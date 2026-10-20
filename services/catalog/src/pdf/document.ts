@@ -28,6 +28,75 @@ import {
 const INK = rgb(0.16, 0.16, 0.18);
 const FAINT = rgb(0.45, 0.45, 0.5);
 
+/**
+ * Everything drawn goes through standard Helvetica, which encodes WinAnsi
+ * only: a transcript's "‑" or an emoji is unprintable to it and `drawText`
+ * throws, refusing the document outright. A caption with the nearest
+ * encodable character is still its caption, so text is normalized and the
+ * common misses put down in ASCII; a character with no near neighbour is
+ * left out, a page plainer for it rather than no PDF at all.
+ */
+const WINANSI_MISSES: Record<string, string> = {
+  "\u2010": "-", // hyphen
+  "\u2011": "-", // non-breaking hyphen
+  "\u2012": "-", // figure dash
+  "\u2015": "-", // horizontal bar
+  "\u2212": "-", // minus sign
+  "\u00ad": "", // soft hyphen
+  "\u2032": "'", // prime
+  "\u2035": "'", // reversed prime
+  "\u2033": '"', // double prime
+  "\u2034": '"', // triple prime
+  "\u2057": '"', // quadruple prime
+  "\u2036": '"', // reversed double prime
+  "\u2037": '"', // reversed triple prime
+  "\u2044": "/", // fraction slash
+  "\u2190": "<-", "\u2192": "->", "\u2191": "^", "\u2193": "v",
+  "\u2028": " ", "\u2029": " ", // line and paragraph separators
+  "\u200b": "", "\ufeff": "", // zero-width spaces
+};
+
+const winAnsiCache = new Map<string, string>();
+
+/** `text` in the nearest form standard Helvetica can print. */
+export function toWinAnsi(text: string, font: PDFFont): string {
+  const out: string[] = [];
+  // NFC only — never NFKC up front: composing an accent sequence into its
+  // encodable letter is right, but decomposing `½` into `1⁄2` is not, since
+  // Helvetica prints the fraction itself and drops the bare slash.
+  for (const ch of text.normalize("NFC")) {
+    let rep = winAnsiCache.get(ch);
+    if (rep === undefined) {
+      rep = winAnsiChar(ch, font);
+      winAnsiCache.set(ch, rep);
+    }
+    out.push(rep);
+  }
+  return out.join("");
+}
+
+function winAnsiChar(ch: string, font: PDFFont): string {
+  try {
+    font.encodeText(ch);
+    return ch;
+  } catch {
+    // not printable as it is
+  }
+  const miss = WINANSI_MISSES[ch];
+  if (miss !== undefined) return miss;
+  // Last resort is the compatibility form — ﬁ is fi, a fullwidth Ａ is A.
+  let out = "";
+  for (const n of ch.normalize("NFKC")) {
+    try {
+      font.encodeText(n);
+      out += n;
+    } catch {
+      out += WINANSI_MISSES[n] ?? "";
+    }
+  }
+  return out;
+}
+
 /** The caption, broken to fit `CAPTION_WIDTH` and clipped after `CAPTION_MAX_LINES` with an ellipsis. */
 export function wrapCaption(text: string, font: PDFFont, size = CAPTION_SIZE, width = CAPTION_WIDTH): string[] {
   const words = text.split(/\s+/).filter((w) => w !== "");
@@ -126,7 +195,7 @@ export async function assemblePdf(title: string, pages: readonly PdfPageInput[],
       font: regular,
       color: FAINT,
     });
-    page.drawText(clip(title, CAPTION_WIDTH - regular.widthOfTextAtSize(count, HEADER_SIZE) - 60), {
+    page.drawText(clip(toWinAnsi(title, bold), CAPTION_WIDTH - regular.widthOfTextAtSize(count, HEADER_SIZE) - 60), {
       x: CAPTION_X,
       y: HEADER_Y,
       size: HEADER_SIZE,
@@ -134,7 +203,7 @@ export async function assemblePdf(title: string, pages: readonly PdfPageInput[],
       color: FAINT,
     });
 
-    for (const [row, line] of wrapCaption(input.caption, regular).entries()) {
+    for (const [row, line] of wrapCaption(toWinAnsi(input.caption, regular), regular).entries()) {
       page.drawText(line, { x: CAPTION_X, y: CAPTION_TOP - row * CAPTION_LEADING, size: CAPTION_SIZE, font: regular, color: INK });
     }
   }
