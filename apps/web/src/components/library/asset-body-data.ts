@@ -4,9 +4,9 @@ import type { AssetRef } from "@self-learn/catalog/state";
 
 import type { VideoChapter } from "@/components/media";
 import { readAssetText, readFileProblems, withCatalog } from "@/lib/asset-library";
-import { storedPosters } from "@/lib/asset-files";
+import { storedPdfs, storedPosters } from "@/lib/asset-files";
 import { problemSource, type RouteProblemCode } from "@/lib/asset-problems";
-import { assetDownloadHref, assetFileHref, assetPosterHref, assetStatusHref } from "@/lib/library";
+import { assetDownloadHref, assetFileHref, assetPdfHref, assetPosterHref, assetStatusHref } from "@/lib/library";
 import { embedTargets } from "@/lib/note-embeds";
 import { parseChapters, parseTranscript, type ParsedTranscript } from "@/lib/transcript";
 
@@ -45,6 +45,8 @@ export interface AssetBodyData {
   sidecars: Sidecars | null;
   /** The poster `catalog asset upload` stored, shown before a video loads. */
   poster: string | undefined;
+  /** The PDF `catalog asset upload` or `catalog video put` made for the video, or undefined. */
+  pdfHref: string | undefined;
   /** The words of anything that is neither a player, a picture nor a URL, or null. */
   text: string | null;
   /** The pictures a note embeds, each checked as the asset itself is. */
@@ -90,10 +92,14 @@ export async function loadAssetBody(asset: AssetRef, derived: readonly AssetRef[
     asset.kind === "link" ? null : ((await readFileProblems([asset.id])).get(asset.id) ?? null);
   const servable = asset.kind !== "link" && fileProblem === null;
 
-  const [sidecars, posters] =
+  const [sidecars, posters, pdfs] =
     asset.kind === "video" && servable
-      ? await Promise.all([videoSidecars(derived), withCatalog((db) => storedPosters(db, [asset]))])
-      : [null, null];
+      ? await Promise.all([
+          videoSidecars(derived),
+          withCatalog((db) => storedPosters(db, [asset])),
+          withCatalog((db) => storedPdfs(db, [asset])),
+        ])
+      : [null, null, null];
 
   // Anything that is neither a player nor a picture nor a bare URL has words,
   // so it is read on the server and the body arrives with them. Attempted for
@@ -123,6 +129,7 @@ export async function loadAssetBody(asset: AssetRef, derived: readonly AssetRef[
     servable,
     sidecars,
     poster: posters?.has(asset.id) ? assetPosterHref(asset.id) : undefined,
+    pdfHref: pdfs?.has(asset.id) ? assetPdfHref(asset.id) : undefined,
     text,
     embedProblems,
   };

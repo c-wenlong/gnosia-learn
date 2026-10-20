@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { lstat, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 
 import { BlobIntegrityError, key as blobKey, type BlobStore } from "@self-learn/blob";
@@ -21,8 +22,10 @@ import { acceptJobIn, JobError, VIDEOS_DIR, VIDEO_SLUG } from "../commands/job";
 import type { CatalogDatabase } from "../db";
 import { fileFacts } from "../index/files";
 import { VIDEO_TOOLS, type VideoToolName } from "../index/video-tool";
+import { buildVideoPdf, readSegments } from "../pdf/build";
+import { PDF_CONTENT_TYPE, PDF_EXTENSION } from "../pdf/recipe";
 import { POSTER_CONTENT_TYPE } from "../poster/recipe";
-import { POSTER_PREFIX } from "./asset-upload";
+import { PDF_PREFIX, POSTER_PREFIX } from "./asset-upload";
 import { uploadBlob } from "./blob";
 import { BlobOwnerError } from "./blob-owner";
 import { sha256 } from "./diagram-document";
@@ -94,6 +97,7 @@ export function videoAssetIds(slug: string) {
     chapters: `${VIDEO_PREFIX}${slug}.chapters.json`,
     captions: `${VIDEO_PREFIX}${slug}.vtt`,
     poster: `${POSTER_PREFIX}${video}`,
+    pdf: `${PDF_PREFIX}${video}`,
   };
 }
 
@@ -188,6 +192,8 @@ export interface PutVideoInput {
   author: string;
   authorKind: AuthorKind;
   ownerId: string;
+  /** Absolute path to ffmpeg, or null when there is none: the video's PDF is then skipped and said so. */
+  ffmpeg?: string | null;
 }
 
 export interface VideoAssetResult {
@@ -224,7 +230,7 @@ export interface PutVideoResult {
 
 interface Planned {
   id: string;
-  kind: "video" | "transcript" | "chapters" | "captions" | "poster";
+  kind: "video" | "transcript" | "chapters" | "captions" | "poster" | "pdf";
   path: string | null;
   file: string;
   ext: string;
@@ -554,6 +560,45 @@ export async function putVideo(db: CatalogDatabase, store: BlobStore, input: Put
     title: `${title} (poster)`,
     links: derived,
   });
+  // The PDF, the poster's sibling (2026-10-20): the candidate's own cut and
+  // transcript, one page per narration beat. The gate has no place to write
+  // it (the poster it hands over is a file the sandbox profile allowed), so
+  // the put makes it here, trusted and outside the sandbox, as the upload
+  // command does for a tool's renders. ffmpeg missing, or a build that
+  // fails, is a note rather than a refusal: the video is the deliverable,
+  // and `catalog doctor` lists the gap like any video's.
+  let pdfDir: string | null = null;
+  if (input.ffmpeg === null || input.ffmpeg === undefined) {
+    notes.push("no PDF: ffmpeg was not found; the next `catalog asset upload`-style rebuild can still make one");
+  } else {
+    const segments = await readSegments(sidecars === null ? null : path.join(dir, names.transcript));
+    const made = await buildVideoPdf(input.ffmpeg, path.join(dir, names.mp4), title, segments);
+    if (!made.ok) {
+      notes.push(`no PDF: ${made.reason}`);
+    } else {
+      pdfDir = await mkdtemp(path.join(os.tmpdir(), "self-learn-video-pdf-"));
+      const file = path.join(pdfDir, `video${PDF_EXTENSION}`);
+      try {
+        await writeFile(file, made.body);
+      } catch (error) {
+        await rm(pdfDir, { recursive: true, force: true });
+        pdfDir = null;
+        throw error;
+      }
+      planned.push({
+        id: ids.pdf,
+        kind: "pdf",
+        path: null,
+        file,
+        ext: "pdf",
+        mime: PDF_CONTENT_TYPE,
+        sha256: sha256(made.body),
+        bytes: made.body.length,
+        title: `${title} (PDF)`,
+        links: derived,
+      });
+    }
+  }
   const keyOf = (p: Planned) => blobKey(ownerId, p.sha256, p.ext);
   const mp4Key = keyOf(planned[0] as Planned);
 
@@ -616,8 +661,6 @@ export async function putVideo(db: CatalogDatabase, store: BlobStore, input: Put
       notes: ["already landed by this job: nothing was written"],
     };
   };
-  if (job.state === "accepted") return landed(db);
-
   // The bytes first, each confirmed against the hash the gate recorded (the
   // store checks the stream against it). A failure from here to the commit
   // leaves blobs no row points at. Nothing deletes those: `catalog blob audit`
@@ -626,6 +669,7 @@ export async function putVideo(db: CatalogDatabase, store: BlobStore, input: Put
   // them, since the keys are the hashes.
   const assets: VideoAssetResult[] = [];
   try {
+    if (job.state === "accepted") return await landed(db);
     for (const p of planned) {
       const done = await uploadBlob(db, store, {
         ownerId,
@@ -640,6 +684,8 @@ export async function putVideo(db: CatalogDatabase, store: BlobStore, input: Put
   } catch (error) {
     if (error instanceof BlobIntegrityError || error instanceof BlobOwnerError) throw new VideoError("blob", error.message);
     throw error;
+  } finally {
+    if (pdfDir !== null) await rm(pdfDir, { recursive: true, force: true });
   }
 
   const common = { owner: ownerId, author: input.author, authorKind: input.authorKind, reason: input.reason, jobId: input.jobId };

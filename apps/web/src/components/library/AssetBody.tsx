@@ -96,6 +96,7 @@ export function AssetBody({
         watchedDay={video.watchedDay}
         favorite={video.favorite}
         downloadHref={data.downloadHref}
+        pdfHref={data.pdfHref}
         actions={video.actions}
         notes={
           <>

@@ -106,14 +106,16 @@ export async function assetBlobs(
 }
 
 /**
- * Which of these videos have a stored poster whose blob is `present`: the
- * thumbnail check for a page of cards, in one query. A video whose own blob is
- * stored can still have no poster (the upload ran without ffmpeg), and its
- * card must not ask the poster route for one the route would have to cut.
+ * Which of these videos have a stored derived asset of `kind` (a poster, a
+ * PDF) whose blob is `present`: the thumbnail and document check for a page
+ * of cards, in one query. A video whose own blob is stored can still have no
+ * derived file (the upload ran without ffmpeg), and its card must not ask a
+ * route for one the route would have to make.
  */
-export async function videosWithStoredPoster(
+async function videosWithStoredDerived(
   db: CatalogDatabase,
   videoIds: readonly string[],
+  kind: string,
   scope: OwnerScope,
 ): Promise<Set<string>> {
   if (videoIds.length === 0) return new Set();
@@ -128,7 +130,7 @@ export async function videosWithStoredPoster(
         .where(
           and(
             inArray(assetDerivation.sourceAssetId, [...videoIds]),
-            eq(asset.kind, "poster"),
+            eq(asset.kind, kind),
             eq(blobObject.state, "present"),
             ownedBy(asset.ownerId, scope.readable),
             ownedBy(video.ownerId, scope.readable),
@@ -139,13 +141,28 @@ export async function videosWithStoredPoster(
   return new Set(rows.map((row) => row.videoId));
 }
 
+export async function videosWithStoredPoster(
+  db: CatalogDatabase,
+  videoIds: readonly string[],
+  scope: OwnerScope,
+): Promise<Set<string>> {
+  return videosWithStoredDerived(db, videoIds, "poster", scope);
+}
+
+export async function videosWithStoredPdf(
+  db: CatalogDatabase,
+  videoIds: readonly string[],
+  scope: OwnerScope,
+): Promise<Set<string>> {
+  return videosWithStoredDerived(db, videoIds, "pdf", scope);
+}
+
 /**
- * The stored poster of one video: the `poster` asset derived from it, with its
- * blob. Null when the video has none yet, which is every video until
- * `catalog asset upload` has run, and then the web app's ffmpeg fallback is
- * the answer.
+ * The stored derived asset of `kind` for one video, with its blob. Null when
+ * the video has none yet, which is every video until `catalog asset upload`
+ * has run.
  */
-export async function posterBlob(db: CatalogDatabase, videoId: string, scope: OwnerScope): Promise<AssetBlob | null> {
+async function derivedBlob(db: CatalogDatabase, videoId: string, kind: string, scope: OwnerScope): Promise<AssetBlob | null> {
   const [row] = await orNoBlobs(
     () =>
       db
@@ -157,7 +174,7 @@ export async function posterBlob(db: CatalogDatabase, videoId: string, scope: Ow
         .where(
           and(
             eq(assetDerivation.sourceAssetId, videoId),
-            eq(asset.kind, "poster"),
+            eq(asset.kind, kind),
             ownedBy(asset.ownerId, scope.readable),
             ownedBy(video.ownerId, scope.readable),
           ),
@@ -167,6 +184,14 @@ export async function posterBlob(db: CatalogDatabase, videoId: string, scope: Ow
     [],
   );
   return row ?? null;
+}
+
+export async function posterBlob(db: CatalogDatabase, videoId: string, scope: OwnerScope): Promise<AssetBlob | null> {
+  return derivedBlob(db, videoId, "poster", scope);
+}
+
+export async function pdfBlob(db: CatalogDatabase, videoId: string, scope: OwnerScope): Promise<AssetBlob | null> {
+  return derivedBlob(db, videoId, "pdf", scope);
 }
 
 /** A course's cover photo, with its blob, for the course list and the cover route. */

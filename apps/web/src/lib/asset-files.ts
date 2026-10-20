@@ -9,7 +9,9 @@ import {
   assetsByIds,
   conceptsForAsset,
   documentBytes,
+  pdfBlob,
   posterBlob,
+  videosWithStoredPdf,
   videosWithStoredPoster,
   type AssetBlob,
   type AssetRef,
@@ -69,6 +71,10 @@ export const CONTENT_TYPES: Readonly<Record<string, string>> = {
   // A poster, cut from a video by `catalog asset upload` and served from the
   // blob store (docs/CONTENT-MIGRATION.md, Track E).
   ".jpg": "image/jpeg",
+  // A video's PDF, made by `catalog asset upload` or `catalog video put`
+  // alongside the poster: one page per narration beat. Self-made, so it
+  // carries nothing a viewer could run but ours.
+  ".pdf": "application/pdf",
 };
 
 /** The declared type for a file name, or null when the extension is not on the list. */
@@ -423,6 +429,22 @@ export async function storedPosters(
 }
 
 /**
+ * The videos among these with a stored PDF: the ones `catalog asset upload`
+ * or `catalog video put` made one for. A page can then offer the document
+ * rather than linking a route that would 404.
+ */
+export async function storedPdfs(
+  db: CatalogDatabase,
+  rows: readonly Pick<AssetRef, "id" | "kind">[],
+): Promise<Set<string>> {
+  return videosWithStoredPdf(
+    db,
+    rows.filter((row) => row.kind === "video").map((row) => row.id),
+    await currentScope(),
+  );
+}
+
+/**
  * Where a video's poster comes from: the one `catalog asset upload` stored,
  * found by what it is (the `poster` asset derived from this video), not by
  * guessing its id. A stored poster that is `pending` or gone answers
@@ -457,6 +479,39 @@ export async function posterSource(db: CatalogDatabase, id: string): Promise<Ass
     detail:
       `No poster is stored for ${id}. \`${uploadCommand(isRenderSource(row.sourceRepo) ? row.sourceRepo : "manimkc")}\` ` +
       `cuts one for each video it uploads.`,
+  };
+}
+
+/**
+ * Where a video's PDF comes from: the one `catalog asset upload` or
+ * `catalog video put` made, found by what it is (the `pdf` asset derived
+ * from this video), as `posterSource` finds the poster. A stored PDF that is
+ * `pending` or gone answers `not-uploaded` like any other blob.
+ */
+export async function pdfSource(db: CatalogDatabase, id: string): Promise<AssetStored | AssetFileProblem> {
+  // The requesting owner's rows and the commons' (phase 4), as for the file.
+  const scope = await currentScope();
+  const stored = await pdfBlob(db, id, scope);
+  if (stored !== null) return resolveBlob(stored, id);
+  const [row] = await assetsByIds(db, [id], scope);
+  if (row === undefined) return missing("not-in-catalog", `No asset ${JSON.stringify(id)} in the catalog.`);
+  if (row.kind !== "video") {
+    return {
+      ok: false,
+      status: 404,
+      code: "not-a-video",
+      error: "No such asset PDF.",
+      detail: `Asset ${id} is a ${row.kind}, and only a video has a PDF.`,
+    };
+  }
+  return {
+    ok: false,
+    status: 404,
+    code: "not-uploaded",
+    error: "No such asset PDF.",
+    detail:
+      `No PDF is stored for ${id}. \`${uploadCommand(isRenderSource(row.sourceRepo) ? row.sourceRepo : "manimkc")}\` ` +
+      `makes one for each video it uploads, as does \`catalog video put\` for a studio video.`,
   };
 }
 

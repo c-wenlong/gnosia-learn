@@ -246,6 +246,9 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
       author: LOCAL_LEARNER_ID,
       authorKind: "person",
       ownerId: LOCAL_LEARNER_ID,
+      // The suites' ffmpeg stand-in (vitest.setup.ts), as the command passes
+      // `findFfmpeg()`'s: the put makes the video's PDF with it.
+      ffmpeg: process.env.FFMPEG_PATH as string,
       ...over,
     });
 
@@ -373,6 +376,7 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
     expect(rows.map((r) => [r.id, r.kind, r.sourceRepo]).sort()).toEqual(
       [
         [ids.poster, "poster", "self-learn"],
+        [ids.pdf, "pdf", "self-learn"],
         [ids.video, "video", "self-learn"],
         [ids.captions, "captions", "self-learn"],
         [ids.chapters, "chapters", "self-learn"],
@@ -386,9 +390,9 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
       expect(await openBlobStore().stat(row.blobKey ?? "")).not.toBeNull();
     }
     const derived = await scratch.db.select().from(assetDerivation).where(eq(assetDerivation.sourceAssetId, ids.video));
-    expect(derived.map((d) => d.assetId).sort()).toEqual([ids.poster, ids.captions, ids.chapters, ids.transcript].sort());
+    expect(derived.map((d) => d.assetId).sort()).toEqual([ids.poster, ids.pdf, ids.captions, ids.chapters, ids.transcript].sort());
     const outputs = await scratch.db.select().from(assetJob).where(eq(assetJob.jobId, queued.id));
-    expect(outputs).toHaveLength(5);
+    expect(outputs).toHaveLength(6);
 
     const [row] = await scratch.db.select().from(video).where(eq(video.slug, slug));
     expect(row?.mp4BlobKey).toBe(rows.find((r) => r.id === ids.video)?.blobKey);
@@ -401,7 +405,7 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
     expect(sourceHash(row?.source as never)).toBe(row?.sourceHash);
 
     const revisions = await scratch.db.select().from(contentRevision).where(eq(contentRevision.jobId, queued.id));
-    expect(revisions.map((r) => r.entityType).sort()).toEqual(["asset", "asset", "asset", "asset", "asset", "video"]);
+    expect(revisions.map((r) => r.entityType).sort()).toEqual(["asset", "asset", "asset", "asset", "asset", "asset", "video"]);
 
     // `job show` names what the accept landed.
     const shown = await runShow(queued.id);

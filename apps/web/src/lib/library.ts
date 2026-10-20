@@ -401,6 +401,16 @@ export function assetPosterHref(id: string): string {
 }
 
 /**
+ * `/api/assets/<id>/pdf`, a video's pages as a PDF, opened inline. Same
+ * one-spelling rule as `assetPosterHref`; only a `video` asset has one, and
+ * a video with none stored answers 404, so callers offer it only when
+ * `storedPdfs` says there is one.
+ */
+export function assetPdfHref(id: string): string {
+  return `/api/assets/${encodeURIComponent(id)}/pdf`;
+}
+
+/**
  * `/api/assets/<id>/status`, which says why the file or poster route would
  * refuse an asset without sending it. What a failed `<img>` or `<video>` asks
  * after `onError`, since that event carries no reason of its own.

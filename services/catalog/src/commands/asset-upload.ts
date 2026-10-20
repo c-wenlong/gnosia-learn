@@ -66,13 +66,14 @@ export function formatAssetUpload(result: AssetUploadCommandResult): string {
     `database   ${result.database}`,
     `blob root  ${result.blobRoot}`,
     `outRoot    ${result.outRoot}`,
-    `${result.dryRun ? "dry run: nothing written. " : ""}${result.counts.videos} videos, ${result.counts.sidecars} sidecars, ${result.counts.posters} posters`,
+    `${result.dryRun ? "dry run: nothing written. " : ""}${result.counts.videos} videos, ${result.counts.sidecars} sidecars, ${result.counts.posters} posters, ${result.counts.pdfs} PDFs`,
     `  ${[...tally].map(([action, n]) => `${action} ${n}`).join(", ")}`,
   ];
   if (!result.dryRun) {
     lines.push(`  ${result.uploaded} objects uploaded (${megabytes(result.uploadedBytes)}), ${result.rowsWritten} asset rows written`);
   }
   if (result.postersSkipped !== null) lines.push(`posters skipped: ${result.postersSkipped}`);
+  if (result.pdfsSkipped !== null) lines.push(`PDFs skipped: ${result.pdfsSkipped}`);
   if (result.bytesCapEstimate !== null) lines.push(`bytes cap: ${result.bytesCapEstimate}`);
   for (const item of result.items) {
     if (item.action === "refused") lines.push(`REFUSED ${item.id}: ${item.detail ?? ""}`);

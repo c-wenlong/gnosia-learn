@@ -332,9 +332,12 @@ manimkc's `MANIMKC_HOME` puts them), and for every video and sidecar the
 catalog already has a row for: hashes the file, refuses it by name if the
 bytes are no longer the ones the last `catalog import --only manimkc` recorded,
 uploads it (`pending` row, put, `head`, `present`), cuts a poster per video
-with ffmpeg and uploads that too, then points each asset row at its blob with
-one revision each. When a video's bytes changed and no new poster can be cut
-(no ffmpeg, or ffmpeg found no frame), its old poster is unhooked from it in the
+with ffmpeg and makes each video's PDF (one page per narration beat from its
+transcript, or a frame every fifteen seconds for a silent cut,
+`services/catalog/src/pdf/`) and uploads those too, then points each asset
+row at its blob with one revision each. When a video's bytes changed and no
+new poster or PDF can be made
+(no ffmpeg, or ffmpeg found no frame), its old one is unhooked from it in the
 same write, so the card shows its placeholder rather than the old render,
 until a later upload makes a new one. Measured on 2026-09-28 against a copy of the local
 database: 36 videos, 87 sidecars and 36 posters, 433.6 MB, in about ten
@@ -360,7 +363,8 @@ until the next upload.
 
 ### Serving from it
 
-`/api/assets/{id}/file` and `/api/assets/{id}/poster` serve an asset from the
+`/api/assets/{id}/file`, `/api/assets/{id}/poster` and `/api/assets/{id}/pdf`
+serve an asset from the
 store when its row names a blob, and a note, a session log or a `.tldr` from
 its row. There is no third place: since phase 2 of
 [CONTENT-MIGRATION.md](CONTENT-MIGRATION.md#phase-2-readers-go-database-only)

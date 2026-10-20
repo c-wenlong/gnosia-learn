@@ -17,6 +17,8 @@ import {
   type TopicsReport,
   type VideoToolName,
 } from "../index/video-tool";
+import { buildVideoPdf, readSegments } from "../pdf/build";
+import { PDF_CONTENT_TYPE, PDF_EXTENSION } from "../pdf/recipe";
 import { extractPoster } from "../poster/extract";
 import { POSTER_CONTENT_TYPE, POSTER_EXTENSION } from "../poster/recipe";
 import {
@@ -88,6 +90,13 @@ export const POSTER_PREFIX = "poster:";
 
 export function posterId(videoId: string): string {
   return `${POSTER_PREFIX}${videoId}`;
+}
+
+/** The namespace a video's PDF asset id lives in: `pdf:` + its video's id. */
+export const PDF_PREFIX = "pdf:";
+
+export function pdfId(videoId: string): string {
+  return `${PDF_PREFIX}${videoId}`;
 }
 
 /** Media types for what this command uploads, by extension: the video tools' own, and the poster. */
@@ -162,8 +171,8 @@ export interface AssetUploadResult {
   source: UploadSource;
   outRoot: string;
   dryRun: boolean;
-  /** Files the report lists, and posters present or made (planned, on a dry run) by the end. */
-  counts: { videos: number; sidecars: number; posters: number };
+  /** Files the report lists, and posters and PDFs present or made (planned, on a dry run) by the end. */
+  counts: { videos: number; sidecars: number; posters: number; pdfs: number };
   /** Files whose bytes went into the store this run, and how many bytes. */
   uploaded: number;
   uploadedBytes: number;
@@ -172,6 +181,8 @@ export interface AssetUploadResult {
   refused: number;
   /** Why posters were not made at all this run, when that is the case. */
   postersSkipped: string | null;
+  /** Why PDFs were not made at all this run, when that is the case. */
+  pdfsSkipped: string | null;
   /**
    * On a dry run under a bytes cap that plans posters: why its bytes-cap
    * answers are an estimate. A poster's size is known only once ffmpeg cuts
@@ -232,35 +243,37 @@ function contentRow(row: Asset): Record<string, unknown> {
 }
 
 /**
- * Unhook the poster of each of `videoIds` that was cut from other bytes than
- * the video's now, the way the upload unhooks one when it links new bytes and
- * cannot cut a new poster (see `detach` below). Under the blob contract (0013)
- * the import, not the upload, is what links a re-render, so the upload would
- * otherwise find the video's blob present and the poster derived from it, and
- * keep a picture of the old render. Unhooked, the poster is not derived from
- * the video, and the next `catalog asset upload` cuts a new one and hooks it
+ * Unhook the derived asset (`prefix` + video id: a poster, a PDF) of each of
+ * `videoIds` that was cut from other bytes than the video's now, the way the
+ * upload unhooks one when it links new bytes and cannot cut a fresh one (see
+ * `detach` below). Under the blob contract (0013) the import, not the upload,
+ * is what links a re-render, so the upload would otherwise find the video's
+ * blob present and the derived asset still hooked to it, keeping a picture
+ * or a document of the old render. Unhooked, it is not derived from the
+ * video, and the next `catalog asset upload` makes a new one and hooks it
  * back up.
  *
  * "Cut from other bytes" is read from the revisions, not from what this run
- * changed: the video's `blob_key` as of the poster revision that last cut or
- * hooked it (a revision that derives the poster from the video where the one
- * before did not, or that changed the poster's own bytes), against its key
- * now. Any other poster revision, a title edit say, is not a cut. So an
- * import that linked the new bytes and then failed before this ran is caught
- * by the next one, whose own write changes nothing.
+ * changed: the video's `blob_key` as of the derived asset's revision that
+ * last cut or hooked it (a revision that derives it from the video where the
+ * one before did not, or that changed its own bytes), against its key now.
+ * Any other revision of it, a title edit say, is not a cut. So an import
+ * that linked the new bytes and then failed before this ran is caught by the
+ * next one, whose own write changes nothing.
  *
- * Which posters are stale, their rows, and the revision each was read at come
- * from one snapshot, and each unhook is based on that revision. A `catalog
- * asset upload` that recut and relinked a poster after the snapshot therefore
- * fails the write's base check, and that poster is left as the upload made it
- * and reported as `moved`, rather than having its fresh link cleared or
- * failing the import. Detecting outside the snapshot, as this once did, let a
- * relink landing between the two reads become the base, and the unhook then
- * undid it.
+ * Which derived assets are stale, their rows, and the revision each was read
+ * at come from one snapshot, and each unhook is based on that revision. A
+ * `catalog asset upload` that remade and relinked one after the snapshot
+ * therefore fails the write's base check, and it is left as the upload made
+ * it and reported as `moved`, rather than having its fresh link cleared or
+ * failing the import. Detecting outside the snapshot, as this once did, let
+ * a relink landing between the two reads become the base, and the unhook
+ * then undid it.
  */
-export async function unhookPosters(
+export async function unhookDerivations(
   db: CatalogDatabase,
   videoIds: readonly string[],
+  prefix: string,
   options: { author: string; reason: string; owner?: string },
 ): Promise<{ unhooked: string[]; moved: string[] }> {
   const readable = readableOwners(options.owner ?? CLI_OWNER);
@@ -293,7 +306,7 @@ export async function unhookPosters(
             )
         ) cut
         where d.source_asset_id in (${ids})
-          and d.asset_id = ${POSTER_PREFIX} || d.source_asset_id
+          and d.asset_id = ${prefix} || d.source_asset_id
           and (
             select r.snapshot -> 'entity' ->> 'blob_key'
             from content_revision r
@@ -370,14 +383,14 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
 
   const found = deliverables(report);
   const ids = found.flatMap((d) => [d.videoPath, ...d.sidecars]).map((p) => `${tool.prefix}${p}`);
-  const posterIds = found.map((d) => posterId(`${tool.prefix}${d.videoPath}`));
+  const derivedIds = found.flatMap((d) => [posterId(`${tool.prefix}${d.videoPath}`), pdfId(`${tool.prefix}${d.videoPath}`)]);
   // The rows and the revision each was read at, in one snapshot. Every write
   // below copies the row it read and changes its blob key, so it is based on
   // that revision: a `catalog import` that rewrote the row in the minutes an
   // upload takes is refused, not overwritten with the row as it was.
   const { rows, bases } = await db.transaction(
     async (tx) => {
-      const all = [...ids, ...posterIds];
+      const all = [...ids, ...derivedIds];
       const read = all.length === 0 ? [] : await tx.select().from(asset).where(inArray(asset.id, all));
       const latest = await latestRevisions(tx, "asset", all);
       return {
@@ -399,12 +412,13 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
     source,
     outRoot,
     dryRun,
-    counts: { videos: 0, sidecars: 0, posters: 0 },
+    counts: { videos: 0, sidecars: 0, posters: 0, pdfs: 0 },
     uploaded: 0,
     uploadedBytes: 0,
     rowsWritten: 0,
     refused: 0,
     postersSkipped: options.ffmpeg === null ? "ffmpeg was not found; set FFMPEG_PATH or put ffmpeg on PATH" : null,
+    pdfsSkipped: options.ffmpeg === null ? "ffmpeg was not found; set FFMPEG_PATH or put ffmpeg on PATH" : null,
     bytesCapEstimate: null,
     items,
   };
@@ -441,13 +455,13 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
     return null;
   };
   /**
-   * The same for a poster the dry run would cut: its bytes are unknown until
-   * ffmpeg runs, so only the day's count can be asked; the bytes cap is said
-   * to be unknowable rather than guessed.
+   * The same for a derived file the dry run would make (a poster, a PDF):
+   * its bytes are unknown until ffmpeg runs, so only the day's count can be
+   * asked; the bytes cap is said to be unknowable rather than guessed.
    */
-  const wouldCapPoster = async (owner: string): Promise<string | null> => {
+  const wouldCapDerived = async (owner: string, noun: string): Promise<string | null> => {
     if (caps === null) return null;
-    if ("error" in caps) return `a real run would refuse this new poster: ${caps.error}`;
+    if ("error" in caps) return `a real run would refuse this new ${noun}: ${caps.error}`;
     if (caps.uploadsPerDay === null) return null;
     let tally = planned.get(owner);
     if (tally === undefined) {
@@ -456,7 +470,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
       planned.set(owner, tally);
     }
     if (tally.uploads + 1 > caps.uploadsPerDay) {
-      return `${owner} would have uploaded ${tally.uploads} new object(s) in 24 hours before this poster; a real run would refuse it under the ${OWNER_UPLOADS_PER_DAY_ENV} cap of ${caps.uploadsPerDay}`;
+      return `${owner} would have uploaded ${tally.uploads} new object(s) in 24 hours before this ${noun}; a real run would refuse it under the ${OWNER_UPLOADS_PER_DAY_ENV} cap of ${caps.uploadsPerDay}`;
     }
     tally.uploads += 1;
     return null;
@@ -598,6 +612,8 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
     if (video !== null) {
       const poster = await settlePoster(group.video, video.changed);
       if (poster !== null) writes.push(poster);
+      const pdf = await settlePdf(group, video.changed);
+      if (pdf !== null) writes.push(pdf);
     }
 
     if (dryRun || writes.length === 0) continue;
@@ -623,11 +639,11 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
     }
   }
 
-  const plannedPosters = items.filter((i) => i.kind === "poster" && i.action === "would-make").length;
-  if (plannedPosters > 0 && caps !== null && !("error" in caps) && caps.bytes !== null) {
+  const plannedDerived = items.filter((i) => (i.kind === "poster" || i.kind === "pdf") && i.action === "would-make").length;
+  if (plannedDerived > 0 && caps !== null && !("error" in caps) && caps.bytes !== null) {
     result.bytesCapEstimate =
-      `the ${OWNER_BYTES_CAP_ENV} answers are an estimate: the ${plannedPosters} poster(s) this run would cut are not counted, ` +
-      `since a poster's size is known only once ffmpeg cuts it, so a real run may refuse a file this one passed`;
+      `the ${OWNER_BYTES_CAP_ENV} answers are an estimate: the ${plannedDerived} poster(s)/PDF(s) this run would make are not counted, ` +
+      `since their size is known only once ffmpeg runs, so a real run may refuse a file this one passed`;
   }
 
   return result;
@@ -699,7 +715,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
     }
     if (dryRun) {
       if (options.ffmpeg === null) return null;
-      const capped = await wouldCapPoster(video.row.ownerId);
+      const capped = await wouldCapDerived(video.row.ownerId, "poster");
       if (capped !== null) {
         refuse(id, "poster", capped);
         return null;
@@ -795,6 +811,179 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
             contentHash: sha256,
             bytes: done.bytes,
             title: `${video.row.title ?? video.row.id} (poster)`,
+            // Made by this repository's upload command, not rendered by the tool.
+            sourceRepo: "self-learn",
+            blobKey: done.key,
+            resourceType: null,
+            ownerId: video.row.ownerId,
+          },
+          links: { asset_derivation: [{ sourceAssetId: video.row.id }] },
+        },
+        base: null,
+        author,
+        authorKind,
+        reason,
+      };
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  }
+
+  /**
+   * The PDF for one video: made and stored if it needs to be, and the row
+   * write that records it. The poster's sibling under every rule that
+   * matters — same id pattern outside the tool's namespace, same owner's
+   * key, same "missing, unlinked or the video's bytes changed" recut rule,
+   * same unhook-on-new-render. It differs in what it is made from: the
+   * transcript sidecar gives the page plan (one page per narration beat),
+   * and a video without one falls back to a fixed cadence of frames.
+   */
+  async function settlePdf(group: Group, videoChanged: boolean): Promise<WriteContentInput | null> {
+    const video = group.video as Planned;
+    const id = pdfId(video.row.id);
+    const existing = rows.get(id);
+    const theirs = existing === undefined ? null : foreign(existing);
+    if (theirs !== null) {
+      refuse(id, "pdf", theirs);
+      return null;
+    }
+    const current =
+      existing !== undefined && existing.blobKey !== null && existing.contentHash !== null
+        ? await alreadyStored(existing, PDF_EXTENSION.slice(1))
+        : null;
+    const derived =
+      existing !== undefined &&
+      (
+        await db
+          .select({ id: assetDerivation.assetId })
+          .from(assetDerivation)
+          .where(and(eq(assetDerivation.assetId, id), eq(assetDerivation.sourceAssetId, video.row.id)))
+      ).length > 0;
+    // As `detach` on the poster: a video whose bytes just changed leaves its
+    // PDF picturing the old render, and nothing later would notice, so it is
+    // unhooked until an upload with a working ffmpeg makes the new one.
+    const detach = (why: string): WriteContentInput | null => {
+      if (!videoChanged || existing === undefined || !derived) return null;
+      items.push({ id, kind: "pdf", action: "detached", key: existing.blobKey, bytes: existing.bytes, detail: why });
+      return {
+        owner: existing.ownerId,
+        type: "asset",
+        id,
+        next: { row: contentRow(existing), links: { asset_derivation: [] } },
+        base: null,
+        author,
+        authorKind,
+        reason,
+      };
+    };
+    if (existing !== undefined && existing.ownerId !== video.row.ownerId) {
+      const why =
+        `${id} belongs to ${existing.ownerId} and its video to ${video.row.ownerId}; move the PDF with its ` +
+        `video (\`update asset set owner_id = '${video.row.ownerId}' where id = '${id}'\`), then upload again`;
+      refuse(id, "pdf", why);
+      return dryRun ? null : detach(why);
+    }
+    if (current !== null && derived && !videoChanged) {
+      result.counts.pdfs += 1;
+      items.push({ id, kind: "pdf", action: "present", key: current, bytes: existing?.bytes ?? null });
+      return null;
+    }
+    if (dryRun) {
+      if (options.ffmpeg === null) return null;
+      const capped = await wouldCapDerived(video.row.ownerId, "PDF");
+      if (capped !== null) {
+        refuse(id, "pdf", capped);
+        return null;
+      }
+      result.counts.pdfs += 1;
+      items.push({
+        id,
+        kind: "pdf",
+        action: "would-make",
+        key: null,
+        bytes: null,
+        ...(caps !== null && !("error" in caps) && caps.bytes !== null
+          ? { detail: `its size is known only once it is made, so the ${OWNER_BYTES_CAP_ENV} cap is not asked` }
+          : {}),
+      });
+      return null;
+    }
+    if (options.ffmpeg === null) return detach("no ffmpeg to make a PDF from the new render");
+    // The file must still be the bytes the row names, before the pages are
+    // cut and after them: a video answered `present` was not read again, and
+    // a render that changed on disk since its import would otherwise give
+    // the stored video a document of other bytes.
+    const indexed = async (): Promise<string | null> => {
+      let facts;
+      try {
+        facts = await fileFacts(video.file);
+      } catch (error) {
+        return `${video.row.path} cannot be read under ${outRoot}: ${(error as NodeJS.ErrnoException).code ?? (error as Error).message}`;
+      }
+      return facts.contentHash === video.row.contentHash
+        ? null
+        : `${video.row.path} has changed since it was indexed, so no PDF was made from it. Run \`${reindex}\`, then upload again.`;
+    };
+    const before = await indexed();
+    if (before !== null) {
+      refuse(id, "pdf", before);
+      return detach(before);
+    }
+    const transcript = group.sidecars.find((s) => s.row.kind === "transcript");
+    const segments = await readSegments(transcript?.file ?? null);
+    const made = await buildVideoPdf(options.ffmpeg, video.file, video.row.title ?? video.row.id, segments);
+    if (!made.ok) {
+      refuse(id, "pdf", `no PDF could be made from ${video.row.path}: ${made.reason}`);
+      return detach(`no PDF could be made from the new render: ${made.reason}`);
+    }
+    const after = await indexed();
+    if (after !== null) {
+      refuse(id, "pdf", after);
+      return detach(after);
+    }
+    const sha256 = createHash("sha256").update(made.body).digest("hex");
+    const dir = await mkdtemp(path.join(os.tmpdir(), "self-learn-pdf-"));
+    try {
+      const file = path.join(dir, `video${PDF_EXTENSION}`);
+      await writeFile(file, made.body);
+      let done;
+      try {
+        done = await uploadBlob(db, store, {
+          ownerId: video.row.ownerId,
+          file,
+          mime: PDF_CONTENT_TYPE,
+          ext: PDF_EXTENSION.slice(1),
+          sha256,
+          bytes: made.body.length,
+        });
+      } catch (error) {
+        if (!(error instanceof OwnerCapError)) throw error;
+        refuse(id, "pdf", error.message);
+        return detach(`its owner's cap refused the new PDF: ${error.message}`);
+      }
+      if (done.uploaded) {
+        result.uploaded += 1;
+        result.uploadedBytes += done.bytes;
+      }
+      result.counts.pdfs += 1;
+      const relinked = existing !== undefined && existing.blobKey === done.key && !done.uploaded;
+      items.push({ id, kind: "pdf", action: relinked ? "linked" : "made", key: done.key, bytes: done.bytes });
+      return {
+        // The PDF is its video's owner's, as its key's prefix already says.
+        owner: video.row.ownerId,
+        type: "asset",
+        id,
+        next: {
+          row: {
+            id,
+            kind: "pdf",
+            // No path: a PDF has no file anywhere but the store, as posters
+            // have none.
+            path: null,
+            url: null,
+            contentHash: sha256,
+            bytes: done.bytes,
+            title: `${video.row.title ?? video.row.id} (PDF)`,
             // Made by this repository's upload command, not rendered by the tool.
             sourceRepo: "self-learn",
             blobKey: done.key,
