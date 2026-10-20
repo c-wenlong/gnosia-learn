@@ -5,12 +5,12 @@
 //
 // The Postgres it reads is the same one every catalog command reads:
 // DATABASE_URL when set, services/catalog/.env's DATABASE_URL next, and
-// postgres://localhost:5432/self_learn last — the resolution
+// postgres://localhost:5432/gnosia last — the resolution
 // services/catalog/src/env.ts gives `npm run catalog`, so a shell that can
 // run the CLI can run this.
 //
 // Where the file lands, in order: --out, GNOSIA_CATALOG, and then
-// $SELF_LEARN_HOME/catalog.db (~/.self-learn/catalog.db with SELF_LEARN_HOME
+// $GNOSIA_HOME/catalog.db (~/.gnosia/catalog.db with no home variable
 // unset — the same default the blob store resolves, and the path the app
 // opens when nothing tells it otherwise).
 //
@@ -43,7 +43,7 @@ import pg from 'pg';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const CATALOG_ENV = join(ROOT, 'services/catalog/.env');
-const DEFAULT_DATABASE_URL = 'postgres://localhost:5432/self_learn';
+const DEFAULT_DATABASE_URL = 'postgres://localhost:5432/gnosia';
 const USAGE = 'usage: node catalog-snapshot.mjs [--out PATH]';
 
 class Refusal extends Error {}
@@ -103,7 +103,7 @@ function databaseUrl() {
 /**
  * `~` and `~/...` expand; a bare `~something` does not (the shell leaves it
  * alone too, and guessing at other users' homes is worse than refusing).
- * SELF_LEARN_HOME carries the same rule in the blob store's resolver.
+ * GNOSIA_HOME carries the same rule in the blob store's resolver.
  */
 function expandHome(path) {
   if (path === '~') return homedir();
@@ -111,12 +111,14 @@ function expandHome(path) {
   return path;
 }
 
-function selfLearnHome() {
-  const raw = process.env.SELF_LEARN_HOME?.trim();
-  if (raw === undefined || raw === '') return join(homedir(), '.self-learn');
+function dataHome() {
+  // GNOSIA_HOME wins; SELF_LEARN_HOME stays readable for envs from before the
+  // rename; ~/.gnosia is the default.
+  const raw = process.env.GNOSIA_HOME?.trim() || process.env.SELF_LEARN_HOME?.trim();
+  if (raw === undefined || raw === '') return join(homedir(), '.gnosia');
   const expanded = expandHome(raw);
   if (!isAbsolute(expanded)) {
-    throw new Refusal(`SELF_LEARN_HOME must be absolute or start with ~/, not ${JSON.stringify(raw)}`);
+    throw new Refusal(`GNOSIA_HOME must be absolute or start with ~/, not ${JSON.stringify(raw)}`);
   }
   return expanded;
 }
@@ -124,7 +126,7 @@ function selfLearnHome() {
 function outputPath(args) {
   const raw = args.out ?? process.env.GNOSIA_CATALOG;
   if (raw !== undefined && raw.trim() !== '') return resolve(expandHome(raw.trim()));
-  return join(selfLearnHome(), 'catalog.db');
+  return join(dataHome(), 'catalog.db');
 }
 
 /**
