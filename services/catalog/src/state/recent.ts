@@ -189,7 +189,7 @@ export async function recentConcepts(
  * timestamp parsing out of it.
  */
 function millis(column: SQL): SQL {
-  return sql`to_char(${column} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
+  return sql`strftime('%Y-%m-%dT%H:%M:%fZ', ${column} / 1000.0, 'unixepoch')`;
 }
 
 function iso(value: Date | string): string {

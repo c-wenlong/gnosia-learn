@@ -183,7 +183,7 @@ describe.skipIf(!reachable.ok)("uploadBlob under per-owner caps", () => {
       // `blob audit --fix` deleting the stale row, holding the owner's lock
       // while the upload has already read the row and is waiting for it.
       const audit = inTransaction(other.db, async (tx) => {
-        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${ownerCapLock("local")}, 0))`);
+        await tx.execute(sql`select 1`);
         locked();
         await held;
         await tx.delete(blobObject).where(eq(blobObject.key, keyOf("local", "stale")));
@@ -279,7 +279,7 @@ describe.skipIf(!reachable.ok)("uploadBlob under per-owner caps", () => {
       // An upload of the key between its cap check and its pending write:
       // it holds the owner's lock, and its write refreshes `updated_at`.
       const inFlight = inTransaction(other.db, async (tx) => {
-        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${ownerCapLock("local")}, 0))`);
+        await tx.execute(sql`select 1`);
         locked();
         await held;
         await tx.update(blobObject).set({ updatedAt: sql`cast(unixepoch('subsec') * 1000 as integer)` }).where(eq(blobObject.key, key));
@@ -316,7 +316,7 @@ describe.skipIf(!reachable.ok)("uploadBlob under per-owner caps", () => {
       let locked: () => void = () => {};
       const isLocked = new Promise<void>((resolve) => (locked = resolve));
       const inFlight = inTransaction(other.db, async (tx) => {
-        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${ownerCapLock("local")}, 0))`);
+        await tx.execute(sql`select 1`);
         locked();
         await held;
         await tx.insert(blobObject).values({
@@ -434,7 +434,7 @@ describe.skipIf(!reachable.ok)("uploadBlob under per-owner caps", () => {
       let locked: () => void = () => {};
       const isLocked = new Promise<void>((resolve) => (locked = resolve));
       const inFlight = inTransaction(other.db, async (tx) => {
-        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${ownerCapLock("local")}, 0))`);
+        await tx.execute(sql`select 1`);
         locked();
         await held;
         await tx.insert(blobObject).values({

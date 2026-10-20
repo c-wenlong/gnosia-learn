@@ -67,7 +67,7 @@ export async function linkOwners(db: CatalogDatabase): Promise<LinkOwnerReport> 
   // Doctor runs on a database behind the journal too, to say so: an entity
   // whose table a later migration adds (`video`, 0015) has nothing to probe.
   const { rows: present } = await db.execute<{ name: string }>(
-    sql`select table_name as name from sqlite_master where type = 'table'`,
+    sql`select name from sqlite_master where type = 'table'`,
   );
   const exists = new Set(present.map((row) => row.name));
   const probes: SQL[] = [];

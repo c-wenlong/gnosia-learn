@@ -41,7 +41,7 @@ import { conceptsIndexer } from "../src/index/concepts";
 import { replayReviews } from "../src/learn/replay";
 import { writeSource } from "../src/index/writer";
 import { readKnowledgeBase } from "../src/state/knowledge-base";
-import { migratedScratchDatabase, probe, type Scratch, SQLSTATE, sqlstate } from "./scratch-database";
+import { clearTables, migratedScratchDatabase, probe, type Scratch, SQLSTATE, sqlstate } from "./scratch-database";
 import {
   ASSETS,
   CONCEPTS,
@@ -86,17 +86,7 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
 
   /** Every test starts from an empty state half, and the content half stays. */
   beforeEach(async () => {
-    await scratch.db.execute(
-      // `event` cannot be deleted through SQL the trigger can see, so the
-      // trigger comes off for the length of the truncate and goes straight
-      // back on. This is the one place in the codebase that does that, and it
-      // is a test fixture rather than anything the application can reach.
-      "alter table event disable trigger event_no_update; " +
-        "alter table event disable trigger event_no_delete; " +
-        "truncate event, mastery, review, progress, recap, preference; " +
-        "alter table event enable trigger event_no_update; " +
-        "alter table event enable trigger event_no_delete;",
-    );
+    await clearTables(scratch.db, ["event", "mastery", "review", "progress", "recap", "preference"]);
   });
 
   describe("progress", () => {

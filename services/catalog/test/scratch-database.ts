@@ -42,6 +42,54 @@ export async function probe(): Promise<Reachability> {
   return { ok: true, reason: "" };
 }
 
+/**
+ * `ALTER TABLE … DISABLE TRIGGER` has no SQLite spelling: a trigger is
+ * dropped and created again, so clearing `event` means taking its
+ * append-only guards off and putting them back with the same DDL the
+ * migration wrote (`event_no_update`/`event_no_delete` in
+ * drizzle-sqlite/0000).
+ */
+export async function clearTables(db: CatalogDatabase, tables: readonly string[]): Promise<void> {
+  await db.execute(
+    "drop trigger if exists event_no_update; drop trigger if exists event_no_delete; " +
+      tables.map((table) => `delete from ${table}`).join("; ") +
+      "; create trigger event_no_update before update on event for each row begin " +
+      "select raise(abort, '23001: event is append-only: UPDATE is not allowed'); end; " +
+      "create trigger event_no_delete before delete on event for each row begin " +
+      "select raise(abort, '23001: event is append-only: DELETE is not allowed'); end;",
+  );
+}
+
+/**
+ * SQLite cannot drop a CHECK constraint, so a suite wanting a table the
+ * contract-era checks have not reached rebuilds it: rename, recreate from
+ * the sqlite_master DDL with the named constraint removed, copy the rows,
+ * and replay the indexes and triggers the rename took away.
+ */
+export async function withoutConstraint(
+  db: CatalogDatabase,
+  table: string,
+  constraint: string,
+): Promise<void> {
+  const ddl = db.get<{ sql: string }>(
+    sql`select sql from sqlite_master where type = 'table' and name = ${table}`,
+  );
+  if (ddl === undefined) throw new Error(`no table ${table}`);
+  const extra = db
+    .all<{ sql: string }>(
+      sql`select sql from sqlite_master where tbl_name = ${table} and type in ('index', 'trigger') and sql is not null`,
+    )
+    .map((row) => row.sql);
+  const stripped = ddl.sql.replace(new RegExp(`,\s*CONSTRAINT "${constraint}" CHECK\([^;]*?\)(?=\s*[,)])`), "");
+  if (stripped === ddl.sql) throw new Error(`${table} has no constraint ${constraint}`);
+  await db.execute(
+    `pragma foreign_keys=off; alter table ${table} rename to ${table}_kept; ${stripped}; ` +
+      `insert into ${table} select * from ${table}_kept; drop table ${table}_kept; ` +
+      extra.join("; ") +
+      "; pragma foreign_keys=on;",
+  );
+}
+
 export interface Scratch extends Connection {
   name: string;
   /** The file path, for a test that spawns a process of its own. */
@@ -203,6 +251,7 @@ const SQLITE_TO_SQLSTATE: Record<string, string> = {
   SQLITE_CONSTRAINT_UNIQUE: "23505",
   SQLITE_CONSTRAINT_PRIMARYKEY: "23505",
   SQLITE_CONSTRAINT_NOTNULL: "23502",
+  SQLITE_BUSY: "55P03",
 };
 
 export function sqlstate(error: unknown): string | undefined {

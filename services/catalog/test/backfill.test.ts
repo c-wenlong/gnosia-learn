@@ -7,7 +7,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { backfill } from "../src/commands/backfill";
 import { readEvents, readReviews } from "../src/state";
 import { LEARN_ROOT_ENV } from "../src/learn/paths";
-import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { clearTables, migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { seedContent } from "./state-fixture";
 
 /**
@@ -108,13 +108,7 @@ describe.skipIf(!reachable.ok)("backfill", () => {
   });
 
   beforeEach(async () => {
-    await scratch.db.execute(
-      "alter table event disable trigger event_no_update; " +
-        "alter table event disable trigger event_no_delete; " +
-        "truncate event, mastery, review, progress, recap, preference; " +
-        "alter table event enable trigger event_no_update; " +
-        "alter table event enable trigger event_no_delete;",
-    );
+    await clearTables(scratch.db, ["event", "mastery", "review", "progress", "recap", "preference"]);
   });
 
   afterEach(async () => {
