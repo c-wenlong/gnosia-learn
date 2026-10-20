@@ -4,8 +4,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { fsStore, key as blobKey, type BlobStore } from "@self-learn/blob";
-import { blobObject } from "@self-learn/schema";
+import { fsStore, key as blobKey, type BlobStore } from "@gnosia/blob";
+import { blobObject } from "@gnosia/schema";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
@@ -29,8 +29,8 @@ import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database
 
 /**
  * Per-owner caps on the blob store (phase 4 of docs/CONTENT-MIGRATION.md):
- * `SELF_LEARN_OWNER_BYTES_CAP` on what one owner stores and
- * `SELF_LEARN_OWNER_UPLOADS_PER_DAY` on how many new objects one owner
+ * `GNOSIA_OWNER_BYTES_CAP` on what one owner stores and
+ * `GNOSIA_OWNER_UPLOADS_PER_DAY` on how many new objects one owner
  * uploads in a rolling 24 hours, both measured from `blob_object` by the key's
  * owner prefix and checked in `uploadBlob` before the pending row is written.
  * Unset, which is today, there is no cap and nothing is measured.
@@ -74,7 +74,7 @@ describe("ownerCaps", () => {
     for (const value of ["5GB", "1.5", "-1", "0x10", "1e9"]) {
       expect(() => ownerCaps({ [OWNER_BYTES_CAP_ENV]: value })).toThrow(OwnerCapConfigError);
     }
-    expect(() => ownerCaps({ [OWNER_UPLOADS_PER_DAY_ENV]: "ten" })).toThrow(/SELF_LEARN_OWNER_UPLOADS_PER_DAY/);
+    expect(() => ownerCaps({ [OWNER_UPLOADS_PER_DAY_ENV]: "ten" })).toThrow(/GNOSIA_OWNER_UPLOADS_PER_DAY/);
   });
 });
 
@@ -513,8 +513,8 @@ describe("the audit's caps and per-owner lines", () => {
   });
 
   it("says a malformed cap refuses every upload, rather than hiding it", () => {
-    expect(formatBlobAudit(result({ error: "SELF_LEARN_OWNER_BYTES_CAP=\"5GB\" is not a whole number." }))).toContain(
-      'caps       unreadable, so every new upload is refused (a re-store of a key with a row is not): SELF_LEARN_OWNER_BYTES_CAP="5GB" is not a whole number.',
+    expect(formatBlobAudit(result({ error: "GNOSIA_OWNER_BYTES_CAP=\"5GB\" is not a whole number." }))).toContain(
+      'caps       unreadable, so every new upload is refused (a re-store of a key with a row is not): GNOSIA_OWNER_BYTES_CAP="5GB" is not a whole number.',
     );
   });
 
@@ -523,7 +523,7 @@ describe("the audit's caps and per-owner lines", () => {
     let home: string;
     const saved = {
       url: process.env["DATABASE_URL"],
-      home: process.env["SELF_LEARN_HOME"],
+      home: process.env["GNOSIA_HOME"],
       bytes: process.env[OWNER_BYTES_CAP_ENV],
     };
 
@@ -531,13 +531,13 @@ describe("the audit's caps and per-owner lines", () => {
       scratch = await migratedScratchDatabase();
       home = await mkdtemp(path.join(tmpdir(), "blob-caps-home-"));
       process.env["DATABASE_URL"] = scratch.url;
-      process.env["SELF_LEARN_HOME"] = home;
+      process.env["GNOSIA_HOME"] = home;
     }, 60_000);
 
     afterAll(async () => {
       for (const [variable, value] of [
         ["DATABASE_URL", saved.url],
-        ["SELF_LEARN_HOME", saved.home],
+        ["GNOSIA_HOME", saved.home],
         [OWNER_BYTES_CAP_ENV, saved.bytes],
       ] as const) {
         if (value === undefined) delete process.env[variable];

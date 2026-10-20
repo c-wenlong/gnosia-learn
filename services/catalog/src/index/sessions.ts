@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import type { NewAsset, NewAssetConcept, NewAssetTopic } from "@self-learn/schema";
+import type { NewAsset, NewAssetConcept, NewAssetTopic } from "@gnosia/schema";
 
 import { type ImportedLog, logAsset } from "../content/session-logs";
 import { filesIn, relativeTo } from "./files";

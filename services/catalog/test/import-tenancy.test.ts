@@ -26,7 +26,7 @@ import {
   tag,
   topic,
   topicRelation,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
@@ -127,7 +127,7 @@ describe.skipIf(!reachable.ok)("an import touches only its owner's rows", () => 
     id: `note:learn/concepts/x/${slug}.md`,
     kind: "note" as const,
     path: `learn/concepts/x/${slug}.md`,
-    sourceRepo: "self-learn" as const,
+    sourceRepo: "gnosia" as const,
   });
   const concepts = (rows: SourceRows) => writeSource(db(), conceptsIndexer, rows, [], "learn/concepts");
   const refusal = (promise: Promise<unknown>) => promise.then(() => null, (e: unknown) => e);
@@ -244,7 +244,7 @@ describe.skipIf(!reachable.ok)("an import touches only its owner's rows", () => 
         id: "link:zq-r1",
         kind: "link",
         url: "https://example.com/zq",
-        sourceRepo: "self-learn",
+        sourceRepo: "gnosia",
         ownerId: OTHER,
       });
       await db().insert(collectionTag).values([
@@ -505,7 +505,7 @@ describe.skipIf(!reachable.ok)("an import touches only its owner's rows", () => 
 
     it("refuses to drop a topic another owner's rows are filed under, naming them", async () => {
       await db().insert(topic).values({ slug: "old", title: "Old", domain: "one" });
-      await db().insert(asset).values({ id: "link:zq-r1", kind: "link", url: "https://e.com", sourceRepo: "self-learn", ownerId: OTHER });
+      await db().insert(asset).values({ id: "link:zq-r1", kind: "link", url: "https://e.com", sourceRepo: "gnosia", ownerId: OTHER });
       await db().insert(assetTopic).values({ assetId: "link:zq-r1", topicSlug: "old" });
       await db().insert(manimkcTopic).values({ path: "out/zq-old", topicSlug: "old", ownerId: OTHER, position: 0 });
       const error = await refusal(topics({ topic: [{ slug: "mine", title: "Mine", domain: "one" }] }));

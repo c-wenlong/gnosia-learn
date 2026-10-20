@@ -40,7 +40,7 @@ describe.skipIf(!reachable.ok)("review API routes", () => {
   let scratch: Scratch;
   let grade: (req: Request) => Promise<Response>;
   let due: (req: Request) => Promise<Response>;
-  let state: typeof import("@self-learn/catalog/state");
+  let state: typeof import("@gnosia/catalog/state");
 
   beforeAll(async () => {
     scratch = await migratedScratchDatabase();
@@ -49,7 +49,7 @@ describe.skipIf(!reachable.ok)("review API routes", () => {
     const [gradeRoute, dueRoute, store] = await Promise.all([
       import("./grade/route"),
       import("./due/route"),
-      import("@self-learn/catalog/state"),
+      import("@gnosia/catalog/state"),
     ]);
     grade = gradeRoute.POST;
     due = dueRoute.GET;

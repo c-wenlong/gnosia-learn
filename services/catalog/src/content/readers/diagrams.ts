@@ -1,4 +1,4 @@
-import { diagram } from "@self-learn/schema";
+import { diagram } from "@gnosia/schema";
 import { and, eq, isNull } from "drizzle-orm";
 
 import { diagramPaths } from "../diagram-document";

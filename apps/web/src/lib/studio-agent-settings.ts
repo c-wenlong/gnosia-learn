@@ -5,7 +5,7 @@ import {
   studioAgentPreference,
   type StudioAgentPreference,
   type StudioAgentPreferenceKey,
-} from "@self-learn/schema/shared";
+} from "@gnosia/schema/shared";
 
 import type { FilterOption } from "@/components/ui/filter-menu";
 import { modelName } from "@/lib/model-name";

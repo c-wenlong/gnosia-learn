@@ -1,4 +1,4 @@
-import { indexRun } from "@self-learn/schema";
+import { indexRun } from "@gnosia/schema";
 import { sql } from "drizzle-orm";
 import pg from "pg";
 import { inject } from "vitest";
@@ -18,7 +18,7 @@ declare module "vitest" {
 /**
  * The schema tests run against a real Postgres, because the whole point of the
  * schema is the constraints, and no fake enforces a foreign key. They must
- * still not touch the developer's own `self_learn` database, so each run gets a
+ * still not touch the developer's own `gnosia` database, so each run gets a
  * throwaway database created and dropped around it.
  *
  * A throwaway *schema* would have been cheaper, but drizzle-kit writes
@@ -88,7 +88,7 @@ export interface Scratch extends Connection {
 const LINGUISTIC_COLLATION = "template template0 locale_provider icu icu_locale 'en-US'";
 
 function scratchName(kind = "test"): string {
-  return `self_learn_${kind}_${process.pid}_${Math.random().toString(36).slice(2, 8)}`;
+  return `gnosia_${kind}_${process.pid}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
 /**

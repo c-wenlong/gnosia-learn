@@ -1,4 +1,4 @@
-import { collection, event, LOCAL_LEARNER_ID, readableOwners, session as sessionTable } from "@self-learn/schema";
+import { collection, event, LOCAL_LEARNER_ID, readableOwners, session as sessionTable } from "@gnosia/schema";
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 

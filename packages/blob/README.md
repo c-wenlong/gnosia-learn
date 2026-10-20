@@ -1,4 +1,4 @@
-# @self-learn/blob
+# @gnosia/blob
 
 One interface for every place the catalog keeps bytes: videos, their posters and
 sidecars, diagram SVGs, course cover photos. Postgres holds a `blob_object` row per object (its key,
@@ -77,19 +77,19 @@ adapter's `BLOB_LINK` and `BLOB_NOT_FILE`).
 ## The `fs` adapter
 
 `fsStore(root?)` keeps objects at `<root>/<owner_id>/<sha256>.<ext>`. The root
-defaults to `$SELF_LEARN_HOME/blobs`, or `~/.self-learn/blobs` when that is
+defaults to `$GNOSIA_HOME/blobs`, or `~/.gnosia/blobs` when that is
 unset. A leading `~` is expanded and a relative value is refused. Callers do
 not read the variable themselves: `blobRoot()` in
 `services/catalog/src/env.ts`, exported to the web app through
-`@self-learn/catalog/state`, reads it after `services/catalog/.env` the way
+`@gnosia/catalog/state`, reads it after `services/catalog/.env` the way
 `DATABASE_URL` is read, so the catalog CLI and the app cannot open different
 stores.
 
 - **Never inside the repository.** Moving the manimkc submodule on 2026-09-13
   deleted 25 rendered videos, because git does not carry gitignored files
-  across a move. `fsStore` refuses a root inside any self-learn checkout,
+  across a move. `fsStore` refuses a root inside any gnosia checkout,
   symlinks resolved, and says which. A checkout is a directory whose
-  `package.json` is named `self-learn` (a clone, a worktree, an old checkout,
+  `package.json` is named `gnosia` (a clone, a worktree, an old checkout,
   a copy with no `.git`), or one with a `.git` and this package in it; any
   other repository, such as a dotfiles home directory, is fine.
 - **Only regular files are objects.** Objects are opened non-blocking and

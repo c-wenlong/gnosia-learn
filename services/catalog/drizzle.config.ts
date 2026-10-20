@@ -10,7 +10,7 @@ import { databaseUrl } from "./src/env";
  * homeserver.
  *
  * Regenerate after changing packages/schema:
- *   npm run generate -w @self-learn/catalog
+ *   npm run generate -w @gnosia/catalog
  */
 export default defineConfig({
   dialect: "postgresql",

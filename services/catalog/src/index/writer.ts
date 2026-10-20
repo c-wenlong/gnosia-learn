@@ -25,7 +25,7 @@ import {
   tag,
   topic,
   topicRelation,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { and, eq, getTableName, inArray, isNull, notInArray, sql, type SQL } from "drizzle-orm";
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
 

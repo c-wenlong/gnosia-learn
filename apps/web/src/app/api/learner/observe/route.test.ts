@@ -6,7 +6,7 @@ import {
   type Scratch,
 } from "../../../../../../../services/catalog/test/scratch-database";
 import { seedContent } from "../../../../../../../services/catalog/test/state-fixture";
-import { collection, learner } from "@self-learn/schema";
+import { collection, learner } from "@gnosia/schema";
 
 /**
  * Beside the fixture's live module `fx-m1`: one the course file stopped
@@ -62,7 +62,7 @@ describe.skipIf(!reachable.ok)("the session's learner routes", () => {
   let scratch: Scratch;
   let observe: (req: Request) => Promise<Response>;
   let close: (req: Request) => Promise<Response>;
-  let state: typeof import("@self-learn/catalog/state");
+  let state: typeof import("@gnosia/catalog/state");
 
   beforeAll(async () => {
     scratch = await migratedScratchDatabase();
@@ -72,7 +72,7 @@ describe.skipIf(!reachable.ok)("the session's learner routes", () => {
     const [observeRoute, closeRoute, store] = await Promise.all([
       import("./route"),
       import("../session/close/route"),
-      import("@self-learn/catalog/state"),
+      import("@gnosia/catalog/state"),
     ]);
     observe = observeRoute.POST;
     close = closeRoute.POST;

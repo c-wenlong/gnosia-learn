@@ -10,7 +10,7 @@ import {
   contentRevision,
   type OwnerScope,
   topic,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { and, asc, count, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
@@ -24,7 +24,7 @@ import { bytewise } from "../sql-order";
  * These queries used to be private functions inside
  * `../commands/show.ts`, which made them reachable from the CLI and from
  * nowhere else. The web app may import exactly one module of this package
- * (`@self-learn/catalog/state`, ARCHITECTURE.md layering rule 1), so an asset
+ * (`@gnosia/catalog/state`, ARCHITECTURE.md layering rule 1), so an asset
  * the catalog knows about could not be put on a page at all: the indexers
  * recorded 200-odd of them and the app could not name one. That is the reason
  * this file exists, and the reason it is here rather than under `commands/`.

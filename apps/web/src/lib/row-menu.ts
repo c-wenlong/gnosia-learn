@@ -1,4 +1,4 @@
-import type { AssetParents } from "@self-learn/catalog/state";
+import type { AssetParents } from "@gnosia/catalog/state";
 
 import { moduleHref } from "@/lib/course-path";
 import { assetDownloadHref, assetHref, conceptHref } from "@/lib/library";

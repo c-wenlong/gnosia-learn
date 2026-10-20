@@ -23,8 +23,8 @@
 // course unchanged. --dry-run passes --dry-run to each command: every check,
 // nothing stored, nothing written.
 //
-// Environment: DATABASE_URL and SELF_LEARN_HOME, as the catalog reads them
-// (the blob store is $SELF_LEARN_HOME/blobs, else ~/.self-learn/blobs).
+// Environment: DATABASE_URL and GNOSIA_HOME, as the catalog reads them
+// (the blob store is $GNOSIA_HOME/blobs, else ~/.gnosia/blobs).
 //
 // Exit codes: 0 every cover is in place (or would be, on a dry run), 1 one
 // or more refused, 2 the invocation was wrong, 3 the database is unreachable,

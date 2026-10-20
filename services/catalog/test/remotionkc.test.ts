@@ -256,12 +256,12 @@ describe("the remotionkc CLI", () => {
 
   it("resolves the checkout from REMOTIONKC_ROOT, else the submodule", () => {
     delete process.env[REMOTIONKC_ROOT_ENV];
-    expect(resolveRemotionkcRoot("/srv/self-learn")).toBe(path.join("/srv/self-learn", "tools", "remotionkc"));
-    expect(toolCliPath(REMOTIONKC, "/srv/self-learn")).toBe(
-      path.join("/srv/self-learn", "tools", "remotionkc", "tools", "cli", "remotionkc.mjs"),
+    expect(resolveRemotionkcRoot("/srv/gnosia")).toBe(path.join("/srv/gnosia", "tools", "remotionkc"));
+    expect(toolCliPath(REMOTIONKC, "/srv/gnosia")).toBe(
+      path.join("/srv/gnosia", "tools", "remotionkc", "tools", "cli", "remotionkc.mjs"),
     );
     process.env[REMOTIONKC_ROOT_ENV] = "../elsewhere/remotionkc";
-    expect(resolveRemotionkcRoot("/srv/self-learn")).toBe(path.resolve("/srv/self-learn", "../elsewhere/remotionkc"));
+    expect(resolveRemotionkcRoot("/srv/gnosia")).toBe(path.resolve("/srv/gnosia", "../elsewhere/remotionkc"));
   });
 });
 

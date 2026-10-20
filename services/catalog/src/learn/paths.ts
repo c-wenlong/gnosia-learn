@@ -17,7 +17,7 @@ import { databaseUrl, loadEnv, redactUrl, REPO_ROOT } from "../env";
  * stops working when the CLI lives in a workspace and the state lives in a
  * database, so the override is explicit: the tests set `LEARN_ROOT` to a
  * fixture tree and `DATABASE_URL` to a scratch database, and nothing they do
- * can touch the real `learn/` or the real `self_learn`.
+ * can touch the real `learn/` or the real `gnosia`.
  *
  * It is read through `loadEnv` rather than straight off `process.env`, so
  * `services/catalog/.env.example` can document it beside `DATABASE_URL` and
@@ -88,7 +88,7 @@ export function workDir(): string {
   // One folder per checkout and database, so two worktrees, or one checkout
   // pointed at a scratch copy, never share a copy named only by concept id.
   const key = createHash("sha256").update(`${repoRoot()}\n${databaseUrl()}`).digest("hex").slice(0, 12);
-  return path.join(tmpdir(), "self-learn", "work", key);
+  return path.join(tmpdir(), "gnosia", "work", key);
 }
 
 /** The path with links resolved, or as given when it does not exist yet. */

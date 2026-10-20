@@ -1,7 +1,7 @@
 import path from "node:path";
 
-import type { BlobStore } from "@self-learn/blob";
-import { asset, assetDerivation, blobObject, collection, diagram, video } from "@self-learn/schema";
+import type { BlobStore } from "@gnosia/blob";
+import { asset, assetDerivation, blobObject, collection, diagram, video } from "@gnosia/schema";
 import { and, eq, inArray, isNotNull, lt, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
@@ -129,7 +129,7 @@ export async function auditBlobs(
         `${options.root} belongs to ${describeOwner(claimed)} (its ${OWNER_FILE}), and this is ` +
           `${describeOwner(self)}. Every object that database wrote has no row here, so --fix would delete ` +
           `them as orphans; nothing was changed. Audit it from that database, or give this one its own store ` +
-          `with SELF_LEARN_HOME. If the marker is wrong, delete ${OWNER_FILE} and run --fix again.`,
+          `with GNOSIA_HOME. If the marker is wrong, delete ${OWNER_FILE} and run --fix again.`,
       );
     }
   }

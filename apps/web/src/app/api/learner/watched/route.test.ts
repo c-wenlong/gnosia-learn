@@ -43,14 +43,14 @@ function request(body: unknown, origin: string | null = ORIGIN): Request {
 describe.skipIf(!reachable.ok)("POST /api/learner/watched", () => {
   let scratch: Scratch;
   let POST: (req: Request) => Promise<Response>;
-  let readEvents: typeof import("@self-learn/catalog/state").readEvents;
+  let readEvents: typeof import("@gnosia/catalog/state").readEvents;
 
   beforeAll(async () => {
     scratch = await migratedScratchDatabase();
     await seedContent(scratch.db);
     await seedAssets(scratch.db);
     process.env.DATABASE_URL = scratch.url;
-    const [route, state] = await Promise.all([import("./route"), import("@self-learn/catalog/state")]);
+    const [route, state] = await Promise.all([import("./route"), import("@gnosia/catalog/state")]);
     POST = route.POST;
     readEvents = state.readEvents;
   }, 60_000);

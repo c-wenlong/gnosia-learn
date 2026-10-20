@@ -1,4 +1,4 @@
-import { concept, mastery, readableOwners } from "@self-learn/schema";
+import { concept, mastery, readableOwners } from "@gnosia/schema";
 import { and, eq, inArray, type SQL, sql } from "drizzle-orm";
 
 import { andOwnedBy, ownedBy, scopedRead } from "../content/scope";

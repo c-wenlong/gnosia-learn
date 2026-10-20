@@ -8,7 +8,7 @@ import {
   type OwnerScope,
   readableOwners,
   topic,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { asc, eq } from "drizzle-orm";
 
 import { ownedBy, scopedRead } from "../content/scope";

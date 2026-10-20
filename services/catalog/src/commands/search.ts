@@ -1,4 +1,4 @@
-import { asset, assetName, concept, topic } from "@self-learn/schema";
+import { asset, assetName, concept, topic } from "@gnosia/schema";
 import { sql, type SQL } from "drizzle-orm";
 
 import { CLI_OWNER } from "../content/scope";

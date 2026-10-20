@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { conversationMade } from "@self-learn/catalog/state";
+import { conversationMade } from "@gnosia/catalog/state";
 
 import { enforceRateLimit } from "@/lib/agent/guard";
 import { isDraftId } from "@/lib/conversation-made";

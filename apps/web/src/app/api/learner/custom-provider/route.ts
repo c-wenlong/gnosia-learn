@@ -1,5 +1,5 @@
-import { CustomProviderError } from "@self-learn/catalog/state";
-import { isCustomProviderId } from "@self-learn/schema/shared";
+import { CustomProviderError } from "@gnosia/catalog/state";
+import { isCustomProviderId } from "@gnosia/schema/shared";
 import { NextResponse } from "next/server";
 
 import { changeCustomProvider, createCustomProvider } from "@/lib/custom-providers/store";

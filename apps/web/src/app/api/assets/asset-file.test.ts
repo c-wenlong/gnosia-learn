@@ -5,8 +5,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { fsStore, key as blobKey } from "@self-learn/blob";
-import { asset, blobObject, indexRun } from "@self-learn/schema";
+import { fsStore, key as blobKey } from "@gnosia/blob";
+import { asset, blobObject, indexRun } from "@gnosia/schema";
 
 import type { RouteProblemCode } from "@/lib/asset-problems";
 
@@ -136,7 +136,7 @@ describe.skipIf(!reachable.ok)("asset file route", () => {
   });
 
   beforeAll(async () => {
-    for (const key of ["DATABASE_URL", "SELF_LEARN_HOME", "ASSET_FILES_ENABLED"]) saved[key] = process.env[key];
+    for (const key of ["DATABASE_URL", "GNOSIA_HOME", "ASSET_FILES_ENABLED"]) saved[key] = process.env[key];
     base = await mkdtemp(path.join(tmpdir(), "asset-files-"));
     dataRoot = path.join(base, "manimkc-home");
     await mkdir(path.join(dataRoot, "out", "algorithms", "demo"), { recursive: true });
@@ -145,7 +145,7 @@ describe.skipIf(!reachable.ok)("asset file route", () => {
     scratch = await createScratchDatabase();
     await applyMigrations(scratch.db, { folder: await partialMigrations(BEFORE_BLOB_CONTRACT) });
     process.env.DATABASE_URL = scratch.url;
-    process.env.SELF_LEARN_HOME = path.join(base, "home");
+    process.env.GNOSIA_HOME = path.join(base, "home");
     // The value that used to turn the legacy branch on. Nothing reads it now.
     process.env.ASSET_FILES_ENABLED = "1";
     ({ GET } = (await import("./[id]/file/route")) as { GET: Handler });
@@ -153,10 +153,10 @@ describe.skipIf(!reachable.ok)("asset file route", () => {
 
     await scratch.db.insert(asset).values([
       row(ON_DISK_ID, "video", "out/algorithms/demo/demo.mp4", null),
-      row(SVG_ID, "diagram_svg", "learn/assets/dot-product.svg", await stored(SVG, "svg"), "self-learn"),
+      row(SVG_ID, "diagram_svg", "learn/assets/dot-product.svg", await stored(SVG, "svg"), "gnosia"),
       row(EMPTY_ID, "video", "out/empty.mp4", await stored(EMPTY, "mp4")),
       row(ODD_ID, "video", "out/odd.bin", await stored(ODD, "bin")),
-      row(LINK_ID, "link", null, null, "self-learn"),
+      row(LINK_ID, "link", null, null, "gnosia"),
     ]);
     // Where manimkc's `out/…` paths resolved, as the indexer records it: the
     // legacy branch's root, and the reason the video above is findable on disk.

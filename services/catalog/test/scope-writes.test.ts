@@ -17,7 +17,7 @@ import {
   session,
   topic,
   topicRelation,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -87,7 +87,7 @@ const COURSE = [
 
 function pointAt(name: string): () => void {
   const saved = { url: process.env["DATABASE_URL"], manimkc: process.env["MANIMKC_ROOT"] };
-  const url = new URL(process.env["DATABASE_URL"] ?? "postgres://localhost:5432/self_learn");
+  const url = new URL(process.env["DATABASE_URL"] ?? "postgres://localhost:5432/gnosia");
   url.pathname = `/${name}`;
   process.env["DATABASE_URL"] = url.toString();
   process.env["MANIMKC_ROOT"] = path.join(tmpdir(), "catalog-test-no-manimkc");
@@ -269,7 +269,7 @@ describe.skipIf(!reachable.ok)("write verbs and owners", () => {
       url: "https://example.com/t",
       title: "Their link",
       resourceType: "docs",
-      sourceRepo: "self-learn",
+      sourceRepo: "gnosia",
       ownerId: OTHER,
     });
     await expect(

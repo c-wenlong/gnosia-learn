@@ -5,8 +5,8 @@
 //
 // usage: node scripts/nightly-export.mjs [--keep N] [--json]
 //
-// It runs `catalog export --out` into $SELF_LEARN_HOME/archive/<UTC time>/
-// (~/.self-learn/archive/ when SELF_LEARN_HOME is unset), points
+// It runs `catalog export --out` into $GNOSIA_HOME/archive/<UTC time>/
+// (~/.gnosia/archive/ when GNOSIA_HOME is unset), points
 // archive/latest at it, and deletes all but the newest N exports (default 30).
 //
 // The export is written into a hidden `.<time>.partial-<random>` directory of
@@ -23,7 +23,7 @@
 // example). Pushing the archive to a private git repository is a later
 // decision of the owner's; nothing here creates one.
 //
-// Environment: DATABASE_URL (the catalog's), SELF_LEARN_HOME (absolute or
+// Environment: DATABASE_URL (the catalog's), GNOSIA_HOME (absolute or
 // starting with ~/, as the blob store reads it; a diagram's SVG is read from
 // that store too).
 //
@@ -62,12 +62,12 @@ function fileStamp(date = new Date()) {
   return date.toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
 }
 
-/** $SELF_LEARN_HOME as the blob store reads it: `~` expanded, relative refused. */
-function selfLearnHome(env = process.env) {
-  const raw = env.SELF_LEARN_HOME?.trim();
-  if (!raw) return join(homedir(), '.self-learn');
+/** $GNOSIA_HOME as the blob store reads it: `~` expanded, relative refused. */
+function gnosiaHome(env = process.env) {
+  const raw = env.GNOSIA_HOME?.trim();
+  if (!raw) return join(homedir(), '.gnosia');
   const expanded = raw === '~' || raw.startsWith('~/') ? join(homedir(), raw.slice(1)) : raw;
-  if (!isAbsolute(expanded)) throw new Refusal(`SELF_LEARN_HOME must be absolute or start with ~/, not ${JSON.stringify(raw)}`);
+  if (!isAbsolute(expanded)) throw new Refusal(`GNOSIA_HOME must be absolute or start with ~/, not ${JSON.stringify(raw)}`);
   return expanded;
 }
 
@@ -114,11 +114,11 @@ async function main(argv) {
     process.stdout.write(`${USAGE}\n`);
     return 0;
   }
-  const archive = join(selfLearnHome(), 'archive');
+  const archive = join(gnosiaHome(), 'archive');
   // Inside the checkout a `git clean` or a relayout deletes it, the reason
   // the blob store and manimkc's renders live outside it too.
   if (inside(real(archive), realpathSync(ROOT))) {
-    throw new Refusal(`refusing ${archive}: it is inside the self-learn checkout, where a git operation can delete it. Point SELF_LEARN_HOME outside it.`);
+    throw new Refusal(`refusing ${archive}: it is inside the gnosia checkout, where a git operation can delete it. Point GNOSIA_HOME outside it.`);
   }
   mkdirSync(archive, { recursive: true });
 

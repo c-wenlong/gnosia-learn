@@ -8,7 +8,7 @@ import {
   type NewAssetTopic,
   session,
   sessionLogEntry,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { asc, eq, inArray, max, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
@@ -162,7 +162,7 @@ export function logAsset(
       contentHash: createHash("sha256").update(bytes).digest("hex"),
       bytes: bytes.length,
       title: readText(data, "title") ?? where.replace(/^.*\//, "").replace(/\.md$/, ""),
-      sourceRepo: "self-learn",
+      sourceRepo: "gnosia",
     },
     assetConcepts,
     assetTopics: [...topics].map((topicSlug) => ({ assetId: id, topicSlug })),

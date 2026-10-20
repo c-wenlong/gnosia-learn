@@ -270,7 +270,7 @@ processes' information) are in the profile above:
 | Read `~/.claude.json` | blocked |
 | List `~/.ssh` | blocked |
 | Read the data root's `.env`, the one file manimkc keeps its keys in | blocked |
-| Read the self-learn repository's `AGENTS.md` | blocked |
+| Read the gnosia repository's `AGENTS.md` | blocked |
 | Write `~/sandbox-probe.txt` | blocked |
 | Write into the real manimkc checkout's `topics/` | blocked |
 | TCP to `1.1.1.1:443` | blocked |
@@ -1138,7 +1138,7 @@ and three actions:
    from; a `content_revision` with `entity_type 'video'` and the job id.
 4. The asset rows the library and player already understand, in a namespace
    no importer prunes: `video:<slug>` (kind `video`, path `videos/<slug>.mp4`,
-   `source_repo 'self-learn'`), `video:<slug>.transcript.json`,
+   `source_repo 'gnosia'`), `video:<slug>.transcript.json`,
    `video:<slug>.chapters.json`, `video:<slug>.vtt` (kinds `transcript`,
    `chapters`, `captions`), each derived from the video, and
    `poster:video:<slug>` and `pdf:video:<slug>`, derived from it too, in
@@ -1897,8 +1897,8 @@ blob store. `MANIMKC_ROOT` pointed read-only at the main checkout's manimkc
 the planner on `sonnet` (`STUDIO_PLANNER_MODEL` unset). The browser was
 headless Chrome for Testing 153 driven by `playwright-core`: every message
 was typed into the composer with its chip picked from the @ menu, and every
-press was a click. Nothing was written to the owner's `self_learn` database,
-under `~/.self-learn/manimkc` (its clip count, timing log and file count were
+press was a click. Nothing was written to the owner's `gnosia` database,
+under `~/.gnosia/manimkc` (its clip count, timing log and file count were
 the same after as before) or into the main checkout's manimkc.
 
 **Five video drafts, first message to a brief that passes

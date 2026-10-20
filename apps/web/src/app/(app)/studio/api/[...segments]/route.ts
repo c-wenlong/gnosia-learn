@@ -1,4 +1,4 @@
-import { STUDIO_OWNER_HEADER } from "@self-learn/schema/shared";
+import { STUDIO_OWNER_HEADER } from "@gnosia/schema/shared";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { currentOwner, NoOwnerError } from "@/lib/owner";

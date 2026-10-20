@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
-import { ownerScope } from "@self-learn/schema/shared";
+import { ownerScope } from "@gnosia/schema/shared";
 
 /**
  * The course cover route and the course list's cover read with the catalog

@@ -2,7 +2,7 @@ import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { asset, assetDerivation, assetTopic, blobObject, indexRun } from "@self-learn/schema";
+import { asset, assetDerivation, assetTopic, blobObject, indexRun } from "@gnosia/schema";
 import { eq, like } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -266,6 +266,6 @@ describe.skipIf(!reachable.ok)("remotionkc through catalog import", () => {
     expect((await remotionkcRows()).map((r) => r.id)).not.toContain(`remotionkc:${SECOND}`);
     // The poster lives outside the namespace, as manimkc's do, so no import prunes it.
     const [poster] = await scratch.db.select().from(asset).where(eq(asset.id, posterId(`remotionkc:${VIDEO}`)));
-    expect(poster?.sourceRepo).toBe("self-learn");
+    expect(poster?.sourceRepo).toBe("gnosia");
   });
 });

@@ -1,8 +1,8 @@
 import "server-only";
 
 import { connection } from "next/server";
-import { PREFERENCE_KEYS } from "@self-learn/schema/shared";
-import { readParams, readPreferences, type BktParams } from "@self-learn/catalog/state";
+import { PREFERENCE_KEYS } from "@gnosia/schema/shared";
+import { readParams, readPreferences, type BktParams } from "@gnosia/catalog/state";
 
 import { catalogDatabase } from "@/lib/learner-store";
 import { currentOwner } from "@/lib/owner";

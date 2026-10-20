@@ -7,7 +7,7 @@ import {
   LOCAL_LEARNER_ID,
   progress,
   recap,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { and, eq, getTableColumns, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import type { PgTable } from "drizzle-orm/pg-core";
 

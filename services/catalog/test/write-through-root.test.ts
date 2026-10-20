@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 
-import { fsStore } from "@self-learn/blob";
+import { fsStore } from "@gnosia/blob";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -43,13 +43,13 @@ const by: By = { author: "local", authorKind: "person", reason: "a test" };
 const NO_MANIMKC = path.join(tmpdir(), "catalog-test-no-manimkc");
 
 function pointAt(name: string, env: { manimkc?: string; blobHome?: string } = {}): () => void {
-  const keys = ["DATABASE_URL", "MANIMKC_ROOT", "SELF_LEARN_HOME"] as const;
+  const keys = ["DATABASE_URL", "MANIMKC_ROOT", "GNOSIA_HOME"] as const;
   const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
-  const url = new URL(process.env["DATABASE_URL"] ?? "postgres://localhost:5432/self_learn");
+  const url = new URL(process.env["DATABASE_URL"] ?? "postgres://localhost:5432/gnosia");
   url.pathname = `/${name}`;
   process.env["DATABASE_URL"] = url.toString();
   process.env["MANIMKC_ROOT"] = env.manimkc ?? NO_MANIMKC;
-  if (env.blobHome !== undefined) process.env["SELF_LEARN_HOME"] = env.blobHome;
+  if (env.blobHome !== undefined) process.env["GNOSIA_HOME"] = env.blobHome;
   return () => {
     for (const key of keys) {
       const value = saved[key];
@@ -177,7 +177,7 @@ describe.skipIf(!reachable.ok)("a copy of a database never writes into the tree 
     expect(rows[0]?.root).toBe(template.root);
     await expect(
       addTopic(copy.db, { slug: "gamma", title: "Gamma", domain: "testing" }, by),
-    ).rejects.toThrow(/topics was last imported from .* by another database \(self_learn_test_\w+:\d+\), not by this one/s);
+    ).rejects.toThrow(/topics was last imported from .* by another database \(gnosia_test_\w+:\d+\), not by this one/s);
     await expect(editTopic(copy.db, { slug: "alpha", summary: "changed on the copy" }, by)).rejects.toThrow(
       /another database/,
     );

@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
-import { COMMONS_OWNER, concept, contentRevision, LOCAL_LEARNER_ID, topic, topicRelation } from "@self-learn/schema";
+import { COMMONS_OWNER, concept, contentRevision, LOCAL_LEARNER_ID, topic, topicRelation } from "@gnosia/schema";
 import { and, eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 

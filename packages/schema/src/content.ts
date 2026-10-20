@@ -74,7 +74,7 @@ export const BLOB_STORED_KINDS = [
 ] as const satisfies readonly AssetKind[];
 
 /**
- * A blob key as `@self-learn/blob`'s `key()` makes it (`packages/blob/src/key.ts`):
+ * A blob key as `@gnosia/blob`'s `key()` makes it (`packages/blob/src/key.ts`):
  * a lowercase owner of 1 to 64 characters, a lowercase hex sha256, and a
  * required extension of 1 to 16 lowercase letters and digits. The database's
  * `blob_object_key_check` holds a key to it from 0013 on.
@@ -86,7 +86,7 @@ export const BLOB_KEY_PATTERN = "^[a-z0-9][a-z0-9_-]{0,63}/[0-9a-f]{64}[.][a-z0-
  * `manimkc`, `remotionkc`, `revideokc` and `blenderkc` are the video tools,
  * `tldrawkc` the diagrams.
  */
-export const SOURCE_REPOS = ["self-learn", "manimkc", "tldrawkc", "remotionkc", "revideokc", "blenderkc"] as const;
+export const SOURCE_REPOS = ["gnosia", "manimkc", "tldrawkc", "remotionkc", "revideokc", "blenderkc"] as const;
 export type SourceRepo = (typeof SOURCE_REPOS)[number];
 
 /** A `collection` is any ordered container. Courses and modules today, decks next. */
@@ -116,7 +116,7 @@ export type AssetResourceType = (typeof RESOURCE_TYPES)[number];
 export const TOPIC_RELATION_KINDS = ["broader", "related", "precedes"] as const;
 export type TopicRelationKind = (typeof TOPIC_RELATION_KINDS)[number];
 
-/** Where a blob's bytes live. `fs` is the laptop's store under `~/.self-learn/blobs`. */
+/** Where a blob's bytes live. `fs` is the laptop's store under `~/.gnosia/blobs`. */
 export const BLOB_PROVIDERS = ["fs", "vercel-blob", "r2"] as const;
 export type BlobProvider = (typeof BLOB_PROVIDERS)[number];
 

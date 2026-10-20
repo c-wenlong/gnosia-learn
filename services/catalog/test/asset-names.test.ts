@@ -1,4 +1,4 @@
-import { asset, assetName, COMMONS_OWNER, learner, LOCAL_LEARNER_ID, ownerScope } from "@self-learn/schema";
+import { asset, assetName, COMMONS_OWNER, learner, LOCAL_LEARNER_ID, ownerScope } from "@gnosia/schema";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
@@ -29,7 +29,7 @@ const COMMONS = "link:commons";
 
 /** A link row, which needs no blob: the one kind a scratch database can hold bare. */
 function link(id: string, ownerId: string, title: string | null) {
-  return { id, kind: "link", url: `https://example.com/${id}`, title, sourceRepo: "self-learn", ownerId };
+  return { id, kind: "link", url: `https://example.com/${id}`, title, sourceRepo: "gnosia", ownerId };
 }
 
 /** Write the row the way `catalog import` does: every column from the source, by `updateSet`. */

@@ -1,4 +1,4 @@
-import type { AvatarId } from "@self-learn/schema/shared";
+import type { AvatarId } from "@gnosia/schema/shared";
 
 /**
  * The pictures behind `AVATARS`: one 16 by 16 grid per sprite, a palette, and

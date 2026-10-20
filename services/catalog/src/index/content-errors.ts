@@ -1,9 +1,9 @@
-import { ContentError } from "@self-learn/content";
+import { ContentError } from "@gnosia/content";
 
 import { IndexError } from "./errors";
 
 /**
- * Runs a `@self-learn/content` reader and re-labels its refusals as
+ * Runs a `@gnosia/content` reader and re-labels its refusals as
  * `IndexError`.
  *
  * The reader is shared with the web app, so it throws `ContentError`: "the

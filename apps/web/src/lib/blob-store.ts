@@ -1,12 +1,12 @@
 import "server-only";
 
-import { fsStore, type BlobStore } from "@self-learn/blob";
-import { blobRoot } from "@self-learn/catalog/state";
+import { fsStore, type BlobStore } from "@gnosia/blob";
+import { blobRoot } from "@gnosia/catalog/state";
 
 /**
  * The blob store the asset routes read from (docs/CONTENT-MIGRATION.md,
  * Track E): the same one `catalog asset upload` wrote to, because both resolve
- * the root through the catalog's `blobRoot()` (`SELF_LEARN_HOME`).
+ * the root through the catalog's `blobRoot()` (`GNOSIA_HOME`).
  *
  * Only the `fs` adapter exists while everything is local ("Decided by the
  * owner"). Its `signedUrl` is null, so the routes stream through `get`; the
@@ -14,8 +14,8 @@ import { blobRoot } from "@self-learn/catalog/state";
  * redirect to it instead. This is the one place that choice will be made.
  *
  * Opened per call and memoised by root, so a test or a developer changing
- * `SELF_LEARN_HOME` gets the store it names without a restart. `fsStore`
- * refuses a root inside a checkout and a relative `SELF_LEARN_HOME`; that
+ * `GNOSIA_HOME` gets the store it names without a restart. `fsStore`
+ * refuses a root inside a checkout and a relative `GNOSIA_HOME`; that
  * refusal is thrown from here, and the routes answer it as
  * `blob-store-unavailable` rather than as a 500.
  */

@@ -1,4 +1,4 @@
-import type { MasteryLabel } from "@self-learn/catalog/state";
+import type { MasteryLabel } from "@gnosia/catalog/state";
 
 import { assetDisplayTitle, assetKindLabel, type AssetCardRef } from "@/components/asset-meta";
 import { safeNextPath } from "@/lib/auth/core";

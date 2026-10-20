@@ -2,7 +2,7 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 
-import type { BlobStore } from "@self-learn/blob";
+import type { BlobStore } from "@gnosia/blob";
 import { sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";

@@ -10,7 +10,7 @@ import {
   canTransition,
   type DraftErrorKind,
   type DraftState,
-} from "@self-learn/schema/shared";
+} from "@gnosia/schema/shared";
 
 import { BriefError, loadVocabulary, SLUG_PATTERN, validateBrief, type ValidBrief, type Vocabulary } from "./brief";
 import { byokEnv, loadByok, resolveByok } from "./byok";

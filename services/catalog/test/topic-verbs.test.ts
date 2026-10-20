@@ -2,8 +2,8 @@ import { readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { fileSource } from "@self-learn/content";
-import { contentRevision, topic } from "@self-learn/schema";
+import { fileSource } from "@gnosia/content";
+import { contentRevision, topic } from "@gnosia/schema";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -48,7 +48,7 @@ const by: By = { author: "local", authorKind: "person", reason: "a test" };
 
 function pointAt(name: string): () => void {
   const saved = { url: process.env["DATABASE_URL"], manimkc: process.env["MANIMKC_ROOT"] };
-  const url = new URL(process.env["DATABASE_URL"] ?? "postgres://localhost:5432/self_learn");
+  const url = new URL(process.env["DATABASE_URL"] ?? "postgres://localhost:5432/gnosia");
   url.pathname = `/${name}`;
   process.env["DATABASE_URL"] = url.toString();
   process.env["MANIMKC_ROOT"] = path.join(tmpdir(), "catalog-test-no-manimkc");
@@ -418,7 +418,7 @@ describe.skipIf(!reachable.ok)("topic and tag writers", () => {
           contentHash: "seeded",
           bytes: 1,
           title: "A picture",
-          sourceRepo: "self-learn",
+          sourceRepo: "gnosia",
           blobKey: null,
           resourceType: null,
           ownerId: "local",

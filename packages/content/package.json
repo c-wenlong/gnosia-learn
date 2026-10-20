@@ -1,10 +1,10 @@
 {
-  "name": "@self-learn/content",
+  "name": "@gnosia/content",
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
   "type": "module",
-  "//": "No build step, same as @self-learn/schema: the consumers are other workspaces running through tsx or vitest, and the Next app, which transpiles workspace packages itself. Publishing is not a goal; if it ever is, add a build and point exports at dist/.",
+  "//": "No build step, same as @gnosia/schema: the consumers are other workspaces running through tsx or vitest, and the Next app, which transpiles workspace packages itself. Publishing is not a goal; if it ever is, add a build and point exports at dist/.",
   "exports": {
     ".": "./src/index.ts"
   },

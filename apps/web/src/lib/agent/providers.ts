@@ -7,7 +7,7 @@ import {
   TUTOR_MODEL_LIMITS,
   type ProviderId,
   type ProviderName,
-} from "@self-learn/schema/shared";
+} from "@gnosia/schema/shared";
 
 import { redactSecrets } from "@/lib/agent/redact";
 import { resolveSiteUrl } from "@/lib/site-url";
@@ -155,7 +155,7 @@ function baseUrl(env: EnvMap, id: ProviderId, variable: string): string {
  * an explicit answer to exactly this question, and a header is all it becomes.
  *
  * Below it, `resolveSiteUrl` answers, in place of the literal
- * `https://self-learn-one.vercel.app` that used to sit here. That was this
+ * `https://gnosia-one.vercel.app` that used to sit here. That was this
  * deployment's own domain, so a fork that set `NEXT_PUBLIC_SITE_URL` and
  * nothing else was crediting its requests to us.
  *

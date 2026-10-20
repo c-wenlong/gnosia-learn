@@ -1,6 +1,6 @@
-# Contributing to self-learn
+# Contributing to gnosia
 
-Thanks for your interest in contributing! self-learn is a Next.js study hub
+Thanks for your interest in contributing! gnosia is a Next.js study hub
 with a tutoring pipeline beside it, both over one Postgres database. Both
 halves are meant to stay readable: every write is a revision with a reason,
 and `catalog export` turns the content back into plain files at any time.
@@ -8,8 +8,8 @@ and `catalog export` turns the content back into plain files at any time.
 ## Getting started
 
 ```bash
-git clone https://github.com/c-wenlong/self-learn.git
-cd self-learn
+git clone https://github.com/c-wenlong/gnosia.git
+cd gnosia
 npm ci
 cp .env.example apps/web/.env.local
 npm run dev
@@ -20,7 +20,7 @@ The web app reads everything from the catalog, and a fresh clone's catalog is
 built from [`seed/`](seed/README.md), the only content the repository holds:
 
 ```bash
-createdb self_learn            # Homebrew Postgres 17, already running
+createdb gnosia            # Homebrew Postgres 17, already running
 npm run catalog -- migrate
 MANIMKC_ROOT=/nonexistent REMOTIONKC_ROOT=/nonexistent REVIDEOKC_ROOT=/nonexistent BLENDERKC_ROOT=/nonexistent npm run catalog -- import seed
 for t in topics tags concepts sessions courses diagrams; do npm run catalog -- flip $t; done
@@ -31,7 +31,7 @@ README.md, "Install", says why each step is there. The tests do not use this
 database.
 
 Without a reachable Postgres the catalog tests skip themselves with a reason
-and `npm test` still passes. With one, they never read your `self_learn`: each
+and `npm test` still passes. With one, they never read your `gnosia`: each
 suite creates and drops its own scratch database, and the end-to-end suite
 imports [`seed/`](seed/README.md), a small real slice of the content in the
 export format. The repository's `content/` and `learn/` went in phase 3 of
@@ -101,7 +101,7 @@ there.
 | `seed/` | A small slice of the content in the export format: a fresh clone's database and the tests' fixture. The format is in its [README](seed/README.md), the course file in [COURSES.md](seed/COURSES.md) |
 | `packages/content/` | The parsers the catalog imports an export's `content/` with, and the reader seam (`ContentSource`, `fileSource`, `selectSource`) the app and the studio read through; the app composes it with no file reader |
 | `packages/schema/` | The Drizzle table definitions: the single source of the catalog's row shapes |
-| `packages/blob/` | The blob store: one interface for where binaries live, and the `fs` adapter under `~/.self-learn/blobs` ([README](packages/blob/README.md)) |
+| `packages/blob/` | The blob store: one interface for where binaries live, and the `fs` adapter under `~/.gnosia/blobs` ([README](packages/blob/README.md)) |
 | `services/catalog/` | Migrations, the database connection and the `catalog` CLI ([SCHEMA.md](services/catalog/SCHEMA.md)) |
 | `scripts/learn/` | The `learn` pipeline's entry point and its pure maths modules; the command itself is `services/catalog/src/learn/` |
 | `tools/manimkc/` | Submodule for narrated animation videos, with its own repo and `AGENTS.md` |
@@ -185,15 +185,15 @@ Prerequisites:
 - Homebrew Postgres 17 running. The client tools are found on `PATH`, then
   through `pg_config --bindir`, then in Homebrew's
   `/opt/homebrew/opt/postgresql@17/bin`; set `PG_BIN` to name another
-  directory. A `self_learn` database is needed only with `--copy`.
+  directory. A `gnosia` database is needed only with `--copy`.
 - playwright-core from the tldrawkc submodule (`npm ci` inside
   `tools/tldrawkc`), or `PLAYWRIGHT_CORE` pointing at its `index.mjs`, and a
   Playwright Chromium in the cache or `CHROMIUM` pointing at one. This is the
   same lookup `docs/design/kit/shots.mjs` uses; the repo installs nothing for it.
 
-**It never touches `self_learn`.** A review rating, a session answer and Mark
+**It never touches `gnosia`.** A review rating, a session answer and Mark
 watched all write real evidence, and the event log is append-only, so the run
-works on a database of its own, `self_learn_e2e_<pid>_<time>`, and drops it
+works on a database of its own, `gnosia_e2e_<pid>_<time>`, and drops it
 afterwards, on a failure and on Ctrl-C too. `--keep-db` leaves it behind to
 inspect, and prints the `dropdb` line; `--headed` shows the browser.
 
@@ -202,7 +202,7 @@ By default it builds that database from the seed, exactly as README.md,
 import seed/`, all six types flipped, and one `learn observe` so a review card
 is due, with the diagram's SVG in a temp blob store. The seed has no videos, so
 the video step (play, pause, see the place saved) prints `SKIP` with the reason
-and counts as neither a pass nor a failure. `--copy` (or `E2E_TEMPLATE_DB=<name>`) copies `self_learn`,
+and counts as neither a pass nor a failure. `--copy` (or `E2E_TEMPLATE_DB=<name>`) copies `gnosia`,
 or the database named, instead (`createdb -T`, or `pg_dump` when another
 connection holds the template open); every content type must be flipped there.
 `--seed` is still accepted and means the default.
@@ -219,7 +219,7 @@ the tree.
 
 ## Reporting bugs
 
-Use the [bug report template](https://github.com/c-wenlong/self-learn/issues/new?template=bug_report.yml)
+Use the [bug report template](https://github.com/c-wenlong/gnosia/issues/new?template=bug_report.yml)
 and include your OS, Node version, browser and whether it was the live site or
 `npm run dev`; the exact command or route that failed with its full output; and
 steps to reproduce.
@@ -229,4 +229,4 @@ steps to reproduce.
 Read [README.md](README.md) for the tour, [ARCHITECTURE.md](ARCHITECTURE.md)
 for how the layers fit together, and [docs/LEARN.md](docs/LEARN.md) for the
 tutoring loop. Discussions are not enabled on this repo, so an
-[issue](https://github.com/c-wenlong/self-learn/issues) is the only channel.
+[issue](https://github.com/c-wenlong/gnosia/issues) is the only channel.

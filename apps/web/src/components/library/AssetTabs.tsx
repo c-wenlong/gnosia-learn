@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import type { AssetDerivations, AssetRef, AssetWithTopics } from "@self-learn/catalog/state";
+import type { AssetDerivations, AssetRef, AssetWithTopics } from "@gnosia/catalog/state";
 
 import { assetDisplayTitle, assetKindLabel, formatBytes } from "@/components/asset-meta";
 import { Button } from "@/components/ui/Button";

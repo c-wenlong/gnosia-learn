@@ -1,4 +1,4 @@
-import { resetCourse } from "@self-learn/catalog/state";
+import { resetCourse } from "@gnosia/catalog/state";
 
 import { handler, requireIdList } from "@/lib/learner-api";
 

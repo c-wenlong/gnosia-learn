@@ -1,4 +1,4 @@
-import type { ContentSource, ContentType } from "@self-learn/content";
+import type { ContentSource, ContentType } from "@gnosia/content";
 
 import type { CatalogDatabase } from "../../db";
 import type { OwnerScope } from "../scope";

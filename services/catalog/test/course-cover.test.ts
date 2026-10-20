@@ -3,8 +3,8 @@ import { cp, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promi
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { fsStore } from "@self-learn/blob";
-import { blobObject, collection, contentRevision, COURSE_COVER_MAX_BYTES, learner } from "@self-learn/schema";
+import { fsStore } from "@gnosia/blob";
+import { blobObject, collection, contentRevision, COURSE_COVER_MAX_BYTES, learner } from "@gnosia/schema";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -54,14 +54,14 @@ const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a
 
 /** Point the blob store at a directory of this database's own, until the returned function puts it back. */
 function ownStore(name: string): { root: string; restore: () => void } {
-  const saved = process.env["SELF_LEARN_HOME"];
-  const home = path.join(tmpdir(), `self-learn-home-${name}`);
-  process.env["SELF_LEARN_HOME"] = home;
+  const saved = process.env["GNOSIA_HOME"];
+  const home = path.join(tmpdir(), `gnosia-home-${name}`);
+  process.env["GNOSIA_HOME"] = home;
   return {
     root: path.join(home, "blobs"),
     restore: () => {
-      if (saved === undefined) delete process.env["SELF_LEARN_HOME"];
-      else process.env["SELF_LEARN_HOME"] = saved;
+      if (saved === undefined) delete process.env["GNOSIA_HOME"];
+      else process.env["GNOSIA_HOME"] = saved;
       void rm(home, { recursive: true, force: true });
     },
   };

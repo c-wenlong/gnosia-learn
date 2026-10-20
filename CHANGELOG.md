@@ -16,7 +16,7 @@ This project is continuously deployed and not versioned; entries are grouped by 
   and once a database owns all six types a write changes rows and no file.
   `catalog export --out <dir>` writes them out when someone wants files, and
   `npm run export:nightly` keeps a dated archive under
-  `$SELF_LEARN_HOME/archive/`, pruned to the newest 30. The last tree the
+  `$GNOSIA_HOME/archive/`, pruned to the newest 30. The last tree the
   repository held is at the tag `content-files-final`.
 
   `CONTENT_SOURCE` defaults to the database, and `files` survives only as a
@@ -28,7 +28,7 @@ This project is continuously deployed and not versioned; entries are grouped by 
   nothing else.
 
   A fresh clone builds its database from `seed/` (README.md, "Install"), and
-  `npm run e2e` does the same by default; `--copy` copies `self_learn`
+  `npm run e2e` does the same by default; `--copy` copies `gnosia`
   instead. The documents moved with the files: `content/README.md` is now the
   export format's section of [seed/README.md](seed/README.md), the course file
   format is [seed/COURSES.md](seed/COURSES.md), and the pipeline's
@@ -73,7 +73,7 @@ This project is continuously deployed and not versioned; entries are grouped by 
   endpoints spends free-tier quota, which is the reason.
 
   The OpenRouter attribution header falls back to the site URL the app already
-  resolves, instead of the literal `https://self-learn-one.vercel.app`. A fork
+  resolves, instead of the literal `https://gnosia-one.vercel.app`. A fork
   that configured its own site and nothing else was crediting its requests to
   this deployment. `resolveSiteUrl` moved out of `apps/web/src/app/layout.tsx`
   into `apps/web/src/lib/site-url.ts` so both callers share one parse: a second
@@ -259,7 +259,7 @@ This project is continuously deployed and not versioned; entries are grouped by 
 
   Without this the value existed only in a log line. The live database recorded
   the checkout, `tools/manimkc`, while all 99 manimkc files sat under
-  `~/.self-learn/manimkc`, so a route resolving against `source_root` would
+  `~/.gnosia/manimkc`, so a route resolving against `source_root` would
   have 404'd every video at once. Reading `$MANIMKC_HOME` instead is not an
   option: nothing in this repository reads it, and the data root belongs to the
   checkout that was indexed rather than to the environment the server booted
@@ -307,7 +307,7 @@ This project is continuously deployed and not versioned; entries are grouped by 
   share in `media.ts`.
 
   All four are pure presentation. Every one takes what it needs as props: none
-  queries the catalog, imports `@self-learn/catalog/state` or builds a URL, so
+  queries the catalog, imports `@gnosia/catalog/state` or builds a URL, so
   the parent that lists the rows and the route that serves the bytes can be
   written beside these rather than after them.
 
@@ -362,7 +362,7 @@ This project is continuously deployed and not versioned; entries are grouped by 
 - **The asset queries are behind the door the web app comes through.** A new
   `services/catalog/src/state/assets.ts` owns `assetsForTopic`,
   `assetsForConcept`, `assetsForCollection` and `assetsByIds`, plus the
-  `AssetRef` shape and the `byKind` grouping, and `@self-learn/catalog/state`
+  `AssetRef` shape and the `byKind` grouping, and `@gnosia/catalog/state`
   exports all of it.
 
   They were private functions inside `services/catalog/src/commands/show.ts`,
@@ -456,7 +456,7 @@ This project is continuously deployed and not versioned; entries are grouped by 
 ### Changed
 
 - **The repository is laid out around the catalog.** The Next app moved from
-  the root into `apps/web/`, with its own `package.json` (`@self-learn/web`),
+  the root into `apps/web/`, with its own `package.json` (`@gnosia/web`),
   its `public/`, `next.config.ts` and `vercel.json`; the two submodules moved
   from the root into `tools/manimkc/` and `tools/tldrawkc/`. Four homes for
   code, and a rule that tells them apart: `apps/` is deployed, `packages/` is
@@ -574,7 +574,7 @@ This project is continuously deployed and not versioned; entries are grouped by 
 ### Added
 
 - **A pixel-art app icon, README banner and social card**
-  ([#1](https://github.com/c-wenlong/self-learn/pull/1)). The icon and the
+  ([#1](https://github.com/c-wenlong/gnosia/pull/1)). The icon and the
   touch icon use the Next file conventions; the Open Graph card is declared
   by hand in the root layout, because under Turbopack the
   `app/opengraph-image.png` convention ignores the documented

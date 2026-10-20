@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { AVATARS, avatarLabel, DISPLAY_NAME_MAX, PREFERENCE_KEYS, type AvatarId } from "@self-learn/schema/shared";
+import { AVATARS, avatarLabel, DISPLAY_NAME_MAX, PREFERENCE_KEYS, type AvatarId } from "@gnosia/schema/shared";
 
 import { ThemeSwitch } from "@/components/ThemeSwitch";
 import { PixelAvatar } from "@/components/avatar/PixelAvatar";
@@ -29,7 +29,7 @@ import type { SettingsSnapshot } from "@/lib/settings";
  * what happened beside it. The theme is `ThemeSwitch`, which goes through the
  * provider's `setThemeMode` and so also writes the cookie the layout reads.
  * Motion is applied the same way, at once and before the save lands: the
- * `self-learn-motion` cookie and `data-motion` on <html> (`@/lib/motion`).
+ * `gnosia-motion` cookie and `data-motion` on <html> (`@/lib/motion`).
  */
 
 async function savePreference(key: string, value: unknown): Promise<string | null> {

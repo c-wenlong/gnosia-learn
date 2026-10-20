@@ -11,8 +11,8 @@ import {
   session,
   tables,
   topic,
-} from "@self-learn/schema";
-import { AVATARS } from "@self-learn/schema/shared";
+} from "@gnosia/schema";
+import { AVATARS } from "@gnosia/schema/shared";
 import { eq, inArray, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 

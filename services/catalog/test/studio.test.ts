@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { fsStore, type BlobStore } from "@self-learn/blob";
+import { fsStore, type BlobStore } from "@gnosia/blob";
 
 import {
   asset,
@@ -16,7 +16,7 @@ import {
   session,
   SESSION_TRANSITIONS,
   topic,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 

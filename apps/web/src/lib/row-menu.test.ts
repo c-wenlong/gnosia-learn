@@ -1,4 +1,4 @@
-import type { AssetParents, AssetPlace } from "@self-learn/catalog/state";
+import type { AssetParents, AssetPlace } from "@gnosia/catalog/state";
 import { describe, expect, it } from "vitest";
 
 import { conceptOrder } from "./library-source";

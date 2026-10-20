@@ -9,7 +9,7 @@
 //
 // A rehearsal (the default):
 //   1. `createdb -T <from> <copy>` (pg_dump into an empty database when the
-//      template has other sessions open). <from> defaults to self_learn and is
+//      template has other sessions open). <from> defaults to gnosia and is
 //      only ever read.
 //   2. Copies <tree-from>/content and <tree-from>/learn (default: this checkout)
 //      into a temp directory, the tree the copy imports, flips and exports.
@@ -17,7 +17,7 @@
 //      frontmatter, the .tldr key order), and a rehearsal leaves the owner's
 //      working tree alone.
 //   3. Runs the procedure below against the copy, with CATALOG_COPY_OK=1 and
-//      SELF_LEARN_HOME at a temp directory, so blobs go nowhere real.
+//      GNOSIA_HOME at a temp directory, so blobs go nowhere real.
 //   4. Prints a summary, and drops the copy and the temp directories unless
 //      --keep.
 //
@@ -136,7 +136,7 @@
 // That is the rehearsal of the owner's own cut-over, before --real. The copy's
 // rows name blobs flip day stored (the export reads the diagram SVGs back), so
 // the rehearsal copies the store --blob-store names (default: the one the
-// environment's SELF_LEARN_HOME names, which --real would use) into its own
+// environment's GNOSIA_HOME names, which --real would use) into its own
 // temp one first, as a clone where the file system can, and writes nothing to
 // the original. The copy leaves out the store's .owner marker, which names the
 // database flip day ran on, so the rehearsal's copy claims its own.
@@ -480,7 +480,7 @@ function options(argv) {
     }
   } else {
     if (parsed.database !== undefined) {
-      throw new Refusal('--database goes with --real. A rehearsal copies --from (default self_learn) instead.');
+      throw new Refusal('--database goes with --real. A rehearsal copies --from (default gnosia) instead.');
     }
     if (parsed.checkout !== undefined) {
       if (!parsed.cutover) {
@@ -508,7 +508,7 @@ function options(argv) {
 
 /** DATABASE_URL with its database swapped for `name`; host and credentials kept. */
 function urlFor(name) {
-  const url = new URL(process.env.DATABASE_URL ?? 'postgres://localhost:5432/self_learn');
+  const url = new URL(process.env.DATABASE_URL ?? 'postgres://localhost:5432/gnosia');
   url.pathname = `/${name}`;
   return url.toString();
 }
@@ -614,7 +614,7 @@ async function describeCheckout(root) {
 /**
  * The blob store's root as the catalog resolves it, asked of the blob package
  * itself rather than guessed here, so the line the operator confirms is the
- * directory the uploads will write to (and a SELF_LEARN_HOME the package
+ * directory the uploads will write to (and a GNOSIA_HOME the package
  * refuses is refused before anything runs).
  */
 async function blobRoot(env) {
@@ -625,12 +625,12 @@ async function blobRoot(env) {
       'tsx',
       '--input-type=module',
       '--eval',
-      "const { defaultBlobRoot } = await import('@self-learn/blob'); process.stdout.write(defaultBlobRoot());",
+      "const { defaultBlobRoot } = await import('@gnosia/blob'); process.stdout.write(defaultBlobRoot());",
     ],
     { env, cwd: ROOT },
   );
   if (ran.status !== 0 || ran.stdout === '') {
-    throw new Refusal(`could not resolve the blob store from SELF_LEARN_HOME: ${ran.stderr.trim().split('\n').at(-1)}`);
+    throw new Refusal(`could not resolve the blob store from GNOSIA_HOME: ${ran.stderr.trim().split('\n').at(-1)}`);
   }
   return ran.stdout;
 }
@@ -701,9 +701,9 @@ async function main(argv) {
   const day = cutover ? 'the cut-over' : 'flip day';
   const stamp = `${process.pid}_${Date.now().toString(36)}`;
   /** The throwaway copy the first import runs on, named in the report so a caller can check it was dropped. */
-  const preflight = `self_learn_preflight_${stamp}`;
-  const from = opts.from ?? 'self_learn';
-  const database = real ? opts.database.trim() : (opts.name ?? `self_learn_rehearsal_${stamp}`);
+  const preflight = `gnosia_preflight_${stamp}`;
+  const from = opts.from ?? 'gnosia';
+  const database = real ? opts.database.trim() : (opts.name ?? `gnosia_rehearsal_${stamp}`);
   if (!real && database === from) throw new Refusal(`--name ${database} is the template; a rehearsal never runs on its template.`);
   const confirmed = opts.checkout === undefined ? null : await confirmedCheckout(opts.checkout, { cutover, real });
   const checkout = confirmed?.path ?? null;
@@ -718,7 +718,7 @@ async function main(argv) {
   const missingTools = missingPgTools(['createdb', 'dropdb', 'pg_dump', 'pg_restore', 'psql']);
   if (missingTools !== null) throw new Refusal(missingTools);
 
-  const scratch = real ? null : realpathSync(mkdtempSync(join(tmpdir(), 'self-learn-flip-rehearsal-')));
+  const scratch = real ? null : realpathSync(mkdtempSync(join(tmpdir(), 'gnosia-flip-rehearsal-')));
   const tree = checkout ?? join(scratch, 'tree');
   const url = urlFor(database);
   // The per-owner blob caps (phase 4) are off for every step. Flip day stores
@@ -728,9 +728,9 @@ async function main(argv) {
   // the empty string rather than removed, since an existing variable wins
   // over services/catalog/.env and the empty string reads as no cap. The day
   // window still counts flip day's objects for the 24 hours after it.
-  const env = { ...process.env, DATABASE_URL: url, SELF_LEARN_OWNER_BYTES_CAP: '', SELF_LEARN_OWNER_UPLOADS_PER_DAY: '' };
+  const env = { ...process.env, DATABASE_URL: url, GNOSIA_OWNER_BYTES_CAP: '', GNOSIA_OWNER_UPLOADS_PER_DAY: '' };
   if (real) delete env.CATALOG_COPY_OK;
-  else Object.assign(env, { CATALOG_COPY_OK: '1', SELF_LEARN_HOME: join(scratch, 'home') });
+  else Object.assign(env, { CATALOG_COPY_OK: '1', GNOSIA_HOME: join(scratch, 'home') });
   // The server the catalog commands reach, for the client tools.
   const maintenance = pgEnv(url);
   const kept = real ? homedir() : scratch;
@@ -863,7 +863,7 @@ async function main(argv) {
     }
     // Spelled out with the server and the user the backup was taken from, and
     // quoted: the client tools do not read DATABASE_URL, so a bare `dropdb
-    // self_learn` in another shell could drop a different server's database.
+    // gnosia` in another shell could drop a different server's database.
     const restoreArgv = restoreCommands(url, database, file);
     const backup = { label, path: file, bytes, tables: tables.length, restore: asShellLine(restoreArgv), restoreArgv };
     report.backups.push(backup);
@@ -886,7 +886,7 @@ async function main(argv) {
      */
     importIntoCopy: async () => {
       const name = preflight;
-      const home = mkdtempSync(join(tmpdir(), 'self-learn-flip-preflight-'));
+      const home = mkdtempSync(join(tmpdir(), 'gnosia-flip-preflight-'));
       try {
         await copyDatabase(database, name, { env: maintenance, created: () => made.add(name) });
         if (report.interrupted) return { problem: 'interrupted', result: null };
@@ -894,7 +894,7 @@ async function main(argv) {
           ...env,
           DATABASE_URL: urlFor(name),
           CATALOG_COPY_OK: '1',
-          SELF_LEARN_HOME: home,
+          GNOSIA_HOME: home,
         });
         const problem = failed ?? removesNothing(json);
         return {
@@ -969,7 +969,7 @@ async function main(argv) {
       // held to the database too.
       let headParity = null;
       if (edits.unexpected.length === 0 && edits.rewrites.length > 0) {
-        const dir = mkdtempSync(join(tmpdir(), 'self-learn-cutover-head-'));
+        const dir = mkdtempSync(join(tmpdir(), 'gnosia-cutover-head-'));
         try {
           const wrote = await writeHeadTree(tree, dir, status.untracked);
           if (wrote !== null) return { problem: wrote, result: null };
@@ -1249,7 +1249,7 @@ async function main(argv) {
         );
       }
       await confirm(database, lines, stopping.signal, day);
-      if (cutover) state.exportDir = mkdtempSync(join(tmpdir(), 'self-learn-cutover-export-'));
+      if (cutover) state.exportDir = mkdtempSync(join(tmpdir(), 'gnosia-cutover-export-'));
     } else if (inPlace) {
       // The owner's cut-over, rehearsed: a copy of a database flip day ran
       // on, and the worktree it ran from, read in place.

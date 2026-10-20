@@ -1,4 +1,4 @@
-import type { OwnerScope } from "@self-learn/schema";
+import type { OwnerScope } from "@gnosia/schema";
 import { sql, type SQL } from "drizzle-orm";
 
 import { andOwnedBy, type Owners, scopedRead } from "../content/scope";

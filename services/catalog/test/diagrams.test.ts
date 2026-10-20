@@ -4,9 +4,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 
-import { fsStore, type BlobStore } from "@self-learn/blob";
-import { fileSource } from "@self-learn/content";
-import { assetJob, blobObject, diagram, job } from "@self-learn/schema";
+import { fsStore, type BlobStore } from "@gnosia/blob";
+import { fileSource } from "@gnosia/content";
+import { assetJob, blobObject, diagram, job } from "@gnosia/schema";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -33,7 +33,7 @@ import { lockEntity } from "../src/content/revisions";
 import { cliScope } from "../src/content/scope";
 import { makeFixture, note, tagsYaml, topicsYaml, type Fixture } from "./fixture-tree";
 import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
-import { LOCAL_LEARNER_ID, ownerScope } from "@self-learn/schema";
+import { LOCAL_LEARNER_ID, ownerScope } from "@gnosia/schema";
 
 /** Who these reads are for: the one owner there is today (phase 4 scoping). */
 const LOCAL = ownerScope(LOCAL_LEARNER_ID);
@@ -91,13 +91,13 @@ const svgOf = (label: string) =>
 
 /** Point the command runners, which connect through DATABASE_URL, at a scratch database. */
 function pointAt(name: string, blobHome: string): () => void {
-  const keys = ["DATABASE_URL", "MANIMKC_ROOT", "SELF_LEARN_HOME"] as const;
+  const keys = ["DATABASE_URL", "MANIMKC_ROOT", "GNOSIA_HOME"] as const;
   const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
-  const url = new URL(process.env["DATABASE_URL"] ?? "postgres://localhost:5432/self_learn");
+  const url = new URL(process.env["DATABASE_URL"] ?? "postgres://localhost:5432/gnosia");
   url.pathname = `/${name}`;
   process.env["DATABASE_URL"] = url.toString();
   process.env["MANIMKC_ROOT"] = path.join(tmpdir(), "catalog-test-no-manimkc");
-  process.env["SELF_LEARN_HOME"] = blobHome;
+  process.env["GNOSIA_HOME"] = blobHome;
   return () => {
     for (const key of keys) {
       const value = saved[key];

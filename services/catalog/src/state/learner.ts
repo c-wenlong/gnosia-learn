@@ -1,5 +1,5 @@
-import { learner, LOCAL_LEARNER_ID } from "@self-learn/schema";
-import { cleanDisplayName, DISPLAY_NAME_MAX, isAvatar, type AvatarId } from "@self-learn/schema/shared";
+import { learner, LOCAL_LEARNER_ID } from "@gnosia/schema";
+import { cleanDisplayName, DISPLAY_NAME_MAX, isAvatar, type AvatarId } from "@gnosia/schema/shared";
 import { eq, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";

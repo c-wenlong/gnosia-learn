@@ -327,7 +327,7 @@ describe("what a failure says", () => {
   });
 
   it("says a failure without the job's file paths, except where the paths are the finding (phase 2, bug 11)", () => {
-    const candidate = "/Users/someone/.self-learn/studio/jobs/54b0211a-4683-43d3-8497-1fed9c9f36d8/candidate/dot-parts.tldr";
+    const candidate = "/Users/someone/.gnosia/studio/jobs/54b0211a-4683-43d3-8497-1fed9c9f36d8/candidate/dot-parts.tldr";
     const failed = job({
       state: "failed",
       errorKind: "gate",

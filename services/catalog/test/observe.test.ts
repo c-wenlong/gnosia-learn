@@ -21,7 +21,7 @@ import {
 import { replayReviews } from "../src/learn/replay";
 import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { fixtureGraph, seedContent } from "./state-fixture";
-import { collection, learner, LOCAL_LEARNER_ID, ownerScope } from "@self-learn/schema";
+import { collection, learner, LOCAL_LEARNER_ID, ownerScope } from "@gnosia/schema";
 
 /** Who these reads are for: the one owner there is today (phase 4 scoping). */
 const LOCAL = ownerScope(LOCAL_LEARNER_ID);

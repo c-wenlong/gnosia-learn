@@ -136,7 +136,7 @@ afterEach(async () => {
 
 describe("a catalog with nothing listening", () => {
   beforeEach(async () => {
-    vi.stubEnv("DATABASE_URL", `postgres://localhost:${await deadPort()}/self_learn`);
+    vi.stubEnv("DATABASE_URL", `postgres://localhost:${await deadPort()}/gnosia`);
   });
 
   it("is offline, and says why", async () => {
