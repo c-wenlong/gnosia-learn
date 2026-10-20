@@ -305,6 +305,88 @@ CREATE TABLE asset_name (
   updated_at REAL,
   PRIMARY KEY (learner_id, asset_id)
 );
+-- ==== courses ====
+-- The course tree and the link tables the course pages read, with the same
+-- columns Postgres has (packages/schema/src/content.ts). jsonb columns land
+-- as text the app parses; archived rows are mirrored too, because the web
+-- reader's archived_at-is-null filter is part of the shape.
+CREATE TABLE collection (
+  id             TEXT PRIMARY KEY,
+  kind           TEXT NOT NULL,
+  slug           TEXT NOT NULL,
+  title          TEXT NOT NULL,
+  parent_id      TEXT,
+  position       INTEGER NOT NULL DEFAULT 0,
+  metadata       TEXT NOT NULL DEFAULT '{}',
+  cover_blob_key TEXT,
+  archived_at    REAL,
+  created_at     REAL,
+  updated_at     REAL
+);
+CREATE INDEX collection_parent_idx ON collection(parent_id);
+
+CREATE TABLE curriculum_item (
+  id            TEXT PRIMARY KEY,
+  collection_id TEXT NOT NULL,
+  position      INTEGER NOT NULL DEFAULT 0,
+  title         TEXT NOT NULL,
+  subtopics     TEXT NOT NULL DEFAULT '[]',
+  videos        TEXT NOT NULL DEFAULT '[]',
+  archived_at   REAL,
+  created_at    REAL,
+  updated_at    REAL
+);
+CREATE INDEX curriculum_item_collection_idx ON curriculum_item(collection_id);
+
+CREATE TABLE collection_item (
+  id             INTEGER PRIMARY KEY,
+  collection_id  TEXT NOT NULL,
+  position       INTEGER NOT NULL DEFAULT 0,
+  topic_slug     TEXT,
+  concept_slug   TEXT,
+  asset_id       TEXT,
+  topic_position INTEGER NOT NULL DEFAULT 0,
+  created_at     REAL
+);
+CREATE INDEX collection_item_collection_idx ON collection_item(collection_id);
+CREATE INDEX collection_item_asset_idx ON collection_item(asset_id);
+
+CREATE TABLE concept_curriculum_item (
+  concept_slug       TEXT NOT NULL,
+  curriculum_item_id TEXT NOT NULL,
+  position           INTEGER NOT NULL DEFAULT 0,
+  created_at         REAL,
+  PRIMARY KEY (concept_slug, curriculum_item_id)
+);
+CREATE INDEX concept_curriculum_item_item_idx ON concept_curriculum_item(curriculum_item_id);
+
+CREATE TABLE curriculum_item_asset (
+  curriculum_item_id TEXT NOT NULL,
+  asset_id           TEXT NOT NULL,
+  position           INTEGER NOT NULL DEFAULT 0,
+  created_at         REAL,
+  PRIMARY KEY (curriculum_item_id, asset_id)
+);
+CREATE INDEX curriculum_item_asset_asset_idx ON curriculum_item_asset(asset_id);
+
+CREATE TABLE tag (
+  id          TEXT PRIMARY KEY,
+  label       TEXT NOT NULL,
+  description TEXT,
+  position    INTEGER NOT NULL DEFAULT 0,
+  created_at  REAL,
+  updated_at  REAL
+);
+
+CREATE TABLE collection_tag (
+  collection_id TEXT NOT NULL,
+  tag_id        TEXT NOT NULL,
+  position      INTEGER NOT NULL DEFAULT 0,
+  created_at    REAL,
+  PRIMARY KEY (collection_id, tag_id)
+);
+CREATE INDEX collection_tag_tag_idx ON collection_tag(tag_id);
+-- ==== end courses ====
 
 CREATE TABLE snapshot_meta (
   key   TEXT PRIMARY KEY,
@@ -329,13 +411,15 @@ async function snapshot(url, out) {
   try {
     db = new Database(partial);
     db.exec(DDL);
-    db.pragma('user_version = 2');
+    db.pragma('user_version = 3');
 
     const write = db.transaction((rows) => {
       const {
         assets, derivations, assetTopics, assetConcepts, topics, concepts,
         prerequisites, masteries, reviews, progress, recaps, preferences,
         events, assetNames,
+        collections, curriculumItems, collectionItems, itemConcepts, itemAssets,
+        tags, collectionTags,
       } = rows;
 
       const assetInsert = db.prepare(
@@ -466,6 +550,75 @@ async function snapshot(url, out) {
       for (const n of assetNames) {
         nameInsert.run(n.learner_id, n.asset_id, n.title, n.created_at, n.updated_at);
       }
+      // ==== courses ====
+      const collectionInsert = db.prepare(
+        `INSERT INTO collection (id, kind, slug, title, parent_id, position, metadata,
+           cover_blob_key, archived_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      );
+      for (const c of collections) {
+        collectionInsert.run(
+          c.id, c.kind, c.slug, c.title, c.parent_id, c.position, c.metadata,
+          c.cover_blob_key, c.archived_at, c.created_at, c.updated_at,
+        );
+      }
+
+      const curriculumItemInsert = db.prepare(
+        `INSERT INTO curriculum_item (id, collection_id, position, title, subtopics,
+           videos, archived_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      );
+      for (const i of curriculumItems) {
+        curriculumItemInsert.run(
+          i.id, i.collection_id, i.position, i.title, i.subtopics,
+          i.videos, i.archived_at, i.created_at, i.updated_at,
+        );
+      }
+
+      const collectionItemInsert = db.prepare(
+        `INSERT INTO collection_item (id, collection_id, position, topic_slug,
+           concept_slug, asset_id, topic_position, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      );
+      for (const m of collectionItems) {
+        collectionItemInsert.run(
+          Number(m.id), m.collection_id, m.position, m.topic_slug,
+          m.concept_slug, m.asset_id, m.topic_position, m.created_at,
+        );
+      }
+
+      const itemConceptInsert = db.prepare(
+        `INSERT OR IGNORE INTO concept_curriculum_item (concept_slug, curriculum_item_id, position, created_at)
+         VALUES (?, ?, ?, ?)`,
+      );
+      for (const l of itemConcepts) {
+        itemConceptInsert.run(l.concept_slug, l.curriculum_item_id, l.position, l.created_at);
+      }
+
+      const itemAssetInsert = db.prepare(
+        `INSERT OR IGNORE INTO curriculum_item_asset (curriculum_item_id, asset_id, position, created_at)
+         VALUES (?, ?, ?, ?)`,
+      );
+      for (const l of itemAssets) {
+        itemAssetInsert.run(l.curriculum_item_id, l.asset_id, l.position, l.created_at);
+      }
+
+      const tagInsert = db.prepare(
+        `INSERT INTO tag (id, label, description, position, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      );
+      for (const t of tags) {
+        tagInsert.run(t.id, t.label, t.description, t.position, t.created_at, t.updated_at);
+      }
+
+      const collectionTagInsert = db.prepare(
+        `INSERT OR IGNORE INTO collection_tag (collection_id, tag_id, position, created_at)
+         VALUES (?, ?, ?, ?)`,
+      );
+      for (const t of collectionTags) {
+        collectionTagInsert.run(t.collection_id, t.tag_id, t.position, t.created_at);
+      }
+      // ==== end courses ====
     });
 
     // Sequential, not Promise.all: pg@8 deprecates queuing a second query on
@@ -517,6 +670,39 @@ async function snapshot(url, out) {
     const assetNames = await client.query(`SELECT learner_id, asset_id, title,
       extract(epoch from created_at)::double precision AS created_at,
       extract(epoch from updated_at)::double precision AS updated_at FROM asset_name`);
+    const concepts = await client.query(`SELECT slug, title, summary, topic_slug, path, domain, body, topic_position,
+      extract(epoch from archived_at)::double precision AS archived_at FROM concept`);
+
+    // ==== courses ====
+    // The tables readCourses joins to build a Course (readers/courses.ts):
+    // the collection tree, the checklist rows, the membership rows that give
+    // a module its topic and its curated links, the item's concept list, and
+    // the reading-to-lesson links. jsonb columns go over as text for the app
+    // to parse, so `metadata::text`, `subtopics::text`, `videos::text`.
+    const collections = await client.query(`SELECT id, kind, slug, title, parent_id, position,
+      metadata::text AS metadata, cover_blob_key,
+      extract(epoch from archived_at)::double precision AS archived_at,
+      extract(epoch from created_at)::double precision AS created_at,
+      extract(epoch from updated_at)::double precision AS updated_at FROM collection`);
+    const curriculumItems = await client.query(`SELECT id, collection_id, position, title,
+      subtopics::text AS subtopics, videos::text AS videos,
+      extract(epoch from archived_at)::double precision AS archived_at,
+      extract(epoch from created_at)::double precision AS created_at,
+      extract(epoch from updated_at)::double precision AS updated_at FROM curriculum_item`);
+    const collectionItems = await client.query(`SELECT id, collection_id, position, topic_slug,
+      concept_slug, asset_id, topic_position,
+      extract(epoch from created_at)::double precision AS created_at FROM collection_item`);
+    const itemConcepts = await client.query(`SELECT concept_slug, curriculum_item_id, position,
+      extract(epoch from created_at)::double precision AS created_at FROM concept_curriculum_item`);
+    const itemAssets = await client.query(`SELECT curriculum_item_id, asset_id, position,
+      extract(epoch from created_at)::double precision AS created_at FROM curriculum_item_asset`);
+    const tags = await client.query(`SELECT id, label, description, position,
+      extract(epoch from created_at)::double precision AS created_at,
+      extract(epoch from updated_at)::double precision AS updated_at FROM tag`);
+    const collectionTags = await client.query(`SELECT collection_id, tag_id, position,
+      extract(epoch from created_at)::double precision AS created_at FROM collection_tag`);
+    // ==== end courses ====
+
     const rows = {
       assets: assets.rows,
       derivations: derivations.rows,
@@ -532,12 +718,20 @@ async function snapshot(url, out) {
       preferences: preferences.rows,
       events: events.rows,
       assetNames: assetNames.rows,
+      collections: collections.rows,
+      curriculumItems: curriculumItems.rows,
+      collectionItems: collectionItems.rows,
+      itemConcepts: itemConcepts.rows,
+      itemAssets: itemAssets.rows,
+      tags: tags.rows,
+      collectionTags: collectionTags.rows,
     };
     write(rows);
 
     const meta = db.prepare('INSERT INTO snapshot_meta (key, value) VALUES (?, ?)');
     meta.run('generator', 'catalog-snapshot.mjs');
     meta.run('schema_version', '2');
+    meta.run('schema_version', '3');
     meta.run('source', 'postgres');
     meta.run('taken_at', String(Date.now() / 1000));
     // The database name, never the URL: a URL can carry a password.
