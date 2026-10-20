@@ -464,7 +464,7 @@ describe.skipIf(!reachable.ok)("topic and tag writers", () => {
       select (select topic_slug from concept where slug = 'base') as concept,
              (select topic_slug from collection_item where collection_id = 'xx1000-m1' and topic_slug is not null) as module,
              (select topic_slug from diagram where slug = 'alpha-picture') as diagram,
-             (select document #>> '{records,0,meta,tldrawkc,topic}' from diagram where slug = 'alpha-picture') as stamp,
+             (select document ->> '$.records[0].meta.tldrawkc.topic' from diagram where slug = 'alpha-picture') as stamp,
              (select brief ->> 'topic' from job where id = ${job.job.id}) as brief,
              (select topic_slug from job where id = ${job.job.id}) as job`);
     expect(refs.rows[0]).toEqual({ concept: "zeta", module: "zeta", diagram: "zeta", stamp: "zeta", brief: "zeta", job: "zeta" });

@@ -152,7 +152,7 @@ export async function auditBlobs(
   // a row that holds a key is enough for the key to be in use. Asked only
   // where the table exists: the audit runs on a database behind the journal.
   const { rows: hasVideo } = await db.execute<{ present: boolean }>(sql`select exists(select 1 from sqlite_master where type = 'table' and name = 'video') as present`);
-  if (hasVideo[0]?.present === true) {
+  if (hasVideo[0]?.present == 1 || hasVideo[0]?.present === true) {
     for (const { key } of await db.select({ key: video.mp4BlobKey }).from(video).where(isNotNull(video.mp4BlobKey))) {
       if (key !== null) referenced.add(key);
     }

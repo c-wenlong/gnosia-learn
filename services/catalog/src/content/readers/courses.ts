@@ -273,7 +273,7 @@ async function lessonLinks(
     db,
     sql`select exists(select 1 from sqlite_master where type = 'table' and name = 'curriculum_item_asset') as present`,
   );
-  if (present?.present !== true) return [];
+  if (present?.present != 1 && present?.present !== true) return [];
   return rows(
     db,
     sql`select l.asset_id, l.curriculum_item_id, i.collection_id

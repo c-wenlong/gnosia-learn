@@ -96,7 +96,7 @@ describe.skipIf(!reachable.ok)("catalog course cover", () => {
 
   beforeAll(async () => {
     scratch = await migratedScratchDatabase();
-    store = ownStore(scratch.name);
+    store = ownStore(scratch.url);
     tree = await seedWithoutCover();
     files = await mkdtemp(path.join(tmpdir(), "course-cover-files-"));
     await runIndex(scratch.db, { repoRoot: tree, only: [...SOURCES], manimkcRoot: NO_MANIMKC });
@@ -373,7 +373,7 @@ describe.skipIf(!reachable.ok)("course covers through export and import", () => 
   });
 
   it("imports the seed's cover as a blob, exports it back byte for byte, and imports that under the same key", async () => {
-    const one = ownStore(first.name);
+    const one = ownStore(first.url);
     restore = one.restore;
     await runIndex(first.db, { repoRoot: SEED, only: [...SOURCES], manimkcRoot: NO_MANIMKC });
     expect(await coverOf(first)).toEqual({ key: await key(), metadata: expect.objectContaining({ coverCredit: CREDIT }) });
@@ -394,7 +394,7 @@ describe.skipIf(!reachable.ok)("course covers through export and import", () => 
     expect((await parity(first.db, SEED, ["courses"])).clean).toBe(true);
     one.restore();
 
-    const two = ownStore(second.name);
+    const two = ownStore(second.url);
     restore = two.restore;
     await runIndex(second.db, { repoRoot: out, only: [...SOURCES], manimkcRoot: NO_MANIMKC });
     expect(await coverOf(second)).toEqual(await coverOf(first));

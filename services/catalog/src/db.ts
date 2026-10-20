@@ -282,10 +282,14 @@ export function connect(options: ConnectOptions = {}): Connection {
    * caller pg left behind (a title de-dupe). `g` is the only flag SQLite
    * callers ever passed; the JS RegExp always replaces globally.
    */
-  sqlite.function("regexp_replace", (value: unknown, pattern: unknown, replacement: unknown) => {
-    if (value === null || pattern === null || replacement === null) return null;
-    return String(value).replace(new RegExp(String(pattern), "g"), String(replacement));
-  });
+  sqlite.function(
+    "regexp_replace",
+    { varargs: true },
+    (value: unknown, pattern: unknown, replacement: unknown) => {
+      if (value === null || pattern === null || replacement === null) return null;
+      return String(value).replace(new RegExp(String(pattern), "g"), String(replacement));
+    },
+  );
   /** What the copy guards ask: may this connection write on a copy? */
   sqlite.function("catalog_copy_ok", () => (flags.copyOk ? 1 : 0));
   /** What the write-seam guards ask: which revision is this connection writing? */

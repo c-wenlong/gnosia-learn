@@ -52,7 +52,7 @@ export async function blobContractInForce(db: CatalogDatabase): Promise<boolean>
       where type = 'table' and name = 'asset' and sql like '%asset_stored_blob_check%'
     ) as present
   `);
-  return rows[0]?.present === true;
+  return rows[0]?.present == 1 || rows[0]?.present === true;
 }
 
 /** One sentence for a held migration, or null when nothing stands in its way. */

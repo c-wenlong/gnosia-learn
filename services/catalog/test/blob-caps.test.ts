@@ -358,7 +358,7 @@ describe.skipIf(!reachable.ok)("uploadBlob under per-owner caps", () => {
     expect((await upload(B, "third")).uploaded).toBe(true);
     await scratch.db
       .update(blobObject)
-      .set({ createdAt: sql`cast(unixepoch('subsec') * 1000 as integer) - interval '25 hours'` })
+      .set({ createdAt: sql`cast(unixepoch('subsec') * 1000 as integer) - 25 * 3600 * 1000` })
       .where(eq(blobObject.key, keyOf("local", "first")));
     expect((await upload("local", "third")).uploaded).toBe(true);
   });
@@ -413,12 +413,12 @@ describe.skipIf(!reachable.ok)("uploadBlob under per-owner caps", () => {
     await upload("local", "old");
     await scratch.db
       .update(blobObject)
-      .set({ createdAt: sql`cast(unixepoch('subsec') * 1000 as integer) - interval '23 hours 59 minutes'` })
+      .set({ createdAt: sql`cast(unixepoch('subsec') * 1000 as integer) - (23 * 3600 + 59 * 60) * 1000` })
       .where(eq(blobObject.key, keyOf("local", "old")));
     await expect(upload("local", "new")).rejects.toMatchObject({ cap: "uploads-per-day" });
     await scratch.db
       .update(blobObject)
-      .set({ createdAt: sql`cast(unixepoch('subsec') * 1000 as integer) - interval '24 hours 1 minute'` })
+      .set({ createdAt: sql`cast(unixepoch('subsec') * 1000 as integer) - (24 * 3600 + 60) * 1000` })
       .where(eq(blobObject.key, keyOf("local", "old")));
     expect((await upload("local", "new")).uploaded).toBe(true);
   });
