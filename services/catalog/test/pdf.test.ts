@@ -209,6 +209,10 @@ describe("buildVideoPdf", () => {
     expect(toWinAnsi("a non‑breaking hyphen, an arrow →, and an emoji 🎬", f)).toBe(
       "a non-breaking hyphen, an arrow ->, and an emoji ",
     );
+    // The encodable character keeps its printed form, never normalized
+    // away: ½ is not 12, and ″ reaches its quote replacement whole rather
+    // than decomposing into primes first.
+    expect(toWinAnsi("½ second, a ″ mark", f)).toBe("½ second, a \" mark");
     const segments = [{ start: 0, end: 4, text: "a non‑breaking hyphen and an emoji 🎬 →" }];
     const made = await buildVideoPdf(ffmpeg, VIDEO, "aa11", "A démo — already fine", segments, "local/bb22.json");
     expect(made.ok).toBe(true);

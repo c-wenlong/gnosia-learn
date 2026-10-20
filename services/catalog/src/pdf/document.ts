@@ -43,9 +43,14 @@ const WINANSI_MISSES: Record<string, string> = {
   "\u2015": "-", // horizontal bar
   "\u2212": "-", // minus sign
   "\u00ad": "", // soft hyphen
+  "\u2032": "'", // prime
   "\u2035": "'", // reversed prime
   "\u2033": '"', // double prime
-  "\u2036": '"', // triple prime
+  "\u2034": '"', // triple prime
+  "\u2057": '"', // quadruple prime
+  "\u2036": '"', // reversed double prime
+  "\u2037": '"', // reversed triple prime
+  "\u2044": "/", // fraction slash
   "\u2190": "<-", "\u2192": "->", "\u2191": "^", "\u2193": "v",
   "\u2028": " ", "\u2029": " ", // line and paragraph separators
   "\u200b": "", "\ufeff": "", // zero-width spaces
@@ -56,20 +61,40 @@ const winAnsiCache = new Map<string, string>();
 /** `text` in the nearest form standard Helvetica can print. */
 export function toWinAnsi(text: string, font: PDFFont): string {
   const out: string[] = [];
-  for (const ch of text.normalize("NFKC")) {
+  // NFC only — never NFKC up front: composing an accent sequence into its
+  // encodable letter is right, but decomposing `½` into `1⁄2` is not, since
+  // Helvetica prints the fraction itself and drops the bare slash.
+  for (const ch of text.normalize("NFC")) {
     let rep = winAnsiCache.get(ch);
     if (rep === undefined) {
-      try {
-        font.encodeText(ch);
-        rep = ch;
-      } catch {
-        rep = WINANSI_MISSES[ch] ?? "";
-      }
+      rep = winAnsiChar(ch, font);
       winAnsiCache.set(ch, rep);
     }
     out.push(rep);
   }
   return out.join("");
+}
+
+function winAnsiChar(ch: string, font: PDFFont): string {
+  try {
+    font.encodeText(ch);
+    return ch;
+  } catch {
+    // not printable as it is
+  }
+  const miss = WINANSI_MISSES[ch];
+  if (miss !== undefined) return miss;
+  // Last resort is the compatibility form — ﬁ is fi, a fullwidth Ａ is A.
+  let out = "";
+  for (const n of ch.normalize("NFKC")) {
+    try {
+      font.encodeText(n);
+      out += n;
+    } catch {
+      out += WINANSI_MISSES[n] ?? "";
+    }
+  }
+  return out;
 }
 
 /** The caption, broken to fit `CAPTION_WIDTH` and clipped after `CAPTION_MAX_LINES` with an ellipsis. */
