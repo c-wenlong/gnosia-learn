@@ -56,8 +56,9 @@ another repo.
 | Directory | What lives there | npm workspace |
 | --- | --- | --- |
 | `apps/web/` | The Next.js app, its `public/`, `next.config.ts`, `vercel.json` | `@self-learn/web` |
-| `packages/content/`, `packages/schema/`, `packages/blob/` | The content reader, the table shapes and the blob store | yes |
+| `packages/content/`, `packages/schema/`, `packages/blob/`, `packages/tutor/` | The content reader, the table shapes, the blob store and the tutor core | yes |
 | `services/catalog/` | The connection, the migrations, the indexers, the `catalog` and `learn` CLIs | yes |
+| `services/sidecar/` | The tutor's loopback API for the native app | yes |
 | `scripts/learn/` | The pipeline's pure maths, and the `npm run learn` entry point | no |
 | `seed/` | A small slice of the content in the export format ([README](seed/README.md)): a fresh clone's database and the tests' fixture. Files, not code. | no |
 | `tools/manimkc/`, `tools/remotionkc/`, `tools/revideokc/`, `tools/blenderkc/`, `tools/tldrawkc/` | Git submodules with their own repos, lockfiles and toolchains | no, deliberately |
@@ -87,8 +88,10 @@ tsconfigs.
 | `packages/content/` | The reader for an export's `content/`: `loadCourses`, `loadTopics`, `loadTags`, the `Course` types, and the reader seam (`ContentSource`, `fileSource`, `selectSource`) |
 | `packages/schema/` | Every table shape, and the row types inferred from them |
 | `packages/blob/` | The `BlobStore` interface, the `<owner_id>/<sha256>.<ext>` key scheme, the `fs` adapter and the conformance suite any later adapter must pass ([README](packages/blob/README.md)) |
+| `packages/tutor/` | The tutor's core: prompts, providers, BYOK credentials, the model chain, and the seven `*Turn` functions the web routes and the sidecar both call. Returns `TurnReply`s — status plus a JSON body — so nothing in it knows Next.js |
 | `services/catalog/` | The connection, the migrations, the indexers and the `catalog` CLI |
 | `services/studio/` | The diagram studio's job runner and loopback API. It reads the topic vocabulary only through `catalog topic ls`, with the last good read cached under `$STUDIO_HOME/cache/topics.json` (D13), and opens no database connection of its own. Each job draws in its own workspace, `$STUDIO_HOME/jobs/<id>/candidate/`, never in the working tree, and Accept lands the candidate with `catalog diagram put --job`. Its repo root is where its code sits, not a walk up to `content/` ([docs/TLDRAWKC-INTEGRATION.md](docs/TLDRAWKC-INTEGRATION.md)) |
+| `services/sidecar/` | The tutor as a standalone loopback service for the native app: `node:http` on `127.0.0.1`, an ephemeral port (or `GNOSIA_SIDECAR_PORT`), and one `listening <port>` line on stdout once bound. The seven endpoints are the web app's `/api/agent/*` and `/api/learner/*` tutor routes verbatim, served by the same `packages/tutor` `*Turn` functions over the catalog pool, so the macOS client (`apps/macos/Sources/Gnosia/SidecarClient.swift`) reuses the BYOK, model-chain and provider-fallback contract rather than reimplementing it. Plain JSON both ways — the tutor endpoints never streamed |
 
 `scripts/learn/` is what is left of the pipeline once its state moved into
 Postgres: the maths, and the published entry point.
@@ -134,6 +137,8 @@ the seam and state through the store, never the database directly.
 | `packages/schema/` | The Drizzle table definitions and the row types inferred from them. Connects to nothing. |
 | `packages/blob/` | `BlobStore`, `key()` and `fsStore()`: bytes under `$SELF_LEARN_HOME/blobs`, outside the repo. Imports nothing but Node. Nothing uses it yet; the catalog's upload command is next. |
 | `services/catalog/` | `db.ts` (the pool), `migrations.ts`, `drizzle/` (generated SQL), `cli.ts`, `src/state/` (the learner store) and `src/learn/` (the `learn` CLI) |
+| `packages/tutor/` | Everything the tutor endpoints share: `src/providers.ts` (provider configs, `keyFor`, `completeWithFallback`), `src/prompt.ts` and the per-shape builders, and `src/server/` — `deps.ts` (`TutorDeps`/`TurnSeams`), `turns.ts` (the seven `*Turn` functions), `credentials.ts`, `provider-keys.ts`, `tutor-models.ts`, `model-list.ts`, `asset-detail.ts` and friends. The pure half imports no I/O; the server half takes the database as a promise so a dead pool degrades per read |
+| `services/sidecar/` | `src/index.ts` (the process: bind, `listening <port>`, signal close), `src/api.ts` (path → `*Turn` table, JSON in/out), `src/guard.ts` (loopback host/origin checks), `src/deps.ts` (`TutorDeps` over the catalog pool and blob store), `src/config.ts` (`HOST`, `GNOSIA_SIDECAR_PORT`) |
 
 `packages/schema`, `packages/content` and `packages/blob` are the bottom of
 that stack: the first imports `drizzle-orm`, the second `yaml`, the third only

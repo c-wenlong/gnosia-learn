@@ -3,6 +3,8 @@ import type { MasteryLabel } from "@self-learn/catalog/state";
 import { assetDisplayTitle, assetKindLabel, type AssetCardRef } from "@/components/asset-meta";
 import { safeNextPath } from "@/lib/auth/core";
 import { bucketOf, type MasteryBucket } from "@/lib/mastery-bucket";
+import { COMPANION_KINDS, compareByKindThenId, isCompanionKind, kindRank } from "@self-learn/tutor/kind-order";
+export { COMPANION_KINDS, compareByKindThenId, isCompanionKind, kindRank };
 
 /**
  * What the library shows first, and why it is not everything.
@@ -52,57 +54,6 @@ import { bucketOf, type MasteryBucket } from "@/lib/mastery-bucket";
  * component calling one throws at request time having built without a word.
  */
 
-/**
- * Kinds that exist to accompany another asset rather than to be opened.
- *
- * A kind absent from this set is shown by default, which is the safe direction:
- * a new indexer's rows turn up in the library on their first index run instead
- * of being silently filtered out by a list nobody remembered to update.
- */
-export const COMPANION_KINDS: ReadonlySet<string> = new Set([
-  "transcript",
-  "captions",
-  "chapters",
-  "diagram_source",
-  // A video's stored still, made by `catalog asset upload`: shown on its
-  // video's card, never as a card of its own.
-  "poster",
-  // A video's document, made with the poster: opened from its video's PDF
-  // button or its Files row, not browsed for as a card.
-  "pdf",
-]);
-
-export function isCompanionKind(kind: string): boolean {
-  return COMPANION_KINDS.has(kind);
-}
-
-/**
- * The order the sections run in, most worth looking at first.
- *
- * Not alphabetical, which is what `asset.kind` ordering gives and which puts
- * `captions` and `chapters` above `video`. The rank is effort and standalone
- * value: a narrated render, then a drawn diagram, then a written note, then a
- * session log, then a bookmark. A kind not named here sorts after all of them,
- * by name, so an unknown kind is last rather than accidentally first.
- */
-const KIND_ORDER = ["video", "diagram_svg", "note", "session", "link"];
-
-export function kindRank(kind: string): number {
-  const at = KIND_ORDER.indexOf(kind);
-  return at === -1 ? KIND_ORDER.length : at;
-}
-
-/** Kind then id, the tiebreak matching what the catalog's own queries return. */
-export function compareByKindThenId(
-  a: { kind: string; id: string },
-  b: { kind: string; id: string },
-): number {
-  const rank = kindRank(a.kind) - kindRank(b.kind);
-  if (rank !== 0) return rank;
-  if (a.kind !== b.kind) return a.kind < b.kind ? -1 : 1;
-  if (a.id === b.id) return 0;
-  return a.id < b.id ? -1 : 1;
-}
 
 /** One chip in the kind rail. */
 export interface KindFacet {
