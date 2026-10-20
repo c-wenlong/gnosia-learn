@@ -67,7 +67,6 @@ private struct SectionModel: Identifiable {
 
 struct LibraryView: View {
     @Environment(CatalogStore.self) private var store
-    @Binding var selection: String?
 
     @State private var grouping: Grouping = .tool
     @State private var sort: SortOrder = .newest
@@ -219,52 +218,54 @@ struct LibraryView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            controls
+        NavigationStack {
+            VStack(spacing: 0) {
+                controls
 
-            if let error = store.error {
-                ContentUnavailableView {
-                    Label("No catalog", systemImage: "cylinder.split.1x2")
-                } description: {
-                    Text(error).font(.caption)
-                }
-            } else if filtered.isEmpty {
-                ContentUnavailableView(
-                    store.assets.isEmpty ? "Nothing indexed yet" : "No assets match",
-                    systemImage: "line.3.horizontal.decrease.circle",
-                    description: Text(store.assets.isEmpty
-                        ? "The catalog is reachable and holds no assets."
-                        : "Nothing here is in this tab under these filters.")
-                )
-            } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 28, pinnedViews: .sectionHeaders) {
-                        ForEach(sections) { section in
-                            Section {
-                                LazyVGrid(
-                                    columns: [GridItem(.adaptive(minimum: 190, maximum: 230), spacing: 18)],
-                                    spacing: 18
-                                ) {
-                                    ForEach(section.rows) { asset in
-                                        Button { selection = asset.id } label: {
-                                            AssetCard(asset: asset, selected: selection == asset.id)
+                if let error = store.error {
+                    ContentUnavailableView {
+                        Label("No catalog", systemImage: "cylinder.split.1x2")
+                    } description: {
+                        Text(error).font(.caption)
+                    }
+                } else if filtered.isEmpty {
+                    ContentUnavailableView(
+                        store.assets.isEmpty ? "Nothing indexed yet" : "No assets match",
+                        systemImage: "line.3.horizontal.decrease.circle",
+                        description: Text(store.assets.isEmpty
+                            ? "The catalog is reachable and holds no assets."
+                            : "Nothing here is in this tab under these filters.")
+                    )
+                } else {
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 28, pinnedViews: .sectionHeaders) {
+                            ForEach(sections) { section in
+                                Section {
+                                    LazyVGrid(
+                                        columns: [GridItem(.adaptive(minimum: 190, maximum: 230), spacing: 18)],
+                                        spacing: 18
+                                    ) {
+                                        ForEach(section.rows) { asset in
+                                            NavigationLink(value: AppDestination.asset(asset.id)) {
+                                                AssetCard(asset: asset)
+                                            }
+                                            .buttonStyle(.plain)
                                         }
-                                        .buttonStyle(.plain)
                                     }
+                                } header: {
+                                    Text(section.title)
+                                        .font(.title3).bold()
+                                        .padding(.bottom, 2)
                                 }
-                            } header: {
-                                Text(section.title)
-                                    .font(.title3).bold()
-                                    .padding(.bottom, 2)
                             }
                         }
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 18)
                     }
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 18)
                 }
             }
-        }
-        .navigationTitle("Library")
+            .navigationTitle("Library")
+            .appDestinations()
         .searchable(text: $search, placement: .toolbar, prompt: "Search the library")
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
@@ -291,6 +292,7 @@ struct LibraryView: View {
                 }
                 .help("Sort and group")
             }
+        }
         }
     }
 
@@ -355,7 +357,6 @@ struct LibraryView: View {
 struct AssetCard: View {
     @Environment(CatalogStore.self) private var store
     let asset: CatalogAsset
-    var selected = false
 
     /// The kind's label, plus which tool made it when a tool did — "other"
     /// and the studio's own "video" namespace say nothing, so they stay off.
@@ -421,14 +422,6 @@ struct AssetCard: View {
             }
         }
         .padding(8)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(selected ? Color.accentColor.opacity(0.14) : .clear)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(selected ? Color.accentColor : .clear, lineWidth: 1.5)
-        )
         .contentShape(Rectangle())
     }
 }
