@@ -2,12 +2,16 @@
 //  LibraryView.swift
 //  Gnosia
 //
-//  The library surface: a split view with the asset list on the left and a
-//  per-kind detail pane on the right. The kind strip is the web library's
-//  own — All, then one tab per standalone kind in effort order, then Others
-//  for the companion files — and the starred-only toggle, the sort and the
-//  tool/topic groupings ride in the row under it. The web's day, course and
-//  conversation groupings land later.
+//  The library surface: a poster grid in the window's content column,
+//  under a real toolbar — kind chips, group and sort menus, the starred
+//  toggle — with the search field in the toolbar where a Mac app keeps
+//  it. Rows live behind the kind chips that want them (Others) rather
+//  than cramming every control into a sidebar, which is what the old
+//  split did.
+//
+//  The kind strip, starred toggle, sort and tool/topic groupings are the
+//  web library's own; its day, course and conversation groupings land
+//  later.
 //
 
 import AppKit
@@ -54,7 +58,7 @@ private struct KindFacet {
     let count: Int
 }
 
-/// One collapsible rung of the list.
+/// One rung of the grid: a section header and the cards under it.
 private struct SectionModel: Identifiable {
     var id: String { title }
     let title: String
@@ -63,7 +67,8 @@ private struct SectionModel: Identifiable {
 
 struct LibraryView: View {
     @Environment(CatalogStore.self) private var store
-    @State private var selection: String?
+    @Binding var selection: String?
+
     @State private var grouping: Grouping = .tool
     @State private var sort: SortOrder = .newest
     @State private var kind = ""
@@ -214,71 +219,86 @@ struct LibraryView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
-            VStack(spacing: 0) {
-                kindStrip
-                controlsRow
-                Text(countLine)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 6)
+        VStack(spacing: 0) {
+            controls
 
-                if let error = store.error {
-                    ContentUnavailableView {
-                        Label("No catalog", systemImage: "cylinder.split.1x2")
-                    } description: {
-                        Text(error).font(.caption)
-                    }
-                } else if filtered.isEmpty {
-                    ContentUnavailableView(
-                        store.assets.isEmpty ? "Nothing indexed yet" : "No assets match",
-                        systemImage: "line.3.horizontal.decrease.circle",
-                        description: Text(store.assets.isEmpty
-                            ? "The catalog is reachable and holds no assets."
-                            : "Nothing here is in this tab under these filters.")
-                    )
-                } else {
-                    List(selection: $selection) {
+            if let error = store.error {
+                ContentUnavailableView {
+                    Label("No catalog", systemImage: "cylinder.split.1x2")
+                } description: {
+                    Text(error).font(.caption)
+                }
+            } else if filtered.isEmpty {
+                ContentUnavailableView(
+                    store.assets.isEmpty ? "Nothing indexed yet" : "No assets match",
+                    systemImage: "line.3.horizontal.decrease.circle",
+                    description: Text(store.assets.isEmpty
+                        ? "The catalog is reachable and holds no assets."
+                        : "Nothing here is in this tab under these filters.")
+                )
+            } else {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 28, pinnedViews: .sectionHeaders) {
                         ForEach(sections) { section in
-                            Section(section.title) {
-                                ForEach(section.rows) { asset in
-                                    AssetRow(asset: asset)
-                                        .tag(asset.id)
+                            Section {
+                                LazyVGrid(
+                                    columns: [GridItem(.adaptive(minimum: 190, maximum: 230), spacing: 18)],
+                                    spacing: 18
+                                ) {
+                                    ForEach(section.rows) { asset in
+                                        Button { selection = asset.id } label: {
+                                            AssetCard(asset: asset, selected: selection == asset.id)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
                                 }
+                            } header: {
+                                Text(section.title)
+                                    .font(.title3).bold()
+                                    .padding(.bottom, 2)
                             }
                         }
                     }
-                    .listStyle(.sidebar)
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 18)
                 }
             }
-            .navigationSplitViewColumnWidth(min: 300, ideal: 360)
-            .searchable(text: $search, placement: .sidebar, prompt: "Search the library")
-        } detail: {
-            if let id = selection, let asset = store.asset(id) {
-                AssetDetailView(asset: asset)
-            } else {
-                ContentUnavailableView(
-                    "Select an asset",
-                    systemImage: "books.vertical",
-                    description: Text("\(store.assets.count) assets in the catalog")
-                )
-            }
         }
-        // learner.db can change while the app is open — it is written beside
-        // the catalog, not into the snapshot — so reread it on appear and
-        // whenever the app comes back to the front.
-        .onAppear { store.refreshLearner() }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            store.refreshLearner()
+        .navigationTitle("Library")
+        .searchable(text: $search, placement: .toolbar, prompt: "Search the library")
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                Text(countLine)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize()
+
+                Toggle(isOn: $favoritesOnly) {
+                    Image(systemName: favoritesOnly ? "star.fill" : "star")
+                }
+                .toggleStyle(.button)
+                .help("Starred only")
+
+                Menu {
+                    Picker("Sort", selection: $sort) {
+                        ForEach(SortOrder.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                    Picker("Group", selection: $grouping) {
+                        ForEach(Grouping.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                } label: {
+                    Image(systemName: "arrow.up.arrow.down")
+                }
+                .help("Sort and group")
+            }
         }
     }
 
-    /// The kind tabs, the web's strip as chips: All, the standalone kinds in
-    /// effort order, Others while a companion file exists.
-    private var kindStrip: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+    /// The kind strip: tabs in a scroll row (a narrow window scrolls them
+    /// rather than clipping them), the Kind menu inside Others; the count,
+    /// starred toggle and sort live in the window toolbar.
+    private var controls: some View {
+        ScrollView(.horizontal) {
             HStack(spacing: 6) {
                 ForEach(tabs) { tab in
                     Button {
@@ -287,96 +307,55 @@ struct LibraryView: View {
                     } label: {
                         Text(tab.label)
                             .font(.callout)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
+                            .padding(.horizontal, 11)
+                            .padding(.vertical, 5)
                             .background(
-                                kind == tab.value ? Color.accentColor.opacity(0.18) : Color.clear,
+                                kind == tab.value ? Color.accentColor : Color.clear,
                                 in: Capsule()
                             )
-                            .overlay {
-                                Capsule().stroke(
-                                    kind == tab.value ? Color.accentColor : Color.secondary.opacity(0.3)
-                                )
-                            }
+                            .foregroundStyle(kind == tab.value ? .white : .primary)
                     }
                     .buttonStyle(.plain)
                 }
-            }
-            .padding(.horizontal, 10)
-            .padding(.top, 8)
-            .padding(.bottom, 6)
-        }
-    }
 
-    /// Grouping, the Kind menu inside Others, Favorites and the sort, at a
-    /// chip's height like the web's toolbar.
-    private var controlsRow: some View {
-        HStack(spacing: 8) {
-            Picker("Group by", selection: $grouping) {
-                ForEach(Grouping.allCases) { Text($0.rawValue).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .frame(width: 130)
-
-            if kind == "other" {
-                Menu(othersKind.map { assetKindLabel($0) } ?? "Kind") {
-                    Button { othersKind = nil } label: {
-                        if othersKind == nil {
-                            Label("All companion files", systemImage: "checkmark")
-                        } else {
-                            Text("All companion files")
-                        }
-                    }
-                    ForEach(companionFacets, id: \.kind) { facet in
-                        Button { othersKind = facet.kind } label: {
-                            if othersKind == facet.kind {
-                                Label("\(facet.label) (\(facet.count))", systemImage: "checkmark")
+                if kind == "other" {
+                    Menu(othersKind.map { assetKindLabel($0) } ?? "Kind") {
+                        Button { othersKind = nil } label: {
+                            if othersKind == nil {
+                                Label("All companion files", systemImage: "checkmark")
                             } else {
-                                Text("\(facet.label) (\(facet.count))")
+                                Text("All companion files")
+                            }
+                        }
+                        ForEach(companionFacets, id: \.kind) { facet in
+                            Button { othersKind = facet.kind } label: {
+                                if othersKind == facet.kind {
+                                    Label("\(facet.label) (\(facet.count))", systemImage: "checkmark")
+                                } else {
+                                    Text("\(facet.label) (\(facet.count))")
+                                }
                             }
                         }
                     }
-                }
-                .font(.callout)
-                .fixedSize()
-            }
-
-            Spacer()
-
-            Button {
-                favoritesOnly.toggle()
-            } label: {
-                Image(systemName: favoritesOnly ? "star.fill" : "star")
-                    .foregroundStyle(favoritesOnly ? .yellow : .secondary)
-            }
-            .buttonStyle(.plain)
-            .help("Starred only")
-
-            Menu(sort.rawValue) {
-                ForEach(SortOrder.allCases) { order in
-                    Button { sort = order } label: {
-                        if order == sort {
-                            Label(order.rawValue, systemImage: "checkmark")
-                        } else {
-                            Text(order.rawValue)
-                        }
-                    }
+                    .font(.callout)
+                    .fixedSize()
                 }
             }
-            .font(.callout)
-            .fixedSize()
         }
-        .padding(.horizontal, 10)
-        .padding(.bottom, 6)
+        .scrollIndicators(.never)
+        .padding(.horizontal, 24)
+        .padding(.vertical, 10)
     }
 }
 
-/// One row of the list: the thumbnail when the blob made one (a video's
-/// poster, or the poster itself), then the title, the kind line, and the
-/// owner's marks — a star for a favorite, a mark for watched or in progress.
-private struct AssetRow: View {
+/// One card of the grid: the poster frame at 16:9 (a video's poster blob,
+/// a poster's own jpg, a tinted tile with the kind's symbol otherwise),
+/// then the title, the kind line and the owner's marks. Internal, not
+/// private: Home's rail draws the same card.
+struct AssetCard: View {
     @Environment(CatalogStore.self) private var store
     let asset: CatalogAsset
+    var selected = false
 
     /// The kind's label, plus which tool made it when a tool did — "other"
     /// and the studio's own "video" namespace say nothing, so they stay off.
@@ -387,52 +366,83 @@ private struct AssetRow: View {
         }
     }
 
+    /// The thumbnail's URL: a video reads its derived poster's blob, a
+    /// poster reads its own.
+    private var posterURL: URL? {
+        switch asset.kind {
+        case "video":
+            return store.companions(for: asset.id).posterKey.map { store.blobURL(for: $0) }
+        case "poster":
+            return asset.blobKey.map { store.blobURL(for: $0) }
+        default:
+            return nil
+        }
+    }
+
     var body: some View {
-        HStack(spacing: 10) {
-            Group {
-                switch asset.kind {
-                case "video":
-                    PosterThumbnail(
-                        url: store.companions(for: asset.id).posterKey.map { store.blobURL(for: $0) },
-                        maxPixel: 40
-                    )
-                case "poster":
-                    PosterThumbnail(
-                        url: asset.blobKey.map { store.blobURL(for: $0) },
-                        maxPixel: 40
-                    )
-                default:
+        VStack(alignment: .leading, spacing: 7) {
+            ZStack(alignment: .topTrailing) {
+                if let url = posterURL {
+                    PosterThumbnail(url: url, maxPixel: 480)
+                        .frame(maxWidth: .infinity)
+                } else {
                     Image(systemName: assetKindSymbol(asset.kind))
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 71, height: 40)
-                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+                        .font(.title2)
+                        .foregroundStyle(kindTint(asset.kind).opacity(0.85))
+                        .frame(maxWidth: .infinity)
+                        .aspectRatio(16.0 / 9.0, contentMode: .fit)
+                        .background(kindTint(asset.kind).opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+                }
+                if store.isFavorite(asset.id) {
+                    Image(systemName: "star.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.yellow)
+                        .padding(6)
+                        .background(.black.opacity(0.45), in: Circle())
+                        .padding(6)
                 }
             }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(store.displayTitle(for: asset))
+                    .font(.callout)
                     .lineLimit(2)
+                    .multilineTextAlignment(.leading)
                 HStack(spacing: 4) {
                     Text(metaLine)
                     if let mark = store.watchMark(asset.id) {
-                        Image(systemName: mark.done ? "checkmark.circle" : "circle.lefthalf.filled")
-                            .help(mark.done ? "Watched" : "Watching")
+                        Image(systemName: mark.done ? "checkmark.circle.fill" : "circle.lefthalf.filled")
+                            .foregroundStyle(mark.done ? .green : .secondary)
                     }
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
             }
-
-            Spacer(minLength: 0)
-
-            if store.isFavorite(asset.id) {
-                Image(systemName: "star.fill")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
         }
-        .padding(.vertical, 2)
+        .padding(8)
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .fill(selected ? Color.accentColor.opacity(0.14) : .clear)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(selected ? Color.accentColor : .clear, lineWidth: 1.5)
+        )
+        .contentShape(Rectangle())
+    }
+}
+
+/// The tile color a non-visual kind gets: quiet tints so a grid of notes,
+/// links and sessions does not read as a wall of identical gray.
+private func kindTint(_ kind: String) -> Color {
+    switch kind {
+    case "note": return .orange
+    case "link": return .blue
+    case "diagram_svg", "diagram_source": return .teal
+    case "session": return .purple
+    case "transcript", "chapters", "captions": return .mint
+    case "pdf": return .red
+    default: return .secondary
     }
 }

@@ -67,35 +67,39 @@ struct CatalogPDFView: NSViewRepresentable {
     }
 }
 
-/// A poster jpg as a thumbnail, downsampled by ImageIO rather than decoded at
-/// full size — poster files are video-sized and a row only needs a chip.
+/// A poster jpg drawn at 16:9, filling the width it is offered and
+/// cropping the overflow. ImageIO downsamples to `maxPixel` (a decode
+/// ceiling, not a display size) rather than decoding the video-sized file
+/// at full size.
 struct PosterThumbnail: View {
     let url: URL?
-    var maxPixel: CGFloat = 96
+    var maxPixel: CGFloat = 512
+    var cornerRadius: CGFloat = 10
 
     @State private var image: NSImage?
 
     var body: some View {
-        Group {
-            if let image {
-                Image(nsImage: image)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-            } else {
-                Rectangle()
-                    .fill(.quaternary)
-                    .overlay {
-                        Image(systemName: "play.rectangle")
-                            .foregroundStyle(.tertiary)
-                    }
+        Color.clear
+            .aspectRatio(16.0 / 9.0, contentMode: .fit)
+            .overlay {
+                if let image {
+                    Image(nsImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } else {
+                    Rectangle()
+                        .fill(.quaternary)
+                        .overlay {
+                            Image(systemName: "play.rectangle")
+                                .foregroundStyle(.tertiary)
+                        }
+                }
             }
-        }
-        .frame(width: maxPixel * 16 / 9, height: maxPixel)
-        .clipShape(RoundedRectangle(cornerRadius: 6))
-        .task(id: url) {
-            guard let url else { return }
-            image = await Self.thumbnail(url: url, maxPixel: maxPixel)
-        }
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+            .task(id: url) {
+                guard let url else { return }
+                image = await Self.thumbnail(url: url, maxPixel: maxPixel)
+            }
     }
 
     private static func thumbnail(url: URL, maxPixel: CGFloat) async -> NSImage? {
@@ -106,13 +110,13 @@ struct PosterThumbnail: View {
             }
             let thumb: [CFString: Any] = [
                 kCGImageSourceCreateThumbnailFromImageAlways: true,
-                kCGImageSourceThumbnailMaxPixelSize: Int(maxPixel * 2), // retina
+                kCGImageSourceThumbnailMaxPixelSize: Int(maxPixel),
                 kCGImageSourceCreateThumbnailWithTransform: true,
             ]
             guard let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, thumb as CFDictionary) else {
                 return nil
             }
-            return NSImage(cgImage: cg, size: NSSize(width: cg.width / 2, height: cg.height / 2))
+            return NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
         }.value
     }
 }
