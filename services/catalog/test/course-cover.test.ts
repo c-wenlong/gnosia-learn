@@ -86,7 +86,7 @@ describe.skipIf(!reachable.ok)("catalog course cover", () => {
   const webp = async () => readFile(COVER);
 
   const revisions = async () =>
-    (await scratch.db.execute<{ n: number }>(sql`select count(*)::int as n from content_revision`)).rows[0]?.n ?? 0;
+    (await scratch.db.execute<{ n: number }>(sql`select count(*) as n from content_revision`)).rows[0]?.n ?? 0;
   const blobs = async () => (await scratch.db.select({ key: blobObject.key }).from(blobObject)).map((r) => r.key).sort();
   const course = async (id = "cp4284") => {
     const [row] = await scratch.db.select().from(collection).where(eq(collection.id, id));
@@ -120,7 +120,7 @@ describe.skipIf(!reachable.ok)("catalog course cover", () => {
       expect(sqlstate(error)).toBe(code);
       expect(String((error as { cause?: { constraint?: unknown } })?.cause?.constraint)).toBe(constraint);
     };
-    const credit = sql`jsonb_build_object('coverCredit', jsonb_build_object('photographer', 'p', 'source', 'https://x.test', 'licence', 'l'))`;
+    const credit = sql`json_object('coverCredit', json_object('photographer', 'p', 'source', 'https://x.test', 'licence', 'l'))`;
 
     it("lets only a course carry a cover", async () => {
       const key = await storedBlob(scratch.db, "a module's photo", "webp");
@@ -406,7 +406,7 @@ describe.skipIf(!reachable.ok)("course covers through export and import", () => 
   const courseRevisions = async (db: Scratch) =>
     (
       await db.db.execute<{ n: number }>(
-        sql`select count(*)::int as n from content_revision where entity_type = 'collection' and entity_id = 'cp4284'`,
+        sql`select count(*) as n from content_revision where entity_type = 'collection' and entity_id = 'cp4284'`,
       )
     ).rows[0]?.n ?? 0;
   /** A copy of the export in `bad`, with `edit` applied to its course file. */
@@ -440,7 +440,7 @@ describe.skipIf(!reachable.ok)("course covers through export and import", () => 
   });
 
   it("refuses by name a cover: that differs from the stored one, or an image that is not the stored image, writing nothing", async () => {
-    const revisions = await second.db.execute(sql`select count(*)::int as n from content_revision`);
+    const revisions = await second.db.execute(sql`select count(*) as n from content_revision`);
     const refused = async (pattern: RegExp) => {
       await expect(importBad(second)).rejects.toThrow(pattern);
     };
@@ -454,7 +454,7 @@ describe.skipIf(!reachable.ok)("course covers through export and import", () => 
     await writeFile(await variant((yaml) => yaml), PNG);
     await refused(/holds a PNG image; name it cp4284\.cover\.png/);
 
-    expect((await second.db.execute(sql`select count(*)::int as n from content_revision`)).rows).toEqual(revisions.rows);
+    expect((await second.db.execute(sql`select count(*) as n from content_revision`)).rows).toEqual(revisions.rows);
     expect((await coverOf(second))?.key).toBe(await key());
   });
 
@@ -474,7 +474,7 @@ describe.skipIf(!reachable.ok)("course covers through export and import", () => 
     await rm(await variant(noCoverBlock));
     const moved = await storedBlob(second.db, "a cover set while the import ran", "png");
     const credit = { photographer: "Someone Else", source: "https://example.com/new", licence: "CC0" };
-    const revisions = async () => (await second.db.execute<{ n: number }>(sql`select count(*)::int as n from content_revision`)).rows[0]?.n;
+    const revisions = async () => (await second.db.execute<{ n: number }>(sql`select count(*) as n from content_revision`)).rows[0]?.n;
     const rowOf = async () => (await second.db.select().from(collection).where(eq(collection.id, "cp4284")))[0];
 
     let landed: Awaited<ReturnType<typeof rowOf>>;
@@ -486,7 +486,7 @@ describe.skipIf(!reachable.ok)("course covers through export and import", () => 
       before = (await revisions()) ?? 0;
       await second.db.execute(
         sql`update collection set cover_blob_key = ${moved},
-              metadata = jsonb_set(metadata, '{coverCredit}', ${JSON.stringify(credit)}::jsonb)
+              metadata = json_set(metadata, '{coverCredit}', ${JSON.stringify(credit)})
             where id = 'cp4284'`,
       );
       landed = await rowOf();

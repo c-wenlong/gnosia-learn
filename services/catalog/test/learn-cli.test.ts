@@ -222,7 +222,7 @@ describe.skipIf(!reachable.ok)("learn CLI", () => {
 
       // The observations are retained for audit, alongside the void marker.
       const { rows } = await scratch.db.execute<{ type: string; n: number }>(
-        "select type, count(*)::int as n from event group by type order by type",
+        "select type, count(*) as n from event group by type order by type",
       );
       expect(rows).toEqual([
         { type: "observation", n: 3 },

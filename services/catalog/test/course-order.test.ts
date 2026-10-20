@@ -13,6 +13,7 @@ import { doctor } from "../src/commands/doctor";
 import { COMPLETENESS_RULES, setTriggers } from "../src/content/rules";
 import { migratedScratchDatabase, probe, type Scratch, sqlMessage, sqlstate } from "./scratch-database";
 
+import { inTransaction } from "../src/db";
 /**
  * Phase 1 of docs/proposals/module-learning-path.md: a course may not teach a
  * concept before a concept it `requires`. The rule reads each concept's first
@@ -212,7 +213,7 @@ describe.skipIf(!reachable.ok)("the course order rule, armed", () => {
 
   it("refuses reordering items so a prerequisite comes after the concept that needs it", async () => {
     // Swap the modules: m2 [d] before m1 [c], and d requires c.
-    const swap = scratch.db.transaction(async (t) => {
+    const swap = inTransaction(scratch.db, async (t) => {
       await t.update(collection).set({ position: 3 }).where(eq(collection.id, "zz2000-m1"));
       await t.update(collection).set({ position: 1 }).where(eq(collection.id, "zz2000-m2"));
     });
@@ -222,7 +223,7 @@ describe.skipIf(!reachable.ok)("the course order rule, armed", () => {
   });
 
   it("refuses moving a concept within its item to before its prerequisite", async () => {
-    const swap = scratch.db.transaction(async (t) => {
+    const swap = inTransaction(scratch.db, async (t) => {
       await t
         .update(conceptCurriculumItem)
         .set({ position: 3 })
@@ -238,7 +239,7 @@ describe.skipIf(!reachable.ok)("the course order rule, armed", () => {
     await scratch.db.insert(conceptCurriculumItem).values({ conceptSlug: "a", curriculumItemId: "zz2000-m2-t2", position: 1 });
     await scratch.db.insert(conceptPrerequisite).values({ conceptSlug: "d", prerequisiteSlug: "a", kind: "requires", position: 2 });
     try {
-      const remove = scratch.db.transaction(async (t) => {
+      const remove = inTransaction(scratch.db, async (t) => {
         await t.delete(curriculumItem).where(eq(curriculumItem.id, "zz2000-m1-t1"));
       });
       await expect(remove).rejects.toSatisfy(refusedForOrder);
@@ -255,7 +256,7 @@ describe.skipIf(!reachable.ok)("the course order rule, armed", () => {
     await scratch.db.insert(curriculumItem).values({ id: "zz2000-m2-t3", collectionId: "zz2000-m2", position: 3, title: "t3" });
     await scratch.db.insert(conceptCurriculumItem).values({ conceptSlug: "c", curriculumItemId: "zz2000-m2-t3", position: 1 });
     await scratch.db.update(curriculumItem).set({ archivedAt: new Date() }).where(eq(curriculumItem.id, "zz2000-m2-t3"));
-    await scratch.db.transaction(async (t) => {
+    await inTransaction(scratch.db, async (t) => {
       await t.delete(curriculumItem).where(eq(curriculumItem.id, "zz2000-m2-t3"));
     });
     expect(await scratch.db.select().from(curriculumItem).where(eq(curriculumItem.id, "zz2000-m2-t3"))).toEqual([]);
@@ -263,7 +264,7 @@ describe.skipIf(!reachable.ok)("the course order rule, armed", () => {
 
   it("accepts a reorder that keeps every requires edge", async () => {
     // b requires a, d requires c: putting m1-t2 [c] first keeps both.
-    await scratch.db.transaction(async (t) => {
+    await inTransaction(scratch.db, async (t) => {
       await t.update(curriculumItem).set({ position: 3 }).where(eq(curriculumItem.id, "zz2000-m1-t1"));
       await t.update(curriculumItem).set({ position: 1 }).where(eq(curriculumItem.id, "zz2000-m1-t2"));
     });

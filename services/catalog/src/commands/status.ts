@@ -16,7 +16,7 @@ import {
   tables,
 } from "@self-learn/schema";
 import { and, asc, count, eq, getTableName, isNull, max, sql } from "drizzle-orm";
-import { alias } from "drizzle-orm/pg-core";
+import { alias } from "drizzle-orm/sqlite-core";
 
 import { withDatabase } from "../db";
 import { databaseUrl, redactUrl } from "../env";
@@ -188,7 +188,7 @@ export async function runStatus(): Promise<StatusResult> {
     // would be 19 round trips for a command whose whole point is to be cheap.
     const parts = (Object.keys(tables) as TableName[]).map((key) => {
       const table = tables[key];
-      return sql`select ${getTableName(table)}::text as name, count(*)::int as rows from ${table}`;
+      return sql`select ${getTableName(table)} as name, count(*) as rows from ${table}`;
     });
     const counted = await db.execute<{ name: string; rows: number }>(
       sql.join(parts, sql.raw(" union all ")),
@@ -228,8 +228,8 @@ async function courseCoverage(db: Db): Promise<CourseCoverage[]> {
   const rows = await db
     .select({
       course: course.id,
-      items: sql<number>`count(distinct ${curriculumItem.id})::int`,
-      withConcepts: sql<number>`count(distinct ${conceptCurriculumItem.curriculumItemId})::int`,
+      items: sql<number>`count(distinct ${curriculumItem.id})`,
+      withConcepts: sql<number>`count(distinct ${conceptCurriculumItem.curriculumItemId})`,
     })
     .from(course)
     // Live rows only: an archived module or item is off the course path (D12),
@@ -290,21 +290,21 @@ async function checkCoverage(db: Db): Promise<Map<string, { concepts: number; co
  */
 async function readingCoverage(db: Db): Promise<Map<string, { readings: number; readingsOnLessons: number }>> {
   const { rows: present } = await db.execute<{ present: boolean }>(
-    sql`select to_regclass('public.curriculum_item_asset') is not null as present`,
+    sql`select exists(select 1 from sqlite_master where type = 'table' and name = 'curriculum_item_asset') as present`,
   );
   const lessons = present[0]?.present === true;
   const { rows } = await db.execute<{ course: string; readings: number; placed: number }>(sql`
-    select m.parent_id as course, count(distinct r.asset_id)::int as readings,
+    select m.parent_id as course, count(distinct r.asset_id) as readings,
       ${
         lessons
           ? sql`count(distinct r.asset_id) filter (where exists (
               select 1 from curriculum_item_asset l
               join curriculum_item i on i.id = l.curriculum_item_id
-              where l.asset_id = r.asset_id and i.collection_id = m.id and i.archived_at is null))::int`
+              where l.asset_id = r.asset_id and i.collection_id = m.id and i.archived_at is null))`
           : sql`0`
       } as placed
     from collection m
-    join collection_item r on r.collection_id = m.id and starts_with(r.asset_id, 'link:')
+    join collection_item r on r.collection_id = m.id and instr(r.asset_id, 'link:') = 1
     where m.kind = 'module' and m.archived_at is null and m.parent_id is not null
     group by m.parent_id`);
   return new Map(rows.map((row) => [row.course, { readings: row.readings, readingsOnLessons: row.placed }]));

@@ -94,7 +94,7 @@ export async function writeProviderKey(
         authTag: sql`excluded.auth_tag`,
         keyVersion: sql`excluded.key_version`,
         last4: sql`excluded.last4`,
-        updatedAt: sql`now()`,
+        updatedAt: sql`cast(unixepoch('subsec') * 1000 as integer)`,
       },
     })
     .returning({ createdAt: providerKey.createdAt, updatedAt: providerKey.updatedAt });

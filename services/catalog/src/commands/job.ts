@@ -27,7 +27,7 @@ import {
 import { and, asc, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 
 import { CLI_OWNER, ownersExist } from "../content/scope";
-import { withDatabase, type CatalogDatabase } from "../db";
+import { withDatabase, type CatalogDatabase, inTransaction } from "../db";
 import { REPO_ROOT } from "../env";
 import { ASSETS_DIR } from "../index/diagrams";
 import { fileFacts } from "../index/files";
@@ -501,7 +501,7 @@ export async function runEnqueue(options: EnqueueOptions): Promise<EnqueueResult
       // One transaction, so a discarded parent and the new job land together
       // or not at all: a refused insert (the topic, the lease, the key) rolls
       // the discard back and the video in review is untouched.
-      const { inserted, discarded } = await db.transaction(async (tx) => {
+      const { inserted, discarded } = await inTransaction(db, async (tx) => {
         const discarded =
           discardParent === undefined ? null : await discardForChange(tx, discardParent, row, scoped ? owner : undefined);
         const [inserted] = await tx
@@ -649,8 +649,7 @@ async function discardForChange(
     .select()
     .from(jobTable)
     .where(and(eq(jobTable.id, parentId), owner === undefined ? undefined : eq(jobTable.ownerId, owner)))
-    .limit(1)
-    .for("update");
+    .limit(1);
   if (parent === undefined) throw new JobError(`no job "${parentId}" to revise.`);
   if (parent.kind !== "video") {
     throw new JobError(`job ${parentId} is a ${parent.kind} job; --discard-parent discards only a video job for its change.`);
@@ -670,7 +669,7 @@ async function discardForChange(
   }
   const updated = await tx
     .update(jobTable)
-    .set({ state: "discarded", reviewedAt: sql`now()`, updatedAt: sql`now()` })
+    .set({ state: "discarded", reviewedAt: sql`cast(unixepoch('subsec') * 1000 as integer)`, updatedAt: sql`cast(unixepoch('subsec') * 1000 as integer)` })
     .where(and(eq(jobTable.id, parentId), eq(jobTable.state, "awaiting_review")))
     .returning({ id: jobTable.id });
   if (updated.length === 0) throw new JobError(`job ${parentId} moved while it was being discarded; nothing was changed.`);
@@ -841,13 +840,13 @@ export async function runClaim(options: ClaimOptions): Promise<ClaimResult> {
     await assertOwnReferences(db, { sessionId: options.sessionId ?? null, parentJobId: null }, owner, mine !== undefined);
     const assignments = {
       state: "running" as const,
-      startedAt: sql`now()`,
-      heartbeatAt: sql`now()`,
+      startedAt: sql`cast(unixepoch('subsec') * 1000 as integer)`,
+      heartbeatAt: sql`cast(unixepoch('subsec') * 1000 as integer)`,
       attempt: sql`${jobTable.attempt} + 1`,
       runner: options.runner ?? null,
       sessionId: options.sessionId ?? sql`${jobTable.sessionId}`,
       phase: null,
-      updatedAt: sql`now()`,
+      updatedAt: sql`cast(unixepoch('subsec') * 1000 as integer)`,
     };
 
     if (options.jobId !== undefined) {
@@ -873,8 +872,7 @@ export async function runClaim(options: ClaimOptions): Promise<ClaimResult> {
         ),
       )
       .orderBy(asc(jobTable.requestedAt))
-      .limit(1)
-      .for("update", { skipLocked: true });
+      .limit(1);
 
     const claimed = await db
       .update(jobTable)
@@ -1001,8 +999,8 @@ export async function runFinish(options: FinishOptions): Promise<TransitionResul
       .update(jobTable)
       .set({
         state: to,
-        finishedAt: sql`now()`,
-        heartbeatAt: sql`now()`,
+        finishedAt: sql`cast(unixepoch('subsec') * 1000 as integer)`,
+        heartbeatAt: sql`cast(unixepoch('subsec') * 1000 as integer)`,
         phase: options.phase ?? (to === "awaiting_review" ? "ready" : null),
         candidatePath: candidatePath ?? sql`${jobTable.candidatePath}`,
         exitCode: options.exitCode ?? null,
@@ -1013,7 +1011,7 @@ export async function runFinish(options: FinishOptions): Promise<TransitionResul
         errorKind: options.errorKind ?? null,
         error: options.error ?? null,
         errorDetail: options.errorDetail ?? null,
-        updatedAt: sql`now()`,
+        updatedAt: sql`cast(unixepoch('subsec') * 1000 as integer)`,
       })
       .where(and(eq(jobTable.id, options.jobId), inArray(jobTable.state, from), mine))
       .returning();
@@ -1048,7 +1046,7 @@ export interface VerdictOptions {
  */
 export async function runAccept(options: VerdictOptions): Promise<TransitionResult> {
   const owner = options.owner ?? CLI_OWNER;
-  return withDatabase(({ db }) => db.transaction((tx) => acceptJobIn(tx, options.jobId, owner)));
+  return withDatabase(({ db }) => inTransaction(db, (tx) => acceptJobIn(tx, options.jobId, owner)));
 }
 
 /**
@@ -1096,8 +1094,8 @@ export async function acceptJobIn(tx: CatalogDatabase, jobId: string, owner: str
     .update(jobTable)
     .set({
       state: "accepted",
-      reviewedAt: sql`now()`,
-      updatedAt: sql`now()`,
+      reviewedAt: sql`cast(unixepoch('subsec') * 1000 as integer)`,
+      updatedAt: sql`cast(unixepoch('subsec') * 1000 as integer)`,
     })
     .where(and(eq(jobTable.id, jobId), inArray(jobTable.state, sourcesOf("accepted")), mine))
     .returning();
@@ -1125,7 +1123,7 @@ export async function runDiscard(options: VerdictOptions): Promise<TransitionRes
       .limit(1);
     const updated = await db
       .update(jobTable)
-      .set({ state: "discarded", reviewedAt: sql`now()`, updatedAt: sql`now()` })
+      .set({ state: "discarded", reviewedAt: sql`cast(unixepoch('subsec') * 1000 as integer)`, updatedAt: sql`cast(unixepoch('subsec') * 1000 as integer)` })
       .where(and(eq(jobTable.id, options.jobId), inArray(jobTable.state, sourcesOf("discarded")), mine))
       .returning();
     if (updated.length === 0) throw await explainRefusal(db, options.jobId, "discarded", owner);
@@ -1170,7 +1168,7 @@ export async function runList(options: ListOptions = {}): Promise<ListResult> {
     const where = filters.length === 0 ? undefined : and(...filters);
 
     const counted = await db
-      .select({ total: sql<number>`count(*)::int` })
+      .select({ total: sql<number>`count(*)` })
       .from(jobTable)
       .where(where);
     const rows = await db

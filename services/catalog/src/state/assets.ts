@@ -12,7 +12,7 @@ import {
   topic,
 } from "@self-learn/schema";
 import { and, asc, count, eq, inArray, sql, type SQL } from "drizzle-orm";
-import { alias } from "drizzle-orm/pg-core";
+import { alias } from "drizzle-orm/sqlite-core";
 
 import { andOwnedBy, cacheKey, ownedBy, type Owners, scopedRead } from "../content/scope";
 import type { CatalogDatabase } from "../db";
@@ -114,7 +114,7 @@ export async function assetNamesExist(db: CatalogDatabase): Promise<boolean> {
   const key = cacheKey(db);
   if (hasNames.has(key)) return true;
   const { rows } = await db.execute<{ present: boolean }>(
-    sql`select to_regclass(current_schema() || '.asset_name') is not null as present`,
+    sql`select exists(select 1 from sqlite_master where type = 'table' and name = 'asset_name') as present`,
   );
   const present = rows[0]?.present === true;
   if (present) hasNames.set(key, true);
@@ -137,7 +137,7 @@ export async function revisionsExist(db: CatalogDatabase): Promise<boolean> {
   const key = cacheKey(db);
   if (hasRevisions.has(key)) return true;
   const { rows } = await db.execute<{ present: boolean }>(
-    sql`select to_regclass(current_schema() || '.content_revision') is not null as present`,
+    sql`select exists(select 1 from sqlite_master where type = 'table' and name = 'content_revision') as present`,
   );
   const present = rows[0]?.present === true;
   if (present) hasRevisions.set(key, true);
@@ -180,7 +180,7 @@ export async function revisionsExist(db: CatalogDatabase): Promise<boolean> {
  * asset the reader may read reaches this, so it widens nothing.
  */
 function editedAtColumn(learnerId: string, names: boolean): SQL<Date | string | null> {
-  const stripped = (alias: string) => sql.raw(`(${alias}.snapshot #- '{entity,blob_key}' #- '{links,asset_derivation}')`);
+  const stripped = (alias: string) => sql.raw(`json_remove(${alias}.snapshot, '$.entity.blob_key', '$.links.asset_derivation')`);
   const renamed = names
     ? sql`union all (select n.updated_at, true from ${assetName} n where n.learner_id = ${learnerId} and n.asset_id = "asset"."id")`
     : sql``;
@@ -191,7 +191,7 @@ function editedAtColumn(learnerId: string, names: boolean): SQL<Date | string | 
        from ${contentRevision} c
        left join ${contentRevision} p on p.id = c.previous_id
        where c.entity_type = 'asset' and c.entity_id = "asset"."id"
-         and (c.author_kind = 'import' or p.id is null or ${stripped("c")} is distinct from ${stripped("p")})
+         and (c.author_kind = 'import' or p.id is null or ${stripped("c")} is not ${stripped("p")})
        order by c.seq desc
        limit 1)
       ${renamed}
@@ -689,7 +689,7 @@ async function listScoped(
       editedAt: revisions ? editedAtColumn(learnerId, names) : sql<null>`null`,
       // Only chips for topics the reader may read (phase 4).
       topics: sql<string[]>`(
-        select coalesce(array_agg(${assetTopic.topicSlug} order by ${assetTopic.topicSlug} collate "C"), '{}')
+        select coalesce(json_group_array(${assetTopic.topicSlug} order by ${assetTopic.topicSlug} collate binary), '[]')
         from ${assetTopic}
         where ${assetTopic.assetId} = ${asset.id}${
           owners === undefined

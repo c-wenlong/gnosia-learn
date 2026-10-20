@@ -23,7 +23,7 @@ import {
   ownerCaps,
   uploadBlob,
 } from "../src/content/blob";
-import { connect } from "../src/db";
+import { connect, inTransaction } from "../src/db";
 import { ensureLearner } from "../src/state";
 import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 
@@ -182,7 +182,7 @@ describe.skipIf(!reachable.ok)("uploadBlob under per-owner caps", () => {
       const isLocked = new Promise<void>((resolve) => (locked = resolve));
       // `blob audit --fix` deleting the stale row, holding the owner's lock
       // while the upload has already read the row and is waiting for it.
-      const audit = other.db.transaction(async (tx) => {
+      const audit = inTransaction(other.db, async (tx) => {
         await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${ownerCapLock("local")}, 0))`);
         locked();
         await held;
@@ -229,7 +229,7 @@ describe.skipIf(!reachable.ok)("uploadBlob under per-owner caps", () => {
       const held = new Promise<void>((resolve) => (release = resolve));
       let deleted: () => void = () => {};
       const isDeleted = new Promise<void>((resolve) => (deleted = resolve));
-      const audit = other.db.transaction(async (tx) => {
+      const audit = inTransaction(other.db, async (tx) => {
         await tx.delete(blobObject).where(eq(blobObject.key, keyOf("local", "stale")));
         deleted();
         await held;
@@ -278,11 +278,11 @@ describe.skipIf(!reachable.ok)("uploadBlob under per-owner caps", () => {
       const isLocked = new Promise<void>((resolve) => (locked = resolve));
       // An upload of the key between its cap check and its pending write:
       // it holds the owner's lock, and its write refreshes `updated_at`.
-      const inFlight = other.db.transaction(async (tx) => {
+      const inFlight = inTransaction(other.db, async (tx) => {
         await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${ownerCapLock("local")}, 0))`);
         locked();
         await held;
-        await tx.update(blobObject).set({ updatedAt: sql`now()` }).where(eq(blobObject.key, key));
+        await tx.update(blobObject).set({ updatedAt: sql`cast(unixepoch('subsec') * 1000 as integer)` }).where(eq(blobObject.key, key));
       });
       try {
         await isLocked;
@@ -315,7 +315,7 @@ describe.skipIf(!reachable.ok)("uploadBlob under per-owner caps", () => {
       const held = new Promise<void>((resolve) => (release = resolve));
       let locked: () => void = () => {};
       const isLocked = new Promise<void>((resolve) => (locked = resolve));
-      const inFlight = other.db.transaction(async (tx) => {
+      const inFlight = inTransaction(other.db, async (tx) => {
         await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${ownerCapLock("local")}, 0))`);
         locked();
         await held;
@@ -358,7 +358,7 @@ describe.skipIf(!reachable.ok)("uploadBlob under per-owner caps", () => {
     expect((await upload(B, "third")).uploaded).toBe(true);
     await scratch.db
       .update(blobObject)
-      .set({ createdAt: sql`now() - interval '25 hours'` })
+      .set({ createdAt: sql`cast(unixepoch('subsec') * 1000 as integer) - interval '25 hours'` })
       .where(eq(blobObject.key, keyOf("local", "first")));
     expect((await upload("local", "third")).uploaded).toBe(true);
   });
@@ -413,12 +413,12 @@ describe.skipIf(!reachable.ok)("uploadBlob under per-owner caps", () => {
     await upload("local", "old");
     await scratch.db
       .update(blobObject)
-      .set({ createdAt: sql`now() - interval '23 hours 59 minutes'` })
+      .set({ createdAt: sql`cast(unixepoch('subsec') * 1000 as integer) - interval '23 hours 59 minutes'` })
       .where(eq(blobObject.key, keyOf("local", "old")));
     await expect(upload("local", "new")).rejects.toMatchObject({ cap: "uploads-per-day" });
     await scratch.db
       .update(blobObject)
-      .set({ createdAt: sql`now() - interval '24 hours 1 minute'` })
+      .set({ createdAt: sql`cast(unixepoch('subsec') * 1000 as integer) - interval '24 hours 1 minute'` })
       .where(eq(blobObject.key, keyOf("local", "old")));
     expect((await upload("local", "new")).uploaded).toBe(true);
   });
@@ -433,7 +433,7 @@ describe.skipIf(!reachable.ok)("uploadBlob under per-owner caps", () => {
       const held = new Promise<void>((resolve) => (release = resolve));
       let locked: () => void = () => {};
       const isLocked = new Promise<void>((resolve) => (locked = resolve));
-      const inFlight = other.db.transaction(async (tx) => {
+      const inFlight = inTransaction(other.db, async (tx) => {
         await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${ownerCapLock("local")}, 0))`);
         locked();
         await held;

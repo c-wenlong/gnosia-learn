@@ -9,7 +9,7 @@ import {
   recap,
 } from "@self-learn/schema";
 import { and, eq, getTableColumns, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
-import type { PgTable } from "drizzle-orm/pg-core";
+import type { SQLiteTable } from "drizzle-orm/sqlite-core";
 
 import type { CatalogDatabase } from "../db";
 import { CourseWriteError, summarise, type WriteThroughSummary } from "./courses";
@@ -181,7 +181,7 @@ export async function archiveItem(db: CatalogDatabase, options: ItemOptions): Pr
 }
 
 /** Rows of `table` keyed by SQL column name, as a snapshot holds them, turned back into drizzle's keys. */
-function fromSnapshot(table: PgTable, row: Record<string, JsonValue>, except?: string): Row {
+function fromSnapshot(table: SQLiteTable, row: Record<string, JsonValue>, except?: string): Row {
   const out: Row = {};
   for (const [key, name] of contentColumns(table, except)) {
     if (Object.hasOwn(row, name)) out[key] = row[name];
@@ -361,7 +361,7 @@ export interface PurgeOptions extends ItemOptions {
 }
 
 /** A learner row back from a purge's snapshot, every column including its timestamps. */
-function learnerFromSnapshot(table: PgTable, snap: Record<string, JsonValue>): Row {
+function learnerFromSnapshot(table: SQLiteTable, snap: Record<string, JsonValue>): Row {
   const out: Row = {};
   for (const [key, column] of Object.entries(getTableColumns(table))) {
     if (!Object.hasOwn(snap, column.name)) continue;
@@ -372,7 +372,7 @@ function learnerFromSnapshot(table: PgTable, snap: Record<string, JsonValue>): R
 }
 
 /** A learner row as a revision holds it: every column but the item it names, by SQL name, canonical. */
-function learnerSnapshot(table: PgTable, row: Row): Record<string, JsonValue> {
+function learnerSnapshot(table: SQLiteTable, row: Row): Record<string, JsonValue> {
   const out: Row = {};
   for (const [key, column] of Object.entries(getTableColumns(table))) {
     if (key === "curriculumItemId") continue;
@@ -390,7 +390,7 @@ export async function purgeItem(db: CatalogDatabase, options: PurgeOptions): Pro
     // the reads below see it) or waits until the purge is over and then fails
     // on the missing item. Without it, a row committed between the reads and
     // the deletes would be deleted with the item and be in no revision.
-    const [row] = await tx.select().from(curriculumItem).where(eq(curriculumItem.id, options.id)).for("update");
+    const [row] = await tx.select().from(curriculumItem).where(eq(curriculumItem.id, options.id));
     if (row === undefined) throw new CourseWriteError(`no curriculum item "${options.id}" in the catalog`);
     // A purge deletes around the seam, so it asks the seam's question itself
     // (phase 4): another owner's item is theirs to purge, not this CLI's.
@@ -410,8 +410,8 @@ export async function purgeItem(db: CatalogDatabase, options: PurgeOptions): Pro
     // revision (phase 4). Another learner's tick or recap is theirs: it keeps
     // the item from being deleted (the foreign key restricts), and the purge
     // says so rather than taking it.
-    const allTicks = await tx.select().from(progress).where(eq(progress.curriculumItemId, options.id)).for("update");
-    const allRecaps = await tx.select().from(recap).where(eq(recap.curriculumItemId, options.id)).for("update");
+    const allTicks = await tx.select().from(progress).where(eq(progress.curriculumItemId, options.id));
+    const allRecaps = await tx.select().from(recap).where(eq(recap.curriculumItemId, options.id));
     const ticks = allTicks.filter((r) => r.learnerId === CLI_OWNER);
     const recaps = allRecaps.filter((r) => r.learnerId === CLI_OWNER);
     const theirs = allTicks.length - ticks.length + (allRecaps.length - recaps.length);

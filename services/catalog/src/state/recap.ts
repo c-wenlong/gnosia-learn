@@ -117,7 +117,7 @@ export async function upsertRecap(
         openQuestions: sql`excluded.open_questions`,
         source: sql`excluded.source`,
         sessions: sql`greatest(${recap.sessions} + ${increment}, ${floor ?? 0}, 1)`,
-        updatedAt: sql`now()`,
+        updatedAt: sql`cast(unixepoch('subsec') * 1000 as integer)`,
       },
     })
     .returning();

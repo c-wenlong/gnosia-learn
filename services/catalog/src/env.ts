@@ -14,11 +14,20 @@ export const SERVICE_ROOT = path.resolve(
 export const REPO_ROOT = path.resolve(SERVICE_ROOT, "..", "..");
 
 /**
- * Local Postgres, the Homebrew install, database `self_learn`. Documented in
- * services/catalog/.env.example. Daily development needs no configuration at
- * all; CI and the homeserver set DATABASE_URL and point at compose.yaml.
+ * The catalog's database is a SQLite file (docs/SQLITE-MIGRATION.md): one
+ * file next to the blob store, at `$SELF_LEARN_HOME/catalog.db`, or
+ * `~/.self-learn/catalog.db` when `SELF_LEARN_HOME` is unset. Daily
+ * development needs no configuration at all; tests and scripts point
+ * `CATALOG_DB` (or `DATABASE_URL`, below) at a scratch file.
  */
-export const DEFAULT_DATABASE_URL = "postgres://localhost:5432/self_learn";
+export const DEFAULT_DATABASE_PATH = path.join(homedir(), ".self-learn", "catalog.db");
+
+/**
+ * The variable that names the file. `CATALOG_DB` rather than reusing
+ * `DATABASE_URL` alone, so a stale `postgres://…` value in a `.env` fails
+ * loudly instead of being read as a path.
+ */
+export const CATALOG_DB_ENV = "CATALOG_DB";
 
 /** The manimkc submodule, relative to the repo root. Also the git path in `git submodule update --init <here>`. */
 export const MANIMKC_DIR = path.join("tools", "manimkc");
@@ -86,10 +95,66 @@ export function loadEnv(file: string = ENV_FILE): void {
   }
 }
 
+/**
+ * The data root the catalog shares with the blob store: `$SELF_LEARN_HOME`,
+ * or `~/.self-learn`. Read after `services/catalog/.env` like the other
+ * resolvers, so one file configures the CLI and the web app together.
+ */
+function selfLearnHome(): string {
+  const raw = process.env[SELF_LEARN_HOME_ENV]?.trim();
+  if (!raw) return path.join(homedir(), ".self-learn");
+  return raw === "~" || raw.startsWith("~/") ? path.join(homedir(), raw.slice(1)) : raw;
+}
+
+/**
+ * The database a connection string or variable names, as a filesystem path.
+ *
+ * Accepted forms: a plain path (`/abs`, `./rel`, `~/…`), a `sqlite:` or
+ * `file:` URL, and the literal `:memory:` for tests that want no file at
+ * all. A `postgres:`/`postgresql:` URL is not silently read as a path: it is
+ * the old world, and the message says where the data went and which script
+ * carries it over (`services/catalog/scripts/pg-to-sqlite.mjs`).
+ */
+export function databasePath(url?: string): string {
+  const raw = (url ?? databaseUrl()).trim();
+  if (raw === ":memory:") return raw;
+  if (raw.startsWith("postgres://") || raw.startsWith("postgresql://")) {
+    throw new Error(
+      `DATABASE_URL is a Postgres URL (${redactUrl(raw)}), but the catalog is a SQLite file now ` +
+        `(docs/SQLITE-MIGRATION.md). Point ${CATALOG_DB_ENV} at the file the port script wrote, ` +
+        `or unset DATABASE_URL to use the default ${DEFAULT_DATABASE_PATH}.`,
+    );
+  }
+  if (raw.startsWith("sqlite:")) return stripScheme(raw, "sqlite:");
+  if (raw.startsWith("file:")) return fileURLToPath(raw);
+  const expanded = raw === "~" || raw.startsWith("~/") ? path.join(homedir(), raw.slice(1)) : raw;
+  return path.resolve(expanded);
+}
+
+/** `sqlite:///abs/path` and `sqlite:rel/path` both become paths; `sqlite::memory:` stays. */
+function stripScheme(raw: string, scheme: string): string {
+  const rest = raw.slice(scheme.length);
+  if (rest === ":memory:") return rest;
+  const withoutSlashes = rest.replace(/^\/+/, "");
+  return path.resolve(withoutSlashes.startsWith("/") ? withoutSlashes : `/${withoutSlashes}`);
+}
+
+/**
+ * The connection string for the catalog's SQLite file, as the rest of the
+ * code knows it: `CATALOG_DB`, then `DATABASE_URL` when it names a file (so
+ * the `DATABASE_URL=<scratch>` flows tests and scripts already use keep
+ * working), then the default under the data root. The name stays because it
+ * is what `.env` files, CI and every spawn-with-env already write; the
+ * *value* is a path or `sqlite:` URL now, which connect resolves through
+ * `databasePath`.
+ */
 export function databaseUrl(): string {
   loadEnv();
+  const fromCatalogDb = process.env[CATALOG_DB_ENV]?.trim();
+  if (fromCatalogDb) return fromCatalogDb;
   const raw = process.env.DATABASE_URL?.trim();
-  return raw ? raw : DEFAULT_DATABASE_URL;
+  if (raw) return raw;
+  return path.join(selfLearnHome(), "catalog.db");
 }
 
 /**
@@ -207,13 +272,17 @@ export function blobRoot(): string {
   return defaultBlobRoot(process.env);
 }
 
-/** The connection string with any password blanked, safe to print or log. */
+/**
+ * The target as it is safe to print or log. A SQLite path holds no secret,
+ * so this only still blanks a password in a URL — which matters only in the
+ * error `databasePath` throws for a Postgres URL.
+ */
 export function redactUrl(url: string): string {
   try {
     const parsed = new URL(url);
     if (parsed.password) parsed.password = "***";
     return parsed.toString();
   } catch {
-    return "(unparseable DATABASE_URL)";
+    return url;
   }
 }

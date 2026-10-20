@@ -45,9 +45,7 @@ const NO_MANIMKC = path.join(tmpdir(), "catalog-test-no-manimkc");
 function pointAt(name: string, env: { manimkc?: string; blobHome?: string } = {}): () => void {
   const keys = ["DATABASE_URL", "MANIMKC_ROOT", "SELF_LEARN_HOME"] as const;
   const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
-  const url = new URL(process.env["DATABASE_URL"] ?? "postgres://localhost:5432/self_learn");
-  url.pathname = `/${name}`;
-  process.env["DATABASE_URL"] = url.toString();
+  process.env["DATABASE_URL"] = name;
   process.env["MANIMKC_ROOT"] = env.manimkc ?? NO_MANIMKC;
   if (env.blobHome !== undefined) process.env["SELF_LEARN_HOME"] = env.blobHome;
   return () => {
@@ -315,7 +313,7 @@ describe.skipIf(!reachable.ok)("a file saved while a write-through is in flight"
       const [row] = (await tx.execute(sql`select * from topic where slug = 'alpha'`)).rows as Record<string, unknown>[];
       const latest = (
         await tx.execute<{ id: number }>(
-          sql`select max(id)::int as id from content_revision where entity_type = 'topic' and entity_id = 'alpha'`,
+          sql`select max(id) as id from content_revision where entity_type = 'topic' and entity_id = 'alpha'`,
         )
       ).rows[0]?.id;
       await writeContent(tx, {

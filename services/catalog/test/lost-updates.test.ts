@@ -47,9 +47,7 @@ const by: By = { author: "local", authorKind: "person", reason: "a test" };
 
 function pointAt(name: string): () => void {
   const saved = { url: process.env["DATABASE_URL"], manimkc: process.env["MANIMKC_ROOT"], learn: process.env["LEARN_ROOT"] };
-  const url = new URL(process.env["DATABASE_URL"] ?? "postgres://localhost:5432/self_learn");
-  url.pathname = `/${name}`;
-  process.env["DATABASE_URL"] = url.toString();
+  process.env["DATABASE_URL"] = name;
   process.env["MANIMKC_ROOT"] = path.join(tmpdir(), "catalog-test-no-manimkc");
   return () => {
     for (const [key, value] of [
@@ -73,7 +71,7 @@ async function pidOf(db: CatalogDatabase): Promise<number> {
 async function waiting(db: CatalogDatabase, pid: number): Promise<void> {
   for (let i = 0; i < 400; i += 1) {
     const { rows } = await db.execute<{ n: number }>(
-      sql`select count(*)::int as n from pg_locks where pid = ${pid} and not granted`,
+      sql`select count(*) as n from pg_locks where pid = ${pid} and not granted`,
     );
     if ((rows[0]?.n ?? 0) > 0) return;
     await new Promise((resolve) => setTimeout(resolve, 25));
@@ -125,7 +123,7 @@ describe.skipIf(!reachable.ok)("a note is written against the revision it was re
     await flip(scratch.db, { type: "concepts", readers: new Set(["concepts"]) });
     await recordExport(scratch.db, "concepts", exportHash(await readTypeFiles(fixture.root, "concepts")));
 
-    restore = pointAt(scratch.name);
+    restore = pointAt(scratch.url);
     process.env["LEARN_ROOT"] = fixture.root;
     one = connect({ url: scratch.url });
     two = connect({ url: scratch.url });
@@ -312,7 +310,7 @@ describe.skipIf(!reachable.ok)("course files, item purges and topic renames agai
       await fixture.write(`learn/concepts/testing/${id}.md`, note({ id }));
     }
     edits = await mkdtemp(path.join(tmpdir(), "catalog-lost-updates-"));
-    restore = pointAt(scratch.name);
+    restore = pointAt(scratch.url);
     await runImportCommand({ dir: fixture.root });
     await runExport({ out: fixture.root, only: ["topics", "tags", "courses"] });
     two = connect({ url: scratch.url });
@@ -339,7 +337,7 @@ describe.skipIf(!reachable.ok)("course files, item purges and topic renames agai
     await archiveItem(two.db, { id: "xx1000-m1-t2", reason: "archived elsewhere" });
 
     await writeFile(out, text.replace("title: Module two", "title: Module two, retitled"));
-    const before = (await scratch.db.select({ n: sql<number>`count(*)::int` }).from(contentRevision))[0]?.n;
+    const before = (await scratch.db.select({ n: sql<number>`count(*)` }).from(contentRevision))[0]?.n;
     await expect(importCourse(scratch.db, { file: out, reason: "retitle module two" })).rejects.toThrow(
       new RegExp(
         `was exported at revision ${exported.base}, and course "xx1000" has moved on since: ` +
@@ -349,7 +347,7 @@ describe.skipIf(!reachable.ok)("course files, item purges and topic renames agai
     // Refused whole, under the locks: the archive stands and nothing was written.
     const [item] = await scratch.db.select().from(curriculumItem).where(eq(curriculumItem.id, "xx1000-m1-t2"));
     expect(item?.archivedAt).not.toBeNull();
-    expect((await scratch.db.select({ n: sql<number>`count(*)::int` }).from(contentRevision))[0]?.n).toBe(before);
+    expect((await scratch.db.select({ n: sql<number>`count(*)` }).from(contentRevision))[0]?.n).toBe(before);
     // A dry run is refused the same way, since it is the same check.
     await expect(importCourse(scratch.db, { file: out, reason: "retitle", dryRun: true })).rejects.toThrow(/has moved on since/);
 
@@ -394,7 +392,7 @@ describe.skipIf(!reachable.ok)("course files, item purges and topic renames agai
     try {
       await b.query("begin");
       await b.query(
-        `insert into progress (learner_id, curriculum_item_id, completed_at, note) values ('local', $1, now(), 'ticked mid-purge')`,
+        `insert into progress (learner_id, curriculum_item_id, completed_at, note) values ('local', $1, cast(unixepoch('subsec') * 1000 as integer), 'ticked mid-purge')`,
         [id],
       );
       await b.query("select 1 from recap where curriculum_item_id = $1 for update", [id]);

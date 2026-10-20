@@ -49,8 +49,10 @@ export class BlobOwnerError extends Error {
 
 /** This connection's database, as a root's marker names it. */
 export async function ownerIdentity(db: CatalogDatabase): Promise<BlobRootOwner> {
-  const { rows } = await db.execute<{ port: string }>(sql`select current_setting('port') as port`);
-  return { database: await databaseIdentity(db), port: String(rows[0]?.port ?? "") };
+  // `port` distinguished same-named databases on different servers. A SQLite
+  // database is a file, and its resolved path is already the whole identity,
+  // so the field stays in the shape and answers empty.
+  return { database: await databaseIdentity(db), port: "" };
 }
 
 export function sameOwner(a: BlobRootOwner, b: BlobRootOwner): boolean {

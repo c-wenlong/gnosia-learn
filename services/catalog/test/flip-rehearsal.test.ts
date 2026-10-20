@@ -404,9 +404,9 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a copy", () => {
       await back.connect();
       try {
         const counts = await back.query<{ migrations: number; assets: number; topics: number }>(
-          `select (select count(*)::int from drizzle.__drizzle_migrations) as migrations,
-                  (select count(*)::int from asset) as assets,
-                  (select count(*)::int from topic) as topics`,
+          `select (select count(*) from __drizzle_migrations) as migrations,
+                  (select count(*) from asset) as assets,
+                  (select count(*) from topic) as topics`,
         );
         expect(counts.rows[0]).toEqual({ migrations: (await journalTags()).length, assets: 0, topics: 0 });
       } finally {
@@ -420,11 +420,11 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a copy", () => {
         new RegExp(`on ${report.preflight}; dropped$`),
       );
       expect(await databaseExists(report.preflight)).toBe(false);
-      const topics = await template.db.execute<{ n: number }>(sql`select count(*)::int as n from topic`);
+      const topics = await template.db.execute<{ n: number }>(sql`select count(*) as n from topic`);
       expect(topics.rows[0]?.n).toBe(0);
-      const assets = await template.db.execute<{ n: number }>(sql`select count(*)::int as n from asset`);
+      const assets = await template.db.execute<{ n: number }>(sql`select count(*) as n from asset`);
       expect(assets.rows[0]?.n).toBe(0);
-      const applied = await template.db.execute<{ n: number }>(sql`select count(*)::int as n from drizzle.__drizzle_migrations`);
+      const applied = await template.db.execute<{ n: number }>(sql`select count(*) as n from __drizzle_migrations`);
       expect(applied.rows[0]?.n).toBe((await journalTags()).length);
     } finally {
       await dropDatabase(name);
@@ -604,9 +604,9 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs --cutover on a copy",
       expect(again.stderr).toMatch(/owns concepts, courses, diagrams, sessions, tags, topics already/);
 
       // The template is as it was.
-      const applied = await template.db.execute<{ n: number }>(sql`select count(*)::int as n from drizzle.__drizzle_migrations`);
+      const applied = await template.db.execute<{ n: number }>(sql`select count(*) as n from __drizzle_migrations`);
       expect(applied.rows[0]?.n).toBe((await journalTags()).length);
-      const topics = await template.db.execute<{ n: number }>(sql`select count(*)::int as n from topic`);
+      const topics = await template.db.execute<{ n: number }>(sql`select count(*) as n from topic`);
       expect(topics.rows[0]?.n).toBe(0);
     } finally {
       await dropDatabase(name);

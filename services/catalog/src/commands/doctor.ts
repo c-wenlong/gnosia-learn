@@ -244,17 +244,17 @@ export async function doctor(
 
   const courses = await db.execute<{ course: string; items: number; without: number }>(sql`
     select coalesce(m.parent_id, m.id) as course,
-           count(*)::int as items,
+           count(*) as items,
            count(*) filter (
              where not exists (
                select 1 from concept_curriculum_item l where l.curriculum_item_id = i.id
              )
-           )::int as without
+           ) as without
     from curriculum_item i
     join collection m on m.id = i.collection_id
     where i.archived_at is null
     group by 1
-    order by coalesce(m.parent_id, m.id) collate "C"
+    order by coalesce(m.parent_id, m.id) collate binary
   `);
   const courseRows = courses.rows.map((row) => ({
     course: row.course,
@@ -268,12 +268,12 @@ export async function doctor(
   // Archived concepts too: the column's `NOT NULL` binds every row, and
   // migration 0012 refuses while any row, archived or not, has a null.
   const orphans = await db.execute<{ slug: string }>(
-    sql`select slug from concept where topic_slug is null order by slug collate "C"`,
+    sql`select slug from concept where topic_slug is null order by slug collate binary`,
   );
   const [topicColumn] = (
     await db.execute<{ nullable: string }>(sql`
-      select is_nullable as nullable from information_schema.columns
-      where table_schema = 'public' and table_name = 'concept' and column_name = 'topic_slug'
+      select case when "notnull" = 0 then 'YES' else 'NO' end as nullable
+      from pragma_table_info('concept') where name = 'topic_slug'
     `)
   ).rows;
 
@@ -362,13 +362,13 @@ async function derivedGaps(db: CatalogDatabase, kind: "poster" | "pdf"): Promise
         join blob_object b on b.key = p.blob_key and b.state = 'present'
         where d.source_asset_id = v.id
       )
-    order by v.id collate "C"
+    order by v.id collate binary
   `);
   const unlinked = await db.execute<{ id: string }>(sql`
     select p.id from asset p
     where p.kind = ${kind}
       and not exists (select 1 from asset_derivation d where d.asset_id = p.id)
-    order by p.id collate "C"
+    order by p.id collate binary
   `);
   return {
     videosWithout: without.rows.map((row) => ({ id: row.id, sourceRepo: row.source_repo })),
@@ -388,15 +388,15 @@ async function listedVideos(db: CatalogDatabase): Promise<{
   sharedWithout: DoctorResult["sharedTopicWithoutVideos"];
 }> {
   const listed = sql`
-    select m.parent_id as course, m.id as module, null::text as item, v.id, m.owner_id
+    select m.parent_id as course, m.id as module, null as item, v.id, m.owner_id
     from collection m
-    cross join jsonb_array_elements_text(coalesce(m.metadata -> 'videos', '[]'::jsonb)) as v(id)
+    cross join json_each(coalesce(m.metadata -> 'videos', '[]')) as v
     where m.kind = 'module' and m.archived_at is null
     union all
     select m.parent_id, m.id, i.id, v.id, m.owner_id
     from curriculum_item i
     join collection m on m.id = i.collection_id
-    cross join jsonb_array_elements_text(coalesce(to_jsonb(i) -> 'videos', '[]'::jsonb)) as v(id)
+    cross join json_each(coalesce(i.videos, '[]')) as v
     where i.archived_at is null and m.archived_at is null`;
   const dangling = await db.execute<{ course: string; module: string; item: string | null; id: string }>(sql`
     with listed as (${listed})
@@ -405,7 +405,7 @@ async function listedVideos(db: CatalogDatabase): Promise<{
       select 1 from asset a
       where a.id = l.id and a.kind = 'video' and (a.owner_id = l.owner_id or a.owner_id = ${COMMONS_OWNER})
     )
-    order by course collate "C", module collate "C", item collate "C" nulls first, id collate "C"
+    order by course collate binary, module collate binary, item collate binary nulls first, id collate binary
   `);
   const shared = await db.execute<{ course: string; module: string; topic: string }>(sql`
     with listed as (${listed}),
@@ -425,7 +425,7 @@ async function listedVideos(db: CatalogDatabase): Promise<{
         and (o.owner_id = mt.owner_id or o.owner_id = ${COMMONS_OWNER} or mt.owner_id = ${COMMONS_OWNER})
     )
       and not exists (select 1 from listed l where l.module = mt.module)
-    order by course collate "C", module collate "C"
+    order by course collate binary, module collate binary
   `);
   return { dangling: dangling.rows, sharedWithout: shared.rows };
 }
