@@ -19,7 +19,9 @@ import CSQLite3
 
 /// SQLITE_TRANSIENT, which the C headers define as a macro and so does not
 /// reach Swift: tell SQLite to copy bound text rather than borrow the pointer.
-private let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+/// Shared with LearnerStore's writer; file scope because it is a fix for a
+/// header quirk, not a part of the read model.
+let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
 // MARK: - SQLite, the thinnest possible shell
 
@@ -116,6 +118,18 @@ final class SQLiteDatabase {
         return rows
     }
 
+    /// Every table name in the file, via sqlite_master. Reads for tables a
+    /// version-1 snapshot does not carry check this first, so a new surface
+    /// degrades to empty rather than failing the whole load.
+    func tables() throws -> Set<String> {
+        let rows = try query("SELECT name FROM sqlite_master WHERE type = 'table'")
+        var names = Set<String>()
+        while rows.next() {
+            if let name = rows.text(0) { names.insert(name) }
+        }
+        return names
+    }
+
     /// The column names of `table`, via PRAGMA table_info. Used to tell a
     /// snapshot that carries `generated_by` from one that predates it.
     func columns(of table: String) throws -> Set<String> {
@@ -154,6 +168,18 @@ func generatedBy(_ id: String) -> String {
     return "other"
 }
 
+/// A mirrored jsonb array read back as its string elements. Anything that
+/// is not a JSON array is an empty list rather than an error — a hand-edited
+/// or older row is read, not trusted (parsePlayback's rule on the web side).
+private func jsonList(_ raw: String?) -> [String] {
+    guard
+        let raw,
+        let data = raw.data(using: .utf8),
+        let list = try? JSONSerialization.jsonObject(with: data) as? [Any]
+    else { return [] }
+    return list.compactMap { $0 as? String }
+}
+
 /// One asset row, as the library list and the detail panes need it.
 struct CatalogAsset: Identifiable, Hashable {
     let id: String
@@ -177,6 +203,76 @@ struct CatalogTopic: Identifiable, Hashable {
     let slug: String
     let title: String
     let domain: String
+}
+
+/// One authored note under a topic, as the concept page and the graph need
+/// it. `body` is the markdown after the note's frontmatter; `tags` and
+/// `sources` arrive as JSON text (the mirror ships jsonb as text) and are
+/// read back as lists.
+struct CatalogConcept: Identifiable, Hashable {
+    var id: String { slug }
+    let slug: String
+    let title: String
+    let summary: String?
+    let topicSlug: String
+    let domain: String?
+    let body: String?
+    let tags: [String]
+    let sources: [String]
+    let authoredAt: Date?
+    let topicPosition: Int
+}
+
+/// One edge of the concept graph: `conceptSlug` depends on
+/// `prerequisiteSlug`. `kind` is `requires` (hard) or `assumes` (soft), and
+/// `position` the edge's place in the note's frontmatter list.
+struct CatalogPrerequisite: Hashable {
+    let conceptSlug: String
+    let prerequisiteSlug: String
+    let kind: String
+    let position: Int
+}
+
+/// The learner's BKT state for one concept, as replaying the event log
+/// computes it.
+struct CatalogMastery: Hashable {
+    let conceptSlug: String
+    let pL: Double
+    let observations: Int64
+    let correct: Int64
+    let lastSeen: Date?
+}
+
+/// One SM-2 card: `due` is when the concept is next owed, the rest is the
+/// schedule that got it there.
+struct CatalogReview: Hashable {
+    let conceptSlug: String
+    let repetitions: Int64
+    let ease: Double
+    let intervalDays: Int64
+    let lapses: Int64
+    let due: Date
+    let lastReviewed: Date?
+    let leech: Bool
+}
+
+/// A ticked checklist row: `completedAt` is the tick, `note` the learner's
+/// marginalia; either can exist without the other.
+struct CatalogProgress: Hashable {
+    let curriculumItemId: String
+    let completedAt: Date?
+    let note: String?
+}
+
+/// The durable "remind me what I learnt" record for one curriculum item.
+struct CatalogRecap: Hashable {
+    let curriculumItemId: String
+    let summary: String
+    let keyPoints: [String]
+    let misconceptions: [String]
+    let openQuestions: [String]
+    let source: String
+    let sessions: Int64
 }
 
 /// The derived pieces a video carries, resolved at load: the poster jpg, the
@@ -243,7 +339,10 @@ struct CatalogLocation {
         )
     }
 
-    private static func dataHome(env: [String: String]) -> URL {
+    /// The data home both stores live under: catalog.db here, learner.db in
+    /// LearnerStore. Not private so the sidecar resolves the same rule rather
+    /// than a second copy of it.
+    static func dataHome(env: [String: String]) -> URL {
         if let raw = env["GNOSIA_HOME"], !raw.trimmingCharacters(in: .whitespaces).isEmpty {
             return URL(fileURLWithPath: expandHome(raw.trimmingCharacters(in: .whitespaces)))
         }
@@ -271,11 +370,36 @@ struct CatalogLocation {
 final class CatalogStore {
     private(set) var assets: [CatalogAsset] = []
     private(set) var topics: [String: CatalogTopic] = [:]
+    private(set) var concepts: [CatalogConcept] = []
     private(set) var companions: [String: VideoCompanions] = [:]
     private(set) var meta: [String: String] = [:]
     private(set) var error: String?
     private(set) var loaded = false
+
+    // The learner tables (wave-1 surfaces). Every per-learner read scopes to
+    // 'local' — LOCAL_LEARNER_ID in packages/schema — because the file is
+    // this learner's mirror: another owner's rows must not leak into "due",
+    // "watched" or "starred". On a version-1 snapshot all of these stay
+    // empty; the file is asked which tables it has before any are read.
+    private(set) var prerequisites: [CatalogPrerequisite] = []
+    /// BKT state by concept slug: p(L), counts, last seen.
+    private(set) var mastery: [String: CatalogMastery] = [:]
+    /// Every review card, ordered by due — `reviewDue` takes its prefix.
+    private(set) var reviews: [CatalogReview] = []
+    /// Ticks and notes by curriculum item id.
+    private(set) var progress: [String: CatalogProgress] = [:]
+    private(set) var recaps: [String: CatalogRecap] = [:]
+    /// The key/value corner as raw JSON text: playback rows
+    /// (`playback:<asset id>`), stars (`favorite:<asset id>`) and the rest.
+    /// Left unparsed on purpose — each surface decodes the keys it knows.
+    private(set) var preferences: [String: String] = [:]
+    /// Asset id → the last `watched` event's instant, from the event log.
+    private(set) var watchedAt: [String: Date] = [:]
+    /// Asset id → the learner's own title, from the catalog's asset_name.
+    private(set) var assetNames: [String: String] = [:]
+
     private var byID: [String: CatalogAsset] = [:]
+    private var conceptsBySlug: [String: CatalogConcept] = [:]
 
     /// Settings writes here; a reload picks it up.
     var location = CatalogLocation.resolve()
@@ -285,8 +409,25 @@ final class CatalogStore {
 
     var assetCount: Int { assets.count }
 
+    /// The cards whose due has passed, in due order.
+    var reviewDue: [CatalogReview] { reviews.filter { $0.due <= Date() } }
+
     func asset(_ id: String) -> CatalogAsset? {
         byID[id]
+    }
+
+    func concept(_ slug: String) -> CatalogConcept? {
+        conceptsBySlug[slug]
+    }
+
+    /// The note's markdown; the commonest thing a concept page asks for.
+    func conceptBody(_ slug: String) -> String? {
+        conceptsBySlug[slug]?.body
+    }
+
+    /// The requires/assumes edges out of one concept, in authored order.
+    func prerequisites(of slug: String) -> [CatalogPrerequisite] {
+        prerequisites.filter { $0.conceptSlug == slug }
     }
 
     func companions(for videoID: String) -> VideoCompanions {
@@ -415,6 +556,179 @@ final class CatalogStore {
             companionsByVideo[videoID] = box
         }
 
+        // MARK: Wave-1 surfaces
+        // Each read checks the file has the table first, so a version-1
+        // snapshot (or one from a script that predates a table) loads with
+        // the surface empty rather than failing the whole catalog.
+        let tables = try db.tables()
+
+        var conceptList: [CatalogConcept] = []
+        var conceptsBySlug: [String: CatalogConcept] = [:]
+        let conceptColumns = try db.columns(of: "concept")
+        if !conceptColumns.isEmpty {
+            // Version-2 columns, absent on a version-1 snapshot: NULLs stand
+            // in so the row read is one shape either way.
+            let extended = conceptColumns.contains("tags")
+            let tagsColumn = extended ? "tags" : "NULL"
+            let sourcesColumn = extended ? "sources" : "NULL"
+            let authoredColumn = extended ? "authored_at" : "NULL"
+            let conceptRows = try db.query("""
+                SELECT slug, title, summary, topic_slug, domain, body,
+                       \(tagsColumn), \(sourcesColumn), \(authoredColumn), topic_position
+                FROM concept
+                WHERE archived_at IS NULL
+                ORDER BY topic_slug, topic_position
+                """)
+            while conceptRows.next() {
+                guard let slug = conceptRows.text(0), let title = conceptRows.text(1) else { continue }
+                let concept = CatalogConcept(
+                    slug: slug,
+                    title: title,
+                    summary: conceptRows.text(2),
+                    topicSlug: conceptRows.text(3) ?? "",
+                    domain: conceptRows.text(4),
+                    body: conceptRows.text(5),
+                    tags: jsonList(conceptRows.text(6)),
+                    sources: jsonList(conceptRows.text(7)),
+                    authoredAt: conceptRows.double(8).map { Date(timeIntervalSince1970: $0) },
+                    topicPosition: Int(conceptRows.int64(9) ?? 0)
+                )
+                conceptList.append(concept)
+                conceptsBySlug[slug] = concept
+            }
+        }
+
+        var prerequisites: [CatalogPrerequisite] = []
+        if tables.contains("concept_prerequisite") {
+            let rows = try db.query("""
+                SELECT concept_slug, prerequisite_slug, kind, position
+                FROM concept_prerequisite
+                ORDER BY concept_slug, position
+                """)
+            while rows.next() {
+                guard let slug = rows.text(0), let prereq = rows.text(1) else { continue }
+                prerequisites.append(CatalogPrerequisite(
+                    conceptSlug: slug,
+                    prerequisiteSlug: prereq,
+                    kind: rows.text(2) ?? "requires",
+                    position: Int(rows.int64(3) ?? 0)
+                ))
+            }
+        }
+
+        var mastery: [String: CatalogMastery] = [:]
+        if tables.contains("mastery") {
+            let rows = try db.query("""
+                SELECT concept_slug, p_l, observations, correct, last_seen
+                FROM mastery WHERE learner_id = 'local'
+                """)
+            while rows.next() {
+                guard let slug = rows.text(0) else { continue }
+                mastery[slug] = CatalogMastery(
+                    conceptSlug: slug,
+                    pL: rows.double(1) ?? 0,
+                    observations: rows.int64(2) ?? 0,
+                    correct: rows.int64(3) ?? 0,
+                    lastSeen: rows.double(4).map { Date(timeIntervalSince1970: $0) }
+                )
+            }
+        }
+
+        var reviews: [CatalogReview] = []
+        if tables.contains("review") {
+            let rows = try db.query("""
+                SELECT concept_slug, repetitions, ease, interval_days, lapses,
+                       due, last_reviewed, leech
+                FROM review WHERE learner_id = 'local'
+                ORDER BY due
+                """)
+            while rows.next() {
+                guard let slug = rows.text(0), let due = rows.double(5) else { continue }
+                reviews.append(CatalogReview(
+                    conceptSlug: slug,
+                    repetitions: rows.int64(1) ?? 0,
+                    ease: rows.double(2) ?? 0,
+                    intervalDays: rows.int64(3) ?? 1,
+                    lapses: rows.int64(4) ?? 0,
+                    due: Date(timeIntervalSince1970: due),
+                    lastReviewed: rows.double(6).map { Date(timeIntervalSince1970: $0) },
+                    leech: (rows.int64(7) ?? 0) != 0
+                ))
+            }
+        }
+
+        var progress: [String: CatalogProgress] = [:]
+        if tables.contains("progress") {
+            let rows = try db.query("""
+                SELECT curriculum_item_id, completed_at, note
+                FROM progress WHERE learner_id = 'local'
+                """)
+            while rows.next() {
+                guard let item = rows.text(0) else { continue }
+                progress[item] = CatalogProgress(
+                    curriculumItemId: item,
+                    completedAt: rows.double(1).map { Date(timeIntervalSince1970: $0) },
+                    note: rows.text(2)
+                )
+            }
+        }
+
+        var recaps: [String: CatalogRecap] = [:]
+        if tables.contains("recap") {
+            let rows = try db.query("""
+                SELECT curriculum_item_id, summary, key_points, misconceptions,
+                       open_questions, source, sessions
+                FROM recap WHERE learner_id = 'local'
+                """)
+            while rows.next() {
+                guard let item = rows.text(0) else { continue }
+                recaps[item] = CatalogRecap(
+                    curriculumItemId: item,
+                    summary: rows.text(1) ?? "",
+                    keyPoints: jsonList(rows.text(2)),
+                    misconceptions: jsonList(rows.text(3)),
+                    openQuestions: jsonList(rows.text(4)),
+                    source: rows.text(5) ?? "agent",
+                    sessions: rows.int64(6) ?? 0
+                )
+            }
+        }
+
+        var preferences: [String: String] = [:]
+        if tables.contains("preference") {
+            let rows = try db.query("SELECT key, value FROM preference WHERE learner_id = 'local'")
+            while rows.next() {
+                if let key = rows.text(0), let value = rows.text(1) { preferences[key] = value }
+            }
+        }
+
+        // The last `watched` event per asset — the verdict the web app reads
+        // from the same log in readLastWatched (payload's `asset` is the
+        // join; the row's `at` is the instant). Playback position itself is
+        // not here: the web app keeps it in `playback:<asset>` preferences.
+        var watchedAt: [String: Date] = [:]
+        if tables.contains("event") {
+            let rows = try db.query("""
+                SELECT json_extract(payload, '$.asset'), MAX(at)
+                FROM event
+                WHERE type = 'watched' AND learner_id = 'local'
+                GROUP BY 1
+                """)
+            while rows.next() {
+                if let assetID = rows.text(0), let at = rows.double(1) {
+                    watchedAt[assetID] = Date(timeIntervalSince1970: at)
+                }
+            }
+        }
+
+        var assetNames: [String: String] = [:]
+        if tables.contains("asset_name") {
+            let rows = try db.query("SELECT asset_id, title FROM asset_name WHERE learner_id = 'local'")
+            while rows.next() {
+                if let id = rows.text(0), let title = rows.text(1) { assetNames[id] = title }
+            }
+        }
+
         var meta: [String: String] = [:]
         if let metaRows = try? db.query("SELECT key, value FROM snapshot_meta") {
             while metaRows.next() {
@@ -424,7 +738,17 @@ final class CatalogStore {
 
         topics = topicsBySlug
         assets = ordered
+        concepts = conceptList
+        self.conceptsBySlug = conceptsBySlug
         companions = companionsByVideo
+        self.prerequisites = prerequisites
+        self.mastery = mastery
+        self.reviews = reviews
+        self.progress = progress
+        self.recaps = recaps
+        self.preferences = preferences
+        self.watchedAt = watchedAt
+        self.assetNames = assetNames
         self.meta = meta
     }
 
