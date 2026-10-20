@@ -10,7 +10,7 @@ one. Dated 2026-10-20; the tree-side preparation is #476.
 | --- | --- |
 | `roadmap/*.pdf` (roadmap.sh exports, no redistribution licence) | Deleted from the tree. Nothing linked to them. Still in history — see below. |
 | `docs/design/reference/*` symlinks | Untracked and gitignored. Each was an absolute `/Users/<user>` path into the private design-systems library; the linker now reads `DESIGN_SYSTEMS_HOME`. Targets still in history. |
-| Submodules | manimkc, remotionkc, revideokc, blenderkc are private; tldrawkc is the only public one. README and CONTRIBUTING say plain `git clone`, never `--recursive`; the app, tests and seed import need none of them. CI never fetched them. |
+| Submodules | manimkc, remotionkc, revideokc are private; tldrawkc and blenderkc (#477) are public, and the others may follow. README and CONTRIBUTING say plain `git clone`, never `--recursive`; the app, tests and seed import need none of them. CI never fetched them. |
 | Secrets in code | `gitleaks detect --log-opts="--all"` over all 860 commits: 26 hits, every one a synthetic test fixture (`0123…`, `test-key-`, `gw-key-`, `nvapi-` dummies) or `b.key = v.mp4_blob_key`, a variable name. Zero real secrets. |
 | Secrets to fork PRs | No `pull_request_target` anywhere. `pull_request` runs never receive secrets, so fork pull requests cannot read `CODECOV_TOKEN` or `VERCEL_TOKEN`. |
 | Personal data | No NRIC, addresses, phone numbers, private IPs or real hostnames in tree or history. `kaichen` survives in the LICENSE copyright line, the Vercel project name in docs/DEPLOYMENT.md and three test fixtures using it as a sample database user; accepted. |
@@ -82,9 +82,11 @@ are commits in *other* repositories and are untouched by this.
 
 ## What stays private after the flip
 
-- `tools/manimkc`, `tools/remotionkc`, `tools/revideokc`, `tools/blenderkc`
-  and the `gnosia-audio` dependency remain private repositories; outsiders
-  see empty `tools/` directories and this is documented in the README.
+- `tools/manimkc`, `tools/remotionkc`, `tools/revideokc` and the
+  `gnosia-audio` dependency remain private repositories at the time of
+  writing; outsiders see those `tools/` directories empty, and this is
+  documented in the README. `tools/tldrawkc` and `tools/blenderkc` are
+  already public.
 - The design-systems library and the `docs/design/reference/` links.
 - `docs/HOMESERVER.md` describes the owner's Tailscale-plus-Ubuntu setup.
   It names no hostname, IP or credential; the detail it gives away is that
