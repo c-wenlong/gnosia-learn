@@ -20,7 +20,7 @@ import { pagePlan, type PdfSegment } from "./recipe";
 export const PDF_MAX_BYTES = 128 * 1024 * 1024;
 
 export type PdfResult =
-  | { ok: true; body: Buffer; pages: number }
+  | { ok: true; body: Buffer; pages: number; inputs: string }
   | { ok: false; reason: string };
 
 /** The transcript sidecar's `segments[]`, as far as this feature reads them. */
@@ -118,8 +118,9 @@ export async function buildVideoPdf(
     pages.push({ jpeg: frame.body, caption });
   }
 
+  const inputs = pdfInputs(videoContentHash, title, segments);
   try {
-    return { ok: true, body: await assemblePdf(title, pages, pdfInputs(videoContentHash, title, segments)), pages: pages.length };
+    return { ok: true, body: await assemblePdf(title, pages, inputs), pages: pages.length, inputs };
   } catch (error) {
     return { ok: false, reason: `the document could not be written: ${error instanceof Error ? error.message : String(error)}` };
   }

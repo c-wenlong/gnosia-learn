@@ -196,7 +196,8 @@ describe("buildVideoPdf", () => {
     if (made.ok !== true) return;
     // The fingerprint is the document's own word on its inputs: a transcript
     // rewritten to the same segments reads as the same document.
-    expect(await pdfInputsOf(made.body)).toBe(pdfInputs("aa11", "A demo", segments));
+    expect(made.inputs).toBe(pdfInputs("aa11", "A demo", segments));
+    expect(await pdfInputsOf(made.body)).toBe(made.inputs);
     expect(await pdfInputsOf(made.body)).not.toBe(pdfInputs("aa11", "A demo", null));
     expect(await pdfInputsOf(Buffer.from("not a pdf"))).toBeNull();
   });

@@ -439,6 +439,13 @@ export const asset = pgTable(
     url: text("url"),
     /** sha256 of the bytes. Null for links and for anything not yet hashed. */
     contentHash: text("content_hash"),
+    /**
+     * A derived asset's word on what it was made from: the pdf's `pdfInputs`
+     * hash of its video's bytes, its title and its transcript's segments.
+     * Null for everything else. Compared against the inputs this run sees,
+     * it says stale-or-not without reading the stored document.
+     */
+    inputsHash: text("inputs_hash"),
     bytes: bigint("bytes", { mode: "number" }),
     title: text("title"),
     sourceRepo: text("source_repo").notNull(),

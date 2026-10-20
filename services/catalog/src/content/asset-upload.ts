@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -18,7 +18,6 @@ import {
   type VideoToolName,
 } from "../index/video-tool";
 import { buildVideoPdf, pdfInputs, segmentsFromText } from "../pdf/build";
-import { pdfInputsOf } from "../pdf/document";
 import { PDF_CONTENT_TYPE, PDF_EXTENSION, type PdfSegment } from "../pdf/recipe";
 import { extractPoster } from "../poster/extract";
 import { POSTER_CONTENT_TYPE, POSTER_EXTENSION } from "../poster/recipe";
@@ -881,23 +880,38 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
     const transcriptKey =
       transcript === undefined ? null : (transcriptSettled?.key ?? (await alreadyStored(transcript.row, transcript.ext)));
     let segments: PdfSegment[] | null = null;
-    if (transcriptKey !== null) {
+    if (transcript !== undefined && transcriptKey !== null) {
       try {
         segments = segmentsFromText(await blobText(transcriptKey));
-      } catch {
-        segments = null;
+      } catch (error) {
+        if (!dryRun) {
+          // A confirmed blob that cannot be read is the store failing, not
+          // the inputs changing: without the real segments the fingerprint
+          // would misjudge a still-valid document as stale. Keep it as is.
+          refuse(id, "pdf", `the transcript's stored bytes could not be read: ${error instanceof Error ? error.message : String(error)}`);
+          return null;
+        }
+        // A dry run stores nothing, so a transcript not yet uploaded has no
+        // blob to read: the file the real run would store is what it would
+        // page on.
+        try {
+          segments = segmentsFromText(await readFile(transcript.file, "utf8"));
+        } catch {
+          segments = null;
+        }
       }
     }
     const expected = pdfInputs(video.row.contentHash ?? "", video.row.title ?? video.row.id, segments);
-    // The stored document carries that fingerprint in its own metadata, so
-    // the comparison is against the bytes themselves rather than the
-    // revision history's memory of them — a memory that does not move when a
-    // rebuild lands on identical bytes (a write that changes nothing appends
-    // no revision). A transcript rewritten with the same segments then
-    // fingerprints the same and recuts nothing, and a run without ffmpeg
-    // unhooks only a document that is actually out of date.
-    const inputChanged =
-      current !== null && derived ? (await pdfInputsOf(await blobBytes(current))) !== expected : false;
+    // The pdf row's `inputs_hash` records the fingerprint of the inputs its
+    // document was made from, so the comparison costs no read of the stored
+    // document at all — and no revision-history memory of the inputs, a
+    // memory that does not move when a rebuild lands on identical bytes (a
+    // write that changes nothing appends no revision). A transcript
+    // rewritten to the same segments fingerprints the same and recuts
+    // nothing, and a run without ffmpeg unhooks only a document that is
+    // actually out of date. A row with no fingerprint — one an older write
+    // left — reads as stale and is remade once, stamped this time.
+    const inputChanged = existing !== undefined && derived ? existing.inputsHash !== expected : false;
     // A video whose inputs just changed leaves its PDF picturing the old
     // render or quoting the old transcript, and nothing later would notice:
     // the next run sees the video linked and the PDF present. So it is
@@ -1033,6 +1047,9 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
             contentHash: sha256,
             bytes: done.bytes,
             title: `${video.row.title ?? video.row.id} (PDF)`,
+            // The fingerprint of what it was made from: what the next run
+            // compares its inputs against without reading the document.
+            inputsHash: made.inputs,
             // Made by this repository's upload command, not rendered by the tool.
             sourceRepo: "self-learn",
             blobKey: done.key,

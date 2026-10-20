@@ -239,6 +239,8 @@ interface Planned {
   bytes: number;
   title: string;
   links: Record<string, Record<string, unknown>[]>;
+  /** A derived kind's fingerprint of what it was made from; only the pdf sets it. */
+  inputsHash?: string;
 }
 
 /** States a job may land a video from: its Accept, and a retried Accept whose rows already landed. */
@@ -600,6 +602,7 @@ export async function putVideo(db: CatalogDatabase, store: BlobStore, input: Put
         bytes: made.body.length,
         title: `${title} (PDF)`,
         links: derived,
+        inputsHash: made.inputs,
       };
     }
   }
@@ -807,6 +810,7 @@ export async function putVideo(db: CatalogDatabase, store: BlobStore, input: Put
                 contentHash: p.sha256,
                 bytes: p.bytes,
                 title: p.title,
+                inputsHash: p.inputsHash ?? null,
                 sourceRepo: "self-learn",
                 blobKey: keyOf(p),
                 resourceType: null,

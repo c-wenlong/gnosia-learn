@@ -12,7 +12,7 @@ import { pdfId, posterId, uploadAssets, type AssetUploadOptions } from "../src/c
 import { auditBlobs, AUDIT_GRACE_MS } from "../src/content/blob-audit";
 import { keepBlobKeys } from "../src/index/blob-keys";
 import { buildRows, manimkcIndexer, type TopicsReport } from "../src/index/manimkc";
-import { buildVideoPdf } from "../src/pdf/build";
+import { buildVideoPdf, pdfInputs } from "../src/pdf/build";
 import { writeSource } from "../src/index/writer";
 import { applyMigrations } from "../src/migrations";
 import { ensureLearner } from "../src/state";
@@ -150,13 +150,17 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
     // after. Once 0013 is in, a stored-kind row cannot exist without its blob
     // and the import stores the bytes itself (blob-contract.test.ts). The
     // kind check is widened by hand for `pdf`: its migration (0030) comes
-    // after 0013, so it cannot apply to a database stopped before it.
+    // after 0013, so it cannot apply to a database stopped before it. The
+    // pdf's `inputs_hash` column (0031) is added by hand for the same reason.
     await applyMigrations(scratch.db, { folder: await partialMigrations(BEFORE_BLOB_CONTRACT) });
     await scratch.db.execute(sql`
       alter table asset drop constraint asset_kind_check;
     `);
     await scratch.db.execute(sql`
       alter table asset add constraint asset_kind_check check (kind in ('video', 'transcript', 'chapters', 'captions', 'diagram_source', 'diagram_svg', 'note', 'session', 'link', 'poster', 'pdf'));
+    `);
+    await scratch.db.execute(sql`
+      alter table asset add column inputs_hash text;
     `);
     base = await mkdtemp(path.join(tmpdir(), "asset-upload-"));
     outRoot = path.join(base, "manimkc-home");
@@ -279,14 +283,24 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
     expect(expected.ok && stored?.blobKey === blobKey("local", sha256(expected.body), "pdf")).toBe(true);
   });
 
+  it("stamps the PDF's row with the fingerprint of its inputs", async () => {
+    await uploadAssets(scratch.db, options());
+    expect((await assetRow(pdfId(VIDEO_ID)))?.inputsHash).toBe(
+      pdfInputs(sha256(VIDEO), "Demo (video)", [
+        { start: 0, end: 4, text: "Insertion sort keeps a sorted prefix on the left." },
+        { start: 4, end: 8, text: "Each new element slides left until it is bigger than its neighbour." },
+      ]),
+    );
+  });
+
   it("leaves the PDF alone when a rewritten transcript keeps the same segments", async () => {
     await uploadAssets(scratch.db, options());
     const before = (await assetRow(pdfId(VIDEO_ID)))?.blobKey;
 
     // A reindex of a reformatted transcript: new blob key, same narration.
-    // The PDF's own fingerprint of its inputs is unchanged, so there is no
-    // recut and no new revision — and a later run without ffmpeg must not
-    // mistake it for a stale one and unhook it.
+    // The fingerprint the row carries is unchanged, so there is no recut and
+    // no new revision — and a later run without ffmpeg must not mistake it
+    // for a stale one and unhook it.
     const moved = Buffer.from(JSON.stringify({ segments: [{ start: 0, end: 4, text: "Insertion sort keeps a sorted prefix on the left." }, { start: 4, end: 8, text: "Each new element slides left until it is bigger than its neighbour." }] }, null, 2));
     await writeFile(path.join(outRoot, TRANSCRIPT_PATH), moved);
     await scratch.db
@@ -302,6 +316,20 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
     expect(quiet.items.find((i) => i.id === pdfId(VIDEO_ID))?.action).toBe("present");
     const derived = await scratch.db.select().from(assetDerivation).where(eq(assetDerivation.assetId, pdfId(VIDEO_ID)));
     expect(derived.map((d) => d.sourceAssetId)).toEqual([VIDEO_ID]);
+  });
+
+  it("remakes a PDF whose row has no inputs fingerprint once, stamping it", async () => {
+    await uploadAssets(scratch.db, options());
+    // A row an older write left: it has no fingerprint, which reads as stale
+    // and earns exactly one recut — the row that lands carries this run's.
+    await scratch.db.update(asset).set({ inputsHash: null }).where(eq(asset.id, pdfId(VIDEO_ID)));
+
+    const result = await uploadAssets(scratch.db, options());
+    expect(result.items.find((i) => i.id === pdfId(VIDEO_ID))?.action).toBe("linked");
+    expect((await assetRow(pdfId(VIDEO_ID)))?.inputsHash).not.toBeNull();
+
+    const again = await uploadAssets(scratch.db, options());
+    expect(again.items.find((i) => i.id === pdfId(VIDEO_ID))?.action).toBe("present");
   });
 
   it("pages the PDF from the transcript's confirmed blob, not a file that drifted since", async () => {
