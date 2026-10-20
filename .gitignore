@@ -81,3 +81,12 @@ learn/assets/.candidates/
 # Third-party product screenshots gathered for design research stay local (copyright); our own current-app captures are tracked.
 docs/design/research/assets/*
 !docs/design/research/assets/current-app/
+
+# docs/design/reference/<slug> is an absolute symlink into the private
+# design-systems library, created per machine by
+# scripts/link-design-systems.py. Tracking one would bake a machine path
+# into the tree and dangle for everyone else, so only LINKS and the README
+# are committed.
+docs/design/reference/*
+!docs/design/reference/LINKS
+!docs/design/reference/README.md
