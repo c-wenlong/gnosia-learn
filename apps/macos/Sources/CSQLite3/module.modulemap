@@ -1,0 +1,8 @@
+// The SDK's libsqlite3 under a Swift-importable name. A systemLibrary target
+// needs nothing but this map and the shim: sqlite3.h and libsqlite3.tbd both
+// ship with the macOS SDK, so `swift build` works with no other setup.
+module CSQLite3 [system] {
+    header "shim.h"
+    link "sqlite3"
+    export *
+}
