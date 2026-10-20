@@ -609,7 +609,7 @@ describe.skipIf(!reachable.ok)("migration 0006 on an empty log", () => {
 
   it("applies with no sessions to make", async () => {
     const { rows } = await scratch.db.execute<{ n: number }>(
-      sql`select count(*)::int as n from "session"`,
+      sql`select count(*) as n from "session"`,
     );
     expect(rows[0]?.n).toBe(0);
     expect((await migrationStatus(scratch.db)).pending).toEqual([]);

@@ -1,3 +1,5 @@
+import { copyFileSync, existsSync } from "node:fs";
+import path from "node:path";
 import {
   catalogInstance,
   collection,
@@ -13,7 +15,6 @@ import {
   topic,
 } from "@self-learn/schema";
 import { and, asc, eq, sql } from "drizzle-orm";
-import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { doctor } from "../src/commands/doctor";
@@ -29,7 +30,8 @@ import {
 } from "../src/content/rules";
 import { lockTypes } from "../src/content/revisions";
 import { ContentWriteError, writeContent, writeContents, type WriteContentInput } from "../src/content/write";
-import { connect, connectionOptions } from "../src/db";
+import { connect, inTransaction } from "../src/db";
+import { DEFAULT_DATABASE_PATH } from "../src/env";
 import type { Indexer, SourceRows } from "../src/index/source";
 import { writeSource } from "../src/index/writer";
 import { BLOB_CONTRACT_MIGRATION, blobContractDistance, describeDistance } from "../src/content/blob-contract";
@@ -104,7 +106,7 @@ function tagWrite(id: string, label: string, base: number | null): WriteContentI
 async function waitingOnLock(db: Scratch["db"], pid: number): Promise<void> {
   for (let i = 0; i < 200; i += 1) {
     const { rows } = await db.execute<{ n: number }>(
-      sql`select count(*)::int as n from pg_locks where pid = ${pid} and locktype = 'advisory' and not granted`,
+      sql`select count(*) as n from pg_locks where pid = ${pid} and locktype = 'advisory' and not granted`,
     );
     if ((rows[0]?.n ?? 0) > 0) return;
     await new Promise((resolve) => setTimeout(resolve, 25));
@@ -153,7 +155,7 @@ describe.skipIf(!reachable.ok)("the expand migration", () => {
       const [instance] = await scratch.db.select().from(catalogInstance);
       expect(instance?.role).toBe("primary");
       const ext = await scratch.db.execute<{ n: number }>(
-        sql`select count(*)::int as n from pg_extension where extname = 'pg_trgm'`,
+        sql`select count(*) as n from pg_extension where extname = 'pg_trgm'`,
       );
       expect(ext.rows[0]?.n).toBe(1);
 
@@ -184,7 +186,7 @@ describe.skipIf(!reachable.ok)("the expand migration", () => {
         expect(enabled.has(name), name).toBe(true);
       }
       const tables = await scratch.db.execute<{ name: string }>(
-        sql`select table_name as name from information_schema.tables where table_schema = 'public'`,
+        sql`select table_name as name from sqlite_master where type = 'table'`,
       );
       for (const { name } of tables.rows) {
         if (name === "catalog_instance") continue;
@@ -224,35 +226,26 @@ describe.skipIf(!reachable.ok)("the expand migration", () => {
   }, 60_000);
 
   it("applies to a copy of the local self_learn database", async (ctx) => {
-    // The owner's real data, read only as a template. Absent, empty (CI's
-    // service creates a bare self_learn), or busy whenever a dev server holds
-    // it open: each skips with the reason. Nothing here connects to
-    // self_learn itself; every check and write is on the copy.
-    const admin = new pg.Client({ connectionString: maintenanceUrl() });
-    await admin.connect();
-    const name = `self_learn_test_copy_${process.pid}_${Math.random().toString(36).slice(2, 8)}`;
+    // The owner's real data, read only as a file to copy. Absent (CI), empty,
+    // or just never migrated: each skips with the reason. Nothing here writes
+    // the owner's file; every check and write is on the copy.
+    const source = DEFAULT_DATABASE_PATH;
+    if (!existsSync(source)) ctx.skip(`no ${source} to copy`);
+    const scratch = await createScratchDatabase();
     try {
-      const exists = await admin.query("select 1 from pg_database where datname = 'self_learn'");
-      if (exists.rowCount === 0) ctx.skip("no self_learn database to copy");
+      copyFileSync(source, scratch.url);
+      const copy = connect({ url: scratch.url, copyOk: true });
       try {
-        await admin.query(`create database "${name}" template self_learn`);
-      } catch (error) {
-        ctx.skip(`could not copy self_learn: ${(error as Error).message}`);
-      }
-      const url = new URL(maintenanceUrl());
-      url.pathname = `/${name}`;
-      // The copy may itself be marked `copy` once the primary has moved; this
-      // is the flag that says writing to a throwaway copy is intended.
-      const copy = connect({ url: url.toString(), copyOk: true });
-      try {
-        // A database with no catalog in it is not a local self_learn to
-        // migrate a copy of: there is nothing for the expand migration to
-        // carry over, and the counts below would have no table to read.
-        const catalog = await copy.db.execute<{ topic: string | null }>(sql`select to_regclass('public.topic')::text as topic`);
-        if (catalog.rows[0]?.topic == null) {
+        // A file with no catalog in it is not a local self_learn to migrate a
+        // copy of: there is nothing for the migration to carry over, and the
+        // counts below would have no table to read.
+        const catalog = await copy.db.execute<{ name: string | null }>(
+          sql`select name from sqlite_master where type = 'table' and name = 'topic'`,
+        );
+        if (catalog.rows[0]?.name == null) {
           ctx.skip("self_learn holds no catalog (no topic table): it was never migrated, as on CI");
         }
-        const before = await copy.db.execute<{ n: number }>(sql`select count(*)::int as n from topic`);
+        const before = await copy.db.execute<{ n: number }>(sql`select count(*) as n from topic`);
         // Holding the contract migration (0013) back while the owner's
         // videos are not uploaded: its guard would otherwise roll the whole
         // run back. Everything before it applies either way.
@@ -265,7 +258,7 @@ describe.skipIf(!reachable.ok)("the expand migration", () => {
         expect(status.pending).toEqual(held.map((h) => h.tag));
         expect(held.map((h) => h.tag)).toEqual(held.length === 0 ? [] : ["0013_asset_blob_contract"]);
         const after = await copy.db.execute<{ n: number; owned: number }>(
-          sql`select count(*)::int as n, count(*) filter (where owner_id = 'local')::int as owned from topic`,
+          sql`select count(*) as n, count(*) filter (where owner_id = 'local') as owned from topic`,
         );
         expect(after.rows[0]?.n).toBe(before.rows[0]?.n);
         expect(after.rows[0]?.owned).toBe(after.rows[0]?.n);
@@ -277,17 +270,12 @@ describe.skipIf(!reachable.ok)("the expand migration", () => {
         await copy.close();
       }
     } finally {
-      await admin.query(`drop database if exists "${name}" with (force)`);
-      await admin.end();
+      await scratch.drop();
     }
   }, 120_000);
 });
 
-function maintenanceUrl(): string {
-  const url = new URL(process.env["DATABASE_URL"] ?? "postgres://localhost:5432/self_learn");
-  url.pathname = "/postgres";
-  return url.toString();
-}
+
 
 describe.skipIf(!reachable.ok)("the write seam", () => {
   let scratch: Scratch;
@@ -382,7 +370,7 @@ describe.skipIf(!reachable.ok)("the write seam", () => {
     try {
       // An import transaction holding the topic type lock, as writeSource does
       // before its first write.
-      const importing = importer.db.transaction(async (tx) => {
+      const importing = inTransaction(importer.db, async (tx) => {
         await lockTypes(tx, ["topic"]);
         locked();
         await held;
@@ -408,7 +396,7 @@ describe.skipIf(!reachable.ok)("the write seam", () => {
   });
 
   it("composes inside an outer transaction: both writes commit with it, or neither does", async () => {
-    await scratch.db.transaction(async (tx) => {
+    await inTransaction(scratch.db, async (tx) => {
       await writeContent(tx, topicWrite("outer-a", "A", null));
       await writeContent(tx, topicWrite("outer-b", "B", null));
     });
@@ -416,7 +404,7 @@ describe.skipIf(!reachable.ok)("the write seam", () => {
     expect((await history(scratch.db, "topic", "outer-b")).map((r) => r.op)).toEqual(["create"]);
 
     await expect(
-      scratch.db.transaction(async (tx) => {
+      inTransaction(scratch.db, async (tx) => {
         await writeContent(tx, topicWrite("outer-c", "C", null));
         throw new Error("the caller changed its mind");
       }),
@@ -472,14 +460,14 @@ describe.skipIf(!reachable.ok)("the write seam", () => {
       go = resolve;
     });
     try {
-      const naive = writer.db.transaction(async (tx) => {
+      const naive = inTransaction(writer.db, async (tx) => {
         await writeContent(tx, topicWrite("dl-topic", "T", null));
         wrote();
         await importWaiting;
         await writeContent(tx, tagWrite("dl-tag", "T", null));
       });
       await topicHeld;
-      const importing = importer.db.transaction(async (tx) => {
+      const importing = inTransaction(importer.db, async (tx) => {
         const { rows } = await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`);
         const pid = rows[0]!.pid;
         const locking = lockTypes(tx, ["tag", "topic"]);
@@ -527,7 +515,7 @@ describe.skipIf(!reachable.ok)("the write seam", () => {
         const results = await Promise.all([
           write(a!.db, ["topic:mix-1", "tag:mix-1", "topic:mix-2"], round),
           write(b!.db, ["tag:mix-1", "topic:mix-2", "topic:mix-1"], round),
-          c!.db.transaction(async (tx) => {
+          inTransaction(c!.db, async (tx) => {
             await lockTypes(tx, ["topic", "tag"]);
             await new Promise((resolve) => setTimeout(resolve, 20));
           }),
@@ -872,7 +860,7 @@ describe.skipIf(!reachable.ok)("the completeness rules, armed", () => {
   });
 
   it("refuses a module with no items, at commit rather than at the insert", async () => {
-    const tx = scratch.db.transaction(async (t) => {
+    const tx = inTransaction(scratch.db, async (t) => {
       await t.insert(collection).values({
         id: "zz1000-m9",
         kind: "module",
@@ -891,7 +879,7 @@ describe.skipIf(!reachable.ok)("the completeness rules, armed", () => {
   });
 
   it("accepts a module whose item and concept arrive in the same transaction", async () => {
-    await scratch.db.transaction(async (t) => {
+    await inTransaction(scratch.db, async (t) => {
       await t.insert(collection).values({ id: "zz1000-m8", kind: "module", slug: "m8", title: "Ok", parentId: "zz1000" });
       await t.execute(sql`insert into collection_item (collection_id, topic_slug) values ('zz1000-m8', 'alpha')`);
       await t.insert(curriculumItem).values({ id: "zz1000-m8-t1", collectionId: "zz1000-m8", title: "t" });
@@ -977,14 +965,6 @@ describe.skipIf(!reachable.ok)("the copy guard", () => {
     await scratch.db.insert(preference).values({ learnerId: LOCAL_LEARNER_ID, key: "k2", value: 2 });
   });
 
-  it("builds the connection options without losing the URL's own", () => {
-    expect(connectionOptions("postgres://h/db", { copyOk: false })).toBeUndefined();
-    expect(connectionOptions("postgres://h/db", { copyOk: true })).toBe("-c self_learn.copy_ok=on");
-    expect(
-      connectionOptions("postgres://h/db?options=-c%20search_path%3Dx", { copyOk: true }),
-    ).toBe("-c search_path=x -c self_learn.copy_ok=on");
-    expect(connectionOptions("postgres://h/db", { options: "-c a=b", copyOk: false })).toBe("-c a=b");
-  });
 });
 
 describe("catalog history's byline", () => {

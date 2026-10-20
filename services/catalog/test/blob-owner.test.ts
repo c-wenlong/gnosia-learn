@@ -244,11 +244,11 @@ describe.skipIf(!reachable.ok)("the blob store against a second writer", () => {
       provider: "fs",
       state: "pending",
     });
-    await a.db.execute(sql`update blob_object set updated_at = now() - interval '2 days' where key = ${key}`);
+    await a.db.execute(sql`update blob_object set updated_at = cast(unixepoch('subsec') * 1000 as integer) - interval '2 days' where key = ${key}`);
     // Between the audit's read of the rows and its delete, an upload of the
     // same key marks the row pending again, as `uploadBlob` does first.
     const racing = interrupted(store, "list", async () => {
-      await two.db.execute(sql`update blob_object set state = 'pending', updated_at = now() where key = ${key}`);
+      await two.db.execute(sql`update blob_object set state = 'pending', updated_at = cast(unixepoch('subsec') * 1000 as integer) where key = ${key}`);
     });
     const result = await auditBlobs(a.db, racing, { fix: true, root });
     const finding = result.findings.find((f) => f.key === key);
@@ -258,7 +258,7 @@ describe.skipIf(!reachable.ok)("the blob store against a second writer", () => {
     expect(await a.db.select().from(blobObject).where(eq(blobObject.key, key))).toHaveLength(1);
 
     // With nothing taking it up, the same row goes.
-    await a.db.execute(sql`update blob_object set updated_at = now() - interval '2 days' where key = ${key}`);
+    await a.db.execute(sql`update blob_object set updated_at = cast(unixepoch('subsec') * 1000 as integer) - interval '2 days' where key = ${key}`);
     const swept = await auditBlobs(a.db, store, { fix: true, root });
     expect(swept.findings.find((f) => f.key === key)?.fixed).toBe("row-deleted");
   });

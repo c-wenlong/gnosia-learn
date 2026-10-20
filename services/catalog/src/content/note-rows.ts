@@ -12,6 +12,7 @@ import { latestRevisions } from "./revisions";
 import { writeContents } from "./write";
 import { bytewise } from "../sql-order";
 
+import { inTransaction } from "../db";
 /**
  * Concept notes read from their rows: the columns, and `requires:` and
  * `assumes:` from `concept_prerequisite` in the order the note listed them.
@@ -302,17 +303,14 @@ export async function noteText(
   // One snapshot for the note and its revision: read apart, a write landing
   // between them would pair old text with the new revision, and a commit of
   // that copy would pass the base check and overwrite the write.
-  return db.transaction(
-    async (tx) => {
+  return inTransaction(db, async (tx) => {
       const [row] = await readNoteRows(tx, [slug], owners);
       if (row === undefined) return null;
       if (row.body === null) {
         throw new NoteWriteError(`concept "${slug}" has no body in the database; re-run \`catalog import\` before the flip`);
       }
       return { text: renderNote({ ...row, body: row.body }), revision: await noteRevision(tx, slug), path: row.path };
-    },
-    { isolationLevel: "repeatable read", accessMode: "read only" },
-  );
+    });
 }
 
 /**

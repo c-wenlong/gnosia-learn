@@ -17,6 +17,7 @@ import { assetNamesExist } from "../../state/assets";
 import { andOwnedBy, type Owners } from "../scope";
 import type { TypeReader } from "./reader";
 
+import { inTransaction } from "../../db";
 /**
  * The database reader for `courses`: every live course, as `Course[]` in
  * `order:`, with archived modules and items left out.
@@ -112,15 +113,15 @@ function optional(value: unknown): string | undefined {
 export async function readCourses(db: CatalogDatabase, owners?: Owners, namer?: string): Promise<Course[]> {
   // Asked before the transaction: a failed check inside it would abort it.
   const names = namer !== undefined && (await assetNamesExist(db));
-  return db.transaction((tx) => readTree(tx, owners, names ? namer : undefined), { isolationLevel: "repeatable read", accessMode: "read only" });
+  return inTransaction(db, (tx) => readTree(tx, owners, names ? namer : undefined));
 }
 
 async function readTree(db: CatalogDatabase, owners: Owners, namer: string | undefined): Promise<Course[]> {
   const courses = await rows<CourseRow>(
     db,
-    sql`select c.id, c.slug, c.title, c.position, c.metadata, to_jsonb(c) ->> 'cover_blob_key' as cover_blob_key
+    sql`select c.id, c.slug, c.title, c.position, c.metadata, c.cover_blob_key
         from collection c
-        where c.kind = 'course' and c.archived_at is null${andOwnedBy(sql`c.owner_id`, owners)} order by c.position, c.id collate "C"`,
+        where c.kind = 'course' and c.archived_at is null${andOwnedBy(sql`c.owner_id`, owners)} order by c.position, c.id collate binary`,
   );
   const tags = groupBy(
     await rows<{ collection_id: string; tag_id: string }>(
@@ -129,7 +130,7 @@ async function readTree(db: CatalogDatabase, owners: Owners, namer: string | und
           join collection c on c.id = t.collection_id
           join tag g on g.id = t.tag_id
           where c.kind = 'course' and c.archived_at is null${andOwnedBy(sql`c.owner_id`, owners)}${andOwnedBy(sql`g.owner_id`, owners)}
-          order by t.collection_id collate "C", t.position, t.tag_id collate "C"`,
+          order by t.collection_id collate binary, t.position, t.tag_id collate binary`,
     ),
     (r) => r.collection_id,
   );
@@ -146,7 +147,7 @@ async function readTree(db: CatalogDatabase, owners: Owners, namer: string | und
                   order by m.position limit 1) as topic
           from collection c
           where c.kind = 'module' and c.archived_at is null${andOwnedBy(sql`c.owner_id`, owners)}
-          order by c.parent_id collate "C", c.position, c.id collate "C"`,
+          order by c.parent_id collate binary, c.position, c.id collate binary`,
     ),
     (r) => r.parent_id,
   );
@@ -155,8 +156,8 @@ async function readTree(db: CatalogDatabase, owners: Owners, namer: string | und
       db,
       // Through `to_jsonb`, so a database that has not had 0022 reads as
       // items listing no video rather than failing the whole list.
-      sql`select id, collection_id, title, subtopics, to_jsonb(curriculum_item) -> 'videos' as videos from curriculum_item
-          where archived_at is null${andOwnedBy(sql`owner_id`, owners)} order by collection_id collate "C", position, id collate "C"`,
+      sql`select id, collection_id, title, subtopics, curriculum_item.videos from curriculum_item
+          where archived_at is null${andOwnedBy(sql`owner_id`, owners)} order by collection_id collate binary, position, id collate binary`,
     ),
     (r) => r.collection_id,
   );
@@ -167,7 +168,7 @@ async function readTree(db: CatalogDatabase, owners: Owners, namer: string | und
           join curriculum_item i on i.id = l.curriculum_item_id
           join concept k on k.slug = l.concept_slug
           where i.archived_at is null${andOwnedBy(sql`i.owner_id`, owners)}${andOwnedBy(sql`k.owner_id`, owners)}
-          order by l.curriculum_item_id collate "C", l.position, l.concept_slug collate "C"`,
+          order by l.curriculum_item_id collate binary, l.position, l.concept_slug collate binary`,
     ),
     (r) => r.curriculum_item_id,
   );
@@ -183,8 +184,8 @@ async function readTree(db: CatalogDatabase, owners: Owners, namer: string | und
             ${namer === undefined ? sql`a.title` : sql`coalesce((select n.title from asset_name n where n.asset_id = a.id and n.learner_id = ${namer}), a.title)`} as title,
             a.url, a.resource_type
           from collection_item m join asset a on a.id = m.asset_id
-          where a.kind = 'link' and starts_with(a.id, ${ASSET_PREFIX.courses})${andOwnedBy(sql`a.owner_id`, owners)}
-          order by m.collection_id collate "C", m.position, a.id collate "C"`,
+          where a.kind = 'link' and instr(a.id, ${ASSET_PREFIX.courses}) = 1${andOwnedBy(sql`a.owner_id`, owners)}
+          order by m.collection_id collate binary, m.position, a.id collate binary`,
     ),
     (r) => r.collection_id,
   );
@@ -270,7 +271,7 @@ async function lessonLinks(
 ): Promise<{ asset_id: string; curriculum_item_id: string; collection_id: string }[]> {
   const [present] = await rows<{ present: boolean }>(
     db,
-    sql`select to_regclass('public.curriculum_item_asset') is not null as present`,
+    sql`select exists(select 1 from sqlite_master where type = 'table' and name = 'curriculum_item_asset') as present`,
   );
   if (present?.present !== true) return [];
   return rows(
@@ -280,7 +281,7 @@ async function lessonLinks(
         join curriculum_item i on i.id = l.curriculum_item_id
         join asset a on a.id = l.asset_id
         where i.archived_at is null${andOwnedBy(sql`i.owner_id`, owners)}${andOwnedBy(sql`a.owner_id`, owners)}
-        order by l.asset_id collate "C", l.position, l.curriculum_item_id collate "C"`,
+        order by l.asset_id collate binary, l.position, l.curriculum_item_id collate binary`,
   );
 }
 

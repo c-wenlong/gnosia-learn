@@ -136,7 +136,7 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
 
     it("refuses a tick, a note or a recap on an archived item, and keeps what was recorded on it", async () => {
       await setProgress(scratch.db, ITEMS[1], true);
-      await scratch.db.execute(sql`update curriculum_item set archived_at = now() where id = ${ITEMS[1]}`);
+      await scratch.db.execute(sql`update curriculum_item set archived_at = cast(unixepoch('subsec') * 1000 as integer) where id = ${ITEMS[1]}`);
       try {
         for (const write of [
           () => setProgress(scratch.db, ITEMS[1], true),
@@ -505,7 +505,7 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
 
       // And nothing was half-applied: the transaction rolled back.
       const { rows } = await scratch.db.execute<{ n: number }>(
-        "select count(*)::int as n from concept",
+        "select count(*) as n from concept",
       );
       expect(rows[0]?.n).toBe(CONCEPTS.length);
     });
@@ -939,7 +939,7 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
     it("carries what the learner recorded on an item the course has since archived", async () => {
       // An export includes ticks, notes and recaps on archived items (D12), so
       // importing one back must not stop at the first of them.
-      await scratch.db.execute(sql`update curriculum_item set archived_at = now() where id in (${ITEMS[0]}, ${ITEMS[1]})`);
+      await scratch.db.execute(sql`update curriculum_item set archived_at = cast(unixepoch('subsec') * 1000 as integer) where id in (${ITEMS[0]}, ${ITEMS[1]})`);
       try {
         const result = await importLegacyState(scratch.db, payload);
         expect(result).toMatchObject({ progress: 1, notes: 1, recaps: 1, unknownItems: ["gone-m9-t9"] });

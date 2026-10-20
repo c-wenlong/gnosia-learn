@@ -27,6 +27,7 @@ import { pullVault, pushVault } from "../src/learn/vault";
 import { makeFixture, note, tagsYaml, topicsYaml, type Fixture } from "./fixture-tree";
 import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 
+import { inTransaction } from "../src/db";
 /**
  * `learn vault pull|push` (phase 2 of docs/CONTENT-MIGRATION.md, edge case
  * 4): a fixture imported into a scratch database with concepts and sessions
@@ -125,7 +126,7 @@ describe.skipIf(!reachable.ok)("learn vault", () => {
   const revisions = async (slug?: string) =>
     (
       await scratch.db
-        .select({ n: sql<number>`count(*)::int` })
+        .select({ n: sql<number>`count(*)` })
         .from(contentRevision)
         .where(
           slug === undefined
@@ -815,7 +816,7 @@ describe.skipIf(!reachable.ok)("learn vault", () => {
     // Another owner's rows, written around the seam as the review's seed was:
     // the write guards of the flipped types let a named repair through.
     const guarded = (write: (tx: typeof scratch.db) => Promise<void>) =>
-      scratch.db.transaction(async (tx) => {
+      inTransaction(scratch.db, async (tx) => {
         await tx.execute(sql`select set_config('self_learn.revision_id', 'test-seed', true)`);
         await write(tx);
       });
@@ -828,7 +829,7 @@ describe.skipIf(!reachable.ok)("learn vault", () => {
       await tx.insert(sessionLogEntry).values({ sessionId: "their-log", seq: 1, markdown: "# theirs\n" });
       await tx.execute(sql`
         insert into blob_object (key, owner_id, sha256, bytes, mime, provider, state, confirmed_at)
-        values (${key}, ${other}, ${sha}, ${Buffer.byteLength(svg)}, 'image/svg+xml', 'fs', 'present', now())`);
+        values (${key}, ${other}, ${sha}, ${Buffer.byteLength(svg)}, 'image/svg+xml', 'fs', 'present', cast(unixepoch('subsec') * 1000 as integer))`);
       await tx.execute(sql`
         insert into diagram (slug, owner_id, topic_slug, document, document_hash, svg_blob_key, svg_document_hash)
         values ('their-diagram', ${other}, 'alpha', '{"records":[]}', ${"d".repeat(64)}, ${key}, ${"d".repeat(64)})`);

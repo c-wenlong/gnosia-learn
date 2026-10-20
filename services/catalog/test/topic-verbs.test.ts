@@ -48,9 +48,7 @@ const by: By = { author: "local", authorKind: "person", reason: "a test" };
 
 function pointAt(name: string): () => void {
   const saved = { url: process.env["DATABASE_URL"], manimkc: process.env["MANIMKC_ROOT"] };
-  const url = new URL(process.env["DATABASE_URL"] ?? "postgres://localhost:5432/self_learn");
-  url.pathname = `/${name}`;
-  process.env["DATABASE_URL"] = url.toString();
+  process.env["DATABASE_URL"] = name;
   process.env["MANIMKC_ROOT"] = path.join(tmpdir(), "catalog-test-no-manimkc");
   return () => {
     for (const [key, value] of [["DATABASE_URL", saved.url], ["MANIMKC_ROOT", saved.manimkc]] as const) {
@@ -175,7 +173,7 @@ describe.skipIf(!reachable.ok)("topic and tag writers", () => {
   beforeAll(async () => {
     scratch = await migratedScratchDatabase();
     fixture = await tree();
-    restore = pointAt(scratch.name);
+    restore = pointAt(scratch.url);
     await runImportCommand({ dir: fixture.root });
     // The house style: header, dividers. From here the tree is the export.
     await runExport({ out: fixture.root });
@@ -539,7 +537,7 @@ describe.skipIf(!reachable.ok)("renaming a topic a diagram file stamps, while di
       records: [{ typeName: "document", id: "document:document", meta: { tldrawkc: { topic: "gamma", concepts: [] } } }],
     };
     await fixture.write("learn/assets/gamma-map.tldr", JSON.stringify(stamped));
-    restore = pointAt(scratch.name);
+    restore = pointAt(scratch.url);
     await runImportCommand({ dir: fixture.root });
     await runExport({ out: fixture.root, only: ["topics", "tags", "courses"] });
   }, 60_000);

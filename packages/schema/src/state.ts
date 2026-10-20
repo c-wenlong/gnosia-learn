@@ -1,18 +1,15 @@
 import { sql } from "drizzle-orm";
 import {
-  bigint,
-  boolean,
+  blob,
   check,
-  customType,
-  doublePrecision,
   index,
   integer,
-  jsonb,
-  pgTable,
   primaryKey,
+  real,
+  sqliteTable,
   text,
   uniqueIndex,
-} from "drizzle-orm/pg-core";
+} from "drizzle-orm/sqlite-core";
 
 import { createdAt, instant, updatedAt } from "./columns";
 import { concept, curriculumItem } from "./content";
@@ -63,15 +60,23 @@ const inList = (column: string, values: readonly string[]) =>
 
 /** A `provider` column: a built-in provider, or a custom one's id (docs/TUTOR-MODELS.md, T14). */
 const providerName = (column: string) =>
-  sql.raw(`(${column} in (${PROVIDER_IDS.map((v) => `'${v}'`).join(", ")}) or ${column} ~ '${CUSTOM_PROVIDER_ID_SQL}')`);
+  sql.raw(`(${column} in (${PROVIDER_IDS.map((v) => `'${v}'`).join(", ")}) or ${column} regexp '${CUSTOM_PROVIDER_ID_SQL}')`);
 
-/** One of `values` at random, each as likely as the next: `random()` is in [0, 1), so the index is 1 to n. */
+/**
+ * One of `values` at random, each as likely as the next. Postgres drew with
+ * `(array[...])[1 + floor(random() * n)::int]`; SQLite has no array indexing,
+ * so the draw is `json_extract` over the list at a `random() % n` offset —
+ * the same uniform pick, evaluated once per row.
+ */
 const randomAvatar = () =>
-  sql.raw(`(array[${AVATARS.map((v) => `'${v}'`).join(", ")}])[1 + floor(random() * ${AVATARS.length})::int]`);
+  sql.raw(
+    `(json_extract('${JSON.stringify([...AVATARS]).replaceAll("'", "''")}', ` +
+      `'$[' || (abs(random()) % ${AVATARS.length}) || ']'))`,
+  );
 
 const boundedList = (column: string) =>
   sql.raw(
-    `jsonb_typeof(${column}) = 'array' and jsonb_array_length(${column}) <= ${KNOWLEDGE_LIMITS.listItems}`,
+    `json_type(${column}) = 'array' and json_array_length(${column}) <= ${KNOWLEDGE_LIMITS.listItems}`,
   );
 
 /**
@@ -79,7 +84,7 @@ const boundedList = (column: string) =>
  * global so every state row below can carry a foreign key, which is what makes
  * a second learner a data change instead of a migration.
  */
-export const learner = pgTable(
+export const learner = sqliteTable(
   "learner",
   {
     id: text("id").primaryKey().default(LOCAL_LEARNER_ID),
@@ -87,10 +92,10 @@ export const learner = pgTable(
     /**
      * The learner's pixel sprite, one of `AVATARS`. Drawn at random by the
      * database when the row is made, so every way a learner row comes to
-     * exist (`ensureLearner`, migration 0010's seed, an import, a test's
+     * exist (`ensureLearner`, the migration's seed, an import, a test's
      * bare insert) gets one without the writer knowing about avatars, and
      * the migration that added the column gave each existing row its own
-     * draw: Postgres evaluates a volatile default once per row.
+     * draw: the default is evaluated once per row.
      */
     avatar: text("avatar").notNull().default(randomAvatar()),
     createdAt: createdAt(),
@@ -103,22 +108,20 @@ export const learner = pgTable(
  * Append-only. Every other state table is a projection of this one, so an
  * UPDATE here would rewrite history and leave the projections unexplainable.
  *
- * The ban is enforced by a BEFORE UPDATE OR DELETE trigger, added in the same
- * migration that creates the table (see services/catalog/drizzle/). A revoked
- * privilege was the alternative and is weaker: REVOKE does not bind the table
- * owner or a superuser, which is exactly who runs the migrations and the CLI
- * locally, so it would look enforced and not be. A trigger binds everyone
- * short of `ALTER TABLE ... DISABLE TRIGGER`, and survives pg_dump/pg_restore
- * with the schema.
+ * The ban is enforced by a BEFORE UPDATE OR DELETE trigger, created by the
+ * migration that creates the table. A trigger binds every writer; SQLite
+ * evaluates it per row, which is the per-row guard 0003 settled on in
+ * Postgres.
  *
  * No `updated_at`: a column that can never change would only invite an UPDATE.
  */
-export const event = pgTable(
+export const event = sqliteTable(
   "event",
   {
-    id: bigint("id", { mode: "number" }).generatedAlwaysAsIdentity().primaryKey(),
+    // Was `GENERATED ALWAYS AS IDENTITY`; a rowid alias fills the same role.
+    id: integer("id").primaryKey({ autoIncrement: true }),
     /** When it happened, from the emitter. Not the same as `created_at`, which is when it landed. */
-    at: instant("at").notNull().default(sql`now()`),
+    at: instant("at").notNull().default(sql`(cast(unixepoch('subsec') * 1000 as integer))`),
     learnerId: text("learner_id")
       .notNull()
       .references(() => learner.id, { onDelete: "restrict", onUpdate: "cascade" }),
@@ -158,12 +161,12 @@ export const event = pgTable(
       onUpdate: "cascade",
     }),
     /** Everything type-specific: grade, correct, pLBefore/pLAfter, question, reason, propagated. */
-    payload: jsonb("payload").notNull().default(sql`'{}'::jsonb`),
+    payload: text("payload", { mode: "json" }).notNull().default(sql`'{}'`),
     createdAt: createdAt(),
   },
   (t) => [
     check("event_type_check", inList("type", EVENT_TYPES)),
-    check("event_payload_object_check", sql`jsonb_typeof(payload) = 'object'`),
+    check("event_payload_object_check", sql`json_type(payload) = 'object'`),
     index("event_at_idx").on(t.at),
     index("event_learner_id_idx").on(t.learnerId),
     index("event_concept_slug_idx").on(t.conceptSlug),
@@ -176,7 +179,7 @@ export const event = pgTable(
  * rebuilds it exactly, which is why a wrong row is a bug to recompute rather
  * than data to recover.
  */
-export const mastery = pgTable(
+export const mastery = sqliteTable(
   "mastery",
   {
     learnerId: text("learner_id")
@@ -185,7 +188,7 @@ export const mastery = pgTable(
     conceptSlug: text("concept_slug")
       .notNull()
       .references(() => concept.slug, { onDelete: "cascade", onUpdate: "cascade" }),
-    pL: doublePrecision("p_l").notNull().default(DEFAULT_P_L),
+    pL: real("p_l").notNull().default(DEFAULT_P_L),
     observations: integer("observations").notNull().default(0),
     correct: integer("correct").notNull().default(0),
     lastSeen: instant("last_seen"),
@@ -208,7 +211,7 @@ export const mastery = pgTable(
  * a column: every grade is already an `event` of type `review`, and duplicating
  * it here would create a second version of the truth.
  */
-export const review = pgTable(
+export const review = sqliteTable(
   "review",
   {
     learnerId: text("learner_id")
@@ -218,12 +221,12 @@ export const review = pgTable(
       .notNull()
       .references(() => concept.slug, { onDelete: "cascade", onUpdate: "cascade" }),
     repetitions: integer("repetitions").notNull().default(0),
-    ease: doublePrecision("ease").notNull().default(SCHEDULE_LIMITS.defaultEase),
+    ease: real("ease").notNull().default(SCHEDULE_LIMITS.defaultEase),
     intervalDays: integer("interval_days").notNull().default(1),
     lapses: integer("lapses").notNull().default(0),
     due: instant("due").notNull(),
     lastReviewed: instant("last_reviewed"),
-    leech: boolean("leech").notNull().default(false),
+    leech: integer("leech", { mode: "boolean" }).notNull().default(false),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -246,7 +249,7 @@ export const review = pgTable(
  * keyed by the same curriculum item id and so are one table here. `completedAt` is nullable
  * because a note without a tick is a real state the web app already allows.
  */
-export const progress = pgTable(
+export const progress = sqliteTable(
   "progress",
   {
     learnerId: text("learner_id")
@@ -274,7 +277,7 @@ export const progress = pgTable(
  * `TopicKnowledge` in `apps/web/src/lib/types.ts`, down to the `sessions`
  * counter.
  */
-export const recap = pgTable(
+export const recap = sqliteTable(
   "recap",
   {
     learnerId: text("learner_id")
@@ -287,9 +290,9 @@ export const recap = pgTable(
       // "Still open" recorded. Purging an item with learner rows is explicit.
       .references(() => curriculumItem.id, { onDelete: "restrict", onUpdate: "cascade" }),
     summary: text("summary").notNull().default(""),
-    keyPoints: jsonb("key_points").notNull().default(sql`'[]'::jsonb`),
-    misconceptions: jsonb("misconceptions").notNull().default(sql`'[]'::jsonb`),
-    openQuestions: jsonb("open_questions").notNull().default(sql`'[]'::jsonb`),
+    keyPoints: text("key_points", { mode: "json" }).notNull().default(sql`'[]'`),
+    misconceptions: text("misconceptions", { mode: "json" }).notNull().default(sql`'[]'`),
+    openQuestions: text("open_questions", { mode: "json" }).notNull().default(sql`'[]'`),
     source: text("source").notNull(),
     /** How many agent sessions have been folded in. */
     sessions: integer("sessions").notNull().default(0),
@@ -301,7 +304,7 @@ export const recap = pgTable(
     check("recap_source_check", inList("source", RECAP_SOURCES)),
     check(
       "recap_summary_length_check",
-      sql.raw(`char_length(summary) <= ${KNOWLEDGE_LIMITS.summaryChars}`),
+      sql.raw(`length(summary) <= ${KNOWLEDGE_LIMITS.summaryChars}`),
     ),
     check("recap_key_points_check", boundedList("key_points")),
     check("recap_misconceptions_check", boundedList("misconceptions")),
@@ -316,22 +319,19 @@ export const recap = pgTable(
  * `epoch`, `lastVisited`. A key/value table rather than columns, because these
  * change with the UI and a migration per preference is not worth it.
  */
-export const preference = pgTable(
+export const preference = sqliteTable(
   "preference",
   {
     learnerId: text("learner_id")
       .notNull()
       .references(() => learner.id, { onDelete: "cascade", onUpdate: "cascade" }),
     key: text("key").notNull(),
-    value: jsonb("value").notNull(),
+    value: text("value", { mode: "json" }).notNull(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [primaryKey({ columns: [t.learnerId, t.key] })],
 );
-
-/** `bytea`, which drizzle's pg-core has no builder for. The driver hands it back as a Buffer. */
-const bytes = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => "bytea" });
 
 /**
  * An owner's own model provider API key, encrypted (docs/BYOK.md).
@@ -351,17 +351,19 @@ const bytes = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () =>
  * Read and written only by `services/catalog/src/state/provider-keys.ts`, and
  * `services/catalog/test/provider-keys.test.ts` fails a reference anywhere
  * else, which is what keeps it out of every export.
+ *
+ * `blob` columns, which `bytea` was: better-sqlite3 hands a Buffer back.
  */
-export const providerKey = pgTable(
+export const providerKey = sqliteTable(
   "provider_key",
   {
     ownerId: text("owner_id")
       .notNull()
       .references(() => learner.id, { onDelete: "cascade", onUpdate: "cascade" }),
     provider: text("provider").notNull(),
-    ciphertext: bytes("ciphertext").notNull(),
-    iv: bytes("iv").notNull(),
-    authTag: bytes("auth_tag").notNull(),
+    ciphertext: blob("ciphertext", { mode: "buffer" }).notNull(),
+    iv: blob("iv", { mode: "buffer" }).notNull(),
+    authTag: blob("auth_tag", { mode: "buffer" }).notNull(),
     keyVersion: integer("key_version").notNull(),
     last4: text("last4").notNull(),
     createdAt: createdAt(),
@@ -371,15 +373,16 @@ export const providerKey = pgTable(
     primaryKey({ columns: [t.ownerId, t.provider] }),
     check("provider_key_provider_check", providerName("provider")),
     // GCM's 96-bit nonce and 128-bit tag, the only sizes the code writes.
-    check("provider_key_iv_check", sql`octet_length(iv) = 12`),
-    check("provider_key_auth_tag_check", sql`octet_length(auth_tag) = 16`),
+    // `length` on a blob is its byte count, `octet_length`'s answer.
+    check("provider_key_iv_check", sql`length(iv) = 12`),
+    check("provider_key_auth_tag_check", sql`length(auth_tag) = 16`),
     // GCM adds no padding, so the ciphertext is as long as the key's UTF-8 bytes.
     check(
       "provider_key_ciphertext_check",
-      sql.raw(`octet_length(ciphertext) between 1 and ${PROVIDER_KEY_LIMITS.maxChars * 4}`),
+      sql.raw(`length(ciphertext) between 1 and ${PROVIDER_KEY_LIMITS.maxChars * 4}`),
     ),
     check("provider_key_key_version_check", sql`key_version >= 1`),
-    check("provider_key_last4_check", sql`char_length(last4) = 4`),
+    check("provider_key_last4_check", sql`length(last4) = 4`),
   ],
 );
 
@@ -399,7 +402,7 @@ export const providerKey = pgTable(
  * delete, as `provider_key`: owner configuration is never filed under `local`
  * by omission, and goes with its owner.
  */
-export const tutorModel = pgTable(
+export const tutorModel = sqliteTable(
   "tutor_model",
   {
     ownerId: text("owner_id")
@@ -421,7 +424,7 @@ export const tutorModel = pgTable(
     // Printable ASCII with no space, as `checkModelId` says: `!` to `~`.
     check(
       "tutor_model_model_check",
-      sql.raw(`char_length(model) between 1 and ${TUTOR_MODEL_LIMITS.maxModelChars} and model ~ '^[!-~]+$'`),
+      sql.raw(`length(model) between 1 and ${TUTOR_MODEL_LIMITS.maxModelChars} and model regexp '^[!-~]+$'`),
     ),
   ],
 );
@@ -438,7 +441,7 @@ export const tutorModel = pgTable(
  * Delete removes this row, its key and its models in one transaction
  * (`deleteTutorProvider`).
  */
-export const customProvider = pgTable(
+export const customProvider = sqliteTable(
   "custom_provider",
   {
     ownerId: text("owner_id")
@@ -452,12 +455,14 @@ export const customProvider = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.ownerId, t.id] }),
-    check("custom_provider_id_check", sql.raw(`id ~ '${CUSTOM_PROVIDER_ID_SQL}'`)),
-    check("custom_provider_label_check", sql.raw(`char_length(label) between 1 and ${CUSTOM_PROVIDER_LIMITS.maxLabelChars}`)),
+    check("custom_provider_id_check", sql.raw(`id regexp '${CUSTOM_PROVIDER_ID_SQL}'`)),
+    check("custom_provider_label_check", sql.raw(`length(label) between 1 and ${CUSTOM_PROVIDER_LIMITS.maxLabelChars}`)),
     check(
       "custom_provider_base_url_check",
+      // The Postgres POSIX patterns rewritten as JS RegExp (`regexp` is
+      // registered per connection): `[[:space:]]` becomes `\\s`.
       sql.raw(
-        `char_length(base_url) between 1 and ${CUSTOM_PROVIDER_LIMITS.maxBaseUrlChars} and base_url !~ '/$' and (base_url ~ '^https://[^/@?#[:space:]]+(/[^@?#[:space:]]*)?$' or base_url ~ '^http://(localhost|127[.]0[.]0[.]1|\\[::1\\])(:[0-9]+)?(/[^@?#[:space:]]*)?$')`,
+        `length(base_url) between 1 and ${CUSTOM_PROVIDER_LIMITS.maxBaseUrlChars} and not (base_url regexp '/$') and (base_url regexp '^https://[^/@?#\\s]+(/[^@?#\\s]*)?$' or base_url regexp '^http://(localhost|127[.]0[.]0[.]1|\\[::1\\])(:[0-9]+)?(/[^@?#\\s]*)?$')`,
       ),
     ),
   ],
@@ -484,7 +489,7 @@ export const customProvider = pgTable(
  * `asset` row. The writer checks the asset exists and is readable before it
  * names it. `cascade` on the learner, as `tutor_model`.
  */
-export const assetName = pgTable(
+export const assetName = sqliteTable(
   "asset_name",
   {
     learnerId: text("learner_id")
@@ -501,7 +506,7 @@ export const assetName = pgTable(
     // Stored cleaned (`cleanAssetName`): never blank, never padded, no line breaks.
     check(
       "asset_name_title_check",
-      sql.raw(`char_length(title) between 1 and ${ASSET_NAME_MAX} and title = btrim(title) and title !~ '\\s{2}|[\\n\\r\\t]'`),
+      sql.raw(`length(title) between 1 and ${ASSET_NAME_MAX} and title = trim(title) and not (title regexp '\\s{2}|[\\n\\r\\t]')`),
     ),
   ],
 );

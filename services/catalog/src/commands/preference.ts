@@ -12,7 +12,7 @@ import {
 import { and, eq, sql } from "drizzle-orm";
 
 import { CLI_OWNER } from "../content/scope";
-import { withDatabase } from "../db";
+import { withDatabase, inTransaction } from "../db";
 
 /**
  * `catalog preference get` and `set`: one owner's studio agent preference, for
@@ -125,14 +125,13 @@ export async function runPreferenceSet(options: {
   const value = parsePreferenceValue(options.value);
   const owner = options.owner ?? CLI_OWNER;
   return withDatabase(async ({ db }) =>
-    db.transaction(async (tx) => {
+    inTransaction(db, async (tx) => {
       const [who] = await tx.select({ id: learner.id }).from(learner).where(eq(learner.id, owner)).limit(1);
       if (who === undefined) throw new PreferenceError(`preference set: no learner "${owner}", so there is no one to hold the preference.`);
       const [row] = await tx
         .select({ value: preference.value, updatedAt: preference.updatedAt })
         .from(preference)
         .where(and(eq(preference.learnerId, owner), eq(preference.key, key)))
-        .for("update")
         .limit(1);
       if (row !== undefined && isDeepStrictEqual(row.value, value)) {
         return { ok: true as const, command: "preference" as const, verb: "set" as const, owner, key, value, updatedAt: row.updatedAt.toISOString(), changed: false };
@@ -140,7 +139,7 @@ export async function runPreferenceSet(options: {
       const [written] = await tx
         .insert(preference)
         .values({ learnerId: owner, key, value })
-        .onConflictDoUpdate({ target: [preference.learnerId, preference.key], set: { value, updatedAt: sql`now()` } })
+        .onConflictDoUpdate({ target: [preference.learnerId, preference.key], set: { value, updatedAt: sql`cast(unixepoch('subsec') * 1000 as integer)` } })
         .returning({ updatedAt: preference.updatedAt });
       return {
         ok: true as const,

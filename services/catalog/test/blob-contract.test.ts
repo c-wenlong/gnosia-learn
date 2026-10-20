@@ -17,7 +17,7 @@ import { openBlobStore, uploadBlob } from "../src/content/blob";
 import { BLOB_CONTRACT_MIGRATION, blobContractDistance, describeDistance } from "../src/content/blob-contract";
 import { latestRevisions, lockEntity } from "../src/content/revisions";
 import { writeContents } from "../src/content/write";
-import { connect } from "../src/db";
+import { connect, inTransaction } from "../src/db";
 import { REPO_ROOT, SERVICE_ROOT } from "../src/env";
 import {
   applyMigrations,
@@ -319,7 +319,7 @@ describe.skipIf(!reachable.ok)("the manimkc import under the contract", () => {
     const stored = await uploadBlob(scratch.db, openBlobStore(), { ownerId: "local", file: videoFile, mime: "video/mp4", ext: "mp4" });
     const row = await video();
     const [latest] = await scratch.db.execute<{ id: number }>(
-      sql`select max(id)::int as id from content_revision where entity_type = 'asset' and entity_id = ${id}`,
+      sql`select max(id) as id from content_revision where entity_type = 'asset' and entity_id = ${id}`,
     ).then((r) => r.rows);
     const rest: Record<string, unknown> = { ...row };
     delete rest["createdAt"];
@@ -343,7 +343,7 @@ describe.skipIf(!reachable.ok)("the manimkc import under the contract", () => {
     delete posterRest["createdAt"];
     delete posterRest["updatedAt"];
     const [posterLatest] = await scratch.db.execute<{ id: number }>(
-      sql`select max(id)::int as id from content_revision where entity_type = 'asset' and entity_id = ${poster}`,
+      sql`select max(id) as id from content_revision where entity_type = 'asset' and entity_id = ${poster}`,
     ).then((r) => r.rows);
     await writeContents(scratch.db, [
       {
@@ -409,7 +409,7 @@ describe.skipIf(!reachable.ok)("the manimkc import under the contract", () => {
     // nor lets it write into the scratch database during the cleanup.
     let unhooking: Promise<{ value?: Awaited<ReturnType<typeof unhookDerivations>>; error?: unknown }> | undefined;
     try {
-      await other.db.transaction(async (tx) => {
+      await inTransaction(other.db, async (tx) => {
         await lockEntity(tx, "asset", poster);
         unhooking = unhookDerivations(scratch.db, [id], POSTER_PREFIX, {
           author: "test",
@@ -422,7 +422,7 @@ describe.skipIf(!reachable.ok)("the manimkc import under the contract", () => {
           // Only this scratch database: another suite's lock waiter on the same
           // server must not release the recut before the unhook is waiting.
           const { rows } = await other.db.execute<{ waiting: number }>(sql`
-            select count(*)::int as waiting from pg_locks
+            select count(*) as waiting from pg_locks
             where locktype = 'advisory' and not granted
               and database = (select oid from pg_database where datname = current_database())`);
           if ((rows[0]?.waiting ?? 0) > 0) break;

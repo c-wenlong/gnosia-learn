@@ -1,17 +1,15 @@
 import { sql } from "drizzle-orm";
 import {
-  type AnyPgColumn,
-  bigint,
+  type AnySQLiteColumn,
   check,
-  doublePrecision,
   index,
   integer,
-  jsonb,
-  pgTable,
   primaryKey,
+  real,
+  sqliteTable,
   text,
   uniqueIndex,
-} from "drizzle-orm/pg-core";
+} from "drizzle-orm/sqlite-core";
 
 import { createdAt, instant, ownerId, updatedAt } from "./columns";
 import { asset, topic } from "./content";
@@ -54,8 +52,8 @@ const inList = (column: string, values: readonly string[]) =>
 const jsonObject = (column: string, nullable = false) =>
   sql.raw(
     nullable
-      ? `${column} is null or jsonb_typeof(${column}) = 'object'`
-      : `jsonb_typeof(${column}) = 'object'`,
+      ? `${column} is null or json_type(${column}) = 'object'`
+      : `json_type(${column}) = 'object'`,
   );
 
 /**
@@ -77,7 +75,7 @@ const jsonObject = (column: string, nullable = false) =>
  * session with it. There is no `asset_session` link table, because the only
  * asset a session produces without a job is that log.
  */
-export const session = pgTable(
+export const session = sqliteTable(
   "session",
   {
     id: text("id").primaryKey(),
@@ -94,14 +92,14 @@ export const session = pgTable(
       onDelete: "set null",
       onUpdate: "cascade",
     }),
-    startedAt: instant("started_at").notNull().default(sql`now()`),
+    startedAt: instant("started_at").notNull().default(sql`(cast(unixepoch('subsec') * 1000 as integer))`),
     endedAt: instant("ended_at"),
     /** Last sign of life. A stale one plus a dead process is `interrupted`. */
     heartbeatAt: instant("heartbeat_at"),
     /** A short machine-readable reason: `timeout`, `nonzero-exit`, `gate`. */
     errorKind: text("error_kind"),
     error: text("error"),
-    metadata: jsonb("metadata").notNull().default(sql`'{}'::jsonb`),
+    metadata: text("metadata", { mode: "json" }).notNull().default(sql`'{}'`),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -149,7 +147,7 @@ export const session = pgTable(
  * cap dates each turn at its own end from the runner's disk record, not from
  * this sum (D36).
  */
-export const draft = pgTable(
+export const draft = sqliteTable(
   "draft",
   {
     id: text("id").primaryKey(),
@@ -171,15 +169,15 @@ export const draft = pgTable(
     /** `drafts/<id>/transcript.ndjson`, relative to the runner's `STUDIO_HOME`. */
     transcriptPath: text("transcript_path").notNull(),
     /** The latest brief that passed `validateBrief`. */
-    brief: jsonb("brief"),
+    brief: text("brief", { mode: "json" }),
     briefAt: instant("brief_at"),
     /**
      * The topic entry the planner proposed and the dry run accepted, when the
      * brief's topic does not exist yet. Cleared when the Draw press creates it.
      */
-    pendingTopic: jsonb("pending_topic"),
+    pendingTopic: text("pending_topic", { mode: "json" }),
     turns: integer("turns").notNull().default(0),
-    costUsd: doublePrecision("cost_usd"),
+    costUsd: real("cost_usd"),
     costSource: text("cost_source"),
     errorKind: text("error_kind"),
     error: text("error"),
@@ -198,7 +196,7 @@ export const draft = pgTable(
     check("draft_pending_topic_brief_check", sql`pending_topic is null or brief is not null`),
     // The runner trims a name and sends a blank one as null, so an empty
     // string here is a writer that skipped that, not a name.
-    check("draft_name_check", sql`name is null or char_length(name) between 1 and 200`),
+    check("draft_name_check", sql`name is null or length(name) between 1 and 200`),
     check("draft_turns_check", sql`turns >= 0`),
     check("draft_cost_usd_check", sql`cost_usd is null or cost_usd >= 0`),
     check(
@@ -247,7 +245,7 @@ export const draft = pgTable(
  * a job being cancelled is still running until the runner has killed Chromium,
  * and the row should say so.
  */
-export const job = pgTable(
+export const job = sqliteTable(
   "job",
   {
     id: text("id").primaryKey(),
@@ -258,7 +256,7 @@ export const job = pgTable(
       onUpdate: "cascade",
     }),
     /** The job this one revises, for a retry or a resume. */
-    parentJobId: text("parent_job_id").references((): AnyPgColumn => job.id, {
+    parentJobId: text("parent_job_id").references((): AnySQLiteColumn => job.id, {
       onDelete: "restrict",
       onUpdate: "cascade",
     }),
@@ -282,9 +280,9 @@ export const job = pgTable(
      * landing mid-job visible: accept refuses when the target has moved since.
      */
     targetHashBefore: text("target_hash_before"),
-    brief: jsonb("brief").notNull().default(sql`'{}'::jsonb`),
+    brief: text("brief", { mode: "json" }).notNull().default(sql`'{}'`),
     /** What the gate found. Null until it has run. */
-    gate: jsonb("gate"),
+    gate: text("gate", { mode: "json" }),
     /**
      * Supplied by the caller, so a retried submit returns the existing job
      * instead of queueing the render twice. Unique, and therefore the one
@@ -293,7 +291,7 @@ export const job = pgTable(
     idempotencyKey: text("idempotency_key").notNull(),
     /** How many times a runner has claimed it. Capped at three by the runner. */
     attempt: integer("attempt").notNull().default(0),
-    requestedAt: instant("requested_at").notNull().default(sql`now()`),
+    requestedAt: instant("requested_at").notNull().default(sql`(cast(unixepoch('subsec') * 1000 as integer))`),
     startedAt: instant("started_at"),
     finishedAt: instant("finished_at"),
     /** When a person accepted or discarded it. */
@@ -305,7 +303,7 @@ export const job = pgTable(
     runnerJobId: text("runner_job_id"),
     exitCode: integer("exit_code"),
     turns: integer("turns"),
-    costUsd: doublePrecision("cost_usd"),
+    costUsd: real("cost_usd"),
     /**
      * Where `cost_usd` came from, and therefore whether it is exact.
      *
@@ -319,7 +317,7 @@ export const job = pgTable(
     costSource: text("cost_source"),
     errorKind: text("error_kind"),
     error: text("error"),
-    errorDetail: jsonb("error_detail"),
+    errorDetail: text("error_detail", { mode: "json" }),
     /**
      * The chat that asked for it (D35), or null for a job briefed through the
      * form or the CLI. Set null rather than blocked when a draft is pruned:
@@ -363,7 +361,7 @@ export const job = pgTable(
     // A source with no figure beside it says where a number came from and then
     // does not have one, which is not a state any writer here can produce.
     check("job_cost_source_paired_check", sql`cost_source is null or cost_usd is not null`),
-    check("job_not_own_parent_check", sql`parent_job_id is distinct from id`),
+    check("job_not_own_parent_check", sql`parent_job_id is not id`),
     check("job_started_at_check", sql`started_at is null or started_at >= requested_at`),
     check(
       "job_finished_at_check",
@@ -399,7 +397,7 @@ export const job = pgTable(
  * An asset with no row here had no job — it was scanned, or drawn by hand — and
  * that absence is the statement. Nothing needs backfilling into it.
  */
-export const assetJob = pgTable(
+export const assetJob = sqliteTable(
   "asset_job",
   {
     assetId: text("asset_id")
@@ -413,8 +411,8 @@ export const assetJob = pgTable(
       .references(() => job.id, { onDelete: "restrict", onUpdate: "cascade" }),
     /** sha256 of the bytes the job landed, lowercase hex. */
     contentHash: text("content_hash").notNull(),
-    bytes: bigint("bytes", { mode: "number" }).notNull(),
-    writtenAt: instant("written_at").notNull().default(sql`now()`),
+    bytes: integer("bytes").notNull(),
+    writtenAt: instant("written_at").notNull().default(sql`(cast(unixepoch('subsec') * 1000 as integer))`),
     ownerId: ownerId(() => learner.id),
     createdAt: createdAt(),
     updatedAt: updatedAt(),

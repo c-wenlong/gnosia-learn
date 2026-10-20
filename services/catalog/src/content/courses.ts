@@ -33,6 +33,7 @@ import { assertInStep, type ExportedType, writeThrough } from "./write-through";
 import { CLI_OWNER } from "./scope";
 import { bytewise } from "../sql-order";
 
+import { inTransaction } from "../db";
 /**
  * `catalog course import <file.yaml>` and `catalog course export <id>`: one
  * course through the write seam (docs/CONTENT-MIGRATION.md, Track B).
@@ -454,7 +455,7 @@ async function plan(
               .where(
                 and(
                   inArray(collectionItem.assetId, candidates),
-                  sql`${collectionItem.collectionId} <> all(${sql.param([...listedModules])}::text[])`,
+                  sql`${collectionItem.collectionId} not in (select value from json_each(${JSON.stringify([...listedModules])}))`,
                 ),
               )
           ).map((row) => row.id as string),
@@ -955,7 +956,9 @@ export async function importCourse(db: CatalogDatabase, options: CourseImportOpt
     // rows and commit the same order or code. Only this command takes the
     // lock, always right after the write-through's export locks and before
     // any revision lock, so it cannot take part in a lock cycle.
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${COURSE_IDENTITY_LOCK}, 0))`);
+    // Was `pg_advisory_xact_lock(COURSE_IDENTITY_LOCK)`: `begin immediate`
+    // already holds the file's write lock for the length of this transaction.
+    void COURSE_IDENTITY_LOCK;
     await checkReferences(tx, course, options.file);
 
     // Two passes: the first finds every entity the write can touch (the
@@ -1021,7 +1024,7 @@ export async function importCourse(db: CatalogDatabase, options: CourseImportOpt
   const through = { exempt: [options.file] };
   if (dryRun) {
     try {
-      await db.transaction(async (tx) => {
+      await inTransaction(db, async (tx) => {
         await assertInStep(tx, WRITES_THROUGH, through);
         throw new DryRun({ ...(await run(tx)), writeThrough: NOTHING_WRITTEN });
       });
@@ -1067,7 +1070,7 @@ export interface CourseExportResult {
 export async function exportCourse(db: CatalogDatabase, id: string): Promise<CourseExportResult> {
   // One snapshot for the file and its base, or a write landing between the
   // render and the revision read would stamp old text with a new base.
-  return db.transaction((tx) => exportCourseIn(tx, id), { isolationLevel: "repeatable read", accessMode: "read only" });
+  return inTransaction(db, (tx) => exportCourseIn(tx, id));
 }
 
 async function exportCourseIn(db: CatalogDatabase, id: string): Promise<CourseExportResult> {

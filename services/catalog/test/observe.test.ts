@@ -38,7 +38,7 @@ const LOCAL = ownerScope(LOCAL_LEARNER_ID);
  * two concurrent answers from losing one.
  */
 
-// In the past on purpose: a session closes at the database's `now()`, and a
+// In the past on purpose: a session closes at the database's `cast(unixepoch('subsec') * 1000 as integer)`, and a
 // start in the future would break `session_order_check`.
 const NOW = new Date("2026-09-20T08:00:00.000Z");
 const later = (seconds: number) => new Date(NOW.getTime() + seconds * 1000);

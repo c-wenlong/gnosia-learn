@@ -38,7 +38,7 @@ describe.skipIf(!reachable.ok)("concept.topic_slug NOT NULL", () => {
       insert into concept (slug, title, path, topic_slug, archived_at) values
         ('filed', 'Filed', 'learn/concepts/one/filed.md', 'alpha', null),
         ('loose', 'Loose', 'learn/concepts/one/loose.md', null, null),
-        ('gone', 'Gone', 'learn/concepts/one/gone.md', null, now())
+        ('gone', 'Gone', 'learn/concepts/one/gone.md', null, cast(unixepoch('subsec') * 1000 as integer))
     `);
   }, 60_000);
 

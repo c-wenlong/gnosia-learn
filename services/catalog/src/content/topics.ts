@@ -115,7 +115,7 @@ export interface WrittenRevision {
 export interface NearMatch {
   slug: string;
   title: string;
-  /** pg_trgm `similarity`, 0 to 1. */
+  /** pg_trgm similarity, 0 to 1. */
   score: number;
   /** Which of the existing topic's names matched: its title, an alias, or its slug read as words. */
   field: "title" | "alias" | "slug";
@@ -297,7 +297,7 @@ export async function readTopicEntries(db: CatalogDatabase, owners?: Owners): Pr
   const rows = <T>(query: ReturnType<typeof sql>) => db.execute(query).then((r) => r.rows as T[]);
   const topics = await rows<{ slug: string; title: string; domain: string; summary: string | null; aliases: unknown }>(
     sql`select slug, title, domain, summary, aliases from topic
-        where archived_at is null${andOwnedBy(sql`owner_id`, owners)} order by position, slug collate "C"`,
+        where archived_at is null${andOwnedBy(sql`owner_id`, owners)} order by position, slug collate binary`,
   );
   const group = <R extends Record<string, unknown>>(list: R[], key: keyof R) => {
     const out = new Map<string, R[]>();
@@ -319,14 +319,14 @@ export async function readTopicEntries(db: CatalogDatabase, owners?: Owners): Pr
               ? sql``
               : sql` and exists (select 1 from topic t where t.slug = r.to_slug${andOwnedBy(sql`t.owner_id`, owners)})`
           }
-          order by r.from_slug collate "C", r.position, r.kind collate "C", r.to_slug collate "C"`,
+          order by r.from_slug collate binary, r.position, r.kind collate binary, r.to_slug collate binary`,
     ),
     "from_slug",
   );
   const manimkc = group(
     await rows<{ topic_slug: string; path: string }>(
       sql`select topic_slug, path from manimkc_topic
-          where true${andOwnedBy(sql`owner_id`, owners)} order by topic_slug collate "C", position, path collate "C"`,
+          where true${andOwnedBy(sql`owner_id`, owners)} order by topic_slug collate binary, position, path collate binary`,
     ),
     "topic_slug",
   );
@@ -334,7 +334,7 @@ export async function readTopicEntries(db: CatalogDatabase, owners?: Owners): Pr
     await rows<{ topic_slug: string; slug: string }>(
       sql`select topic_slug, slug from concept
           where topic_slug is not null and archived_at is null${andOwnedBy(sql`owner_id`, owners)}
-          order by topic_slug collate "C", topic_position, slug collate "C"`,
+          order by topic_slug collate binary, topic_position, slug collate binary`,
     ),
     "topic_slug",
   );
@@ -343,7 +343,7 @@ export async function readTopicEntries(db: CatalogDatabase, owners?: Owners): Pr
       sql`select m.topic_slug, m.collection_id from collection_item m
           join collection c on c.id = m.collection_id
           where m.topic_slug is not null and c.kind = 'module' and c.archived_at is null${andOwnedBy(sql`c.owner_id`, owners)}
-          order by m.topic_slug collate "C", m.topic_position, m.collection_id collate "C"`,
+          order by m.topic_slug collate binary, m.topic_position, m.collection_id collate binary`,
     ),
     "topic_slug",
   );
@@ -433,18 +433,33 @@ export async function nearMatches(
     against: string;
     score: number;
   }>(sql`
-    select distinct on (t.slug) t.slug, t.title, m.field, m.value, c.against,
-           similarity(m.value, c.against)::float8 as score
-    from topic t
-    cross join lateral (
-      select 'title' as field, t.title as value
-      union all select 'slug', replace(t.slug, '-', ' ')
-      union all select 'alias', a from jsonb_array_elements_text(t.aliases) as a
-    ) m
-    cross join unnest(${sql.param(wanted)}::text[]) as c(against)
-    where t.archived_at is null and t.slug <> ${options.exclude ?? ""}${andOwnedBy(sql`t.owner_id`, options.owners)}
-      and similarity(m.value, c.against) >= ${threshold}
-    order by t.slug, score desc, m.field collate "C", m.value collate "C"
+    -- Was distinct on, cross join lateral and unnest: none exist in
+    -- SQLite, so the fields are a union CTE, the candidates are a json_each
+    -- of the bound array, the one-best-per-slug pick is a row_number
+    -- window, and similarity is the trigram function connect registers.
+    with live as (
+      select t.slug, t.title, t.aliases from topic t
+      where t.archived_at is null and t.slug <> ${options.exclude ?? ""}${andOwnedBy(sql`t.owner_id`, options.owners)}
+    ),
+    fields as (
+      select slug, title, 'title' as field, title as value from live
+      union all select slug, title, 'slug', replace(slug, '-', ' ') from live
+      union all select l.slug, l.title, 'alias', a.value from live l, json_each(l.aliases) as a
+    ),
+    scored as (
+      select f.slug, f.title, f.field, f.value, c.value as against,
+             similarity(f.value, c.value) as score
+      from fields f
+      cross join json_each(${JSON.stringify(wanted)}) as c
+      where similarity(f.value, c.value) >= ${threshold}
+    ),
+    best as (
+      select *, row_number() over (
+        partition by slug order by score desc, field collate binary, value collate binary
+      ) as rn from scored
+    )
+    select slug, title, field, value, against, score from best where rn = 1
+    order by slug
   `);
   return rows
     .map((row) => ({ ...row, score: Math.round(Number(row.score) * 1000) / 1000 }))
@@ -1086,30 +1101,30 @@ export async function mapTopic(db: CatalogDatabase, input: MapInput, by: By): Pr
 /** What still points at a topic, each with a few ids, for the refusal to archive it. */
 async function usesOf(db: CatalogDatabase, slug: string): Promise<string[]> {
   const probes: [string, ReturnType<typeof sql>][] = [
-    ["live concepts filed under it", sql`select slug as id from concept where topic_slug = ${slug} and archived_at is null order by slug collate "C"`],
+    ["live concepts filed under it", sql`select slug as id from concept where topic_slug = ${slug} and archived_at is null order by slug collate binary`],
     [
       "live modules mapped to it",
       sql`select m.collection_id as id from collection_item m join collection c on c.id = m.collection_id
-          where m.topic_slug = ${slug} and c.kind = 'module' and c.archived_at is null order by m.collection_id collate "C"`,
+          where m.topic_slug = ${slug} and c.kind = 'module' and c.archived_at is null order by m.collection_id collate binary`,
     ],
-    ["manimkc paths mapped to it", sql`select path as id from manimkc_topic where topic_slug = ${slug} order by path collate "C"`],
+    ["manimkc paths mapped to it", sql`select path as id from manimkc_topic where topic_slug = ${slug} order by path collate binary`],
     [
       "relations to or from it",
       sql`select from_slug || ' ' || kind || ' ' || to_slug as id from topic_relation
-          where from_slug = ${slug} or to_slug = ${slug} order by (from_slug || ' ' || kind || ' ' || to_slug) collate "C"`,
+          where from_slug = ${slug} or to_slug = ${slug} order by (from_slug || ' ' || kind || ' ' || to_slug) collate binary`,
     ],
     [
       "live curriculum items linked to it",
       sql`select l.curriculum_item_id as id from curriculum_item_topic l
           join curriculum_item i on i.id = l.curriculum_item_id
-          where l.topic_slug = ${slug} and i.archived_at is null order by l.curriculum_item_id collate "C"`,
+          where l.topic_slug = ${slug} and i.archived_at is null order by l.curriculum_item_id collate binary`,
     ],
-    ["assets filed under it", sql`select asset_id as id from asset_topic where topic_slug = ${slug} order by asset_id collate "C"`],
-    ["diagrams filed under it", sql`select slug as id from diagram where topic_slug = ${slug} and archived_at is null order by slug collate "C"`],
-    ["studio videos filed under it", sql`select slug as id from video where topic_slug = ${slug} and archived_at is null order by slug collate "C"`],
+    ["assets filed under it", sql`select asset_id as id from asset_topic where topic_slug = ${slug} order by asset_id collate binary`],
+    ["diagrams filed under it", sql`select slug as id from diagram where topic_slug = ${slug} and archived_at is null order by slug collate binary`],
+    ["studio videos filed under it", sql`select slug as id from video where topic_slug = ${slug} and archived_at is null order by slug collate binary`],
     [
       "open studio jobs for it",
-      sql`select id from job where topic_slug = ${slug} and state in (${sql.join(JOB_ACTIVE_STATES.map((s) => sql`${s}`), sql`, `)}) order by id collate "C"`,
+      sql`select id from job where topic_slug = ${slug} and state in (${sql.join(JOB_ACTIVE_STATES.map((s) => sql`${s}`), sql`, `)}) order by id collate binary`,
     ],
   ];
   const out: string[] = [];
@@ -1224,7 +1239,7 @@ async function namedBy(db: CatalogDatabase, slug: string): Promise<Map<RevisionE
     [
       "topic",
       await ids(sql`
-        select ${slug}::text as id
+        select ${slug} as id
         union select from_slug from topic_relation where to_slug = ${slug}
         union select to_slug from topic_relation where from_slug = ${slug} and kind = 'related'`),
     ],
@@ -1324,7 +1339,7 @@ async function renameUnder(
         : (
             await tx.execute<{ path: string }>(sql`
               select a.path from asset a join asset_topic t on t.asset_id = a.id
-              where a.kind = 'diagram_source' and t.topic_slug = ${from} and a.path is not null order by a.path collate "C"`)
+              where a.kind = 'diagram_source' and t.topic_slug = ${from} and a.path is not null order by a.path collate binary`)
           ).rows.map((r) => r.path);
     if (restamp.length > 0 && input.restampDiagramsLater !== true) {
       throw new TopicError(
@@ -1363,13 +1378,13 @@ async function renameUnder(
       diagramsOwned?.source === "db"
         ? (
             await tx.execute<{ slug: string }>(
-              sql`select slug from diagram where topic_slug = ${from} and svg_blob_key is not null order by slug collate "C"`,
+              sql`select slug from diagram where topic_slug = ${from} and svg_blob_key is not null order by slug collate binary`,
             )
           ).rows.map((r) => diagramPaths(r.slug).svg)
         : (
             await tx.execute<{ path: string }>(sql`
               select a.path from asset a join asset_topic t on t.asset_id = a.id
-              where a.kind = 'diagram_svg' and t.topic_slug = ${from} and a.path is not null order by a.path collate "C"`)
+              where a.kind = 'diagram_svg' and t.topic_slug = ${from} and a.path is not null order by a.path collate binary`)
           ).rows.map((r) => r.path);
 
     const affected = await namedBy(tx, from);
@@ -1394,7 +1409,7 @@ async function renameUnder(
     const aliases = Array.isArray(row.aliases) ? (row.aliases as string[]) : [];
     await tx
       .update(topic)
-      .set({ slug: to, aliases: aliases.includes(from) ? aliases : [...aliases, from], updatedAt: sql`now()` })
+      .set({ slug: to, aliases: aliases.includes(from) ? aliases : [...aliases, from], updatedAt: sql`cast(unixepoch('subsec') * 1000 as integer)` })
       .where(eq(topic.slug, from));
 
     // 3. The related edges back, under whichever end is now smaller. An edge
@@ -1431,13 +1446,13 @@ async function renameUnder(
       if (document === null) continue;
       const bytes = canonicalJson(document);
       await tx.execute(sql`
-        update diagram set document = ${JSON.stringify(document)}::jsonb,
-          document_hash = ${sha256(bytes)}, updated_at = now()
+        update diagram set document = ${JSON.stringify(document)},
+          document_hash = ${sha256(bytes)}, updated_at = cast(unixepoch('subsec') * 1000 as integer)
         where slug = ${diagram.slug}`);
       // The `.tldr` asset's hash is the document's by definition (Track D,
       // `content/diagram-document.ts`), so it moves with the stamp.
       await tx.execute(sql`
-        update asset set content_hash = ${sha256(bytes)}, bytes = ${Buffer.byteLength(bytes, "utf8")}, updated_at = now()
+        update asset set content_hash = ${sha256(bytes)}, bytes = ${Buffer.byteLength(bytes, "utf8")}, updated_at = cast(unixepoch('subsec') * 1000 as integer)
         where id = ${`${ASSET_PREFIX.diagrams}${diagramPaths(diagram.slug).tldr}`}`);
     }
 
@@ -1453,16 +1468,16 @@ async function renameUnder(
       if (source === null) continue;
       const hash = sourceHash(source);
       await tx.execute(sql`
-        update video set source = ${JSON.stringify(source)}::jsonb, source_hash = ${hash},
+        update video set source = ${JSON.stringify(source)}, source_hash = ${hash},
           rendered_source_hash = case when rendered_source_hash = ${row.source_hash} then ${hash} else rendered_source_hash end,
-          updated_at = now()
+          updated_at = cast(unixepoch('subsec') * 1000 as integer)
         where slug = ${row.slug}`);
     }
 
     // 5. Open jobs' briefs. `job.topic_slug` followed by cascade; the brief is
     //    jsonb, and a finished job's brief is history, so only open ones move.
     const jobs = await tx.execute<{ id: string }>(sql`
-      update job set brief = jsonb_set(brief, '{topic}', to_jsonb(${to}::text)), updated_at = now()
+      update job set brief = json_set(brief, '$.topic', json_quote(${to})), updated_at = cast(unixepoch('subsec') * 1000 as integer)
       where state in (${sql.join(JOB_ACTIVE_STATES.map((s) => sql`${s}`), sql`, `)}) and brief ->> 'topic' = ${from}
       returning id`);
 

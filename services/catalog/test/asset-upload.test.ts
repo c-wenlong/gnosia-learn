@@ -19,6 +19,7 @@ import { ensureLearner } from "../src/state";
 import { BEFORE_BLOB_CONTRACT, partialMigrations } from "./partial-migrations";
 import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
 
+import { inTransaction } from "../src/db";
 /**
  * `catalog asset upload --source manimkc` and `catalog blob audit`
  * (docs/CONTENT-MIGRATION.md, Track E; edge cases 5 and 9), against a scratch
@@ -721,7 +722,7 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
       await uploadAssets(scratch.db, options());
       const video = await assetRow(VIDEO_ID);
       const transcript = await assetRow(TRANSCRIPT_ID);
-      const rows = await scratch.db.transaction((tx) =>
+      const rows = await inTransaction(scratch.db, (tx) =>
         keepBlobKeys(tx, {
           asset: [
             row(VIDEO_ID, "video", VIDEO_PATH, VIDEO),

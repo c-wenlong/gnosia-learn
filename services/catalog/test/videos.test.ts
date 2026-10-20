@@ -28,7 +28,7 @@ import { auditBlobs } from "../src/content/blob-audit";
 import { lockEntity } from "../src/content/revisions";
 import { addTopic, archiveTopic, renameTopic } from "../src/content/topics";
 import { ContentWriteError, writeContents } from "../src/content/write";
-import { connect, type CatalogDatabase } from "../src/db";
+import { connect, type CatalogDatabase, inTransaction } from "../src/db";
 import {
   checkoutVideo,
   listVideos,
@@ -94,7 +94,7 @@ async function holdLock(url: string, take: (tx: CatalogDatabase) => Promise<unkn
   const released = new Promise<void>((resolve) => (release = resolve));
   let holding!: (pid: number) => void;
   const held = new Promise<number>((resolve) => (holding = resolve));
-  const done = holder.db.transaction(async (tx) => {
+  const done = inTransaction(holder.db, async (tx) => {
     const { rows } = await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`);
     await take(tx);
     holding(Number(rows[0]!.pid));
@@ -1061,8 +1061,8 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
     // needs topics owned by the database, so the row says so for this check.
     const [had] = (await scratch.db.execute<{ source: string }>(sql`select source from content_source where type = 'topics'`)).rows;
     await scratch.db.execute(sql`
-      insert into content_source (type, source, flipped_at) values ('topics', 'db', now())
-      on conflict (type) do update set source = 'db', flipped_at = now()`);
+      insert into content_source (type, source, flipped_at) values ('topics', 'db', cast(unixepoch('subsec') * 1000 as integer))
+      on conflict (type) do update set source = 'db', flipped_at = cast(unixepoch('subsec') * 1000 as integer)`);
     try {
       await expect(archiveTopic(scratch.db, "video-rename-to", by)).rejects.toThrow(/studio videos filed under it: renamed-subject/);
     } finally {
