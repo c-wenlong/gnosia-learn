@@ -43,25 +43,25 @@ const catalogMock = vi.hoisted(() => ({
   videoList: vi.fn(),
   videoShow: vi.fn(),
 }));
-vi.mock("../src/catalog", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/catalog")>()),
+vi.mock("../src/data/catalog", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/data/catalog")>()),
   ...catalogMock,
 }));
 const canvasMock = vi.hoisted(() => ({ doctor: vi.fn(), canvas: vi.fn() }));
-vi.mock("../src/canvas", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/canvas")>()),
+vi.mock("../src/canvas/canvas", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/canvas/canvas")>()),
   doctor: canvasMock.doctor,
   // Only a draft opened on a diagram calls it here, for its `inspect`.
   canvas: canvasMock.canvas,
 }));
 
-const { Drafts } = await import("../src/drafts");
+const { Drafts } = await import("../src/drafts/drafts");
 const { narratedBrief } = await import("./video-fixture");
 const { CLAUDE_BIN } = await import("../src/config");
 // Never the real CLI: every turn here is the fake's.
 if (CLAUDE_BIN !== fake!.bin) throw new Error(`the planner would spawn ${CLAUDE_BIN}, not the fake`);
-const { JobStore, RecordStore } = await import("../src/store");
-const { JobRefused } = await import("../src/runner");
+const { JobStore, RecordStore } = await import("../src/data/store");
+const { JobRefused } = await import("../src/diagram/runner");
 const { draftJsonPath, plannerSystemPath, workDir, workPath } = await import("../src/paths");
 
 type DraftsT = InstanceType<typeof Drafts>;

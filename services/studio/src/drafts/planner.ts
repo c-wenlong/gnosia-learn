@@ -3,14 +3,14 @@ import { createHash } from "node:crypto";
 
 import type { TopicEntry } from "@self-learn/content";
 
-import { agentEnv } from "./agent";
-import { BriefError, validateBrief, type ValidBrief, type Vocabulary } from "./brief";
-import type { InspectReport } from "./canvas";
-import type { TopicProposal } from "./catalog";
-import { CLAUDE_BIN, KILL_GRACE_MS, PLANNER_IDLE_MS, PLANNER_TURN_MS, type AgentAuth } from "./config";
+import { agentEnv } from "../agent/agent";
+import { BriefError, validateBrief, type ValidBrief, type Vocabulary } from "../diagram/brief";
+import type { InspectReport } from "../canvas/canvas";
+import type { TopicProposal } from "../data/catalog";
+import { CLAUDE_BIN, KILL_GRACE_MS, PLANNER_IDLE_MS, PLANNER_TURN_MS, type AgentAuth } from "../config";
 import { isBriefKind, type BriefKind } from "./planner-prompt";
-import { signalGroup } from "./proc";
-import { validateVideoBrief, type ValidVideoBrief } from "./video/brief";
+import { signalGroup } from "../proc";
+import { validateVideoBrief, type ValidVideoBrief } from "../video/brief";
 
 /**
  * The planner: one `claude -p` per person turn, resumed turn by turn, that

@@ -4,11 +4,11 @@ import path from "node:path";
 
 import type { JobState } from "@self-learn/schema";
 
-import type { ValidBrief } from "./brief";
-import type { CanvasLint, VerifyCheck } from "./canvas";
-import type { Comparison } from "./compare";
-import { SSE_BUFFER, type AgentAuth } from "./config";
-import type { CostSource } from "./cost";
+import type { ValidBrief } from "../diagram/brief";
+import type { CanvasLint, VerifyCheck } from "../canvas/canvas";
+import type { Comparison } from "../diagram/compare";
+import { SSE_BUFFER, type AgentAuth } from "../config";
+import type { CostSource } from "../cost";
 import {
   jobDir,
   jobJsonPath,
@@ -16,8 +16,8 @@ import {
   sessionLogPath,
   studioHome,
   tmpDir,
-} from "./paths";
-import type { AgentSetting } from "./video/types";
+} from "../paths";
+import type { AgentSetting } from "../video/types";
 
 /**
  * The write-ahead log, and the only thing the API reads.

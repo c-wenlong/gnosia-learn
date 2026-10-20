@@ -8,7 +8,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vites
 
 import { fakeClaude, proposing, type FakeClaude } from "./fake-claude";
 import { candidatePath, candidateSvgPath, draftJsonPath, targetPath, targetSvgPath } from "../src/paths";
-import type { JobRecord } from "../src/store";
+import type { JobRecord } from "../src/data/store";
 import { topicListAnswer } from "./vocabulary";
 import { until } from "./wait";
 
@@ -42,8 +42,8 @@ const catalogMock = vi.hoisted(() => ({
 }));
 /** Catalog verbs this file reached without mocking them, by name. See the `afterEach`. */
 const unmocked = vi.hoisted(() => [] as string[]);
-vi.mock("../src/catalog", async (importOriginal) => {
-  const real = await importOriginal<typeof import("../src/catalog")>();
+vi.mock("../src/data/catalog", async (importOriginal) => {
+  const real = await importOriginal<typeof import("../src/data/catalog")>();
   // Every verb is a CLI spawn, so one this file did not mock is a stand-in
   // that records its name and answers "offline", never the real catalog.
   const standIns = Object.fromEntries(
@@ -60,22 +60,22 @@ vi.mock("../src/catalog", async (importOriginal) => {
   return { ...real, ...standIns, ...catalogMock };
 });
 const canvasMock = vi.hoisted(() => ({ doctor: vi.fn() }));
-vi.mock("../src/canvas", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/canvas")>()),
+vi.mock("../src/canvas/canvas", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/canvas/canvas")>()),
   doctor: canvasMock.doctor,
 }));
 // No job runs: the queue is not what these routes are about.
 const agentMock = vi.hoisted(() => ({ startAgent: vi.fn(() => new Promise(() => undefined)) }));
-vi.mock("../src/agent", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/agent")>()),
+vi.mock("../src/agent/agent", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/agent/agent")>()),
   startAgent: agentMock.startAgent,
 }));
 
 const { createApi } = await import("../src/api");
-const { Drafts } = await import("../src/drafts");
-const { JobStore } = await import("../src/store");
-const { Runner } = await import("../src/runner");
-const { Mirrors } = await import("../src/mirrors");
+const { Drafts } = await import("../src/drafts/drafts");
+const { JobStore } = await import("../src/data/store");
+const { Runner } = await import("../src/diagram/runner");
+const { Mirrors } = await import("../src/canvas/mirrors");
 
 const ok = (json: unknown = {}) => ({ ok: true, json, error: null, offline: false });
 

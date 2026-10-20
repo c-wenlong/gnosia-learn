@@ -3,7 +3,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { REPO_ROOT } from "../src/paths";
-import { jobWorkspacePath } from "../src/review";
+import { jobWorkspacePath } from "../src/diagram/review";
 
 /**
  * The A4 backstop leaves the studio's own paths out of `git status`. Only the

@@ -5,10 +5,10 @@ import path from "node:path";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const conceptShow = vi.hoisted(() => vi.fn());
-vi.mock("../src/catalog", () => ({ conceptShow }));
+vi.mock("../src/data/catalog", () => ({ conceptShow }));
 
 import { absolute, scratchDir } from "../src/paths";
-import { resolveSource } from "../src/source-note";
+import { resolveSource } from "../src/diagram/source-note";
 
 /**
  * A brief's source note since the cut-over: a note is a row, so a source that

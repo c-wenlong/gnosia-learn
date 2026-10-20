@@ -6,8 +6,8 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { byokEnv } from "../src/byok";
-import { qwenPlannerArgv } from "../src/planner";
+import { byokEnv } from "../src/agent/byok";
+import { qwenPlannerArgv } from "../src/drafts/planner";
 
 /**
  * The installed `qwen` itself, opt-in: `STUDIO_QWEN_LIVE=1` turns this on.

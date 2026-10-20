@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { studioHome } from "./paths";
+import { studioHome } from "../paths";
 
 /**
  * The last content the studio read successfully, kept so it can still work

@@ -1,11 +1,11 @@
-import { offeredModels, resolveDiagramAgent, resolveVideoAgent } from "./agent-settings";
-import { byokStatus } from "./byok";
-import { vocabularyStatus } from "./brief";
-import { doctor, doctorAnsweredAt, DOCTOR_TTL_MS } from "./canvas";
-import { status as catalogStatus, type CatalogResult } from "./catalog";
-import { CLAUDE_BIN, CODEX_BIN, plannerModel, QWEN_BIN } from "./config";
+import { offeredModels, resolveDiagramAgent, resolveVideoAgent } from "../agent/agent-settings";
+import { byokStatus } from "../agent/byok";
+import { vocabularyStatus } from "../diagram/brief";
+import { doctor, doctorAnsweredAt, DOCTOR_TTL_MS } from "../canvas/canvas";
+import { status as catalogStatus, type CatalogResult } from "../data/catalog";
+import { CLAUDE_BIN, CODEX_BIN, plannerModel, QWEN_BIN } from "../config";
 import { Probe } from "./probe";
-import { run, type RunResult } from "./proc";
+import { run, type RunResult } from "../proc";
 
 /**
  * The checks `/api/health` reports on, each kept by a `Probe` so that a health

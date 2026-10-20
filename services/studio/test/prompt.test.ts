@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { ValidBrief } from "../src/brief";
+import type { ValidBrief } from "../src/diagram/brief";
 import { candidatePath, candidateSvgPath, jobDir, mermaidPath } from "../src/paths";
 import {
   buildPrompt,
@@ -9,7 +9,7 @@ import {
   buildRevisePrompt,
   DATA_FENCE,
   DATA_FENCE_END,
-} from "../src/prompt";
+} from "../src/diagram/prompt";
 
 /**
  * Prompt assembly against a brief that is trying to take the session over.

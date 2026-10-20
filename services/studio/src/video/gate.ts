@@ -5,7 +5,7 @@ import path from "node:path";
 // the gate, step 9). A pure module with no imports, so reaching it by path
 // pulls nothing of the catalog's into this service.
 import { ffmpegArgs, POSTER_OFFSETS_SECONDS } from "../../../catalog/src/poster/recipe";
-import type { GateStep } from "../store";
+import type { GateStep } from "../data/store";
 import { MANIMKC_GATE } from "./backends/manimkc-gate";
 import { isNarrated, predictedSeconds, secondsForLines, type ValidVideoBrief } from "./brief";
 import { isLook, type WrapperCall, type SheetRead } from "./calls";

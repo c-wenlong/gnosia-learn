@@ -1,4 +1,4 @@
-import { NPM, run, type RunResult } from "./proc";
+import { NPM, run, type RunResult } from "../proc";
 
 /**
  * tldrawkc, through the one launcher the rest of the repo uses.

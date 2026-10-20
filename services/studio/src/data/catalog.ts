@@ -1,5 +1,5 @@
-import { studioOwner } from "./config";
-import { NPM, run } from "./proc";
+import { studioOwner } from "../config";
+import { NPM, run } from "../proc";
 
 /**
  * Postgres, reached only through `npm run --silent catalog --`.

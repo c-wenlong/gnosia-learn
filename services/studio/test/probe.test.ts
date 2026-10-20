@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { Probe } from "../src/probe";
+import { Probe } from "../src/probes/probe";
 
 /**
  * The probe `/api/health` reads through. What it owes a caller is timing, so

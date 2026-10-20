@@ -1,11 +1,11 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { draftDelete, type CatalogResult } from "./catalog";
-import { studioOwner } from "./config";
+import { draftDelete, type CatalogResult } from "../data/catalog";
+import { studioOwner } from "../config";
 import type { DraftRecord, Drafts } from "./drafts";
-import { jobJsonPath, studioHome } from "./paths";
-import type { JobStore } from "./store";
+import { jobJsonPath, studioHome } from "../paths";
+import type { JobStore } from "../data/store";
 
 /**
  * Pruning the drafts (D40 of docs/STUDIO-CHAT-FIRST.md).

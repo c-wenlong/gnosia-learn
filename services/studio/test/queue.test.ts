@@ -5,8 +5,8 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { validateBrief, type ValidBrief } from "../src/brief";
-import type { JobRecord } from "../src/store";
+import { validateBrief, type ValidBrief } from "../src/diagram/brief";
+import type { JobRecord } from "../src/data/store";
 import {
   absolute,
   candidatePath,
@@ -52,10 +52,10 @@ const catalogMock = vi.hoisted(() => ({
   diagramShow: vi.fn(async () => ({ ok: false, json: null, error: "unreachable", offline: true })),
   diagramCheckout: vi.fn(async () => ({ ok: false, json: null, error: "unreachable", offline: true })),
 }));
-vi.mock("../src/catalog", () => catalogMock);
+vi.mock("../src/data/catalog", () => catalogMock);
 
 const gateMock = vi.hoisted(() => ({ runGate: vi.fn(), narrate: vi.fn(() => "a step") }));
-vi.mock("../src/gate", () => gateMock);
+vi.mock("../src/diagram/gate", () => gateMock);
 
 /**
  * The before side of the comparison launches Chromium twice — `inspect` and
@@ -79,8 +79,8 @@ const compareMock = vi.hoisted(() => ({
     at: new Date().toISOString(),
   })),
 }));
-vi.mock("../src/compare", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/compare")>()),
+vi.mock("../src/diagram/compare", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/diagram/compare")>()),
   ...compareMock,
 }));
 
@@ -90,7 +90,7 @@ const reviewMock = vi.hoisted(() => ({
   discard: vi.fn(),
   reindex: vi.fn(),
 }));
-vi.mock("../src/review", () => reviewMock);
+vi.mock("../src/diagram/review", () => reviewMock);
 
 /** One controllable agent run: the test decides when it finishes and how. */
 interface FakeAgent {
@@ -105,10 +105,10 @@ const agentMock = vi.hoisted(() => ({
   sweepOrphans: vi.fn(async () => [] as number[]),
   AgentRun: class {},
 }));
-vi.mock("../src/agent", () => agentMock);
+vi.mock("../src/agent/agent", () => agentMock);
 
-const { Runner, JobRefused } = await import("../src/runner");
-const { JobStore } = await import("../src/store");
+const { Runner, JobRefused } = await import("../src/diagram/runner");
+const { JobStore } = await import("../src/data/store");
 
 const ok = { ok: true, json: {}, error: null, offline: false };
 

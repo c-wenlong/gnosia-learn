@@ -85,7 +85,7 @@ const catalogMock = vi.hoisted(() => ({
   videoCheckout: vi.fn(),
   preferenceGet: vi.fn(),
 }));
-vi.mock("../src/catalog", async (importOriginal) => ({ ...(await importOriginal<typeof import("../src/catalog")>()), ...catalogMock }));
+vi.mock("../src/data/catalog", async (importOriginal) => ({ ...(await importOriginal<typeof import("../src/data/catalog")>()), ...catalogMock }));
 
 const gateCalls = vi.hoisted(() => ({ count: 0 }));
 vi.mock("../src/video/backend", async (importOriginal) => {
@@ -120,7 +120,7 @@ vi.mock("../src/video/backend", async (importOriginal) => {
 const { CLAUDE_BIN } = await import("../src/config");
 if (CLAUDE_BIN !== path.join(fakeDir, "claude")) throw new Error(`the runner would spawn ${CLAUDE_BIN}, not the stand-in`);
 const { VideoRunner } = await import("../src/video/runner");
-const { RecordStore } = await import("../src/store");
+const { RecordStore } = await import("../src/data/store");
 const { silentBrief } = await import("./video-fixture");
 type VideoDoctorT = import("../src/video/doctor").VideoDoctor;
 type VideoDoctorReportT = import("../src/video/doctor").VideoDoctorReport;

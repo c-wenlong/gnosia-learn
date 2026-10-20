@@ -1,5 +1,5 @@
-import { DEFAULT_MODEL } from "./config";
-import { ratesFor } from "./cost";
+import { DEFAULT_MODEL } from "../config";
+import { ratesFor } from "../cost";
 import {
   DEFAULT_PREFERENCE,
   readClaudeDefaults,
@@ -7,8 +7,8 @@ import {
   resolveAgentSettings,
   resolveSetting,
   type AgentPreference,
-} from "./video/agent-model";
-import type { AgentSetting } from "./video/types";
+} from "../video/agent-model";
+import type { AgentSetting } from "../video/types";
 
 /**
  * The model and effort a job started now would run with, per kind (D53 of

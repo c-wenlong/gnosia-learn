@@ -6,8 +6,8 @@ import path from "node:path";
 import ignore from "ignore";
 import { afterAll, describe, expect, it } from "vitest";
 
-import { BASH_ALLOW, buildSettings, claudeTempRules, otherJobPatterns } from "../src/settings";
-import { cacheDir } from "../src/content-cache";
+import { BASH_ALLOW, buildSettings, claudeTempRules, otherJobPatterns } from "../src/diagram/settings";
+import { cacheDir } from "../src/data/content-cache";
 import {
   absolute,
   candidateDir,

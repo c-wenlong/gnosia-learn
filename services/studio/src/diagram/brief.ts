@@ -2,9 +2,9 @@ import type { TopicEntry } from "@self-learn/content";
 
 import { isAgentModel } from "@self-learn/schema/shared";
 
-import { topicList } from "./catalog";
-import { MERMAID_LIMIT, studioOwner, TEXT_LIMIT, VOCABULARY_STATUS_MS } from "./config";
-import { readThrough, type CachedRead } from "./content-cache";
+import { topicList } from "../data/catalog";
+import { MERMAID_LIMIT, studioOwner, TEXT_LIMIT, VOCABULARY_STATUS_MS } from "../config";
+import { readThrough, type CachedRead } from "../data/content-cache";
 
 /**
  * The brief, and the refusals that happen before anything is spent.

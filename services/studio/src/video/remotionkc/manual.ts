@@ -1,7 +1,7 @@
 import path from "node:path";
 
 import { run } from "../../proc";
-import { DATA_FENCE, DATA_FENCE_END } from "../../prompt";
+import { DATA_FENCE, DATA_FENCE_END } from "../../diagram/prompt";
 import { HELD_TAIL_SECONDS } from "../gate";
 import { videoPromptFacing } from "../prompt";
 import type { VideoPromptRequest } from "../backend";
