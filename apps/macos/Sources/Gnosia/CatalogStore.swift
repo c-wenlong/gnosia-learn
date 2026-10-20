@@ -14,9 +14,14 @@
 //  1970-01-01 UTC as REAL.
 //
 //  It also reads <data home>/learner.db — the owner's own marks (stars,
-//  watch positions, renames), a file beside the snapshot rather than in it
-//  because it is the one store this app will write itself. Read-only here;
-//  writes land with a later wave.
+//  watch positions, renames, course ticks), a file beside the snapshot
+//  rather than in it because it is the one store this app will write
+//  itself. The split, on purpose: this file stays the read model every
+//  view renders from, and LearnerStore is the writer — a write lands in
+//  learner.db, then `refreshLearner()` re-reads it so the two never drift.
+//  (The alternative — LearnerStore owning the reads too — would split the
+//  views between two stores, and progress merges below could not live in
+//  one place at all.)
 //
 
 import Foundation
@@ -287,11 +292,14 @@ struct CatalogReview: Hashable {
 }
 
 /// A ticked checklist row: `completedAt` is the tick, `note` the learner's
-/// marginalia; either can exist without the other.
+/// marginalia; either can exist without the other. `updatedAt` is when the
+/// row last changed — the merge clock when the snapshot's copy and this
+/// app's own write in learner.db both name an item.
 struct CatalogProgress: Hashable {
     let curriculumItemId: String
     let completedAt: Date?
     let note: String?
+    var updatedAt: Date? = nil
 }
 
 /// The durable "remind me what I learnt" record for one curriculum item.
@@ -421,8 +429,11 @@ final class CatalogStore {
     private(set) var mastery: [String: CatalogMastery] = [:]
     /// Every review card, ordered by due — `reviewDue` takes its prefix.
     private(set) var reviews: [CatalogReview] = []
-    /// Ticks and notes by curriculum item id.
+    /// Ticks and notes by curriculum item id — snapshot rows merged with
+    /// the app's own ticks from learner.db (loadLearner does the merge;
+    /// `snapshotProgress` is the half that survives a learner-only refresh).
     private(set) var progress: [String: CatalogProgress] = [:]
+    private var snapshotProgress: [String: CatalogProgress] = [:]
     private(set) var recaps: [String: CatalogRecap] = [:]
     /// The key/value corner as raw JSON text: playback rows
     /// (`playback:<asset id>`), stars (`favorite:<asset id>`) and the rest.
@@ -720,7 +731,7 @@ final class CatalogStore {
         var progress: [String: CatalogProgress] = [:]
         if tables.contains("progress") {
             let rows = try db.query("""
-                SELECT curriculum_item_id, completed_at, note
+                SELECT curriculum_item_id, completed_at, note, updated_at
                 FROM progress WHERE learner_id = 'local'
                 """)
             while rows.next() {
@@ -728,7 +739,8 @@ final class CatalogStore {
                 progress[item] = CatalogProgress(
                     curriculumItemId: item,
                     completedAt: rows.double(1).map { Date(timeIntervalSince1970: $0) },
-                    note: rows.text(2)
+                    note: rows.text(2),
+                    updatedAt: rows.double(3).map { Date(timeIntervalSince1970: $0) }
                 )
             }
         }
@@ -820,6 +832,7 @@ final class CatalogStore {
         self.mastery = mastery
         self.reviews = reviews
         self.progress = progress
+        snapshotProgress = progress
         self.recaps = recaps
         self.preferences = preferences
         self.watchedAt = watchedAt
@@ -1353,11 +1366,12 @@ func filesNoun(_ count: Int) -> String { count == 1 ? "file" : "files" }
 // MARK: - Learner marks
 //
 // <data home>/learner.db is the owner's own file: stars (`favorite`), watch
-// positions (`watch`) and renames (`asset_name`), written beside the
-// catalog rather than into the snapshot because it is the one store this
-// app will mutate itself. This side only reads, and reads tolerantly — a
-// missing file, a missing table or a half-written row is empty state, and
-// opening read-only means this app never creates the file by accident.
+// positions (`watch`), renames (`asset_name`) and course ticks (`progress`),
+// written beside the catalog rather than into the snapshot because it is
+// the one store this app mutates. This side only reads, and reads
+// tolerantly — a missing file, a missing table or a half-written row is
+// empty state, and opening read-only means this app never creates the file
+// by accident.
 
 /// One `watch` row: how far the owner got, and whether it counts as done.
 struct WatchMark: Hashable {
@@ -1379,44 +1393,76 @@ extension CatalogStore {
     /// The watch mark for this asset, or nil when never opened.
     func watchMark(_ id: String) -> WatchMark? { watch[id] }
 
-    /// The learner's rename when learner.db carries one, else the asset's
-    /// own title — what rows and detail panes should all print.
+    /// The learner's rename when either file carries one — this app's own
+    /// (learner.db) first, then the mirrored Postgres asset_name — else the
+    /// asset's own title. What rows and detail panes should all print.
     func displayTitle(for asset: CatalogAsset) -> String {
-        names[asset.id] ?? asset.displayTitle
+        names[asset.id] ?? assetNames[asset.id] ?? asset.displayTitle
+    }
+
+    /// The merged tick for one curriculum item, when either file has a row.
+    func progressMark(for itemID: String) -> CatalogProgress? {
+        progress[itemID]
+    }
+
+    /// Whether the item is ticked — `completed_at` non-null, the rule
+    /// readProgress in services/catalog/src/state/progress.ts answers with.
+    func isDone(_ itemID: String) -> Bool {
+        progress[itemID]?.completedAt != nil
+    }
+
+    /// How many of the module's items are ticked — the web module row's
+    /// done count (moduleMark's input in apps/web/src/lib/course-path.ts).
+    func itemsDone(in module: CourseModule) -> Int {
+        module.items.filter { isDone($0.id) }.count
     }
 
     fileprivate func loadLearner() {
         let path = location.learnerPath
-        guard
+        var starred = Set<String>()
+        var marks: [String: WatchMark] = [:]
+        var renames: [String: String] = [:]
+        var ticks: [String: CatalogProgress] = [:]
+
+        if
             FileManager.default.fileExists(atPath: path),
             let db = try? SQLiteDatabase(path: path)
-        else {
-            favorites = []
-            watch = [:]
-            names = [:]
-            return
-        }
-
-        var starred = Set<String>()
-        if let rows = try? db.query("SELECT asset_id FROM favorite") {
-            while rows.next() {
-                if let id = rows.text(0) { starred.insert(id) }
+        {
+            if let rows = try? db.query("SELECT asset_id FROM favorite") {
+                while rows.next() {
+                    if let id = rows.text(0) { starred.insert(id) }
+                }
             }
-        }
 
-        var marks: [String: WatchMark] = [:]
-        if let rows = try? db.query("SELECT asset_id, seconds, done FROM watch") {
-            while rows.next() {
-                guard let id = rows.text(0), let seconds = rows.double(1) else { continue }
-                marks[id] = WatchMark(seconds: seconds, done: (rows.int64(2) ?? 0) != 0)
+            if let rows = try? db.query("SELECT asset_id, seconds, done FROM watch") {
+                while rows.next() {
+                    guard let id = rows.text(0), let seconds = rows.double(1) else { continue }
+                    marks[id] = WatchMark(seconds: seconds, done: (rows.int64(2) ?? 0) != 0)
+                }
             }
-        }
 
-        var renames: [String: String] = [:]
-        if let rows = try? db.query("SELECT asset_id, name FROM asset_name") {
-            while rows.next() {
-                if let id = rows.text(0), let name = rows.text(1), !name.isEmpty {
-                    renames[id] = name
+            if let rows = try? db.query("SELECT asset_id, name FROM asset_name") {
+                while rows.next() {
+                    if let id = rows.text(0), let name = rows.text(1), !name.isEmpty {
+                        renames[id] = name
+                    }
+                }
+            }
+
+            if (try? db.hasTable("progress")) == true,
+               let rows = try? db.query("""
+                   SELECT curriculum_item_id, completed_at, note, updated_at
+                   FROM progress WHERE learner_id = 'local'
+                   """)
+            {
+                while rows.next() {
+                    guard let item = rows.text(0) else { continue }
+                    ticks[item] = CatalogProgress(
+                        curriculumItemId: item,
+                        completedAt: rows.double(1).map { Date(timeIntervalSince1970: $0) },
+                        note: rows.text(2),
+                        updatedAt: rows.double(3).map { Date(timeIntervalSince1970: $0) }
+                    )
                 }
             }
         }
@@ -1424,6 +1470,20 @@ extension CatalogStore {
         favorites = starred
         watch = marks
         names = renames
+
+        // The two progress sources merge per item: the snapshot's mirror of
+        // Postgres and this app's own writes in learner.db. The row with the
+        // newer `updated_at` is the truth whichever file it sits in — a
+        // learner.db untick (a NULL completed_at tombstone) masks the stale
+        // snapshot tick it came after, and a re-snapshot that picked up a
+        // web-side change outdates the local row in turn.
+        var merged = snapshotProgress
+        for (item, tick) in ticks {
+            if let have = merged[item],
+               (have.updatedAt ?? .distantPast) > (tick.updatedAt ?? .distantPast) { continue }
+            merged[item] = tick
+        }
+        progress = merged
     }
 }
 
