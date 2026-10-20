@@ -541,6 +541,11 @@ export type ThemeAppearance = (typeof THEME_APPEARANCES)[number];
 
 /** The mode a stored or posted value names, or null for anything else. */
 export function asThemeMode(value: unknown): ThemeMode | null {
+  // The palette predates the rename: cookies and preference rows written
+  // before it still say `self-learn*`, which are the gnosia modes renamed.
+  if (typeof value === "string" && value.startsWith("self-learn")) {
+    value = `gnosia${value.slice("self-learn".length)}`;
+  }
   return typeof value === "string" && (THEME_MODES as readonly string[]).includes(value) ? (value as ThemeMode) : null;
 }
 
@@ -717,7 +722,7 @@ export const emptyLearnerState = (): LearnerState => ({
  * unknown-typed: this is data written by an older build, so it is parsed
  * defensively rather than trusted.
  */
-export const LEGACY_STORAGE_KEY = "gnosia:v1";
+export const LEGACY_STORAGE_KEY = "self-learn:v1";
 
 /* -------------------------------------------------------------------------- */
 /* The studio: sessions and jobs                                              */

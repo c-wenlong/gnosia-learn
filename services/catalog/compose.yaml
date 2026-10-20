@@ -10,7 +10,10 @@
 # The image tag is pinned to the same major the Homebrew install runs, so a
 # migration cannot pass here and fail there on a version difference.
 
-name: gnosia-catalog
+# The project name stays self-learn-catalog: compose namespaces the volume
+# below with it (self-learn-catalog_catalog-data), and renaming the project
+# would point a deployment that already has data at a fresh, empty volume.
+name: self-learn-catalog
 
 services:
   postgres:

@@ -299,7 +299,7 @@ CREATE TRIGGER session_log_entry_no_delete
 	FOR EACH ROW EXECUTE FUNCTION catalog_append_only('A session log records what happened. Append a correcting entry, or fix the note it touched.');
 --> statement-breakpoint
 -- The write-seam guard (D4): a content write is refused unless the transaction
--- has set `gnosia.revision_id`, which only the seam in
+-- has set `self_learn.revision_id`, which only the seam in
 -- services/catalog/src/content/ does. Per row, so a referential action that
 -- touches nothing is not refused.
 --
@@ -311,7 +311,7 @@ CREATE TRIGGER session_log_entry_no_delete
 CREATE FUNCTION content_write_guard() RETURNS trigger
 	LANGUAGE plpgsql AS $$
 BEGIN
-	IF coalesce(current_setting('gnosia.revision_id', true), '') = '' THEN
+	IF coalesce(current_setting('self_learn.revision_id', true), '') = '' THEN
 		RAISE EXCEPTION '% is written only through the content write seam: % refused', TG_TABLE_NAME, TG_OP
 			USING ERRCODE = 'insufficient_privilege',
 			      HINT = 'Write through services/catalog/src/content/write.ts, which records who wrote it and why. A deliberate repair disables this trigger in its own transaction first.';
@@ -535,7 +535,7 @@ ALTER TABLE "collection_item" DISABLE TRIGGER collection_item_concept_topic;
 --
 -- Per statement, because on a copy a statement that would change nothing is
 -- still a write aimed at the wrong database, and TRUNCATE has no rows. A
--- connection that sets `gnosia.copy_ok = on` is let through: that is the
+-- connection that sets `self_learn.copy_ok = on` is let through: that is the
 -- flag tests and scripts/e2e.mjs pass (`CATALOG_COPY_OK=1`), and `catalog
 -- migrate` sets it, since a copy's schema still has to follow the primary's.
 -- `catalog_instance` itself is not guarded, so a copy can be promoted.
@@ -544,7 +544,7 @@ CREATE FUNCTION catalog_copy_guard() RETURNS trigger
 DECLARE
 	instance record;
 BEGIN
-	IF coalesce(current_setting('gnosia.copy_ok', true), '') = 'on' THEN
+	IF coalesce(current_setting('self_learn.copy_ok', true), '') = 'on' THEN
 		RETURN NULL;
 	END IF;
 	SELECT role, primary_host INTO instance FROM public.catalog_instance WHERE id;

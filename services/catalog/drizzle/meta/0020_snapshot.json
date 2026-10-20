@@ -211,7 +211,7 @@
         },
         "asset_source_repo_check": {
           "name": "asset_source_repo_check",
-          "value": "source_repo in ('gnosia', 'manimkc', 'tldrawkc', 'remotionkc', 'revideokc')"
+          "value": "source_repo in ('self-learn', 'manimkc', 'tldrawkc', 'remotionkc', 'revideokc')"
         },
         "asset_location_check": {
           "name": "asset_location_check",
