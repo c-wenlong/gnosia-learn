@@ -87,7 +87,9 @@ this repository is refused, since notes written there are untracked files in
 
 Four submodules make narrated videos: manimkc (ManimGL), remotionkc
 (Remotion), revideokc (Revideo, the Motion Canvas fork) and blenderkc
-(Blender's Cycles, photoreal 3D, made at a terminal only). They share one
+(Blender's Cycles, photoreal 3D, made at a terminal only). All four are
+private repositories, so a clone without access leaves `tools/` empty and
+needs nothing from them; `tools/tldrawkc` is the only public submodule. They share one
 voice, one report shape and one deliverable format, and differ in what they
 draw well. **Before making a video, run the `video-router` skill**
 (`.claude/skills/video-router/`); it applies
@@ -98,7 +100,7 @@ beyond the videos made so far.
 
 ## Asset generation: tools/manimkc/
 
-`tools/manimkc/` is a git **submodule** (its own repo,
+`tools/manimkc/` is a git **submodule** (its own private repo,
 github.com/c-wenlong/manimkc) that renders narrated animation videos with
 manim: ManimGL as the primary flavour, a Manim Community port alongside it,
 and a TTS narration layer synced to the animations. It exists so the
@@ -182,7 +184,7 @@ Rules of engagement:
 
 ## Asset generation: tools/remotionkc/
 
-`tools/remotionkc/` is the third git **submodule** (its own repo,
+`tools/remotionkc/` is the third git **submodule** (its own private repo,
 github.com/c-wenlong/remotionkc): narrated explainer videos made with
 Remotion, the second video tool beside manimkc. Its renders enter the catalog
 the way manimkc's do, as `video` assets with transcript, chapters and
@@ -228,7 +230,7 @@ Rules of engagement:
 
 ## Asset generation: tools/revideokc/
 
-`tools/revideokc/` is the fourth git **submodule** (its own repo,
+`tools/revideokc/` is the fourth git **submodule** (its own private repo,
 github.com/c-wenlong/revideokc): narrated explainer videos made with Revideo
 0.11, the maintained fork of Motion Canvas that renders headless, the third
 video tool. It is shaped like remotionkc on purpose: the same CLI verbs, the

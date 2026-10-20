@@ -8,7 +8,7 @@ and `catalog export` turns the content back into plain files at any time.
 ## Getting started
 
 ```bash
-git clone --recursive https://github.com/c-wenlong/self-learn.git
+git clone https://github.com/c-wenlong/self-learn.git
 cd self-learn
 npm ci
 cp .env.example apps/web/.env.local
@@ -58,16 +58,20 @@ provider key (`NVIDIA_API_KEY`, `GEMINI_API_KEY` or `OPENROUTER_API_KEY`).
 With none set, the `/api/agent/*` routes answer `MISSING_API_KEY` and the rest
 of the app works.
 
-> **Clone with `--recursive`.** `tools/manimkc/` is a git submodule, and manim
-> is a submodule inside that. An existing clone catches up with
-> `git submodule update --init --recursive`. Without it the directory is empty,
-> and so is the `AGENTS.md` in it that explains the ManimGL versus Manim
-> Community split, the no-LaTeX constraint and the render loop.
+> **Do not clone with `--recursive`.** `tools/manimkc/`, `tools/remotionkc/`,
+> `tools/revideokc/` and `tools/blenderkc/` are private repositories, so a
+> recursive clone fails on them; `tools/tldrawkc/` is the only public one.
+> A plain clone leaves the four directories empty and the app, tests and seed
+> import all work. On a machine with access,
+> `git submodule update --init tools/manimkc` fetches one (manim is a
+> submodule inside that, so add `--recursive` there), and the `AGENTS.md` in
+> it explains the ManimGL versus Manim Community split, the no-LaTeX
+> constraint and the render loop.
 
-> **A clone from before the re-layout needs a sync.** Both submodules moved
+> **A clone from before the re-layout needs a sync.** The submodules moved
 > from the repo root into `tools/`. Pull, then
 > `git submodule sync --recursive && git submodule update --init`, and delete
-> the empty `manimkc/` and `tldrawkc/` directories git leaves behind.
+> the empty directories git leaves behind at the old paths.
 
 > **`npm run canvas` needs a build first.** `tools/tldrawkc/` is the second
 > submodule, and the script runs `tools/tldrawkc/dist/cli/index.js`, which is
