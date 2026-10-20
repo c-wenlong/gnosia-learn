@@ -6,7 +6,7 @@ import path from "node:path";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import { afterAll, describe, expect, it } from "vitest";
 
-import { buildVideoPdf, readSegments } from "../src/pdf/build";
+import { buildVideoPdf, readSegments, segmentsFromText } from "../src/pdf/build";
 import { wrapCaption } from "../src/pdf/document";
 import { ffmpegPageArgs, pagePlan, PDF_MAX_PAGES, PDF_SILENT_EVERY_SECONDS } from "../src/pdf/recipe";
 
@@ -159,6 +159,16 @@ describe("readSegments", () => {
     await writeFile(shapeless, JSON.stringify({ cues: [] }));
     expect(await readSegments(shapeless)).toBeNull();
   });
+
+  it("skips an item that is not a segment rather than throwing on it", () => {
+    // `{"segments":[null]}` reached the field reads before the type check once;
+    // a malformed transcript must be a silent plan, never a stopped upload.
+    expect(segmentsFromText(JSON.stringify({ segments: [null, { start: 0, end: 4, text: "kept" }, "x", 7] }))).toEqual([
+      { start: 0, end: 4, text: "kept" },
+    ]);
+    expect(segmentsFromText("not json {")).toBeNull();
+    expect(segmentsFromText(JSON.stringify({ segments: [null] }))).toEqual([]);
+  });
 });
 
 describe("buildVideoPdf", () => {
@@ -192,5 +202,21 @@ describe("buildVideoPdf", () => {
     expect(made.ok).toBe(false);
     if (made.ok) return;
     expect(made.reason).toContain("page 1");
+  });
+
+  it("says why when the duration probe fails, rather than rejecting", async () => {
+    // A silent cut probes first. A dead ffmpeg must be `ok: false` like a
+    // dead frame cut, not a thrown failure the upload cannot continue past:
+    // a clean exit with no Duration line plans no pages, and a binary that
+    // cannot spawn at all comes back as the probe's reason.
+    const quiet = await buildVideoPdf(noFfmpeg, VIDEO, "Silent", null);
+    expect(quiet.ok).toBe(false);
+    if (quiet.ok) return;
+    expect(quiet.reason).toContain("no duration to spread frames over");
+
+    const dead = await buildVideoPdf(path.join(dir, "no-such-ffmpeg"), VIDEO, "Silent", null);
+    expect(dead.ok).toBe(false);
+    if (dead.ok) return;
+    expect(dead.reason).toContain("duration could not be probed");
   });
 });

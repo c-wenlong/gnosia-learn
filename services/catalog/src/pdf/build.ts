@@ -29,6 +29,7 @@ function segmentsOf(raw: unknown): PdfSegment[] | null {
   if (!Array.isArray(segments)) return null;
   const out: PdfSegment[] = [];
   for (const s of segments) {
+    if (typeof s !== "object" || s === null) continue;
     const seg = s as { start?: unknown; end?: unknown; text?: unknown };
     if (typeof seg.start !== "number" || typeof seg.end !== "number") continue;
     out.push({ start: seg.start, end: seg.end, text: typeof seg.text === "string" ? seg.text.trim() : "" });
@@ -36,16 +37,23 @@ function segmentsOf(raw: unknown): PdfSegment[] | null {
   return out;
 }
 
-/** The segments a transcript file lists, or null when there is no readable one. */
-export async function readSegments(transcriptFile: string | null): Promise<PdfSegment[] | null> {
-  if (transcriptFile === null) return null;
-  let raw: unknown;
+/** The segments a transcript's text lists, or null when it does not parse as one. */
+export function segmentsFromText(text: string): PdfSegment[] | null {
   try {
-    raw = JSON.parse(await readFile(transcriptFile, "utf8"));
+    return segmentsOf(JSON.parse(text));
   } catch {
     return null;
   }
-  return segmentsOf(raw);
+}
+
+/** The segments a transcript file lists, or null when there is no readable one. */
+export async function readSegments(transcriptFile: string | null): Promise<PdfSegment[] | null> {
+  if (transcriptFile === null) return null;
+  try {
+    return segmentsFromText(await readFile(transcriptFile, "utf8"));
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -61,8 +69,17 @@ export async function buildVideoPdf(
   segments: readonly PdfSegment[] | null,
 ): Promise<PdfResult> {
   // The plan needs a duration only for a silent cut; probe lazily so a
-  // narrated video never waits on a second ffmpeg spawn.
-  const duration = segments === null || segments.length === 0 ? await probeDuration(ffmpeg, videoFile) : null;
+  // narrated video never waits on a second ffmpeg spawn. A failed probe is
+  // `ok: false` like a failed frame, never a thrown failure — the PDF is a
+  // companion whose absence is a note, not a stopped upload.
+  let duration: number | null = null;
+  if (segments === null || segments.length === 0) {
+    try {
+      duration = await probeDuration(ffmpeg, videoFile);
+    } catch (error) {
+      return { ok: false, reason: `the duration could not be probed: ${error instanceof Error ? error.message : String(error)}` };
+    }
+  }
   const plan = pagePlan(segments, duration);
   if (plan.length === 0) {
     return {

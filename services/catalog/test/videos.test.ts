@@ -430,6 +430,85 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
     expect(await revisionCount()).toBe(before);
   });
 
+  it("keeps a retry accepted when today's ffmpeg cannot rebuild the landed PDF", async () => {
+    // The retry compares against the recorded outputs, not today's ability
+    // to rebuild the optional PDF: the landing holds it, and the retry
+    // answers with it.
+    const slug = "retry-pdf-swing";
+    const { job: queued } = await jobReady(slug);
+    const dir = await candidate(slug);
+    const landed = await put({ slug, dir, jobId: queued.id, base: null });
+    expect(landed.assets.map((a) => a.id)).toContain(`pdf:video:${slug}`);
+
+    const noFfmpeg = await put({ slug, dir, jobId: queued.id, base: null, ffmpeg: null });
+    expect(noFfmpeg).toMatchObject({ retry: true, changed: false });
+    const landedPdf = landed.assets.find((a) => a.id === `pdf:video:${slug}`);
+    expect(noFfmpeg.assets.find((a) => a.id === `pdf:video:${slug}`)?.sha256).toBe(landedPdf?.sha256);
+  });
+
+  it("keeps a retry accepted when it can now make a PDF the landing predates", async () => {
+    // And the reverse swing: ffmpeg absent for the landing, present for the
+    // retry. The landing does not grow — the note says why the made PDF is
+    // not attached, and a later put adds it.
+    const slug = "retry-pdf-gain";
+    const { job: queued } = await jobReady(slug);
+    const dir = await candidate(slug);
+    const landed = await put({ slug, dir, jobId: queued.id, base: null, ffmpeg: null });
+    expect(landed.assets.map((a) => a.id)).not.toContain(`pdf:video:${slug}`);
+
+    const again = await put({ slug, dir, jobId: queued.id, base: null });
+    expect(again).toMatchObject({ retry: true, changed: false });
+    expect(again.assets.map((a) => a.id)).not.toContain(`pdf:video:${slug}`);
+    expect(again.notes.some((n) => n.includes("landing predates"))).toBe(true);
+  });
+
+  it("drops the earlier cut's PDF when a new put cannot make one", async () => {
+    // A new cut without a new PDF: the earlier cut's document is deleted in
+    // the same transaction rather than served for video bytes it is not of.
+    const slug = "pdf-gone";
+    const { job: first } = await jobReady(slug);
+    const landed = await put({ slug, dir: await candidate(slug), jobId: first.id, base: null });
+    expect(landed.assets.map((a) => a.id)).toContain(`pdf:video:${slug}`);
+
+    const { job: change } = await jobReady(slug, briefOf(slug, { mode: "change" }), { parentJob: first.id });
+    const dir = await candidate(slug, { render: "a new cut" });
+    const result = await put({ slug, dir, jobId: change.id, base: landed.revision, ffmpeg: null });
+    expect(result).toMatchObject({ jobState: "accepted" });
+    expect(result.assets.map((a) => a.id)).not.toContain(`pdf:video:${slug}`);
+    expect(result.notes.some((n) => n.startsWith("no PDF:"))).toBe(true);
+    expect(result.notes.some((n) => n.includes(`pdf:video:${slug} deleted`))).toBe(true);
+    expect((await scratch.db.select().from(asset).where(eq(asset.id, `pdf:video:${slug}`))).length).toBe(0);
+  });
+
+  it("lands the video when the owner's cap refuses only its PDF", async () => {
+    // The PDF is optional: a cap that refuses its bytes is a note and a
+    // doctor-listed gap, never a failed put for the video it accompanies.
+    const slug = "cap-skips-pdf";
+    const { job: first } = await jobReady(slug);
+    const dir = await candidate(slug);
+    const landed = await put({ slug, dir, jobId: first.id, base: null, ffmpeg: null });
+    expect(landed.assets.map((a) => a.id)).not.toContain(`pdf:video:${slug}`);
+
+    const { job: second } = await jobReady(slug, briefOf(slug, { mode: "change" }), { parentJob: first.id });
+    // Every required blob is the same content-addressed bytes — already
+    // stored, so the cap never sees them — and the PDF is the only new
+    // object this put would store.
+    const saved = process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"];
+    process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"] = "0";
+    try {
+      const result = await put({ slug, dir, jobId: second.id, base: landed.revision });
+      expect(result).toMatchObject({ jobState: "accepted" });
+      expect(result.assets.map((a) => a.id)).not.toContain(`pdf:video:${slug}`);
+      expect(result.notes.some((n) => n.startsWith("no PDF:"))).toBe(true);
+      expect((await scratch.db.select().from(asset).where(eq(asset.id, `pdf:video:${slug}`))).length).toBe(0);
+      // No half-written outputs either: the job records the five it landed.
+      expect((await scratch.db.select().from(assetJob).where(eq(assetJob.jobId, second.id)))).toHaveLength(5);
+    } finally {
+      if (saved === undefined) delete process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"];
+      else process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"] = saved;
+    }
+  });
+
   it("refuses another owner's job, and a job for another slug", async () => {
     const slug = "not-yours";
     await scratch.db.insert(job).values({

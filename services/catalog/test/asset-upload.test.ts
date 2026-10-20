@@ -12,6 +12,7 @@ import { pdfId, posterId, uploadAssets, type AssetUploadOptions } from "../src/c
 import { auditBlobs, AUDIT_GRACE_MS } from "../src/content/blob-audit";
 import { keepBlobKeys } from "../src/index/blob-keys";
 import { buildRows, manimkcIndexer, type TopicsReport } from "../src/index/manimkc";
+import { buildVideoPdf } from "../src/pdf/build";
 import { writeSource } from "../src/index/writer";
 import { applyMigrations } from "../src/migrations";
 import { ensureLearner } from "../src/state";
@@ -249,6 +250,77 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
     expect(again.uploaded).toBe(0);
     expect(again.rowsWritten).toBe(0);
     expect(again.items.map((i) => i.action)).toEqual(["present", "present", "present", "present", "present"]);
+  });
+
+  it("remakes the PDF when the transcript moved, though the video's bytes did not", async () => {
+    await uploadAssets(scratch.db, options());
+    const before = (await assetRow(pdfId(VIDEO_ID)))?.contentHash;
+
+    // A reindex: the transcript's row names the new bytes and its blob is not
+    // yet stored, which is what `catalog import` leaves the upload. The
+    // video's bytes did not move, so the old `present` check alone would
+    // keep serving the old captions.
+    const moved = Buffer.from(JSON.stringify({ segments: [{ start: 0, end: 6, text: "A different narration now." }] }));
+    await writeFile(path.join(outRoot, TRANSCRIPT_PATH), moved);
+    await scratch.db
+      .update(asset)
+      .set({ contentHash: sha256(moved), bytes: moved.length, blobKey: null })
+      .where(eq(asset.id, TRANSCRIPT_ID));
+
+    const result = await uploadAssets(scratch.db, options());
+    const pdf = result.items.find((i) => i.id === pdfId(VIDEO_ID));
+    expect(pdf?.action).not.toBe("present");
+    const stored = await assetRow(pdfId(VIDEO_ID));
+    expect(stored?.contentHash).not.toBe(before);
+    // The new captions are in it: the same bytes building them by hand makes.
+    const expected = await buildVideoPdf(ffmpeg, path.join(outRoot, VIDEO_PATH), "Demo (video)", [
+      { start: 0, end: 6, text: "A different narration now." },
+    ]);
+    expect(expected.ok && stored?.blobKey === blobKey("local", sha256(expected.body), "pdf")).toBe(true);
+  });
+
+  it("pages the PDF from the transcript's confirmed blob, not a file that drifted since", async () => {
+    await uploadAssets(scratch.db, options());
+    // The transcript file moved on disk without a reindex; the row and its
+    // stored blob still name the confirmed bytes. When the render itself is
+    // re-cut, the rebuilt PDF must quote the blob, not the drifted file.
+    await writeFile(
+      path.join(outRoot, TRANSCRIPT_PATH),
+      JSON.stringify({ segments: [{ start: 0, end: 9, text: "words the catalog never accepted" }] }),
+    );
+    const moved = Buffer.from("a second render of demo");
+    await writeFile(path.join(outRoot, VIDEO_PATH), moved);
+    await scratch.db
+      .update(asset)
+      .set({ contentHash: sha256(moved), bytes: moved.length, blobKey: null })
+      .where(eq(asset.id, VIDEO_ID));
+
+    const result = await uploadAssets(scratch.db, options());
+    // The drifted file is invisible to `settle` while the confirmed blob is
+    // there — `present`, not refused — and the PDF is remade with it.
+    expect(result.items.find((i) => i.id === TRANSCRIPT_ID)?.action).toBe("present");
+    const stored = await assetRow(pdfId(VIDEO_ID));
+    const expected = await buildVideoPdf(ffmpeg, path.join(outRoot, VIDEO_PATH), "Demo (video)", [
+      { start: 0, end: 4, text: "Insertion sort keeps a sorted prefix on the left." },
+      { start: 4, end: 8, text: "Each new element slides left until it is bigger than its neighbour." },
+    ]);
+    expect(expected.ok && stored?.blobKey === blobKey("local", sha256(expected.body), "pdf")).toBe(true);
+  });
+
+  it("pages a refused transcript's PDF silent, never reading the drifted file", async () => {
+    // The transcript file changed since it was indexed and no blob was ever
+    // confirmed for it: the upload refuses it, and the PDF falls to the
+    // silent cadence — the drifted file is never read.
+    await writeFile(
+      path.join(outRoot, TRANSCRIPT_PATH),
+      JSON.stringify({ segments: [{ start: 0, end: 5, text: "words the catalog never accepted" }] }),
+    );
+    const result = await uploadAssets(scratch.db, options());
+    expect(result.items.find((i) => i.id === TRANSCRIPT_ID)?.action).toBe("refused");
+    const pdf = result.items.find((i) => i.id === pdfId(VIDEO_ID));
+    expect(pdf?.action).toBe("made");
+    const silent = await buildVideoPdf(ffmpeg, path.join(outRoot, VIDEO_PATH), "Demo (video)", null);
+    expect(silent.ok && pdf?.key === blobKey("local", sha256(silent.body), "pdf")).toBe(true);
   });
 
   it("refuses each file its owner's cap refuses, and goes on with the rest (phase 4)", async () => {

@@ -68,6 +68,9 @@ const KINDS: Record<string, { label: string; family: Family }> = {
   link: { label: "Link", family: "link" },
   // A still cut from a video by `catalog asset upload`, a companion of it.
   poster: { label: "Poster", family: "diagram" },
+  // A video's pages as a document, made with the poster; opens in the
+  // browser's own viewer, not as words.
+  pdf: { label: "PDF", family: "video" },
 };
 
 /** `diagram_source` reads as "Diagram source"; an unknown kind reads as itself. */

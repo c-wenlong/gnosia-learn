@@ -17,8 +17,8 @@ import {
   type TopicsReport,
   type VideoToolName,
 } from "../index/video-tool";
-import { buildVideoPdf, readSegments } from "../pdf/build";
-import { PDF_CONTENT_TYPE, PDF_EXTENSION } from "../pdf/recipe";
+import { buildVideoPdf, segmentsFromText } from "../pdf/build";
+import { PDF_CONTENT_TYPE, PDF_EXTENSION, type PdfSegment } from "../pdf/recipe";
 import { extractPoster } from "../poster/extract";
 import { POSTER_CONTENT_TYPE, POSTER_EXTENSION } from "../poster/recipe";
 import {
@@ -603,16 +603,18 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
     result.counts.videos += 1;
     const video = await settle(group.video);
     if (video !== null && video.changed) linkTo(group.video.row, video.key);
+    let transcriptSettled: { key: string; changed: boolean } | null = null;
     for (const sidecar of group.sidecars) {
       result.counts.sidecars += 1;
       const done = await settle(sidecar);
+      if (sidecar.row.kind === "transcript") transcriptSettled = done;
       if (done !== null && done.changed) linkTo(sidecar.row, done.key);
     }
 
     if (video !== null) {
       const poster = await settlePoster(group.video, video.changed);
       if (poster !== null) writes.push(poster);
-      const pdf = await settlePdf(group, video.changed);
+      const pdf = await settlePdf(group, video.changed, transcriptSettled);
       if (pdf !== null) writes.push(pdf);
     }
 
@@ -838,7 +840,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
    * transcript sidecar gives the page plan (one page per narration beat),
    * and a video without one falls back to a fixed cadence of frames.
    */
-  async function settlePdf(group: Group, videoChanged: boolean): Promise<WriteContentInput | null> {
+  async function settlePdf(group: Group, videoChanged: boolean, transcriptSettled: { key: string; changed: boolean } | null): Promise<WriteContentInput | null> {
     const video = group.video as Planned;
     const id = pdfId(video.row.id);
     const existing = rows.get(id);
@@ -859,11 +861,56 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
           .from(assetDerivation)
           .where(and(eq(assetDerivation.assetId, id), eq(assetDerivation.sourceAssetId, video.row.id)))
       ).length > 0;
-    // As `detach` on the poster: a video whose bytes just changed leaves its
-    // PDF picturing the old render, and nothing later would notice, so it is
-    // unhooked until an upload with a working ffmpeg makes the new one.
+    // What the PDF is made from: the video's bytes, its title, and the
+    // transcript's. `videoChanged` is this run's own signal for the first;
+    // the transcript's is the blob key it had when this PDF was last cut
+    // against the key `settle` confirmed now — `changed` alone is not it,
+    // since an import that already linked the new bytes leaves it false —
+    // and the title's is the row's own title.
+    const transcript = group.sidecars.find((s) => s.row.kind === "transcript");
+    const transcriptKey =
+      transcript === undefined ? null : (transcriptSettled?.key ?? (await alreadyStored(transcript.row, transcript.ext)));
+    let transcriptMoved = false;
+    if (existing !== undefined && derived && transcript !== undefined) {
+      const [watermark] = (
+        await db.execute<{ key: string | null }>(sql`
+          select (
+            select r.snapshot -> 'entity' ->> 'blob_key'
+            from content_revision r
+            where r.entity_type = 'asset' and r.entity_id = ${transcript.row.id} and r.id < (
+              select max(p.id) from (
+                select r.id, r.snapshot, lag(r.snapshot) over (order by r.id) as prev
+                from content_revision r
+                where r.entity_type = 'asset' and r.entity_id = ${id}
+              ) p
+              where p.snapshot -> 'links' -> 'asset_derivation' @> jsonb_build_array(jsonb_build_object('source_asset_id', ${video.row.id}::text))
+                and (
+                  p.prev is null
+                  or not coalesce(
+                    p.prev -> 'links' -> 'asset_derivation' @> jsonb_build_array(jsonb_build_object('source_asset_id', ${video.row.id}::text)),
+                    false
+                  )
+                  or p.prev -> 'entity' ->> 'blob_key' is distinct from p.snapshot -> 'entity' ->> 'blob_key'
+                )
+            )
+            order by r.id desc
+            limit 1
+          ) as key
+        `)
+      ).rows;
+      transcriptMoved = (watermark?.key ?? null) !== transcriptKey;
+    }
+    // A video whose inputs just changed leaves its PDF picturing the old
+    // render or quoting the old transcript, and nothing later would notice:
+    // the next run sees the video linked and the PDF present. So it is
+    // unhooked in the same write, as `detach` on the poster does for the
+    // render alone, until an upload with a working ffmpeg makes the new one.
+    const inputChanged =
+      videoChanged ||
+      transcriptMoved ||
+      (existing !== undefined && existing.title !== `${video.row.title ?? video.row.id} (PDF)`);
     const detach = (why: string): WriteContentInput | null => {
-      if (!videoChanged || existing === undefined || !derived) return null;
+      if (!inputChanged || existing === undefined || !derived) return null;
       items.push({ id, kind: "pdf", action: "detached", key: existing.blobKey, bytes: existing.bytes, detail: why });
       return {
         owner: existing.ownerId,
@@ -883,7 +930,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
       refuse(id, "pdf", why);
       return dryRun ? null : detach(why);
     }
-    if (current !== null && derived && !videoChanged) {
+    if (current !== null && derived && !inputChanged) {
       result.counts.pdfs += 1;
       items.push({ id, kind: "pdf", action: "present", key: current, bytes: existing?.bytes ?? null });
       return null;
@@ -929,8 +976,21 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
       refuse(id, "pdf", before);
       return detach(before);
     }
-    const transcript = group.sidecars.find((s) => s.row.kind === "transcript");
-    const segments = await readSegments(transcript?.file ?? null);
+    // The captions come from the transcript's confirmed blob — the bytes its
+    // row names — never the file: `settle` may have refused a file that
+    // changed since it was indexed, and a transcript linked in an earlier run
+    // can drift on disk afterwards. Either way the PDF quotes what the
+    // catalog serves, not what happens to be on disk.
+    let segments: PdfSegment[] | null = null;
+    if (transcriptKey !== null) {
+      try {
+        const chunks: Buffer[] = [];
+        for await (const chunk of (await store.get(transcriptKey)).body) chunks.push(chunk as Buffer);
+        segments = segmentsFromText(Buffer.concat(chunks).toString("utf8"));
+      } catch {
+        segments = null;
+      }
+    }
     const made = await buildVideoPdf(options.ffmpeg, video.file, video.row.title ?? video.row.id, segments);
     if (!made.ok) {
       refuse(id, "pdf", `no PDF could be made from ${video.row.path}: ${made.reason}`);

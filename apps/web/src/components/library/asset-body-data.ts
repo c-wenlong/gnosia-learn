@@ -75,7 +75,7 @@ export type Sidecars =
   | { state: "read"; chapters: VideoChapter[]; cues: ParsedTranscript["cues"]; dropped: number };
 
 /** The kinds drawn by something other than their words. */
-const RENDERED = new Set(["video", "diagram_svg", "link"]);
+const RENDERED = new Set(["video", "diagram_svg", "link", "pdf"]);
 
 /** The asset id a note's `![[name]]` embed names: the diagram rows' own. */
 export function embedAssetId(embed: string): string {
