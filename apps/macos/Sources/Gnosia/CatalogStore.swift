@@ -246,6 +246,10 @@ struct CatalogConcept: Identifiable, Hashable {
     let summary: String?
     let topicSlug: String
     let domain: String?
+    /// The note's logical path (`learn/concepts/<domain>/<slug>.md`) — the
+    /// same string a note asset's `path` carries, which is how the
+    /// workspace leaves the concept's own note out of its linked assets.
+    let path: String?
     let body: String?
     let tags: [String]
     let sources: [String]
@@ -271,6 +275,17 @@ struct CatalogMastery: Hashable {
     let observations: Int64
     let correct: Int64
     let lastSeen: Date?
+}
+
+/// One row of the mirrored event log. The snapshot ships only these fields —
+/// Postgres' promoted `concept_slug` and `session_id` columns are not
+/// mirrored — so `payload` is where `course`/`module`, `asset`, `goal` and
+/// `concepts` live, and an `observation` row cannot name its concept.
+struct CatalogEvent {
+    let id: Int64
+    let at: Date
+    let type: String
+    let payload: [String: Any]
 }
 
 /// One SM-2 card: `due` is when the concept is next owed, the rest is the
@@ -432,6 +447,20 @@ final class CatalogStore {
     private(set) var watchedAt: [String: Date] = [:]
     /// Asset id → the learner's own title, from the catalog's asset_name.
     private(set) var assetNames: [String: String] = [:]
+    /// The mirrored event log, in log order. The snapshot ships only
+    /// id/at/type/payload — Postgres' promoted `concept_slug` and
+    /// `session_id` columns stay behind (catalog-snapshot.mjs), so a surface
+    /// reads the payload for `course`/`module`/`asset`/`goal`/`concepts`
+    /// and accepts that an observation cannot name its concept.
+    private(set) var events: [CatalogEvent] = []
+    /// Concept slug → its `concept_curriculum_item` links as
+    /// (item id, authored position), item id ascending — the web's
+    /// `KbConcept.topics`/`positions` pair, keyed the same way.
+    private(set) var conceptItems: [String: [(itemId: String, position: Int)]] = [:]
+    /// The learning read model — concepts as KbConcepts, the frontier, the
+    /// path's standing — built from the rows above at the end of load().
+    /// Empty before the first load and after a failed one.
+    private(set) var learn = LearnGraph()
 
     // Learner marks, from <data home>/learner.db. Empty when the file is
     // absent or unreadable — a library without marks, not an error.
@@ -632,9 +661,11 @@ final class CatalogStore {
             let tagsColumn = extended ? "tags" : "NULL"
             let sourcesColumn = extended ? "sources" : "NULL"
             let authoredColumn = extended ? "authored_at" : "NULL"
+            let pathColumn = conceptColumns.contains("path") ? "path" : "NULL"
             let conceptRows = try db.query("""
                 SELECT slug, title, summary, topic_slug, domain, body,
-                       \(tagsColumn), \(sourcesColumn), \(authoredColumn), topic_position
+                       \(tagsColumn), \(sourcesColumn), \(authoredColumn), topic_position,
+                       \(pathColumn)
                 FROM concept
                 WHERE archived_at IS NULL
                 ORDER BY topic_slug, topic_position
@@ -647,6 +678,7 @@ final class CatalogStore {
                     summary: conceptRows.text(2),
                     topicSlug: conceptRows.text(3) ?? "",
                     domain: conceptRows.text(4),
+                    path: conceptRows.text(10),
                     body: conceptRows.text(5),
                     tags: jsonList(conceptRows.text(6)),
                     sources: jsonList(conceptRows.text(7)),
@@ -781,6 +813,44 @@ final class CatalogStore {
             }
         }
 
+        // The whole event log, newest surfaces need more than the `watched`
+        // fold above: `visit` rows carry course/module, `session-start` a
+        // `goal` concept slug, `session-close` a `concepts` list, and an
+        // `observation` its question text — which is as close as the mirror
+        // gets to naming the concept an observation belongs to.
+        var events: [CatalogEvent] = []
+        if tables.contains("event") {
+            let rows = try db.query("""
+                SELECT id, at, type, payload FROM event
+                WHERE learner_id = 'local' ORDER BY at, id
+                """)
+            while rows.next() {
+                guard let at = rows.double(1) else { continue }
+                events.append(CatalogEvent(
+                    id: rows.int64(0) ?? 0,
+                    at: Date(timeIntervalSince1970: at),
+                    type: rows.text(2) ?? "",
+                    payload: Self.jsonObject(rows.text(3))
+                ))
+            }
+        }
+
+        // Concept → curriculum-item links, item id ascending — the direction
+        // loadCourses' link read does not keep, and the web's
+        // KbConcept.topics/positions pair that placement reads.
+        var conceptItems: [String: [(itemId: String, position: Int)]] = [:]
+        if tables.contains("concept_curriculum_item") {
+            let rows = try db.query("""
+                SELECT concept_slug, curriculum_item_id, position
+                FROM concept_curriculum_item
+                ORDER BY concept_slug, curriculum_item_id
+                """)
+            while rows.next() {
+                guard let slug = rows.text(0), let item = rows.text(1) else { continue }
+                conceptItems[slug, default: []].append((itemId: item, position: Int(rows.int64(2) ?? 0)))
+            }
+        }
+
         var assetNames: [String: String] = [:]
         if tables.contains("asset_name") {
             let rows = try db.query("SELECT asset_id, title FROM asset_name WHERE learner_id = 'local'")
@@ -823,6 +893,8 @@ final class CatalogStore {
         self.recaps = recaps
         self.preferences = preferences
         self.watchedAt = watchedAt
+        self.events = events
+        self.conceptItems = conceptItems
         self.assetNames = assetNames
         conceptBodies = bodies
         self.noteConcepts = noteConcepts
@@ -836,6 +908,21 @@ final class CatalogStore {
         if try db.hasTable("collection") {
             try loadCourses(db, ordered: ordered)
         }
+
+        // The learning graph goes last: it folds the course tree, the
+        // concept rows and the learner state into the knowledge base the
+        // learn surfaces all read.
+        learn = LearnGraph(
+            concepts: conceptList,
+            prerequisites: prerequisites,
+            mastery: mastery,
+            reviews: reviews,
+            conceptItems: conceptItems,
+            courses: courses,
+            progress: progress,
+            preferences: preferences,
+            knownTopics: Set(topicsBySlug.keys)
+        )
     }
 
     // MARK: - Sidecars

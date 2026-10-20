@@ -2,8 +2,8 @@
 //  GnosiaApp.swift
 //  Gnosia
 //
-//  The app shell: one window onto the library, and a Settings pane for the
-//  catalog path. Runs unbundled from `swift run`, so init() also asks for a
+//  The app shell: one window onto RootView's five surfaces, and a Settings
+//  pane for the catalog path. Runs unbundled from `swift run`, so init() also asks for a
 //  regular activation policy — a bare executable gets no .app bundle to tell
 //  the window server it is a foreground app, and without this the window can
 //  open behind the terminal.
@@ -23,7 +23,7 @@ struct GnosiaApp: App {
 
     var body: some Scene {
         WindowGroup("Gnosia") {
-            LibraryView()
+            RootView()
                 .environment(store)
                 .frame(minWidth: 920, minHeight: 560)
                 .task { store.loadIfNeeded() }
