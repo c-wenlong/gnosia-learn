@@ -481,6 +481,10 @@ final class LearnerStore {
         ]
         if !write.sessionTitle.isEmpty { body["sessionTitle"] = write.sessionTitle }
         if !write.sessionGoal.isEmpty { body["sessionGoal"] = write.sessionGoal }
+        // A week check names its module — the web's `module`, validated
+        // server-side as a live module the owner can read. A concept
+        // session sends no key, as the web's payload does.
+        if let module = write.module { body["module"] = module }
         return try? JSONSerialization.data(withJSONObject: body)
     }
 
@@ -587,6 +591,9 @@ final class LearnerStore {
         payload["question"] = write.question ?? NSNull()
         payload["answer"] = write.answer ?? NSNull()
         payload["chosen"] = write.chosen ?? NSNull()
+        // `module` on a week check's event — recordObservation's
+        // `module: weekModule?.id`, absent on a concept session's.
+        if let module = write.module { payload["module"] = module }
         try db.run(
             "INSERT INTO event (at, learner_id, type, payload) VALUES (?, 'local', 'observation', ?)",
             [.real(at), .text(Self.json(payload))]

@@ -19,6 +19,19 @@ struct LearnView: View {
     @State private var selection: String?
     @State private var filter: IndexFilter = .all
     @State private var search = ""
+    /// The draft slots: the concept workspaces kept mounted behind the
+    /// selected one, most recently used last. The web keeps the
+    /// concept's in-progress session per page visit — here a workspace
+    /// stays alive while it is still in the recent set, so a session
+    /// walked part-way in the centre panel is where the learner left it
+    /// when they come back, and the slot evicted beyond the bound is
+    /// the web's "went away": its session closes as the view unmounts.
+    @State private var mounted: [String] = []
+
+    /// How many workspaces stay alive at once. The web's per-tab store
+    /// has no bound; eight is the working set a browse keeps, past which
+    /// the oldest slot closes like the page it replaced.
+    private static let draftSlots = 8
 
     /// Every row once — the page's toRow order kept (studied before
     /// untouched, alphabetical within each). The Status menu's counts and
@@ -88,11 +101,20 @@ struct LearnView: View {
             Divider().overlay(G.border)
 
             NavigationStack {
-                Group {
-                    if let slug = selection, let concept = store.concept(slug) {
-                        ConceptDetailView(concept: concept)
-                            .id(slug)
-                    } else {
+                // Every workspace in the recent set stays mounted, the
+                // selected one drawn on top and the rest hidden — the
+                // per-concept slots the web's sessionStorage gives each
+                // tutor session, kept alive for a trip away and back.
+                ZStack {
+                    ForEach(mounted, id: \.self) { slug in
+                        if let concept = store.concept(slug) {
+                            ConceptDetailView(concept: concept)
+                                .opacity(slug == selection ? 1 : 0)
+                                .allowsHitTesting(slug == selection)
+                                .accessibilityHidden(slug != selection)
+                        }
+                    }
+                    if selection == nil || selection.flatMap({ store.concept($0) }) == nil {
                         ContentUnavailableView(
                             "Select a concept",
                             systemImage: "brain",
@@ -104,9 +126,20 @@ struct LearnView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .onChange(of: selection) { _, slug in touch(slug) }
         .onAppear {
             if selection == nil { selection = store.learn.defaultSelection() }
         }
+    }
+
+    /// `slug` visited: it becomes the freshest slot, evicting the
+    /// stalest past the bound — its unmount is the page leave that
+    /// closes what its session had open.
+    private func touch(_ slug: String?) {
+        guard let slug else { return }
+        mounted.removeAll { $0 == slug }
+        mounted.append(slug)
+        while mounted.count > Self.draftSlots { mounted.removeFirst() }
     }
 
     /// The Status menu — every filter with how many rows it shows, counted
