@@ -478,22 +478,8 @@ func topicSections(
 
 // MARK: - Topic ranks (domain-map.ts + domain-view.ts)
 
-/// A domain slug as words: `classical-ai` reads "Classical AI", `hci`
-/// reads "HCI" — `domainTitle`.
-private let domainAcronyms: Set<String> = [
-    "ai", "hci", "llm", "llms", "ml", "ui", "ux", "gpu", "cpu", "os", "nlp", "rl",
-]
-
-func domainTitle(_ slug: String) -> String {
-    let words = slug.split(whereSeparator: { "-_ \t".contains($0) }).filter { !$0.isEmpty }
-    guard !words.isEmpty else { return "Other" }
-    return words.enumerated().map { i, w in
-        let word = String(w)
-        return domainAcronyms.contains(word.lowercased())
-            ? word.uppercased()
-            : (i == 0 ? word.prefix(1).uppercased() + word.dropFirst() : word)
-    }.joined(separator: " ")
-}
+// `domainTitle` lives in LearnMap.swift — one port shared by the board
+// and the library's topic grouping.
 
 /// The topic grouping's section order — `topicRanks`: domain by domain,
 /// the domains by title A to Z, and inside a domain `topicOrder`, the
