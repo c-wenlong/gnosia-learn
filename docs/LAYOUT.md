@@ -132,9 +132,9 @@ content source (the database, or a refusal naming `catalog flip <type>`),
 A SwiftPM executable package, `Package.swift` at its root and
 `swift run Gnosia` or `scripts/bundle-app.sh` (which codesigns a `Gnosia.app`
 bundle with an `Info.plist` and icon) to run it. The `package.json` beside it
-exists only so the snapshot script's two npm dependencies (`better-sqlite3`,
-`pg`) resolve inside the workspaces: `npm run snapshot -w @gnosia/macos`
-refreshes `catalog.db`.
+exists only so the snapshot script's npm dependency (`better-sqlite3`)
+resolves inside the workspaces: `npm run snapshot -w @gnosia/macos`
+refreshes `app-catalog.db`.
 
 ```
 apps/macos/
@@ -144,7 +144,7 @@ apps/macos/
 │   └── Gnosia/                   the app, one file per surface or model
 ├── Resources/                    in Sources/Gnosia: the mark and wordmarks
 ├── scripts/
-│   ├── catalog-snapshot.mjs      Postgres → catalog.db
+│   ├── catalog-snapshot.mjs      catalog.db → app-catalog.db
 │   └── bundle-app.sh             .app bundle, adhoc-signed
 └── package.json                  the snapshot script's npm shell
 ```
@@ -154,7 +154,7 @@ says which web surface it ports. The read model first:
 
 | File | Owns |
 | --- | --- |
-| `CatalogStore.swift` | The whole read model: `catalog.db` opened read-only, `learner.db` merged over it, the catalog's paths resolved (see the data root below). `SQLiteDatabase` in the same file is the raw SQLite shell |
+| `CatalogStore.swift` | The whole read model: `app-catalog.db` opened read-only, `learner.db` merged over it, the catalog's paths resolved (see the data root below). `SQLiteDatabase` in the same file is the raw SQLite shell |
 | `LearnModel.swift` | The learning arithmetic ported to the mirror: BKT buckets, the learn index, the review queue, home's threads — kept in step with the named `apps/web/src/lib/` modules |
 | `LearnerStore.swift` | The writable half: `learner.db`'s `watch`, `favorite`, `asset_name`, `progress` marks and the `session`/`event`/`mastery`/`review` tables a check session writes, column for column the catalog's |
 | `LearnerControls.swift` | The write affordances (star, mark watched, rename, topic tick); every write is `LearnerStore` then `refreshLearner()` |
@@ -180,14 +180,15 @@ The shell and destinations (`GnosiaApp.swift` is the entry point,
 | `ReviewView.swift` | The due queue, read-only — grading stays in the web app and CLI |
 | `LibraryView.swift`, `AssetDetailView.swift`, `VideoDetailView.swift`, `MediaViews.swift` | The grid, the per-kind detail dispatch, the video page, and the AVKit/PDFKit/QuickLook surfaces |
 | `AskView.swift`, `AssetAskPanel.swift` | The open tutor, and the asset chat as an inspector panel |
-| `SettingsView.swift`, `TutorSettingsView.swift` | The ⌘, pane: where `catalog.db` is, and the tutor's keys and chain through the sidecar |
+| `SettingsView.swift`, `TutorSettingsView.swift` | The ⌘, pane: where `app-catalog.db` is, and the tutor's keys and chain through the sidecar |
 | `StudioView.swift`, `StudioDetails.swift`, `SvgRasterizer.swift` | The studio surface, its job/diagram/draft detail screens, and the one-WKWebView SVG rasterizer they share |
 | `Theme.swift` | The brand palette, token for token from the web's `.gnosia` blocks |
 
-## services/catalog — Postgres and the CLIs
+## services/catalog — the catalog database and the CLIs
 
-The only thing in the repo that talks to Postgres; `drizzle/` holds the
-generated migrations. `src/` divides by who a file serves:
+The only thing in the repo that talks to the catalog's SQLite file;
+`drizzle-sqlite/` holds the generated migrations (`drizzle/` is the Postgres
+set the port came from). `src/` divides by who a file serves:
 
 | Directory | What lives there |
 | --- | --- |
@@ -289,7 +290,8 @@ snapshot script and the app, then `~/.gnosia`. `GNOSIA_CATALOG` and
 | Path | What it is |
 | --- | --- |
 | `blobs/` | The `fs` blob store: every asset's bytes keyed `<owner>/<sha256>.<ext>` |
-| `catalog.db` | The SQLite snapshot `apps/macos/scripts/catalog-snapshot.mjs` writes; the app's read model, replaced wholesale each run |
+| `catalog.db` | The live catalog database — the SQLite file `CATALOG_DB`/`DATABASE_URL` names, which `services/catalog` and the web app read and write |
+| `app-catalog.db` | The snapshot `apps/macos/scripts/catalog-snapshot.mjs` mirrors out of `catalog.db`; the native app's read model, replaced wholesale each run |
 | `learner.db` | The native app's writable store: its marks and the learning state its sessions write |
 | `topics/` | A checkout per video tool of its topic sources (`topics/manimkc/` is itself a git repo holding `agentic-ai/`, `algorithms/`, …): authored material kept outside the submodules, so a tool's move or a fresh clone loses no source |
 | `manimkc/`, `remotionkc/`, `revideokc/`, `blenderkc/` | The tools' `*_HOME` data roots when the owner keeps them here: renders, narration caches, state |
@@ -301,6 +303,5 @@ snapshot script and the app, then `~/.gnosia`. `GNOSIA_CATALOG` and
 Which of these a given machine has is convention, not code: the catalog reads
 each tool's checkout from its `*_ROOT` variable and its output location from
 the report's `outRoot`, so nothing in `services/` goes looking under
-`~/.gnosia`. Postgres stays out of the list for the same reason in reverse:
-the catalog's authority is the database `DATABASE_URL` names, and
-`catalog.db` is a mirror of it, never a peer.
+`~/.gnosia`. The two databases are not peers: `catalog.db` is the authority
+and `app-catalog.db` a mirror of it, never the other way.

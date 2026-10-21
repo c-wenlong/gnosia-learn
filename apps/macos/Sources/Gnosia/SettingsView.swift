@@ -24,7 +24,7 @@ struct SettingsView: View {
             Section("Catalog") {
                 TextField("Catalog SQLite file:", text: $catalogPath)
                     .textFieldStyle(.roundedBorder)
-                Text("Leave empty for the default: <data home>/catalog.db — " +
+                Text("Leave empty for the default: <data home>/app-catalog.db — " +
                      "$GNOSIA_HOME, then $SELF_LEARN_HOME, then ~/.gnosia. GNOSIA_CATALOG overrides it.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -44,11 +44,11 @@ struct SettingsView: View {
             }
 
             // The mirror queue, only when it has something to say: writes
-            // learner.db still owes Postgres, plus what gave up retrying.
+            // learner.db still owes the catalog, plus what gave up retrying.
             if learner.pendingMirrors > 0 || learner.droppedMirrors > 0 {
                 Section("Learner mirror") {
                     if learner.pendingMirrors > 0 {
-                        LabeledContent("Writes owed to Postgres") {
+                        LabeledContent("Writes owed to the catalog") {
                             Text("\(learner.pendingMirrors)")
                         }
                     }

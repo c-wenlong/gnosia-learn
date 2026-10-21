@@ -31,12 +31,12 @@ instructions are not in this repo at all.
                         ┌────────────────────────────────────────────────────────┐
                         │ services/catalog: the content (courses, topics, tags,  │
                         │ notes, session logs, diagrams) and the learner state,  │
-                        │ all in Postgres                                        │
+                        │ all in one SQLite file                                 │
                         └────────────────────────────────────────────────────────┘
                                    │                     │
                   the app calls    │   the app and the   │  npm run snapshot
                   both over        │   web's /studio     ▼
-                  loopback         │   proxy call it  ~/.gnosia/catalog.db
+                  loopback         │   proxy call it  ~/.gnosia/app-catalog.db
                                    │   (connect-only)   (read-only mirror)
          services/sidecar          │            + ~/.gnosia/learner.db
          services/studio           │             (the app's writable half)
@@ -51,7 +51,7 @@ instructions are not in this repo at all.
 | --- | --- | --- |
 | Instructions | `learning` plugin, `learning` marketplace | The `/learn` and `/review` skills, plus the `concept-mapper`, `fact-checker` and `diagram-maker` subagents |
 | Code | `scripts/learn/`, `apps/web/`, `apps/macos/` | The pipeline CLI, the web app and the native macOS app |
-| Data | Postgres, through `services/catalog/`; `~/.gnosia/` for the local half | Courses, topics, tags, concept notes, session logs and diagrams, the event log and its projections in Postgres; the blob store, the `catalog.db` snapshot and the app's `learner.db` under the data root. The repository holds only `seed/`, a small slice in the export format |
+| Data | SQLite, through `services/catalog/`; `~/.gnosia/` for the local half | Courses, topics, tags, concept notes, session logs and diagrams, the event log and its projections in the catalog; the blob store, the `app-catalog.db` snapshot and the app's `learner.db` under the data root. The repository holds only `seed/`, a small slice in the export format |
 | Assets | `tools/manimkc/` | A separate repo, wired in as a submodule, that renders narrated animation videos |
 | Assets | `tools/remotionkc/` | A separate repo, wired in as a submodule, that renders narrated explainer videos with Remotion; its `topics --json` is manimkc's report shape |
 | Assets | `tools/revideokc/` | A separate repo, wired in as a submodule, that renders narrated explainer videos with Revideo; its `topics --json` is manimkc's report shape too |
@@ -455,21 +455,21 @@ store rather than the route: the database wins, and a curriculum item id the
 catalog no longer has is skipped and counted rather than costing the learner
 the rest of the document.
 
-**The native app splits this in two.** `catalog.db` is a mirror — the snapshot
-below — and a mirror that a snapshot run replaces wholesale cannot be the
-writable store: anything the learner wrote into it would vanish at the next
-refresh. So the app's own writes land in `learner.db`, a second SQLite file
-beside it, owned by `LearnerStore`. The small marks are its own (`watch`,
-`favorite`, `asset_name`, `progress`); the learning-state tables a check
-session writes (`session`, `event`, `mastery`, `review`) are column for
-column the Postgres tables the snapshot mirrors, so `recordSessionAnswer` is
-the web's `POST /api/learner/observe` as a local equivalent and a later sync
-has nothing to reshape. `CatalogStore` reads both files into one model —
-the snapshot's Postgres-side learner rows plus the app's own — and
+**The native app splits this in two.** `app-catalog.db` is a mirror — the
+snapshot below — and a mirror that a snapshot run replaces wholesale cannot
+be the writable store: anything the learner wrote into it would vanish at the
+next refresh. So the app's own writes land in `learner.db`, a second SQLite
+file beside it, owned by `LearnerStore`. The small marks are its own
+(`watch`, `favorite`, `asset_name`, `progress`); the learning-state tables a
+check session writes (`session`, `event`, `mastery`, `review`) are column
+for column the catalog tables the snapshot mirrors, so `recordSessionAnswer`
+is the web's `POST /api/learner/observe` as a local equivalent and a later
+sync has nothing to reshape. `CatalogStore` reads both files into one
+model — the snapshot's catalog-side learner rows plus the app's own — and
 `refreshLearner()` re-reads the file after each write, so the read model can
 never show a state the write did not land. The tutor's settings are a
 different door: provider keys and the model chain are owner configuration in
-Postgres, and the app edits them through the sidecar's `/api/learner/*`
+the catalog, and the app edits them through the sidecar's `/api/learner/*`
 routes, the same contract the web Settings page writes against.
 
 ## The course data model
@@ -590,36 +590,40 @@ native pane lets the runner apply its own defaults.
 
 **The catalog reaches it as a file, not a connection.**
 `apps/macos/scripts/catalog-snapshot.mjs` (`npm run snapshot -w
-@gnosia/macos`) reads `DATABASE_URL` — `services/catalog/.env` filling the
-gaps, the shell winning — and writes `<data home>/catalog.db`, where the
-data home is `GNOSIA_HOME`, then `SELF_LEARN_HOME`, then `~/.gnosia`;
-`GNOSIA_CATALOG` or `--out` overrides the file itself. The write is a
-`.partial` file renamed into place, so a reader never meets a half-written
-snapshot. `PRAGMA user_version = 3` and a `snapshot_meta` table (generator,
-`schema_version`, `source`, `taken_at`, `source_database` — the database
-name, never the URL, since a URL can carry a password) say where the file
-came from. Column names mirror `packages/schema/src/content.ts`; timestamps
-go over as `REAL` seconds since the epoch (`extract(epoch from …)`), jsonb
-as its `::text`, booleans 0/1, and `asset.generated_by` is the one computed
-column — which tool made a row, so the app never repeats that join.
+@gnosia/macos`) resolves the catalog the way every command does — `CATALOG_DB`,
+then `DATABASE_URL`, `services/catalog/.env` filling the gaps, the shell
+winning, then the live file under the data home — and writes
+`<data home>/app-catalog.db`, where the data home is `GNOSIA_HOME`, then
+`SELF_LEARN_HOME`, then `~/.gnosia`; `GNOSIA_CATALOG` or `--out` overrides
+the file itself. `app-catalog.db`, not `catalog.db`: the live database owns
+that name now, and the script refuses when source and target would be one
+file. The write is a `.partial` file renamed into place, so a reader never
+meets a half-written snapshot. `PRAGMA user_version = 3` and a
+`snapshot_meta` table (generator, `schema_version`, `source`, `taken_at`,
+`source_database` — the source file's path, which can carry no secret) say
+where the file came from. Column names mirror
+`packages/schema/src/content.ts`; the live schema's millisecond-integer
+instants go over as `REAL` seconds since the epoch, JSON columns as the text
+they already are, booleans 0/1, and `asset.generated_by` is the one
+computed column — which tool made a row, so the app never repeats that join.
 
-The mirrored tables are the content half plus the Postgres-side learner
-rows: `asset`, `asset_derivation`, `asset_topic`, `asset_concept`, `topic`,
+The mirrored tables are the content half plus the learner rows the catalog
+holds: `asset`, `asset_derivation`, `asset_topic`, `asset_concept`, `topic`,
 `concept`, `concept_prerequisite`, `collection`, `curriculum_item`,
 `collection_item`, `concept_curriculum_item`, `curriculum_item_asset`,
 `tag`, `collection_tag`, and `mastery`, `review`, `progress`, `recap`,
 `preference`, `event`, `asset_name`. The mirror carries every owner's rows
 unscoped; the app reads it under its own learner id and merges
 `learner.db`'s native writes over it. Two files, two answers to one
-question — what can be regenerated? Everything Postgres knows is in
-`catalog.db`, opened read-only and replaced wholesale by the next snapshot
-run; what the app itself writes is in `learner.db`, which no snapshot
-touches.
+question — what can be regenerated? Everything the catalog knows is in
+`app-catalog.db`, opened read-only and replaced wholesale by the next
+snapshot run; what the app itself writes is in `learner.db`, which no
+snapshot touches.
 
 **The sidecar is the tutor boundary.** Anything needing a provider call —
 the chat tutors, the session questions, the judge — goes to
-`services/sidecar`, not to Postgres and not to a provider directly, so the
-macOS code holds no credential logic at all. `SidecarManager` spawns
+`services/sidecar`, not to the catalog's file and not to a provider directly,
+so the macOS code holds no credential logic at all. `SidecarManager` spawns
 `npx tsx services/sidecar/src/index.ts` from the repo root and reads stdout
 for exactly one line, `listening <port>` — printed once the socket is
 bound, on an ephemeral port by default so nothing has to be known ahead of
@@ -627,7 +631,7 @@ time and nothing collides. Everything else on stdout is shell noise and
 skipped; a 20-second wait bounds the whole spawn. The client then talks to
 `127.0.0.1:<port>` — the web contract's own paths, served by the same
 `*Turn` functions, which is why the app's tutor and Settings pane cannot
-drift from the site's. The sidecar's own Postgres failure is a request-time
+drift from the site's. The sidecar's own catalog failure is a request-time
 degradation, not a boot failure, so the line a slow database never blocks is
 the one the app is waiting for.
 
@@ -782,7 +786,7 @@ One direction for content, one door for state.
        │              (the pool, the degradation)
        └──► /api/learner/* ──► apps/web/src/lib/learner-api.ts ──► the same store
 
-   apps/macos ──► catalog.db (read-only mirror) + learner.db (writable)
+   apps/macos ──► app-catalog.db (read-only mirror) + learner.db (writable)
        │
        ├──► services/sidecar (spawned; the tutor turns over the same catalog pool)
        └──► services/studio (connect-only: the runner is already up or the surface says so)
@@ -793,7 +797,7 @@ change bundle 5 made: before it, the CLI owned files under `learn/state/` and
 the web app owned a localStorage document, and the two models of the same
 learner never spoke. The native app sits beside them rather than inside
 them: its writes land in `learner.db` today, and a bridge that lifts those
-rows into Postgres is a different branch's work — deliberately not described
+rows into the catalog is a different branch's work — deliberately not described
 here, since this branch has none. `apps/web/src/lib/kb/load.ts` is still the only place in the app that
 reads the concept graph, and it is a query now rather than a `readFileSync` of a snapshot
 — so a study session shows up on `/learn` immediately instead of at the next
@@ -1083,10 +1087,10 @@ with the command made for it (`learn concept show`, `catalog course export`).
     shown as unsaved. An optimistic tick that silently never persisted is worse
     than an error, and the study record is the one thing in this repo with no
     second copy.
-15. **The native app writes `learner.db`, never the catalog.** `catalog.db`
+15. **The native app writes `learner.db`, never the catalog.** `app-catalog.db`
     is the snapshot's file — regenerated wholesale, opened read-only — so the
     app's marks and its session's learning state go to the second file beside
-    it. When a native write does have to reach Postgres (provider keys, the
+    it. When a native write does have to reach the catalog (provider keys, the
     model chain) it goes through the sidecar's routes, not a connection of
     the app's own, so the credential and store logic stays shared with the
     web. A surface that cannot write a thing does not pretend: grading stays
