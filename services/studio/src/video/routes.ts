@@ -4,15 +4,15 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import { pipeline } from "node:stream/promises";
 
-import { BriefError, loadVocabulary } from "../brief";
-import { JobRefused } from "../runner";
+import { BriefError, loadVocabulary } from "../diagram/brief";
+import { JobRefused } from "../diagram/runner";
 import { validateVideoBrief } from "./brief";
 import { backendFor, type SheetEntry } from "./backend";
 import { isLook, readCalls } from "./calls";
 import { candidateNames, type VideoPaths } from "./paths";
 import { briefTool } from "./tools";
 import { acceptVideo, discardVideo } from "./review";
-import type { Drafts } from "../drafts";
+import type { Drafts } from "../drafts/drafts";
 import { videoNote, type VideoRunner, type VideoStore } from "./runner";
 import type { VideoJobRecord } from "./types";
 

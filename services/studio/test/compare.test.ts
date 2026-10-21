@@ -9,7 +9,7 @@ import {
   sideFromGate,
   type LintRef,
   type Side,
-} from "../src/compare";
+} from "../src/diagram/compare";
 
 /**
  * The comparison's arithmetic, which is the half of phase 4 that can be wrong

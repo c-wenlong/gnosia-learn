@@ -13,7 +13,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const procMock = vi.hoisted(() => ({ run: vi.fn(), NPM: "npm", parseJson: vi.fn() }));
 vi.mock("../src/proc", () => procMock);
 
-const { doctor, forgetDoctor, DOCTOR_TTL_MS } = await import("../src/canvas");
+const { doctor, forgetDoctor, DOCTOR_TTL_MS } = await import("../src/canvas/canvas");
 
 const result = { code: 0, signal: null, stdout: "ok", stderr: "", json: null, timedOut: false };
 

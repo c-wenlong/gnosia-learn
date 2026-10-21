@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { validateBrief, type ValidBrief } from "../src/brief";
+
+import { validateBrief, type ValidBrief } from "../src/diagram/brief";
 import { absolute, jobDir, targetPath, targetSvgPath } from "../src/paths";
 import { allSettled, until } from "./wait";
 import { testVocabulary } from "./vocabulary";
@@ -28,7 +29,7 @@ import { testVocabulary } from "./vocabulary";
  */
 
 const gateMock = vi.hoisted(() => ({ runGate: vi.fn(), narrate: vi.fn(() => "a step") }));
-vi.mock("../src/gate", () => gateMock);
+vi.mock("../src/diagram/gate", () => gateMock);
 
 const compareMock = vi.hoisted(() => ({
   readSide: vi.fn(async () => ({
@@ -40,8 +41,8 @@ const compareMock = vi.hoisted(() => ({
     at: new Date().toISOString(),
   })),
 }));
-vi.mock("../src/compare", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/compare")>()),
+vi.mock("../src/diagram/compare", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/diagram/compare")>()),
   ...compareMock,
 }));
 
@@ -51,18 +52,18 @@ const reviewMock = vi.hoisted(() => ({
   discard: vi.fn(),
   reindex: vi.fn(),
 }));
-vi.mock("../src/review", () => reviewMock);
+vi.mock("../src/diagram/review", () => reviewMock);
 
 const agentMock = vi.hoisted(() => ({
   startAgent: vi.fn(),
   sweepOrphans: vi.fn(async () => [] as number[]),
   AgentRun: class {},
 }));
-vi.mock("../src/agent", () => agentMock);
+vi.mock("../src/agent/agent", () => agentMock);
 
-const { status } = await import("../src/catalog");
-const { Runner, JobRefused } = await import("../src/runner");
-const { JobStore } = await import("../src/store");
+const { status } = await import("../src/data/catalog");
+const { Runner, JobRefused } = await import("../src/diagram/runner");
+const { JobStore } = await import("../src/data/store");
 
 const SLUG = "studio-offline-fixture";
 

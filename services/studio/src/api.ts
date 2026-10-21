@@ -3,15 +3,15 @@ import { pipeline } from "node:stream";
 import { stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 
-import { BriefError, loadVocabulary, validateBrief, vocabularyStatusNow, type ValidBrief, type Vocabulary } from "./brief";
-import { byokStatus, checkByokProvider, listByokModels, loadByok, removeByokProvider, saveByok, saveByokModels, setByokActive } from "./byok";
-import { canvas, doctor, doctorChecks, type DoctorCheck } from "./canvas";
-import { preferenceSet, videoList } from "./catalog";
+import { BriefError, loadVocabulary, validateBrief, vocabularyStatusNow, type ValidBrief, type Vocabulary } from "./diagram/brief";
+import { byokStatus, checkByokProvider, listByokModels, loadByok, removeByokProvider, saveByok, saveByokModels, setByokActive } from "./agent/byok";
+import { canvas, doctor, doctorChecks, type DoctorCheck } from "./canvas/canvas";
+import { preferenceSet, videoList } from "./data/catalog";
 import { STUDIO_OWNER_HEADER, studioAgentPreference } from "@gnosia/schema/shared";
 
 import { agentAuthReport, CONCURRENCY, HOST, PORT, studioOwner, VERB_TIMEOUT_MS } from "./config";
-import { recompare } from "./compare";
-import { diagramCommit } from "./catalog";
+import { recompare } from "./diagram/compare";
+import { diagramCommit } from "./data/catalog";
 import {
   checkoutOf,
   ensureCheckout,
@@ -22,20 +22,20 @@ import {
   svgKeyOf,
   type CheckoutView,
   type DiagramListing,
-} from "./diagrams";
-import { studioBlobStore } from "./blobs";
-import { DRAFT_SEARCH_LIMIT, type Drafts, type DraftStreamEvent } from "./drafts";
-import { MirrorRefused, type Mirrors } from "./mirrors";
-import { matchesTag, openNewestShot } from "./live-shot";
-import { diagramPathProblem } from "./diagram-guard";
-import { HealthProbes } from "./health-probes";
-import { readListing, type ListingCache, type Listings } from "./listings";
-import type { ProbeReading } from "./probe";
+} from "./canvas/diagrams";
+import { studioBlobStore } from "./data/blobs";
+import { DRAFT_SEARCH_LIMIT, type Drafts, type DraftStreamEvent } from "./drafts/drafts";
+import { MirrorRefused, type Mirrors } from "./canvas/mirrors";
+import { matchesTag, openNewestShot } from "./diagram/live-shot";
+import { diagramPathProblem } from "./diagram/diagram-guard";
+import { HealthProbes } from "./probes/health-probes";
+import { readListing, type ListingCache, type Listings } from "./probes/listings";
+import type { ProbeReading } from "./probes/probe";
 import { scratchDir, shotPath, studioHome, targetPath, workDir, workSvgPath } from "./paths";
-import { accept, discard, reindex } from "./review";
-import { JobRefused, noteFor, Runner } from "./runner";
-import type { JobRecord, JobStore } from "./store";
-import { offeredModels, resolveDiagramAgent, resolveVideoAgent } from "./agent-settings";
+import { accept, discard, reindex } from "./diagram/review";
+import { JobRefused, noteFor, Runner } from "./diagram/runner";
+import type { JobRecord, JobStore } from "./data/store";
+import { offeredModels, resolveDiagramAgent, resolveVideoAgent } from "./agent/agent-settings";
 import { priceableAs, ratesFor } from "./cost";
 
 /** What a studio spawn with no `--model` runs on under the seal, measured (D53). */

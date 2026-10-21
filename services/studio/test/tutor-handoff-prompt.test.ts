@@ -5,8 +5,8 @@ import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { conceptShow } from "../src/catalog";
-import { CONCEPT_BODY_LIMIT, parseConcept, parseTutor, withConcept } from "../src/drafts";
+import { conceptShow } from "../src/data/catalog";
+import { CONCEPT_BODY_LIMIT, parseConcept, parseTutor, withConcept } from "../src/drafts/drafts";
 import {
   buildCombinedSystemPrompt,
   combinedPrompt,
@@ -18,7 +18,7 @@ import {
   tutorBlock,
   type CombinedPromptInput,
   type TutorTurn,
-} from "../src/planner-prompt";
+} from "../src/drafts/planner-prompt";
 import { testVocabulary } from "./vocabulary";
 
 /**

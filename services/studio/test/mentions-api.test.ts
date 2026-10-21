@@ -35,20 +35,20 @@ const catalogMock = vi.hoisted(() => ({
   preferenceSet: vi.fn(),
   status: vi.fn(),
 }));
-vi.mock("../src/catalog", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/catalog")>()),
+vi.mock("../src/data/catalog", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/data/catalog")>()),
   ...catalogMock,
 }));
 const canvasMock = vi.hoisted(() => ({ doctor: vi.fn() }));
-vi.mock("../src/canvas", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/canvas")>()),
+vi.mock("../src/canvas/canvas", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/canvas/canvas")>()),
   doctor: canvasMock.doctor,
 }));
 
 const { createApi } = await import("../src/api");
-const { Drafts } = await import("../src/drafts");
-const { JobStore, RecordStore } = await import("../src/store");
-const { Mirrors } = await import("../src/mirrors");
+const { Drafts } = await import("../src/drafts/drafts");
+const { JobStore, RecordStore } = await import("../src/data/store");
+const { Mirrors } = await import("../src/canvas/mirrors");
 const { narratedBrief } = await import("./video-fixture");
 const { CLAUDE_BIN } = await import("../src/config");
 if (CLAUDE_BIN !== fake.bin) throw new Error(`the planner would spawn ${CLAUDE_BIN}, not the fake`);

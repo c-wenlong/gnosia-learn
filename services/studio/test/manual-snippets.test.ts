@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { afterAll, describe, expect, it } from "vitest";
 
-import { canvas } from "../src/canvas";
+import { canvas } from "../src/canvas/canvas";
 import { SNIPPETS } from "../src/manual/assemble";
 import { STATIC_LINT_NAMES } from "../src/manual/lints";
 import { lintNamesFromApi, parseApi } from "../src/manual/listing";

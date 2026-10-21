@@ -1,4 +1,4 @@
-import { DATA_FENCE, DATA_FENCE_END } from "../prompt";
+import { DATA_FENCE, DATA_FENCE_END } from "../diagram/prompt";
 import { isNarrated, type ValidVideoBrief } from "./brief";
 import type { VideoPaths } from "./paths";
 

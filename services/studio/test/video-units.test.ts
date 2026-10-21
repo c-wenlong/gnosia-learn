@@ -6,10 +6,10 @@ import path from "node:path";
 import ignore from "ignore";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { BriefError } from "../src/brief";
+import { BriefError } from "../src/diagram/brief";
 import { normalisePreference, readClaudeDefaults, resolveAgentSettings, resolveSetting } from "../src/video/agent-model";
 import { predictedSeconds, validateVideoBrief } from "../src/video/brief";
-import { buildSettings } from "../src/settings";
+import { buildSettings } from "../src/diagram/settings";
 import { commandPathProblem, GUARD_REFUSAL, guardSource, wrapperCommandAllowed } from "../src/video/bash-guard";
 import { runVideoDoctor } from "../src/video/doctor";
 import { appendRead, LineQueue, readReads, ReadTracker } from "../src/video/calls";

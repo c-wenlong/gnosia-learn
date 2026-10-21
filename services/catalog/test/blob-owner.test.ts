@@ -17,7 +17,6 @@ import { writeContent } from "../src/content/write";
 import { connect, type Connection } from "../src/db";
 import type { TopicsReport } from "../src/index/manimkc";
 import { applyMigrations } from "../src/migrations";
-import { BEFORE_BLOB_CONTRACT, partialMigrations } from "./partial-migrations";
 import { clearTables, createScratchDatabase, probe, type Scratch, withoutConstraint } from "./scratch-database";
 
 /**

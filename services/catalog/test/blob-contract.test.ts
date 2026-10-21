@@ -30,7 +30,7 @@ import {
   migrationStatus,
 } from "../src/migrations";
 import { manimkcStandIn, seedWithManimkc } from "./manimkc-standin";
-import { BEFORE_BLOB_CONTRACT, partialMigrations, tagsAfter } from "./partial-migrations";
+import { assetBefore0031, BEFORE_BLOB_CONTRACT, partialMigrations, tagsAfter } from "./partial-migrations";
 import { createScratchDatabase, migratedScratchDatabase, probe, type Scratch, sqlMessage, SQLSTATE, sqlstate } from "./scratch-database";
 import { storedBlob } from "./stored-blob";
 
@@ -89,8 +89,10 @@ describe.skip("the blob contract, 0013" /* SQLite ships one foundation migration
     scratch = await createScratchDatabase();
     await applyMigrations(scratch.db, { folder: await partialMigrations(BEFORE_BLOB_CONTRACT) });
     // A render an import recorded and no upload stored, and a key 0010's
-    // check admits and the blob package would never make.
-    await scratch.db.insert(asset).values({ id: "manimkc:out/a/one.mp4", kind: "video", path: "out/a/one.mp4", sourceRepo: "manimkc" });
+    // check admits and the blob package would never make. The row goes in
+    // through `assetBefore0031`: this schema has no `inputs_hash` (0031),
+    // which `insert(asset)` would name.
+    await scratch.db.insert(assetBefore0031).values({ id: "manimkc:out/a/one.mp4", kind: "video", path: "out/a/one.mp4", sourceRepo: "manimkc" });
     await scratch.db.insert(blobObject).values({
       key: badKey,
       ownerId: "local",
@@ -458,7 +460,9 @@ describe.skip("a migration queued behind a held contract" /* SQLite ships one fo
   beforeAll(async () => {
     scratch = await createScratchDatabase();
     await applyMigrations(scratch.db, { folder: await partialMigrations(BEFORE_BLOB_CONTRACT) });
-    await scratch.db.insert(asset).values({ id: "manimkc:out/a/one.mp4", kind: "video", path: "out/a/one.mp4", sourceRepo: "manimkc" });
+    // Through `assetBefore0031`, as in the suite above: this schema predates
+    // `inputs_hash` (0031), which `insert(asset)` would name.
+    await scratch.db.insert(assetBefore0031).values({ id: "manimkc:out/a/one.mp4", kind: "video", path: "out/a/one.mp4", sourceRepo: "manimkc" });
     // The real folder plus one ordinary migration after 0013.
     folder = await partialMigrations(BEFORE_BLOB_CONTRACT + 1);
     const journal = path.join(folder, "meta", "_journal.json");

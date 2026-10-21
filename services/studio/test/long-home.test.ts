@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { canvas } from "../src/canvas";
+import { canvas } from "../src/canvas/canvas";
 import { SNIPPETS } from "../src/manual/assemble";
 import { checkSnippets, groupCanvas } from "../src/manual/source";
 import { manualCheckDir } from "../src/paths";

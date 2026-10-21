@@ -41,18 +41,18 @@ const catalogMock = vi.hoisted(() => ({
   videoShow: vi.fn(),
   conceptShow: vi.fn(),
 }));
-vi.mock("../src/catalog", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/catalog")>()),
+vi.mock("../src/data/catalog", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/data/catalog")>()),
   ...catalogMock,
 }));
 
-const { Drafts } = await import("../src/drafts");
+const { Drafts } = await import("../src/drafts/drafts");
 const { narratedBrief } = await import("./video-fixture");
 const { CLAUDE_BIN } = await import("../src/config");
 if (CLAUDE_BIN !== fake!.bin) throw new Error(`the planner would spawn ${CLAUDE_BIN}, not the fake`);
-const { JobStore, RecordStore } = await import("../src/store");
+const { JobStore, RecordStore } = await import("../src/data/store");
 const { plannerSystemPath } = await import("../src/paths");
-const { CONCEPT_PARAGRAPH } = await import("../src/planner-prompt");
+const { CONCEPT_PARAGRAPH } = await import("../src/drafts/planner-prompt");
 
 type DraftsT = InstanceType<typeof Drafts>;
 const ok = (json: unknown = {}) => ({ ok: true, json, error: null, offline: false });

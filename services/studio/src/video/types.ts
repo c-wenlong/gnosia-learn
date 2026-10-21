@@ -2,7 +2,7 @@ import type { JobState } from "@gnosia/schema";
 
 import type { AgentAuth } from "../config";
 import type { CostSource } from "../cost";
-import type { GateStep } from "../store";
+import type { GateStep } from "../data/store";
 import type { ValidVideoBrief } from "./brief";
 import type { DeadTools } from "./dead-tools";
 

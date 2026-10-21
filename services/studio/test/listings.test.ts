@@ -22,8 +22,8 @@ vi.mock("../src/proc", async (importOriginal) => {
   return { ...actual, run: proc.run };
 });
 
-const { diagramPut, topicAdd } = await import("../src/catalog");
-const { Listings, readListing } = await import("../src/listings");
+const { diagramPut, topicAdd } = await import("../src/data/catalog");
+const { Listings, readListing } = await import("../src/probes/listings");
 
 const summary = (slug: string) => ({
   slug,

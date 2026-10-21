@@ -29,7 +29,13 @@ const SEAM = ["services/catalog/src/content/", "services/catalog/src/index/"];
  * allowed and the change that removes it. An entry here is a debt, not a
  * permission.
  */
-const ALLOWED: Record<string, string> = {};
+const ALLOWED: Record<string, string> = {
+  // Mirrors catalog rows into the macOS app's own SQLite read model
+  // (apps/macos); its INSERTs target the snapshot file, never the catalog it
+  // reads. Removed with the mirror itself, or when the app's snapshot moves
+  // inside the seam.
+  "apps/macos/scripts/catalog-snapshot.mjs": "writes the native app's SQLite snapshot, not the catalog's own tables",
+};
 
 /**
  * `blob_object` and `session_log_entry` are content but carry no revisions

@@ -1,0 +1,24 @@
+{
+  "name": "@gnosia/tutor",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "//": "No build step, same as @gnosia/schema: the consumers are other workspaces running through tsx or vitest, and the Next app, which transpiles workspace packages itself. The two entries are split on purpose: \".\" holds only pure modules a client component can import (no Postgres, no node:crypto, nothing request-bound), and \"./server\" holds the database- and environment-bound reads the API routes and the sidecar share.",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@gnosia/blob": "*",
+    "@gnosia/catalog": "*",
+    "@gnosia/content": "*",
+    "@gnosia/schema": "*"
+  },
+  "devDependencies": {
+    "typescript": "^6"
+  }
+}

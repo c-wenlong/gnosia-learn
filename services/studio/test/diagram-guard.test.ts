@@ -5,8 +5,8 @@ import path from "node:path";
 
 import { afterAll, describe, expect, it } from "vitest";
 
-import { shellWord } from "../src/bash-guard";
-import type { ValidBrief } from "../src/brief";
+import { shellWord } from "../src/agent/bash-guard";
+import type { ValidBrief } from "../src/diagram/brief";
 import {
   canvasCommandAllowed,
   canvasTokens,
@@ -17,10 +17,10 @@ import {
   guardPath,
   writeDiagramGuard,
   type CanvasPolicy,
-} from "../src/diagram-guard";
+} from "../src/diagram/diagram-guard";
 import { candidatePath, candidateSvgPath, jobDir, mermaidPath, scratchDir, workPath } from "../src/paths";
-import { buildPrompt, buildResumePrompt, buildRetryPrompt, buildRevisePrompt } from "../src/prompt";
-import { buildSettings } from "../src/settings";
+import { buildPrompt, buildResumePrompt, buildRetryPrompt, buildRevisePrompt } from "../src/diagram/prompt";
+import { buildSettings } from "../src/diagram/settings";
 
 /**
  * The diagram agent's Bash guard. The hostile forms are the ones the review of

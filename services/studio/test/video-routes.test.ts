@@ -6,7 +6,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Runner } from "../src/runner";
+import type { Runner } from "../src/diagram/runner";
 import type { VideoDoctor, VideoDoctorReport } from "../src/video/doctor";
 import type { VideoJobRecord } from "../src/video/types";
 
@@ -32,8 +32,8 @@ vi.mock("node:fs/promises", async (importOriginal) => {
   return { ...actual, open, default: { ...actual, open } };
 });
 
-vi.mock("../src/canvas", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../src/canvas")>();
+vi.mock("../src/canvas/canvas", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/canvas/canvas")>();
   return { ...actual, doctor: vi.fn(async () => ({ code: 0, signal: null, stdout: "", stderr: "", json: null, timedOut: false })) };
 });
 
@@ -45,14 +45,14 @@ const catalogMock = vi.hoisted(() => ({
   videoShow: vi.fn(),
   preferenceGet: vi.fn(),
 }));
-vi.mock("../src/catalog", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../src/catalog")>();
+vi.mock("../src/data/catalog", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/data/catalog")>();
   return { ...actual, ...catalogMock };
 });
 
 const { createApi } = await import("../src/api");
-const { Mirrors } = await import("../src/mirrors");
-const { JobStore, RecordStore } = await import("../src/store");
+const { Mirrors } = await import("../src/canvas/mirrors");
+const { JobStore, RecordStore } = await import("../src/data/store");
 const { VideoRunner } = await import("../src/video/runner");
 const { clientWentAway } = await import("../src/video/routes");
 

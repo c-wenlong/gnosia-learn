@@ -59,8 +59,8 @@ fact stated in one is cross-referenced rather than repeated in the others.
 | Layer | Where | What it owns |
 | --- | --- | --- |
 | UI | `apps/web/src/app/studio/` | The conversation with the person: the grid, the inspector, the brief form, the job panel, the accept screen. Holds no job state of its own |
-| API | `services/studio/src/api/` | HTTP on `127.0.0.1:7250`. JSON in, JSON out, plus one SSE stream per job |
-| Runner | `services/studio/src/runner/` | Jobs, one runner per generator kind it drives — the diagrams runner is what phases 0 to 4 build. Spawns the agent, constrains it, supervises it, checks its work, records what happened. Never draws. See D25 |
+| API | `services/studio/src/api.ts` | HTTP on `127.0.0.1:7250`. JSON in, JSON out, plus one SSE stream per job |
+| Runner | `services/studio/src/diagram/` | Jobs, one runner per generator kind it drives — the diagrams runner is what phases 0 to 4 build. Spawns the agent, constrains it, supervises it, checks its work, records what happened. Never draws. See D25 |
 | Agent | a headless `claude -p` session | The drawing. Writes snippets, runs the draw-look-fix loop, reads its own screenshots. The only model call in the system |
 | Catalog | `services/catalog/src/` | Where a diagram lives. Accept is `catalog diagram put --job`, which writes the `diagram` row, the SVG blob and the job's `asset_job` rows in one transaction (Track D of [CONTENT-MIGRATION.md](CONTENT-MIGRATION.md) retired `assert-output`) |
 | Tools | `tools/tldrawkc/`, `tools/manimkc/` | The canvas and the renderer. Neither changes for the studio |
@@ -397,7 +397,7 @@ browser on this machine.
 | `POST` | `/api/jobs/{id}/revise` | Continue the stored session with a change request | `{ changes }` | `{ jobId, state: "queued", mode, resuming }` |
 | `POST` | `/api/jobs/{id}/resume` | Continue an `interrupted` job's session, with nothing to change | none | `{ jobId, state: "queued", parentJob, mode, resuming }` |
 
-| `GET` | `/api/health` | What is and is not working right now, from the last answer each check gave: it waits on no subprocess once each has answered once (`services/studio/src/health-probes.ts`), and `freshness` says when each was checked and whether a refresh is under way | none | `{ ok, tldrawkc, chromium, claude, postgres, vocabulary: { readAt, stale, error? }, queueDepth, costLast24h, dailyCap, freshness: { tldrawkc, claude, postgres, agent: { checkedAt, stale, refreshing } } }` |
+| `GET` | `/api/health` | What is and is not working right now, from the last answer each check gave: it waits on no subprocess once each has answered once (`services/studio/src/probes/health-probes.ts`), and `freshness` says when each was checked and whether a refresh is under way | none | `{ ok, tldrawkc, chromium, claude, postgres, vocabulary: { readAt, stale, error? }, queueDepth, costLast24h, dailyCap, freshness: { tldrawkc, claude, postgres, agent: { checkedAt, stale, refreshing } } }` |
 | `POST` | `/api/mirrors` | Open a human canvas on one file | `{ file }` | `{ file, url, port }` |
 | `DELETE` | `/api/mirrors` | Close one | `?file=…` | `{ closed: true }` |
 | `GET` | `/api/mirrors` | What is open, and whether each is answering | `?file=…` to poll and touch one | `{ mirrors: [{ file, url, port, startedAt, lastSeenAt, healthy }] }` |
@@ -452,7 +452,7 @@ rather than to guess.
 | `concepts` | no | `meta.tldrawkc.concepts`, the concept slugs under that topic |
 | `layout` | no | A hint: `flow-lr`, `layered`, `comparison`, `radial` |
 | `mermaidPath` | no | A pasted flowchart, written to the job scratch directory and lifted with `from-mermaid`. The text never enters the prompt |
-| `source` | no | `meta.tldrawkc.source`: the concept or session that prompted the diagram. A concept is named by slug, the form's placeholder (an older brief's `learn/concepts/<domain>/<slug>.md` or `<slug>.md` still works). A note is a row since the cut-over, so when no such file is on disk the runner reads it with `learn concept show --owner <STUDIO_OWNER> --json` (the studio owner's note or the commons', never another owner's) into the job's scratch directory, `source/<slug>.md`, and the agent is pointed there (`services/studio/src/source-note.ts`); a slug the database does not answer for leaves the agent drawing from the brief alone |
+| `source` | no | `meta.tldrawkc.source`: the concept or session that prompted the diagram. A concept is named by slug, the form's placeholder (an older brief's `learn/concepts/<domain>/<slug>.md` or `<slug>.md` still works). A note is a row since the cut-over, so when no such file is on disk the runner reads it with `learn concept show --owner <STUDIO_OWNER> --json` (the studio owner's note or the commons', never another owner's) into the job's scratch directory, `source/<slug>.md`, and the agent is pointed there (`services/studio/src/diagram/source-note.ts`); a slug the database does not answer for leaves the agent drawing from the brief alone |
 | `model` | no | `sonnet` (default) or `opus`. Drawing loops are mechanical, so the default is the cheaper tier |
 | `notes` | no | Anything else the person wants the agent to know, as data |
 
@@ -561,7 +561,7 @@ Each with the reason it exists.
   `-o`, and the document `new` and `from-mermaid` create). The runner now
   writes a `PreToolUse` hook into each job's settings file,
   `jobs/<id>/bash-guard.cjs`, beside the permission file and denied to the
-  agent like it (`services/studio/src/diagram-guard.ts`, the check in
+  agent like it (`services/studio/src/diagram/diagram-guard.ts`, the check in
   `canvas-guard.cjs`). It allows `npm run --silent canvas -- <verb> …` for the
   verbs the agent is taught (`new`, `run`, `shot`, `inspect`, `export`,
   `verify`, `from-mermaid`, `meta set`, `api`, `doctor`), each with only the
@@ -584,7 +584,7 @@ Each with the reason it exists.
   command line ends `|| exit 2`: measured on 2.1.274, a hook pointing at a
   missing file let the command run without the suffix and blocked it with
   it. The hook program, its read-only file and the settings block are the
-  video guard's, shared in `services/studio/src/bash-guard.ts`. A studio home
+  video guard's, shared in `services/studio/src/agent/bash-guard.ts`. A studio home
   the agent could not type bare or with a plain quote around a space (a `$`,
   a quote, a backtick, a glob character) refuses the diagram agent by name:
   `POST /api/jobs` answers 503, a job queued before the home moved is
@@ -617,7 +617,7 @@ Each with the reason it exists.
   document is how every diagram ends up looking like the first one.
 - **The agent's credential is chosen, not inherited.** The agent's environment
   is the runner's with the Anthropic auth variables taken out
-  (`AGENT_AUTH_ENV` in `services/studio/src/agent.ts` lists them:
+  (`AGENT_AUTH_ENV` in `services/studio/src/agent/agent.ts` lists them:
   `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`,
   `ANTHROPIC_CUSTOM_HEADERS`, `CLAUDE_CODE_OAUTH_TOKEN`, the provider switches
   and a parent SDK host's hand-off, each group with its reason), so `claude -p`
@@ -724,7 +724,7 @@ and stops has done the right thing and written nothing. Measured against its own
 start, such a job failed step 1 three times and then failed the job, which made
 Resume a button that could only ever produce a failure. Seen on the first real
 resume in phase 3; `gateFreshnessFrom` in
-[`services/studio/src/runner.ts`](../services/studio/src/runner.ts) is the fix
+[`services/studio/src/diagram/runner.ts`](../services/studio/src/diagram/runner.ts) is the fix
 and it applies to a resume only. A revision keeps the strict reading, because
 its parent was accepted, discarded or failed and nothing of its candidate is
 left at that path.
@@ -1953,7 +1953,7 @@ Goal: a person can look at the corpus and open one diagram on a live canvas.
 - [x] `/studio/d/<name>`: the mirror iframe, the studio strip, the freshness
       pill, Export SVG, Verify and Inspect
 - [x] `POST`/`DELETE`/`GET /api/mirrors` wired to the `ServeHandle`, with the
-      idle timeout — `services/studio/src/mirrors.ts`. The handle is the
+      idle timeout — `services/studio/src/canvas/mirrors.ts`. The handle is the
       `serve` subprocess and its ready JSON, not the tool's in-process
       `ServeHandle`: tldrawkc is a submodule with its own toolchain and is not
       a dependency of this workspace

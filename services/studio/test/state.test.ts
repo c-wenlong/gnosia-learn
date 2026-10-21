@@ -5,9 +5,9 @@ import path from "node:path";
 import { JOB_STATES, JOB_TRANSITIONS, canTransition } from "@gnosia/schema";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { validateBrief, BriefError, type ValidBrief, type Vocabulary } from "../src/brief";
-import { noteFor, phaseFromLine } from "../src/runner";
-import type { JobRecord } from "../src/store";
+import { validateBrief, BriefError, type ValidBrief, type Vocabulary } from "../src/diagram/brief";
+import { noteFor, phaseFromLine } from "../src/diagram/runner";
+import type { JobRecord } from "../src/data/store";
 import { testVocabulary } from "./vocabulary";
 
 /**
@@ -36,10 +36,10 @@ const catalogMock = vi.hoisted(() => ({
   diagramShow: vi.fn(async () => ({ ok: false, json: null, error: "unreachable", offline: true })),
   diagramCheckout: vi.fn(async () => ({ ok: false, json: null, error: "unreachable", offline: true })),
 }));
-vi.mock("../src/catalog", () => catalogMock);
+vi.mock("../src/data/catalog", () => catalogMock);
 
-const { Runner, JobRefused } = await import("../src/runner");
-const { JobStore } = await import("../src/store");
+const { Runner, JobRefused } = await import("../src/diagram/runner");
+const { JobStore } = await import("../src/data/store");
 
 const ok = { ok: true, json: {}, error: null };
 

@@ -19,8 +19,8 @@ import {
   workDir,
   workPath,
 } from "../src/paths";
-import type { JobRecord } from "../src/store";
-import type { Runner } from "../src/runner";
+import type { JobRecord } from "../src/data/store";
+import type { Runner } from "../src/diagram/runner";
 import { fixtureDocument } from "./fixture-document";
 import { topicListAnswer, topicListDown } from "./vocabulary";
 
@@ -37,8 +37,8 @@ const canvasMock = vi.hoisted(() => ({
   /** Set by a test that fakes a verb; every other test runs the real tool. */
   verb: null as null | ((args: string[]) => Promise<unknown>),
 }));
-vi.mock("../src/canvas", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../src/canvas")>();
+vi.mock("../src/canvas/canvas", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/canvas/canvas")>();
   return {
     ...actual,
     doctor: canvasMock.doctor,
@@ -60,8 +60,8 @@ const catalogMock = vi.hoisted(() => ({
   preferenceGet: vi.fn(),
   preferenceSet: vi.fn(),
 }));
-vi.mock("../src/catalog", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../src/catalog")>();
+vi.mock("../src/data/catalog", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/data/catalog")>();
   return { ...actual, ...catalogMock };
 });
 
@@ -69,9 +69,9 @@ vi.mock("../src/catalog", async (importOriginal) => {
 let latestRevision = 5;
 
 const { createApi } = await import("../src/api");
-const { HealthProbes } = await import("../src/health-probes");
-const { JobStore } = await import("../src/store");
-const { Mirrors } = await import("../src/mirrors");
+const { HealthProbes } = await import("../src/probes/health-probes");
+const { JobStore } = await import("../src/data/store");
+const { Mirrors } = await import("../src/canvas/mirrors");
 
 const SLUG = "studio-api-fixture";
 
@@ -672,7 +672,7 @@ describe("the vocabulary", () => {
     await get("/api/health");
     expect(catalogMock.topicList.mock.calls.length).toBe(calls);
     // Past the reuse window: concurrent callers share one read.
-    const { vocabularyStatus } = await import("../src/brief");
+    const { vocabularyStatus } = await import("../src/diagram/brief");
     const [first, second] = await Promise.all([vocabularyStatus(0), vocabularyStatus(0)]);
     expect(catalogMock.topicList.mock.calls.length).toBe(calls + 1);
     expect(first).toEqual(second);
