@@ -288,7 +288,7 @@ export function providerConfigs(
       keyUrl: "https://openrouter.ai/keys",
       extraHeaders: {
         "HTTP-Referer": openRouterReferer(env),
-        "X-Title": env.OPENROUTER_APP_TITLE?.trim() || "Self-Learn",
+        "X-Title": env.OPENROUTER_APP_TITLE?.trim() || "Gnosia",
       },
     },
     ...added,
