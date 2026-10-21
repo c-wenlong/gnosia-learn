@@ -547,8 +547,7 @@ struct TutorPanel: View {
     /// the Check row or the feedback bar once graded.
     private func questionCard(_ question: SessionQuestion, answered: Graded?) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(question.prompt)
-                .font(.title3.weight(.semibold))
+            MathText(text: question.prompt, font: .title3.weight(.semibold))
 
             VStack(spacing: 8) {
                 ForEach(Array(question.choices.enumerated()), id: \.offset) { i, choice in
@@ -622,8 +621,7 @@ struct TutorPanel: View {
                     .foregroundStyle(G.text3)
                     .frame(width: 26, height: 26)
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(G.border, lineWidth: 1.5))
-                Text(choice)
-                    .font(.callout.weight(.medium))
+                MathText(text: choice, font: .callout.weight(.medium))
                     .foregroundStyle(ink)
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -666,8 +664,7 @@ struct TutorPanel: View {
                         .font(.headline)
                         .foregroundStyle(ink)
                     if let reason = question.reason, !reason.isEmpty {
-                        Text(reason)
-                            .font(.callout)
+                        MathText(text: reason, font: .callout)
                             .foregroundStyle(ink)
                     }
                     Text(sessionFeedbackNote(answered.outcome))
@@ -687,8 +684,7 @@ struct TutorPanel: View {
             if whyOpen {
                 VStack(alignment: .leading, spacing: 4) {
                     if let explanation = question.explanation {
-                        Text(explanation)
-                            .font(.callout)
+                        MathText(text: explanation, font: .callout)
                             .foregroundStyle(G.text)
                     }
                     if let source = question.source {
