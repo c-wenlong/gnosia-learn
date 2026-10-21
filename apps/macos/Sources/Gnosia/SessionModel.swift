@@ -14,8 +14,10 @@
 //    scripts/learn/lib/bkt.mjs              — the Bayesian update
 //    scripts/learn/lib/schedule.mjs         — gradeFromOutcome, newCard
 //
-//  The learn-mode session only: probe, teach, check, close. `?mode=check`
-//  (Quiz me) and the module week check have no native surface yet.
+//  The concept session's two modes: learn (Teach me — probe, teach, check,
+//  close) and check (`?mode=check`, the workspace's Quiz me — the note's
+//  checks in turn, then close). The module week check has no native
+//  surface yet.
 //
 
 import Foundation
@@ -128,7 +130,19 @@ func sessionWrongOptionsFor(check: ConceptCheck, otherAnswers: [String], pool: S
     return strong + fill
 }
 
-// MARK: - The plan (buildSessionPlan, learn mode)
+// MARK: - The plan (buildSessionPlan)
+
+/// The two modes a concept's own session page takes — ConceptSessionMode
+/// in session-core.ts. `learn` is Teach me; `check` is the workspace's
+/// Quiz me, `?mode=check` on the session URL. (`module`, the week check,
+/// is a third thing on the web — a different page, not a `?mode=` — and
+/// has no native surface.)
+enum SessionMode: String, Hashable {
+    case learn, check
+}
+
+/// The most checks Quiz me asks in one session — MAX_QUIZ_CHECKS.
+let maxQuizChecks = 5
 
 enum SessionStepKind: String, Hashable {
     case probe, teach, check, close
@@ -152,13 +166,17 @@ struct SessionStep: Hashable {
     var fallback: SessionQuestion? = nil
 }
 
-/// The steps a Teach me session walks — buildSessionPlan's learn branch:
-/// probe, teach, check, close. The probe is the note's first check; the
-/// check after teaching is its next one, or one the tutor writes, falling
-/// back to the first check asked again (reshuffled) when the tutor is
-/// unavailable. A note with no usable checks leaves both questions to the
-/// tutor.
-func buildSessionPlan(slug: String, checks: [ConceptCheck], pool: SessionDistractorPool, summary: String = "") -> [SessionStep] {
+/// The steps a session walks — buildSessionPlan.
+///
+/// Learn (Teach me): probe, teach, check, close. The probe is the note's
+/// first check; the check after teaching is its next one, or one the tutor
+/// writes, falling back to the first check asked again (reshuffled) when
+/// the tutor is unavailable. A note with no usable checks leaves both
+/// questions to the tutor.
+///
+/// Check (Quiz me): each of the note's checks in turn, up to
+/// `maxQuizChecks`, then close; with none, one question from the tutor.
+func buildSessionPlan(slug: String, mode: SessionMode = .learn, checks: [ConceptCheck], pool: SessionDistractorPool, summary: String = "") -> [SessionStep] {
     let answers = checks.map { $0.answer.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
     func poolFor(_ check: ConceptCheck) -> [String] {
         sessionWrongOptionsFor(
@@ -172,6 +190,11 @@ func buildSessionPlan(slug: String, checks: [ConceptCheck], pool: SessionDistrac
     }
 
     let close = SessionStep(kind: .close)
+    if mode == .check {
+        let questions = ask("check").prefix(maxQuizChecks)
+        if questions.isEmpty { return [SessionStep(kind: .check), close] }
+        return questions.map { SessionStep(kind: .check, question: $0) } + [close]
+    }
     let probes = ask("probe")
     let checksAfter = ask("check")
     let probe = probes.first

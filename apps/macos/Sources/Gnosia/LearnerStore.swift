@@ -116,6 +116,10 @@ let watchedFraction = 0.9
 /// The longest name `asset_name` takes — ASSET_NAME_MAX in shared.ts.
 let assetNameMax = 200
 
+/// The longest scratch note `progress.note` takes — MAX_NOTE_CHARS in
+/// apps/web/src/lib/learner-api.ts.
+let maxNoteChars = 20_000
+
 /// cleanAssetName in packages/schema/src/shared.ts: whitespace runs as one
 /// space, ends trimmed, and an empty remainder means "no name of mine".
 func cleanAssetName(_ value: String) -> String? {
@@ -302,6 +306,46 @@ final class LearnerStore {
                 )
             } else {
                 progress.removeValue(forKey: itemID)
+            }
+        }
+    }
+
+    /// The learner's note on one curriculum item — setNote in
+    /// services/catalog/src/state/progress.ts as `POST /api/learner/note`
+    /// calls it: an empty note clears to NULL. Capped at MAX_NOTE_CHARS in
+    /// apps/web/src/lib/learner-api.ts, which the route enforces.
+    ///
+    /// The row is kept rather than deleted when it ends up holding neither
+    /// tick nor note — the same tombstone rule setProgress documents:
+    /// Postgres's pruneEmpty can delete because absence means "untouched"
+    /// there, while this file's row masks the snapshot's progress mirror,
+    /// and a deleted row would let a stale mirrored note show through.
+    func setNote(_ itemID: String, note: String) {
+        let value = note.prefix(maxNoteChars)
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        let now = Date().timeIntervalSince1970
+        write { db in
+            try db.run("""
+                INSERT INTO progress
+                    (learner_id, curriculum_item_id, note, created_at, updated_at)
+                VALUES ('local', ?, ?, ?, ?)
+                ON CONFLICT (learner_id, curriculum_item_id)
+                DO UPDATE SET note = excluded.note,
+                              updated_at = excluded.updated_at
+                """,
+                [.text(itemID), trimmed.isEmpty ? .null : .text(String(value)), .real(now), .real(now)])
+            // Memory reads the row back, as setProgress does.
+            let row = try db.query("""
+                SELECT completed_at, note, updated_at FROM progress
+                WHERE learner_id = 'local' AND curriculum_item_id = ?
+                """, bind: [itemID])
+            if row.next() {
+                progress[itemID] = CatalogProgress(
+                    curriculumItemId: itemID,
+                    completedAt: row.double(0).map { Date(timeIntervalSince1970: $0) },
+                    note: row.text(1),
+                    updatedAt: row.double(2).map { Date(timeIntervalSince1970: $0) }
+                )
             }
         }
     }

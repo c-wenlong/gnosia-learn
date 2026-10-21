@@ -14,8 +14,10 @@
 //  first, then each concept step's `asset_concept` links, then the module
 //  topic's videos as the Watch fallback — and a video places once. Learner
 //  state draws only what learner.db can write back: the tick on each topic
-//  row and its "Mark done" in the open panel. Mastery marks, locks and
-//  sessions stay off — the app cannot write them, so it does not pretend.
+//  row, and in the open panel its "Mark done" and the "Your note" field —
+//  the web TopicRow's scratch note, debounced the way the web saves it.
+//  Mastery marks, locks and sessions stay off — the app cannot write them,
+//  so it does not pretend.
 //
 
 import SwiftUI
@@ -333,6 +335,15 @@ private struct LessonRow: View {
                         Text("Mark done").font(.callout)
                     }
                     .toggleStyle(.checkbox)
+
+                    // The web TopicRow panel's "Your note" field: a textarea
+                    // that saves 400ms after the last keystroke, and at once
+                    // on blur — here when the field loses focus or the panel
+                    // folds away with an edit pending.
+                    ItemNoteField(
+                        itemID: lesson.item.id,
+                        saved: store.progressMark(for: lesson.item.id)?.note ?? ""
+                    )
                 }
                 .padding(.leading, 28)
                 .padding(.top, 4)
@@ -358,6 +369,86 @@ private struct LessonRow: View {
     private var meta: String {
         let base = "\(lesson.item.concepts.count) \(lesson.item.concepts.count == 1 ? "concept" : "concepts")"
         return done ? "\(base) · Done" : base
+    }
+}
+
+/// The scratch note on one checklist item — the "Your note" textarea in the
+/// web TopicRow's panel (TopicRow.tsx in course-home). Saved like the web
+/// field is: 400ms after the last keystroke, and at once when the field
+/// loses focus or the panel folds away, so a close inside the debounce never
+/// drops the last edit. The write is setNote's (`learner.setNote` into
+/// learner.db, then the merged progress re-read); an emptied note clears the
+/// column, as the web's does.
+private struct ItemNoteField: View {
+    @Environment(CatalogStore.self) private var store
+    @Environment(LearnerStore.self) private var learner: LearnerStore?
+    let itemID: String
+    /// The merged note the store held when the field mounted — the draft's
+    /// seed and the line a change is measured against, so a save only ever
+    /// fires on a real edit.
+    let saved: String
+
+    @State private var draft: String
+    @State private var pendingSave: Task<Void, Never>?
+    @FocusState private var focused: Bool
+
+    init(itemID: String, saved: String) {
+        self.itemID = itemID
+        self.saved = saved
+        _draft = State(initialValue: saved)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Your note")
+                .font(.caption.bold())
+                .foregroundStyle(.secondary)
+            ZStack(alignment: .topLeading) {
+                if draft.isEmpty {
+                    Text("Personal notes for this topic")
+                        .font(.callout)
+                        .foregroundStyle(.tertiary)
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 14)
+                        .allowsHitTesting(false)
+                }
+                TextEditor(text: $draft)
+                    .font(.callout)
+                    .scrollContentBackground(.hidden)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 8)
+                    .frame(minHeight: 64)
+                    .focused($focused)
+            }
+            .background(G.surface, in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(G.border, lineWidth: 1))
+        }
+        .onChange(of: draft) { _, text in
+            pendingSave?.cancel()
+            guard text != saved else { return }
+            pendingSave = Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(400))
+                guard !Task.isCancelled else { return }
+                flush(text)
+            }
+        }
+        // The web field's blur flush: leaving the field or folding the row
+        // writes whatever the debounce had not yet.
+        .onChange(of: focused) { _, on in
+            if !on { pendingSave?.cancel(); flush(draft) }
+        }
+        .onDisappear {
+            pendingSave?.cancel()
+            flush(draft)
+        }
+    }
+
+    /// The one write — a no-op when the draft is what the store already
+    /// holds, so the blur and fold flushes do not write twice.
+    private func flush(_ text: String) {
+        guard text != saved else { return }
+        learner?.setNote(itemID, note: text)
+        store.refreshLearner()
     }
 }
 
