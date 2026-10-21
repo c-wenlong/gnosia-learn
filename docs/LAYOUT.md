@@ -30,9 +30,8 @@ gnosia/                           the checkout
 The product is Gnosia, renamed from self-learn: the workspace names are
 `@gnosia/web`, `@gnosia/catalog`, `@gnosia/schema`, `@gnosia/content`,
 `@gnosia/blob`, `@gnosia/tutor`, `@gnosia/studio`, `@gnosia/sidecar` and
-`@gnosia/macos`. `GNOSIA_HOME` is the data-root variable everywhere; the
-snapshot script and the app also read a stale `SELF_LEARN_HOME` as a
-fallback, and the web keeps the legacy storage key and cookies readable
+`@gnosia/macos`. `GNOSIA_HOME` is the data-root variable everywhere, and
+the web keeps the legacy storage key and cookies readable
 (`self-learn:v1`, `self-learn-theme`, `self-learn-motion`).
 
 ## apps/web — the web app
@@ -283,8 +282,7 @@ deleted at will: nothing in it is the only copy of anything.
 
 Not in the repository at all, and deliberately so: the data a generator
 produces should not be pinned inside a checkout it can be moved out of.
-Resolved as `GNOSIA_HOME`, then `SELF_LEARN_HOME` as a fallback in the
-snapshot script and the app, then `~/.gnosia`. `GNOSIA_CATALOG` and
+Resolved as `GNOSIA_HOME`, then `~/.gnosia`. `GNOSIA_CATALOG` and
 `GNOSIA_BLOBS` override the two files directly.
 
 | Path | What it is |
