@@ -275,8 +275,8 @@ private struct SidecarDetail: View {
 // MARK: - Note
 
 /// A concept note: its markdown, from the linked concept row's `body`, set
-/// as readable text. The web's NoteProse resolves wikilinks and embeds;
-/// those read as their text here, a later wave can resolve them.
+/// as readable text. The web's NoteProse resolves wikilinks; those read as
+/// their text here, a later wave can resolve them.
 private struct NoteDetail: View {
     @Environment(CatalogStore.self) private var store
     let asset: CatalogAsset
@@ -305,77 +305,6 @@ private struct NoteDetail: View {
             asking = false
             ask = AssetAskModel()
         }
-    }
-}
-
-/// The note-body block split shared by NoteBodyView's renderer: headings,
-/// bullets, fenced code and paragraphs; the inline half (emphasis, maths,
-/// links) is the renderer's. Deliberately small — no wikilink or embed
-/// resolution this side of the webview.
-enum MarkdownText {
-    /// One markdown block; NoteBodyView feeds this split to its renderer.
-    enum Block {
-        case heading(Int, String)
-        case para(String)
-        case bullet(String)
-        case code(String)
-        case rule
-    }
-
-    /// The source split into blocks: code fences first, then headings,
-    /// rules and bullets line by line, everything else folded into a
-    /// paragraph per blank-line run. Shared with NoteBodyView's renderer.
-    static func parse(_ source: String) -> [Block] {
-        var blocks: [Block] = []
-        var para: [String] = []
-        var code: [String]?
-        func flushPara() {
-            if !para.isEmpty {
-                blocks.append(.para(para.joined(separator: " ")))
-                para = []
-            }
-        }
-        for raw in source.components(separatedBy: .newlines) {
-            let trimmed = raw.trimmingCharacters(in: .whitespaces)
-            if code != nil {
-                if trimmed.hasPrefix("```") {
-                    blocks.append(.code((code ?? []).joined(separator: "\n")))
-                    code = nil
-                } else {
-                    code?.append(raw)
-                }
-                continue
-            }
-            if trimmed.hasPrefix("```") {
-                flushPara()
-                code = []
-            } else if trimmed.isEmpty {
-                flushPara()
-            } else if let head = trimmed.range(of: #"^#{1,6}\s+"#, options: .regularExpression) {
-                flushPara()
-                let level = trimmed[head].filter { $0 == "#" }.count
-                blocks.append(.heading(level, String(trimmed[head.upperBound...])))
-            } else if trimmed.count >= 3, trimmed.allSatisfy({ $0 == "-" || $0 == "*" }) {
-                flushPara()
-                blocks.append(.rule)
-            } else if trimmed.count > 2,
-                      let marker = trimmed.first,
-                      "-*+".contains(marker),
-                      trimmed.hasPrefix("\(marker) ") {
-                flushPara()
-                blocks.append(.bullet(String(trimmed.dropFirst(2))))
-            } else if let ordered = trimmed.range(of: #"^\d+[.)]\s+"#, options: .regularExpression) {
-                flushPara()
-                blocks.append(.bullet(String(trimmed[ordered.upperBound...])))
-            } else if trimmed.hasPrefix("> ") {
-                para.append(String(trimmed.dropFirst(2)))
-            } else {
-                para.append(trimmed)
-            }
-        }
-        flushPara()
-        if let code { blocks.append(.code(code.joined(separator: "\n"))) }
-        return blocks
     }
 }
 
