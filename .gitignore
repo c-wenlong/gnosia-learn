@@ -64,13 +64,6 @@ next-env.d.ts
 # machine's, and committing it would give the repo two versions that drift.
 .agents/
 
-# Where a studio job wrote its candidate before candidates moved into the job
-# workspace under STUDIO_HOME (phase 2 of docs/CONTENT-MIGRATION.md). Kept
-# ignored for a job recorded before the move, whose half-drawn file may still
-# sit here until it is accepted or discarded; committing one would ship a
-# diagram nobody reviewed.
-learn/assets/.candidates/
-
 # The diagram studio runner's own state: one directory per job, holding the
 # write-ahead log, the agent transcript, the per-job permission file and the
 # scratch the agent writes snippets into. None of it is knowledge base, and the
