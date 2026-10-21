@@ -34,7 +34,7 @@ manimkc, remotionkc or revideokc gets exactly one `asset_topic` row
 
 ## What already exists
 
-Most of what a path needs is already in the catalog. Measured on `self_learn`
+Most of what a path needs is already in the catalog. Measured on `gnosia`
 on 2026-10-04:
 
 - **The order.** Every one of the 248 live course items lists its concepts in
@@ -246,6 +246,8 @@ module material, and that is correct. A video's chapters sidecar could later
 split it into per-lesson segments; that is out of scope here.
 
 ### The week check
+
+Renamed on screen to "Module check" on 2026-10-09, when the self-paced roadmap.sh courses arrived: they have no weeks. The code, routes and this document keep the old name (`weekCheck`, `week-check.ts`).
 
 A new session mode, `?mode=module`, at `/courses/<slug>/<module>/check`,
 reuses `SessionFocus` and its Quiz me flow. The plan takes the module's

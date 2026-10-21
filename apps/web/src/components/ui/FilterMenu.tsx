@@ -127,8 +127,11 @@ export function FilterMenu<V extends string>({
   };
   const pick = (index: number) => {
     const option = options[index];
+    // A disabled row is shown, never picked: keyboard Enter lands on it all
+    // the same, so the refusal lives here too.
+    if (option === undefined || option.disabled === true) return;
     close(true);
-    if (option !== undefined && option.value !== value) onChange(option.value);
+    if (option.value !== value) onChange(option.value);
   };
 
   // Opening: give the list focus. A layout effect, which runs after the
@@ -309,10 +312,11 @@ export function ListOption<V extends string>({
       role="option"
       data-value={option.value}
       aria-selected={selected}
+      aria-disabled={option.disabled === true}
       aria-label={name}
-      onMouseMove={onHover}
-      onClick={onPick}
-      className={menuRowClasses({ active, keyboard })}
+      onMouseMove={option.disabled === true ? undefined : onHover}
+      onClick={option.disabled === true ? undefined : onPick}
+      className={cx(menuRowClasses({ active, keyboard }), option.disabled === true && "cursor-default opacity-50")}
     >
       <Glyph name="tick" size={16} className={cx("text-accent-text", !selected && "invisible")} />
       <span className="flex min-w-0 flex-1 flex-col">

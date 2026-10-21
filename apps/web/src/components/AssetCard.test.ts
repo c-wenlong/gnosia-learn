@@ -120,11 +120,12 @@ describe("assetMetaLine", () => {
     expect(assetMetaLine(asset())).toBe("manim · 25 MB");
     expect(assetMetaLine(asset({ sourceRepo: "remotionkc" }))).toBe("remotion · 25 MB");
     expect(assetMetaLine(asset({ sourceRepo: "revideokc" }))).toBe("revideo · 25 MB");
+    expect(assetMetaLine(asset({ sourceRepo: "blenderkc" }))).toBe("blender · 25 MB");
     expect(
       assetMetaLine(asset({ kind: "diagram_svg", sourceRepo: "tldrawkc", bytes: 12_000 })),
     ).toBe("SVG · tldraw · 12 kB");
     // The chip beside it already says "Note", so the line does not.
-    expect(assetMetaLine(asset({ kind: "note", sourceRepo: "self-learn", bytes: 3_100 }))).toBe("3.1 kB");
+    expect(assetMetaLine(asset({ kind: "note", sourceRepo: "gnosia", bytes: 3_100 }))).toBe("3.1 kB");
   });
 
   it("gives a link its host, or says external when the URL does not parse", () => {
@@ -135,7 +136,7 @@ describe("assetMetaLine", () => {
   });
 
   it("says nothing it does not know", () => {
-    expect(assetMetaLine(asset({ kind: "session", sourceRepo: "self-learn", bytes: null }))).toBe("");
+    expect(assetMetaLine(asset({ kind: "session", sourceRepo: "gnosia", bytes: null }))).toBe("");
   });
 });
 

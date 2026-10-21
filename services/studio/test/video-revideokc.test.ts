@@ -22,7 +22,7 @@ import { buildRevideokcProfile, profilePorts, RENDER_SERVICES, revideokcEnv } fr
 import { buildRevideokcSettings } from "../src/video/revideokc/settings";
 import { combinedHash, COMBINED_HASH_JS, currentSourceHash, readSources } from "../src/video/revideokc/source";
 import type { RevideokcToolchain } from "../src/video/revideokc/toolchain";
-import { revideokcProblems } from "../src/video/revideokc/toolchain";
+import { findChrome, revideokcProblems } from "../src/video/revideokc/toolchain";
 import { revideokcWrapperConfig, writeRevideokcWrapper } from "../src/video/revideokc/wrapper";
 import type { WrapperCall } from "../src/video/calls";
 
@@ -55,25 +55,27 @@ afterEach(async () => {
   }
 });
 
-const REVIDEOKC = "/Users/me/self-learn/tools/revideokc";
+const REVIDEOKC = "/Users/me/gnosia/tools/revideokc";
 
 /** A toolchain that names programs without running any. */
 function fixedTools(): RevideokcToolchain {
   return {
     platform: "darwin",
+    sandboxKind: "seatbelt",
     sandboxExec: "/usr/bin/sandbox-exec",
-    manimkcRoot: "/Users/me/self-learn/tools/manimkc",
-    manimkcDirs: { manim: "/m/manim", venv: "/m/.venv", venvTts: "/Users/me/self-learn/tools/manimkc/.venv-tts", tools: "/m/tools" },
+    libs: [],
+    manimkcRoot: "/Users/me/gnosia/tools/manimkc",
+    manimkcDirs: { manim: "/m/manim", venv: "/m/.venv", venvTts: "/Users/me/gnosia/tools/manimkc/.venv-tts", tools: "/m/tools" },
     ffmpeg: { link: "/opt/homebrew/bin/ffmpeg", real: "/opt/homebrew/Cellar/ffmpeg/9/bin/ffmpeg", home: "/opt/homebrew/Cellar/ffmpeg/9" },
     ffprobe: { link: "/opt/homebrew/bin/ffprobe", real: "/opt/homebrew/Cellar/ffmpeg/9/bin/ffprobe", home: "/opt/homebrew/Cellar/ffmpeg/9" },
     python3: null,
     venvPython: null,
-    ttsPython: { link: "/Users/me/self-learn/tools/manimkc/.venv-tts/bin/python", real: "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3.12", home: "/Library/Frameworks/Python.framework" },
+    ttsPython: { link: "/Users/me/gnosia/tools/manimkc/.venv-tts/bin/python", real: "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3.12", home: "/Library/Frameworks/Python.framework" },
     node: "/usr/local/bin/node",
     hfHubCache: "/Users/me/.cache/huggingface/hub",
     kokoroModel: "/Users/me/.cache/huggingface/hub/models--hexgrad--Kokoro-82M",
     voicesInstalled: ["af_heart"],
-    sharedAudioCache: "/Users/me/.self-learn/manimkc/cache/audio",
+    sharedAudioCache: "/Users/me/.gnosia/manimkc/cache/audio",
     revideokc: {
       root: REVIDEOKC,
       nodeModules: `${REVIDEOKC}/node_modules`,
@@ -87,7 +89,8 @@ function fixedTools(): RevideokcToolchain {
       revideo: "0.11.0",
       splitBuild: true,
       nodeVersion: "22.23.1",
-      ownerHome: "/Users/me/.self-learn/revideokc",
+      ownerHome: "/Users/me/.gnosia/revideokc",
+      libs: [],
     },
   };
 }
@@ -205,7 +208,7 @@ describe("the revideokc profiles", () => {
     const exec = block(text, "allow process-exec").join(" ");
     expect(exec).toContain(`(literal "${REVIDEOKC}/.venv/bin/gnosia-audio")`);
     expect(exec).toContain(`(literal "${REVIDEOKC}/.venv/bin/python")`);
-    expect(exec).toContain('(literal "/Users/me/self-learn/tools/manimkc/.venv-tts/bin/python")');
+    expect(exec).toContain('(literal "/Users/me/gnosia/tools/manimkc/.venv-tts/bin/python")');
     expect(exec).not.toContain("Google Chrome");
     expect(text).not.toMatch(/network|mach-lookup|mach-register/);
     expect(block(text, "allow file-read*").join(" ")).toContain("models--hexgrad--Kokoro-82M");
@@ -385,9 +388,9 @@ describe("the permission file", () => {
       jobId: "j",
       paths,
       revideokcRoot: REVIDEOKC,
-      revideokcHome: "/Users/me/.self-learn/revideokc",
-      manimkcRoot: "/Users/me/self-learn/tools/manimkc",
-      manimkcHome: "/Users/me/.self-learn/manimkc",
+      revideokcHome: "/Users/me/.gnosia/revideokc",
+      manimkcRoot: "/Users/me/gnosia/tools/manimkc",
+      manimkcHome: "/Users/me/.gnosia/manimkc",
       guard: "/usr/local/bin/node /jobs/j/bin/bash-guard.cjs",
     });
     const { allow, deny } = settings.permissions;
@@ -408,8 +411,8 @@ describe("the permission file", () => {
       `Edit(/${paths.lib}/**)`,
       `Edit(/${paths.render}/**)`,
       `Read(/${REVIDEOKC}/topics/**)`,
-      "Read(//Users/me/.self-learn/revideokc/**)",
-      "Read(//Users/me/self-learn/tools/manimkc/topics/**)",
+      "Read(//Users/me/.gnosia/revideokc/**)",
+      "Read(//Users/me/gnosia/tools/manimkc/topics/**)",
       `Read(/${path.join(paths.job, "ports.json")})`,
       "WebFetch",
     ]) {
@@ -447,6 +450,22 @@ describe("the backend's own parts", () => {
     expect(revideokcProblems(broken).join("\n")).toMatch(
       /no build --no-narrate[\s\S]*22\.18[\s\S]*Chrome[\s\S]*narration-deps/,
     );
+  });
+
+  it("resolves a distro launcher script to the browser it execs, never to the script's own shell", async () => {
+    // Greptile on #445: the shebang's `/bin/sh` is itself a large executable
+    // and won over the browser path the launcher execs.
+    const bindir = path.join(root, "usr", "bin");
+    const libdir = path.join(root, "usr", "lib", "chromium");
+    const real = path.join(libdir, "chromium");
+    const script = path.join(bindir, "chromium");
+    await mkdir(bindir, { recursive: true });
+    await mkdir(libdir, { recursive: true });
+    await writeFile(real, Buffer.alloc(20000, 1));
+    await chmod(real, 0o755);
+    await writeFile(script, `#!/bin/sh\nexec ${real} "$@"\n`);
+    await chmod(script, 0o755);
+    expect(findChrome({ REVIDEOKC_CHROME: script })).toEqual({ binary: real, bundle: libdir });
   });
 });
 
@@ -512,10 +531,10 @@ describe("the doctor's kept build", () => {
 
 const execFileAsync = promisify(execFile);
 
-// The wrapper's shebang is `#!/usr/bin/env -i <node>`, which only macOS splits
-// into arguments (Linux hands env "-i <node>" as one, and env exits 125); the
-// video runner is macOS-only anyway (Seatbelt), as manimkc's wrapper test says.
-describe.skipIf(process.platform !== "darwin")("the revideokc wrapper", () => {
+// The wrapper's shebang is `#!/usr/bin/env -i <node>` on macOS, which the
+// kernel splits on spaces, and `#!/usr/bin/env -S -i <node>` on Linux, where
+// coreutils does the splitting (`wrapperSource` in src/video/wrapper.ts).
+describe("the revideokc wrapper", () => {
   let paths: VideoPaths;
   let recordFile: string;
 

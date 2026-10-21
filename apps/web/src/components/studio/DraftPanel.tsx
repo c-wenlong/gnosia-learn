@@ -103,12 +103,15 @@ import {
   drawBoth,
   drawDraft,
   getDraft,
+  getByokSettings,
+  BYOK_SETTINGS_CHANGED,
   openDraftEvents,
   readStudioHealth,
   refusalReason,
   saveBrief,
   sendMessage,
   setDraftModel,
+  setDraftHarness,
   stopWaiting,
   releaseHold,
   videoAvailability,
@@ -119,7 +122,9 @@ import {
   type TranscriptEntry,
   type VideoAvailability,
 } from "@/lib/studio-drafts";
-import { modelOptions, runnerDefaultOption, runnerSettings, MODEL_CHOICES, type AgentDefaults, type ModelChoice, type RunnerResolved } from "@/lib/studio-agent-settings";
+import { HarnessPicker } from "@/components/studio/HarnessPicker";
+import type { HarnessValue } from "@/lib/studio-harness";
+import { harnessModelOptions, runnerSettings, type AgentDefaults, type ModelChoice, type RunnerResolved } from "@/lib/studio-agent-settings";
 import { switchedTool, type VideoToolOption } from "@/lib/studio-brief-video";
 import {
   arrivingPurpose,
@@ -236,10 +241,19 @@ export function DraftPanel({
   const [video, setVideo] = useState<VideoAvailability | null>(initialVideo);
   const [diagramAgent, setDiagramAgent] = useState<VideoAvailability | null>(initialDiagram);
   /** The picker's list and the Claude Code defaults, from health's `agent` (D90). */
-  const [agentMenu, setAgentMenu] = useState<{ models: ModelChoice[] | null; defaults: AgentDefaults | null; resolved: RunnerResolved | null }>({ models: null, defaults: null, resolved: null });
+  const [agentMenu, setAgentMenu] = useState<{ models: ModelChoice[] | null; defaults: AgentDefaults | null; resolved: RunnerResolved | null; byokModel: string | null; byokTiers: { default?: string; lite?: string; max?: string } | null }>({
+    models: null,
+    defaults: null,
+    resolved: null,
+    byokModel: null,
+    byokTiers: null,
+  });
   /** The pick sent to the runner and not yet seen in the record. */
   const [modelPick, setModelPick] = useState<string | null>(null);
   const [modelError, setModelError] = useState<string | null>(null);
+  /** The harness pick sent to the runner and not yet seen in the record, as the model pick's is. */
+  const [harnessPick, setHarnessPick] = useState<string | null>(null);
+  const [harnessError, setHarnessError] = useState<string | null>(null);
   /** The cards whose press is under way, each with its kind's job before the press. */
   const [pressing, setPressing] = useState<ReadonlyMap<DraftKind, string | null>>(new Map());
   const [refused, setRefused] = useState<Partial<Record<CardKey, DrawRefusal & { seq: number }>>>({});
@@ -409,7 +423,30 @@ export function DraftPanel({
     setVideo(videoAvailability(health.video));
     setDiagramAgent(diagramAvailability(health.diagramAgent));
     setAgentMenu(runnerSettings(health.agent));
-  }, []);
+    // The BYOK tier models, read fresh — health's copy can be older than a
+    // Connect that just wrote them.
+    if (view?.harness === "byok") {
+      const result = await getByokSettings();
+      // A read that says nothing is configured clears what an earlier one
+      // found — a removed provider's tiers go with it.
+      if (!result.ok) return;
+      if (!result.data.configured) {
+        setAgentMenu((held) => ({ ...held, byokModel: null, byokTiers: null }));
+        return;
+      }
+      const entry = result.data.providers.find((provider) => provider.provider === result.data.active);
+      if (entry !== undefined) {
+        setAgentMenu((held) => ({ ...held, byokModel: result.data.model, byokTiers: entry.models }));
+      }
+    }
+  }, [view?.harness]);
+  // A BYOK write from the dialog or Settings re-reads the tiers at once
+  // (D94), so a tier just configured is pickable without a health refresh.
+  useEffect(() => {
+    const on = () => void readHealth();
+    window.addEventListener(BYOK_SETTINGS_CHANGED, on);
+    return () => window.removeEventListener(BYOK_SETTINGS_CHANGED, on);
+  }, [readHealth]);
   // Once on opening too: the page that drew the grid read health, and a
   // conversation opened in the browser (`PanelHost`) can be minutes
   // younger than that read.
@@ -704,6 +741,29 @@ export function DraftPanel({
     setModelPick((held) => (held === next ? null : held));
   }
 
+  /* ---------------------------------------------------------------- */
+  /* The harness pick (the pane picker's)                              */
+  /* ---------------------------------------------------------------- */
+
+  // Same optimistic shape as the model pick: the chip shows it at once, the
+  // record's own `harness` clears the stand-in, and a refusal is said under
+  // the composer. A harness moves only before the first turn, so the common
+  // refusal is `harness-locked`.
+  const shownHarness = harnessPick ?? view?.harness ?? "claude";
+  if (harnessPick !== null && (view?.harness ?? "claude") === harnessPick) {
+    setHarnessPick(null);
+  }
+
+  async function pickHarness(next: HarnessValue) {
+    setHarnessPick(next);
+    setHarnessError(null);
+    const result = await setDraftHarness(draftId, next);
+    if (!result.ok) {
+      setHarnessError(`The harness could not be set: ${result.refusal.error}`);
+    }
+    setHarnessPick((held) => (held === next ? null : held));
+  }
+
   // Arriving from Extend, from Talk it through on a failed job, or from a
   // video's Change: the opener left for this draft, taken once so a reload
   // never sends it again, and sent only into a conversation that is still
@@ -943,7 +1003,13 @@ export function DraftPanel({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" onKeyDown={onKeyDown}>
-      <DialogHeader title={title} meta={cost === null ? undefined : <span title={costTitle}>{cost}</span>} />
+      <DialogHeader
+        title={title}
+        meta={cost === null ? undefined : <span title={costTitle}>{cost}</span>}
+        // The harness picker bound to this conversation: its own `harness`,
+        // and picks written through `PUT .../harness` (`pickHarness`).
+        leading={<HarnessPicker value={shownHarness} onPick={(next) => void pickHarness(next)} />}
+      />
 
       <div
         ref={thread}
@@ -1111,12 +1177,14 @@ export function DraftPanel({
           onModEnter={cards.length > 0 ? () => modEnter(null) : undefined}
         />
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-[12px] text-text3">
-          {/* The conversation's model (D90): every turn and job it makes runs
-              on this. Filled only when a pick stands. */}
+          {/* The conversation's model (D90), as tiers (D92): each harness's
+              own Lite/Default/Max rather than a model list. On BYOK the tiers
+              name the active provider's configured models (D94); one left
+              unconfigured shows greyed out and cannot be picked. */}
           <FilterMenu
             label="Model"
             bare
-            options={modelOptions(shownModel, agentMenu.defaults, agentMenu.models ?? MODEL_CHOICES, null, runnerDefaultOption(agentMenu.resolved))}
+            options={harnessModelOptions(shownHarness, shownModel, agentMenu.resolved, agentMenu.byokTiers)}
             value={shownModel}
             defaultValue="default"
             busy={modelPick !== null}
@@ -1137,7 +1205,9 @@ export function DraftPanel({
           )}
           {downReason !== null && <span className="text-danger">The runner stopped answering: {downReason}</span>}
           <Failure
-            text={modelError ?? startOverError ?? (startError === null ? null : `A new conversation could not start: ${startError}`)}
+            text={
+              modelError ?? harnessError ?? startOverError ?? (startError === null ? null : `A new conversation could not start: ${startError}`)
+            }
             className="basis-full"
           />
         </div>

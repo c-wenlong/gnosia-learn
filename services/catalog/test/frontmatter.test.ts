@@ -4,7 +4,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { REPO_ROOT } from "../src/env";
-import { noteId } from "@self-learn/content";
+import { noteId } from "@gnosia/content";
 import { SEED } from "./seed";
 
 import { extractWikilinks, parseFrontmatter, readText } from "../src/index/frontmatter";

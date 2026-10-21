@@ -11,8 +11,8 @@ import {
   SESSIONS_DIR,
   TAGS_FILE,
   TOPICS_FILE,
-} from "@self-learn/content";
-import type { ContentType } from "@self-learn/schema";
+} from "@gnosia/content";
+import type { ContentType } from "@gnosia/schema";
 
 /**
  * The export format's layout: which files under a root belong to which

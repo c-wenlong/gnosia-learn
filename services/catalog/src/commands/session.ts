@@ -3,7 +3,7 @@ import {
   SESSION_STATES,
   type SessionKind,
   type SessionState,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 
 import { CLI_OWNER } from "../content/scope";
 import { withDatabase } from "../db";

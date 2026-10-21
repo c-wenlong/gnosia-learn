@@ -17,7 +17,7 @@ import {
   session,
   topic,
   topicRelation,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -87,9 +87,7 @@ const COURSE = [
 
 function pointAt(name: string): () => void {
   const saved = { url: process.env["DATABASE_URL"], manimkc: process.env["MANIMKC_ROOT"] };
-  const url = new URL(process.env["DATABASE_URL"] ?? "postgres://localhost:5432/self_learn");
-  url.pathname = `/${name}`;
-  process.env["DATABASE_URL"] = url.toString();
+  process.env["DATABASE_URL"] = name;
   process.env["MANIMKC_ROOT"] = path.join(tmpdir(), "catalog-test-no-manimkc");
   return () => {
     for (const [key, value] of [["DATABASE_URL", saved.url], ["MANIMKC_ROOT", saved.manimkc]] as const) {
@@ -124,7 +122,7 @@ describe.skipIf(!reachable.ok)("write verbs and owners", () => {
     await fixture.write("content/courses/lc1000.yaml", COURSE);
     await fixture.write("learn/concepts/one/base.md", note({ id: "base" }));
     await fixture.write("learn/concepts/two/other-concept.md", note({ id: "other-concept" }));
-    restore = pointAt(scratch.name);
+    restore = pointAt(scratch.url);
     await runImportCommand({ dir: fixture.root });
 
     // Then the owners, as the review's seed set them: `other` holds a topic
@@ -269,7 +267,7 @@ describe.skipIf(!reachable.ok)("write verbs and owners", () => {
       url: "https://example.com/t",
       title: "Their link",
       resourceType: "docs",
-      sourceRepo: "self-learn",
+      sourceRepo: "gnosia",
       ownerId: OTHER,
     });
     await expect(

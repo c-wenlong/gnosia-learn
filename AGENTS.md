@@ -31,13 +31,14 @@ This version has breaking changes — APIs, conventions, and file structure may 
 | [docs/proposals/knowledge-map.md](docs/proposals/knowledge-map.md) | Built, then superseded the same day (2026-10-04) except G1: the island map, a pannable, zoomable canvas of the prerequisite graph titled by course. G1 (the graph is `/learn`'s default view, the table at `?view=table`) still stands; G2 to G8 gave way to domain-map.md |
 | [docs/proposals/domain-map.md](docs/proposals/domain-map.md) | Built 2026-10-04: the Learn map grouped by domain (the topic's), one card per domain, then one bounded domain picture of topic groups with the list beside it; hover lights a concept's edges, drag moves it, no pan or zoom; legend chips preview and filter (D9), labels and topic titles keep 11px and the ones that collide are culled (D10), and an Axes layout places each concept by learning order and how many need it (D11). Replaces G2 to G8 of knowledge-map.md. Decisions D1 to D11 |
 | [docs/proposals/recall-in-chat.md](docs/proposals/recall-in-chat.md) | Accepted 2026-10-04, all three phases built (R2: tap to record): a check inside the concept tutor's chat, or the course topic tutor's (naming its concept), is evidence. The tutor marks a check, a second call judges the answer, the learner commits the verdict with one tap, and `recordObservation` writes it, so mastery, the map and the review card move from the conversation; recall becomes the tutor's opening move on a due concept. Review left the sidebar first (#343). Decisions R1 to R6, three phases |
+| [docs/proposals/blenderkc.md](docs/proposals/blenderkc.md) | Proposed 2026-10-09, then built as a fourth video tool by the owner's call the same day (D96 amended): blenderkc, photoreal 3D through Blender's `bpy` from PyPI, narrated, with its own sidecars and its own `topics --json`, imported by the catalog as `blenderkc:` rows. The test shot's measurements (6.0 s a 1080p Cycles frame on the M4 Pro, the wheel matching the app), the homeserver's GTX 1070 with OptiX (3.2 s a frame), anchors that let 2D labels track 3D objects, the repository private like the other tools (D103). Decisions D96 to D104
 | [tools/tldrawkc/docs/](tools/tldrawkc/docs/README.md) | The tool's design docs: architecture, CLI contract, helpers, decisions, roadmap |
 | [docs/TLDRAWKC-INTEGRATION.md](docs/TLDRAWKC-INTEGRATION.md) | The diagram studio at `/studio`: the session and job schema, the runner, the UI, and the decisions behind them |
 | [docs/STUDIO-CHAT-FIRST.md](docs/STUDIO-CHAT-FIRST.md) | The studio's chat-first redesign, accepted and being built: the planner agent, the `draft` table, the plus card and chat panel, and the tldraw manual in the drawing prompt |
 | [docs/STUDIO-VIDEOS.md](docs/STUDIO-VIDEOS.md) | Proposed: manimkc videos through the studio's chat. The video runner, the per-job sandbox around agent-written Python, the script as the brief, the gate, `catalog video put`, and the panel for the agent's model and effort |
 | [docs/STUDIO-MENTIONS.md](docs/STUDIO-MENTIONS.md) | Proposed: choosing what the studio's chat makes with @ tags. The menu, the inline chip and the studio's Lexical `MentionComposer`, tags as data on a message, untagged messages as conversation with one-click suggestions, one live brief per kind and Make both, the combined planner prompt, and "Add from library" as a later phase. Supersedes D51 of STUDIO-VIDEOS.md; ships with video phase 2 |
 | [docs/STUDIO-TUTOR-HANDOFF.md](docs/STUDIO-TUTOR-HANDOFF.md) | Accepted, phases 1 (the runner) and 2 (the web app) built and measured, the paid hand-offs and the iOS Safari touch check included; Android Chrome and VoiceOver are the owner's to run: the concept tutor on `/learn/<concept>` gets the @ composer, and a Diagram or Video tag hands the concept to a new studio conversation (the note and the last tutor turns as data blocks, the message sent on arrival). When tags show, when Lexical loads, the runner change, D64 to D70 |
-| [docs/VIDEO-TOOLS.md](docs/VIDEO-TOOLS.md) | Which of the three video tools (manimkc, remotionkc, revideokc) makes a given video: what each is good for, a capability matrix with where each claim was proven, the risks, and the routing procedure the `video-router` skill runs |
+| [docs/VIDEO-TOOLS.md](docs/VIDEO-TOOLS.md) | Which of the four video tools (manimkc, remotionkc, revideokc, blenderkc) makes a given video: what each is good for, a capability matrix with where each claim was proven, the risks, and the routing procedure the `video-router` skill runs |
 | [docs/STUDIO-VIDEO-TOOLS.md](docs/STUDIO-VIDEO-TOOLS.md) | Built in phases, phase 3 (remotionkc) the last: the studio picks a video tool. The planner proposes manimkc, remotionkc or revideokc in the brief with a reason (a TOOLS block pinned to VIDEO-TOOLS.md), the card shows it as a switchable chip, the runner gets a backend per tool, and headless Chrome runs inside the job's Seatbelt profile (measured). D71 to D80 |
 | [docs/CONTENT-MIGRATION.md](docs/CONTENT-MIGRATION.md) | Moving authored content out of files in git into Postgres and object storage, built through the phase 3 cut-over: the phases, the revision table, the blob store and the decisions behind them |
 | [docs/design/DESIGN.md](docs/design/DESIGN.md) | The redesign: sixteen decisions, the routes and screens, the hi-fi tokens and where each came from |
@@ -73,7 +74,7 @@ reachable at the tag `content-files-final` (`git show
 content-files-final:content/topics.yaml`). Obsidian reads the notes from a
 **vault**:
 `npm run learn -- vault pull` writes every note, every log and every diagram's
-SVG (under `assets/`, read-only) to `~/.self-learn/vault/`, and
+SVG (under `assets/`, read-only) to `~/.gnosia/vault/`, and
 `npm run learn -- vault push --reason R` takes edited notes back, one revision
 each, refusing a note that moved in the database since the pull. Neither
 command overwrites an edit nobody pushed, and a vault inside any checkout of
@@ -84,8 +85,12 @@ this repository is refused, since notes written there are untracked files in
 
 ## Video tools: choosing one
 
-Three submodules make narrated videos: manimkc (ManimGL), remotionkc
-(Remotion) and revideokc (Revideo, the Motion Canvas fork). They share one
+Four submodules make narrated videos: manimkc (ManimGL), remotionkc
+(Remotion), revideokc (Revideo, the Motion Canvas fork) and blenderkc
+(Blender's Cycles, photoreal 3D, made at a terminal only). Three are
+private repositories, so a clone without access leaves their `tools/`
+directories empty and needs nothing from them; tldrawkc and blenderkc are
+public. They share one
 voice, one report shape and one deliverable format, and differ in what they
 draw well. **Before making a video, run the `video-router` skill**
 (`.claude/skills/video-router/`); it applies
@@ -96,7 +101,7 @@ beyond the videos made so far.
 
 ## Asset generation: tools/manimkc/
 
-`tools/manimkc/` is a git **submodule** (its own repo,
+`tools/manimkc/` is a git **submodule** (its own private repo,
 github.com/c-wenlong/manimkc) that renders narrated animation videos with
 manim: ManimGL as the primary flavour, a Manim Community port alongside it,
 and a TTS narration layer synced to the animations. It exists so the
@@ -135,7 +140,7 @@ Rules of engagement:
   which is exactly why it can live elsewhere: moving this submodule from
   `manimkc/` into `tools/` on 2026-09-13 deleted 25 rendered videos and the whole
   clip cache, because git does not carry gitignored files across a move. Point
-  `MANIMKC_HOME` outside the checkout (`manimkc home --migrate ~/.self-learn`)
+  `MANIMKC_HOME` outside the checkout (`manimkc home --migrate ~/.gnosia`)
   and a repo relayout cannot do that again.
 - **Never join a manimkc path onto the submodule root.** `manimkc topics --json`
   and `manimkc mirrors --json` report a top-level absolute `outRoot`; a
@@ -152,9 +157,9 @@ Rules of engagement:
   nothing in this repo reads it: the indexers take that from each report's
   `outRoot`. `TLDRAWKC_ROOT` is the same idea for the other submodule, read by
   `npm run canvas` as well so the two cannot run different builds, and
-  `REMOTIONKC_ROOT` and `REVIDEOKC_ROOT` the same for remotionkc and
-  revideokc. All five default to the paths in `.gitmodules`, so a clone
-  configures nothing.
+  `REMOTIONKC_ROOT`, `REVIDEOKC_ROOT` and `BLENDERKC_ROOT` the same for
+  remotionkc, revideokc and blenderkc. All six default to the paths in
+  `.gitmodules`, so a clone configures nothing.
 - **Drive it through its CLI, not by hand.** `tools/manimkc/tools/cli/manimkc` is
   stdlib-only Python, so it still runs when a venv is broken:
   `doctor` (venvs, ffmpeg, narration backend, output dirs), `home` (the data
@@ -162,7 +167,7 @@ Rules of engagement:
   and every `lib/` helper with a real usage line), `example`, `new` (scaffold a
   topic), `lint`, `preview`, `build`, `topics`, `mirrors`. Run it from any
   checkout, or install with `uv tool install -e tools/cli`.
-- **A topic.yml's `concepts:` is read by the catalog, for all three video
+- **A topic.yml's `concepts:` is read by the catalog, for all four video
   tools.** Each slug becomes an `asset_concept` row on the video and its
   sidecars, which is how a video lands on a concept's step of a module path.
   A slug the importing owner cannot read, or a `concepts:` that is not a list
@@ -180,7 +185,7 @@ Rules of engagement:
 
 ## Asset generation: tools/remotionkc/
 
-`tools/remotionkc/` is the third git **submodule** (its own repo,
+`tools/remotionkc/` is the third git **submodule** (its own private repo,
 github.com/c-wenlong/remotionkc): narrated explainer videos made with
 Remotion, the second video tool beside manimkc. Its renders enter the catalog
 the way manimkc's do, as `video` assets with transcript, chapters and
@@ -226,7 +231,7 @@ Rules of engagement:
 
 ## Asset generation: tools/revideokc/
 
-`tools/revideokc/` is the fourth git **submodule** (its own repo,
+`tools/revideokc/` is the fourth git **submodule** (its own private repo,
 github.com/c-wenlong/revideokc): narrated explainer videos made with Revideo
 0.11, the maintained fork of Motion Canvas that renders headless, the third
 video tool. It is shaped like remotionkc on purpose: the same CLI verbs, the
@@ -273,6 +278,68 @@ Rules of engagement:
   gnosia-audio falls back to its own voice, which is not the series'.
 - The end-to-end process is the `revideokc-video` skill, which lives in the
   submodule and is symlinked into `.claude/skills/revideokc-video`.
+
+## Asset generation: tools/blenderkc/
+
+`tools/blenderkc/` is the fifth git **submodule** (its own public repo,
+github.com/c-wenlong/blenderkc): narrated explainer videos whose pictures are
+photoreal 3D, rendered by Blender's Cycles through `bpy` 5.2.2 from PyPI, the
+fourth video tool. It is shaped like revideokc: the same CLI verbs, the same
+`topics --json` report, the same narration through gnosia-audio and the same
+sidecars, so the catalog indexes it through the same descriptor in
+`services/catalog/src/index/video-tool.ts`, labelled "blender" in the web app.
+It is for videos whose subject is a physical object (a chip package, a die
+stack, a board), where its 3D is the picture and 2D labels sit on top. The
+studio has no blenderkc backend: it is made at a terminal only.
+
+Rules of engagement:
+
+- **Read `tools/blenderkc/docs/DESIGN.md` before working in there**, and
+  `docs/KIT.md` before writing a shot. DESIGN.md is the contract between the
+  library (Python 3.13 with bpy, in its `.venv`) and the CLI (standard library
+  only, which never imports bpy), the two cache keys per scene, the build and
+  `--host`. The proposal behind it is
+  [docs/proposals/blenderkc.md](docs/proposals/blenderkc.md).
+- **Commits inside `tools/blenderkc/` belong to that repo.** Commit and push
+  there first, then commit the updated submodule pointer here. Never commit a
+  dirty submodule pointer.
+- **Drive it through its CLI.** `python3 tools/blenderkc/tools/cli/blenderkc
+  --root <checkout> topics --json` answers with manimkc's report shape.
+  `catalog import` runs it with `python3` (`--only blenderkc`,
+  `--blenderkc-root`), and `catalog asset upload --source blenderkc` stores
+  the bytes and cuts the posters. A bare import with no CLI skips blenderkc,
+  and refuses once it has rows here, as for the other three.
+- **Each topic.yml's `topic:` is required**, as for remotionkc and revideokc;
+  there is no maps vocabulary. Its optional `concepts:` is read as manimkc's
+  is. A folder whose topic the owner cannot read refuses the import even
+  before it is rendered, so a new topic.yml names a real catalog topic from
+  its first commit.
+- **`BLENDERKC_ROOT` is the checkout, `BLENDERKC_HOME` the data root**, with
+  the same split as the others: the catalog reads the first
+  (`services/catalog/src/env.ts`, defaulting to `tools/blenderkc`) and takes
+  the second from the report's `outRoot`. On the owner's Mac the data root is
+  `~/.gnosia/blenderkc`, set by a `BLENDERKC_HOME=` line in the
+  checkout's `.env` (blenderkc reads the checkout's `.env`, never the data
+  root's). A worktree's submodule has no `.env`, so set the variable in the
+  environment there. **Never join a blenderkc path onto the submodule root.**
+- **`make deps` then `make narration-deps` in `tools/blenderkc`** make its one
+  `.venv`: Python 3.13 with bpy and Pillow, and the pinned gnosia-audio
+  beside them (non-editable, with uv). Run them after a fresh clone and after
+  any pointer move that changes either pin. Only `topics --json`, which the
+  catalog runs, works without them
+  (`services/catalog/test/blenderkc-pinned.test.ts` holds that). Like the
+  others it hands gnosia-audio a manimkc checkout (`MANIMKC_ROOT`, or a
+  sibling `../manimkc`) for the series' voice.
+- **The 3D renders on the homeserver**: `build <topic> --host home` copies a
+  snapshot of the checkout to the host (Ubuntu, a GTX 1070), renders each
+  scene's frames there with Cycles on CUDA and the OptiX denoiser, copies
+  each scene's plate back, and does every 2D step (overlays, joining,
+  narration, sidecars) on the Mac. Measured: 3.2 s a frame on the host
+  against 4.0 s on the M4 Pro, and 17 s when the denoiser falls back to OIDN
+  on the CPU. A build is resumable: run it again and it renders only
+  the frames that are missing. `still` renders here, at half resolution.
+- There is no blenderkc skill yet; until there is, the process is DESIGN.md's
+  verbs (`new`, `narrate`, `still`, `build`, `sheet`, `topics`).
 
 ## Diagrams: tools/tldrawkc/
 
@@ -366,7 +433,10 @@ catalog until a person says so.
 Rules of engagement:
 
 - Run it with `npm run studio` from the repository root; it binds
-  `127.0.0.1:7250` and nothing else. `/studio` routes 404 unless
+  `127.0.0.1:7250` and nothing else. `npm run dev:up` starts it together with
+  the app, in one tmux session with a pane each (`npm run dev:down` stops both,
+  the runner first: it drains on SIGINT or SIGTERM but not on the SIGHUP that
+  ending a session sends); `scripts/dev.sh` is the script. `/studio` routes 404 unless
   `STUDIO_ENABLED` is set. Studio thumbnails depend on that same flag alone:
   from the browser they are served from
   `/studio/api/diagrams/{name}/svg` (the runner's own `/api/diagrams/{name}/svg`
@@ -382,7 +452,7 @@ Rules of engagement:
   vocabulary is that owner's topics and the commons', a topic the planner
   proposed is filed as theirs, and its jobs and sessions are that owner's;
   `services/studio/test/owner.test.ts` fails a verb that leaves it out. The web app names the signed-in owner in
-  `x-self-learn-owner` (`STUDIO_OWNER_HEADER`), set by its server from the
+  `x-gnosia-owner` (`STUDIO_OWNER_HEADER`), set by its server from the
   session after dropping any value a page sent, and the runner refuses a
   request naming anyone else: its queue, checkouts, cached list and agent
   account are that one owner's, so there is no view of them to scope.
@@ -651,7 +721,7 @@ anything it finds out first. Then
 `git worktree prune`), and never run `git submodule deinit` in one to make
 that work. The `submodule.<name>.*`
 settings live in the `.git/config` every worktree shares, so a deinit in any
-of them unregisters all four submodules in the main checkout and in every
+of them unregisters all five submodules in the main checkout and in every
 other session's worktree: their files stay, but `git submodule status`
 prints `-` and `update` answers "not initialized". It happened on
 2026-10-04; `git submodule init` re-reads `.gitmodules` and repairs it
@@ -791,7 +861,7 @@ not have to be worked out again.
   `https://`, and
   falls back to localhost when parsing fails, because a bad value should cost a
   link preview and not the whole app.
-- **All four submodules and `coverage/` are lint-ignored in `eslint.config.mjs`.**
+- **All five submodules and `coverage/` are lint-ignored in `eslint.config.mjs`.**
   ESLint walks the whole tree from the repo root, so without those entries a
   local `npm run lint` walks manimkc's Python virtualenvs and reports 100k+
   findings from code this repo does not own, and lints tldrawkc's TypeScript
@@ -808,7 +878,7 @@ not have to be worked out again.
   (`*.ts`), and the app's config lives in `apps/web/` where it cannot reach
   `tools/` at all. Do not re-add an exclude for a directory nothing includes.
 - **`npm run canvas` needs `--silent`, or `--json` is unparseable.** npm
-  prints a two-line banner (`> self-learn@0.1.0 canvas` and the resolved
+  prints a two-line banner (`> gnosia@0.1.0 canvas` and the resolved
   command) on stdout before the tool writes anything, so
   `npm run canvas -- inspect x.tldr --json | jq` fails on the first token.
   `npm run --silent canvas -- ...` suppresses it. The same applies to
@@ -886,7 +956,7 @@ not have to be worked out again.
   checkout pointed at a database still at `0009` shows that panel, and one
   never imported has nothing to show: migrate, import the seed (or an export)
   and flip it (README.md, "Install"). A new reader takes `getCourses()`, `getTopics()`
-  or `getTags()` from `@/data/*`, never a parser from `@self-learn/content`;
+  or `getTags()` from `@/data/*`, never a parser from `@gnosia/content`;
   a test that wants real course data mocks `contentSource` with
   `apps/web/src/test/content-files.ts`, which reads `seed/`, rather than
   opening a database. There
@@ -900,7 +970,7 @@ not have to be worked out again.
   fails and says why. Setting a type to `files` only makes sense in a suite
   that hands the seam a tree of its own; the web app refuses it, and there is
   no tree in the repository to point it at.
-- **`@self-learn/content` needs no `transpilePackages` entry.** Next 16 builds
+- **`@gnosia/content` needs no `transpilePackages` entry.** Next 16 builds
   with Turbopack, which transpiles npm workspace packages automatically
   (`node_modules/next/dist/docs/01-app/03-api-reference/05-config/01-next-config-js/transpilePackages.md`).
   Adding one would be cargo cult. The package ships raw TypeScript with
@@ -930,17 +1000,18 @@ not have to be worked out again.
   They are NOT eslint-ignored: unlike the two submodules they are ours, and the
   root config lints them correctly.
 - **The catalog needs a database before its tests do anything.**
-  `createdb self_learn` against the Homebrew Postgres 17, then
+  `createdb gnosia` against the Homebrew Postgres 17, then
   `npm run catalog -- migrate`. Without a reachable Postgres the schema tests
   skip themselves with a named reason and `npm test` still passes, so a green
   local run is not proof the schema is sound. CI runs a `postgres:17` service
-  and is where they are a real gate. The suites never read `self_learn`'s rows:
+  and is where they are a real gate. The suites never read `gnosia`'s rows:
   each makes a scratch database, and the end-to-end one imports `seed/`, a
   small real slice cut with `catalog export --subset` (seed/README.md), since
   the phase 3 cut-over removed `content/` and `learn/`. A database of your own
   to look at is `createdb`, `migrate`,
   `MANIMKC_ROOT=/nonexistent REMOTIONKC_ROOT=/nonexistent
-  REVIDEOKC_ROOT=/nonexistent npm run catalog -- import seed`, then
+  REVIDEOKC_ROOT=/nonexistent BLENDERKC_ROOT=/nonexistent npm run catalog --
+  import seed`, then
   `catalog flip` for topics, tags, concepts, sessions, courses and diagrams in
   that order (`scripts/lib/flip-order.mjs`; README.md, "Install"). `npm run
   e2e` builds exactly that database on its own.
@@ -954,7 +1025,7 @@ not have to be worked out again.
   `BEFORE_BLOB_CONTRACT`); `schema.test.ts` migrating from empty is what
   keeps the template honest. The template refuses connections, since
   Postgres will not copy a database anyone is connected to, so never connect
-  to a `self_learn_test_template_*` database or point a suite at it.
+  to a `gnosia_test_template_*` database or point a suite at it.
 - **`catalog import` is the name; `catalog index` is the alias.** `index`
   is `import` with no directory; it still runs it and prints the new name once
   on stderr, so a `--json` reader is unaffected. A few comments still say
@@ -984,7 +1055,7 @@ not have to be worked out again.
   was imported from, which is why a test that flips some types sees files
   written.
 - **Flip day and the cut-over were a script, and it stays.**
-  `node scripts/flip-rehearsal.mjs --tree-from <dir>` copies `self_learn`
+  `node scripts/flip-rehearsal.mjs --tree-from <dir>` copies `gnosia`
   with `createdb -T`, imports a temp copy of `<dir>/content` and
   `<dir>/learn`, flips the six types in the plan's order with an export after
   each group, imports and checks parity again, uploads manimkc's renders
@@ -1017,7 +1088,7 @@ not have to be worked out again.
 - **The nightly export is the readable backup, and it lives outside the
   checkout.** `npm run export:nightly` (`scripts/nightly-export.mjs [--keep N]
   [--json]`) runs `catalog export --out` into
-  `$SELF_LEARN_HOME/archive/<UTC time>/` (default `~/.self-learn/archive/`).
+  `$GNOSIA_HOME/archive/<UTC time>/` (default `~/.gnosia/archive/`).
   It writes into `.<UTC time>.partial` first and renames it on success,
   replaces the `latest` symlink with a rename so the link is never missing,
   keeps the newest 30, removes partials more than a day old, and refuses an
@@ -1059,7 +1130,7 @@ not have to be worked out again.
   the hashes drizzle recorded. So an edited applied file shows as pending
   forever while drizzle skips it on every run, and `catalog migrate` now
   refuses with `MigrationSkipped` naming it rather than report success. Change
-  `packages/schema/src/`, then `npm run generate -w @self-learn/catalog`.
+  `packages/schema/src/`, then `npm run generate -w @gnosia/catalog`.
 - **`learn/state/` is gone, and `learn` needs Postgres.** `events.jsonl`,
   `model.json` and `reviews.json` are the `event`, `mastery` and `review`
   tables; `index.json` is a query. `npm run learn -- status` fails when the
@@ -1090,7 +1161,7 @@ not have to be worked out again.
   `catalog_instance` carries a statement trigger that refuses all writes when
   that row says `copy`; a database made with `createdb -T` from a copy is a
   copy too. Tests and `scripts/e2e.mjs` pass `CATALOG_COPY_OK=1` (or
-  `connect({ copyOk: true })`, or `set self_learn.copy_ok = on` in psql);
+  `connect({ copyOk: true })`, or `set gnosia.copy_ok = on` in psql);
   nothing else should. A content table is written only from
   `services/catalog/src/content/` or `src/index/`, which
   `services/catalog/test/content-writes.test.ts` checks by grep, and a
@@ -1127,15 +1198,15 @@ not have to be worked out again.
   no owner at all, so accounts need every type flipped first. Do not answer
   a scoped read's error by reading unscoped: `scopedRead` does that only
   after the catalog says `owner_id` is absent.
-- **The web app imports `@self-learn/catalog/state`, and `pg` stays external.**
+- **The web app imports `@gnosia/catalog/state`, and `pg` stays external.**
   `serverExternalPackages: ["pg"]` in `apps/web/next.config.ts` is
   load-bearing: the
   driver resolves its optional native binding through a runtime `require` no
   bundler can follow. `transpilePackages` is deliberately *not* there —
   Turbopack transpiles workspace packages on its own, verified by removing an
   entry and building. A client component must take the shared constants from
-  `@self-learn/schema/shared`, which imports nothing; taking them from
-  `@self-learn/schema` would drag drizzle into the browser bundle, and
+  `@gnosia/schema/shared`, which imports nothing; taking them from
+  `@gnosia/schema` would drag drizzle into the browser bundle, and
   `apps/web/src/lib/learner-store.ts` carries `import "server-only"` so that mistake
   fails the build rather than shipping a Postgres driver.
 - **Every page under `(app)/` has a loading boundary, and must keep one.**
@@ -1274,7 +1345,7 @@ not have to be worked out again.
   `stat` and set again can come out a microsecond short on Linux); the
   Postgres client tools (found through `PG_BIN`, `PATH`, `pg_config --bindir`
   or Homebrew, in `scripts/lib/pg.mjs`, and installed at version 17 by the
-  workflow); and `self_learn`, which on CI is the service's empty database.
+  workflow); and `gnosia`, which on CI is the service's empty database.
   History: from 2026-09-14 to about 2026-10-01 Actions was blocked by billing
   and every PR merged on the local gate alone. That failure looks like a run
   that fails in single-digit seconds with zero steps run, on `main` as well

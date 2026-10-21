@@ -1,9 +1,10 @@
-import { realpathSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { cpus, totalmem } from "node:os";
 import path from "node:path";
 
 import { studioHome } from "../paths";
 
+import { bwrapProfileArgv, bwrapProfileText } from "./bwrap";
 import type { Toolchain } from "./toolchain";
 import type { VideoPaths } from "./paths";
 
@@ -61,6 +62,12 @@ import type { VideoPaths } from "./paths";
  * resolved first (`/private/tmp`, not `/tmp`) by the caller, and a path
  * holding a character that would end the profile's string literal is refused
  * rather than escaped.
+ *
+ * On Linux the same rule lists go to bubblewrap instead: `buildProfile`
+ * writes a `.bwrap.json` of the argv `bwrap.ts` emits (the mapping is its
+ * docstring's), and `sandboxed` runs it. One semantic holds on both: nothing
+ * the profile did not name is readable, nothing but the writes it named is
+ * writable.
  */
 
 export type ProfileKind = "render" | "narrate" | "gate";
@@ -246,6 +253,20 @@ export function buildProfile(kind: ProfileKind, input: ProfileInput): string {
   const exec = execRules(kind, input);
   const reads = readRules(kind, input);
   const writes = writeRules(kind, input);
+  if (input.tools.sandboxKind === "bwrap") {
+    return bwrapProfileText({
+      kind,
+      exec,
+      reads,
+      writes,
+      deniedReads,
+      libs: input.tools.libs,
+      rootfs: input.paths.sandboxRoot,
+      empty: input.paths.sandboxEmpty,
+      emptyFile: input.paths.sandboxEmptyFile,
+      gpu: kind === "render",
+    });
+  }
   const services = ALLOWED_SERVICES[kind];
   const ancestors = ancestorRules([...exec, ...reads, ...writes], deniedReads);
   return [
@@ -305,6 +326,9 @@ export function sandboxEnv(kind: ProfileKind, { tools, paths, home, voice }: Env
     HOME: home,
     LANG: "en_US.UTF-8",
     TMPDIR: paths.renderTmp,
+    // Linux: $HOME points at a read-only skeleton stub, so caches (fontconfig's
+    // among them) that default under it are pointed at the job's instead.
+    ...(tools.platform === "linux" ? { XDG_CACHE_HOME: path.join(paths.renderTmp, "xdg") } : {}),
   };
   if (kind === "gate") return env;
   Object.assign(env, {
@@ -329,8 +353,20 @@ export function sandboxEnv(kind: ProfileKind, { tools, paths, home, voice }: Env
   return env;
 }
 
-/** The argv that runs `argv` inside a profile file. */
+/**
+ * The argv that runs `argv` inside a profile file: `sandbox-exec -f` for the
+ * Seatbelt text, `bwrap` with the file's own argv for a `.bwrap.json` one.
+ */
 export function sandboxed(tools: Toolchain, profileFile: string, argv: string[]): string[] {
-  if (tools.sandboxExec === null) throw new ProfileError("sandbox-exec is missing, and nothing here runs unsandboxed");
+  if (tools.sandboxExec === null) throw new ProfileError("the sandbox program is missing, and nothing here runs unsandboxed");
+  if (tools.sandboxKind === "bwrap") {
+    let spec: string[];
+    try {
+      spec = bwrapProfileArgv(readFileSync(profileFile, "utf8"));
+    } catch (error) {
+      throw new ProfileError(`${profileFile} is not a readable bwrap profile: ${(error as Error).message}`);
+    }
+    return [tools.sandboxExec, ...spec, ...argv];
+  }
   return [tools.sandboxExec, "-f", profileFile, ...argv];
 }

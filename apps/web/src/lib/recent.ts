@@ -1,6 +1,6 @@
 import "server-only";
 
-import { PREFERENCE_KEYS } from "@self-learn/schema/shared";
+import { PREFERENCE_KEYS } from "@gnosia/schema/shared";
 import {
   asLastVisited,
   asRecentModules,
@@ -16,7 +16,7 @@ import {
   type RecentConcept,
   type RecentDraft,
   type RecentSession,
-} from "@self-learn/catalog/state";
+} from "@gnosia/catalog/state";
 
 import { getCourses } from "@/data/courses";
 import { conceptTouches } from "@/lib/home-core";
@@ -138,7 +138,7 @@ export async function videoProgress(
  * point at one: `session:learn/sessions/<id>.md`, the id `catalog`'s
  * `logAssetId` (services/catalog/src/content/session-logs.ts) gives every
  * log it writes. Repeated here because the web app reaches the catalog
- * through `@self-learn/catalog/state` alone.
+ * through `@gnosia/catalog/state` alone.
  */
 export function sessionLogId(sessionId: string): string {
   return `session:learn/sessions/${sessionId}.md`;

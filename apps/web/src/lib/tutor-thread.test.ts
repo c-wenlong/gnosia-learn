@@ -17,7 +17,7 @@ import {
 
 describe("tutor thread", () => {
   it("keys the thread per concept", () => {
-    expect(threadKey("dot-product")).toBe("self-learn:tutor:dot-product");
+    expect(threadKey("dot-product")).toBe("gnosia:tutor:dot-product");
   });
 
   it("reads back only well-formed turns", () => {
@@ -166,7 +166,7 @@ describe("a thread that opens on the tutor's recall question (R3)", () => {
   });
 
   it("keeps the session id beside the thread, per concept", () => {
-    expect(sessionKey("dot-product")).toBe("self-learn:tutor-session:dot-product");
+    expect(sessionKey("dot-product")).toBe("gnosia:tutor-session:dot-product");
     expect(sessionKey("dot-product")).not.toBe(threadKey("dot-product"));
   });
 });

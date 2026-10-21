@@ -2,8 +2,8 @@ import { readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { fileSource } from "@self-learn/content";
-import { contentRevision, topic } from "@self-learn/schema";
+import { fileSource } from "@gnosia/content";
+import { contentRevision, topic } from "@gnosia/schema";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -48,9 +48,7 @@ const by: By = { author: "local", authorKind: "person", reason: "a test" };
 
 function pointAt(name: string): () => void {
   const saved = { url: process.env["DATABASE_URL"], manimkc: process.env["MANIMKC_ROOT"] };
-  const url = new URL(process.env["DATABASE_URL"] ?? "postgres://localhost:5432/self_learn");
-  url.pathname = `/${name}`;
-  process.env["DATABASE_URL"] = url.toString();
+  process.env["DATABASE_URL"] = name;
   process.env["MANIMKC_ROOT"] = path.join(tmpdir(), "catalog-test-no-manimkc");
   return () => {
     for (const [key, value] of [["DATABASE_URL", saved.url], ["MANIMKC_ROOT", saved.manimkc]] as const) {
@@ -175,7 +173,7 @@ describe.skipIf(!reachable.ok)("topic and tag writers", () => {
   beforeAll(async () => {
     scratch = await migratedScratchDatabase();
     fixture = await tree();
-    restore = pointAt(scratch.name);
+    restore = pointAt(scratch.url);
     await runImportCommand({ dir: fixture.root });
     // The house style: header, dividers. From here the tree is the export.
     await runExport({ out: fixture.root });
@@ -418,7 +416,7 @@ describe.skipIf(!reachable.ok)("topic and tag writers", () => {
           contentHash: "seeded",
           bytes: 1,
           title: "A picture",
-          sourceRepo: "self-learn",
+          sourceRepo: "gnosia",
           blobKey: null,
           resourceType: null,
           ownerId: "local",
@@ -466,7 +464,7 @@ describe.skipIf(!reachable.ok)("topic and tag writers", () => {
       select (select topic_slug from concept where slug = 'base') as concept,
              (select topic_slug from collection_item where collection_id = 'xx1000-m1' and topic_slug is not null) as module,
              (select topic_slug from diagram where slug = 'alpha-picture') as diagram,
-             (select document #>> '{records,0,meta,tldrawkc,topic}' from diagram where slug = 'alpha-picture') as stamp,
+             (select document ->> '$.records[0].meta.tldrawkc.topic' from diagram where slug = 'alpha-picture') as stamp,
              (select brief ->> 'topic' from job where id = ${job.job.id}) as brief,
              (select topic_slug from job where id = ${job.job.id}) as job`);
     expect(refs.rows[0]).toEqual({ concept: "zeta", module: "zeta", diagram: "zeta", stamp: "zeta", brief: "zeta", job: "zeta" });
@@ -539,7 +537,7 @@ describe.skipIf(!reachable.ok)("renaming a topic a diagram file stamps, while di
       records: [{ typeName: "document", id: "document:document", meta: { tldrawkc: { topic: "gamma", concepts: [] } } }],
     };
     await fixture.write("learn/assets/gamma-map.tldr", JSON.stringify(stamped));
-    restore = pointAt(scratch.name);
+    restore = pointAt(scratch.url);
     await runImportCommand({ dir: fixture.root });
     await runExport({ out: fixture.root, only: ["topics", "tags", "courses"] });
   }, 60_000);

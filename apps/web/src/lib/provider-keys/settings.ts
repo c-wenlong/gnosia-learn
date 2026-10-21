@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { ProviderName } from "@self-learn/schema/shared";
+import type { ProviderName } from "@gnosia/schema/shared";
 
 import { customProviderConfig, providerConfigs, type KeySource } from "@/lib/agent/providers";
 import { type CustomProvider, readOwnerCustomProviders } from "@/lib/custom-providers/store";

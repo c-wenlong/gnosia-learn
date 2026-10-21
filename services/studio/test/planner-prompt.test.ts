@@ -132,6 +132,11 @@ describe("the combined prompt", () => {
         { origin: "revideokc", slug: null, assetId: "revideokc:out/a/c.mp4", title: "C", topic: "t", durationSeconds: 48 },
       ]),
     ).toContain("revideokc:out/a/c.mp4 | C | t | 48 s | revideokc");
+    expect(
+      videosBlock([
+        { origin: "blenderkc", slug: null, assetId: "blenderkc:out/a/d.mp4", title: "D", topic: "t", durationSeconds: 75 },
+      ]),
+    ).toContain("blenderkc:out/a/d.mp4 | D | t | 1 min 15 s | blenderkc");
     expect(lengthOf(52)).toBe("52 s");
     expect(lengthOf(0)).toBe("(unknown length)");
   });

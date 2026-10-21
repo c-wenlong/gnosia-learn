@@ -5,14 +5,14 @@ import { databaseUrl, REPO_ROOT, redactUrl } from "../env";
 import { findFfmpeg } from "../poster/extract";
 
 /**
- * `catalog asset upload --source manimkc|remotionkc|revideokc [--dry-run]`:
+ * `catalog asset upload --source manimkc|remotionkc|revideokc|blenderkc [--dry-run]`:
  * the connection, the store and the printing. What it uploads and why each
  * rule holds is in `../content/asset-upload.ts`.
  *
- * The store is the one `SELF_LEARN_HOME` names, the same one the web app
+ * The store is the one `GNOSIA_HOME` names, the same one the web app
  * serves. It had a `--blob-root` flag for a scratch store, which wrote rows
  * pointing at bytes the web app never read, since the app resolves its root
- * from `SELF_LEARN_HOME` alone. A scratch run sets that variable instead, and
+ * from `GNOSIA_HOME` alone. A scratch run sets that variable instead, and
  * both sides follow it.
  */
 
@@ -22,6 +22,7 @@ export interface AssetUploadCommandOptions {
   manimkcRoot?: string;
   remotionkcRoot?: string;
   revideokcRoot?: string;
+  blenderkcRoot?: string;
   reason?: string;
 }
 
@@ -46,6 +47,7 @@ export async function runAssetUpload(options: AssetUploadCommandOptions): Promis
       manimkcRoot: options.manimkcRoot,
       remotionkcRoot: options.remotionkcRoot,
       revideokcRoot: options.revideokcRoot,
+      blenderkcRoot: options.blenderkcRoot,
       dryRun: options.dryRun,
       ffmpeg,
       reason: options.reason,
@@ -64,13 +66,14 @@ export function formatAssetUpload(result: AssetUploadCommandResult): string {
     `database   ${result.database}`,
     `blob root  ${result.blobRoot}`,
     `outRoot    ${result.outRoot}`,
-    `${result.dryRun ? "dry run: nothing written. " : ""}${result.counts.videos} videos, ${result.counts.sidecars} sidecars, ${result.counts.posters} posters`,
+    `${result.dryRun ? "dry run: nothing written. " : ""}${result.counts.videos} videos, ${result.counts.sidecars} sidecars, ${result.counts.posters} posters, ${result.counts.pdfs} PDFs`,
     `  ${[...tally].map(([action, n]) => `${action} ${n}`).join(", ")}`,
   ];
   if (!result.dryRun) {
     lines.push(`  ${result.uploaded} objects uploaded (${megabytes(result.uploadedBytes)}), ${result.rowsWritten} asset rows written`);
   }
   if (result.postersSkipped !== null) lines.push(`posters skipped: ${result.postersSkipped}`);
+  if (result.pdfsSkipped !== null) lines.push(`PDFs skipped: ${result.pdfsSkipped}`);
   if (result.bytesCapEstimate !== null) lines.push(`bytes cap: ${result.bytesCapEstimate}`);
   for (const item of result.items) {
     if (item.action === "refused") lines.push(`REFUSED ${item.id}: ${item.detail ?? ""}`);

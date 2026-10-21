@@ -8,6 +8,9 @@ import { useStartDraft } from "@/components/studio/useStartDraft";
 import { focusIsUnclaimed } from "@/components/studio/dialog-focus";
 import { chipClasses, cx, FOCUS } from "@/components/ui/classes";
 import { FilterMenu } from "@/components/ui/FilterMenu";
+import { useStoredHarness } from "@/components/studio/HarnessPicker";
+import type { HarnessValue } from "@/lib/studio-harness";
+import { BYOK_SETTINGS_CHANGED, getByokSettings } from "@/lib/studio-drafts";
 import { Glyph, type GlyphName } from "@/components/ui/Glyph";
 import type { MentionComposerHandle } from "@/components/ui/MentionComposer";
 import {
@@ -21,7 +24,7 @@ import {
   type MentionValue,
 } from "@/components/ui/mention-text";
 import { MENTION_HINT, mentionOptions, valueSendBlock } from "@/lib/studio-cards";
-import { modelOptions, runnerDefaultOption, MODEL_CHOICES, type AgentDefaults, type ModelChoice, type RunnerResolved } from "@/lib/studio-agent-settings";
+import { harnessModelOptions, type RunnerResolved } from "@/lib/studio-agent-settings";
 import { DRAFT_KINDS, type DraftKind, type VideoAvailability } from "@/lib/studio-drafts";
 
 type Value = MentionValue<DraftKind>;
@@ -51,24 +54,42 @@ type Value = MentionValue<DraftKind>;
 export function HomeComposer({
   path,
   video,
-  models = null,
-  defaults = null,
   resolved = null,
 }: {
   path: string;
   video: VideoAvailability | null;
-  /** The runner's offered models (health's `agent.models`); `MODEL_CHOICES` when it did not say. */
-  models?: ModelChoice[] | null;
-  /** What "Claude Code default" resolves to, for the menu's first row. */
-  defaults?: AgentDefaults | null;
-  /** What each part of a conversation runs on with no pick (health's `agent`): turns, video, diagram. */
+  /** What each part of a conversation runs on with no pick (health's `agent`): turns, video, diagram — the Default tier's detail. */
   resolved?: RunnerResolved | null;
 }) {
   const { start, busy, error } = useStartDraft(path);
   const [value, setValue] = useState<Value>(EMPTY_MENTION_VALUE);
   // The picker's pick (D90): sent on `POST /api/drafts`, so the whole
-  // conversation, its turns and the jobs they make, runs on it.
-  const [model, setModel] = useState("default");
+  // conversation, its turns and the jobs they make, runs on it. One per
+  // harness (D92): a tier is a name on its own CLI, so `gpt-6-astra` can
+  // never ride a switch back to claude, nor `fable` onto codex.
+  const [picks, setPicks] = useState<Partial<Record<HarnessValue, string>>>({});
+  const harness = useStoredHarness();
+  const model = picks[harness] ?? "default";
+  const setModel = (next: string) => setPicks((held) => ({ ...held, [harness]: next }));
+  // The BYOK tiers the active provider configured (D94), read when BYOK is
+  // the pick — fresher than health's, since Connect may have just written it —
+  // and again whenever a BYOK write lands (`BYOK_SETTINGS_CHANGED`), so tiers
+  // set in the dialog or Settings are enabled at once.
+  const [byokTiers, setByokTiers] = useState<{ default?: string; lite?: string; max?: string } | null>(null);
+  useEffect(() => {
+    if (harness !== "byok") return;
+    const read = async () => {
+      const result = await getByokSettings();
+      // A read that says nothing is configured clears what an earlier one
+      // found — a removed provider's tiers go with it.
+      if (!result.ok) return;
+      const entry = result.data.providers.find((provider) => provider.provider === result.data.active);
+      setByokTiers(result.data.configured ? (entry?.models ?? null) : null);
+    };
+    void read();
+    window.addEventListener(BYOK_SETTINGS_CHANGED, read);
+    return () => window.removeEventListener(BYOK_SETTINGS_CHANGED, read);
+  }, [harness]);
   const composer = useRef<MentionComposerHandle | null>(null);
 
   useEffect(() => {
@@ -83,7 +104,7 @@ export function HomeComposer({
   const options = useMemo(() => mentionOptions({ plannerKinds: [...DRAFT_KINDS] }, video), [video]);
   // The same list the settings panel's menus offer (`agent-settings.ts`),
   // with the default row saying what no pick means here: each part's own.
-  const modelMenu = useMemo(() => modelOptions(model, defaults, models ?? MODEL_CHOICES, null, runnerDefaultOption(resolved)), [model, defaults, models, resolved]);
+  const modelMenu = useMemo(() => harnessModelOptions(harness, model, resolved, byokTiers), [harness, model, resolved, byokTiers]);
   const block = valueSendBlock(value, true);
   const [announcement, setAnnouncement] = useState("");
 
@@ -129,7 +150,10 @@ export function HomeComposer({
           ...options.map((option) => (
             <KindToggle key={option.id} option={option} pressed={hasMention(value, option.id)} onPress={() => toggle(option)} />
           )),
-          // The model the conversation runs on (D90), picked once at the start.
+          // The model the conversation runs on (D90), picked once at the
+          // start — as tiers (D92): the picked harness's Lite/Default/Max.
+          // On BYOK the tiers are the active provider's configured models
+          // (D94); one left unconfigured shows greyed out, never pickable.
           <FilterMenu key="model" label="Model" bare options={modelMenu} value={model} defaultValue="default" onChange={setModel} />,
         ]}
       />

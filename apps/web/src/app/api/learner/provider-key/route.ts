@@ -1,6 +1,7 @@
-import { CustomProviderError } from "@self-learn/catalog/state";
+import { CustomProviderError } from "@gnosia/catalog/state";
 import { NextResponse } from "next/server";
 
+import { dropByokProvider, pushByokKey } from "@/lib/byok-sync";
 import { KEY_WRITE_RATE_LIMIT, answer, guard, readBody, readProvider, refuse } from "@/lib/provider-keys/requests";
 import { checkKeyShape } from "@/lib/provider-keys/seal";
 import { failureCode, NoKeySecretError, removeProviderKey, saveProviderKey } from "@/lib/provider-keys/store";
@@ -38,7 +39,12 @@ export async function POST(req: Request): Promise<NextResponse> {
     // A key under a custom id is stored only while the owner has that
     // provider, checked under the lock its Delete holds (T14).
     const key = await saveProviderKey(owner, provider, shape.key);
-    return answer({ ok: true, key });
+    // One key, two stores (D95): a provider the studio harness can name gets
+    // the same key written to `byok.json`. `byok` in the reply says whether
+    // it landed — `false` means the runner did not take it, and the tutor's
+    // save still stands.
+    const byok = await pushByokKey(provider, shape.key);
+    return answer({ ok: true, key, ...(byok === undefined ? {} : { byok }) });
   } catch (error) {
     return failed("save", error);
   }
@@ -53,7 +59,12 @@ export async function DELETE(req: Request): Promise<NextResponse> {
   if (provider instanceof NextResponse) return provider;
 
   try {
-    return answer({ ok: true, removed: await removeProviderKey(owner, provider) });
+    const removed = await removeProviderKey(owner, provider);
+    // The mirror is attempted whenever a preset's key went away, and the
+    // answer says whether it landed: `byok: false` tells the card the runner
+    // still has the key, so the row can say so and offer Remove there.
+    const byok = removed ? await dropByokProvider(provider) : undefined;
+    return answer({ ok: true, removed, ...(byok === undefined ? {} : { byok }) });
   } catch (error) {
     return failed("remove", error);
   }

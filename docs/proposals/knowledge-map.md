@@ -35,7 +35,7 @@ learner move around it, which is what this proposal builds.
 
 ## What the data looks like
 
-Measured on `self_learn` on 2026-10-04:
+Measured on `gnosia` on 2026-10-04:
 
 | Fact | Value | What it means for the map |
 | --- | --- | --- |
@@ -163,13 +163,13 @@ working.
 | 3. Reading the map | Node selection with the side panel, search to zoom, filter dims, the p(L) arc and the overdue and leech marks (G4), the ready highlight (G5), the "Not in a course" filter (G8). Pinch and drag at 375 pixels wide | Selecting "Vector as a list of numbers" shows its four dependants in the accent and the panel's "Open in workspace" lands on its page. With CS3230 in `recentModules`, only CS3230's ready concepts are highlighted, "Cost model and input size" among them. "Not in a course" leaves exactly the concepts in no course undimmed (10 today). The phone walk pans and zooms the largest island without a frame over 50 ms (else G3's fallback is taken, and this proposal is amended) |
 | 4. Keyboard, then the default | Keyboard: Tab and Shift-Tab move between islands in map order, focusing each island's title and fitting the view to it; Enter enters the island at its first concept; the arrow keys then move to a prerequisite, a dependant, or the next concept in the same layer, so every concept of an island is reachable; Enter opens the panel; Escape goes back to the island's title; a text summary for screen readers that names the islands and points to the table. Then, in the same PR, the map becomes the default view (G1) | Every concept on every island, panel included, can be reached with the keyboard alone, starting from the first island, and a screen reader announces the summary. Only then does `/learn` open on the map |
 
-Phase 1 measured on `self_learn`, 2026-10-04: the layout takes about 100 ms
+Phase 1 measured on `gnosia`, 2026-10-04: the layout takes about 100 ms
 on the server for all 306 concepts. Counting crossings of straight lines
 between the dots, island by island, today's alphabetical rows cross 827
 times and the map 112; on the largest island 464 against 32. The map is
 3,572 by 5,804 at natural size, which phase 2's zoom is for.
 
-Phase 2 measured on `self_learn`, 2026-10-04, in Chromium at 1440 by 900: a
+Phase 2 measured on `gnosia`, 2026-10-04, in Chromium at 1440 by 900: a
 drag across the largest island, fifteen wheel steps in and out, and the fit
 animations all held 16.8 ms a frame at worst, none over 50 ms. Two things the
 measurement turned up are in the build: zoomed out, a title shows only over an
@@ -177,7 +177,7 @@ island wide enough on screen to hold it, and a row of islands may run as wide
 as the widest island, so the map is no longer one wide island over a tall thin
 column.
 
-Phase 3 measured on `self_learn`, 2026-10-04: selecting "Vector as a list of
+Phase 3 measured on `gnosia`, 2026-10-04: selecting "Vector as a list of
 numbers" marks its four dependants and lists them in the panel; with CS4225
 and CS3230 in `recentModules`, 19 concepts are marked ready, all in those two
 courses or serving them, "Cost model and input size" among them; "Not in a
@@ -185,7 +185,7 @@ course" leaves the 10 such concepts undimmed. On a 390 by 844 phone the page
 does not scroll sideways, and a touch drag then a pinch on the largest island
 held 16.8 ms a frame at worst.
 
-Phase 4 measured on `self_learn`, 2026-10-04: `/learn` opens on the map in
+Phase 4 measured on `gnosia`, 2026-10-04: `/learn` opens on the map in
 388 ms; walking it from the first island with Tab, Enter and the right arrow
 alone reaches all 306 concepts on all 34 islands.
 

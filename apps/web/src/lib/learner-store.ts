@@ -8,8 +8,8 @@ import {
   StateError,
   type CatalogDatabase,
   type KnowledgeBase,
-} from "@self-learn/catalog/state";
-import { emptyLearnerState, type LearnerState } from "@self-learn/schema/shared";
+} from "@gnosia/catalog/state";
+import { emptyLearnerState, type LearnerState } from "@gnosia/schema/shared";
 
 import { currentOwner } from "@/lib/owner";
 
@@ -71,7 +71,7 @@ async function database(): Promise<CatalogDatabase> {
   if (pool === null) {
     // Imported lazily so the pool is never constructed during a build, even if
     // something imports this module for its types.
-    const { connect } = await import("@self-learn/catalog/state");
+    const { connect } = await import("@gnosia/catalog/state");
     const created = connect({ max: 4, connectionTimeoutMillis: 3_000 });
     // An idle client that the server drops emits on the pool, and an
     // unhandled 'error' event takes the whole process down. A dropped

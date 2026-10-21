@@ -1,0 +1,11 @@
+# Design systems linked into docs/design/reference/, one slug per line.
+# Run: python3 scripts/link-design-systems.py
+brilliant
+chatgpt
+claude
+coursera
+duolingo
+gauth
+manus
+notebooklm
+researchrabbit

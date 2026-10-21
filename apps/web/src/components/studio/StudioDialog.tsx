@@ -193,7 +193,7 @@ export function StudioDialog({
  * here it goes home, to the composer and the grid. Nothing is modal: the
  * sidebar stays usable, so another conversation or New chat is one press
  * away, and Escape does nothing. The header has no Close of its own for the
- * same reason; on a phone it carries the sidebar's toggle instead
+ * same reason; it carries the harness picker before the title instead
  * (`leading`).
  */
 export function StudioPane({
@@ -256,14 +256,25 @@ export function StudioPane({
  * `close`. Full screen it has no Close and no rule, since nothing is modal
  * there to close, and starts with the pane's `leading`.
  */
-export function DialogHeader({ title, meta, children }: { title: ReactNode; meta?: ReactNode; children?: ReactNode }) {
+export function DialogHeader({
+  title,
+  meta,
+  leading,
+  children,
+}: {
+  title: ReactNode;
+  meta?: ReactNode;
+  /** What the header draws before its title; the pane's own `leading` when absent. */
+  leading?: ReactNode;
+  children?: ReactNode;
+}) {
   const { close } = useStudioDialog();
-  const { inline, leading } = usePaneLayout();
+  const { inline, leading: paneLeading } = usePaneLayout();
   const metaText = meta !== undefined && meta !== null && <span className="shrink-0 text-[12px] tabular-nums text-text3">{meta}</span>;
   if (inline) {
     return (
       <div className="flex h-12 shrink-0 items-center gap-2 px-3 md:px-5">
-        {leading}
+        {leading ?? paneLeading}
         <h2 className={cx(PANEL_TITLE, "min-w-0 flex-1 truncate")}>{title}</h2>
         {metaText}
         {children}

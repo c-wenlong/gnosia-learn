@@ -1,9 +1,10 @@
-import { learner, LOCAL_LEARNER_ID } from "@self-learn/schema";
-import { cleanDisplayName, DISPLAY_NAME_MAX, isAvatar, type AvatarId } from "@self-learn/schema/shared";
+import { learner, LOCAL_LEARNER_ID } from "@gnosia/schema";
+import { cleanDisplayName, DISPLAY_NAME_MAX, isAvatar, type AvatarId } from "@gnosia/schema/shared";
 import { eq, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
 
+import { inTransaction } from "../db";
 /**
  * The single learner row.
  *
@@ -107,8 +108,8 @@ export async function withLearnerLock<T>(
   fn: (tx: CatalogDatabase) => Promise<T>,
 ): Promise<T> {
   await ensureLearner(db, learnerId);
-  return db.transaction(async (tx) => {
-    await tx.select({ id: learner.id }).from(learner).where(eq(learner.id, learnerId)).for("update");
+  return inTransaction(db, async (tx) => {
+    await tx.select({ id: learner.id }).from(learner).where(eq(learner.id, learnerId));
     return fn(tx as CatalogDatabase);
   });
 }
@@ -131,11 +132,11 @@ export async function bumpEpoch(
   await ensureLearner(db, learnerId);
   const { rows } = await db.execute<{ value: number }>(sql`
     insert into preference (learner_id, key, value)
-    values (${learnerId}, ${key}, to_jsonb(1))
+    values (${learnerId}, ${key}, json_quote(1))
     on conflict (learner_id, key) do update
-      set value = to_jsonb(coalesce((preference.value #>> '{}')::numeric, 0) + 1),
-          updated_at = now()
-    returning (value #>> '{}')::int as value
+      set value = json_quote(coalesce(cast(preference.value as numeric), 0) + 1),
+          updated_at = cast(unixepoch('subsec') * 1000 as integer)
+    returning value
   `);
-  return rows[0]?.value ?? 1;
+  return Number(rows[0]?.value ?? 1);
 }

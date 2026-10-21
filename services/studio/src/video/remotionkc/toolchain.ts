@@ -1,10 +1,10 @@
-import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
+import { accessSync, constants, existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 
 import { REPO_ROOT } from "../../paths";
 import { scriptShells } from "../script-shells";
-import { discoverToolchain, programAt, toolchainProblems, type Program, type Toolchain } from "../toolchain";
+import { discoverToolchain, foreignLibs, programAt, toolchainProblems, type Program, type Toolchain } from "../toolchain";
 
 export { scriptShells };
 
@@ -76,6 +76,12 @@ export interface RemotionkcTools {
    * syntax, which any recent TypeScript reads.
    */
   parser: string | null;
+  /**
+   * Library roots this half's binaries resolve against beyond the standard
+   * directories, measured with `ldd` (`../toolchain.ts` `foreignLibs`): on
+   * Linux they are bound into every profile, on macOS the list stays empty.
+   */
+  libs: string[];
 }
 
 /** A remotionkc job's toolchain: manimkc's discovery, and remotionkc's own half. */
@@ -172,12 +178,20 @@ function studioTypeScript(): string | null {
   }
 }
 
-export function discoverRemotionkc(): RemotionkcTools {
+/** The synchronous half of the discovery; `libs` is `ldd` work, so only `discoverRemotionkcToolchain` fills it. */
+export function discoverRemotionkc(): Omit<RemotionkcTools, "libs"> {
   const root = remotionkcRoot();
   const nodeModules = resolveOr(path.join(root, "node_modules"));
   const venv = resolveOr(path.join(root, ".venv"));
   const target = `${process.platform}-${process.arch}`;
   const inModules = (...parts: string[]): string | null => (nodeModules === null ? null : resolveOr(path.join(nodeModules, ...parts)));
+  // The compositor's Linux builds are split by libc (`-gnu`, `-musl`) where
+  // the other platforms' are not; npm's optional-dependency filter leaves
+  // exactly the matching one installed.
+  const compositor =
+    process.platform === "linux"
+      ? (inModules("@remotion", `compositor-${target}-gnu`) ?? inModules("@remotion", `compositor-${target}-musl`) ?? inModules("@remotion", `compositor-${target}`))
+      : inModules("@remotion", `compositor-${target}`);
   return {
     root,
     nodeModules,
@@ -185,7 +199,7 @@ export function discoverRemotionkc(): RemotionkcTools {
     gnosiaPython: venv !== null && gnosiaInstalled(venv) ? programAt(path.join(root, ".venv", "bin", "python")) : null,
     scriptShells: venv === null ? [] : scriptShells(path.join(venv, "bin", "gnosia-audio")),
     headlessShell: findHeadlessShell(nodeModules),
-    compositor: inModules("@remotion", `compositor-${target}`),
+    compositor,
     esbuild: inModules("@esbuild", target, "bin", "esbuild"),
     tsc: inModules("@typescript", `typescript-${target}`, "lib", "tsc"),
     remotion: packageVersion(nodeModules, "remotion"),
@@ -196,8 +210,31 @@ export function discoverRemotionkc(): RemotionkcTools {
   };
 }
 
+/** The executable regular files in a directory — the compositor's binaries — for `foreignLibs`. */
+function executablesIn(dir: string | null): string[] {
+  if (dir === null) return [];
+  try {
+    return readdirSync(dir)
+      .map((name) => path.join(dir!, name))
+      .filter((file) => {
+        try {
+          return statSync(file).isFile() && accessSync(file, constants.X_OK) === undefined;
+        } catch {
+          return false;
+        }
+      });
+  } catch {
+    return [];
+  }
+}
+
 export async function discoverRemotionkcToolchain(): Promise<RemotionkcToolchain> {
-  return { ...(await discoverToolchain()), remotionkc: discoverRemotionkc() };
+  const own = discoverRemotionkc();
+  const libs =
+    process.platform === "linux"
+      ? await foreignLibs([own.gnosiaPython?.real ?? null, own.headlessShell?.binary ?? null, own.esbuild, own.tsc, ...executablesIn(own.compositor)])
+      : [];
+  return { ...(await discoverToolchain()), remotionkc: { ...own, libs } };
 }
 
 /** A toolchain as a remotionkc job sees it; throws when it was discovered without remotionkc's half. */

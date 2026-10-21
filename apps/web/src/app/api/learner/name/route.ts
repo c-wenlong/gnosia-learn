@@ -1,5 +1,5 @@
-import { cleanDisplayName, DISPLAY_NAME_MAX } from "@self-learn/schema/shared";
-import { writeDisplayName } from "@self-learn/catalog/state";
+import { cleanDisplayName, DISPLAY_NAME_MAX } from "@gnosia/schema/shared";
+import { writeDisplayName } from "@gnosia/catalog/state";
 
 import { BadRequest, handler } from "@/lib/learner-api";
 

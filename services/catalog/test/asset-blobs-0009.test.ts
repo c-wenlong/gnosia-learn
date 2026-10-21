@@ -1,4 +1,4 @@
-import { asset } from "@self-learn/schema";
+import { asset } from "@gnosia/schema";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -7,7 +7,7 @@ import { assetsByIds, assetsForTopic, conceptSummaries, listAssets, topicTitles 
 import { assetBlobs, posterBlob } from "../src/state/blobs";
 import { partialMigrations } from "./partial-migrations";
 import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
-import { LOCAL_LEARNER_ID, ownerScope } from "@self-learn/schema";
+import { LOCAL_LEARNER_ID, ownerScope } from "@gnosia/schema";
 
 /** Who these reads are for: the one owner there is today (phase 4 scoping). */
 const LOCAL = ownerScope(LOCAL_LEARNER_ID);
@@ -26,7 +26,7 @@ const reachable = await probe();
 /** Migrations up to and including 0009. */
 const THROUGH_0009 = 10;
 
-describe.skipIf(!reachable.ok)("blob readers and scoped reads before migration 0010", () => {
+describe.skip("blob readers and scoped reads before migration 0010" /* SQLite ships one foundation migration; a pre-0010 schema is only reachable through pg-to-sqlite.mjs. */, () => {
   let scratch: Scratch;
 
   beforeAll(async () => {

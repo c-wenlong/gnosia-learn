@@ -1,7 +1,7 @@
 import "server-only";
 
-import { TutorModelError } from "@self-learn/catalog/state";
-import { checkModelId } from "@self-learn/schema/shared";
+import { TutorModelError } from "@gnosia/catalog/state";
+import { checkModelId } from "@gnosia/schema/shared";
 import { NextResponse } from "next/server";
 
 import type { RateLimitRule } from "@/lib/agent/guard";

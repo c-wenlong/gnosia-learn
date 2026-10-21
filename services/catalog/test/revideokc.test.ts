@@ -246,12 +246,12 @@ describe("the revideokc CLI", () => {
 
   it("resolves the checkout from REVIDEOKC_ROOT, else the submodule", () => {
     delete process.env[REVIDEOKC_ROOT_ENV];
-    expect(resolveRevideokcRoot("/srv/self-learn")).toBe(path.join("/srv/self-learn", "tools", "revideokc"));
-    expect(toolCliPath(REVIDEOKC, "/srv/self-learn")).toBe(
-      path.join("/srv/self-learn", "tools", "revideokc", "tools", "cli", "revideokc.mjs"),
+    expect(resolveRevideokcRoot("/srv/gnosia")).toBe(path.join("/srv/gnosia", "tools", "revideokc"));
+    expect(toolCliPath(REVIDEOKC, "/srv/gnosia")).toBe(
+      path.join("/srv/gnosia", "tools", "revideokc", "tools", "cli", "revideokc.mjs"),
     );
     process.env[REVIDEOKC_ROOT_ENV] = "../elsewhere/revideokc";
-    expect(resolveRevideokcRoot("/srv/self-learn")).toBe(path.resolve("/srv/self-learn", "../elsewhere/revideokc"));
+    expect(resolveRevideokcRoot("/srv/gnosia")).toBe(path.resolve("/srv/gnosia", "../elsewhere/revideokc"));
   });
 });
 

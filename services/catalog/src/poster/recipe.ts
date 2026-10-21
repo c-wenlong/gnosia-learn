@@ -4,7 +4,7 @@
  * (docs/CONTENT-MIGRATION.md, Track E), and the web app serves that blob.
  *
  * Pure: no spawn, no filesystem. The web app takes `POSTER_CONTENT_TYPE`
- * through `@self-learn/catalog/state`, the package's one door.
+ * through `@gnosia/catalog/state`, the package's one door.
  *
  * The reasoning for each value is beside it. They were chosen for the web
  * route's old request-time fallback, which phase 2 removed, and moved here

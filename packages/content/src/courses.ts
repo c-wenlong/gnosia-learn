@@ -50,8 +50,9 @@ const COURSE_CODE = /^[A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)*$/;
 const RESOURCE_TYPES: readonly ResourceType[] = ["paper", "docs", "video", "book", "other", "practice"];
 
 /**
- * The asset id prefixes a listed video may carry: the three video tools'
- * (`manimkc:`, `remotionkc:`, `revideokc:`, the catalog's `ASSET_PREFIX`) and
+ * The asset id prefixes a listed video may carry: the four video tools'
+ * (`manimkc:`, `remotionkc:`, `revideokc:`, `blenderkc:`, the catalog's
+ * `ASSET_PREFIX`) and
  * a studio video's (`video:`, the catalog's `VIDEO_PREFIX`). A course's
  * `videos:` is checked for this shape only, never against the catalog: the
  * courses source indexes before the video tools, and a clone may have none of
@@ -59,7 +60,7 @@ const RESOURCE_TYPES: readonly ResourceType[] = ["paper", "docs", "video", "book
  * concepts"). `test/course-lessons.test.ts` in the catalog holds the two
  * lists together.
  */
-export const VIDEO_ASSET_PREFIXES = ["manimkc:", "remotionkc:", "revideokc:", "video:"] as const;
+export const VIDEO_ASSET_PREFIXES = ["manimkc:", "remotionkc:", "revideokc:", "blenderkc:", "video:"] as const;
 
 /** A prefix, then the rest of the id: at least one character and no whitespace. */
 const VIDEO_ASSET_ID = new RegExp(`^(?:${VIDEO_ASSET_PREFIXES.join("|")})\\S+$`);
@@ -127,7 +128,7 @@ export interface LoadCoursesOptions extends LoadOptions {
 
 /**
  * The image types a cover file may be, by extension: the same closed list as
- * `COURSE_COVER_TYPES` in `@self-learn/schema`, which this package does not
+ * `COURSE_COVER_TYPES` in `@gnosia/schema`, which this package does not
  * import. `catalog course cover` decides the type from the bytes; the export
  * names the file by it.
  */

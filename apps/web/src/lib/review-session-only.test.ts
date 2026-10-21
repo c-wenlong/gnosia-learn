@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  */
 const reviewQueue = vi.hoisted(() => vi.fn());
 
-vi.mock("@self-learn/catalog/state", () => ({
+vi.mock("@gnosia/catalog/state", () => ({
   reviewQueue,
   conceptSummaries: vi.fn(async () => []),
 }));

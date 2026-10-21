@@ -26,7 +26,7 @@ const nextConfig: NextConfig = {
    * docs/CONTENT-MIGRATION.md it reads every piece of authored content from
    * the database instead. Nothing the app serves is a file in the tree.
    *
-   * Neither `@self-learn/content` nor `@self-learn/catalog` needs a
+   * Neither `@gnosia/content` nor `@gnosia/catalog` needs a
    * `transpilePackages` entry, even though both ship raw TypeScript with no
    * build step: Turbopack transpiles workspace packages on its own. Verified
    * by removing the entry and building.

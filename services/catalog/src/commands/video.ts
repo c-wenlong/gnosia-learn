@@ -1,10 +1,11 @@
 import path from "node:path";
 import { parseArgs } from "node:util";
 
-import { AUTHOR_KINDS, type AuthorKind, LOCAL_LEARNER_ID, ownerScope } from "@self-learn/schema";
+import { AUTHOR_KINDS, type AuthorKind, LOCAL_LEARNER_ID, ownerScope } from "@gnosia/schema";
 
 import { openBlobStore } from "../content/blob";
 import { CLI_OWNER } from "../content/scope";
+import { findFfmpeg } from "../poster/extract";
 import {
   checkoutVideo,
   COPIES_FILE,
@@ -151,6 +152,7 @@ export function parseVideo(argv: string[]): ParsedVideo {
               author,
               authorKind: kind as AuthorKind,
               ownerId: owner,
+              ffmpeg: await findFfmpeg(),
             });
           }),
       };

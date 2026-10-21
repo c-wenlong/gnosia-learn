@@ -9,11 +9,11 @@ import {
   job as jobTable,
   type Draft,
   type NewDraft,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
 import { CLI_OWNER } from "../content/scope";
-import { withDatabase, type CatalogDatabase } from "../db";
+import { withDatabase, type CatalogDatabase, inTransaction } from "../db";
 
 /**
  * `catalog draft`: the studio's planner conversations (docs/STUDIO-CHAT-FIRST.md,
@@ -342,7 +342,7 @@ export async function runDraftUpsert(document: DraftDocument, owner: string = CL
       .values({ ...row, ownerId: owner })
       .onConflictDoUpdate({
         target: draftTable.id,
-        set: { ...changes, updatedAt: row.updatedAt ?? sql`now()` },
+        set: { ...changes, updatedAt: row.updatedAt ?? sql`cast(unixepoch('subsec') * 1000 as integer)` },
         // The lock as well as the message: a row another owner took between
         // the read above and this write is left alone, and the empty return
         // is the refusal.
@@ -415,14 +415,13 @@ export async function runDraftDelete(id: string, owner: string = CLI_OWNER): Pro
     throw new DraftError(`${JSON.stringify(id)} is not a draft id: letters, digits and dashes, up to 64.`);
   }
   return withDatabase(({ db }) =>
-    db.transaction(async (tx) => {
+    inTransaction(db, async (tx) => {
       const [row] = await tx
         .select({ ownerId: draftTable.ownerId })
         .from(draftTable)
-        .where(eq(draftTable.id, id))
-        .for("update");
+        .where(eq(draftTable.id, id));
       const [counted] = await tx
-        .select({ total: sql<number>`count(*)::int` })
+        .select({ total: sql<number>`count(*)` })
         .from(jobTable)
         .where(eq(jobTable.draftId, id));
       const jobs = counted?.total ?? 0;
@@ -463,7 +462,7 @@ export async function runDraftList(options: DraftListOptions = {}): Promise<Draf
       eq(draftTable.ownerId, owner),
       options.state === undefined ? undefined : eq(draftTable.state, options.state),
     );
-    const [counted] = await db.select({ total: sql<number>`count(*)::int` }).from(draftTable).where(where);
+    const [counted] = await db.select({ total: sql<number>`count(*)` }).from(draftTable).where(where);
     const rows = await db.select().from(draftTable).where(where).orderBy(desc(draftTable.updatedAt)).limit(limit);
     const jobs = await newestJobs(db, rows.map((row) => row.id));
     return {

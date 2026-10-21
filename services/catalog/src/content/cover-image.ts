@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { open } from "node:fs/promises";
 
-import { type CourseCover, type CourseCoverExtension } from "@self-learn/content";
-import { COURSE_COVER_MAX_BYTES, COURSE_COVER_TYPES } from "@self-learn/schema";
+import { type CourseCover, type CourseCoverExtension } from "@gnosia/content";
+import { COURSE_COVER_MAX_BYTES, COURSE_COVER_TYPES } from "@gnosia/schema";
 
 /**
  * What a course cover image is, decided from its bytes, never its name.

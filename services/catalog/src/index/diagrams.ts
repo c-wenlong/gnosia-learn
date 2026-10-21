@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { key as blobKey } from "@self-learn/blob";
+import { key as blobKey } from "@gnosia/blob";
 import {
   LOCAL_LEARNER_ID,
   type NewAsset,
@@ -10,7 +10,7 @@ import {
   type NewAssetDerivation,
   type NewAssetTopic,
   type NewDiagram,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 
 import { DIAGRAM_SLUG, documentBytes, documentProblem, sha256 } from "../content/diagram-document";
 
@@ -98,7 +98,7 @@ export function diagramAsset(
     contentHash: facts.contentHash,
     bytes: facts.bytes,
     title: title ?? path.basename(where, extension),
-    sourceRepo: "self-learn",
+    sourceRepo: "gnosia",
   };
 }
 

@@ -163,7 +163,7 @@ rendering something wrong:
 | A resource `type` outside paper/docs/video/book/other/practice | A chip the UI has no styling for |
 | A reading's `lessons:` naming an id that is no item of its own module (the message names the module when the id is another module's item) | A reading placed on a lesson of another week, or on nothing; a reading belongs to its module |
 | A `lessons:` id listed twice, or `lessons:` written with nothing in it | Each entry is one `curriculum_item_asset` row; an empty key is an author who meant to list something |
-| A `videos:` id with no video asset prefix (`manimkc:`, `remotionkc:`, `revideokc:`, `video:`), or `videos:` written with nothing in it | An id that can never resolve to a video; only the shape is checked, since the video tools import after the courses |
+| A `videos:` id with no video asset prefix (`manimkc:`, `remotionkc:`, `revideokc:`, `blenderkc:`, `video:`), or `videos:` written with nothing in it | An id that can never resolve to a video; only the shape is checked, since the video tools import after the courses |
 | One video listed twice in a module, across the module's `videos:` and its lessons' | The module path places a video once per module |
 | A tag that is not a known tag | The chip shows the raw id, and the course drops out of the related-course list for the theme it meant |
 | A module with no `topics:` | A page with an empty section and nothing to tick |

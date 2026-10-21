@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 
-import { type BlobStore, BlobIntegrityError, fsStore, key as blobKey } from "@self-learn/blob";
-import { blobObject } from "@self-learn/schema";
+import { type BlobStore, BlobIntegrityError, fsStore, key as blobKey } from "@gnosia/blob";
+import { blobObject } from "@gnosia/schema";
 import { eq, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
@@ -10,6 +10,7 @@ import { blobRoot, loadEnv } from "../env";
 import { fileFacts } from "../index/files";
 import { assertWritable } from "./blob-owner";
 
+import { inTransaction } from "../db";
 /**
  * Putting bytes in the blob store and saying so in `blob_object`
  * (docs/CONTENT-MIGRATION.md 0.4, the `upload(file)` box, and D5).
@@ -38,8 +39,8 @@ import { assertWritable } from "./blob-owner";
  * in a rolling 24 hours. Both unset by default, which is no cap, and that is
  * today: one owner, uploading from their own laptop.
  */
-export const OWNER_BYTES_CAP_ENV = "SELF_LEARN_OWNER_BYTES_CAP";
-export const OWNER_UPLOADS_PER_DAY_ENV = "SELF_LEARN_OWNER_UPLOADS_PER_DAY";
+export const OWNER_BYTES_CAP_ENV = "GNOSIA_OWNER_BYTES_CAP";
+export const OWNER_UPLOADS_PER_DAY_ENV = "GNOSIA_OWNER_UPLOADS_PER_DAY";
 
 /** The window the uploads cap counts over. Rolling, never a calendar day, as the studio's spend cap. */
 export const UPLOAD_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -95,7 +96,7 @@ export function ownerCapsOrError(env?: Record<string, string | undefined>): Owne
 
 /**
  * The caps in force, from the environment, `services/catalog/.env` included,
- * where `SELF_LEARN_HOME` is set too. Zero is a real cap: nothing more for
+ * where `GNOSIA_HOME` is set too. Zero is a real cap: nothing more for
  * that owner.
  */
 export function ownerCaps(env?: Record<string, string | undefined>): OwnerCaps {
@@ -149,18 +150,18 @@ export async function ownerUsage(
   // in or out of it. `now` is for a caller that reports as of a moment.
   const since =
     options.now === undefined
-      ? sql`now() - make_interval(secs => ${UPLOAD_WINDOW_MS / 1000})`
-      : sql`${new Date(options.now.getTime() - UPLOAD_WINDOW_MS).toISOString()}::timestamptz`;
+      ? sql`cast(unixepoch('subsec') * 1000 as integer) - ${UPLOAD_WINDOW_MS}`
+      : sql`${options.now.getTime() - UPLOAD_WINDOW_MS}`;
   // By `owner_id`, which the table's check ties to the key's prefix
   // (`starts_with(key, owner_id || '/' || sha256)`), so this is the prefix the
   // store lists by and the column the owner index serves.
   const { rows } = await db.execute<{ owner: string; objects: number; bytes: string; uploads: number }>(sql`
-    select ${blobObject.ownerId} as owner, count(*)::int as objects, coalesce(sum(${blobObject.bytes}), 0)::text as bytes,
-           (count(*) filter (where ${blobObject.createdAt} > ${since}))::int as uploads
+    select ${blobObject.ownerId} as owner, count(*) as objects, coalesce(sum(${blobObject.bytes}), 0) as bytes,
+           (count(*) filter (where ${blobObject.createdAt} > ${since})) as uploads
     from ${blobObject}
     where true
       ${options.owner === undefined ? sql`` : sql`and ${blobObject.ownerId} = ${options.owner}`}
-    group by 1 order by ${blobObject.ownerId} collate "C"
+    group by 1 order by ${blobObject.ownerId} collate binary
   `);
   return rows.map((row) => ({
     owner: row.owner,
@@ -197,12 +198,14 @@ async function checkCaps(
   caps: OwnerCaps | OwnerCapConfigError,
   input: { owner: string; key: string; bytes: number },
 ): Promise<void> {
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${ownerCapLock(input.owner)}, 0))`);
+  // The Postgres advisory lock this line took is folded into the
+  // transaction: `begin immediate` already holds the file's write lock, so
+  // the check below and the pending insert stay one act without it.
+  void ownerCapLock(input.owner);
   const [existing] = await tx
     .select({ key: blobObject.key })
     .from(blobObject)
-    .where(eq(blobObject.key, input.key))
-    .for("update");
+    .where(eq(blobObject.key, input.key));
   if (existing !== undefined) return;
   if (caps instanceof OwnerCapConfigError) throw caps;
   const [usage] = await ownerUsage(tx, { owner: input.owner });
@@ -232,10 +235,10 @@ export type CatalogBlobStore = BlobStore & { readonly root: string };
 
 /**
  * The one place the catalog chooses a store: the `fs` adapter under
- * `blobRoot()` (`$SELF_LEARN_HOME/blobs`), until 0.1's cloud adapter. Every
+ * `blobRoot()` (`$GNOSIA_HOME/blobs`), until 0.1's cloud adapter. Every
  * command that writes or audits blobs opens it here, so the store a command
  * writes is the one the web app serves; a scratch run points
- * `SELF_LEARN_HOME` somewhere else, and both follow.
+ * `GNOSIA_HOME` somewhere else, and both follow.
  */
 export function openBlobStore(): CatalogBlobStore {
   const root = blobRoot();
@@ -330,12 +333,12 @@ export async function uploadBlob(
       })
       .onConflictDoUpdate({
         target: blobObject.key,
-        set: { state: "pending", mime: input.mime, provider: store.provider, updatedAt: sql`now()` },
+        set: { state: "pending", mime: input.mime, provider: store.provider, updatedAt: sql`cast(unixepoch('subsec') * 1000 as integer)` },
       });
   if (!(caps instanceof OwnerCapConfigError) && caps.bytes === null && caps.uploadsPerDay === null) {
     await pending(db);
   } else {
-    await db.transaction(async (tx) => {
+    await inTransaction(db, async (tx) => {
       await checkCaps(tx, caps, { owner: input.ownerId, key, bytes: facts.bytes });
       await pending(tx);
     });
@@ -358,7 +361,7 @@ export async function uploadBlob(
 
   await db
     .update(blobObject)
-    .set({ state: "present", confirmedAt: sql`now()`, updatedAt: sql`now()` })
+    .set({ state: "present", confirmedAt: sql`cast(unixepoch('subsec') * 1000 as integer)`, updatedAt: sql`cast(unixepoch('subsec') * 1000 as integer)` })
     .where(eq(blobObject.key, key));
   return { ...result, uploaded: true };
 }
@@ -367,7 +370,7 @@ export async function uploadBlob(
 export async function markBlobPending(db: CatalogDatabase, key: string): Promise<void> {
   await db
     .update(blobObject)
-    .set({ state: "pending", updatedAt: sql`now()` })
+    .set({ state: "pending", updatedAt: sql`cast(unixepoch('subsec') * 1000 as integer)` })
     .where(eq(blobObject.key, key));
 }
 

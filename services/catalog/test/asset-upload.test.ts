@@ -3,21 +3,23 @@ import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { fsStore, key as blobKey, type BlobStore } from "@self-learn/blob";
-import { asset, assetDerivation, blobObject, COMMONS_OWNER, contentRevision, type NewAsset } from "@self-learn/schema";
+import { fsStore, key as blobKey, type BlobStore } from "@gnosia/blob";
+import { asset, assetDerivation, blobObject, COMMONS_OWNER, contentRevision, type NewAsset } from "@gnosia/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { posterId, uploadAssets, type AssetUploadOptions } from "../src/content/asset-upload";
+import { pdfId, posterId, uploadAssets, type AssetUploadOptions } from "../src/content/asset-upload";
 import { auditBlobs, AUDIT_GRACE_MS } from "../src/content/blob-audit";
 import { keepBlobKeys } from "../src/index/blob-keys";
 import { buildRows, manimkcIndexer, type TopicsReport } from "../src/index/manimkc";
+import { buildVideoPdf, pdfInputs } from "../src/pdf/build";
 import { writeSource } from "../src/index/writer";
 import { applyMigrations } from "../src/migrations";
 import { ensureLearner } from "../src/state";
 import { BEFORE_BLOB_CONTRACT, partialMigrations } from "./partial-migrations";
-import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { clearTables, createScratchDatabase, probe, type Scratch, withoutConstraint } from "./scratch-database";
 
+import { inTransaction } from "../src/db";
 /**
  * `catalog asset upload --source manimkc` and `catalog blob audit`
  * (docs/CONTENT-MIGRATION.md, Track E; edge cases 5 and 9), against a scratch
@@ -32,9 +34,24 @@ const reachable = await probe();
 const sha256 = (bytes: Buffer | string) => createHash("sha256").update(bytes).digest("hex");
 
 const VIDEO = Buffer.from(Array.from({ length: 4_000 }, (_, i) => (i * 7) % 251));
-const TRANSCRIPT = Buffer.from('{"cues":[]}');
+// Two narration beats, so the video's PDF is two pages rather than the
+// silent cut's cadence.
+const TRANSCRIPT = Buffer.from(
+  JSON.stringify({
+    segments: [
+      { start: 0, end: 4, text: "Insertion sort keeps a sorted prefix on the left." },
+      { start: 4, end: 8, text: "Each new element slides left until it is bigger than its neighbour." },
+    ],
+  }),
+);
 const VTT = Buffer.from("WEBVTT\n");
-const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4, 0xff, 0xd9]);
+// A real 64x36 baseline JPEG: the PDF builder's embedJpg refuses the old
+// marker-shaped bytes, and a fixed body keeps a re-cut poster's bytes the
+// same, which is what "linked" asserts.
+const JPEG = Buffer.from(
+  "/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAAkAEADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD9U6KKKAP/2Q==",
+  "base64",
+);
 
 const VIDEO_PATH = "out/algorithms/demo/demo.mp4";
 const TRANSCRIPT_PATH = "out/algorithms/demo/demo.transcript.json";
@@ -120,18 +137,39 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
 
   const assetRow = async (id: string) => (await scratch.db.select().from(asset).where(eq(asset.id, id)))[0];
 
+  /** A stored object's whole body, for looking inside a PDF rather than at its hash. */
+  const streamOf = async (store: BlobStore, key: string): Promise<Buffer[]> => {
+    const read = await store.get(key);
+    const chunks: Buffer[] = [];
+    for await (const chunk of read.body) chunks.push(chunk as Buffer);
+    return chunks;
+  };
+
   beforeAll(async () => {
     scratch = await createScratchDatabase();
     // Flip day's upload runs before the contract (0013): rows first, bytes
     // after. Once 0013 is in, a stored-kind row cannot exist without its blob
-    // and the import stores the bytes itself (blob-contract.test.ts).
-    await applyMigrations(scratch.db, { folder: await partialMigrations(BEFORE_BLOB_CONTRACT) });
+    // and the import stores the bytes itself (blob-contract.test.ts). The
+    // kind check is widened by hand for `pdf`: its migration (0030) comes
+    // after 0013, so it cannot apply to a database stopped before it. The
+    // pdf's `inputs_hash` column (0031) is added by hand for the same reason.
+    await applyMigrations(scratch.db);
+    // The contract-era check that keeps a stored kind's row without its
+    // blob: the upload flow under test exists to move rows first, bytes
+    // after, so the fixture removes it (SQLite cannot drop one; the helper
+    // rebuilds the table).
+    await withoutConstraint(scratch.db, "asset", "asset_stored_blob_check");
     base = await mkdtemp(path.join(tmpdir(), "asset-upload-"));
     outRoot = path.join(base, "manimkc-home");
     ffmpeg = path.join(base, "ffmpeg");
     // Prints the same JPEG whatever it is asked, like a real ffmpeg on a real
-    // video prints the same frame, so a rerun cuts identical bytes.
-    await writeFile(ffmpeg, `#!/bin/sh\nprintf '\\377\\330\\377\\340\\001\\002\\003\\004\\377\\331'\n`);
+    // video prints the same frame, so a rerun cuts identical bytes — and a
+    // Duration line on stderr, where the silent-cut cadence would read a
+    // length for a video with no transcript.
+    await writeFile(
+      ffmpeg,
+      `#!/bin/sh\necho '  Duration: 00:00:10.00, start: 0.000000, bitrate: 200 kb/s' >&2\necho '${JPEG.toString("base64")}' | base64 -d\n`,
+    );
     await chmod(ffmpeg, 0o755);
   }, 60_000);
 
@@ -141,19 +179,19 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
   });
 
   beforeEach(async () => {
-    await scratch.db.execute(sql`truncate asset, blob_object, content_revision cascade`);
+    await clearTables(scratch.db, ["asset", "blob_object", "content_revision"]);
     blobRoot = await mkdtemp(path.join(base, "blobs-"));
     store = fsStore(blobRoot);
     await writeFixture();
     await seedIndexed();
   });
 
-  it("uploads every indexed file, cuts a poster, and points each row at bytes equal to its content_hash", async () => {
+  it("uploads every indexed file, cuts a poster, makes a PDF, and points each row at bytes equal to its content_hash", async () => {
     const result = await uploadAssets(scratch.db, options());
-    expect(result.counts).toEqual({ videos: 1, sidecars: 2, posters: 1 });
+    expect(result.counts).toEqual({ videos: 1, sidecars: 2, posters: 1, pdfs: 1 });
     expect(result.refused).toBe(0);
-    expect(result.uploaded).toBe(4);
-    expect(result.rowsWritten).toBe(4);
+    expect(result.uploaded).toBe(5);
+    expect(result.rowsWritten).toBe(5);
 
     for (const [id, bytes, ext] of [
       [VIDEO_ID, VIDEO, "mp4"],
@@ -182,13 +220,29 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
       .where(eq(assetDerivation.assetId, posterId(VIDEO_ID)));
     expect(derived.map((d) => d.sourceAssetId)).toEqual([VIDEO_ID]);
 
+    const pdf = await assetRow(pdfId(VIDEO_ID));
+    expect(pdf).toMatchObject({ kind: "pdf", path: null, url: null, ownerId: "local" });
+    // The document is deterministic: the same video, transcript and title
+    // make the same bytes, so its key is its hash and the store's copy
+    // hashes to it.
+    expect(pdf?.blobKey).toBe(blobKey("local", pdf?.contentHash as string, "pdf"));
+    const head = await store.head(pdf?.blobKey as string);
+    expect(head?.sha256).toBe(pdf?.contentHash);
+    const pdfBody = Buffer.concat(await streamOf(store, pdf?.blobKey as string));
+    expect(pdfBody.subarray(0, 5).toString("latin1")).toBe("%PDF-");
+    const pdfDerived = await scratch.db
+      .select()
+      .from(assetDerivation)
+      .where(eq(assetDerivation.assetId, pdfId(VIDEO_ID)));
+    expect(pdfDerived.map((d) => d.sourceAssetId)).toEqual([VIDEO_ID]);
+
     const states = await scratch.db.select({ state: blobObject.state }).from(blobObject);
-    expect(states.map((s) => s.state)).toEqual(["present", "present", "present", "present"]);
+    expect(states.map((s) => s.state)).toEqual(["present", "present", "present", "present", "present"]);
     const revisions = await scratch.db
       .select({ id: contentRevision.entityId, op: contentRevision.op })
       .from(contentRevision)
       .where(eq(contentRevision.entityType, "asset"));
-    expect(revisions).toHaveLength(4);
+    expect(revisions).toHaveLength(5);
   });
 
   it("is resumable: a second run reads nothing, uploads nothing and writes no revision", async () => {
@@ -196,22 +250,190 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
     const again = await uploadAssets(scratch.db, options({ ffmpeg: path.join(base, "not-ffmpeg") }));
     expect(again.uploaded).toBe(0);
     expect(again.rowsWritten).toBe(0);
-    expect(again.items.map((i) => i.action)).toEqual(["present", "present", "present", "present"]);
+    expect(again.items.map((i) => i.action)).toEqual(["present", "present", "present", "present", "present"]);
+  });
+
+  it("remakes the PDF when the transcript moved, though the video's bytes did not", async () => {
+    await uploadAssets(scratch.db, options());
+    const before = (await assetRow(pdfId(VIDEO_ID)))?.contentHash;
+
+    // A reindex: the transcript's row names the new bytes and its blob is not
+    // yet stored, which is what `catalog import` leaves the upload. The
+    // video's bytes did not move, so the old `present` check alone would
+    // keep serving the old captions.
+    const moved = Buffer.from(JSON.stringify({ segments: [{ start: 0, end: 6, text: "A different narration now." }] }));
+    await writeFile(path.join(outRoot, TRANSCRIPT_PATH), moved);
+    await scratch.db
+      .update(asset)
+      .set({ contentHash: sha256(moved), bytes: moved.length, blobKey: null })
+      .where(eq(asset.id, TRANSCRIPT_ID));
+
+    const result = await uploadAssets(scratch.db, options());
+    const pdf = result.items.find((i) => i.id === pdfId(VIDEO_ID));
+    expect(pdf?.action).not.toBe("present");
+    const stored = await assetRow(pdfId(VIDEO_ID));
+    expect(stored?.contentHash).not.toBe(before);
+    // The new captions are in it: the same bytes building them by hand makes.
+    const expected = await buildVideoPdf(
+      ffmpeg,
+      path.join(outRoot, VIDEO_PATH),
+      sha256(VIDEO),
+      "Demo (video)",
+      [{ start: 0, end: 6, text: "A different narration now." }],
+      blobKey("local", sha256(moved), "json"),
+    );
+    expect(expected.ok && stored?.blobKey === blobKey("local", sha256(expected.body), "pdf")).toBe(true);
+  });
+
+  it("stamps the PDF's row with the fingerprint of its inputs", async () => {
+    await uploadAssets(scratch.db, options());
+    expect((await assetRow(pdfId(VIDEO_ID)))?.inputsHash).toBe(
+      pdfInputs(sha256(VIDEO), "Demo (video)", blobKey("local", sha256(TRANSCRIPT), "json")),
+    );
+  });
+
+  it("recuts a rewritten transcript's document exactly once, then leaves it alone", async () => {
+    await uploadAssets(scratch.db, options());
+    const before = (await assetRow(pdfId(VIDEO_ID)))?.blobKey;
+
+    // A reindex of a reformatted transcript: new blob key, same narration.
+    // The fingerprint names the transcript by its key, so this run recuts —
+    // the document's own inputs differ, its bytes differ, a new blob lands
+    // — and the row's new fingerprint settles the question for every later
+    // run: present, not a recut each time, and a run without ffmpeg does
+    // not unhook it.
+    const moved = Buffer.from(JSON.stringify({ segments: [{ start: 0, end: 4, text: "Insertion sort keeps a sorted prefix on the left." }, { start: 4, end: 8, text: "Each new element slides left until it is bigger than its neighbour." }] }, null, 2));
+    await writeFile(path.join(outRoot, TRANSCRIPT_PATH), moved);
+    await scratch.db
+      .update(asset)
+      .set({ contentHash: sha256(moved), bytes: moved.length, blobKey: null })
+      .where(eq(asset.id, TRANSCRIPT_ID));
+
+    const result = await uploadAssets(scratch.db, options());
+    expect(result.items.find((i) => i.id === pdfId(VIDEO_ID))?.action).toBe("made");
+    const stored = await assetRow(pdfId(VIDEO_ID));
+    expect(stored?.blobKey).not.toBe(before);
+    expect(stored?.inputsHash).toBe(pdfInputs(sha256(VIDEO), "Demo (video)", blobKey("local", sha256(moved), "json")));
+
+    const again = await uploadAssets(scratch.db, options());
+    expect(again.items.find((i) => i.id === pdfId(VIDEO_ID))?.action).toBe("present");
+
+    const quiet = await uploadAssets(scratch.db, { ...options(), ffmpeg: null });
+    expect(quiet.items.find((i) => i.id === pdfId(VIDEO_ID))?.action).toBe("present");
+    const derived = await scratch.db.select().from(assetDerivation).where(eq(assetDerivation.assetId, pdfId(VIDEO_ID)));
+    expect(derived.map((d) => d.sourceAssetId)).toEqual([VIDEO_ID]);
+  });
+
+  it("remakes a PDF whose row has no inputs fingerprint once, stamping it", async () => {
+    await uploadAssets(scratch.db, options());
+    // A row an older write left: it has no fingerprint, which reads as stale
+    // and earns exactly one recut — the row that lands carries this run's.
+    await scratch.db.update(asset).set({ inputsHash: null }).where(eq(asset.id, pdfId(VIDEO_ID)));
+
+    const result = await uploadAssets(scratch.db, options());
+    expect(result.items.find((i) => i.id === pdfId(VIDEO_ID))?.action).toBe("linked");
+    expect((await assetRow(pdfId(VIDEO_ID)))?.inputsHash).not.toBeNull();
+
+    const again = await uploadAssets(scratch.db, options());
+    expect(again.items.find((i) => i.id === pdfId(VIDEO_ID))?.action).toBe("present");
+  });
+
+  it("pages the PDF from the transcript's confirmed blob, not a file that drifted since", async () => {
+    await uploadAssets(scratch.db, options());
+    // The transcript file moved on disk without a reindex; the row and its
+    // stored blob still name the confirmed bytes. When the render itself is
+    // re-cut, the rebuilt PDF must quote the blob, not the drifted file.
+    await writeFile(
+      path.join(outRoot, TRANSCRIPT_PATH),
+      JSON.stringify({ segments: [{ start: 0, end: 9, text: "words the catalog never accepted" }] }),
+    );
+    const moved = Buffer.from("a second render of demo");
+    await writeFile(path.join(outRoot, VIDEO_PATH), moved);
+    await scratch.db
+      .update(asset)
+      .set({ contentHash: sha256(moved), bytes: moved.length, blobKey: null })
+      .where(eq(asset.id, VIDEO_ID));
+
+    const result = await uploadAssets(scratch.db, options());
+    // The drifted file is invisible to `settle` while the confirmed blob is
+    // there — `present`, not refused — and the PDF is remade with it.
+    expect(result.items.find((i) => i.id === TRANSCRIPT_ID)?.action).toBe("present");
+    const stored = await assetRow(pdfId(VIDEO_ID));
+    const expected = await buildVideoPdf(
+      ffmpeg,
+      path.join(outRoot, VIDEO_PATH),
+      sha256(moved),
+      "Demo (video)",
+      [
+        { start: 0, end: 4, text: "Insertion sort keeps a sorted prefix on the left." },
+        { start: 4, end: 8, text: "Each new element slides left until it is bigger than its neighbour." },
+      ],
+      blobKey("local", sha256(TRANSCRIPT), "json"),
+    );
+    expect(expected.ok && stored?.blobKey === blobKey("local", sha256(expected.body), "pdf")).toBe(true);
+  });
+
+  it("pages a refused transcript's PDF silent, never reading the drifted file", async () => {
+    // The transcript file changed since it was indexed and no blob was ever
+    // confirmed for it: the upload refuses it, and the PDF falls to the
+    // silent cadence — the drifted file is never read.
+    await writeFile(
+      path.join(outRoot, TRANSCRIPT_PATH),
+      JSON.stringify({ segments: [{ start: 0, end: 5, text: "words the catalog never accepted" }] }),
+    );
+    const result = await uploadAssets(scratch.db, options());
+    expect(result.items.find((i) => i.id === TRANSCRIPT_ID)?.action).toBe("refused");
+    const pdf = result.items.find((i) => i.id === pdfId(VIDEO_ID));
+    expect(pdf?.action).toBe("made");
+    const silent = await buildVideoPdf(ffmpeg, path.join(outRoot, VIDEO_PATH), sha256(VIDEO), "Demo (video)", null, null);
+    expect(silent.ok && pdf?.key === blobKey("local", sha256(silent.body), "pdf")).toBe(true);
+  });
+
+  it("keeps a PDF whose transcript did not move and unhooks one whose transcript changed, however the store fails", async () => {
+    await uploadAssets(scratch.db, options());
+    // A store that stats every object but cannot serve one byte — the race
+    // between `alreadyStored`'s stat and the read that follows it.
+    const flaky: BlobStore = {
+      ...store,
+      get: (key) => Promise.reject(new Error(`cannot serve ${key}`)),
+    };
+
+    // Inputs unchanged: the fingerprint comparison reads no blob, so the
+    // unservable transcript cannot make a still-valid document look stale.
+    const still = await uploadAssets(scratch.db, { ...options(), store: flaky, ffmpeg: null });
+    expect(still.items.find((i) => i.id === pdfId(VIDEO_ID))?.action).toBe("present");
+
+    // Inputs changed and no replacement can be read: the old document is
+    // unhooked rather than left quoting a transcript it no longer has.
+    const moved = Buffer.from(JSON.stringify({ segments: [{ start: 0, end: 9, text: "A changed narration." }] }));
+    await writeFile(path.join(outRoot, TRANSCRIPT_PATH), moved);
+    await scratch.db
+      .update(asset)
+      .set({ contentHash: sha256(moved), bytes: moved.length, blobKey: null })
+      .where(eq(asset.id, TRANSCRIPT_ID));
+    const result = await uploadAssets(scratch.db, { ...options(), store: flaky });
+    const pdf = result.items.filter((i) => i.id === pdfId(VIDEO_ID)).map((i) => i.action);
+    expect(pdf).toEqual(["refused", "detached"]);
+    expect(await scratch.db.select().from(assetDerivation).where(eq(assetDerivation.assetId, pdfId(VIDEO_ID)))).toEqual([]);
+
+    // And a healthy run makes the new one from the new transcript.
+    const healed = await uploadAssets(scratch.db, options());
+    expect(healed.items.find((i) => i.id === pdfId(VIDEO_ID))?.action).toBe("made");
   });
 
   it("refuses each file its owner's cap refuses, and goes on with the rest (phase 4)", async () => {
-    const saved = process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"];
-    process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"] = "2";
+    const saved = process.env["GNOSIA_OWNER_UPLOADS_PER_DAY"];
+    process.env["GNOSIA_OWNER_UPLOADS_PER_DAY"] = "2";
     try {
       const result = await uploadAssets(scratch.db, options());
       expect(result.uploaded).toBe(2);
-      expect(result.refused).toBe(2);
+      expect(result.refused).toBe(3);
       const refused = result.items.filter((i) => i.action === "refused");
-      expect(refused).toHaveLength(2);
-      for (const item of refused) expect(item.detail).toContain("SELF_LEARN_OWNER_UPLOADS_PER_DAY");
+      expect(refused).toHaveLength(3);
+      for (const item of refused) expect(item.detail).toContain("GNOSIA_OWNER_UPLOADS_PER_DAY");
     } finally {
-      if (saved === undefined) delete process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"];
-      else process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"] = saved;
+      if (saved === undefined) delete process.env["GNOSIA_OWNER_UPLOADS_PER_DAY"];
+      else process.env["GNOSIA_OWNER_UPLOADS_PER_DAY"] = saved;
     }
   });
 
@@ -224,7 +446,7 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
     await scratch.db.update(asset).set({ ownerId: COMMONS_OWNER });
     const result = await uploadAssets(scratch.db, options());
     expect(result.refused).toBe(0);
-    expect(result.rowsWritten).toBe(4);
+    expect(result.rowsWritten).toBe(5);
     for (const [id, bytes, ext] of [
       [VIDEO_ID, VIDEO, "mp4"],
       [TRANSCRIPT_ID, TRANSCRIPT, "json"],
@@ -235,6 +457,9 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
       expect(stored?.ownerId, id).toBe(COMMONS_OWNER);
       expect(stored?.blobKey, id).toBe(blobKey(COMMONS_OWNER, sha256(bytes), ext));
     }
+    const pdf = await assetRow(pdfId(VIDEO_ID));
+    expect(pdf?.ownerId).toBe(COMMONS_OWNER);
+    expect(pdf?.blobKey).toBe(blobKey(COMMONS_OWNER, pdf?.contentHash as string, "pdf"));
     const owners = await scratch.db.select({ owner: blobObject.ownerId }).from(blobObject);
     expect(new Set(owners.map((o) => o.owner))).toEqual(new Set([COMMONS_OWNER]));
     const authors = await scratch.db.select({ owner: contentRevision.ownerId }).from(contentRevision);
@@ -243,7 +468,7 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
 
   it("refuses a poster left with another owner than its video, before cutting or storing it (phase 4)", async () => {
     await uploadAssets(scratch.db, options());
-    // D23's move done for the video and its sidecars but not its poster.
+    // D23's move done for the video and its sidecars but not its poster or PDF.
     await ensureLearner(scratch.db, COMMONS_OWNER);
     await scratch.db.update(asset).set({ ownerId: COMMONS_OWNER }).where(sql`${asset.id} like 'manimkc:%'`);
     const before = (await scratch.db.select({ key: blobObject.key }).from(blobObject)).map((b) => b.key);
@@ -257,11 +482,20 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
     expect(derived).toEqual([]);
     expect((await assetRow(posterId(VIDEO_ID)))?.ownerId).toBe("local");
 
-    // The video and its sidecars moved to the commons' prefix; no poster
-    // bytes were cut for either owner.
+    // The PDF is the poster's sibling under the same rule: refused by name,
+    // and unhooked so it is not served as the moved video's document.
+    const pdf = result.items.filter((i) => i.id === pdfId(VIDEO_ID));
+    expect(pdf.map((i) => i.action)).toEqual(["refused", "detached"]);
+    expect(pdf[0]?.detail).toContain("belongs to local and its video to commons");
+    const pdfDerived = await scratch.db.select().from(assetDerivation).where(eq(assetDerivation.assetId, pdfId(VIDEO_ID)));
+    expect(pdfDerived).toEqual([]);
+    expect((await assetRow(pdfId(VIDEO_ID)))?.ownerId).toBe("local");
+
+    // The video and its sidecars moved to the commons' prefix; no derived
+    // bytes were made for either owner.
     expect((await assetRow(VIDEO_ID))?.blobKey).toBe(blobKey(COMMONS_OWNER, sha256(VIDEO), "mp4"));
     const after = (await scratch.db.select({ key: blobObject.key }).from(blobObject)).map((b) => b.key);
-    expect(after.filter((k) => !before.includes(k)).every((k) => !k.endsWith(".jpg"))).toBe(true);
+    expect(after.filter((k) => !before.includes(k)).every((k) => !k.endsWith(".jpg") && !k.endsWith(".pdf"))).toBe(true);
   });
 
   it("says a mismatched poster is to be moved even when it is present and its video unchanged (phase 4)", async () => {
@@ -276,6 +510,8 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
     expect(poster.map((i) => i.action)).toEqual(["refused"]);
     const derived = await scratch.db.select().from(assetDerivation).where(eq(assetDerivation.assetId, posterId(VIDEO_ID)));
     expect(derived.map((d) => d.sourceAssetId)).toEqual([VIDEO_ID]);
+    // The PDF stayed the commons' with its video, so it is simply present.
+    expect(result.items.find((i) => i.id === pdfId(VIDEO_ID))?.action).toBe("present");
   });
 
   it("refuses another owner's video before storing a byte, and goes on with the rest (phase 4)", async () => {
@@ -313,7 +549,7 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
   it("writes nothing on a dry run", async () => {
     const result = await uploadAssets(scratch.db, options({ dryRun: true }));
     expect(result.items.map((i) => i.action).sort()).toEqual(
-      ["would-make", "would-upload", "would-upload", "would-upload"].sort(),
+      ["would-make", "would-make", "would-upload", "would-upload", "would-upload"].sort(),
     );
     expect(await scratch.db.select().from(blobObject)).toEqual([]);
     expect((await assetRow(VIDEO_ID))?.blobKey).toBeNull();
@@ -323,8 +559,8 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
   });
 
   it("says on a dry run which files the caps would refuse, counting what it has planned", async () => {
-    const saved = process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"];
-    process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"] = "2";
+    const saved = process.env["GNOSIA_OWNER_UPLOADS_PER_DAY"];
+    process.env["GNOSIA_OWNER_UPLOADS_PER_DAY"] = "2";
     try {
       const dry = await uploadAssets(scratch.db, options({ dryRun: true }));
       const real = await uploadAssets(scratch.db, options());
@@ -337,28 +573,30 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
         expect(item.detail).toContain("a real run would refuse it");
       }
     } finally {
-      if (saved === undefined) delete process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"];
-      else process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"] = saved;
+      if (saved === undefined) delete process.env["GNOSIA_OWNER_UPLOADS_PER_DAY"];
+      else process.env["GNOSIA_OWNER_UPLOADS_PER_DAY"] = saved;
     }
   });
 
-  it("says a dry run's bytes-cap answers are an estimate when it plans posters, whose sizes it cannot know", async () => {
-    const saved = process.env["SELF_LEARN_OWNER_BYTES_CAP"];
-    process.env["SELF_LEARN_OWNER_BYTES_CAP"] = "1000000000";
+  it("says a dry run's bytes-cap answers are an estimate when it plans derived files, whose sizes it cannot know", async () => {
+    const saved = process.env["GNOSIA_OWNER_BYTES_CAP"];
+    process.env["GNOSIA_OWNER_BYTES_CAP"] = "1000000000";
     try {
       const dry = await uploadAssets(scratch.db, options({ dryRun: true }));
-      expect(dry.items.filter((i) => i.action === "would-make")).toHaveLength(1);
-      expect(dry.bytesCapEstimate).toMatch(/SELF_LEARN_OWNER_BYTES_CAP answers are an estimate: the 1 poster\(s\) this run would cut/);
+      expect(dry.items.filter((i) => i.action === "would-make")).toHaveLength(2);
+      expect(dry.bytesCapEstimate).toMatch(
+        /GNOSIA_OWNER_BYTES_CAP answers are an estimate: the 2 poster\(s\)\/PDF\(s\) this run would make/,
+      );
       // No posters planned (no ffmpeg), or no bytes cap: an exact answer, and nothing said.
       expect((await uploadAssets(scratch.db, options({ dryRun: true, ffmpeg: null }))).bytesCapEstimate).toBeNull();
-      delete process.env["SELF_LEARN_OWNER_BYTES_CAP"];
+      delete process.env["GNOSIA_OWNER_BYTES_CAP"];
       expect((await uploadAssets(scratch.db, options({ dryRun: true }))).bytesCapEstimate).toBeNull();
       // Nor on a real run, which measures each poster it cuts.
-      process.env["SELF_LEARN_OWNER_BYTES_CAP"] = "1000000000";
+      process.env["GNOSIA_OWNER_BYTES_CAP"] = "1000000000";
       expect((await uploadAssets(scratch.db, options())).bytesCapEstimate).toBeNull();
     } finally {
-      if (saved === undefined) delete process.env["SELF_LEARN_OWNER_BYTES_CAP"];
-      else process.env["SELF_LEARN_OWNER_BYTES_CAP"] = saved;
+      if (saved === undefined) delete process.env["GNOSIA_OWNER_BYTES_CAP"];
+      else process.env["GNOSIA_OWNER_BYTES_CAP"] = saved;
     }
   });
 
@@ -370,16 +608,16 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
     const withCopy = report();
     const sections = withCopy.topics[0]?.sections as unknown[];
     sections.push({ section: "copy", deliverable: { path: COPY_PATH, exists: true, sidecars: {} } });
-    const saved = process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"];
-    process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"] = "3";
+    const saved = process.env["GNOSIA_OWNER_UPLOADS_PER_DAY"];
+    process.env["GNOSIA_OWNER_UPLOADS_PER_DAY"] = "3";
     try {
       const dry = await uploadAssets(scratch.db, options({ dryRun: true, ffmpeg: null, report: withCopy }));
       expect(dry.items.filter((i) => i.action === "refused")).toEqual([]);
       const real = await uploadAssets(scratch.db, options({ ffmpeg: null, report: withCopy }));
       expect(real.refused).toBe(0);
     } finally {
-      if (saved === undefined) delete process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"];
-      else process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"] = saved;
+      if (saved === undefined) delete process.env["GNOSIA_OWNER_UPLOADS_PER_DAY"];
+      else process.env["GNOSIA_OWNER_UPLOADS_PER_DAY"] = saved;
     }
   });
 
@@ -390,8 +628,10 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
     expect(refused.map((i) => i.id)).toEqual([VIDEO_ID]);
     expect(refused[0]?.detail).toContain("catalog -- import --only manimkc");
     expect((await assetRow(VIDEO_ID))?.blobKey).toBeNull();
-    // No video, no poster: a poster of bytes nobody indexed would be a lie.
+    // No video, no poster, no PDF: a derived file of bytes nobody indexed
+    // would be a lie.
     expect(await assetRow(posterId(VIDEO_ID))).toBeUndefined();
+    expect(await assetRow(pdfId(VIDEO_ID))).toBeUndefined();
     // The sidecars were fine and went up.
     expect((await assetRow(TRANSCRIPT_ID))?.blobKey).not.toBeNull();
   });
@@ -402,11 +642,14 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
     expect(result.items.filter((i) => i.action === "refused").map((i) => i.id)).toEqual([VTT_ID]);
   });
 
-  it("skips posters, and says so, with no ffmpeg", async () => {
+  it("skips posters and PDFs, and says so, with no ffmpeg", async () => {
     const result = await uploadAssets(scratch.db, options({ ffmpeg: null }));
     expect(result.postersSkipped).toContain("ffmpeg");
+    expect(result.pdfsSkipped).toContain("ffmpeg");
     expect(result.counts.posters).toBe(0);
+    expect(result.counts.pdfs).toBe(0);
     expect(await assetRow(posterId(VIDEO_ID))).toBeUndefined();
+    expect(await assetRow(pdfId(VIDEO_ID))).toBeUndefined();
     expect((await assetRow(VIDEO_ID))?.blobKey).not.toBeNull();
   });
 
@@ -424,6 +667,8 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
 
     const noFfmpeg = await uploadAssets(scratch.db, options({ ffmpeg: null }));
     expect(noFfmpeg.items.find((i) => i.id === posterId(VIDEO_ID))?.action).toBe("detached");
+    // The PDF is unhooked by the same rule.
+    expect(noFfmpeg.items.find((i) => i.id === pdfId(VIDEO_ID))?.action).toBe("detached");
     expect((await assetRow(VIDEO_ID))?.blobKey).toBe(blobKey("local", sha256(rerender), "mp4"));
     const derivedFrom = async () =>
       (
@@ -442,6 +687,30 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
     expect(withFfmpeg.items.find((i) => i.id === posterId(VIDEO_ID))?.action).toBe("linked");
     expect(await derivedFrom()).toEqual([VIDEO_ID]);
     expect((await assetRow(posterId(VIDEO_ID)))?.blobKey).toBe(oldPoster);
+    // And the PDF is made again: the new render's hash is in the document's
+    // own inputs fingerprint, so its bytes differ even though the fixture's
+    // pages would come out the same.
+    expect(withFfmpeg.items.find((i) => i.id === pdfId(VIDEO_ID))?.action).toBe("made");
+    const recut = await buildVideoPdf(
+      ffmpeg,
+      path.join(outRoot, VIDEO_PATH),
+      sha256(rerender),
+      "Demo (video)",
+      [
+        { start: 0, end: 4, text: "Insertion sort keeps a sorted prefix on the left." },
+        { start: 4, end: 8, text: "Each new element slides left until it is bigger than its neighbour." },
+      ],
+      blobKey("local", sha256(TRANSCRIPT), "json"),
+    );
+    expect(recut.ok && (await assetRow(pdfId(VIDEO_ID)))?.blobKey === blobKey("local", sha256(recut.body), "pdf")).toBe(true);
+    expect(
+      (
+        await scratch.db
+          .select({ source: assetDerivation.sourceAssetId })
+          .from(assetDerivation)
+          .where(eq(assetDerivation.assetId, pdfId(VIDEO_ID)))
+      ).map((row) => row.source),
+    ).toEqual([VIDEO_ID]);
   });
 
   describe("a re-index", () => {
@@ -449,7 +718,7 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
       await uploadAssets(scratch.db, options());
       const video = await assetRow(VIDEO_ID);
       const transcript = await assetRow(TRANSCRIPT_ID);
-      const rows = await scratch.db.transaction((tx) =>
+      const rows = await inTransaction(scratch.db, (tx) =>
         keepBlobKeys(tx, {
           asset: [
             row(VIDEO_ID, "video", VIDEO_PATH, VIDEO),
@@ -503,7 +772,7 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
       await uploadAssets(scratch.db, options());
       const audit = await auditBlobs(scratch.db, store);
       expect(audit.findings).toEqual([]);
-      expect(audit).toMatchObject({ rows: 4, objects: 4, outstanding: 0 });
+      expect(audit).toMatchObject({ rows: 5, objects: 5, outstanding: 0 });
     });
 
     it("lists a missing and a corrupt object, and --fix sends their rows back to pending", async () => {
@@ -588,14 +857,15 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
       expect(await scratch.db.select().from(blobObject)).toEqual([]);
     });
 
-    it("lists a poster whose video is gone, and bytes nothing points at", async () => {
+    it("lists the poster and PDF whose video is gone, and bytes nothing points at", async () => {
       await uploadAssets(scratch.db, options());
       const videoKey = (await assetRow(VIDEO_ID))?.blobKey as string;
-      // The manimkc prune deleting the video: its links cascade, the poster stays.
+      // The manimkc prune deleting the video: its links cascade, the derived
+      // rows stay.
       await scratch.db.delete(asset).where(eq(asset.id, VIDEO_ID));
       const audit = await auditBlobs(scratch.db, store);
       const kinds = audit.findings.map((f) => f.kind).sort();
-      expect(kinds).toEqual(["orphan-poster", "unreferenced"]);
+      expect(kinds).toEqual(["orphan-poster", "orphan-poster", "unreferenced"]);
       expect(audit.findings.find((f) => f.kind === "unreferenced")?.key).toBe(videoKey);
       // Neither is a disagreement between the table and the store.
       expect(audit.outstanding).toBe(0);
@@ -604,6 +874,12 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
           .select()
           .from(assetDerivation)
           .where(and(eq(assetDerivation.assetId, posterId(VIDEO_ID)))),
+      ).toEqual([]);
+      expect(
+        await scratch.db
+          .select()
+          .from(assetDerivation)
+          .where(and(eq(assetDerivation.assetId, pdfId(VIDEO_ID)))),
       ).toEqual([]);
     });
   });

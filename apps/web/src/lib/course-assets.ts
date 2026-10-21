@@ -6,7 +6,7 @@ import {
   assetsForTopic,
   conceptCheckCounts,
   type AssetRef,
-} from "@self-learn/catalog/state";
+} from "@gnosia/catalog/state";
 import { connection } from "next/server";
 
 import { assetDisplayTitle, assetKindLabel, familyOf } from "@/components/asset-meta";

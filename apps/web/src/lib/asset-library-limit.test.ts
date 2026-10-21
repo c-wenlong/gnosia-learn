@@ -27,7 +27,7 @@ const listAssets = vi.hoisted(() =>
       url: null,
       bytes: 1,
       title: `Note ${i}`,
-      sourceRepo: "self-learn",
+      sourceRepo: "gnosia",
       topics: [],
       createdAt: "2026-10-05T00:00:00.000Z",
       updatedAt: "2026-10-05T00:00:00.000Z",
@@ -38,7 +38,7 @@ const listAssets = vi.hoisted(() =>
 
 vi.mock("@/lib/learner-store", () => ({ catalogDatabase: async () => ({}) }));
 vi.mock("next/server", () => ({ connection: async () => undefined }));
-vi.mock("@self-learn/catalog/state", () => ({
+vi.mock("@gnosia/catalog/state", () => ({
   listAssets,
   assetCounts: async () => [{ kind: "note", count: catalog.size }],
   assetParents: async () => ({}),

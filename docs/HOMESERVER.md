@@ -15,7 +15,7 @@ and points there.
 | S2 | The database moves as a dump, never as an export. | `catalog export` is content only. The learner state (`event`, `mastery`, `review`, `progress`, `recap`), `content_revision`, the studio's `job`, `session` and `draft` rows, and the sealed `provider_key` are only in the dump. |
 | S3 | The blob store moves as files without its `.owner` marker, and the server's copy is claimed by its own database. | The `fs` store is content-addressed, so the bytes are the same on both machines and every key still resolves. Its `.owner` marker names the database by name, `pg_database` oid and port (`services/catalog/src/content/blob-owner.ts`), and a restored database has a new oid, so a copied marker would name a database that is not there and the root would refuse uploads and `--fix`. Left out of the copy, `blob audit --fix` or the first upload claims the root by writing a new one (`claimRoot` in that module); a plain audit only reads. |
 | S4 | `AUTH_SECRET` is the same on both machines. | The provider key saved in Settings is encrypted under a key derived from it ([BYOK.md](BYOK.md)). A different secret makes the restored row read as "re-enter this key". `OWNER_PASSWORD` can differ freely; it is checked, not used to encrypt anything. |
-| S5 | The studio runs diagram jobs on the homeserver and no video jobs. | Diagram jobs are bounded by the Claude Code permission file and the `PreToolUse` hook in `services/studio/src/diagram-guard.ts`, which run anywhere `claude` does. Video jobs run inside a Seatbelt profile through `/usr/bin/sandbox-exec`, and the runner refuses them on any other platform (`toolchainProblems` in `services/studio/src/video/toolchain.ts`, decision V4 of [STUDIO-VIDEOS.md](STUDIO-VIDEOS.md)). The Linux boundary, bubblewrap, is designed there and not measured, and there is no unsandboxed fallback. Videos stay a Mac job until someone builds and measures that profile. |
+| S5 | The studio runs diagram jobs on the homeserver and no video jobs. | Diagram jobs are bounded by the Claude Code permission file and the `PreToolUse` hook in `services/studio/src/diagram-guard.ts`, which run anywhere `claude` does. Video jobs run inside a Seatbelt profile on macOS and a bubblewrap one on Linux (`services/studio/src/video/bwrap.ts`, decision V4 of [STUDIO-VIDEOS.md](STUDIO-VIDEOS.md)), and the runner refuses them where the sandbox does not come up; there is no unsandboxed fallback. The bubblewrap side is written but not yet measured against the hostile-scene test, and Ubuntu 24.04's `kernel.apparmor_restrict_unprivileged_userns=1` refuses the user namespaces it needs until the packaged `/etc/apparmor.d/bwrap` profile is installed. Videos stay a Mac job until both are done on the server. |
 | S6 | `tailscale serve` in front of port 3000, tailnet only, no Funnel. | The owner's setup (2026-10-04): every served port on the machine is `tailscale serve` with tailnet-only access and an empty `AllowFunnel`. Serve terminates TLS with the machine's tailnet certificate, keeps the incoming `Host` (`r.Out.Host = r.In.Host` in `ipn/ipnlocal/serve.go`) and sets `X-Forwarded-Proto: https`, which is exactly what the app reads: the session cookie goes `Secure` on that header (`apps/web/src/app/api/auth/shared.ts`) and the same-origin check builds the origin from `Host` plus that header (`originFromHeaders` in `apps/web/src/lib/auth/core.ts`), so sign-in and every POST work with no app-side setting. The 600 ms per wrong password stays the only brake on `/api/auth/sign-in`, which is proportionate while the tailnet is the perimeter; turning Funnel on would need a per-IP rate limit in front first (see Open). Plain `http://<machine>:3000` inside the tailnet also works, since the cookie is `Secure` only over https. |
 | S7 | The nightly export runs on the homeserver too, under a systemd timer. | It is the readable copy of the content ([DEPLOYMENT.md](DEPLOYMENT.md#the-nightly-export)), and a database that diverges from the laptop's needs its own. The launchd wrapper's logic (pull, `npm ci` when the commit moved, export) ports as a shell script; only the scheduler changes. |
 
@@ -23,14 +23,14 @@ and points there.
 
 | On the laptop | On the homeserver | How |
 | --- | --- | --- |
-| Postgres `self_learn`, both halves | A `postgres:17` container from [services/catalog/compose.yaml](../services/catalog/compose.yaml) | `pg_dump -Fc`, `pg_restore` (S2) |
-| `~/.self-learn/blobs` | `~/.self-learn/blobs` | `rsync`, delete `.owner`, `blob audit` (S3) |
+| Postgres `gnosia`, both halves | A `postgres:17` container from [services/catalog/compose.yaml](../services/catalog/compose.yaml) | `pg_dump -Fc`, `pg_restore` (S2) |
+| `~/.gnosia/blobs` | `~/.gnosia/blobs` | `rsync`, delete `.owner`, `blob audit` (S3) |
 | `apps/web/.env.local` and `services/catalog/.env` | The same two files | Written by hand; same `AUTH_SECRET` (S4) |
 | `npm run dev` | `next build` then `next start` under systemd | A production build; the dev server is not for serving |
 | The studio on `127.0.0.1:7250`, diagrams and videos | The studio, diagrams only | S5 |
 | launchd nightly export | systemd timer | S7 |
-| `~/.self-learn/manimkc`, the renders and TTS cache | Nothing | The videos the app serves are in the blob store; the data root is only for rendering, which stays on the Mac |
-| `~/.self-learn/vault`, Obsidian's copy of the notes | Nothing, unless Obsidian runs there | `learn vault pull` rebuilds it from the database |
+| `~/.gnosia/manimkc`, the renders and TTS cache | Nothing | The videos the app serves are in the blob store; the data root is only for rendering, which stays on the Mac |
+| `~/.gnosia/vault`, Obsidian's copy of the notes | Nothing, unless Obsidian runs there | `learn vault pull` rebuilds it from the database |
 | `$STUDIO_HOME` (`.studio/` in the checkout by default): job workspaces, draft transcripts, diagram checkouts | Nothing; the server's studio starts empty | The runner lists jobs and drafts from its own files, and the `job`, `session` and `draft` rows the dump carries are a mirror of them, so a laptop job or draft cannot be resumed or reviewed on the server. Its permission files name the laptop's home directory, so copying them would not help. `catalog diagram checkout` writes a fresh checkout from the row |
 
 ## The steps
@@ -43,16 +43,16 @@ and points there.
    the other side is a hash check and not a replay:
 
    ```bash
-   pg_dump -Fc self_learn > ~/self_learn.dump
+   pg_dump -Fc gnosia > ~/gnosia.dump
    ```
 
 2. Copy the dump and the blob store over the tailnet. The store was 1.3 GB
    on 2026-10-04:
 
    ```bash
-   scp ~/self_learn.dump homeserver:~/
-   ssh homeserver 'mkdir -p ~/.self-learn'
-   rsync -a --exclude .owner ~/.self-learn/blobs/ homeserver:~/.self-learn/blobs/
+   scp ~/gnosia.dump homeserver:~/
+   ssh homeserver 'mkdir -p ~/.gnosia'
+   rsync -a --exclude .owner ~/.gnosia/blobs/ homeserver:~/.gnosia/blobs/
    ```
 
    The `mkdir` first: `rsync` creates the last path element and not a
@@ -86,8 +86,8 @@ and points there.
    tools); serving needs none of them, so a plain clone is enough to start:
 
    ```bash
-   git clone https://github.com/c-wenlong/self-learn ~/self-learn
-   cd ~/self-learn && npm ci
+   git clone https://github.com/c-wenlong/gnosia ~/gnosia
+   cd ~/gnosia && npm ci
    ```
 
 6. Start Postgres and restore the dump. The compose file publishes the port
@@ -100,7 +100,7 @@ and points there.
 
    ```bash
    docker compose -f services/catalog/compose.yaml up -d
-   pg_restore --no-owner -d postgres://catalog:catalog@localhost:5432/self_learn ~/self_learn.dump
+   pg_restore --no-owner -d postgres://catalog:catalog@localhost:5432/gnosia ~/gnosia.dump
    ```
 
    `--no-owner` because the dump's objects belong to the laptop's role and
@@ -112,8 +112,8 @@ and points there.
    lives here):
 
    ```
-   DATABASE_URL=postgres://catalog:catalog@localhost:5432/self_learn
-   SELF_LEARN_HOME=~/.self-learn
+   DATABASE_URL=postgres://catalog:catalog@localhost:5432/gnosia
+   GNOSIA_HOME=~/.gnosia
    ```
 
 8. Write `apps/web/.env.local`. Next reads `.env*` from `apps/web/`, never
@@ -121,7 +121,7 @@ and points there.
    sign-in page refusing every password:
 
    ```
-   DATABASE_URL=postgres://catalog:catalog@localhost:5432/self_learn
+   DATABASE_URL=postgres://catalog:catalog@localhost:5432/gnosia
    OWNER_PASSWORD=<yours>
    AUTH_SECRET=<the laptop's, S4>
    NEXT_PUBLIC_SITE_URL=https://<machine>.<tailnet>.ts.net
@@ -163,7 +163,7 @@ and points there.
 
     [Service]
     User=YOU
-    WorkingDirectory=/home/YOU/self-learn
+    WorkingDirectory=/home/YOU/gnosia
     Environment=NODE_ENV=production
     ExecStart=/usr/bin/npm run start
     Restart=always
@@ -210,8 +210,8 @@ and points there.
     [Service]
     Type=oneshot
     User=YOU
-    WorkingDirectory=/home/YOU/self-learn
-    Environment=SELF_LEARN_HOME=/home/YOU/.self-learn
+    WorkingDirectory=/home/YOU/gnosia
+    Environment=GNOSIA_HOME=/home/YOU/.gnosia
     ExecStart=/usr/bin/node scripts/nightly-export.mjs
     ```
 
@@ -231,11 +231,11 @@ and points there.
     ```bash
     sudo systemctl daemon-reload && sudo systemctl enable --now gnosia-export.timer
     sudo systemctl start gnosia-export.service    # one run now, to check
-    ls ~/.self-learn/archive/
+    ls ~/.gnosia/archive/
     ```
 
     `Persistent=true` is launchd's missed-run behaviour: a night the machine
-    was off runs at the next boot. Set `SELF_LEARN_HOME` in the unit even
+    was off runs at the next boot. Set `GNOSIA_HOME` in the unit even
     though `services/catalog/.env` names it, because the script takes the
     archive's location from its own environment only.
 
@@ -258,19 +258,20 @@ and points there.
     `ExecStart=/usr/bin/npm run studio`; it binds `127.0.0.1:7250` and
     the web app reaches it through its own route handler. Set
     `STUDIO_ENABLED=1` in `apps/web/.env.local` and restart `gnosia`.
-    `/studio/api/health` should report `video` off with the V4 reason and
-    `manual` fresh. Set `STUDIO_DAILY_USD` in the unit's `Environment=` if
-    the machine should have a spend cap.
+    `/studio/api/health` should report `video` off with the V4 reason (no
+    `bwrap`, or the kernel refusing its user namespaces) and `manual`
+    fresh. Set `STUDIO_DAILY_USD` in the unit's `Environment=` if the
+    machine should have a spend cap.
 
 13. The `/learn` and `/review` skills. They open with `npm run learn --
     status` against the database `services/catalog/.env` names, so a
-    Claude Code session in `~/self-learn` on the homeserver writes to the
+    Claude Code session in `~/gnosia` on the homeserver writes to the
     homeserver's database, and one on the laptop to the laptop's (S1). The
     `learning` plugin is installed per machine
     (`~/.quiver/plugins/learning/learning`), as on the Mac.
 
 14. Updating, by hand and in this order, since nothing else on the machine
-    touches the checkout: stop the services, `git pull` in `~/self-learn`,
+    touches the checkout: stop the services, `git pull` in `~/gnosia`,
     `npm ci` when the lockfile moved, `npm run catalog -- migrate` when
     `services/catalog/drizzle/` did, `npm run build`, then start them
     again:
@@ -326,10 +327,13 @@ and points there.
 
 ## Open
 
-- [ ] A Linux video sandbox. Bubblewrap, designed in
-      [STUDIO-VIDEOS.md](STUDIO-VIDEOS.md) and never measured; the hostile-scene
-      test there is the bar. Until then the studio on Ubuntu refuses video
-      jobs by design (S5).
+- [ ] The Linux video sandbox, measured. Bubblewrap is implemented
+      (`services/studio/src/video/bwrap.ts`, the "What is not covered" list in
+      [STUDIO-VIDEOS.md](STUDIO-VIDEOS.md)); what is left is the hostile-scene
+      test on a Linux host, which first needs
+      `kernel.apparmor_restrict_unprivileged_userns` lifted for `bwrap` (the
+      packaged `/etc/apparmor.d/bwrap` profile) and the toolchain installed.
+      Until then the studio on Ubuntu refuses video jobs by design (S5).
 - [ ] Whether the homeserver should also be the laptop's database over the
       tailnet, so there is one history again. S1 says not for now; the
       change would be the compose port bound to the machine's Tailscale

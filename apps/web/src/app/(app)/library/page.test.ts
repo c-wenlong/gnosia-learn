@@ -71,7 +71,7 @@ const ROWS = [
     url: null,
     bytes: 2_900,
     title: "The TLB",
-    sourceRepo: "self-learn",
+    sourceRepo: "gnosia",
     topics: ["operating-systems"],
     createdAt: "2026-09-29T12:00:00Z",
     // Revised by a person five days later: the row says so.
@@ -85,7 +85,7 @@ const ROWS = [
     url: null,
     bytes: 1_200,
     title: "Session log",
-    sourceRepo: "self-learn",
+    sourceRepo: "gnosia",
     topics: [],
     createdAt: "2026-09-29T15:30:00Z",
     updatedAt: "2026-09-29T15:30:00Z",
@@ -98,7 +98,7 @@ const ROWS = [
     url: "https://pages.cs.wisc.edu/~remzi/OSTEP/",
     bytes: null,
     title: "OSTEP",
-    sourceRepo: "self-learn",
+    sourceRepo: "gnosia",
     topics: ["operating-systems"],
     createdAt: "2026-09-01T00:00:00Z",
     // Rewritten by an import a month later: no person changed it, so no label.

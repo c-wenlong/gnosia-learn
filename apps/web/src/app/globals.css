@@ -20,7 +20,7 @@
 /*
  * Reduced motion has two sources: the device's `prefers-reduced-motion`, and
  * Settings' "Always reduce motion", which the root layout writes as
- * `data-motion="reduce"` on <html> from the `self-learn-motion` cookie
+ * `data-motion="reduce"` on <html> from the `gnosia-motion` cookie
  * (lib/motion.ts). Tailwind's own `motion-reduce:` and `motion-safe:` read
  * only the first, so both are redefined here to read both, the way `dark:`
  * above reads the class rather than the OS.

@@ -1,5 +1,5 @@
-import { asset, assetName, COMMONS_OWNER, learner, LOCAL_LEARNER_ID, ownerScope } from "@self-learn/schema";
-import { eq } from "drizzle-orm";
+import { asset, assetName, COMMONS_OWNER, learner, LOCAL_LEARNER_ID, ownerScope } from "@gnosia/schema";
+import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { runSearch } from "../src/commands/search";
@@ -29,7 +29,7 @@ const COMMONS = "link:commons";
 
 /** A link row, which needs no blob: the one kind a scratch database can hold bare. */
 function link(id: string, ownerId: string, title: string | null) {
-  return { id, kind: "link", url: `https://example.com/${id}`, title, sourceRepo: "self-learn", ownerId };
+  return { id, kind: "link", url: `https://example.com/${id}`, title, sourceRepo: "gnosia", ownerId };
 }
 
 /** Write the row the way `catalog import` does: every column from the source, by `updateSet`. */
@@ -162,8 +162,10 @@ describe.skipIf(!reachable.ok)("asset reads before 0024", () => {
 
   beforeAll(async () => {
     behind = await createScratchDatabase();
-    // Every migration but the one that makes `asset_name`.
-    await applyMigrations(behind.db, { folder: await partialMigrations(24) });
+    // The pre-0024 shape under the one-shot SQLite migration: every table,
+    // minus `asset_name`, which the pre-name code paths probe for.
+    await applyMigrations(behind.db);
+    await behind.db.execute(sql`drop table asset_name`);
     await behind.db.insert(learner).values({ id: LOCAL_LEARNER_ID }).onConflictDoNothing();
     await behind.db.insert(asset).values(link(MINE, LOCAL_LEARNER_ID, "lec03 v2 final"));
   }, 60_000);

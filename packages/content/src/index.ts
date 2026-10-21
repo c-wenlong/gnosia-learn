@@ -6,7 +6,7 @@
  * `loadTags`) are what `catalog index` turns into rows, and they are the only
  * place a course file's meaning is decided. `ContentSource` is what a reader
  * holds: `fileSource(root)` answers it from those parsers, `dbSource` in
- * `@self-learn/catalog` will answer it from rows, and `selectSource` picks one
+ * `@gnosia/catalog` will answer it from rows, and `selectSource` picks one
  * per content type (docs/CONTENT-MIGRATION.md, 0.6 and D9). The web app and
  * the studio read through the seam; only the indexers call the parsers
  * directly, until phase 2 retires them to import validators.

@@ -8,7 +8,7 @@ import {
   type MirrorComparison,
   type MirrorStatus,
   type NewMirror,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 
 import { IndexError } from "./errors";
 import { manimkcCliPath, missingCli } from "./manimkc";

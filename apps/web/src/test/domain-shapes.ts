@@ -2,7 +2,7 @@ import type { GraphEdge } from "@/lib/concept-graph";
 import type { DomainNode, DomainTopic } from "@/lib/domain-map";
 
 /**
- * The shape of two of the owner's domains on `self_learn`, read on
+ * The shape of two of the owner's domains on `gnosia`, read on
  * 2026-10-05: the same concepts, topics and prerequisite edges, with the
  * slugs and titles replaced by `c01`, `t01` and so on, so a test lays out
  * the real structure without carrying the owner's notes. Algorithms is the

@@ -2,6 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import type { BackendJob, VideoBackend, VideoProfile } from "../backend";
+import { prepareBwrap } from "../bwrap";
 import { resolvedPaths } from "../checkout";
 import { revideokcVideoPaths, revideokcPaths } from "../revideokc/paths";
 import { buildRevideokcCheckout, scaffoldRevideokc } from "../revideokc/checkout";
@@ -56,10 +57,10 @@ export const revideokcBackend: VideoBackend = {
     await buildRevideokcCheckout(asRevideokc(job), job.paths);
     await writePorts(job.paths, await jobPorts(path.basename(job.paths.job)));
     const base = readPorts(job.paths);
-    for (const kind of PROFILE_KINDS) {
-      const written = profile(job, kind, base);
-      await writeFile(written.file, written.text, "utf8");
-    }
+    const written = PROFILE_KINDS.map((kind) => profile(job, kind, base));
+    for (const each of written) await writeFile(each.file, each.text, "utf8");
+    // The skeleton every bwrap profile mounts: stubs for each destination.
+    if (job.tools.sandboxKind === "bwrap") await prepareBwrap(job.paths, written.map((each) => each.text));
     await mkdir(job.paths.candidate, { recursive: true });
   },
 

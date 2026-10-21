@@ -6,7 +6,7 @@ import {
   type Session,
   type SessionKind,
   type SessionState,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
@@ -181,10 +181,10 @@ export async function endSession(
     .update(session)
     .set({
       state,
-      endedAt: sql`now()`,
+      endedAt: sql`cast(unixepoch('subsec') * 1000 as integer)`,
       errorKind: input.errorKind ?? null,
       error: input.error ?? null,
-      updatedAt: sql`now()`,
+      updatedAt: sql`cast(unixepoch('subsec') * 1000 as integer)`,
     })
     .where(and(eq(session.id, id), eq(session.learnerId, learnerId), inArray(session.state, from)))
     .returning({ id: session.id });
@@ -195,6 +195,6 @@ export async function endSession(
 export async function touchSession(db: CatalogDatabase, id: string): Promise<void> {
   await db
     .update(session)
-    .set({ heartbeatAt: sql`now()`, updatedAt: sql`now()` })
+    .set({ heartbeatAt: sql`cast(unixepoch('subsec') * 1000 as integer)`, updatedAt: sql`cast(unixepoch('subsec') * 1000 as integer)` })
     .where(eq(session.id, id));
 }

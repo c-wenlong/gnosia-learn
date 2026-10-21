@@ -1,7 +1,7 @@
 import "server-only";
 
-import { courseCovers } from "@self-learn/catalog/state";
-import type { OwnerScope } from "@self-learn/schema/shared";
+import { courseCovers } from "@gnosia/catalog/state";
+import type { OwnerScope } from "@gnosia/schema/shared";
 import { connection } from "next/server";
 import { cache } from "react";
 

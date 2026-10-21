@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { ProviderName } from "@self-learn/schema/shared";
+import type { ProviderName } from "@gnosia/schema/shared";
 
 import {
   type ChainEntry,
@@ -28,7 +28,7 @@ async function ownerInputs(owner: string): Promise<{ saved: SavedKeys; chain: Ch
       return {};
     }),
     readChain(owner).catch((error: unknown) => {
-      console.warn(`tutor: model chain unavailable (${failureCode(error)}), using the built-in defaults`);
+      console.warn(`tutor: model chain unavailable (${failureCode(error)}), the tutor has no chain`);
       return [];
     }),
     customConfigs(owner),
@@ -52,16 +52,14 @@ async function customConfigs(owner: string): Promise<ProviderConfig[]> {
 
 /**
  * What the tutor tries for this owner, in order (docs/TUTOR-MODELS.md): their
- * model chain when they have one, each entry with the key `keyFor` finds or
- * marked skipped; otherwise the built-in defaults with their saved keys first,
- * then the server's (docs/BYOK.md, decision 4).
+ * model chain alone, each entry with the key `keyFor` finds or marked
+ * skipped. No chain means no steps — the built-in defaults are gone (T15),
+ * so the tutor calls only models the owner added.
  *
  * Per request, never cached: a key or a chain entry changed in Settings
  * applies from the next turn. Never throws: a database that cannot be read
- * costs the saved keys and the chain, not the turn, and the server's keys
- * still answer with the built-in defaults, which is the deployment as it was
- * before either existed. The warnings name a code and nothing else (see
- * `failureCode`).
+ * costs the saved keys and the chain, not the turn. The warnings name a
+ * code and nothing else (see `failureCode`).
  */
 export async function tutorCredentials(owner: string, env: Env = process.env): Promise<ChainStep[]> {
   const { saved, chain, custom } = await ownerInputs(owner);

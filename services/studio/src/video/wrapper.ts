@@ -18,14 +18,16 @@ import type { Toolchain } from "./toolchain";
  *   `manimkc api`'s own list, a scene from the brief's classes. Anything else
  *   is refused with one fixed sentence that never repeats what was passed, so
  *   an argument cannot become text in the agent's context by bouncing off it.
- * - **Its first line is `#!/usr/bin/env -i <node>`.** macOS splits a shebang
- *   line on spaces, so `env -i` clears the whole environment before node
- *   starts. A Node program run with an inherited environment would read
- *   `NODE_OPTIONS`, and `NODE_OPTIONS=--require <the scene file>` in front of
- *   the allowed prefix would run agent-written code unsandboxed. Whether the
- *   CLI's Bash matcher accepts a leading assignment was not tested (the design
- *   says so); with this line the answer does not matter. Measured: an
- *   inherited `NODE_OPTIONS` naming a missing file changes nothing.
+ * - **Its first line clears the environment before node starts.** macOS
+ *   splits a shebang line on spaces, so it is `#!/usr/bin/env -i <node>`
+ *   there; Linux passes the whole line as one argument, so it is
+ *   `#!/usr/bin/env -S -i <node>` and coreutils' `-S` does the splitting. A
+ *   Node program run with an inherited environment would read `NODE_OPTIONS`,
+ *   and `NODE_OPTIONS=--require <the scene file>` in front of the allowed
+ *   prefix would run agent-written code unsandboxed. Whether the CLI's Bash
+ *   matcher accepts a leading assignment was not tested (the design says so);
+ *   with this line the answer does not matter. Measured: an inherited
+ *   `NODE_OPTIONS` naming a missing file changes nothing.
  * - **Every child's environment is built from nothing**: the allowlist in
  *   `sandbox.ts`, compiled in here, so an inherited `PYTHONPATH` cannot reach
  *   Python either.
@@ -53,6 +55,8 @@ import type { Toolchain } from "./toolchain";
 
 export interface WrapperConfig {
   jobId: string;
+  /** Which sandbox `sandboxExec` is, so the body knows whether a profile file holds Seatbelt text or a bwrap argv. */
+  sandbox: "seatbelt" | "bwrap";
   sandboxExec: string;
   /** The interpreter the stdlib-only manimkc CLI runs on. */
   python3: string;
@@ -82,10 +86,11 @@ export function wrapperConfig(input: {
   narrated: boolean;
 }): WrapperConfig {
   const { tools, paths } = input;
-  if (tools.sandboxExec === null || tools.python3 === null) throw new Error("the toolchain cannot run a wrapper");
+  if (tools.sandboxExec === null || tools.sandboxKind === null || tools.python3 === null) throw new Error("the toolchain cannot run a wrapper");
   const envInput = { tools, paths, home: input.home, voice: input.voice };
   return {
     jobId: path.basename(paths.job),
+    sandbox: tools.sandboxKind,
     sandboxExec: tools.sandboxExec,
     python3: tools.python3.real,
     checkout: paths.checkout,
@@ -206,7 +211,12 @@ function sandboxed(profile, env, argv) {
     const ended = (exitCode, signal) => resolve({ step: profile, exitCode, signal, ms: Date.now() - started });
     let child;
     try {
-      child = spawn(CONFIG.sandboxExec, ["-f", CONFIG.profiles[profile], ...argv], {
+      // Seatbelt reads the profile file itself; a bwrap profile carries the argv.
+      const boxed =
+        CONFIG.sandbox === "bwrap"
+          ? [...JSON.parse(fs.readFileSync(CONFIG.profiles[profile], "utf8")).argv, ...argv]
+          : ["-f", CONFIG.profiles[profile], ...argv];
+      child = spawn(CONFIG.sandboxExec, boxed, {
         cwd: CONFIG.checkout,
         env,
         stdio: ["ignore", "pipe", "pipe"],
@@ -322,7 +332,10 @@ main(process.argv.slice(2)).then((code) => { process.exitCode = code; }, (error)
 /** The program's text: the shebang, the compiled-in configuration, the body. */
 export function wrapperSource(node: string, config: WrapperConfig): string {
   if (!/^[A-Za-z0-9/._-]+$/.test(node)) throw new Error("node's path cannot go on a shebang line");
-  return `#!/usr/bin/env -i ${node}\n// Written by the studio runner for job ${config.jobId}. Nothing may edit it.\nconst CONFIG = ${JSON.stringify(config, null, 1)};\n${WRAPPER_BODY}`;
+  // Linux hands `env` the whole line as one argument; `-S` splits it. coreutils
+  // has had it since 8.30; a libc without it (busybox) is out of scope.
+  const shebang = process.platform === "linux" ? `#!/usr/bin/env -S -i ${node}` : `#!/usr/bin/env -i ${node}`;
+  return `${shebang}\n// Written by the studio runner for job ${config.jobId}. Nothing may edit it.\nconst CONFIG = ${JSON.stringify(config, null, 1)};\n${WRAPPER_BODY}`;
 }
 
 /** Write `bin/video`, read-and-execute only. */

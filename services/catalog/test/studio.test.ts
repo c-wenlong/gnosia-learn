@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { fsStore, type BlobStore } from "@self-learn/blob";
+import { fsStore, type BlobStore } from "@gnosia/blob";
 
 import {
   asset,
@@ -16,7 +16,7 @@ import {
   session,
   SESSION_TRANSITIONS,
   topic,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
@@ -416,7 +416,8 @@ describe.skipIf(!reachable.ok)("the studio schema", () => {
         .where(eq(session.id, "with-events"))
         .catch((e: unknown) => e);
       expect(sqlstate(error)).toBe("23503");
-      expect(sqlMessage(error)).toContain("event_session_id_session_id_fk");
+      // SQLite reports "FOREIGN KEY constraint failed" without naming the constraint.
+      expect(sqlMessage(error)).toContain("FOREIGN KEY constraint failed");
     });
 
     it("refuses to delete a session a job ran under", async () => {
@@ -428,7 +429,8 @@ describe.skipIf(!reachable.ok)("the studio schema", () => {
         .where(eq(session.id, "with-a-job"))
         .catch((e: unknown) => e);
       expect(sqlstate(error)).toBe("23503");
-      expect(sqlMessage(error)).toContain("job_session_id_session_id_fk");
+      // SQLite reports "FOREIGN KEY constraint failed" without naming the constraint.
+      expect(sqlMessage(error)).toContain("FOREIGN KEY constraint failed");
     });
 
   });
@@ -488,14 +490,14 @@ describe.skipIf(!reachable.ok)("the studio schema", () => {
  * holding those values are in an append-only table, and the foreign key cannot
  * land until every one of them resolves.
  */
-describe.skipIf(!reachable.ok)("migration 0006's backfill", () => {
+describe.skip("migration 0006's backfill" /* SQLite ships one foundation migration; there is no 0006 to stop before. */, () => {
   let scratch: Scratch;
   let folder: string;
 
   beforeAll(async () => {
     scratch = await createScratchDatabase();
     // Stop at 0005, which is where `event.session_id` is still free text.
-    folder = await partialMigrations(6);
+    folder = await partialMigrations(1);
     await applyMigrations(scratch.db, { folder });
 
     // `id` alone: drizzle's insert names every column the schema has today,
@@ -597,7 +599,7 @@ describe.skipIf(!reachable.ok)("migration 0006 on an empty log", () => {
 
   beforeAll(async () => {
     scratch = await createScratchDatabase();
-    folder = await partialMigrations(6);
+    folder = await partialMigrations(1);
     await applyMigrations(scratch.db, { folder });
     await applyMigrations(scratch.db);
   }, 60_000);
@@ -609,7 +611,7 @@ describe.skipIf(!reachable.ok)("migration 0006 on an empty log", () => {
 
   it("applies with no sessions to make", async () => {
     const { rows } = await scratch.db.execute<{ n: number }>(
-      sql`select count(*)::int as n from "session"`,
+      sql`select count(*) as n from "session"`,
     );
     expect(rows[0]?.n).toBe(0);
     expect((await migrationStatus(scratch.db)).pending).toEqual([]);
@@ -783,7 +785,8 @@ describe.skipIf(!reachable.ok)("accept over a landed diagram", () => {
         .where(eq(job.id, jobId))
         .catch((e: unknown) => e);
       expect(sqlstate(error)).toBe("23503");
-      expect(sqlMessage(error)).toContain("asset_job_job_id_job_id_fk");
+      // SQLite reports "FOREIGN KEY constraint failed" without naming the constraint.
+      expect(sqlMessage(error)).toContain("FOREIGN KEY constraint failed");
     });
 
     it("takes the provenance with the asset, because that row is derived", async () => {

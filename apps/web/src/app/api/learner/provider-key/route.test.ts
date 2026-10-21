@@ -1,6 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { isCallable } from "@/lib/agent/providers";
 
 import {
   migratedScratchDatabase,
@@ -57,7 +56,13 @@ describe.skipIf(!reachable.ok)("provider key routes and store", () => {
   let store: Store;
   let credentials: Credentials;
   let settings: Settings;
-  const saved = { url: process.env.DATABASE_URL, secret: process.env.AUTH_SECRET, openrouter: process.env.OPENROUTER_API_KEY };
+  const saved = {
+    url: process.env.DATABASE_URL,
+    secret: process.env.AUTH_SECRET,
+    openrouter: process.env.OPENROUTER_API_KEY,
+    gemini: process.env.GEMINI_API_KEY,
+    nvidia: process.env.NVIDIA_API_KEY,
+  };
 
   /** Every ciphertext in the table, in each form a response could carry it in. */
   async function storedForms(): Promise<string[]> {
@@ -79,7 +84,11 @@ describe.skipIf(!reachable.ok)("provider key routes and store", () => {
     scratch = await migratedScratchDatabase();
     process.env.DATABASE_URL = scratch.url;
     process.env.AUTH_SECRET = SECRET;
+    // A server key in the shell's environment must not leak in: the suite's
+    // refusals are about the database holding nothing.
     delete process.env.OPENROUTER_API_KEY;
+    delete process.env.GEMINI_API_KEY;
+    delete process.env.NVIDIA_API_KEY;
     [routes, testRoute, store, credentials, settings] = await Promise.all([
       import("./route"),
       import("./test/route"),
@@ -94,6 +103,8 @@ describe.skipIf(!reachable.ok)("provider key routes and store", () => {
       ["DATABASE_URL", saved.url],
       ["AUTH_SECRET", saved.secret],
       ["OPENROUTER_API_KEY", saved.openrouter],
+      ["GEMINI_API_KEY", saved.gemini],
+      ["NVIDIA_API_KEY", saved.nvidia],
     ] as const) {
       if (value === undefined) delete process.env[name];
       else process.env[name] = value;
@@ -105,6 +116,8 @@ describe.skipIf(!reachable.ok)("provider key routes and store", () => {
     signedIn.value = true;
     process.env.AUTH_SECRET = SECRET;
     delete process.env.OPENROUTER_API_KEY;
+    delete process.env.GEMINI_API_KEY;
+    delete process.env.NVIDIA_API_KEY;
     await scratch.pool.query("delete from provider_key");
   });
 
@@ -127,8 +140,8 @@ describe.skipIf(!reachable.ok)("provider key routes and store", () => {
     expect(rows[0]!.ciphertext.toString("utf8")).not.toContain(KEY.slice(0, 12));
 
     expect(await store.openSavedKeys("local")).toEqual({ openrouter: KEY });
-    const order = await credentials.tutorCredentials("local", {});
-    expect(order.map((c) => (isCallable(c) ? [c.config.id, c.source] : c))).toEqual([["openrouter", "saved"]]);
+    // A saved key alone gives the tutor nothing — the chain alone does (T15).
+    expect(await credentials.tutorCredentials("local", {})).toEqual([]);
   });
 
   it("refuses a key of the wrong shape without repeating it, and stores nothing", async () => {
@@ -187,8 +200,8 @@ describe.skipIf(!reachable.ok)("provider key routes and store", () => {
     const view = await settings.loadProviderKeys("local");
     expect(view.rows.find((r) => r.id === "openrouter")).toMatchObject({ saved: { readable: false }, inUse: null });
 
-    const fallback = await credentials.tutorCredentials("local", { OPENROUTER_API_KEY: "server-openrouter-key-0123456789" });
-    expect(fallback.map((c) => (isCallable(c) ? [c.config.id, c.source] : c))).toEqual([["openrouter", "server"]]);
+    // Rotated or not, a key by itself is not a model — nothing is callable (T15).
+    expect(await credentials.tutorCredentials("local", { OPENROUTER_API_KEY: "server-openrouter-key-0123456789" })).toEqual([]);
 
     // Re-entering it under the new secret makes it the owner's again.
     await routes.POST(request("POST", { provider: "openrouter", key: KEY }));

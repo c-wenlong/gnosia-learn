@@ -192,6 +192,6 @@ export function weekCheckPercent(step: SessionStep | undefined): number {
 /** "Concept 2 of 6 · Question 1", the frame's label on a week check step. */
 export function weekCheckLabel(step: SessionStep | undefined): string {
   const place = step?.place;
-  if (place === undefined) return "Week check";
+  if (place === undefined) return "Module check";
   return `Concept ${place.position} of ${place.of} · Question ${place.question}`;
 }

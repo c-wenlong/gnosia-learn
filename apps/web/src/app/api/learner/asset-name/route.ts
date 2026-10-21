@@ -1,5 +1,5 @@
-import { ASSET_NAME_MAX, cleanAssetName } from "@self-learn/schema/shared";
-import { writeAssetName } from "@self-learn/catalog/state";
+import { ASSET_NAME_MAX, cleanAssetName } from "@gnosia/schema/shared";
+import { writeAssetName } from "@gnosia/catalog/state";
 
 import { MAX_ASSET_ID_CHARS } from "@/app/api/learner/watched/route";
 import { BadRequest, handler } from "@/lib/learner-api";

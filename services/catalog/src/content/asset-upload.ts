@@ -3,8 +3,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { key as blobKey, type BlobStore } from "@self-learn/blob";
-import { asset, assetDerivation, blobObject, LOCAL_LEARNER_ID, readableOwners, type Asset } from "@self-learn/schema";
+import { key as blobKey, type BlobStore } from "@gnosia/blob";
+import { asset, assetDerivation, blobObject, LOCAL_LEARNER_ID, readableOwners, type Asset } from "@gnosia/schema";
 import { and, eq, inArray, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
@@ -17,6 +17,8 @@ import {
   type TopicsReport,
   type VideoToolName,
 } from "../index/video-tool";
+import { buildVideoPdf, pdfInputs, segmentsFromText } from "../pdf/build";
+import { PDF_CONTENT_TYPE, PDF_EXTENSION, type PdfSegment } from "../pdf/recipe";
 import { extractPoster } from "../poster/extract";
 import { POSTER_CONTENT_TYPE, POSTER_EXTENSION } from "../poster/recipe";
 import {
@@ -31,18 +33,19 @@ import { latestRevisions } from "./revisions";
 import { ContentWriteError, writeContents, type WriteContentInput } from "./write";
 import { CLI_OWNER } from "./scope";
 
+import { inTransaction } from "../db";
 /**
- * `catalog asset upload --source manimkc|remotionkc|revideokc`: a video
+ * `catalog asset upload --source manimkc|remotionkc|revideokc|blenderkc`: a video
  * tool's rendered videos and their sidecars into the blob store, a poster made for each video on the way, and
  * every `asset` row pointed at its blob (docs/CONTENT-MIGRATION.md, Track E;
  * D5, D7, D8, D11; edge cases 5 and 9).
  *
  * **Which files.** The same report the tool's indexer reads,
  * `<tool> topics --json`, with its `outRoot`: nothing here re-derives the
- * tool's layout. manimkc is described below; remotionkc's and revideokc's
- * reports have the same shape and their rows the `remotionkc:` and
- * `revideokc:` namespaces, and everything holds for them with that name in
- * place of manimkc's. A deliverable is only uploaded onto an asset row the
+ * tool's layout. manimkc is described below; remotionkc's, revideokc's and
+ * blenderkc's reports have the same shape and their rows the `remotionkc:`,
+ * `revideokc:` and `blenderkc:` namespaces, and everything holds for them
+ * with that name in place of manimkc's. A deliverable is only uploaded onto an asset row the
  * indexer already wrote (`manimkc:<out/...>`), because the
  * row is what the page asks for and a blob no row points at is an orphan on
  * arrival.
@@ -90,6 +93,13 @@ export function posterId(videoId: string): string {
   return `${POSTER_PREFIX}${videoId}`;
 }
 
+/** The namespace a video's PDF asset id lives in: `pdf:` + its video's id. */
+export const PDF_PREFIX = "pdf:";
+
+export function pdfId(videoId: string): string {
+  return `${PDF_PREFIX}${videoId}`;
+}
+
 /** Media types for what this command uploads, by extension: the video tools' own, and the poster. */
 const MIME: Readonly<Record<string, string>> = { ...VIDEO_TOOL_MIME, jpg: POSTER_CONTENT_TYPE };
 
@@ -106,12 +116,13 @@ export interface AssetUploadOptions {
   /**
    * The checkout the source's CLI reads, as `catalog import` takes it:
    * `manimkcRoot` for manimkc, `remotionkcRoot` for remotionkc,
-   * `revideokcRoot` for revideokc. Absent, the tool's variable, else its
-   * submodule under `repoRoot`.
+   * `revideokcRoot` for revideokc, `blenderkcRoot` for blenderkc. Absent,
+   * the tool's variable, else its submodule under `repoRoot`.
    */
   manimkcRoot?: string;
   remotionkcRoot?: string;
   revideokcRoot?: string;
+  blenderkcRoot?: string;
   dryRun?: boolean;
   /** Absolute path to ffmpeg, or null when there is none: posters are then skipped and said so. */
   ffmpeg: string | null;
@@ -161,8 +172,8 @@ export interface AssetUploadResult {
   source: UploadSource;
   outRoot: string;
   dryRun: boolean;
-  /** Files the report lists, and posters present or made (planned, on a dry run) by the end. */
-  counts: { videos: number; sidecars: number; posters: number };
+  /** Files the report lists, and posters and PDFs present or made (planned, on a dry run) by the end. */
+  counts: { videos: number; sidecars: number; posters: number; pdfs: number };
   /** Files whose bytes went into the store this run, and how many bytes. */
   uploaded: number;
   uploadedBytes: number;
@@ -171,6 +182,8 @@ export interface AssetUploadResult {
   refused: number;
   /** Why posters were not made at all this run, when that is the case. */
   postersSkipped: string | null;
+  /** Why PDFs were not made at all this run, when that is the case. */
+  pdfsSkipped: string | null;
   /**
    * On a dry run under a bytes cap that plans posters: why its bytes-cap
    * answers are an estimate. A poster's size is known only once ffmpeg cuts
@@ -231,35 +244,37 @@ function contentRow(row: Asset): Record<string, unknown> {
 }
 
 /**
- * Unhook the poster of each of `videoIds` that was cut from other bytes than
- * the video's now, the way the upload unhooks one when it links new bytes and
- * cannot cut a new poster (see `detach` below). Under the blob contract (0013)
- * the import, not the upload, is what links a re-render, so the upload would
- * otherwise find the video's blob present and the poster derived from it, and
- * keep a picture of the old render. Unhooked, the poster is not derived from
- * the video, and the next `catalog asset upload` cuts a new one and hooks it
+ * Unhook the derived asset (`prefix` + video id: a poster, a PDF) of each of
+ * `videoIds` that was cut from other bytes than the video's now, the way the
+ * upload unhooks one when it links new bytes and cannot cut a fresh one (see
+ * `detach` below). Under the blob contract (0013) the import, not the upload,
+ * is what links a re-render, so the upload would otherwise find the video's
+ * blob present and the derived asset still hooked to it, keeping a picture
+ * or a document of the old render. Unhooked, it is not derived from the
+ * video, and the next `catalog asset upload` makes a new one and hooks it
  * back up.
  *
  * "Cut from other bytes" is read from the revisions, not from what this run
- * changed: the video's `blob_key` as of the poster revision that last cut or
- * hooked it (a revision that derives the poster from the video where the one
- * before did not, or that changed the poster's own bytes), against its key
- * now. Any other poster revision, a title edit say, is not a cut. So an
- * import that linked the new bytes and then failed before this ran is caught
- * by the next one, whose own write changes nothing.
+ * changed: the video's `blob_key` as of the derived asset's revision that
+ * last cut or hooked it (a revision that derives it from the video where the
+ * one before did not, or that changed its own bytes), against its key now.
+ * Any other revision of it, a title edit say, is not a cut. So an import
+ * that linked the new bytes and then failed before this ran is caught by the
+ * next one, whose own write changes nothing.
  *
- * Which posters are stale, their rows, and the revision each was read at come
- * from one snapshot, and each unhook is based on that revision. A `catalog
- * asset upload` that recut and relinked a poster after the snapshot therefore
- * fails the write's base check, and that poster is left as the upload made it
- * and reported as `moved`, rather than having its fresh link cleared or
- * failing the import. Detecting outside the snapshot, as this once did, let a
- * relink landing between the two reads become the base, and the unhook then
- * undid it.
+ * Which derived assets are stale, their rows, and the revision each was read
+ * at come from one snapshot, and each unhook is based on that revision. A
+ * `catalog asset upload` that remade and relinked one after the snapshot
+ * therefore fails the write's base check, and it is left as the upload made
+ * it and reported as `moved`, rather than having its fresh link cleared or
+ * failing the import. Detecting outside the snapshot, as this once did, let
+ * a relink landing between the two reads become the base, and the unhook
+ * then undid it.
  */
-export async function unhookPosters(
+export async function unhookDerivations(
   db: CatalogDatabase,
   videoIds: readonly string[],
+  prefix: string,
   options: { author: string; reason: string; owner?: string },
 ): Promise<{ unhooked: string[]; moved: string[] }> {
   const readable = readableOwners(options.owner ?? CLI_OWNER);
@@ -268,39 +283,46 @@ export async function unhookPosters(
     videoIds.map((id) => sql`${id}`),
     sql`, `,
   );
-  const { posters, bases } = await db.transaction(
+  const { posters, bases } = await inTransaction(
+    db,
     async (tx) => {
       const { rows: derived } = await tx.execute<{ poster: string }>(sql`
         select d.asset_id as poster
         from asset_derivation d
         join asset v on v.id = d.source_asset_id
-        cross join lateral (
-          select max(p.id) as id
-          from (
-            select r.id, r.snapshot, lag(r.snapshot) over (order by r.id) as prev
-            from content_revision r
-            where r.entity_type = 'asset' and r.entity_id = d.asset_id
-          ) p
-          where p.snapshot -> 'links' -> 'asset_derivation' @> jsonb_build_array(jsonb_build_object('source_asset_id', v.id))
-            and (
-              p.prev is null
-              or not coalesce(
-                p.prev -> 'links' -> 'asset_derivation' @> jsonb_build_array(jsonb_build_object('source_asset_id', v.id)),
-                false
-              )
-              or p.prev -> 'entity' ->> 'blob_key' is distinct from p.snapshot -> 'entity' ->> 'blob_key'
-            )
-        ) cut
+        -- Was cross join lateral (…) cut: SQLite has no lateral, so the
+        -- correlated cut.id is spelled as a scalar subquery inline below,
+        -- and the @> jsonb_build_array(…) containment asks json_each
+        -- whether the derivation list holds this source's id.
         where d.source_asset_id in (${ids})
-          and d.asset_id = ${POSTER_PREFIX} || d.source_asset_id
+          and d.asset_id = ${prefix} || d.source_asset_id
           and (
             select r.snapshot -> 'entity' ->> 'blob_key'
             from content_revision r
-            where r.entity_type = 'asset' and r.entity_id = v.id and r.id < cut.id
+            where r.entity_type = 'asset' and r.entity_id = v.id and r.id < (
+              select max(p.id)
+              from (
+                select r2.id, r2.snapshot, lag(r2.snapshot) over (order by r2.id) as prev
+                from content_revision r2
+                where r2.entity_type = 'asset' and r2.entity_id = d.asset_id
+              ) p
+              where exists (
+                  select 1 from json_each(p.snapshot -> 'links' -> 'asset_derivation') e
+                  where e.value ->> 'source_asset_id' = v.id
+                )
+                and (
+                  p.prev is null
+                  or not exists (
+                    select 1 from json_each(p.prev -> 'links' -> 'asset_derivation') e
+                    where e.value ->> 'source_asset_id' = v.id
+                  )
+                  or p.prev -> 'entity' ->> 'blob_key' is not p.snapshot -> 'entity' ->> 'blob_key'
+                )
+            )
             order by r.id desc
             limit 1
-          ) is distinct from v.blob_key
-        order by d.asset_id collate "C"
+          ) is not v.blob_key
+        order by d.asset_id collate binary
       `);
       if (derived.length === 0) return { posters: [], bases: new Map<string, number | null>() };
       const stale = derived.map((d) => d.poster);
@@ -310,7 +332,10 @@ export async function unhookPosters(
         bases: new Map(stale.map((id) => [id, latest.get(id)?.id ?? null] as const)),
       };
     },
-    { isolationLevel: "repeatable read", accessMode: "read only" },
+    // One snapshot is all this asks, so a deferred begin beside a writer —
+    // not `begin immediate`, which would serialise the read behind an
+    // upload's relink and report `moved` on nothing.
+    { readOnly: true },
   );
   const unhooked: string[] = [];
   const moved: string[] = [];
@@ -349,6 +374,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
     manimkc: options.manimkcRoot,
     remotionkc: options.remotionkcRoot,
     revideokc: options.revideokcRoot,
+    blenderkc: options.blenderkcRoot,
   };
   const checkout = named[source] ?? tool.resolveRoot(options.repoRoot);
   const report = options.report ?? (await readToolReport(tool, options.repoRoot, checkout));
@@ -368,23 +394,20 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
 
   const found = deliverables(report);
   const ids = found.flatMap((d) => [d.videoPath, ...d.sidecars]).map((p) => `${tool.prefix}${p}`);
-  const posterIds = found.map((d) => posterId(`${tool.prefix}${d.videoPath}`));
+  const derivedIds = found.flatMap((d) => [posterId(`${tool.prefix}${d.videoPath}`), pdfId(`${tool.prefix}${d.videoPath}`)]);
   // The rows and the revision each was read at, in one snapshot. Every write
   // below copies the row it read and changes its blob key, so it is based on
   // that revision: a `catalog import` that rewrote the row in the minutes an
   // upload takes is refused, not overwritten with the row as it was.
-  const { rows, bases } = await db.transaction(
-    async (tx) => {
-      const all = [...ids, ...posterIds];
+  const { rows, bases } = await inTransaction(db, async (tx) => {
+      const all = [...ids, ...derivedIds];
       const read = all.length === 0 ? [] : await tx.select().from(asset).where(inArray(asset.id, all));
       const latest = await latestRevisions(tx, "asset", all);
       return {
         rows: new Map(read.map((row) => [row.id, row] as const)),
         bases: new Map(all.map((id) => [id, latest.get(id)?.id ?? null] as const)),
       };
-    },
-    { isolationLevel: "repeatable read", accessMode: "read only" },
-  );
+    });
   const keys = [...rows.values()].map((row) => row.blobKey).filter((k): k is string => k !== null);
   const blobs = new Map(
     (keys.length === 0 ? [] : await db.select().from(blobObject).where(inArray(blobObject.key, keys))).map(
@@ -397,12 +420,13 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
     source,
     outRoot,
     dryRun,
-    counts: { videos: 0, sidecars: 0, posters: 0 },
+    counts: { videos: 0, sidecars: 0, posters: 0, pdfs: 0 },
     uploaded: 0,
     uploadedBytes: 0,
     rowsWritten: 0,
     refused: 0,
     postersSkipped: options.ffmpeg === null ? "ffmpeg was not found; set FFMPEG_PATH or put ffmpeg on PATH" : null,
+    pdfsSkipped: options.ffmpeg === null ? "ffmpeg was not found; set FFMPEG_PATH or put ffmpeg on PATH" : null,
     bytesCapEstimate: null,
     items,
   };
@@ -439,13 +463,13 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
     return null;
   };
   /**
-   * The same for a poster the dry run would cut: its bytes are unknown until
-   * ffmpeg runs, so only the day's count can be asked; the bytes cap is said
-   * to be unknowable rather than guessed.
+   * The same for a derived file the dry run would make (a poster, a PDF):
+   * its bytes are unknown until ffmpeg runs, so only the day's count can be
+   * asked; the bytes cap is said to be unknowable rather than guessed.
    */
-  const wouldCapPoster = async (owner: string): Promise<string | null> => {
+  const wouldCapDerived = async (owner: string, noun: string): Promise<string | null> => {
     if (caps === null) return null;
-    if ("error" in caps) return `a real run would refuse this new poster: ${caps.error}`;
+    if ("error" in caps) return `a real run would refuse this new ${noun}: ${caps.error}`;
     if (caps.uploadsPerDay === null) return null;
     let tally = planned.get(owner);
     if (tally === undefined) {
@@ -454,7 +478,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
       planned.set(owner, tally);
     }
     if (tally.uploads + 1 > caps.uploadsPerDay) {
-      return `${owner} would have uploaded ${tally.uploads} new object(s) in 24 hours before this poster; a real run would refuse it under the ${OWNER_UPLOADS_PER_DAY_ENV} cap of ${caps.uploadsPerDay}`;
+      return `${owner} would have uploaded ${tally.uploads} new object(s) in 24 hours before this ${noun}; a real run would refuse it under the ${OWNER_UPLOADS_PER_DAY_ENV} cap of ${caps.uploadsPerDay}`;
     }
     tally.uploads += 1;
     return null;
@@ -464,6 +488,14 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
     items.push({ id, kind, action: "refused", key: null, bytes: null, detail });
     result.refused += 1;
   };
+
+  /** The bytes of a confirmed blob: what the row names, never what a file claims. */
+  const blobBytes = async (key: string): Promise<Buffer> => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of (await store.get(key)).body) chunks.push(chunk as Buffer);
+    return Buffer.concat(chunks);
+  };
+  const blobText = async (key: string): Promise<string> => (await blobBytes(key)).toString("utf8");
 
   /** A present blob the row already names and the store still has: nothing to read or write. */
   const alreadyStored = async (row: Asset, ext: string): Promise<string | null> => {
@@ -587,15 +619,19 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
     result.counts.videos += 1;
     const video = await settle(group.video);
     if (video !== null && video.changed) linkTo(group.video.row, video.key);
+    let transcriptSettled: { key: string; changed: boolean } | null = null;
     for (const sidecar of group.sidecars) {
       result.counts.sidecars += 1;
       const done = await settle(sidecar);
+      if (sidecar.row.kind === "transcript") transcriptSettled = done;
       if (done !== null && done.changed) linkTo(sidecar.row, done.key);
     }
 
     if (video !== null) {
       const poster = await settlePoster(group.video, video.changed);
       if (poster !== null) writes.push(poster);
+      const pdf = await settlePdf(group, transcriptSettled);
+      if (pdf !== null) writes.push(pdf);
     }
 
     if (dryRun || writes.length === 0) continue;
@@ -621,11 +657,11 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
     }
   }
 
-  const plannedPosters = items.filter((i) => i.kind === "poster" && i.action === "would-make").length;
-  if (plannedPosters > 0 && caps !== null && !("error" in caps) && caps.bytes !== null) {
+  const plannedDerived = items.filter((i) => (i.kind === "poster" || i.kind === "pdf") && i.action === "would-make").length;
+  if (plannedDerived > 0 && caps !== null && !("error" in caps) && caps.bytes !== null) {
     result.bytesCapEstimate =
-      `the ${OWNER_BYTES_CAP_ENV} answers are an estimate: the ${plannedPosters} poster(s) this run would cut are not counted, ` +
-      `since a poster's size is known only once ffmpeg cuts it, so a real run may refuse a file this one passed`;
+      `the ${OWNER_BYTES_CAP_ENV} answers are an estimate: the ${plannedDerived} poster(s)/PDF(s) this run would make are not counted, ` +
+      `since their size is known only once ffmpeg runs, so a real run may refuse a file this one passed`;
   }
 
   return result;
@@ -697,7 +733,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
     }
     if (dryRun) {
       if (options.ffmpeg === null) return null;
-      const capped = await wouldCapPoster(video.row.ownerId);
+      const capped = await wouldCapDerived(video.row.ownerId, "poster");
       if (capped !== null) {
         refuse(id, "poster", capped);
         return null;
@@ -747,7 +783,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
       return detach(after);
     }
     const sha256 = createHash("sha256").update(frame.body).digest("hex");
-    const dir = await mkdtemp(path.join(os.tmpdir(), "self-learn-poster-"));
+    const dir = await mkdtemp(path.join(os.tmpdir(), "gnosia-poster-"));
     try {
       const file = path.join(dir, `poster${POSTER_EXTENSION}`);
       await writeFile(file, frame.body);
@@ -794,7 +830,229 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
             bytes: done.bytes,
             title: `${video.row.title ?? video.row.id} (poster)`,
             // Made by this repository's upload command, not rendered by the tool.
-            sourceRepo: "self-learn",
+            sourceRepo: "gnosia",
+            blobKey: done.key,
+            resourceType: null,
+            ownerId: video.row.ownerId,
+          },
+          links: { asset_derivation: [{ sourceAssetId: video.row.id }] },
+        },
+        base: null,
+        author,
+        authorKind,
+        reason,
+      };
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  }
+
+  /**
+   * The PDF for one video: made and stored if it needs to be, and the row
+   * write that records it. The poster's sibling under every rule that
+   * matters — same id pattern outside the tool's namespace, same owner's
+   * key, same "missing, unlinked or the video's bytes changed" recut rule,
+   * same unhook-on-new-render. It differs in what it is made from: the
+   * transcript sidecar gives the page plan (one page per narration beat),
+   * and a video without one falls back to a fixed cadence of frames.
+   */
+  async function settlePdf(group: Group, transcriptSettled: { key: string } | null): Promise<WriteContentInput | null> {
+    const video = group.video as Planned;
+    const id = pdfId(video.row.id);
+    const existing = rows.get(id);
+    const theirs = existing === undefined ? null : foreign(existing);
+    if (theirs !== null) {
+      refuse(id, "pdf", theirs);
+      return null;
+    }
+    const current =
+      existing !== undefined && existing.blobKey !== null && existing.contentHash !== null
+        ? await alreadyStored(existing, PDF_EXTENSION.slice(1))
+        : null;
+    const derived =
+      existing !== undefined &&
+      (
+        await db
+          .select({ id: assetDerivation.assetId })
+          .from(assetDerivation)
+          .where(and(eq(assetDerivation.assetId, id), eq(assetDerivation.sourceAssetId, video.row.id)))
+      ).length > 0;
+    // What the PDF is made from, by names rather than contents: the video's
+    // bytes by their content hash, its title, and the transcript's confirmed
+    // blob key — the bytes its row names, never a file's claim, since a file
+    // that changed since it was indexed is refused or an old link can drift
+    // on disk afterwards. Named keys mean the comparison reads no blob at
+    // all.
+    const transcript = group.sidecars.find((s) => s.row.kind === "transcript");
+    const transcriptKey =
+      transcript === undefined ? null : (transcriptSettled?.key ?? (await alreadyStored(transcript.row, transcript.ext)));
+    const expected = pdfInputs(video.row.contentHash ?? "", video.row.title ?? video.row.id, transcriptKey);
+    // The pdf row's `inputs_hash` records that fingerprint of the inputs its
+    // document was made from, so the comparison costs no read — and no
+    // revision-history memory of the inputs, a memory that does not move when
+    // a rebuild lands on identical bytes (a write that changes nothing
+    // appends no revision). A transcript rewrite lands under a new key, so
+    // the fingerprint differs and the document is recut or unhooked even
+    // when the pages would come out the same — the difference is worth a
+    // recut to never serve a document of another transcript's captions. A
+    // row with no fingerprint — one an older write left — reads as stale and
+    // is remade once, stamped this time.
+    const inputChanged = existing !== undefined && derived ? existing.inputsHash !== expected : false;
+    // A video whose inputs just changed leaves its PDF picturing the old
+    // render or quoting the old transcript, and nothing later would notice:
+    // the next run sees the video linked and the PDF present. So it is
+    // unhooked in the same write, as `detach` on the poster does for the
+    // render alone, until an upload with a working ffmpeg makes the new one.
+    const unhook = (why: string): WriteContentInput | null => {
+      if (existing === undefined || !derived) return null;
+      items.push({ id, kind: "pdf", action: "detached", key: existing.blobKey, bytes: existing.bytes, detail: why });
+      return {
+        owner: existing.ownerId,
+        type: "asset",
+        id,
+        next: { row: contentRow(existing), links: { asset_derivation: [] } },
+        base: null,
+        author,
+        authorKind,
+        reason,
+      };
+    };
+    // Unhooking for staleness only when the inputs say it is; an owner
+    // mismatch unhooks at any age, since the video must not serve a document
+    // under the other owner's prefix at all.
+    const detach = (why: string): WriteContentInput | null => (inputChanged ? unhook(why) : null);
+    if (existing !== undefined && existing.ownerId !== video.row.ownerId) {
+      const why =
+        `${id} belongs to ${existing.ownerId} and its video to ${video.row.ownerId}; move the PDF with its ` +
+        `video (\`update asset set owner_id = '${video.row.ownerId}' where id = '${id}'\`), then upload again`;
+      refuse(id, "pdf", why);
+      return dryRun ? null : unhook(why);
+    }
+    if (current !== null && derived && !inputChanged) {
+      result.counts.pdfs += 1;
+      items.push({ id, kind: "pdf", action: "present", key: current, bytes: existing?.bytes ?? null });
+      return null;
+    }
+    if (dryRun) {
+      if (options.ffmpeg === null) return null;
+      const capped = await wouldCapDerived(video.row.ownerId, "PDF");
+      if (capped !== null) {
+        refuse(id, "pdf", capped);
+        return null;
+      }
+      result.counts.pdfs += 1;
+      items.push({
+        id,
+        kind: "pdf",
+        action: "would-make",
+        key: null,
+        bytes: null,
+        ...(caps !== null && !("error" in caps) && caps.bytes !== null
+          ? { detail: `its size is known only once it is made, so the ${OWNER_BYTES_CAP_ENV} cap is not asked` }
+          : {}),
+      });
+      return null;
+    }
+    if (options.ffmpeg === null) return detach("no ffmpeg to make a PDF from the new render");
+    // The file must still be the bytes the row names, before the pages are
+    // cut and after them: a video answered `present` was not read again, and
+    // a render that changed on disk since its import would otherwise give
+    // the stored video a document of other bytes.
+    const indexed = async (): Promise<string | null> => {
+      let facts;
+      try {
+        facts = await fileFacts(video.file);
+      } catch (error) {
+        return `${video.row.path} cannot be read under ${outRoot}: ${(error as NodeJS.ErrnoException).code ?? (error as Error).message}`;
+      }
+      return facts.contentHash === video.row.contentHash
+        ? null
+        : `${video.row.path} has changed since it was indexed, so no PDF was made from it. Run \`${reindex}\`, then upload again.`;
+    };
+    const before = await indexed();
+    if (before !== null) {
+      refuse(id, "pdf", before);
+      return detach(before);
+    }
+    // The captions come from the transcript's confirmed blob — the bytes its
+    // row names — never the file, so the document quotes what the catalog
+    // serves. A blob that cannot be read after `alreadyStored` confirmed it
+    // is the store failing, not a reason to keep the old document either:
+    // `detach` unhooks it when the inputs say it is stale.
+    let segments: PdfSegment[] | null = null;
+    if (transcriptKey !== null) {
+      try {
+        segments = segmentsFromText(await blobText(transcriptKey));
+      } catch (error) {
+        refuse(id, "pdf", `the transcript's stored bytes could not be read: ${error instanceof Error ? error.message : String(error)}`);
+        return detach("its transcript's stored bytes could not be read");
+      }
+    }
+    const made = await buildVideoPdf(
+      options.ffmpeg,
+      video.file,
+      video.row.contentHash ?? "",
+      video.row.title ?? video.row.id,
+      segments,
+      transcriptKey,
+    );
+    if (!made.ok) {
+      refuse(id, "pdf", `no PDF could be made from ${video.row.path}: ${made.reason}`);
+      return detach(`no PDF could be made from the new render: ${made.reason}`);
+    }
+    const after = await indexed();
+    if (after !== null) {
+      refuse(id, "pdf", after);
+      return detach(after);
+    }
+    const sha256 = createHash("sha256").update(made.body).digest("hex");
+    const dir = await mkdtemp(path.join(os.tmpdir(), "gnosia-pdf-"));
+    try {
+      const file = path.join(dir, `video${PDF_EXTENSION}`);
+      await writeFile(file, made.body);
+      let done;
+      try {
+        done = await uploadBlob(db, store, {
+          ownerId: video.row.ownerId,
+          file,
+          mime: PDF_CONTENT_TYPE,
+          ext: PDF_EXTENSION.slice(1),
+          sha256,
+          bytes: made.body.length,
+        });
+      } catch (error) {
+        if (!(error instanceof OwnerCapError)) throw error;
+        refuse(id, "pdf", error.message);
+        return detach(`its owner's cap refused the new PDF: ${error.message}`);
+      }
+      if (done.uploaded) {
+        result.uploaded += 1;
+        result.uploadedBytes += done.bytes;
+      }
+      result.counts.pdfs += 1;
+      const relinked = existing !== undefined && existing.blobKey === done.key && !done.uploaded;
+      items.push({ id, kind: "pdf", action: relinked ? "linked" : "made", key: done.key, bytes: done.bytes });
+      return {
+        // The PDF is its video's owner's, as its key's prefix already says.
+        owner: video.row.ownerId,
+        type: "asset",
+        id,
+        next: {
+          row: {
+            id,
+            kind: "pdf",
+            // No path: a PDF has no file anywhere but the store, as posters
+            // have none.
+            path: null,
+            url: null,
+            contentHash: sha256,
+            bytes: done.bytes,
+            title: `${video.row.title ?? video.row.id} (PDF)`,
+            // The fingerprint of what it was made from: what the next run
+            // compares its inputs against without reading the document.
+            inputsHash: made.inputs,
+            // Made by this repository's upload command, not rendered by the tool.
+            sourceRepo: "gnosia",
             blobKey: done.key,
             resourceType: null,
             ownerId: video.row.ownerId,

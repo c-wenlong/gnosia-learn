@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  clearTables,
   migratedScratchDatabase,
   probe,
   type Scratch,
@@ -40,7 +41,7 @@ describe.skipIf(!reachable.ok)("review API routes", () => {
   let scratch: Scratch;
   let grade: (req: Request) => Promise<Response>;
   let due: (req: Request) => Promise<Response>;
-  let state: typeof import("@self-learn/catalog/state");
+  let state: typeof import("@gnosia/catalog/state");
 
   beforeAll(async () => {
     scratch = await migratedScratchDatabase();
@@ -49,7 +50,7 @@ describe.skipIf(!reachable.ok)("review API routes", () => {
     const [gradeRoute, dueRoute, store] = await Promise.all([
       import("./grade/route"),
       import("./due/route"),
-      import("@self-learn/catalog/state"),
+      import("@gnosia/catalog/state"),
     ]);
     grade = gradeRoute.POST;
     due = dueRoute.GET;
@@ -61,13 +62,7 @@ describe.skipIf(!reachable.ok)("review API routes", () => {
   });
 
   beforeEach(async () => {
-    await scratch.db.execute(
-      "alter table event disable trigger event_no_update; " +
-        "alter table event disable trigger event_no_delete; " +
-        "truncate event, mastery, review; " +
-        "alter table event enable trigger event_no_update; " +
-        "alter table event enable trigger event_no_delete;",
-    );
+    await clearTables(scratch.db, ["event", "mastery", "review"]);
   });
 
   const send = async (body: unknown, origin?: string | null) => {

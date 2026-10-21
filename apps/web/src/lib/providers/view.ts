@@ -1,69 +1,39 @@
-import { PROVIDER_IDS, TUTOR_MODEL_LIMITS, type ProviderId, type ProviderName } from "@self-learn/schema/shared";
-
 import type { ChainEntry } from "@/lib/agent/providers";
 import type { ProviderKeyView, ProviderKeysView } from "@/lib/provider-keys/settings";
 
 /**
- * What the Settings Providers card is handed (docs/TUTOR-MODELS.md, T12):
- * the provider keys and the model chain as one list of providers, each with
- * its key's state and its models in the order the tutor tries them.
- * Provider names, model ids and where a key comes from; never a key.
+ * What the Settings Providers card is handed (docs/TUTOR-MODELS.md): every
+ * provider the owner could connect — each built-in in the cascade's order,
+ * keyed or not, then every custom provider — with its key's state and its
+ * models in the chain's order. Provider names, model ids and where a key
+ * comes from; never a key. One list serves the whole Models tab: the picks
+ * under Model selection read the same rows.
  */
-
 export interface ProviderRowView extends ProviderKeyView {
-  /** This provider's models, in the chain's order. */
+  /** This provider's models in the model chain's order (T15). */
   models: string[];
 }
 
 export interface ProvidersView {
   /** False when the saved keys could not be read. */
   keysReachable: boolean;
-  /** False when the chain could not be read: the tutor uses the built-in defaults. */
+  /** False when the chain could not be read: the tutor has nothing to call. */
   chainReachable: boolean;
-  /** No provider has a model, so the tutor uses each keyed provider's built-in default. */
+  /** No provider has a model, so the tutor has nothing to call (T15). */
   usingDefaults: boolean;
-  /**
-   * The providers the card lists, in the order the tutor tries them: those
-   * with models in the chain's order, then the rest that have a key (or a
-   * model, but no key). With no models at all the tutor walks the built-in
-   * defaults, your saved keys before the server's (`orderCredentials`), and
-   * the rows follow that order; otherwise the rest follow the built-in order.
-   */
+  /** Every provider, keyed or not. An unkeyed row is where its key goes. */
   rows: ProviderRowView[];
-  /** The providers not listed yet, for Add provider, each with where its key is made. */
-  addable: { id: ProviderId; label: string; keyUrl?: string }[];
-  /** The chain holds as many models as it may. */
-  full: boolean;
 }
 
 export function providersView(keys: ProvidersKeysInput, chain: readonly ChainEntry[], chainReachable: boolean): ProvidersView {
-  const byId = new Map<string, ProviderKeyView>(keys.rows.map((row) => [row.id, row]));
-  const withModels = [...new Set(chain.map((e) => e.provider))].filter((id) => byId.has(id));
-  const listed = (id: ProviderId) => {
-    const row = byId.get(id);
-    return row !== undefined && (row.saved !== null || row.server || withModels.includes(id));
-  };
-  const rest = PROVIDER_IDS.filter((id) => !withModels.includes(id) && listed(id));
-  const rank = (id: ProviderId) => {
-    const use = byId.get(id)?.inUse;
-    return use === "saved" ? 0 : use === "server" ? 1 : 2;
-  };
-  // A provider the owner added is always listed: it exists because they made it (T14).
-  const custom = keys.rows.filter((row) => row.custom !== undefined && !withModels.includes(row.id)).map((row) => row.id);
-  const order: ProviderName[] = [...withModels, ...(chain.length === 0 ? [...rest].sort((a, b) => rank(a) - rank(b)) : rest), ...custom];
-  const rows = order.flatMap((id): ProviderRowView[] => {
-    const row = byId.get(id);
-    return row === undefined ? [] : [{ ...row, models: chain.filter((e) => e.provider === id).map((e) => e.model) }];
-  });
   return {
     keysReachable: keys.reachable,
     chainReachable,
     usingDefaults: chain.length === 0,
-    rows,
-    addable: keys.rows
-      .filter((row): row is ProviderKeyView & { id: ProviderId } => row.custom === undefined && !order.includes(row.id))
-      .map((row) => (row.keyUrl === undefined ? { id: row.id, label: row.label } : { id: row.id, label: row.label, keyUrl: row.keyUrl })),
-    full: chain.length >= TUTOR_MODEL_LIMITS.maxEntries,
+    rows: keys.rows.map((row) => ({
+      ...row,
+      models: chain.filter((e) => e.provider === row.id).map((e) => e.model),
+    })),
   };
 }
 

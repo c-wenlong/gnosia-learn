@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
  * Nothing in the web app reads or writes on the `'local'` default (phase 4 of
  * docs/CONTENT-MIGRATION.md).
  *
- * Every state function in `@self-learn/catalog/state` takes the learner as
+ * Every state function in `@gnosia/catalog/state` takes the learner as
  * `learnerId`, defaulted to `'local'` so the `learn` CLI, which runs on the
  * owner's machine with no session, reads naturally. The web app has a
  * session, and a call there that leaves `learnerId` out would read the owner's
@@ -30,14 +30,14 @@ import { describe, expect, it } from "vitest";
  * `LOCAL_LEARNER_ID` outside `owner.ts`, a scope built by hand (an object with
  * `owner` and `readable`, or `ownerScope`/`readableOwners` given a literal), a
  * namespace or unbound dynamic import of the catalog, a re-export of it, any
- * other `@self-learn/catalog` entry point, and a query of the app's own
+ * other `@gnosia/catalog` entry point, and a query of the app's own
  * (`drizzle-orm`, or `.execute(`), which would bypass every scoped reader.
  */
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const WEB_SRC = path.resolve(HERE, "..");
 const REPO = path.resolve(WEB_SRC, "..", "..", "..");
-const DOOR = "@self-learn/catalog/state";
+const DOOR = "@gnosia/catalog/state";
 const DOOR_INDEX = path.join(REPO, "services", "catalog", "src", "state", "index.ts");
 
 const OWNER_PARAMS = new Set(["learnerId", "owner", "scope"]);
@@ -165,7 +165,7 @@ function violationsIn(file: string, text: string, table: ReadonlyMap<string, Own
         bindFrom((node.moduleSpecifier as ts.StringLiteral).text, element.name.text, (element.propertyName ?? element.name).text);
       }
     }
-    // const { a, b: c } = await import("@self-learn/catalog/state")
+    // const { a, b: c } = await import("@gnosia/catalog/state")
     if (ts.isVariableDeclaration(node) && ts.isObjectBindingPattern(node.name) && node.initializer !== undefined) {
       const init = ts.isAwaitExpression(node.initializer) ? node.initializer.expression : node.initializer;
       if (ts.isCallExpression(init) && init.expression.kind === ts.SyntaxKind.ImportKeyword) {
@@ -186,7 +186,7 @@ function violationsIn(file: string, text: string, table: ReadonlyMap<string, Own
     out.push({ file, line: source.getLineAndCharacterOfPosition(node.getStart()).line + 1, name, why });
   };
   const isOwnerModule = path.resolve(file) === OWNER_MODULE;
-  const catalogSpecifier = (text: string) => text === "@self-learn/catalog" || text.startsWith("@self-learn/catalog/");
+  const catalogSpecifier = (text: string) => text === "@gnosia/catalog" || text.startsWith("@gnosia/catalog/");
   const bypasses = (node: ts.Node): void => {
     if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
       const specifier = node.moduleSpecifier;
@@ -361,8 +361,8 @@ describe("owner-bearing catalog calls in the web app", () => {
       `export { readEvents } from "${DOOR}";`,
       `export * from "${DOOR}";`,
       `import { sql } from "drizzle-orm";`,
-      `import { writeContent } from "@self-learn/catalog/src/content/write";`,
-      `import { LOCAL_LEARNER_ID } from "@self-learn/schema/shared";`,
+      `import { writeContent } from "@gnosia/catalog/src/content/write";`,
+      `import { LOCAL_LEARNER_ID } from "@gnosia/schema/shared";`,
       `const mod = await import("${DOOR}");`,
       `await db.execute(sql\`select 1\`);`,
       `await readEvents(db, "local");`,
@@ -378,7 +378,7 @@ describe("owner-bearing catalog calls in the web app", () => {
         `2 ${DOOR}`,
         `3 ${DOOR}`,
         "4 drizzle-orm",
-        "5 @self-learn/catalog/src/content/write",
+        "5 @gnosia/catalog/src/content/write",
         "6 LOCAL_LEARNER_ID",
         `7 ${DOOR}`,
         "8 execute",
@@ -391,7 +391,7 @@ describe("owner-bearing catalog calls in the web app", () => {
     );
     // owner.ts is the one place allowed to name the default learner.
     expect(
-      violationsIn(OWNER_MODULE, `import { LOCAL_LEARNER_ID } from "@self-learn/schema/shared";\nreturn LOCAL_LEARNER_ID;`, ownerTable()),
+      violationsIn(OWNER_MODULE, `import { LOCAL_LEARNER_ID } from "@gnosia/schema/shared";\nreturn LOCAL_LEARNER_ID;`, ownerTable()),
     ).toEqual([]);
   });
 

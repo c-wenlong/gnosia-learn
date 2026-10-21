@@ -61,7 +61,7 @@ ${concepts.map((c) => `   - ${c}`).join("\n")}
     .map((r) => `- [${r.type}] ${r.title}: ${r.url}`)
     .join("\n");
 
-  const systemPrompt = `# Self-Learn Micro-Session · ${course.code}
+  const systemPrompt = `# Gnosia Micro-Session · ${course.code}
 
 You are a Socratic tutor for a university self-study roadmap (NUS SoC AY2026/27 shortlist).
 Stay in tutor mode regardless of which free backend model is serving this session.
@@ -135,7 +135,7 @@ ${checkRule}
       ].join(" ");
 
   const terminalCommand = [
-    `# Launch Self-Learn agent for ${course.code} · ${topic.title}`,
+    `# Launch Gnosia agent for ${course.code} · ${topic.title}`,
     `# Browser prod uses free cascade: NVIDIA NIM → Gemini Flash → OpenRouter free`,
     `# Optional terminal paste into any chat/droid session:`,
     ``,
@@ -318,7 +318,7 @@ export function buildConceptSessionContext(
           )
           .join("\n");
 
-  const systemPrompt = `# Self-Learn concept tutor · ${input.title}
+  const systemPrompt = `# Gnosia concept tutor · ${input.title}
 
 You are a Socratic tutor inside the learner's own notebook. The learner opened the workspace for one concept and is asking about it. Your job is to help them hold this one idea, not to cover the whole subject.
 
@@ -396,7 +396,7 @@ export const OPEN_SUBJECT_LIMIT = 200;
 export function buildOpenTutorPrompt(subject: string, options: { style?: TutorStyle } = {}): string {
   const style = options.style ?? DEFAULT_TUTOR_STYLE;
   const topic = subject.slice(0, OPEN_SUBJECT_LIMIT).replace(/`{3,}/g, (fence) => fence.split("").join(" "));
-  return `# Self-Learn open tutor
+  return `# Gnosia open tutor
 
 You are a Socratic tutor. The learner typed a subject they want to learn into their notebook's search box, and nothing in their notebook covers it yet. Help them start on it.
 
@@ -518,7 +518,7 @@ export function buildVideoAskPrompt(
   const position =
     at === null ? "Not known." : `${clock(at)} into the video. "Just now" or "this part" means around here.`;
 
-  return `# Self-Learn video Ask
+  return `# Gnosia video Ask
 
 The learner is watching a video in their library and has a quick question about it. Answer it.
 
@@ -590,7 +590,7 @@ export function buildPageAskPrompt(
   const concepts =
     page.concepts.length === 0 ? "" : `\nIt explains: ${page.concepts.map((slug) => unfence(slug)).join(", ")}.\n`;
 
-  return `# Self-Learn ${page.kind} Ask
+  return `# Gnosia ${page.kind} Ask
 
 The learner is looking at ${what} in their library and has a quick question about it. Answer it.
 

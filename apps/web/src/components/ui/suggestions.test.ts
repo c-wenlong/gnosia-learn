@@ -26,8 +26,9 @@ describe("suggestionsFor", () => {
     ];
     expect(suggestionsFor(options, "deepseek free").map((o) => o.value)).toEqual(["a", "c"]);
     expect(suggestionsFor(options, "free  deepseek").map((o) => o.value)).toEqual(["a", "c"]);
-    // One word reads the label only, as it always has.
-    expect(suggestionsFor(options, "free").map((o) => o.value)).toEqual(["a", "d"]);
+    // One word searches the same text: a detail's word is a match too, so an
+    // id carried as a row's second line is found by typing it (D93's models).
+    expect(suggestionsFor(options, "free").map((o) => o.value)).toEqual(["a", "c", "d"]);
   });
 });
 

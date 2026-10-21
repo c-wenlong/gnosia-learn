@@ -28,14 +28,21 @@ const listen = (name, port) => new Promise((resolve) => {
   server.listen(port, "127.0.0.1", () => { out[name] = "allowed"; server.close(() => resolve()); });
 });
 (async () => {
-  sync("read home", () => fs.readdirSync(fs.existsSync(path.join(T.home, ".ssh")) ? path.join(T.home, ".ssh") : T.home));
+  // The owner's ssh keys by name: a skeleton rootfs lets a readdir of the home
+  // stub succeed on Linux (it shows only mount points), so the probe names the
+  // directory that would hold secrets.
+  sync("read home", () => fs.readdirSync(path.join(T.home, ".ssh")));
   sync("read ~/.claude.json", () => fs.readFileSync(path.join(T.home, ".claude.json")));
   sync("write in home", () => { const p = path.join(T.home, ".studio-sandbox-probe-" + process.pid); fs.writeFileSync(p, "x", { flag: "wx" }); fs.rmSync(p); });
   sync("write in the real checkout", () => { const p = path.join(T.root, "sandbox-probe-" + process.pid); fs.writeFileSync(p, "x", { flag: "wx" }); fs.rmSync(p); });
   sync("write in node_modules", () => { const p = path.join(T.nodeModules, ".sandbox-probe-" + process.pid); fs.writeFileSync(p, "x", { flag: "wx" }); fs.rmSync(p); });
   sync("list /private/tmp", () => fs.readdirSync("/private/tmp"));
-  sync("symlink out of render", () => { const p = path.join(T.render, "probe-link-" + process.pid); fs.symlinkSync("/etc/hosts", p); fs.rmSync(p); });
-  sync("hard link in render", () => { const a = path.join(T.render, "probe-a-" + process.pid); fs.writeFileSync(a, "x"); try { fs.linkSync(a, a + "-b"); fs.rmSync(a + "-b"); } finally { fs.rmSync(a); } });
+  // A namespace cannot refuse the link itself, so the boundary being probed
+  // is the target: a denied path resolves nowhere inside.
+  sync("symlink out of render", () => { const p = path.join(T.render, "probe-link-" + process.pid); fs.symlinkSync(path.join(T.home, ".ssh", "config"), p); try { fs.readFileSync(p); } finally { fs.rmSync(p, { force: true }); } });
+  // And a hard link out of it: a file under a read-only mount is on another
+  // filesystem inside, so EXDEV is the verdict a Seatbelt file-link deny gave.
+  sync("hard link out of render", () => { const p = path.join(T.render, "probe-" + process.pid); try { fs.linkSync("/etc/hosts", p); } finally { fs.rmSync(p, { force: true }); } });
   sync("run curl", () => { const r = spawnSync("/usr/bin/curl", ["--version"]); if (r.error) throw r.error; if (r.status !== 0) throw new Error("exit " + r.status); });
   sync("run open", () => { const r = spawnSync("/usr/bin/open", ["-h"]); if (r.error) throw r.error; if (r.status !== 0 && r.status !== 1) throw new Error("exit " + r.status); });
   sync("run python", () => { const r = spawnSync("/usr/bin/python3", ["-c", "1"]); if (r.error) throw r.error; if (r.status !== 0) throw new Error("exit " + r.status); });

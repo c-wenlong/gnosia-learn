@@ -47,7 +47,9 @@ afterEach(async () => {
 function fixedTools(manimkcRoot: string): Toolchain {
   return {
     platform: "darwin",
+    sandboxKind: "seatbelt",
     sandboxExec: "/usr/bin/sandbox-exec",
+    libs: [],
     manimkcRoot,
     manimkcDirs: { manim: `${manimkcRoot}/manim`, venv: `${manimkcRoot}/.venv`, venvTts: `${manimkcRoot}/.venv-tts`, tools: `${manimkcRoot}/tools` },
     ffmpeg: { link: "/opt/homebrew/bin/ffmpeg", real: "/opt/homebrew/Cellar/ffmpeg/9/bin/ffmpeg", home: "/opt/homebrew/Cellar/ffmpeg/9" },
@@ -59,7 +61,7 @@ function fixedTools(manimkcRoot: string): Toolchain {
     hfHubCache: "/Users/me/.cache/huggingface/hub",
     kokoroModel: "/Users/me/.cache/huggingface/hub/models--hexgrad--Kokoro-82M",
     voicesInstalled: ["af_heart"],
-    sharedAudioCache: "/Users/me/.self-learn/manimkc/cache/audio",
+    sharedAudioCache: "/Users/me/.gnosia/manimkc/cache/audio",
   };
 }
 
@@ -147,7 +149,7 @@ describe("the manimkc backend writes what the runner wrote before it", () => {
     const guard = "/usr/local/bin/node /jobs/j/bin/bash-guard.cjs";
     const source = path.join(root, "note.md");
     const settings = backendFor("manimkc").settings(job, { jobId: "j", guard, source });
-    const before = buildVideoSettings({ jobId: "j", paths: job.paths, manimkcRoot: job.tools.manimkcRoot, manimkcHome: "/Users/me/.self-learn/manimkc", guard, source });
+    const before = buildVideoSettings({ jobId: "j", paths: job.paths, manimkcRoot: job.tools.manimkcRoot, manimkcHome: "/Users/me/.gnosia/manimkc", guard, source });
     expect(JSON.stringify(settings, null, 1)).toBe(JSON.stringify(before, null, 1));
     const noCache = { ...job, tools: { ...job.tools, sharedAudioCache: null } };
     expect(JSON.stringify(backendFor("manimkc").settings(noCache, { jobId: "j", guard }))).toBe(
