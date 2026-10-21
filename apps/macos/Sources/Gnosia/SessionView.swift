@@ -3,8 +3,10 @@
 //  Gnosia
 //
 //  The web's concept session — apps/web/src/components/session/
-//  SessionFocus.tsx, learn mode — walked natively over the sidecar:
-//  probe, teach, check, close. A question step asks the note's own check
+//  SessionFocus.tsx — walked natively over the sidecar, in both modes the
+//  page knows: learn (Teach me — probe, teach, check, close) and check
+//  (`?mode=check`, the workspace's Quiz me — the note's checks in turn,
+//  then close). A question step asks the note's own check
 //  when the plan has one; otherwise it asks the tutor for a question
 //  (`POST /api/agent/session` through SidecarClient), and when the model
 //  is not configured or answers in prose it falls back to the plan's
@@ -18,8 +20,8 @@
 //  first answer and closes on the close step — or on leaving mid-session,
 //  as the web's does.
 //
-//  Learn mode only: `?mode=check` (Quiz me) and the module week check
-//  have no native surface yet.
+//  The module week check (`/courses/<slug>/<module>/check`) has no
+//  native surface yet.
 //
 
 import SwiftUI
@@ -33,6 +35,8 @@ struct SessionView: View {
     /// The concept the session is about — the plan, the pool and the
     /// model are built from the workspace at open, once.
     let slug: String
+    /// `?mode=` on the web URL: `.learn` is Teach me, `.check` is Quiz me.
+    var mode: SessionMode = .learn
 
     // MARK: The plan, built at open
 
@@ -123,7 +127,7 @@ struct SessionView: View {
             slug: slug, domain: w.domain, neighbours: neighbours,
             concepts: store.learn.concepts
         )
-        steps = buildSessionPlan(slug: slug, checks: checks, pool: pool, summary: w.summary)
+        steps = buildSessionPlan(slug: slug, mode: mode, checks: checks, pool: pool, summary: w.summary)
         teach = teachProse(w.body ?? "")
         noteAsksNothing = !steps.contains {
             ($0.kind == .probe || $0.kind == .check) && ($0.question != nil || $0.fallback != nil)
@@ -260,7 +264,10 @@ struct SessionView: View {
         if sessionId == nil {
             sessionId = newSessionId(slug: slug, now: Date(), random: UUID().uuidString)
         }
-        let source = step.kind == .check ? "teach" : "probe"
+        // Asked after this session taught it, a check is a teaching
+        // check; a Quiz me check with no teaching only measures —
+        // `source` in the web's grade, the same either way.
+        let source = step.kind == .check && mode == .learn ? "teach" : "probe"
         // The model advances with the answer; if the write does not land
         // the model goes back too, so a retry replays the same answer from
         // the same state rather than stacking a second update on the first.

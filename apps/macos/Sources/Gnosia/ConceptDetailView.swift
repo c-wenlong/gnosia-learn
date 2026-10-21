@@ -185,6 +185,20 @@ struct ConceptDetailView: View {
                 }
                 .padding(.vertical, 2)
             }
+            // The Checks card's Quiz me — the session's `?mode=check`:
+            // the note's checks as questions, no teaching. The web
+            // disables it when the note has no checks; here the section
+            // itself is absent then, so the button needn't be.
+            NavigationLink(value: AppDestination.session(concept: w.slug, mode: .check)) {
+                Text("Quiz me")
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(G.text)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(G.surface, in: RoundedRectangle(cornerRadius: 8))
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(G.border, lineWidth: 1))
+            }
+            .buttonStyle(.plain)
             Text("Answered state is matched by question text — the mirrored observations name no concept.")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)

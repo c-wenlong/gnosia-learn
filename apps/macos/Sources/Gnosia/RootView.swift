@@ -24,7 +24,9 @@ enum AppDestination: Hashable {
     case module(course: String, module: String)
     case asset(String)
     /// A tutor session on a concept — the web's /learn/<slug>/session.
-    case session(concept: String)
+    /// `mode` is its `?mode=` query: `.learn` is Teach me, `.check` is
+    /// the workspace's Quiz me.
+    case session(concept: String, mode: SessionMode = .learn)
 }
 
 extension View {
@@ -42,8 +44,8 @@ extension View {
                 CourseDestination(slug: course, moduleID: module)
             case .asset(let id):
                 AssetDestination(id: id)
-            case .session(let slug):
-                SessionDestination(slug: slug)
+            case .session(let slug, let mode):
+                SessionDestination(slug: slug, mode: mode)
             }
         }
     }
@@ -110,10 +112,11 @@ private struct AssetDestination: View {
 private struct SessionDestination: View {
     @Environment(CatalogStore.self) private var store
     let slug: String
+    var mode: SessionMode = .learn
 
     var body: some View {
         if store.concept(slug) != nil {
-            SessionView(slug: slug)
+            SessionView(slug: slug, mode: mode)
         } else {
             ContentUnavailableView(
                 "Concept not in the catalog",
