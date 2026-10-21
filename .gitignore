@@ -64,13 +64,6 @@ next-env.d.ts
 # machine's, and committing it would give the repo two versions that drift.
 .agents/
 
-# Where a studio job wrote its candidate before candidates moved into the job
-# workspace under STUDIO_HOME (phase 2 of docs/CONTENT-MIGRATION.md). Kept
-# ignored for a job recorded before the move, whose half-drawn file may still
-# sit here until it is accepted or discarded; committing one would ship a
-# diagram nobody reviewed.
-learn/assets/.candidates/
-
 # The diagram studio runner's own state: one directory per job, holding the
 # write-ahead log, the agent transcript, the per-job permission file and the
 # scratch the agent writes snippets into. None of it is knowledge base, and the
@@ -82,11 +75,11 @@ learn/assets/.candidates/
 docs/design/research/assets/*
 !docs/design/research/assets/current-app/
 
-# Duolingo proprietary web fonts, used locally by the reference style guide; not ours to commit.
-docs/design/reference/duolingo/fonts/
-docs/design/reference/duolingo/tools/capture/winid
-docs/design/reference/duolingo/tools/capture/dumps/
-docs/design/reference/duolingo/tools/capture/out/
-
-# Brilliant proprietary web fonts (CoFo), used locally by the reference style guide; not ours to commit.
-docs/design/reference/brilliant/fonts/
+# docs/design/reference/<slug> is an absolute symlink into the private
+# design-systems library, created per machine by
+# scripts/link-design-systems.py. Tracking one would bake a machine path
+# into the tree and dangle for everyone else, so only LINKS and the README
+# are committed.
+docs/design/reference/*
+!docs/design/reference/LINKS
+!docs/design/reference/README.md

@@ -1,4 +1,4 @@
-import { concept, type OwnerScope } from "@self-learn/schema";
+import { concept, type OwnerScope } from "@gnosia/schema";
 import { and, inArray } from "drizzle-orm";
 
 import { ownedBy, scopedRead } from "../content/scope";

@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  clearTables,
   migratedScratchDatabase,
   probe,
   type Scratch,
@@ -40,14 +41,14 @@ function request(body: unknown, origin: string | null = ORIGIN): Request {
 describe.skipIf(!reachable.ok)("POST /api/learner/playback", () => {
   let scratch: Scratch;
   let POST: (req: Request) => Promise<Response>;
-  let state: typeof import("@self-learn/catalog/state");
+  let state: typeof import("@gnosia/catalog/state");
 
   beforeAll(async () => {
     scratch = await migratedScratchDatabase();
     await seedContent(scratch.db);
     await seedAssets(scratch.db);
     process.env.DATABASE_URL = scratch.url;
-    const [route, loaded] = await Promise.all([import("./route"), import("@self-learn/catalog/state")]);
+    const [route, loaded] = await Promise.all([import("./route"), import("@gnosia/catalog/state")]);
     POST = route.POST;
     state = loaded;
   }, 60_000);
@@ -57,13 +58,7 @@ describe.skipIf(!reachable.ok)("POST /api/learner/playback", () => {
   });
 
   beforeEach(async () => {
-    await scratch.db.execute(
-      "alter table event disable trigger event_no_update; " +
-        "alter table event disable trigger event_no_delete; " +
-        "truncate event; " +
-        "alter table event enable trigger event_no_update; " +
-        "alter table event enable trigger event_no_delete;",
-    );
+    await clearTables(scratch.db, ["event"]);
     await state.clearPreference(scratch.db, `playback:${ASSETS.video}`);
   });
 

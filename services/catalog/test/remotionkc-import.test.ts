@@ -2,12 +2,12 @@ import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { asset, assetDerivation, assetTopic, blobObject, indexRun } from "@self-learn/schema";
+import { asset, assetDerivation, assetTopic, blobObject, indexRun } from "@gnosia/schema";
 import { eq, like } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { runImportCommand } from "../src/commands/index-command";
-import { posterId, uploadAssets } from "../src/content/asset-upload";
+import { pdfId, posterId, uploadAssets } from "../src/content/asset-upload";
 import { openBlobStore } from "../src/content/blob";
 import { cliScope } from "../src/content/scope";
 import { listVideos } from "../src/content/videos";
@@ -138,9 +138,9 @@ describe.skipIf(!reachable.ok)("remotionkc through catalog import", () => {
     const result = await runImportCommand({ dir: SEED });
     expect(result.remotionkcRoot).toBe(checkout);
     expect(result.sources.map((s) => s.source)).toContain("remotionkc");
-    // revideokc's root is nothing in the suites (vitest.setup.ts), so it is
-    // skipped beside manimkc's two.
-    expect(result.skipped.map((s) => s.source)).toEqual(["manimkc", "revideokc", "mirrors"]);
+    // revideokc's and blenderkc's roots are nothing in the suites
+    // (vitest.setup.ts), so they are skipped beside manimkc's two.
+    expect(result.skipped.map((s) => s.source)).toEqual(["manimkc", "revideokc", "blenderkc", "mirrors"]);
 
     const rows = await remotionkcRows();
     expect(rows.map((r) => [r.id, r.kind, r.sourceRepo])).toEqual([
@@ -159,11 +159,12 @@ describe.skipIf(!reachable.ok)("remotionkc through catalog import", () => {
     expect(new Map(topics.map((t) => [t.assetId, t.topicSlug])).get(`remotionkc:${SECOND}`)).toBe("agent-memory-and-state");
     expect(topics.filter((t) => t.topicSlug === "agent-tool-use-and-reasoning-loops")).toHaveLength(4);
     const derived = await scratch.db.select().from(assetDerivation).where(eq(assetDerivation.sourceAssetId, `remotionkc:${VIDEO}`));
-    // The three sidecars, and the poster the import cut (2026-10-05).
+    // The three sidecars, and the poster and PDF the import cut (2026-10-05, 2026-10-20).
     expect(derived.map((d) => d.assetId)).toContain(posterId(`remotionkc:${VIDEO}`));
-    expect(derived).toHaveLength(4);
-    const secondPoster = await scratch.db.select().from(assetDerivation).where(eq(assetDerivation.sourceAssetId, `remotionkc:${SECOND}`));
-    expect(secondPoster.map((d) => d.assetId)).toEqual([posterId(`remotionkc:${SECOND}`)]);
+    expect(derived.map((d) => d.assetId)).toContain(pdfId(`remotionkc:${VIDEO}`));
+    expect(derived).toHaveLength(5);
+    const secondDerived = await scratch.db.select().from(assetDerivation).where(eq(assetDerivation.sourceAssetId, `remotionkc:${SECOND}`));
+    expect(secondDerived.map((d) => d.assetId).sort()).toEqual([pdfId(`remotionkc:${SECOND}`), posterId(`remotionkc:${SECOND}`)].sort());
   });
 
   it("records the run's data root, which is where out/… resolves, and the checkout it read", async () => {
@@ -185,10 +186,12 @@ describe.skipIf(!reachable.ok)("remotionkc through catalog import", () => {
       ["remotionkc:out/agents/loops/loops.chapters.json", "present"],
       ["remotionkc:out/agents/loops/loops.vtt", "present"],
       [posterId(`remotionkc:${VIDEO}`), "present"],
+      [pdfId(`remotionkc:${VIDEO}`), "present"],
       [`remotionkc:${SECOND}`, "present"],
       [posterId(`remotionkc:${SECOND}`), "present"],
+      [pdfId(`remotionkc:${SECOND}`), "present"],
     ]);
-    // The import cut both posters, so neither run writes a row.
+    // The import cut both posters and PDFs, so neither run writes a row.
     expect(first.rowsWritten).toBe(0);
     expect((await upload()).rowsWritten).toBe(0);
   });
@@ -263,6 +266,6 @@ describe.skipIf(!reachable.ok)("remotionkc through catalog import", () => {
     expect((await remotionkcRows()).map((r) => r.id)).not.toContain(`remotionkc:${SECOND}`);
     // The poster lives outside the namespace, as manimkc's do, so no import prunes it.
     const [poster] = await scratch.db.select().from(asset).where(eq(asset.id, posterId(`remotionkc:${VIDEO}`)));
-    expect(poster?.sourceRepo).toBe("self-learn");
+    expect(poster?.sourceRepo).toBe("gnosia");
   });
 });

@@ -14,7 +14,7 @@
  * every row.
  */
 
-import type { MasteryLabel } from "@self-learn/catalog/state";
+import type { MasteryLabel } from "@gnosia/catalog/state";
 
 import { EMPTY_STANDING, itemDoneWith, type ItemStanding } from "@/lib/course-path";
 import { dayKey, type LogEvent } from "@/lib/days";

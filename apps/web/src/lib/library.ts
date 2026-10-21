@@ -1,4 +1,4 @@
-import type { MasteryLabel } from "@self-learn/catalog/state";
+import type { MasteryLabel } from "@gnosia/catalog/state";
 
 import { assetDisplayTitle, assetKindLabel, type AssetCardRef } from "@/components/asset-meta";
 import { safeNextPath } from "@/lib/auth/core";
@@ -67,6 +67,9 @@ export const COMPANION_KINDS: ReadonlySet<string> = new Set([
   // A video's stored still, made by `catalog asset upload`: shown on its
   // video's card, never as a card of its own.
   "poster",
+  // A video's document, made with the poster: opened from its video's PDF
+  // button or its Files row, not browsed for as a card.
+  "pdf",
 ]);
 
 export function isCompanionKind(kind: string): boolean {
@@ -398,6 +401,16 @@ export function assetDownloadHref(id: string): string {
  */
 export function assetPosterHref(id: string): string {
   return `/api/assets/${encodeURIComponent(id)}/poster`;
+}
+
+/**
+ * `/api/assets/<id>/pdf`, a video's pages as a PDF, opened inline. Same
+ * one-spelling rule as `assetPosterHref`; only a `video` asset has one, and
+ * a video with none stored answers 404, so callers offer it only when
+ * `storedPdfs` says there is one.
+ */
+export function assetPdfHref(id: string): string {
+  return `/api/assets/${encodeURIComponent(id)}/pdf`;
 }
 
 /**

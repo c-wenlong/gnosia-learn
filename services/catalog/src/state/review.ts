@@ -6,7 +6,7 @@ import {
   readableOwners,
   review,
   SCHEDULE_LIMITS,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { and, asc, eq, gt, inArray, lte, notInArray, sql } from "drizzle-orm";
 
 import { ownedBy, readableFor, scopedRead } from "../content/scope";
@@ -20,6 +20,7 @@ import { ensureLearner, withLearnerLock } from "./learner";
 import { assertReadableConcepts, ensureEntry, readModel, writeModel } from "./mastery";
 import { bytewise } from "../sql-order";
 
+import { inTransaction } from "../db";
 /**
  * `learn/state/reviews.json` as the `review` table.
  *
@@ -130,7 +131,7 @@ const CARD_SET = {
   due: sql`excluded.due`,
   lastReviewed: sql`excluded.last_reviewed`,
   leech: sql`excluded.leech`,
-  updatedAt: sql`now()`,
+  updatedAt: sql`cast(unixepoch('subsec') * 1000 as integer)`,
 };
 
 /** Write one card. What `observe` and `review grade` actually need. */
@@ -158,7 +159,7 @@ export async function writeReviews(
 ): Promise<Reviews> {
   const cards = Object.values(reviews.cards);
   await ensureLearner(db, learnerId);
-  await db.transaction(async (tx) => {
+  await inTransaction(db, async (tx) => {
     if (cards.length > 0) {
       await tx
         .insert(review)

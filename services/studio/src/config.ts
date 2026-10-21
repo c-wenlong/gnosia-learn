@@ -6,7 +6,7 @@
  * than inline so the first ten real jobs can move them without a code read.
  */
 
-import { LOCAL_LEARNER_ID } from "@self-learn/schema/shared";
+import { LOCAL_LEARNER_ID } from "@gnosia/schema/shared";
 
 function integer(name: string, fallback: number, min: number, max: number): number {
   const raw = process.env[name]?.trim();
@@ -87,6 +87,12 @@ export const RUNNER_NAME = "studio-diagrams";
 
 /** The `claude` binary. Overridable the way manimkc's `MANIMKC_CLAUDE_BIN` is. */
 export const CLAUDE_BIN = process.env.STUDIO_CLAUDE_BIN?.trim() || "claude";
+
+/** The `qwen` binary (Qwen Code), the BYOK harness. Overridable like `STUDIO_CLAUDE_BIN`. */
+export const QWEN_BIN = process.env.STUDIO_QWEN_BIN?.trim() || "qwen";
+
+/** The `codex` binary (Codex CLI), the OpenAI harness. Overridable like `STUDIO_CLAUDE_BIN`. */
+export const CODEX_BIN = process.env.STUDIO_CODEX_BIN?.trim() || "codex";
 
 /**
  * Where the spawned agent's credential comes from: `login` or `env`.

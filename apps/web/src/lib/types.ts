@@ -1,5 +1,5 @@
 /**
- * Course content types come from `@self-learn/content`, which is also what
+ * Course content types come from `@gnosia/content`, which is also what
  * parses `content/`. They are re-exported here so every `@/lib/types` import
  * keeps working and there is still one place to look for "what shape is a
  * Course" — but the declaration lives with the parser, because a type the
@@ -16,10 +16,10 @@ export type {
   TagId,
   TagMeta,
   Topic,
-} from "@self-learn/content";
+} from "@gnosia/content";
 
 /**
- * The learner-state shapes are declared in `@self-learn/schema/shared` and
+ * The learner-state shapes are declared in `@gnosia/schema/shared` and
  * re-exported here.
  *
  * They used to be written out below, when learner state was a localStorage
@@ -39,8 +39,8 @@ export type {
   ThemeMode,
   TopicKnowledge,
   UserResource,
-} from "@self-learn/schema/shared";
-export { emptyLearnerState, LEGACY_STORAGE_KEY } from "@self-learn/schema/shared";
+} from "@gnosia/schema/shared";
+export { emptyLearnerState, LEGACY_STORAGE_KEY } from "@gnosia/schema/shared";
 
 export interface ProgressCounts {
   completed: number;

@@ -6,14 +6,14 @@ import {
   indexRun,
   mirror,
   topic,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { eq, isNull, sql } from "drizzle-orm";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { loadCourses } from "@self-learn/content";
+import { loadCourses } from "@gnosia/content";
 
 import { runDoctor } from "../src/commands/doctor";
 import { runExport } from "../src/commands/export";
@@ -90,9 +90,7 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
     // CLI takes. Pointing it at the scratch database exercises that path
     // rather than a test-only one.
     previousUrl = process.env["DATABASE_URL"];
-    const url = new URL(process.env["DATABASE_URL"] ?? "postgres://localhost:5432/self_learn");
-    url.pathname = `/${scratch.name}`;
-    process.env["DATABASE_URL"] = url.toString();
+    process.env["DATABASE_URL"] = scratch.url;
     previousManimkc = process.env["MANIMKC_ROOT"];
     noManimkc = await mkdtemp(path.join(tmpdir(), "catalog-no-manimkc-"));
     process.env["MANIMKC_ROOT"] = noManimkc;
@@ -110,27 +108,29 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
   });
 
   describe("import", () => {
-    it("skips the manimkc, remotionkc and revideokc sources with a reason, since there is no CLI to run", async () => {
+    it("skips the manimkc, remotionkc, revideokc and blenderkc sources with a reason, since there is no CLI to run", async () => {
       const result = await importSeed();
       const ran = result.sources.map((s) => s.source);
       // `mirrors` reads the same CLI out of the same checkout, so it is
       // absent for exactly the same reason `manimkc` is and never on its own.
       expect(ran).not.toContain("manimkc");
       expect(ran).not.toContain("mirrors");
-      // remotionkc's and revideokc's roots are directories that do not exist
-      // (vitest.setup.ts), so each is left out the same way, and says which
-      // submodule is missing.
+      // remotionkc's, revideokc's and blenderkc's roots are directories that
+      // do not exist (vitest.setup.ts), so each is left out the same way, and
+      // says which submodule is missing.
       expect(ran).not.toContain("remotionkc");
       expect(ran).not.toContain("revideokc");
+      expect(ran).not.toContain("blenderkc");
       expect(result.skipped).toEqual([
         { source: "manimkc", reason: expect.stringContaining("never been indexed") },
         { source: "remotionkc", reason: "the remotionkc submodule is not initialised, and it has never been indexed here" },
         { source: "revideokc", reason: "the revideokc submodule is not initialised, and it has never been indexed here" },
+        { source: "blenderkc", reason: "the blenderkc submodule is not initialised, and it has never been indexed here" },
         { source: "mirrors", reason: expect.stringContaining("never been indexed") },
       ]);
     });
 
-    it("refuses --only manimkc, mirrors, remotionkc or revideokc when its CLI is not there", async () => {
+    it("refuses --only manimkc, mirrors, remotionkc, revideokc or blenderkc when its CLI is not there", async () => {
       // Asked for explicitly, so dropping it silently would answer a different
       // question than the one put to it.
       await expect(runImportCommand({ dir: SEED, only: ["manimkc"] })).rejects.toThrow(
@@ -145,11 +145,14 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
       await expect(runImportCommand({ dir: SEED, only: ["revideokc"] })).rejects.toThrow(
         /the revideokc submodule is not initialised, so `revideokc topics --json` cannot run\. Run `git submodule update --init tools\/revideokc`, or set REVIDEOKC_ROOT/,
       );
+      await expect(runImportCommand({ dir: SEED, only: ["blenderkc"] })).rejects.toThrow(
+        /the blenderkc submodule is not initialised, so `blenderkc topics --json` cannot run\. Run `git submodule update --init tools\/blenderkc`, or set BLENDERKC_ROOT/,
+      );
     });
 
     it("holds every other count the seed has", async () => {
       const count = async (table: string) =>
-        (await scratch.db.execute<{ n: number }>(sql`select count(*)::int as n from ${sql.identifier(table)}`)).rows[0]?.n;
+        (await scratch.db.execute<{ n: number }>(sql`select count(*) as n from ${sql.identifier(table)}`)).rows[0]?.n;
       expect({
         tags: await count("tag"),
         items: await count("curriculum_item"),
@@ -188,7 +191,7 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
 
     it("gives every module a topic, and every curriculum item its module's", async () => {
       const { rows } = await scratch.db.execute<{ n: number }>(sql`
-        select count(*)::int as n from collection c
+        select count(*) as n from collection c
          where c.kind = 'module'
            and not exists (
              select 1 from collection_item ci
@@ -198,7 +201,7 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
 
       const items = await scratch.db.select().from(curriculumItem);
       const untagged = await scratch.db.execute<{ n: number }>(sql`
-        select count(*)::int as n from curriculum_item ci
+        select count(*) as n from curriculum_item ci
          where not exists (
            select 1 from curriculum_item_topic cit where cit.curriculum_item_id = ci.id)
       `);
@@ -295,16 +298,13 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
     });
 
     it("reports pending migrations instead of failing on a table that does not exist yet", async () => {
-      // `index_run` arrives in 0002, so a database stopped at 0000 or 0001 has
-      // a non-null head and no such table. Counting there used to throw
-      // "relation does not exist" rather than saying the obvious thing.
+      // A database one migration behind has a non-null head and a pending
+      // entry: status must report both rather than throw.
       const partial = await createScratchDatabase();
       const saved = process.env["DATABASE_URL"];
       try {
-        await applyMigrations(partial.db, { folder: await partialMigrations() });
-        const url = new URL(saved ?? "postgres://localhost:5432/self_learn");
-        url.pathname = `/${partial.name}`;
-        process.env["DATABASE_URL"] = url.toString();
+        await applyMigrations(partial.db, { folder: await partialMigrations(1) });
+        process.env["DATABASE_URL"] = partial.url;
 
         const status = await runStatus();
         expect(status.migrations.head).not.toBeNull();
@@ -457,7 +457,7 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
     // import (D12), kept for the learner rows under them, on no page. Set
     // directly here and put back, so the cases above see the tree as it is.
     const archive = async (on: boolean) => {
-      const at = on ? sql`now()` : sql`null`;
+      const at = on ? sql`cast(unixepoch('subsec') * 1000 as integer)` : sql`null`;
       await scratch.db.execute(sql`update curriculum_item set archived_at = ${at} where id = 'cp4284-m3-t1'`);
       await scratch.db.execute(sql`update collection set archived_at = ${at} where id = 'cp4284-m1'`);
       await scratch.db.execute(sql`update curriculum_item set archived_at = ${at} where collection_id = 'cp4284-m1'`);
@@ -519,7 +519,7 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
     it("keeps a live course whose items are all archived in the coverage, at zero", async () => {
       const courses = (await runStatus()).coverage.map((c) => c.course);
       await scratch.db.execute(
-        sql`update curriculum_item set archived_at = now()
+        sql`update curriculum_item set archived_at = cast(unixepoch('subsec') * 1000 as integer)
             where collection_id in (select id from collection where parent_id = 'cp4284')`,
       );
       try {
@@ -585,9 +585,7 @@ describe.skipIf(!reachable.ok)("mirror coverage", () => {
   beforeAll(async () => {
     scratch = await migratedScratchDatabase();
     previousUrl = process.env["DATABASE_URL"];
-    const url = new URL(previousUrl ?? "postgres://localhost:5432/self_learn");
-    url.pathname = `/${scratch.name}`;
-    process.env["DATABASE_URL"] = url.toString();
+    process.env["DATABASE_URL"] = scratch.url;
   }, 60_000);
 
   afterAll(async () => {
@@ -686,7 +684,7 @@ describe.skipIf(!reachable.ok)("mirror coverage", () => {
       id: "note:learn/concepts/x/a.md",
       kind: "note",
       path: "learn/concepts/x/a.md",
-      sourceRepo: "self-learn",
+      sourceRepo: "gnosia",
     });
     const result = (await runShow("note:learn/concepts/x/a.md")) as ShowAsset;
     expect(result.mirrors).toEqual([]);

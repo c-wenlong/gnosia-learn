@@ -1,4 +1,4 @@
-import { appendEvent, assetsByIds, StateError } from "@self-learn/catalog/state";
+import { appendEvent, assetsByIds, StateError } from "@gnosia/catalog/state";
 
 import { BadRequest, handler } from "@/lib/learner-api";
 import { ownerScope } from "@/lib/owner";

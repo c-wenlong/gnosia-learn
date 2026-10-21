@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 
 import { PAGE_ENTER } from "@/components/PageLoading";
+import { ModelSelection } from "@/components/settings/ModelSelection";
 import { Providers } from "@/components/settings/Providers";
-import { DataSettings, GeneralSettings, ProfileSettings, TutorSettings } from "@/components/settings/SettingsForm";
+import { DataSettings, GeneralSettings, ProfileSettings } from "@/components/settings/SettingsForm";
 import { SettingsTabs } from "@/components/settings/SettingsTabs";
 import { ShortcutsCard } from "@/components/settings/ShortcutsCard";
 import { cx, PAGE_TITLE } from "@/components/ui/classes";
@@ -11,6 +12,7 @@ import { getAllTopicIds, getCourses } from "@/data/courses";
 import { currentOwner } from "@/lib/owner";
 import { loadProviderKeys } from "@/lib/provider-keys/settings";
 import { loadSettings } from "@/lib/settings";
+import { TUTOR_TO_BYOK } from "@/lib/byok-providers";
 import { providersView } from "@/lib/providers/view";
 import { isMacUserAgent } from "@/lib/shortcuts";
 import { loadTutorModels } from "@/lib/tutor-models/settings";
@@ -27,11 +29,11 @@ export const metadata: Metadata = { title: "Settings" };
  * parameters, which providers have a key); the cards in `SettingsForm.tsx` write through
  * `/api/learner/preference` one field at a time.
  *
- * The Providers card (docs/TUTOR-MODELS.md, T12) is the owner's model
- * providers: each one's key (docs/BYOK.md, saved through
- * `/api/learner/provider-key`, handed to the card as its last four characters
- * and date, never the key) and its models, the chain that replaces the
- * built-in defaults once it holds a model.
+ * The Models tab is two cards: Providers lists every provider with its
+ * key's state (docs/BYOK.md, saved through `/api/learner/provider-key`,
+ * handed to the card as its last four characters and date, never the key),
+ * and Model selection picks the model the tutor calls and the provider
+ * Studio chats run on.
  *
  * The cards are grouped into tabs (General, Profile, Tutor, Data) so the page
  * is one short group at a time; `?tab=` opens one, read by `SettingsTabs`.
@@ -44,18 +46,8 @@ export default async function SettingsPage() {
   const owner = await currentOwner();
   const [settings, courses, keys, request] = await Promise.all([loadSettings(), getCourses(), loadProviderKeys(owner), headers()]);
   const mac = isMacUserAgent(request.get("user-agent"));
-  const models = await loadTutorModels(owner, keys);
-  // Ids rather than labels: "NVIDIA NIM → Google Gemini → OpenRouter" does
-  // not fit the 300px box. Each says whose key it is. With a model chain, the
-  // chain's entries that have a key, by model id, in the order tried.
-  const keyed = new Map(models.providers.map((p) => [p.id, p]));
-  const providers =
-    models.chain.length > 0
-      ? models.chain.flatMap((entry) => {
-          const provider = keyed.get(entry.provider);
-          return provider?.key ? [{ id: entry.model, label: `${provider.label} ${entry.model}`, source: provider.key }] : [];
-        })
-      : keys.order.map((p) => ({ id: p.id, label: p.label, source: p.source }));
+  const models = await loadTutorModels(owner);
+  const view = providersView(keys, models.chain, models.reachable);
   return (
     <div data-layout="app" className={cx("flex max-w-[1084px] flex-col gap-4", PAGE_ENTER)}>
       <h1 className={PAGE_TITLE}>Settings</h1>
@@ -74,13 +66,23 @@ export default async function SettingsPage() {
           },
           { id: "profile", label: "Profile", glyph: "person", content: <ProfileSettings /> },
           {
-            id: "tutor",
-            label: "Tutor",
-            glyph: "chat",
+            id: "models",
+            label: "Models",
+            glyph: "sparkle",
             content: (
               <>
-                <TutorSettings settings={settings} providers={providers} chain={models.chain.length > 0} />
-                <Providers view={providersView(keys, models.chain, models.reachable)} />
+                <Providers view={view} />
+                <ModelSelection
+                  view={view}
+                  chain={models.chain}
+                  tutorStyle={settings.tutorStyle}
+                  savedForTutor={keys.rows
+                    .filter((row) => row.saved?.readable === true)
+                    .flatMap((row) => {
+                      const preset = TUTOR_TO_BYOK[row.id];
+                      return preset === undefined ? [] : [preset];
+                    })}
+                />
               </>
             ),
           },

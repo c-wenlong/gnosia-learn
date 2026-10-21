@@ -1,4 +1,4 @@
-import { checkModelId, looksLikeKey } from "@self-learn/schema/shared";
+import { checkModelId, looksLikeKey } from "@gnosia/schema/shared";
 import { describe, expect, it } from "vitest";
 
 /**

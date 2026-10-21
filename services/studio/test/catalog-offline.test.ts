@@ -1,10 +1,8 @@
-import { rm, stat } from "node:fs/promises";
+import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-
-import { deadPort, refusingPostgres, type RefusingPostgres } from "../../catalog/test/fake-postgres";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { validateBrief, type ValidBrief } from "../src/brief";
 import { absolute, jobDir, targetPath, targetSvgPath } from "../src/paths";
 import { allSettled, until } from "./wait";
@@ -23,9 +21,10 @@ import { testVocabulary } from "./vocabulary";
  * agent, the gate, the before-screenshot and the review are, because none of
  * them is what is under test and the agent costs money.
  *
- * No Postgres is needed. A dead port is nothing listening, and the refusal
- * comes from a server that answers the startup message the way Postgres does
- * when it will not let a client in.
+ * No database server is needed. A file whose parent cannot be a directory is
+ * "nothing listening" — `open` never reaches SQLite — and the refusal comes
+ * from a file that opens and is not a database, the same shape a Postgres
+ * server answering 3D000 had.
  */
 
 const gateMock = vi.hoisted(() => ({ runGate: vi.fn(), narrate: vi.fn(() => "a step") }));
@@ -135,15 +134,25 @@ afterEach(async () => {
 });
 
 describe("a catalog with nothing listening", () => {
+  // A regular file where the database's parent directory should be: mkdir
+  // cannot make it, so no open ever happens — what a refused TCP connection
+  // was on Postgres.
+  let dir: string;
   beforeEach(async () => {
-    vi.stubEnv("DATABASE_URL", `postgres://localhost:${await deadPort()}/self_learn`);
+    dir = await mkdtemp(path.join(tmpdir(), "studio-offline-"));
+    const blocker = path.join(dir, "blocking");
+    await writeFile(blocker, "a file, not a directory");
+    vi.stubEnv("DATABASE_URL", path.join(blocker, "catalog.db"));
+  });
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
   });
 
   it("is offline, and says why", async () => {
     const result = await status();
     expect(result.ok).toBe(false);
     expect(result.offline).toBe(true);
-    expect(result.error).toContain("database unreachable: connection refused");
+    expect(result.error).toContain("database unreachable: a path component is not a directory");
   });
 
   it("degrades enqueue: the job is kept, and it runs", async () => {
@@ -152,7 +161,7 @@ describe("a catalog with nothing listening", () => {
     expect(created).toBe(true);
     expect(record.state).toBe("queued");
     expect(await stat(jobDir(record.id)).then(() => true)).toBe(true);
-    expect(store.get(record.id)?.catalogErrors.join(" ")).toContain("connection refused");
+    expect(store.get(record.id)?.catalogErrors.join(" ")).toContain("a path component is not a directory");
     // Session start and the claim are two more real CLI calls before the
     // agent, each a cold `tsx` start, so the budget is theirs and not a sleep.
     await until(
@@ -165,15 +174,17 @@ describe("a catalog with nothing listening", () => {
 });
 
 describe("a catalog whose database answers and refuses", () => {
-  let server: RefusingPostgres;
-  beforeAll(async () => {
-    server = await refusingPostgres("3D000", 'database "does_not_exist" does not exist');
+  // A file that opens but is not a database: `open` answered, the first read
+  // says no — the same shape a Postgres answering 3D000 had, and just as much
+  // a hard stop rather than "offline".
+  let dir: string;
+  beforeEach(async () => {
+    dir = await mkdtemp(path.join(tmpdir(), "studio-offline-notdb-"));
+    await writeFile(path.join(dir, "catalog.db"), "this is not a sqlite database\n");
+    vi.stubEnv("DATABASE_URL", path.join(dir, "catalog.db"));
   });
-  afterAll(async () => {
-    await server.close();
-  });
-  beforeEach(() => {
-    vi.stubEnv("DATABASE_URL", `postgres://127.0.0.1:${server.port}/does_not_exist`);
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
   });
 
   it("refuses the job and forgets it, rather than running lease-free", async () => {

@@ -6,7 +6,7 @@ import {
   reviewQueue,
   type ConceptSummary,
   type ReviewQueueItem,
-} from "@self-learn/catalog/state";
+} from "@gnosia/catalog/state";
 
 import type { ConceptCheck } from "@/lib/concept-note-core";
 import { readConceptNote } from "@/lib/concept-note";

@@ -5,8 +5,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { fsStore, key as blobKey, type BlobStore } from "@self-learn/blob";
-import { blobObject, collection, learner, ownerScope } from "@self-learn/schema";
+import { fsStore, key as blobKey, type BlobStore } from "@gnosia/blob";
+import { blobObject, collection, learner, ownerScope } from "@gnosia/schema";
 
 import {
   migratedScratchDatabase,
@@ -25,11 +25,11 @@ vi.mock("@/lib/auth/session", async (importOriginal) => ({
 // The `fs` store the catalog opens, with `signedUrl` answering a URL when a
 // test asks for the cloud store's path (a redirect, never a stream).
 vi.mock("@/lib/blob-store", async () => {
-  const { fsStore: open } = await import("@self-learn/blob");
+  const { fsStore: open } = await import("@gnosia/blob");
   return {
     SIGNED_URL_TTL_SECONDS: 3600,
     assetBlobStore: (): BlobStore => {
-      const inner = open(path.join(process.env.SELF_LEARN_HOME ?? "", "blobs"));
+      const inner = open(path.join(process.env.GNOSIA_HOME ?? "", "blobs"));
       return {
         ...inner,
         provider: inner.provider,
@@ -119,11 +119,11 @@ describe.skipIf(!reachable.ok)("the course cover route", () => {
   });
 
   beforeAll(async () => {
-    for (const key of ["DATABASE_URL", "SELF_LEARN_HOME"]) saved[key] = process.env[key];
+    for (const key of ["DATABASE_URL", "GNOSIA_HOME"]) saved[key] = process.env[key];
     scratch = await migratedScratchDatabase();
     home = await mkdtemp(path.join(tmpdir(), "course-cover-route-"));
     process.env.DATABASE_URL = scratch.url;
-    process.env.SELF_LEARN_HOME = home;
+    process.env.GNOSIA_HOME = home;
 
     await scratch.db.insert(learner).values({ id: "other" }).onConflictDoNothing();
     await scratch.db.insert(collection).values([

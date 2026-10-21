@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { BLOB_KEY_PATTERN } from "@self-learn/schema";
+import { BLOB_KEY_PATTERN } from "@gnosia/schema";
 
 import { BlobKeyError, isKey, key, parseKey } from "../src/index";
 

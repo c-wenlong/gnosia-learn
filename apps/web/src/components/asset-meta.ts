@@ -16,7 +16,7 @@
  */
 
 /**
- * The asset as `@self-learn/catalog/state` hands it over. Restated here rather
+ * The asset as `@gnosia/catalog/state` hands it over. Restated here rather
  * than imported: a `"use client"` module that reaches the catalog would drag a
  * Postgres driver into the browser bundle, and the shapes a component renders
  * are its own contract anyway. `title` is nullable and usually exactly one of
@@ -68,6 +68,9 @@ const KINDS: Record<string, { label: string; family: Family }> = {
   link: { label: "Link", family: "link" },
   // A still cut from a video by `catalog asset upload`, a companion of it.
   poster: { label: "Poster", family: "diagram" },
+  // A video's pages as a document, made with the poster; opens in the
+  // browser's own viewer, not as words.
+  pdf: { label: "PDF", family: "video" },
 };
 
 /** `diagram_source` reads as "Diagram source"; an unknown kind reads as itself. */
@@ -136,6 +139,7 @@ const SOURCE_LABEL: Record<string, string> = {
   manimkc: "manim",
   remotionkc: "remotion",
   revideokc: "revideo",
+  blenderkc: "blender",
   tldrawkc: "tldraw",
 };
 

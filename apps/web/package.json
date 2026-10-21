@@ -1,5 +1,5 @@
 {
-  "name": "@self-learn/web",
+  "name": "@gnosia/web",
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
@@ -10,7 +10,7 @@
     "start": "next start",
     "typecheck": "next typegen && tsc --noEmit -p tsconfig.typecheck.json"
   },
-  "//dependencies": "@self-learn/catalog and @self-learn/schema were resolved through workspace hoisting before this file existed. They are declared now, because a workspace that imports a package without depending on it breaks the moment the hoist changes.",
+  "//dependencies": "@gnosia/catalog and @gnosia/schema were resolved through workspace hoisting before this file existed. They are declared now, because a workspace that imports a package without depending on it breaks the moment the hoist changes.",
   "dependencies": {
     "@dagrejs/dagre": "^3.1.1",
     "@lexical/clipboard": "0.52.0",
@@ -18,10 +18,10 @@
     "@lexical/plain-text": "0.52.0",
     "@lexical/react": "0.52.0",
     "@lexical/utils": "0.52.0",
-    "@self-learn/blob": "*",
-    "@self-learn/catalog": "*",
-    "@self-learn/content": "*",
-    "@self-learn/schema": "*",
+    "@gnosia/blob": "*",
+    "@gnosia/catalog": "*",
+    "@gnosia/content": "*",
+    "@gnosia/schema": "*",
     "@tailwindcss/typography": "^0.5.20",
     "katex": "0.18.9",
     "lexical": "0.52.0",

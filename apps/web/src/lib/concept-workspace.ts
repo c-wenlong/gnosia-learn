@@ -1,7 +1,7 @@
 import "server-only";
 
 import { connection } from "next/server";
-import { assetsForConcept, readEvents, readReviews } from "@self-learn/catalog/state";
+import { assetsForConcept, readEvents, readReviews } from "@gnosia/catalog/state";
 
 import { getCourses } from "@/data/courses";
 import { findTopicAcrossCourses } from "@/lib/agent/lookup";

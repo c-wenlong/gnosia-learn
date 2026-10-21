@@ -625,7 +625,7 @@ handler as every other route. Every response carries a `note`.
 
 | Method | Path | Request | Response |
 | --- | --- | --- | --- |
-| `POST` | `/api/drafts` | `{ source?: "<slug>", idempotencyKey, model? }` | `201 { draftId, state: "open", note }`. With `source`, the runner runs `inspect` first, so this can take a Chromium launch. *Since D90:* `model` is the composer picker's pick for the conversation, a name `claude --model` takes, or `"default"`/null for the runner's own resolution |
+| `POST` | `/api/drafts` | `{ source?: "<slug>", idempotencyKey, model?, harness? }` | `201 { draftId, state: "open", note }`. With `source`, the runner runs `inspect` first, so this can take a Chromium launch. *Since D90:* `model` is the composer picker's pick for the conversation, a name `claude --model` takes, or `"default"`/null for the runner's own resolution. *Since D91:* `harness` is the pane picker's pick, `"claude"`, `"byok"` or `"codex"`; `byok` without a stored key is `400 { reason: "byok-unconfigured" }`, `codex` without a login is `400 { reason: "codex-not-signed-in" }`. *Since D92:* `model` on a codex draft names a `codex -m` slug (the picker's tiers), not a claude name |
 | `GET` | `/api/drafts` | `?state=&limit=&nonEmpty=&q=`; `state` may be a comma list (`open,briefed`); `nonEmpty=1` leaves out drafts with no person message (`turns` 0), before the limit is applied; *since D87:* `q` (at most 200 characters, else 400) keeps the drafts whose name, title, first message or concept title contains it, in any case, also before the limit and the `before` cursor | `{ drafts: [{ draftId, kind, state, title, name, firstMessage, source, turns, costUsd, updated, jobId }] }`. `name` is the owner's name for the conversation (see `PUT .../name`), or null. `firstMessage` is the person's first message, whitespace collapsed and cut to 120 characters, or null before one |
 | `GET` | `/api/drafts/{id}` | none | `{ draftId, state, source, sourceChanged, sourceRevision, title, name, model, transcript: [{ seq, role, text, at, brief?, edit? }], brief, briefSeq, jobId, turns, turnCap, costUsd, costSource, inFlight, error, note }`. `sourceChanged` is C11: the extend target's checkout no longer has the document hash, or the checkout revision, the EXTENDING block was built from; false when unknown. `briefSeq` is the seq of the transcript entry carrying `brief` (a planner reply, or the `studio` note of an edit, which has `edit: true`), null with no brief |
 | `POST` | `/api/drafts/{id}/messages` | `{ text }`, no length cap of its own; a body over 1 MB is refused with 413 | `202 { draftId, seq, note }`. 409 turn in flight or draft `drawing`; 429 daily cap, with the existing refusal body; 422 turn cap |
@@ -1626,7 +1626,7 @@ and each kind's `passed` in health's `agent` block. The offered list is
 `/api/settings/agent` and `/api/health`'s `agent.models` all report, so a
 stale web build falls back to its own copy and never a different one. Only
 the Claude Code harness has a model to pass; other runners keep this inert
-until one exists.
+until one exists. D91 names the first one that does.
 
 **Why:** the model is a choice a person makes per piece of work ("draft this
 hard one on Opus"), not a site policy; the panel's row stays the default a
@@ -1638,6 +1638,155 @@ invariant true (`modelOf` keeps whatever a brief already held; a pick adds
 none) and lets a changed pick reach a brief already proposed without editing
 it. A rename's rule applies to it too: it goes through the write chain so
 `drain` waits, and it leaves `updated` alone so a pick moves nothing.
+
+### D91. A conversation carries the harness its turns run on
+
+**Verdict (2026-11-26):** the pane header holds a harness picker at its left,
+the way Manus's top bar does, with the model picker keeping its place under
+the composer, and the new-chat view carries the same picker in the same
+corner so the pick can be made before the draft exists. Three rows:
+**Claude** (the default, absent on the record), **Codex** — OpenAI's `codex
+exec`, on the owner's `codex login` — and **BYOK**, Qwen Code (`qwen`) on the
+key `byok.json` holds, chosen because its headless surface replicates
+`claude -p`'s flag for flag, stream-json shape included. A
+turn on `byok` spawns `qwen` rather than `claude`: no `-p` (piped stdin is
+the prompt and headless both), `--output-format stream-json
+--include-partial-messages`, `--model` from the stored config rather than the
+conversation's pick (D90's names are claude's), `--max-session-turns` for
+`--max-turns`, `--approval-mode default` for `--permission-prompts none`, and
+`--session-id`/`--resume` on the same minted `plannerSessionId` (a UUID, as
+`qwen` requires). The seals stay flags and env, measured on 0.25.0:
+`--safe-mode` (no hooks, extensions, skills, MCP servers or context files —
+`--setting-sources ""` and `--strict-mcp-config`'s shape), `--exclude-tools`
+naming every built-in so the init event's `tools` is `[]`, `QWEN_SYSTEM_MD`
+carrying the same `planner-system.md` file (honored under `--safe-mode`),
+and the spawn's `HOME` pointed at the draft's `tmp` so the owner's own
+`~/.qwen` is never read and the session it writes is where the next turn's
+resume looks. Jobs a byok draft draws still run on `claude`: the job spawn's
+hooks and Bash guard are a claude surface.
+
+`byok.json` (`$STUDIO_HOME`, mode 0600) is what `PUT /api/settings/byok`
+writes and the picker's Connect dialog sends: `{ provider, apiKey, model }`,
+the provider naming a fixed endpoint preset (`BYOK_PROVIDERS`), so a key
+cannot be aimed at a host the dialog never offered. `GET` answers status with
+the key's last four, never the key. A draft made on `byok` before the key is
+stored is refused at creation; one whose config is later cleared reports the
+turn the way a missing binary does.
+
+A turn on `codex` spawns `codex exec --json` rather than `claude`: the prompt
+on stdin (`-`, never argv), the draft's `planner-system.md` as
+`model_instructions_file`, and `thread.started`'s `thread_id` as the session
+id — codex mints its own, so the record's `plannerSessionId` is a placeholder
+until the first init reports the real one, and `exec resume <id>` continues
+it. Its NDJSON is a shape of its own (`thread.*`/`item.*`/`turn.*`), which
+`codexEvent` translates into the events `PlannerRun` knows. The seals are
+measured on codex-cli 0.161.0: a per-draft `CODEX_HOME` holding only a
+symlink to the real `auth.json` (the login shared, everything else — the
+owner's `config.toml`, `AGENTS.md`, skills and plugins — sealed out), `HOME`
+sealed to the draft's `tmp` beside it, and config flags: `read-only`
+sandbox, `approval_policy="never"`, `project_doc_max_bytes=0` (no
+`AGENTS.md`, the repo's own included) and `mcp_servers={}`. A pick on `codex`
+with no login file and no `OPENAI_API_KEY` is refused at pick time
+(`codex-not-signed-in`), as BYOK's missing key is. Codex reports token usage
+but no dollar figure, so a codex turn has no cost entry the way a claude one
+does.
+
+The pick is `harness` on `POST /api/drafts` — the remembered last pick, which
+is how a BYOK conversation begins before its pane exists — and
+`PUT /api/drafts/{id}/harness` while no turn has run: a harness carries its
+own session store, so a spoken conversation keeps the one it started on (409
+`harness-locked`), and a change mints a new `plannerSessionId`.
+
+**Why:** the model picker changes which Claude answers; the harness picker
+changes which agent does. Before the first turn is the honest line for moving
+it: a reply the earlier harness wrote is not a session the new one can resume
+without inventing continuity, and "start a new conversation" is the rule a
+person already knows from the model picker's resume semantics.
+
+### D92. The model pick is a tier the harness names
+
+**Verdict (2026-11-26):** the conversation's model menu is three rows per
+harness, the way Manus offers Manus 2.0 Max / 2.0 / 2.0 Lite rather than a
+model list — **Lite**, **Default** and **Max**, each a name the spawn takes,
+so the pick is still a `model` write and nothing about the record changes.
+On `claude` they are `sonnet` / the runner's own resolution / `fable`; on
+`codex`, `gpt-6-luna` / the login's model / `gpt-6-astra`, which `codex
+exec -m` takes on a start and on a `resume` alike (verified on 0.161.0). A
+name a stored pick holds that no tier covers is appended as itself. BYOK has
+no menu: its model is `byok.json`'s, and the row says so.
+
+**Why:** a person picks "how much agent" a task wants, not a model version;
+the version is the tier's to carry and the runner's to retarget later. Per
+harness because a name only means something on its own CLI — there is no
+cross-harness "opus".
+
+### D93. BYOK's model field lists the provider's real models
+
+**Verdict (2026-10-09):** the Connect dialog's fields run Provider, key,
+Model: the model field is a combobox (`ui/Combobox`, the kit's text-plus-
+suggestions) the provider's own `/models` fills, fetched on the key the field
+holds — or the stored one when left blank — through
+`POST /api/settings/byok/models`, so the pick is the provider's real ids
+filtered as they are typed. Free text still stands, since a model the list
+does not name yet is still a valid `model`. The fetch is debounced through
+typing pauses; a refusal is said under the field and blocks nothing.
+
+**Why:** a model name typed by hand fails at spawn, a hundred turns later,
+the moment it is asked for — the list turns the failure into a pick. A POST
+with the key in the body rather than a GET with it in the path, so the key
+never sits in a URL. The provider table's `modelsUrl` and `auth` carry the
+per-provider endpoint and header, so a wrong one cannot be aimed at a host
+the dialog never offered.
+
+### D94. BYOK is a set of providers, each with tier models
+
+**Verdict (2026-10-09):** `byok.json` is a set — `{ active, providers:
+{ name: { apiKey, models: { default?, lite?, max? } } } }` — with a v1
+`{ provider, apiKey, model }` file read as its one provider on the Default
+tier and rewritten on the next save. Settings' Tutor tab is Models now, and
+the BYOK card there shares the dialog's configuration: a provider dropdown
+of the connected ones plus "+ Add provider", a Lite/Default/Max tab set
+holding one `/models`-fed combobox each, and the same writes the picker's
+dialog sends — `PUT /api/settings/byok` to connect (which also makes the
+provider active), `PUT /api/settings/byok/active` to switch, `PUT
+/api/settings/byok/models` to save a provider's tiers. A byok
+conversation's model pick is a tier, `lite` or `max` with absent meaning
+Default — the record never holds a provider model id, so a pick survives a
+provider switch and `setHarness`'s model reset still applies; the spawn
+resolves it through the active provider at turn time, an unset tier running
+Default's model. The chat row offers the three tiers; one the provider has
+no model for is shown greyed out, not pickable. Since the pick is no longer
+a claude name either, a byok draft's draw jobs inherit nothing, as codex's
+do.
+
+**Why:** "Lite" is a wish about how much model a turn wants, and which model
+that is changes with the provider — putting the names on the provider, not
+the conversation, keeps a pick meaningful when the provider underneath
+moves. The keys' home is Settings because a key is a credential, and
+credentials live where the other providers' already did; the dialog keeps a
+Connect affordance because a picker row is where the want starts.
+
+### D95. The provider key is one key in two stores
+
+**Verdict (2026-10-09):** the Settings Providers card and the BYOK harness
+share credentials — `/api/learner/provider-key` writes the sealed row and
+mirrors it to the runner's `byok.json` in the same request, Delete removes
+from both, and a tutor-model provider delete drops the BYOK entry when the
+key went with it. The tutor's `gemini` is BYOK's `google` (the tables name
+Google's OpenAI-compatible endpoint differently); `TUTOR_TO_BYOK` is the
+whole overlap. Each connected provider's row in the card holds its Studio
+tier picks under the expand arrow, a provider the runner has but the tutor
+does not gets a slim row of its own, and `POST
+/api/learner/provider-key/sync` pushes a saved key to a runner that missed
+it — a provider connected before the merge, or while the runner was down.
+The runner remains standalone: the web side writes the file, never reads
+anything back except status.
+
+**Why:** two "your keys" cards that each knew half of the same accounts was
+the setup a merged card fixes. The runner keeps its own copy because a
+spawn must not depend on the web app being up; a write-time mirror keeps
+them in step for everything the cards do, and the sync route is the
+self-heal for whatever they miss.
 
 ## Later: other kinds of asset
 

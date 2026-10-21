@@ -1,7 +1,7 @@
 import "server-only";
 
 import { NextResponse } from "next/server";
-import { isProviderName, PROVIDER_IDS, type ProviderName } from "@self-learn/schema/shared";
+import { isProviderName, PROVIDER_IDS, type ProviderName } from "@gnosia/schema/shared";
 
 import { enforceRateLimit, enforceSameOrigin, type RateLimitRule } from "@/lib/agent/guard";
 import { requestOwner } from "@/lib/learner-api";

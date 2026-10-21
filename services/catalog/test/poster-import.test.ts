@@ -4,17 +4,17 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 
-import { asset, assetDerivation, indexRun, LOCAL_LEARNER_ID, ownerScope } from "@self-learn/schema";
+import { asset, assetDerivation, indexRun, LOCAL_LEARNER_ID, ownerScope } from "@gnosia/schema";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { doctor } from "../src/commands/doctor";
-import { posterId, uploadAssets } from "../src/content/asset-upload";
+import { pdfId, posterId, uploadAssets } from "../src/content/asset-upload";
 import { openBlobStore } from "../src/content/blob";
 import { REPO_ROOT } from "../src/env";
 import { runIndex } from "../src/index/run";
 import { findFfmpeg } from "../src/poster/extract";
-import { videosWithStoredPoster } from "../src/state/blobs";
+import { videosWithStoredPdf, videosWithStoredPoster } from "../src/state/blobs";
 import { manimkcStandIn, seedWithManimkc } from "./manimkc-standin";
 import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 
@@ -38,16 +38,17 @@ const reachable = await probe();
 const run = promisify(execFile);
 const VIDEO = "manimkc:out/demo/one/one.mp4";
 const POSTER = posterId(VIDEO);
+const PDF = pdfId(VIDEO);
 const LOCAL = ownerScope(LOCAL_LEARNER_ID);
 /** The real ffmpeg on PATH, ignoring the suites' FFMPEG_PATH stand-in. */
 const realFfmpeg = await findFfmpeg({ PATH: process.env.PATH });
 
-const SAVED = { manimkc: process.env.MANIMKC_ROOT, home: process.env.SELF_LEARN_HOME };
+const SAVED = { manimkc: process.env.MANIMKC_ROOT, home: process.env.GNOSIA_HOME };
 
 /**
  * The seed with the manimkc stand-in, and the two variables pointed at this
  * suite's own: the stand-in's CLI is found through `MANIMKC_ROOT`, and each
- * scratch database needs a blob store of its own (`SELF_LEARN_HOME`), since a
+ * scratch database needs a blob store of its own (`GNOSIA_HOME`), since a
  * store belongs to the database that first wrote it.
  */
 async function fixture(prefix: string, video: (dir: string) => Promise<Buffer>) {
@@ -57,12 +58,12 @@ async function fixture(prefix: string, video: (dir: string) => Promise<Buffer>) 
   const manimkc = path.join(work, "manimkc");
   const { videoFile } = await manimkcStandIn(manimkc, await video(work));
   process.env.MANIMKC_ROOT = manimkc;
-  process.env.SELF_LEARN_HOME = path.join(work, "home");
+  process.env.GNOSIA_HOME = path.join(work, "home");
   return { work, tree, manimkc, videoFile };
 }
 
 function restore(): void {
-  for (const [key, value] of [["MANIMKC_ROOT", SAVED.manimkc], ["SELF_LEARN_HOME", SAVED.home]] as const) {
+  for (const [key, value] of [["MANIMKC_ROOT", SAVED.manimkc], ["GNOSIA_HOME", SAVED.home]] as const) {
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
   }
@@ -100,9 +101,12 @@ describe.skipIf(!reachable.ok || realFfmpeg === null)("catalog import with a rea
     expect(result.sources.find((s) => s.source === "manimkc")?.notes).toContain(
       "1 poster(s) cut and stored, 0 linked to their video again",
     );
+    expect(result.sources.find((s) => s.source === "manimkc")?.notes).toContain(
+      "1 PDF(s) made and stored, 0 linked to their video again",
+    );
     expect(await videosWithStoredPoster(scratch.db, [VIDEO], LOCAL)).toEqual(new Set([VIDEO]));
     const [poster] = await scratch.db.select().from(asset).where(eq(asset.id, POSTER));
-    expect(poster).toMatchObject({ kind: "poster", ownerId: LOCAL_LEARNER_ID, sourceRepo: "self-learn" });
+    expect(poster).toMatchObject({ kind: "poster", ownerId: LOCAL_LEARNER_ID, sourceRepo: "gnosia" });
     expect(poster?.blobKey).toMatch(/^local\/[0-9a-f]{64}\.jpg$/);
     const read = await openBlobStore().get(poster?.blobKey as string);
     const chunks: Buffer[] = [];
@@ -110,7 +114,19 @@ describe.skipIf(!reachable.ok || realFfmpeg === null)("catalog import with a rea
     const body = Buffer.concat(chunks);
     // A JPEG starts with SOI.
     expect([...body.subarray(0, 2)]).toEqual([0xff, 0xd8]);
-    expect((await doctor(scratch.db, "scratch")).posters.videosWithout).toEqual([]);
+    // And the same for the PDF: the one-second render is shorter than the
+    // silent cadence, so it is a document of one page at the midpoint.
+    expect(await videosWithStoredPdf(scratch.db, [VIDEO], LOCAL)).toEqual(new Set([VIDEO]));
+    const [pdf] = await scratch.db.select().from(asset).where(eq(asset.id, PDF));
+    expect(pdf).toMatchObject({ kind: "pdf", ownerId: LOCAL_LEARNER_ID, sourceRepo: "gnosia" });
+    expect(pdf?.blobKey).toMatch(/^local\/[0-9a-f]{64}\.pdf$/);
+    const pdfRead = await openBlobStore().get(pdf?.blobKey as string);
+    const pdfChunks: Buffer[] = [];
+    for await (const chunk of pdfRead.body) pdfChunks.push(chunk as Buffer);
+    expect(Buffer.concat(pdfChunks).subarray(0, 5).toString("latin1")).toBe("%PDF-");
+    const report = await doctor(scratch.db, "scratch");
+    expect(report.posters.videosWithout).toEqual([]);
+    expect(report.pdfs.videosWithout).toEqual([]);
   });
 });
 
@@ -120,8 +136,8 @@ describe.skipIf(!reachable.ok)("every video leaves catalog import with a poster"
   let tree: string;
   let manimkc: string;
   let videoFile: string;
-  const derivedFrom = async () =>
-    (await scratch.db.select().from(assetDerivation).where(eq(assetDerivation.assetId, POSTER))).map((d) => d.sourceAssetId);
+  const derivedFrom = async (id: string = POSTER) =>
+    (await scratch.db.select().from(assetDerivation).where(eq(assetDerivation.assetId, id))).map((d) => d.sourceAssetId);
   const posterRevisions = async () =>
     Number(
       (
@@ -151,12 +167,13 @@ describe.skipIf(!reachable.ok)("every video leaves catalog import with a poster"
 
   it("fails loudly, naming ffmpeg, when there is none to cut with, and writes the rest", async () => {
     await expect(importTree(null)).rejects.toThrow(
-      /1 manimkc video\(s\) have no poster \(manimkc:out\/demo\/one\/one\.mp4\): ffmpeg was not found; set FFMPEG_PATH or put ffmpeg on PATH\..*run the import again/,
+      /1 manimkc video\(s\) have no poster \(manimkc:out\/demo\/one\/one\.mp4\); 1 manimkc video\(s\) have no PDF \(manimkc:out\/demo\/one\/one\.mp4\): ffmpeg was not found; set FFMPEG_PATH or put ffmpeg on PATH\..*run the import again/,
     );
-    // The rows landed; the poster did not, and the doctor says so.
+    // The rows landed; the poster and PDF did not, and the doctor says so.
     expect((await scratch.db.select().from(asset).where(eq(asset.id, VIDEO))).length).toBe(1);
     const report = await doctor(scratch.db, "scratch");
     expect(report.posters.videosWithout).toEqual([{ id: VIDEO, sourceRepo: "manimkc" }]);
+    expect(report.pdfs.videosWithout).toEqual([{ id: VIDEO, sourceRepo: "manimkc" }]);
   });
 
   it("cuts what is missing on the next import with ffmpeg, and the doctor finds nothing", async () => {
@@ -164,28 +181,39 @@ describe.skipIf(!reachable.ok)("every video leaves catalog import with a poster"
     expect(result.sources.find((s) => s.source === "manimkc")?.notes).toContain(
       "1 poster(s) cut and stored, 0 linked to their video again",
     );
+    expect(result.sources.find((s) => s.source === "manimkc")?.notes).toContain(
+      "1 PDF(s) made and stored, 0 linked to their video again",
+    );
     expect(await derivedFrom()).toEqual([VIDEO]);
+    expect(await derivedFrom(PDF)).toEqual([VIDEO]);
     const report = await doctor(scratch.db, "scratch");
     expect(report.posters).toEqual({ videosWithout: [], unlinked: [] });
+    expect(report.pdfs).toEqual({ videosWithout: [], unlinked: [] });
     // And again: nothing to cut, nothing said.
     const again = await importTree();
     expect(again.sources.find((s) => s.source === "manimkc")?.notes.some((n) => n.includes("poster(s) cut"))).toBe(false);
+    expect(again.sources.find((s) => s.source === "manimkc")?.notes.some((n) => n.includes("PDF(s) made"))).toBe(false);
   });
 
   it("links the poster again when a prune and a re-import bring its video back", async () => {
     const [before] = await scratch.db.select().from(asset).where(eq(asset.id, POSTER));
     const revisions = await posterRevisions();
     // What 2026-10-04's prune did: the video row deleted, and with it, by the
-    // foreign key's cascade, the poster's derivation. The poster row lives
-    // outside the `manimkc:` namespace, so it stays, linked to nothing.
+    // foreign key's cascade, the derived assets' derivations. Those rows live
+    // outside the `manimkc:` namespace, so they stay, linked to nothing.
     await scratch.db.delete(asset).where(eq(asset.id, VIDEO));
     expect(await derivedFrom()).toEqual([]);
+    expect(await derivedFrom(PDF)).toEqual([]);
     const orphaned = await doctor(scratch.db, "scratch");
     expect(orphaned.posters.unlinked).toEqual([POSTER]);
+    expect(orphaned.pdfs.unlinked).toEqual([PDF]);
 
     const result = await importTree();
     expect(result.sources.find((s) => s.source === "manimkc")?.notes).toContain(
       "0 poster(s) cut and stored, 1 linked to their video again",
+    );
+    expect(result.sources.find((s) => s.source === "manimkc")?.notes).toContain(
+      "0 PDF(s) made and stored, 1 linked to their video again",
     );
     // The card has its poster again: the same picture, the same row, and no
     // revision appended, since the poster's history already records the link.
@@ -194,7 +222,12 @@ describe.skipIf(!reachable.ok)("every video leaves catalog import with a poster"
     const [after] = await scratch.db.select().from(asset).where(eq(asset.id, POSTER));
     expect(after?.blobKey).toBe(before?.blobKey);
     expect(await posterRevisions()).toBe(revisions);
-    expect((await doctor(scratch.db, "scratch")).posters).toEqual({ videosWithout: [], unlinked: [] });
+    // The PDF links again the same way.
+    expect(await videosWithStoredPdf(scratch.db, [VIDEO], LOCAL)).toEqual(new Set([VIDEO]));
+    expect(await derivedFrom(PDF)).toEqual([VIDEO]);
+    const report = await doctor(scratch.db, "scratch");
+    expect(report.posters).toEqual({ videosWithout: [], unlinked: [] });
+    expect(report.pdfs).toEqual({ videosWithout: [], unlinked: [] });
   });
 
   it("has the upload link a poster the cascade left behind, and say linked, not made", async () => {
@@ -210,6 +243,7 @@ describe.skipIf(!reachable.ok)("every video leaves catalog import with a poster"
       });
     const first = await upload();
     expect(first.items.find((i) => i.id === POSTER)?.action).toBe("linked");
+    expect(first.items.find((i) => i.id === PDF)?.action).toBe("present");
     expect(first.rowsWritten).toBe(1);
     expect(await derivedFrom()).toEqual([VIDEO]);
     const second = await upload();
@@ -217,7 +251,8 @@ describe.skipIf(!reachable.ok)("every video leaves catalog import with a poster"
     expect(second.rowsWritten).toBe(0);
 
     // A render that changed on disk since its import: the stored video is
-    // still `present`, and the poster is not cut from bytes it does not hold.
+    // still `present`, and neither derived asset is cut from bytes the
+    // catalog does not hold.
     await scratch.db.delete(assetDerivation).where(eq(assetDerivation.assetId, POSTER));
     await writeFile(videoFile, "a render nobody imported");
     try {
@@ -225,11 +260,17 @@ describe.skipIf(!reachable.ok)("every video leaves catalog import with a poster"
       const item = changed.items.find((i) => i.id === POSTER);
       expect(item?.action).toBe("refused");
       expect(item?.detail).toMatch(/has changed since it was indexed, so no poster was cut from it/);
+      // The PDF keeps its derivation, so it is `present`: only a derived
+      // asset that must be remade is held to the file's drift.
+      expect(changed.items.find((i) => i.id === PDF)?.action).toBe("present");
       expect(await derivedFrom()).toEqual([]);
+      expect(await derivedFrom(PDF)).toEqual([VIDEO]);
     } finally {
       await writeFile(videoFile, "a render");
     }
-    expect((await upload()).items.find((i) => i.id === POSTER)?.action).toBe("linked");
+    const relinked = await upload();
+    expect(relinked.items.find((i) => i.id === POSTER)?.action).toBe("linked");
+    expect(relinked.items.find((i) => i.id === PDF)?.action).toBe("present");
   });
 
   it("names a poster step that throws, and still runs the sources after it", async () => {
@@ -243,7 +284,7 @@ describe.skipIf(!reachable.ok)("every video leaves catalog import with a poster"
     process.env.TMPDIR = path.join(work, "no-such-temp");
     try {
       await expect(importTree()).rejects.toThrow(
-        /1 manimkc video\(s\) have no poster \(manimkc:out\/demo\/one\/one\.mp4\): the poster step failed: .*ENOENT/,
+        /1 manimkc video\(s\) have no poster \(manimkc:out\/demo\/one\/one\.mp4\); 1 manimkc video\(s\) have no PDF \(manimkc:out\/demo\/one\/one\.mp4\): the derived step failed: .*ENOENT/,
       );
     } finally {
       if (saved === undefined) delete process.env.TMPDIR;

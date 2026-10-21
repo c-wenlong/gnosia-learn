@@ -14,6 +14,37 @@ name: CI
 on:
   pull_request:
     branches: [main, master]
+    # A pull request that changes nothing a step reads does not need a
+    # fifteen-minute run. The Markdown ignored below is documentation only:
+    # seed/ stays covered because the tests import it, and
+    # services/studio/src/manual/sections/*.md stays covered because
+    # assembleManual() reads it at runtime. The design folders skipped are
+    # pictures, captured research and the untracked reference symlinks, while
+    # docs/design/kit stays covered because eslint lints its scripts. A
+    # tools/ pointer bump is a gitlink the checkout below never fetches
+    # (submodules are off), so it cannot move lint, typecheck, test or build
+    # either. Everything else, including this file, still runs the full gate.
+    paths-ignore:
+      - "*.md"
+      - "**/README.md"
+      - ".github/**/*.md"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/dependabot.yml"
+      - "docs/**/*.md"
+      - "docs/design/brand/**"
+      - "docs/design/hifi/**"
+      - "docs/design/lofi/**"
+      - "docs/design/reference/**"
+      - "docs/design/research/**"
+      - "docs/design/gnosia-lofi.fig"
+      - "services/catalog/*.md"
+      - "tools/**"
+      - ".claude/**"
+      - ".agents/**"
+      - ".gitignore"
+      - ".vercelignore"
+      - "codecov.yml"
+      - "LICENSE"
   workflow_dispatch:
 
 # Least privilege by default. Nothing here writes to the repository, so the
@@ -62,14 +93,14 @@ jobs:
         env:
           POSTGRES_USER: catalog
           POSTGRES_PASSWORD: catalog
-          POSTGRES_DB: self_learn
+          POSTGRES_DB: gnosia
         ports:
           - 5432:5432
         # Without a health check the job starts npm ci against a container that
         # is still initialising, and the test step fails with a connection error
         # that looks like a code problem.
         options: >-
-          --health-cmd "pg_isready -U catalog -d self_learn"
+          --health-cmd "pg_isready -U catalog -d gnosia"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
@@ -77,8 +108,8 @@ jobs:
     env:
       # Every step sees it, but only the test step uses it. The schema tests
       # create and drop a scratch database per run against this server, so they
-      # never depend on, or leave anything in, self_learn itself.
-      DATABASE_URL: postgres://catalog:catalog@localhost:5432/self_learn
+      # never depend on, or leave anything in, gnosia itself.
+      DATABASE_URL: postgres://catalog:catalog@localhost:5432/gnosia
 
     steps:
       - name: Checkout

@@ -1,14 +1,14 @@
 import "server-only";
 
-import { PREFERENCE_KEYS } from "@self-learn/schema/shared";
-import { readPreferences } from "@self-learn/catalog/state";
+import { PREFERENCE_KEYS } from "@gnosia/schema/shared";
+import { readPreferences } from "@gnosia/catalog/state";
 
 import { catalogDatabase } from "@/lib/learner-store";
 import { currentOwner } from "@/lib/owner";
 import { parseMotionMode, type MotionMode } from "@/lib/preferences";
 
 /**
- * The stored motion mode, for a browser with no `self-learn-motion` cookie
+ * The stored motion mode, for a browser with no `gnosia-motion` cookie
  * yet (`@/lib/motion`). The `(app)` layout asks only then, so it costs one
  * read in a new browser and nothing after the cookie is written.
  *

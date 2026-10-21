@@ -3,19 +3,21 @@ import "server-only";
 import path from "node:path";
 import type { Readable } from "node:stream";
 
-import { BlobError, BlobNotFoundError, BlobRangeError, type BlobRead } from "@self-learn/blob";
+import { BlobError, BlobNotFoundError, BlobRangeError, type BlobRead } from "@gnosia/blob";
 import {
   assetBlobs,
   assetsByIds,
   conceptsForAsset,
   documentBytes,
+  pdfBlob,
   posterBlob,
+  videosWithStoredPdf,
   videosWithStoredPoster,
   type AssetBlob,
   type AssetRef,
   type CatalogDatabase,
-} from "@self-learn/catalog/state";
-import type { ContentType } from "@self-learn/content";
+} from "@gnosia/catalog/state";
+import type { ContentType } from "@gnosia/content";
 
 import { ContentUnavailableError, contentSource } from "@/data/source";
 import { isRenderSource, uploadCommand, type RouteProblemCode } from "@/lib/asset-problems";
@@ -69,6 +71,10 @@ export const CONTENT_TYPES: Readonly<Record<string, string>> = {
   // A poster, cut from a video by `catalog asset upload` and served from the
   // blob store (docs/CONTENT-MIGRATION.md, Track E).
   ".jpg": "image/jpeg",
+  // A video's PDF, made by `catalog asset upload` or `catalog video put`
+  // alongside the poster: one page per narration beat. Self-made, so it
+  // carries nothing a viewer could run but ours.
+  ".pdf": "application/pdf",
 };
 
 /** The declared type for a file name, or null when the extension is not on the list. */
@@ -339,7 +345,7 @@ const noStoredCopy = (row: AssetRef): AssetFileProblem =>
  * The command that stores this kind's bytes. A diagram's SVG is stored by the
  * diagram writer, never by the manimkc upload, which would walk the videos
  * and leave the SVG missing. A render names the upload of the tool that made
- * it, manimkc's, remotionkc's or revideokc's.
+ * it, manimkc's, remotionkc's, revideokc's or blenderkc's.
  */
 function uploadHint(row: AssetRef): string {
   if (row.kind === "diagram_svg") {
@@ -363,10 +369,18 @@ export async function resolveAsset(db: CatalogDatabase, id: string): Promise<Ass
   if (row === undefined) return missing("not-in-catalog", `No asset ${JSON.stringify(id)} in the catalog.`);
   const titled = (found: AssetSourceResult): AssetSourceResult => (found.ok ? { ...found, title: row.title } : found);
   const blob = (await assetBlobs(db, [row.id], scope)).get(row.id);
-  if (blob !== undefined) return titled(await resolveBlob(blob, row.path ?? row.id));
-  const text = await resolveRowText(db, row);
-  if (text !== undefined) return titled(text);
-  return noStoredCopy(row);
+  try {
+    if (blob !== undefined) return titled(await resolveBlob(blob, row.path ?? row.id));
+    const text = await resolveRowText(db, row);
+    if (text !== undefined) return titled(text);
+    return noStoredCopy(row);
+  } catch (error) {
+    // A store that will not open or answer is the store's failure, not the
+    // catalog's: it classifies as `blob-store-unavailable`, and only a
+    // catalog read propagates to the route's `catalog-unreachable`.
+    if (error instanceof BlobError) return blobStoreProblem(error);
+    throw error;
+  }
 }
 
 /**
@@ -423,6 +437,22 @@ export async function storedPosters(
 }
 
 /**
+ * The videos among these with a stored PDF: the ones `catalog asset upload`
+ * or `catalog video put` made one for. A page can then offer the document
+ * rather than linking a route that would 404.
+ */
+export async function storedPdfs(
+  db: CatalogDatabase,
+  rows: readonly Pick<AssetRef, "id" | "kind">[],
+): Promise<Set<string>> {
+  return videosWithStoredPdf(
+    db,
+    rows.filter((row) => row.kind === "video").map((row) => row.id),
+    await currentScope(),
+  );
+}
+
+/**
  * Where a video's poster comes from: the one `catalog asset upload` stored,
  * found by what it is (the `poster` asset derived from this video), not by
  * guessing its id. A stored poster that is `pending` or gone answers
@@ -457,6 +487,39 @@ export async function posterSource(db: CatalogDatabase, id: string): Promise<Ass
     detail:
       `No poster is stored for ${id}. \`${uploadCommand(isRenderSource(row.sourceRepo) ? row.sourceRepo : "manimkc")}\` ` +
       `cuts one for each video it uploads.`,
+  };
+}
+
+/**
+ * Where a video's PDF comes from: the one `catalog asset upload` or
+ * `catalog video put` made, found by what it is (the `pdf` asset derived
+ * from this video), as `posterSource` finds the poster. A stored PDF that is
+ * `pending` or gone answers `not-uploaded` like any other blob.
+ */
+export async function pdfSource(db: CatalogDatabase, id: string): Promise<AssetStored | AssetFileProblem> {
+  // The requesting owner's rows and the commons' (phase 4), as for the file.
+  const scope = await currentScope();
+  const stored = await pdfBlob(db, id, scope);
+  if (stored !== null) return resolveBlob(stored, id);
+  const [row] = await assetsByIds(db, [id], scope);
+  if (row === undefined) return missing("not-in-catalog", `No asset ${JSON.stringify(id)} in the catalog.`);
+  if (row.kind !== "video") {
+    return {
+      ok: false,
+      status: 404,
+      code: "not-a-video",
+      error: "No such asset PDF.",
+      detail: `Asset ${id} is a ${row.kind}, and only a video has a PDF.`,
+    };
+  }
+  return {
+    ok: false,
+    status: 404,
+    code: "not-uploaded",
+    error: "No such asset PDF.",
+    detail:
+      `No PDF is stored for ${id}. \`${uploadCommand(isRenderSource(row.sourceRepo) ? row.sourceRepo : "manimkc")}\` ` +
+      `makes one for each video it uploads, as does \`catalog video put\` for a studio video.`,
   };
 }
 

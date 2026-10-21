@@ -458,7 +458,7 @@ export function SessionFocus({
   if (step === undefined) return null;
 
   const percent = checkPlan === null ? ((index + 1) / steps.length) * 100 : weekCheckPercent(step);
-  const label = checkPlan === null ? stepLabel(steps, index, title) : `Week check · ${weekCheckLabel(step)}`;
+  const label = checkPlan === null ? stepLabel(steps, index, title) : `Module check · ${weekCheckLabel(step)}`;
   const short = checkPlan === null ? stepLabel(steps, index, title, true) : weekCheckLabel(step);
   const exitLabel = weekCheck === null ? "Exit to workspace" : "Exit to module";
   const noQuestionReason = weekCheck?.reason ?? null;
@@ -471,8 +471,8 @@ export function SessionFocus({
     return (
       <Frame
         percent={100}
-        label={checkPlan === null ? label : "Week check"}
-        short={checkPlan === null ? short : "Week check"}
+        label={checkPlan === null ? label : "Module check"}
+        short={checkPlan === null ? short : "Module check"}
         exitHref={exitHref}
         exitLabel={exitLabel}
         stepKey={index}

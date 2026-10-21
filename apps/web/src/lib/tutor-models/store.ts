@@ -7,8 +7,9 @@ import {
   moveTutorProvider,
   readTutorModels,
   removeTutorModel,
-} from "@self-learn/catalog/state";
-import { groupByProvider } from "@self-learn/schema/shared";
+  setTutorModel,
+} from "@gnosia/catalog/state";
+import { groupByProvider } from "@gnosia/schema/shared";
 
 import type { ChainEntry } from "@/lib/agent/providers";
 import { catalogDatabase } from "@/lib/learner-store";
@@ -41,6 +42,11 @@ export async function readChain(owner: string): Promise<ChainEntry[]> {
  */
 export async function addChainEntry(owner: string, provider: unknown, model: unknown, serverKey: boolean): Promise<ChainEntry[]> {
   return entries(await addTutorModel(await catalogDatabase(), owner, provider, model, { requireKey: { server: serverKey } }));
+}
+
+/** The whole chain becomes this one entry, in one locked rewrite — a refused write keeps the chain it would have replaced. */
+export async function setChainEntry(owner: string, provider: unknown, model: unknown, serverKey: boolean): Promise<ChainEntry[]> {
+  return entries(await setTutorModel(await catalogDatabase(), owner, provider, model, { requireKey: { server: serverKey } }));
 }
 
 export async function removeChainEntry(owner: string, provider: unknown, model: unknown): Promise<ChainEntry[]> {

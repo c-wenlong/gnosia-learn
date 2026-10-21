@@ -4,17 +4,18 @@
 // usage: npm run e2e [-- --keep-db] [-- --headed] [-- --copy]
 //
 // What it does, in order:
-//   1. Builds `self_learn_e2e_<pid>_<time>`: an empty database, migrated,
+//   1. Builds `gnosia_e2e_<pid>_<time>`: an empty database, migrated,
 //      `catalog import seed/`, all six types flipped (the app reads content
 //      from the database only), and one `learn observe` so a review card is
 //      due. The default since phase 3 of docs/CONTENT-MIGRATION.md removed
 //      `content/` and `learn/`: `seed/` is the content a clone has.
-//      With --copy (or E2E_TEMPLATE_DB set) it copies a database instead,
-//      `self_learn` unless E2E_TEMPLATE_DB names another, with `createdb -T`.
-//      Every flow below that grades (a review rating, a session answer, Mark
-//      watched, a settings change) writes real rows, and AGENTS.md is plain
-//      that anything which grades runs against a copy, never `self_learn`.
-//      Either database is dropped in `finally`, on a failure and on Ctrl-C too.
+//      With --copy (or E2E_TEMPLATE_DB set) it copies a database file instead,
+//      the catalog's own unless E2E_TEMPLATE_DB names another, through the
+//      SQLite backup API. Every flow below that grades (a review rating, a
+//      session answer, Mark watched, a settings change) writes real rows, and
+//      AGENTS.md is plain that anything which grades runs against a copy,
+//      never `gnosia`. Either database's file is removed in `finally`,
+//      on a failure and on Ctrl-C too.
 //   2. Starts `next start` from `apps/web/` on a free port, pointed at the copy,
 //      with a fixed test password and secret and with every provider key blank.
 //      It builds nothing: run `npm run build` first.
@@ -27,16 +28,14 @@
 // Options:
 //   --keep-db    leave the copy behind and print its name, to look at afterwards
 //   --headed     show the browser instead of running headless
-//   --copy       copy self_learn (or E2E_TEMPLATE_DB) rather than build from
+//   --copy       copy gnosia (or E2E_TEMPLATE_DB) rather than build from
 //                seed/. Built from the seed, which has no videos (D7), the
 //                video step is skipped and says so, and the blob store
 //                is a temp directory.
 //   --seed       the default; accepted so an older command line still runs.
 //
 // Environment:
-//   E2E_TEMPLATE_DB=<name>  copy this database rather than build from seed/; every content type must be flipped
-//   PG_BIN=<dir>            the Postgres binaries (default: the pg_dump on PATH, then
-//                           `pg_config --bindir`, then Homebrew's postgresql@17)
+//   E2E_TEMPLATE_DB=<file>  copy this database file rather than build from seed/; every content type must be flipped
 //   PLAYWRIGHT_CORE=<path>  playwright-core's index.mjs, when the tldrawkc submodule
 //                           in this checkout is not installed
 //   CHROMIUM=<path>         the browser binary, when not in the Playwright cache
@@ -55,7 +54,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { FLIP_ORDER } from './lib/flip-order.mjs';
-import { copyDatabase, exec as execTool, missingPgTools, PG_BIN } from './lib/pg.mjs';
+import { exec as execTool } from './lib/proc.mjs';
+import { copyDatabase, dropDatabase, openDatabase } from './lib/sqlite.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const WEB = join(ROOT, 'apps/web');
@@ -73,20 +73,24 @@ if (flags.size > 0 || (SEED_FLAG && COPY)) {
   process.exit(2);
 }
 // Built from seed/ unless a copy was asked for: the repository has held no
-// content of its own since the cut-over, and self_learn is the owner's.
+// content of its own since the cut-over, and gnosia is the owner's.
 const SEED = !COPY;
 
 /** Values the server is started with. Test values only; nothing real is typed anywhere. */
 const PASSWORD = 'e2e-smoke-owner-password';
 const SECRET = 'e2e-smoke-auth-secret-0123456789abcdef';
-// The database copied with --copy. `self_learn` by default; E2E_TEMPLATE_DB
-// names another, such as a scratch copy flipped for a rehearsal, since the app
+// The database file copied with --copy. The catalog's own by default
+// ($GNOSIA_HOME/catalog.db, else ~/.gnosia); E2E_TEMPLATE_DB names
+// another, such as a scratch copy flipped for a rehearsal, since the app
 // reads content from the database only and an unflipped template fails every
 // content page.
-const TEMPLATE_DB = process.env.E2E_TEMPLATE_DB || 'self_learn';
+const TEMPLATE_DB =
+  process.env.E2E_TEMPLATE_DB ||
+  join(process.env.GNOSIA_HOME ?? join(homedir(), '.gnosia'), 'catalog.db');
 // The pid and the start time, so a later run that happens to get the same pid
-// can never collide with (or drop) a copy an earlier run kept with --keep-db.
-const COPY_DB = `self_learn_e2e_${process.pid}_${Date.now().toString(36)}`;
+// can never collide with (or remove) a copy an earlier run kept with
+// --keep-db.
+const COPY_DB = join(tmpdir(), `gnosia_e2e_${process.pid}_${Date.now().toString(36)}.db`);
 
 // ---------------------------------------------------------------------------
 // Prerequisites. Each one names what is missing and how to get it, then exits 2.
@@ -99,9 +103,6 @@ function missing(message) {
 if (!existsSync(join(WEB, '.next/BUILD_ID'))) {
   missing('no production build at apps/web/.next. Run `npm run build` first; this script never builds.');
 }
-
-const missingTools = missingPgTools(['createdb', 'dropdb', 'psql', 'pg_dump']);
-if (missingTools !== null) missing(missingTools);
 
 const corePath = process.env.PLAYWRIGHT_CORE ?? join(ROOT, 'tools/tldrawkc/node_modules/playwright-core/index.mjs');
 if (!existsSync(corePath)) {
@@ -126,18 +127,18 @@ if (chromiumPath !== undefined && !existsSync(chromiumPath)) {
 
 const { chromium } = await import(pathToFileURL(corePath).href);
 
-const OUT = mkdtempSync(join(tmpdir(), 'self-learn-e2e-'));
+const OUT = mkdtempSync(join(tmpdir(), 'gnosia-e2e-'));
 const SERVER_LOG = join(OUT, 'server.log');
 console.log(`e2e: screenshots and the server log go to ${OUT}`);
 
 /**
  * With --seed, the blob store the import puts the seed's diagram SVG in, and
- * the server reads it from: under OUT, never `~/.self-learn`. And an empty
+ * the server reads it from: under OUT, never `~/.gnosia`. And an empty
  * manimkc root, so the import runs no manimkc source: the seed maps no topic
  * folder (it has no videos), and a real checkout's renders would be refused
- * as folders no topic maps. The same empty directory is the remotionkc and
- * revideokc root, for the same reason: their topic.yml files name topics the
- * seed lacks.
+ * as folders no topic maps. The same empty directory is the remotionkc,
+ * revideokc and blenderkc root, for the same reason: their topic.yml files
+ * name topics the seed lacks.
  */
 const SEED_HOME = SEED ? join(OUT, 'home') : null;
 const NO_MANIMKC = SEED ? mkdtempSync(join(OUT, 'no-manimkc-')) : null;
@@ -165,18 +166,15 @@ function cleanup() {
     if (browser !== null) await browser.close().catch(() => {});
     if (held.server !== null) await stopGroup(held.server);
     if (held.copying !== null) {
-      // Let an in-flight createdb or dump finish first; a drop that ran ahead
-      // of it would find nothing and leave the finished copy behind.
+      // Let an in-flight copy finish first; a removal that ran ahead of it
+      // would find nothing and leave the finished copy behind.
       await held.copying.catch(() => {});
       if (KEEP_DB) {
-        console.log(`e2e: kept the database ${COPY_DB}. Drop it with: ${join(PG_BIN, 'dropdb')} ${COPY_DB}`);
+        console.log(`e2e: kept the database ${COPY_DB}. Remove it with: rm -f '${COPY_DB}' '${COPY_DB}-wal' '${COPY_DB}-shm'`);
       } else {
-        // --force ends any connection still open, so a server that was slow to
-        // die cannot leave the copy behind.
-        const drop = await pg('dropdb', ['--if-exists', '--force', COPY_DB]);
-        if (drop.status === 0) console.log(`e2e: dropped ${COPY_DB}`);
+        if (dropDatabase(COPY_DB)) console.log(`e2e: removed ${COPY_DB}`);
         else {
-          teardownProblem = `could not drop ${COPY_DB}: ${drop.stderr.trim()}. Drop it by hand: ${join(PG_BIN, 'dropdb')} --force ${COPY_DB}`;
+          teardownProblem = `could not remove ${COPY_DB}. Remove it by hand: rm -f '${COPY_DB}' '${COPY_DB}-wal' '${COPY_DB}-shm'`;
           console.error(`e2e: ${teardownProblem}`);
         }
       }
@@ -204,13 +202,11 @@ function stopIfInterrupted() {
 
 /**
  * Run a command from the repository root and collect its output, in a process
- * group of its own (scripts/lib/pg.mjs), so a Ctrl-C meant for this script
- * does not kill createdb halfway through; the handler above decides what
+ * group of its own (scripts/lib/proc.mjs), so a Ctrl-C meant for this script
+ * does not kill a child halfway through; the handler above decides what
  * stops, and in what order.
  */
 const exec = (command, args, env = process.env) => execTool(command, args, { env, cwd: ROOT });
-
-const pg = (tool, args) => exec(join(PG_BIN, tool), args);
 
 /**
  * Signal the server's whole process group and wait until nothing in it answers.
@@ -253,11 +249,13 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 function seedEnv() {
   return {
     ...process.env,
-    DATABASE_URL: `postgres://localhost:5432/${COPY_DB}`,
-    SELF_LEARN_HOME: SEED_HOME,
+    CATALOG_DB: COPY_DB,
+    DATABASE_URL: COPY_DB,
+    GNOSIA_HOME: SEED_HOME,
     MANIMKC_ROOT: NO_MANIMKC,
     REMOTIONKC_ROOT: NO_MANIMKC,
     REVIDEOKC_ROOT: NO_MANIMKC,
+    BLENDERKC_ROOT: NO_MANIMKC,
     // The knowledge base is the seed's, for any learn command that still
     // looks at files; after the flips below it reads the notes from rows.
     LEARN_ROOT: join(ROOT, 'seed'),
@@ -282,8 +280,8 @@ async function seedCommand(script, args) {
  */
 
 async function buildFromSeed() {
-  const made = await pg('createdb', [COPY_DB]);
-  if (made.status !== 0) throw new Error(`createdb ${COPY_DB} failed: ${made.stderr.trim()} (is Postgres running?)`);
+  // No create-database step: `catalog migrate` makes the file on first
+  // connect, which is the whole point of a SQLite catalog.
   await seedCommand('catalog', ['migrate']);
   await seedCommand('catalog', ['import', join(ROOT, 'seed')]);
   for (const type of FLIP_ORDER) await seedCommand('catalog', ['flip', type]);
@@ -295,15 +293,12 @@ async function createCopy() {
     await buildFromSeed();
     return markReviewDue();
   }
-  // No `catalog migrate` afterwards: a template copy carries the schema and the
-  // drizzle journal of `self_learn` exactly, so it is as migrated as its source.
-  // `createdb -T` needs the template to have no other connections, and a dev
-  // server or another session holding `self_learn` open is ordinary, so the
-  // copy falls back to a dump into an empty database, which does not care.
-  await copyDatabase(TEMPLATE_DB, COPY_DB, {
-    onFallback: () => console.log(`e2e: ${TEMPLATE_DB} is in use, copying it with pg_dump instead`),
-  }).catch((error) => {
-    throw new Error(`${error.message} (is Postgres running, and does ${TEMPLATE_DB} exist?)`);
+  // No `catalog migrate` afterwards: a file copy carries the schema and the
+  // drizzle journal of the template exactly, so it is as migrated as its
+  // source. The backup API reads a consistent snapshot even with the
+  // template open elsewhere, which `createdb -T` could not promise.
+  await copyDatabase(TEMPLATE_DB, COPY_DB).catch((error) => {
+    throw new Error(`${error.message} (does ${TEMPLATE_DB} exist?)`);
   });
   await markReviewDue();
   ACCOUNT_NAME = await displayName();
@@ -311,25 +306,35 @@ async function createCopy() {
 
 /** The signed-in learner's display name in the copy, which names the sidebar's account row; null for none. */
 async function displayName() {
-  const read = await pg('psql', ['-d', COPY_DB, '-v', 'ON_ERROR_STOP=1', '-Atc', "select coalesce(display_name, '') from learner where id = 'local'"]);
-  if (read.status !== 0) throw new Error(`could not read the learner's name in the copy: ${read.stderr.trim()}`);
-  return read.stdout.replace(/\n$/, '') || null;
+  const db = openDatabase(COPY_DB);
+  try {
+    const row = db.prepare("select coalesce(display_name, '') as name from learner where id = 'local'").get();
+    return row?.name || null;
+  } finally {
+    db.close();
+  }
 }
 
 async function markReviewDue() {
   // Make the review step deterministic: whatever the owner has already cleared,
   // the earliest card in the copy is due now. `review` is a projection of the
   // event log, and this is a throwaway copy, so rewriting one row is harmless.
-  // `self_learn.copy_ok` because the template may itself be a copy once the
+  // `catalog_copy_ok()` because the template may itself be a copy once the
   // primary has moved (edge case 14 of docs/CONTENT-MIGRATION.md), and a copy
-  // refuses every write that does not say it means it.
-  const due = await pg('psql', [
-    '-d', COPY_DB, '-v', 'ON_ERROR_STOP=1', '-Atc',
-    `set self_learn.copy_ok = on;
-     update review set due = now() - interval '1 minute'
-      where (learner_id, concept_slug) in (select learner_id, concept_slug from review order by due limit 1)`,
-  ]);
-  if (due.status !== 0) throw new Error(`could not mark a review due in the copy: ${due.stderr.trim()}`);
+  // refuses every write that does not say it means it; the bare handle has
+  // none of `connect`'s functions, so it is registered here.
+  const db = openDatabase(COPY_DB);
+  try {
+    db.function('catalog_copy_ok', () => 1);
+    db.exec(
+      `update review set due = cast(unixepoch('subsec') * 1000 as integer) - 60000
+        where (learner_id, concept_slug) in (select learner_id, concept_slug from review order by due limit 1)`,
+    );
+  } catch (error) {
+    throw new Error(`could not mark a review due in the copy: ${error?.message ?? error}`);
+  } finally {
+    db.close();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -361,11 +366,12 @@ async function startServer(port) {
   const env = {
     ...process.env,
     NODE_ENV: 'production',
-    DATABASE_URL: `postgres://localhost:5432/${COPY_DB}`,
+    CATALOG_DB: COPY_DB,
+    DATABASE_URL: COPY_DB,
     OWNER_PASSWORD: PASSWORD,
     AUTH_SECRET: SECRET,
     // The seed's blob store, where its import put the diagram SVG.
-    ...(SEED_HOME === null ? {} : { SELF_LEARN_HOME: SEED_HOME }),
+    ...(SEED_HOME === null ? {} : { GNOSIA_HOME: SEED_HOME }),
     // The copy is throwaway, and may have been made from a database marked
     // `copy`; this is the flag that says writing to it is intended.
     CATALOG_COPY_OK: '1',
@@ -1529,10 +1535,10 @@ async function run() {
 
   await step('settings: change the tutor style, see Saved', page, async () => {
     await go('/settings');
-    // The page opens on General since #342; the style is under Tutor, and a
+    // The page opens on General since #342; the style is under Models, and a
     // press on the tab puts it in the address.
-    await clickHydrated(page, main.getByRole('tab', { name: 'Tutor' }));
-    await page.waitForURL((url) => url.searchParams.get('tab') === 'tutor');
+    await clickHydrated(page, main.getByRole('tab', { name: 'Models' }));
+    await page.waitForURL((url) => url.searchParams.get('tab') === 'models');
     // A kit menu since #355: the trigger is named "Tutor style: <current>".
     await clickHydrated(page, main.getByRole('button', { name: /^Tutor style:/ }));
     const next = page.getByRole('listbox', { name: 'Tutor style' }).locator('[role=option][aria-selected=false]').first();
@@ -1545,48 +1551,45 @@ async function run() {
   });
 
   await step('provider keys: save a key, see its last four, remove it', page, async () => {
-    // The keys are under Tutor (#342), which `?tab=tutor` opens.
-    if (new URL(page.url()).searchParams.get('tab') !== 'tutor') await go('/settings?tab=tutor');
+    // The keys are under Models, which `?tab=models` opens.
+    if (new URL(page.url()).searchParams.get('tab') !== 'models') await go('/settings?tab=models');
     // docs/BYOK.md: a key goes in once and never comes back out. The Providers
-    // card (#383) lists a provider only once it has a key or a model; the
-    // rest are offered under Add provider. From the seed that is all three,
-    // but a `--copy` may hold some already, so the step takes whichever
-    // provider the form offers first, which it chooses on its own.
-    const add = main.getByRole('button', { name: 'Add provider', expanded: false });
-    assert((await add.count()) > 0, 'every provider is listed already, so none can be added');
-    await clickHydrated(page, add);
-    const form = main.getByRole('form', { name: 'Add a provider' });
-    // A kit menu: the trigger is named "Provider: <current>".
-    const chosen = form.getByRole('button', { name: /^Provider: / });
-    await chosen.waitFor();
-    const label = (await chosen.getAttribute('aria-label'))?.replace(/^Provider: /, '') ?? '';
-    assert(label !== '', 'the provider menu names no provider');
+    // card lists every provider, keyed or not; an unkeyed row's Add key opens
+    // its key form. The step takes the first row holding no saved key, so a
+    // `--copy` that keyed some already still has somewhere to write — and the
+    // delete at the end puts the row back as it was.
+    const unkeyed = main.getByRole('listitem').filter({ hasNotText: /Your key, ending|can no longer be read/ }).first();
+    // The row stops matching `hasNotText` the moment the key lands, so the
+    // checks after the save locate it by its provider's name instead.
+    const label = (await unkeyed.locator('p').first().textContent())?.trim() ?? '';
+    assert(label !== '', 'the row names no provider');
+    const row = main.getByRole('listitem').filter({ has: page.getByText(label, { exact: true }) });
+    await unkeyed.getByRole('button', { name: 'Add key', expanded: false }).click();
     const fake = 'e2e-not-a-real-provider-key-000000000000wxyz';
-    await form.getByLabel('API key', { exact: true }).fill(fake);
+    await unkeyed.locator('input[type="password"]').fill(fake);
     const saving = page.waitForResponse(
       (r) => new URL(r.url()).pathname === '/api/learner/provider-key' && r.request().method() === 'POST',
     );
-    await form.getByRole('button', { name: 'Add provider' }).click();
+    await unkeyed.getByRole('button', { name: 'Save key' }).click();
     const response = await saving;
     assert(response.status() === 200, `the save answered ${response.status()}`);
     assert(!(await response.text()).includes(fake), 'the save answered with the key in it');
-    const row = main.getByRole('listitem').filter({ has: page.getByText(label, { exact: true }) });
     await row.getByText(/^Your key, ending wxyz\. Saved /).waitFor();
     assert(!(await page.content()).includes(fake), 'the page still holds the key after saving');
-    // Delete opens a confirm; its own Delete takes the key, and with no
-    // server key and no models the row leaves the list, as it was.
+    // Delete opens a confirm; its own Delete takes the key, and the built-in
+    // row stays listed, back to having no key (or back on the server's).
     await row.getByRole('button', { name: 'Delete', exact: true, expanded: false }).click();
-    await row.getByRole('group', { name: `Confirm deleting ${label}` }).getByRole('button', { name: 'Delete', exact: true }).click();
-    await row.waitFor({ state: 'detached' });
+    await row.getByRole('group', { name: /^Confirm deleting / }).getByRole('button', { name: 'Delete', exact: true }).click();
+    await row.getByText(/No key yet|Using the server's key/).waitFor();
   });
 
   await step('settings: the sidebar reaches the bottom with every fold shut', page, async () => {
     // #405: an `sr-only` line (position: absolute) inside a shut fold escaped
     // the fold's clip and made the document taller than the shell, so the
-    // sticky sidebar stopped short with a blank strip under it. The Tutor tab
-    // holds shut folds with such lines (Add provider, each row's panels).
-    if (new URL(page.url()).searchParams.get('tab') !== 'tutor') await go('/settings?tab=tutor');
-    await main.getByRole('button', { name: 'Add provider', expanded: false }).waitFor();
+    // sticky sidebar stopped short with a blank strip under it. The Models tab
+    // holds shut folds with such lines (each row's key form and confirm).
+    if (new URL(page.url()).searchParams.get('tab') !== 'models') await go('/settings?tab=models');
+    await main.getByRole('button', { name: 'Add custom provider', expanded: false }).waitFor();
     for (const height of [860, 600]) {
       await page.setViewportSize({ width: 1280, height });
       const m = await page.evaluate(async () => {

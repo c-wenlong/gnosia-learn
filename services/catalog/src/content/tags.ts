@@ -1,5 +1,5 @@
-import type { TagMeta } from "@self-learn/content";
-import { tag } from "@self-learn/schema";
+import type { TagMeta } from "@gnosia/content";
+import { tag } from "@gnosia/schema";
 import { asc, desc, eq } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";

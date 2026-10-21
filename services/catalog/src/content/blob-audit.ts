@@ -1,12 +1,12 @@
 import path from "node:path";
 
-import type { BlobStore } from "@self-learn/blob";
-import { asset, assetDerivation, blobObject, collection, diagram, video } from "@self-learn/schema";
+import type { BlobStore } from "@gnosia/blob";
+import { asset, assetDerivation, blobObject, collection, diagram, video } from "@gnosia/schema";
 import { and, eq, inArray, isNotNull, lt, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
 import { sqlstate } from "../state/errors";
-import { POSTER_PREFIX } from "./asset-upload";
+import { PDF_PREFIX, POSTER_PREFIX } from "./asset-upload";
 import { markBlobPending, ownerCapLock, ownerUsage, type OwnerUsage } from "./blob";
 import {
   BlobOwnerError,
@@ -21,6 +21,7 @@ import {
   stalePartials,
 } from "./blob-owner";
 
+import { inTransaction } from "../db";
 /**
  * `catalog blob audit`: the store and the `blob_object` table, compared both
  * ways (docs/CONTENT-MIGRATION.md, edge cases 5 and 9).
@@ -32,7 +33,7 @@ import {
  * | `stale-pending` | A `pending` row a day old with no object behind it and no asset, diagram or course cover pointing at it | the row is deleted |
  * | `pending` | Any other `pending` row: an upload that has not finished, or one the audit sent back | none; rerun the upload |
  * | `unreferenced` | A `present` row no asset, diagram, studio video or course cover points at: the old bytes of something re-rendered, or the blobs of a `video put` whose transaction was refused | none; listed so it can be seen, and still counted toward the owner's byte cap |
- * | `orphan-poster` | A poster asset derived from no video: its video was pruned, or the upload unhooked it from a re-render it could not cut a new poster for | none; the next upload with ffmpeg makes and hooks up a new one |
+ * | `orphan-poster` | A poster or PDF asset derived from no video: its video was pruned, or the upload unhooked it from a re-render it could not make a new one for | none; the next upload with ffmpeg makes and hooks up a new one |
  * | `partial` | A staged write under `<root>/.tmp` a day old: an upload a crash stopped before its rename | deleted |
  *
  * **`--fix` acts only on a root that names this database** (`<root>/.owner`,
@@ -129,7 +130,7 @@ export async function auditBlobs(
         `${options.root} belongs to ${describeOwner(claimed)} (its ${OWNER_FILE}), and this is ` +
           `${describeOwner(self)}. Every object that database wrote has no row here, so --fix would delete ` +
           `them as orphans; nothing was changed. Audit it from that database, or give this one its own store ` +
-          `with SELF_LEARN_HOME. If the marker is wrong, delete ${OWNER_FILE} and run --fix again.`,
+          `with GNOSIA_HOME. If the marker is wrong, delete ${OWNER_FILE} and run --fix again.`,
       );
     }
   }
@@ -150,8 +151,8 @@ export async function auditBlobs(
   // A studio video's cut is named by its row as well as its asset (0015), so
   // a row that holds a key is enough for the key to be in use. Asked only
   // where the table exists: the audit runs on a database behind the journal.
-  const { rows: hasVideo } = await db.execute<{ present: boolean }>(sql`select to_regclass('public.video') is not null as present`);
-  if (hasVideo[0]?.present === true) {
+  const { rows: hasVideo } = await db.execute<{ present: number }>(sql`select exists(select 1 from sqlite_master where type = 'table' and name = 'video') as present`);
+  if (hasVideo[0]?.present === 1) {
     for (const { key } of await db.select({ key: video.mp4BlobKey }).from(video).where(isNotNull(video.mp4BlobKey))) {
       if (key !== null) referenced.add(key);
     }
@@ -229,8 +230,10 @@ export async function auditBlobs(
         // deleted before its own pending write, which would let a new object
         // past both caps unmeasured. Its write refreshes `updated_at`, and the
         // age guard then keeps the row.
-        const deleted = await db.transaction(async (tx) => {
-          await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${ownerCapLock(row.ownerId)}, 0))`);
+        const deleted = await inTransaction(db, async (tx) => {
+          // `begin immediate` serialises this delete with every other writer;
+          // the advisory lock it replaced serialised only the ones that asked.
+          void ownerCapLock(row.ownerId);
           return tx
             .delete(blobObject)
             .where(and(eq(blobObject.key, row.key), eq(blobObject.state, "pending"), lt(blobObject.updatedAt, cutoff)))
@@ -253,27 +256,33 @@ export async function auditBlobs(
     });
   }
 
-  // 3. Posters whose video was pruned: the derivation cascaded away with it.
-  const posters = await db
+  // 3. Derived assets (posters, PDFs) whose video was pruned: the
+  // derivation cascaded away with it.
+  const derived = await db
     .select({ id: asset.id, key: asset.blobKey })
     .from(asset)
-    .where(and(eq(asset.kind, "poster"), sql`starts_with(${asset.id}, ${POSTER_PREFIX})`));
+    .where(
+      and(
+        inArray(asset.kind, ["poster", "pdf"]),
+        sql`instr(${asset.id}, ${POSTER_PREFIX}) = 1 or instr(${asset.id}, ${PDF_PREFIX}) = 1`,
+      ),
+    );
   const withSource = new Set(
-    posters.length === 0
+    derived.length === 0
       ? []
       : (
           await db
             .select({ id: assetDerivation.assetId })
             .from(assetDerivation)
-            .where(inArray(assetDerivation.assetId, posters.map((p) => p.id)))
+            .where(inArray(assetDerivation.assetId, derived.map((p) => p.id)))
         ).map((row) => row.id),
   );
-  for (const poster of posters) {
-    if (withSource.has(poster.id)) continue;
+  for (const entry of derived) {
+    if (withSource.has(entry.id)) continue;
     findings.push({
       kind: "orphan-poster",
-      key: poster.key ?? poster.id,
-      detail: `${poster.id}: derived from no video (its video was pruned, or it was unhooked from a re-render)`,
+      key: entry.key ?? entry.id,
+      detail: `${entry.id}: derived from no video (its video was pruned, or it was unhooked from a re-render)`,
     });
   }
 

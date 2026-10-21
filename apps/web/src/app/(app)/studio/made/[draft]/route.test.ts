@@ -16,7 +16,7 @@ vi.mock("@/lib/auth/session", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth/session")>()),
   isSignedIn: async () => mocks.signedIn,
 }));
-vi.mock("@self-learn/catalog/state", () => ({ conversationMade: mocks.made }));
+vi.mock("@gnosia/catalog/state", () => ({ conversationMade: mocks.made }));
 vi.mock("@/lib/learner-store", () => ({ catalogDatabase: async () => ({ db: true }) }));
 
 const { GET } = await import("./route");

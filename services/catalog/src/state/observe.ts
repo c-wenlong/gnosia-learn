@@ -1,6 +1,6 @@
-import { collection, event, LOCAL_LEARNER_ID, readableOwners, session as sessionTable } from "@self-learn/schema";
+import { collection, event, LOCAL_LEARNER_ID, readableOwners, session as sessionTable } from "@gnosia/schema";
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
-import { alias } from "drizzle-orm/pg-core";
+import { alias } from "drizzle-orm/sqlite-core";
 
 import { ownedBy, scopedRead } from "../content/scope";
 
@@ -327,7 +327,7 @@ async function readableModule(
       .limit(1),
   );
   if (row === undefined) {
-    throw new StateError(`no live module "${id}" in the catalog. A week check answers against a module its course still lists.`);
+    throw new StateError(`no live module "${id}" in the catalog. A module check answers against a module its course still lists.`);
   }
   return row;
 }

@@ -5,19 +5,19 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 
-import { asset, assetDerivation, blobObject } from "@self-learn/schema";
+import { asset, assetDerivation, blobObject } from "@gnosia/schema";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { doctor } from "../src/commands/doctor";
 import { runImportCommand } from "../src/commands/index-command";
 import { runStatus } from "../src/commands/status";
-import { posterId, unhookPosters, uploadAssets } from "../src/content/asset-upload";
+import { POSTER_PREFIX, posterId, unhookDerivations, uploadAssets } from "../src/content/asset-upload";
 import { openBlobStore, uploadBlob } from "../src/content/blob";
 import { BLOB_CONTRACT_MIGRATION, blobContractDistance, describeDistance } from "../src/content/blob-contract";
 import { latestRevisions, lockEntity } from "../src/content/revisions";
 import { writeContents } from "../src/content/write";
-import { connect } from "../src/db";
+import { connect, inTransaction } from "../src/db";
 import { REPO_ROOT, SERVICE_ROOT } from "../src/env";
 import {
   applyMigrations,
@@ -37,7 +37,7 @@ import { storedBlob } from "./stored-blob";
 /**
  * Phase 2's contract migration, 0013 (docs/CONTENT-MIGRATION.md, "Contract
  * migration"): a video, sidecar, poster or diagram SVG names its blob, and a
- * blob key is one `@self-learn/blob` makes.
+ * blob key is one `@gnosia/blob` makes.
  *
  * The migration raises with every offending id rather than failing on the
  * constraint; `catalog doctor` lists the same rows; `catalog migrate` holds
@@ -81,7 +81,7 @@ describe("the registered contract migrations", () => {
   });
 });
 
-describe.skipIf(!reachable.ok)("the blob contract, 0013", () => {
+describe.skip("the blob contract, 0013" /* SQLite ships one foundation migration; the pre-0013 schema this needs is only reachable through pg-to-sqlite.mjs. */, () => {
   let scratch: Scratch;
   const badKey = `local/${sha("no extension")}`;
 
@@ -181,7 +181,7 @@ describe.skipIf(!reachable.ok)("the blob contract, 0013", () => {
       () => null,
       (error: unknown) => error,
     );
-    expect(sqlMessage(refused)).toMatch(new RegExp(`these keys are not keys @self-learn/blob makes: ${badKey}\\.`));
+    expect(sqlMessage(refused)).toMatch(new RegExp(`these keys are not keys @gnosia/blob makes: ${badKey}\\.`));
   });
 
   it("applies once nothing stands in its way, and the constraints then hold", async () => {
@@ -199,7 +199,7 @@ describe.skipIf(!reachable.ok)("the blob contract, 0013", () => {
       );
     expect(sqlstate(unstored)).toBe(SQLSTATE.checkViolation);
     // A note, a log, a .tldr and a link are not stored kinds: a path, or a URL, still does.
-    await scratch.db.insert(asset).values({ id: "note:learn/concepts/x/a.md", kind: "note", path: "learn/concepts/x/a.md", sourceRepo: "self-learn" });
+    await scratch.db.insert(asset).values({ id: "note:learn/concepts/x/a.md", kind: "note", path: "learn/concepts/x/a.md", sourceRepo: "gnosia" });
 
     for (const key of [badKey, `Local/${sha("case")}.mp4`, `local/${sha("long")}.${"x".repeat(17)}`]) {
       const refused = await scratch.db.execute(sql`
@@ -276,6 +276,7 @@ describe.skipIf(!reachable.ok)("the manimkc import under the contract", () => {
       ["video", "present"],
       ["transcript", "present"],
       ["poster", "present"],
+      ["pdf", "present"],
     ]);
     expect(first.rowsWritten).toBe(0);
   });
@@ -289,9 +290,11 @@ describe.skipIf(!reachable.ok)("the manimkc import under the contract", () => {
     const manimkcWrite = moved.sources.find((s) => s.source === "manimkc");
     // The video's revision; the poster's are written through the seam beside it.
     expect(manimkcWrite?.revisions).toEqual({ asset: 1 });
-    expect(manimkcWrite?.notes).toContain("1 poster(s) unhooked from a re-rendered video; this import cuts new ones");
+    expect(manimkcWrite?.notes).toContain("1 poster(s) unhooked from a re-rendered video; this import makes new ones");
+    expect(manimkcWrite?.notes).toContain("1 PDF(s) unhooked from a re-rendered video; this import makes new ones");
     // The same import then cuts the new render's poster and hooks it back up.
     expect(manimkcWrite?.notes).toContain("1 poster(s) cut and stored, 0 linked to their video again");
+    expect(manimkcWrite?.notes).toContain("1 PDF(s) made and stored, 0 linked to their video again");
     expect((await video())?.blobKey).toBe(`local/${sha("second render")}.mp4`);
     expect(await derivedFrom(poster)).toEqual(["manimkc:out/demo/one/one.mp4"]);
     expect(await posterKey()).not.toBe(oldPoster);
@@ -316,7 +319,7 @@ describe.skipIf(!reachable.ok)("the manimkc import under the contract", () => {
     const stored = await uploadBlob(scratch.db, openBlobStore(), { ownerId: "local", file: videoFile, mime: "video/mp4", ext: "mp4" });
     const row = await video();
     const [latest] = await scratch.db.execute<{ id: number }>(
-      sql`select max(id)::int as id from content_revision where entity_type = 'asset' and entity_id = ${id}`,
+      sql`select max(id) as id from content_revision where entity_type = 'asset' and entity_id = ${id}`,
     ).then((r) => r.rows);
     const rest: Record<string, unknown> = { ...row };
     delete rest["createdAt"];
@@ -340,7 +343,7 @@ describe.skipIf(!reachable.ok)("the manimkc import under the contract", () => {
     delete posterRest["createdAt"];
     delete posterRest["updatedAt"];
     const [posterLatest] = await scratch.db.execute<{ id: number }>(
-      sql`select max(id)::int as id from content_revision where entity_type = 'asset' and entity_id = ${poster}`,
+      sql`select max(id) as id from content_revision where entity_type = 'asset' and entity_id = ${poster}`,
     ).then((r) => r.rows);
     await writeContents(scratch.db, [
       {
@@ -361,8 +364,10 @@ describe.skipIf(!reachable.ok)("the manimkc import under the contract", () => {
     expect(retry.sources.find((s) => s.source === "manimkc")?.revisions).toEqual({});
     expect(retry.sources.find((s) => s.source === "manimkc")?.notes).toEqual(
       expect.arrayContaining([
-        "1 poster(s) unhooked from a re-rendered video; this import cuts new ones",
+        "1 poster(s) unhooked from a re-rendered video; this import makes new ones",
         "1 poster(s) cut and stored, 0 linked to their video again",
+        "1 PDF(s) unhooked from a re-rendered video; this import makes new ones",
+        "1 PDF(s) made and stored, 0 linked to their video again",
       ]),
     );
     expect(await derivedFrom(poster)).toEqual([id]);
@@ -402,25 +407,21 @@ describe.skipIf(!reachable.ok)("the manimkc import under the contract", () => {
     const other = connect({ url: scratch.url, max: 2 });
     // Settled on every path, so a failure below neither leaves it unhandled
     // nor lets it write into the scratch database during the cleanup.
-    let unhooking: Promise<{ value?: Awaited<ReturnType<typeof unhookPosters>>; error?: unknown }> | undefined;
+    let unhooking: Promise<{ value?: Awaited<ReturnType<typeof unhookDerivations>>; error?: unknown }> | undefined;
     try {
-      await other.db.transaction(async (tx) => {
+      await inTransaction(other.db, async (tx) => {
         await lockEntity(tx, "asset", poster);
-        unhooking = unhookPosters(scratch.db, [id], { author: "test", reason: "an import racing an upload" }).then(
+        unhooking = unhookDerivations(scratch.db, [id], POSTER_PREFIX, {
+          author: "test",
+          reason: "an import racing an upload",
+        }).then(
           (value) => ({ value }),
           (error: unknown) => ({ error }),
         );
-        for (let tries = 0; ; tries += 1) {
-          // Only this scratch database: another suite's lock waiter on the same
-          // server must not release the recut before the unhook is waiting.
-          const { rows } = await other.db.execute<{ waiting: number }>(sql`
-            select count(*)::int as waiting from pg_locks
-            where locktype = 'advisory' and not granted
-              and database = (select oid from pg_database where datname = current_database())`);
-          if ((rows[0]?.waiting ?? 0) > 0) break;
-          if (tries > 200) throw new Error("the unhook never waited on the poster's lock");
-          await new Promise((resolve) => setTimeout(resolve, 25));
-        }
+        // Postgres showed the unhook's advisory-lock wait in pg_locks; SQLite
+        // exposes no waiter list, so give the contender a beat to reach its
+        // `begin immediate` before the holder writes.
+        await new Promise((resolve) => setTimeout(resolve, 100));
         const [row] = await tx.select().from(asset).where(eq(asset.id, poster));
         const posterRest: Record<string, unknown> = { ...row };
         delete posterRest["createdAt"];
@@ -450,7 +451,7 @@ describe.skipIf(!reachable.ok)("the manimkc import under the contract", () => {
   });
 });
 
-describe.skipIf(!reachable.ok)("a migration queued behind a held contract", () => {
+describe.skip("a migration queued behind a held contract" /* SQLite ships one foundation migration; the pre-0013 schema this needs is only reachable through pg-to-sqlite.mjs. */, () => {
   let scratch: Scratch;
   let folder: string;
 
@@ -483,7 +484,7 @@ describe.skipIf(!reachable.ok)("a migration queued behind a held contract", () =
   });
 });
 
-describe.skipIf(!reachable.ok)("a contract migration edited after it was applied", () => {
+describe.skip("a contract migration edited after it was applied" /* SQLite ships one foundation migration; the pre-0013 schema this needs is only reachable through pg-to-sqlite.mjs. */, () => {
   let scratch: Scratch;
   let folder: string;
 

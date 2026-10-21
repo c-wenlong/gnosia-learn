@@ -62,6 +62,10 @@ describe("the problem table", () => {
       kind: "command",
       text: "npm run catalog -- asset upload --source revideokc",
     });
+    expect(assetProblem("not-uploaded", "blenderkc").fix).toEqual({
+      kind: "command",
+      text: "npm run catalog -- asset upload --source blenderkc",
+    });
     expect(assetProblem("not-uploaded", "manimkc")).toEqual(ASSET_PROBLEMS["not-uploaded"]);
     // Not a render, or not known: the table's own sentence.
     expect(assetProblem("not-uploaded", "tldrawkc")).toBe(ASSET_PROBLEMS["not-uploaded"]);
@@ -80,11 +84,11 @@ describe("the problem table", () => {
   });
 
   it("reads a studio video, its sidecars and its poster as the studio's, and anything else by its row", () => {
-    expect(problemSource("video:attention", "self-learn")).toBe(STUDIO_SOURCE);
-    expect(problemSource("video:attention.vtt", "self-learn")).toBe(STUDIO_SOURCE);
-    expect(problemSource("poster:video:attention", "self-learn")).toBe(STUDIO_SOURCE);
+    expect(problemSource("video:attention", "gnosia")).toBe(STUDIO_SOURCE);
+    expect(problemSource("video:attention.vtt", "gnosia")).toBe(STUDIO_SOURCE);
+    expect(problemSource("poster:video:attention", "gnosia")).toBe(STUDIO_SOURCE);
     expect(problemSource("manimkc:out/a/b.mp4", "manimkc")).toBe("manimkc");
-    expect(problemSource("diagram:learn/assets/x.svg", "self-learn")).toBe("self-learn");
+    expect(problemSource("diagram:learn/assets/x.svg", "gnosia")).toBe("gnosia");
     expect(problemSource("note:x", null)).toBeNull();
   });
 

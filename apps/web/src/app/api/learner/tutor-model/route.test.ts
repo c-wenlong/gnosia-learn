@@ -35,7 +35,7 @@ let ip = 0;
 
 function request(
   path: "" | "/test" | "/models" | "/provider",
-  method: "POST" | "DELETE" | "PATCH",
+  method: "POST" | "DELETE" | "PATCH" | "PUT",
   body: unknown,
   options: { origin?: string | null; ip?: string } = {},
 ): Request {
@@ -169,6 +169,24 @@ describe.skipIf(!reachable.ok)("tutor model routes", () => {
     ]);
   });
 
+  it("replaces the whole chain in one PUT, even a full one, and keeps it when refused", async () => {
+    for (let i = 0; i < 10; i += 1) {
+      expect((await routes.POST(request("", "POST", { provider: "nvidia", model: `n/m-${i}` }))).status).toBe(200);
+    }
+    // Ten entries is the cap: an add would answer FULL, a replace does not.
+    const replaced = await json(await routes.PUT(request("", "PUT", { provider: "nvidia", model: "n/new" })));
+    expect(replaced).toMatchObject({ ok: true });
+    expect(replaced.chain).toEqual([{ provider: "nvidia", model: "n/new" }]);
+    const { rows } = await scratch.pool.query<{ position: number }>("select position from tutor_model order by position");
+    expect(rows.map((r) => r.position)).toEqual([0]);
+
+    // The same key rule as an add, and a refused write keeps what was there.
+    const refused = await routes.PUT(request("", "PUT", { provider: "gemini", model: "gemini-2.5-flash" }));
+    expect(refused.status).toBe(400);
+    expect((await refused.json()).code).toBe("NO_KEY");
+    expect(await store.readChain("local")).toEqual([{ provider: "nvidia", model: "n/new" }]);
+  });
+
   it("moves a provider's models together, and Delete takes its models and the saved key, leaving the server's", async () => {
     const saveKey = (provider: string) =>
       keyRoutes.POST(
@@ -220,7 +238,7 @@ describe.skipIf(!reachable.ok)("tutor model routes", () => {
       [request("", "PATCH", { provider: "nvidia", model: "not-there", direction: "up" }), 404, "NOT_FOUND"],
     ];
     for (const [req, status, code] of cases) {
-      const method = req.method as "POST" | "DELETE" | "PATCH";
+      const method = req.method as "POST" | "DELETE" | "PATCH" | "PUT";
       const response = await routes[method](req);
       expect(response.status, `${method} ${code}`).toBe(status);
       const body = await json(response);
@@ -279,7 +297,8 @@ describe.skipIf(!reachable.ok)("tutor model routes", () => {
     expect(await store.readChain("owner-b")).toEqual([]);
     await expect(store.removeChainEntry("owner-b", "nvidia", "a/one")).rejects.toMatchObject({ code: "NOT_FOUND" });
     const steps = await credentials.tutorCredentials("owner-b");
-    expect(steps.map((s) => (isCallable(s) ? [s.config.id, s.config.model] : s))).toEqual([["nvidia", "google/gemma-4-31b-it"]]);
+    // No chain at all means nothing to call — the built-in defaults are gone (T15).
+    expect(steps).toEqual([]);
     expect(await store.readChain("local")).toEqual([{ provider: "nvidia", model: "a/one" }]);
   });
 

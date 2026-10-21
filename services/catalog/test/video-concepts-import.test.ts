@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { asset, assetConcept, COMMONS_OWNER, concept, contentRevision, topic } from "@self-learn/schema";
+import { asset, assetConcept, COMMONS_OWNER, concept, contentRevision, topic } from "@gnosia/schema";
 import { and, eq, like } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 

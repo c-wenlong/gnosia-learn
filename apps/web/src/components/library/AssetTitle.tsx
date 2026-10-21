@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
-import { ASSET_NAME_MAX, cleanAssetName } from "@self-learn/schema/shared";
+import { ASSET_NAME_MAX, cleanAssetName } from "@gnosia/schema/shared";
 
 import { Button } from "@/components/ui/Button";
 import { Collapse } from "@/components/ui/Collapse";

@@ -1,50 +1,46 @@
 "use client";
 
-import { PROVIDER_KEY_LIMITS, type ProviderName } from "@self-learn/schema/shared";
+import { PROVIDER_KEY_LIMITS } from "@gnosia/schema/shared";
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { Card } from "@/components/ui/Card";
 import { Collapse } from "@/components/ui/Collapse";
-import { Combobox } from "@/components/ui/Combobox";
 import { ConfirmFold } from "@/components/ui/ConfirmFold";
 import { FormRow } from "@/components/ui/FormRow";
 import { Glyph } from "@/components/ui/Glyph";
 import { Input } from "@/components/ui/Input";
 import { LiveStatus } from "@/components/ui/LiveStatus";
-import { Select } from "@/components/ui/Select";
 import { TextLink } from "@/components/ui/TextLink";
 import { cx } from "@/components/ui/classes";
+import { Dialog, DIALOG_CLOSE_MS } from "@/components/ui/Dialog";
+import { DialogHeader } from "@/components/ui/DialogHeader";
 import { usePresence } from "@/components/ui/use-presence";
 import type { ChainEntry } from "@/lib/agent/providers";
 import type { ProviderRowView, ProvidersView } from "@/lib/providers/view";
 import { sendJson } from "@/lib/send-json";
+import { BYOK_SETTINGS_CHANGED } from "@/lib/studio-drafts";
 
 /**
- * The Providers card (docs/TUTOR-MODELS.md, T12): the tutor's model
- * providers, each with its key and its models, in the order the tutor tries
- * them. It replaces the Provider keys and Models cards, which kept the key
- * and the models of one provider on two cards.
+ * The Providers card: every model provider in one list — each built-in,
+ * keyed or not, then the custom ones — each row holding its key's state
+ * with Edit (replace the key), Delete (the key and the provider's models,
+ * after a confirm) and Test the key. An unkeyed built-in stays listed: its
+ * row is where the key goes, so a provider is never hidden behind the add
+ * dialog. Add custom provider takes a name, a base URL and a key for any
+ * OpenAI-compatible endpoint (T14).
  *
- * Add provider takes a provider not listed yet and its key. A row shows the
- * key's state with Edit (replace the key), Delete (the key and the
- * provider's models, after a confirm), Move up and Move down (the provider's
- * models together, `PATCH /api/learner/tutor-model/provider`), and an arrow
- * at the far right that opens the row onto its models. Rows start closed.
- * Inside, each model has Test, Move up, Move down and Remove, and Add model
- * is the kit's `Combobox` over the provider's live model list
- * (`/api/learner/tutor-model/models`), fetched when the row first opens, so
- * picking from the list and typing an id are the same field.
+ * Which model a provider serves is picked under Model selection below
+ * (`ModelSelection.tsx`); this card answers whose key the call spends.
  *
  * Keys are write-only, as on the old card (docs/BYOK.md): typed into a
  * password field, sent once, dropped from state whatever the answer. The
  * card is handed last four characters and dates, never a key.
  *
- * Nothing swaps in a frame: every form, confirm and model list glides open
- * and shut (`Collapse`), the arrow turns, a model that arrives fades in, and
- * the status lines glide (`LiveStatus`).
+ * Nothing swaps in a frame: every form and confirm glides open and shut
+ * (`Collapse`), and the status lines glide (`LiveStatus`).
  */
 
 type Status = { kind: "idle" } | { kind: "busy"; text: string } | { kind: "done"; text: string } | { kind: "error"; text: string };
@@ -52,6 +48,8 @@ type Status = { kind: "idle" } | { kind: "busy"; text: string } | { kind: "done"
 interface Reply {
   ok?: boolean;
   error?: string;
+  /** The mirrored `byok.json` write's answer on preset providers: false when the runner did not take it (D95). */
+  byok?: boolean;
   chain?: ChainEntry[];
   models?: { id: string; free?: boolean }[];
   message?: string;
@@ -61,11 +59,6 @@ interface Reply {
   status?: number | null;
   tested?: string;
 }
-
-type ListState =
-  | { state: "loading" }
-  | { state: "ready"; models: { id: string; free?: boolean }[] }
-  | { state: "error"; message: string };
 
 const tone = (s: Status) => (s.kind === "done" ? "ok" : s.kind === "error" ? "danger" : "muted");
 const textOf = (s: Status) => (s.kind === "idle" ? null : s.text);
@@ -95,22 +88,20 @@ export function Providers({ view }: { view: ProvidersView }) {
       id={`${base}-add`}
       variant="secondary"
       size="sm"
-      aria-expanded={adding}
-      aria-controls={`${base}-add-form`}
+      aria-haspopup="dialog"
       disabled={!view.keysReachable || addSaving}
-      onClick={() => setAdding((was) => !was)}
+      onClick={() => setAdding(true)}
     >
       <Glyph name="add" size={16} />
-      Add provider
+      Add custom provider
     </Button>
   );
 
   return (
     <Card title="Providers" action={addButton}>
       <p className="text-[14px] text-text2">
-        {view.usingDefaults
-          ? "Your model providers and their keys. Until you add a model, the tutor tries each provider's built-in default, in this order."
-          : "Your model providers, their keys and their models. The tutor tries each provider's models top to bottom, then the next provider's, and skips a provider with no models."}
+        Your model providers and the keys they run on, shared by the tutor and Studio chats below. A row without a key
+        calls nothing until you add one.
       </p>
       {!view.keysReachable && (
         <Callout role="status" bordered>
@@ -119,38 +110,34 @@ export function Providers({ view }: { view: ProvidersView }) {
       )}
       {!view.chainReachable && (
         <Callout role="status" bordered>
-          Your models could not be read: the database is unreachable. The tutor is using the built-in defaults.
+          Your models could not be read: the database is unreachable. The tutor cannot call anything until they are back.
         </Callout>
       )}
-      <Collapse open={adding} id={`${base}-add-form`}>
-        <AddProvider
-          open={adding}
-          addable={view.addable}
-          onSaving={setAddSaving}
-          onClose={() => {
-            setAdding(false);
-            document.getElementById(`${base}-add`)?.focus();
-          }}
-          onAdded={(label) => {
-            setAdding(false);
-            setStatus({ kind: "done", text: `Added ${label}. Open it to add a model.` });
-            router.refresh();
-          }}
-        />
-      </Collapse>
+      {/* The form is a dialog rather than an inline panel — a provider is a
+          credentials ask, and it deserves the same surface the picker's BYOK
+          connect gets. */}
+      <AddProvider
+        open={adding}
+        onSaving={setAddSaving}
+        onClose={() => setAdding(false)}
+        opener={() => document.getElementById(`${base}-add`)}
+        onAdded={(label, note) => {
+          setAdding(false);
+          setStatus({ kind: "done", text: note ?? `Added ${label}. Pick a model for it below.` });
+          // The key mirrored into `byok.json` — the Studio block reads it.
+          window.dispatchEvent(new Event(BYOK_SETTINGS_CHANGED));
+          router.refresh();
+        }}
+      />
       {view.rows.length === 0 ? (
         <p className="text-[14px] text-text">No provider yet. Add one to give the tutor a model to call.</p>
       ) : (
         <ul className="flex flex-col divide-y-2 divide-border">
-          {view.rows.map((row, index) => (
+          {view.rows.map((row) => (
             <ProviderRow
               key={row.id}
               row={row}
-              first={index === 0 || view.rows[index - 1]?.models.length === 0}
-              last={index === view.rows.length - 1 || view.rows[index + 1]?.models.length === 0}
-              usingDefaults={view.usingDefaults}
-              full={view.full}
-              disabled={!view.keysReachable || !view.chainReachable}
+              disabled={!view.keysReachable}
               // A deleted row leaves with the refresh, its status line with
               // it: the card says what happened, and Add provider takes focus.
               onGone={(text) => {
@@ -168,28 +155,26 @@ export function Providers({ view }: { view: ProvidersView }) {
   );
 }
 
-/** The Add provider menu's last choice: any OpenAI-compatible endpoint (T14). */
-const CUSTOM = "custom";
-
 /**
- * Add provider's form, under the card's text: a provider not listed yet and
- * its key, or a custom provider (a name, a base URL and a key), which
- * `/api/learner/custom-provider` stores whole or not at all.
+ * Add custom provider's dialog: a name, a base URL and a key for any
+ * OpenAI-compatible endpoint (T14), which `/api/learner/custom-provider`
+ * stores whole or not at all.
  */
 function AddProvider({
   open,
-  addable,
   onSaving,
   onClose,
   onAdded,
+  opener,
 }: {
   open: boolean;
-  addable: ProvidersView["addable"];
   onSaving: (saving: boolean) => void;
   onClose: () => void;
-  onAdded: (label: string) => void;
+  /** A provider went on the card. `text` overrides the stock message when only part of the ask landed. */
+  onAdded: (label: string, text?: string) => void;
+  /** The Add custom provider button, which the dialog returns focus to. */
+  opener: () => HTMLElement | null;
 }) {
-  const [provider, setProvider] = useState<ProviderName | typeof CUSTOM>(addable[0]?.id ?? CUSTOM);
   const [draft, setDraft] = useState("");
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
@@ -197,9 +182,7 @@ function AddProvider({
   const [saving, setSaving] = useState(false);
   // In the page only while open, as the old key form: a password field kept
   // in the page is one a browser may fill with the sign-in password.
-  const form = usePresence(open, 300);
-  const custom = provider === CUSTOM || addable.length === 0;
-  const chosen = custom ? undefined : (addable.find((a) => a.id === provider) ?? addable[0]);
+  const form = usePresence(open, DIALOG_CLOSE_MS);
 
   const save = async (event: FormEvent) => {
     event.preventDefault();
@@ -208,49 +191,32 @@ function AddProvider({
     setSaving(true);
     onSaving(true);
     setError(null);
-    const reply = custom
-      ? await sendJson<Reply>("POST", "/api/learner/custom-provider", { label: name, baseUrl: url, key })
-      : await sendJson<Reply>("POST", "/api/learner/provider-key", { provider: chosen?.id, key });
+    const reply = await sendJson<Reply>("POST", "/api/learner/custom-provider", { label: name, baseUrl: url, key });
     setSaving(false);
     onSaving(false);
     if (reply === null || reply.status !== 200 || reply.data.ok !== true) return setError(failure("added", reply));
-    const label = custom ? name.trim() : (chosen?.label ?? "the provider");
+    const label = name.trim();
     setName("");
     setUrl("");
     onAdded(label);
   };
 
   if (!form.mounted) return null;
-  const ready = draft.trim() !== "" && (!custom || (name.trim() !== "" && url.trim() !== ""));
+  const ready = draft.trim() !== "" && name.trim() !== "" && url.trim() !== "";
+  // A save in flight is not dismissed: Escape, the backdrop and Close all
+  // ask the same way, and the ask waits — a hid error is a silent failure.
+  const askClose = () => {
+    if (!saving) onClose();
+  };
   return (
-    <form onSubmit={(e) => void save(e)} aria-label="Add a provider" className="flex flex-col gap-3 rounded-2xl border-2 border-border p-4">
-      <div className="grid gap-3 md:grid-cols-[minmax(0,220px)_minmax(0,1fr)]">
-        <FormRow label="Provider">
-          {({ id }) => (
-            <Select
-              id={id}
-              label="Provider"
-              options={[
-                ...addable.map((a) => ({ value: a.id as string, label: a.label })),
-                { value: CUSTOM, label: "Custom provider", detail: "Any OpenAI-compatible API", section: "Your own" },
-              ]}
-              value={custom ? CUSTOM : (chosen?.id ?? CUSTOM)}
-              onChange={(v) => {
-                setProvider(v as ProviderName | typeof CUSTOM);
-                setError(null);
-              }}
-            />
+    <Dialog label="Add a custom provider" onClose={askClose} closing={form.leaving} size="compact" className="md:w-[520px]" opener={opener}>
+      <DialogHeader title="Add a custom provider" onClose={askClose} />
+      <form onSubmit={(e) => void save(e)} aria-label="Add a custom provider" className="flex min-h-0 flex-col gap-3 overflow-y-auto p-6 pt-5">
+        <FormRow label="Name" hint="How it is listed here and named in the tutor's messages.">
+          {({ id, describedBy }) => (
+            <Input id={id} value={name} maxLength={60} onChange={(e) => setName(e.target.value)} placeholder="My gateway" aria-describedby={describedBy} />
           )}
         </FormRow>
-        {custom && (
-          <FormRow label="Name" hint="How it is listed here and named in the tutor's messages.">
-            {({ id, describedBy }) => (
-              <Input id={id} value={name} maxLength={60} onChange={(e) => setName(e.target.value)} placeholder="My gateway" aria-describedby={describedBy} />
-            )}
-          </FormRow>
-        )}
-      </div>
-      {custom && (
         <FormRow
           label="Base URL"
           hint="The part before /chat/completions, as the provider documents it. https:// only, or http:// for a model server on this machine."
@@ -270,67 +236,55 @@ function AddProvider({
             />
           )}
         </FormRow>
-      )}
-      <FormRow
-        label="API key"
-        hint={
-          <>
-            Sent once and stored encrypted. Only its last four characters are shown again.
-            {custom && " For a local server that needs no key, type any 16 characters."}
-            {chosen?.keyUrl !== undefined && (
-              <>
-                {" "}
-                <TextLink href={chosen.keyUrl} external size="xs">
-                  Get a {chosen.label} key<span aria-hidden> ↗</span>
-                </TextLink>
-              </>
-            )}
-          </>
-        }
-      >
-        {({ id, describedBy, invalid }) => (
-          <Input
-            id={id}
-            type="password"
-            name={`${custom ? "custom" : (chosen?.id ?? "provider")}-api-key`}
-            autoComplete="off"
-            autoCapitalize="off"
-            autoCorrect="off"
-            spellCheck={false}
-            value={draft}
-            minLength={PROVIDER_KEY_LIMITS.minChars}
-            onChange={(e) => {
-              setDraft(e.target.value);
-              setError(null);
-            }}
-            aria-describedby={describedBy}
-            aria-invalid={invalid}
-          />
-        )}
-      </FormRow>
-      {/* The refusal can be about any field (the name, the URL, the key), so it sits above the buttons, not under one of them. */}
-      {error !== null && (
-        <p role="alert" className="animate-fade-in text-[12px] text-danger motion-reduce:animate-none">
-          {error} {draft === "" && "Enter the key again: it is never kept after a send."}
-        </p>
-      )}
-      <div className="flex flex-wrap gap-2.5">
-        <Button type="submit" size="sm" disabled={saving || !ready}>
-          Add provider
-        </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          disabled={saving}
-          onClick={() => {
-            setDraft("");
-            onClose();
-          }}
+        <FormRow
+          label="API key"
+          hint="Sent once and stored encrypted. Only its last four characters are shown again. For a local server that needs no key, type any 16 characters."
         >
-          Cancel
-        </Button>
-      </div>
-    </form>
+          {({ id, describedBy, invalid }) => (
+            <Input
+              id={id}
+              type="password"
+              name="custom-api-key"
+              autoComplete="off"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+              value={draft}
+              minLength={PROVIDER_KEY_LIMITS.minChars}
+              required
+              onChange={(e) => {
+                setDraft(e.target.value);
+                setError(null);
+              }}
+              aria-describedby={describedBy}
+              aria-invalid={invalid}
+            />
+          )}
+        </FormRow>
+        {/* The refusal can be about any field (the name, the URL, the key), so it sits above the buttons, not under one of them. */}
+        {error !== null && (
+          <p role="alert" className="animate-fade-in text-[12px] text-danger motion-reduce:animate-none">
+            {error} {draft === "" && "Enter the key again: it is never kept after a send."}
+          </p>
+        )}
+        <div className="flex flex-wrap gap-2.5">
+          <Button type="submit" size="sm" disabled={saving || !ready}>
+            Add provider
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={saving}
+            onClick={() => {
+              setDraft("");
+              onClose();
+            }}
+          >
+            Cancel
+          </Button>
+        </div>
+      </form>
+    </Dialog>
   );
 }
 
@@ -338,27 +292,16 @@ type Mode = "idle" | "edit" | "delete";
 
 function ProviderRow({
   row,
-  first,
-  last,
-  usingDefaults,
-  full,
   disabled,
   onGone,
 }: {
   row: ProviderRowView;
-  /** No provider with models above it: Move up does nothing. */
-  first: boolean;
-  /** No provider with models below it: Move down does nothing. */
-  last: boolean;
-  usingDefaults: boolean;
-  full: boolean;
   disabled: boolean;
-  /** This row was deleted and leaves with the refresh (no server key keeps it listed), with what to say. */
+  /** This row was deleted and leaves with the refresh, with what to say. */
   onGone: (text: string) => void;
 }) {
   const router = useRouter();
   const base = useId();
-  const [expanded, setExpanded] = useState(false);
   const [mode, setMode] = useState<Mode>("idle");
   const [draft, setDraft] = useState("");
   // A custom provider's Edit also takes its name and base URL (T14).
@@ -384,15 +327,10 @@ function ProviderRow({
     saved === null
       ? row.server
         ? "Using the server's key."
-        : "No key, so the tutor skips this provider."
+        : "No key yet — nothing calls this provider."
       : unreadable
         ? "Your saved key can no longer be read, most likely because the server's secret changed. Edit to re-enter it."
         : `Your key, ending ${saved.last4}. Saved ${saved.savedOn}.`;
-  const modelLine = hasModels
-    ? `${row.models.length} ${row.models.length === 1 ? "model" : "models"}`
-    : usingDefaults && row.inUse !== null && row.custom === undefined
-      ? `Built-in default: ${row.model}`
-      : "No models";
 
   const saveKey = async (event: FormEvent) => {
     event.preventDefault();
@@ -421,6 +359,7 @@ function ProviderRow({
     focusNext.current = `${base}-edit`;
     setMode("idle");
     setStatus({ kind: "done", text: row.custom !== undefined ? "Saved." : "Key saved." });
+    window.dispatchEvent(new Event(BYOK_SETTINGS_CHANGED));
     router.refresh();
   };
 
@@ -428,24 +367,19 @@ function ProviderRow({
     setStatus({ kind: "busy", text: "Deleting…" });
     const reply = await sendJson<Reply>("DELETE", "/api/learner/tutor-model/provider", { provider: row.id });
     // Focus after either answer is the fold's (`ConfirmFold`): back to its
-    // Delete when the delete failed, to the row's Delete once it closes, and
-    // to Add provider when the row itself goes (`onGone`).
+    // Delete when the delete failed, to the row's own Add key once the row
+    // stays (a built-in is always listed), and to Add custom provider when a
+    // custom row leaves with the refresh (`onGone`).
     if (reply === null || reply.status !== 200 || reply.data.ok !== true) {
       return setStatus({ kind: "error", text: failure("deleted", reply) });
     }
     setMode("idle");
-    const text = row.server ? `Deleted ${row.label}. The server's key still applies.` : `Deleted ${row.label}.`;
+    const kept = reply.data.byok === false ? " The studio runner did not answer, so it may still hold the key — remove the provider in a chat's BYOK settings." : "";
+    const text = `Deleted ${row.label}.${kept}`;
     setStatus({ kind: "done", text });
-    if (!row.server) onGone(text);
-    router.refresh();
-  };
-
-  const moveProvider = async (direction: "up" | "down") => {
-    setStatus({ kind: "busy", text: "Moving…" });
-    const reply = await sendJson<Reply>("PATCH", "/api/learner/tutor-model/provider", { provider: row.id, direction });
-    focusNext.current = `${base}-${direction}`;
-    if (reply === null || reply.status !== 200 || reply.data.ok !== true) return setStatus({ kind: "error", text: failure("moved", reply) });
-    setStatus({ kind: "done", text: `${row.label} moved ${direction}.` });
+    window.dispatchEvent(new Event(BYOK_SETTINGS_CHANGED));
+    if (row.custom === undefined) focusNext.current = `${base}-edit`;
+    else onGone(text);
     router.refresh();
   };
 
@@ -482,36 +416,12 @@ function ProviderRow({
           </p>
           {row.custom !== undefined && <p className="font-mono text-[12px] break-all text-text2">{row.custom.baseUrl}</p>}
           <p className={cx("text-[12px]", unreadable || (row.inUse === null && hasModels) ? "text-danger" : "text-text2")}>{keyLine}</p>
-          <p className="text-[12px] break-all text-text2">{modelLine}</p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
-          {hasModels && (
-            <>
-              <Button
-                id={`${base}-up`}
-                variant="secondary"
-                size="sm"
-                className="w-9 px-0"
-                aria-label={`Move ${row.label} up`}
-                title="Move up"
-                disabled={disabled || busy || first}
-                onClick={() => void moveProvider("up")}
-              >
-                <Glyph name="up" size={16} />
-              </Button>
-              <Button
-                id={`${base}-down`}
-                variant="secondary"
-                size="sm"
-                className="w-9 px-0"
-                aria-label={`Move ${row.label} down`}
-                title="Move down"
-                disabled={disabled || busy || last}
-                onClick={() => void moveProvider("down")}
-              >
-                <Glyph name="down" size={16} />
-              </Button>
-            </>
+          {row.inUse !== null && row.custom === undefined && (
+            <Button id={`${base}-test-key`} variant="secondary" size="sm" disabled={disabled || busy} onClick={() => void testKey()}>
+              Test the key
+            </Button>
           )}
           <Button
             id={`${base}-edit`}
@@ -521,7 +431,7 @@ function ProviderRow({
             disabled={disabled || busy}
             onClick={() => open(mode === "edit" ? "idle" : "edit")}
           >
-            Edit
+            {saved === null && row.custom === undefined ? "Add key" : "Edit"}
           </Button>
           <Button
             ref={deleteButton}
@@ -535,21 +445,6 @@ function ProviderRow({
           >
             Delete
           </Button>
-          <button
-            type="button"
-            aria-expanded={expanded}
-            aria-controls={`${base}-models`}
-            aria-label={`${expanded ? "Hide" : "Show"} ${row.label} models`}
-            title={expanded ? "Hide models" : "Show models"}
-            onClick={() => setExpanded((was) => !was)}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-text2 transition-colors duration-100 hover:bg-surface2 hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          >
-            <Glyph
-              name="expand"
-              size={18}
-              className={cx("transition-transform duration-200 motion-reduce:transition-none", expanded && "rotate-180")}
-            />
-          </button>
         </div>
       </div>
 
@@ -583,9 +478,21 @@ function ProviderRow({
                 id={`${base}-key`}
                 label={saved === null ? `Your ${row.label} key` : `A new ${row.label} key`}
                 hint={
-                  row.custom !== undefined
-                    ? "Leave it empty to keep the key saved now. A new one is sent once and stored encrypted."
-                    : "Sent once and stored encrypted. It replaces the key saved now."
+                  <>
+                    {row.custom !== undefined
+                      ? "Leave it empty to keep the key saved now. A new one is sent once and stored encrypted."
+                      : saved === null
+                        ? "Sent once and stored encrypted. Only its last four characters are shown again."
+                        : "Sent once and stored encrypted. It replaces the key saved now."}
+                    {row.keyUrl !== undefined && (
+                      <>
+                        {" "}
+                        <TextLink href={row.keyUrl} external size="xs">
+                          Get a {row.label} key<span aria-hidden> ↗</span>
+                        </TextLink>
+                      </>
+                    )}
+                  </>
                 }
               >
                 {({ id, describedBy }) => (
@@ -633,7 +540,6 @@ function ProviderRow({
         message={
           <>
             Delete {row.label}? {row.custom !== undefined ? "It is removed with your key and its models." : goes(saved !== null, row.models.length)}
-            {row.server ? " The server's key stays, so it is still listed." : ""}
           </>
         }
         confirmLabel="Delete"
@@ -644,290 +550,7 @@ function ProviderRow({
       />
 
       <LiveStatus text={textOf(status)} tone={tone(status)} className="pt-2.5" />
-
-      <Collapse open={expanded} id={`${base}-models`}>
-        <Models row={row} usingDefaults={usingDefaults} full={full} disabled={disabled} visible={expanded} onTestKey={() => void testKey()} testKeyId={`${base}-test-key`} />
-      </Collapse>
     </li>
-  );
-}
-
-/** A row's models, opened under it: each with Test, Move up, Move down and Remove, then Add model. */
-function Models({
-  row,
-  usingDefaults,
-  full,
-  disabled,
-  visible,
-  onTestKey,
-  testKeyId,
-}: {
-  row: ProviderRowView;
-  usingDefaults: boolean;
-  full: boolean;
-  disabled: boolean;
-  /** The row is open: the model list is fetched the first time it is. */
-  visible: boolean;
-  onTestKey: () => void;
-  testKeyId: string;
-}) {
-  const router = useRouter();
-  const base = useId();
-  const [tests, setTests] = useState<Record<string, { ok: boolean; text: string }>>({});
-  const [status, setStatus] = useState<Status>({ kind: "idle" });
-  const [model, setModel] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [list, setList] = useState<ListState | null>(null);
-  const busy = status.kind === "busy";
-  const focusNext = useRef<string | null>(null);
-  useEffect(() => {
-    if (focusNext.current === null || busy) return;
-    document.getElementById(focusNext.current)?.focus();
-    focusNext.current = null;
-  }, [busy, row.models]);
-  const idFor = (m: string, action: string) => `${base}-${m}-${action}`;
-  const keyed = row.inUse !== null;
-
-  /**
-   * The provider's model list, asked once each time the row opens, and again
-   * when its key changes while it is open: a replaced key is another
-   * account, and the server's cache is keyed by the key. A list that failed
-   * is asked again on Try again. Only the newest ask's answer is shown, so a
-   * slow earlier one cannot put an old list or an old error back.
-   */
-  const asked = useRef<string | null>(null);
-  const latest = useRef(0);
-  const keyStamp = `${row.inUse ?? "none"}:${row.saved?.last4 ?? ""}:${row.saved?.savedOn ?? ""}`;
-  const load = async () => {
-    const ask = ++latest.current;
-    setList({ state: "loading" });
-    const reply = await sendJson<Reply>("POST", "/api/learner/tutor-model/models", { provider: row.id });
-    if (ask !== latest.current) return;
-    setList(
-      reply === null
-        ? { state: "error", message: "the server did not answer" }
-        : reply.status === 200 && reply.data.ok === true && Array.isArray(reply.data.models)
-          ? { state: "ready", models: reply.data.models }
-          : {
-              state: "error",
-              message:
-                reply.status === 200
-                  ? `${typeof reply.data.status === "number" ? `HTTP ${reply.data.status}: ` : ""}${reply.data.message ?? "no reason given"}`
-                  : (reply.data.error ?? `HTTP ${reply.status}`),
-            },
-    );
-  };
-  useEffect(() => {
-    if (!visible) {
-      asked.current = null;
-      return;
-    }
-    if (asked.current === keyStamp || !keyed) return;
-    asked.current = keyStamp;
-    void load();
-    // `load` reads only the row's id, which a row never changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, keyed, keyStamp]);
-
-  const change = async (method: "DELETE" | "PATCH", m: string, extra: Record<string, unknown>, busyText: string, pressed: string, done: (next: ChainEntry[]) => { text: string; focus: string }) => {
-    setStatus({ kind: "busy", text: busyText });
-    const reply = await sendJson<Reply>(method, "/api/learner/tutor-model", { provider: row.id, model: m, ...extra });
-    if (reply === null || reply.status !== 200 || reply.data.ok !== true || reply.data.chain === undefined) {
-      focusNext.current = pressed;
-      return setStatus({ kind: "error", text: failure("changed", reply) });
-    }
-    const { text, focus } = done(reply.data.chain);
-    focusNext.current = focus;
-    setStatus({ kind: "done", text });
-    router.refresh();
-  };
-
-  const move = (m: string, direction: "up" | "down") =>
-    change("PATCH", m, { direction }, "Moving…", idFor(m, direction), (next) => {
-      const mine = next.filter((e) => e.provider === row.id).map((e) => e.model);
-      const at = mine.indexOf(m);
-      const atEnd = direction === "up" ? at === 0 : at === mine.length - 1;
-      return { text: `${m} is now number ${at + 1} of ${mine.length}.`, focus: idFor(m, atEnd ? (direction === "up" ? "down" : "up") : direction) };
-    });
-
-  const remove = (m: string) => {
-    const at = row.models.indexOf(m);
-    return change("DELETE", m, {}, "Removing…", idFor(m, "remove"), (next) => {
-      const mine = next.filter((e) => e.provider === row.id).map((e) => e.model);
-      const neighbour = mine[Math.min(at, mine.length - 1)];
-      return {
-        text: next.length === 0 ? `Removed ${m}. The tutor is back on the built-in defaults.` : `Removed ${m}.`,
-        focus: neighbour === undefined ? `${base}-model` : idFor(neighbour, "remove"),
-      };
-    });
-  };
-
-  const test = async (m: string) => {
-    setStatus({ kind: "busy", text: `Testing ${m}…` });
-    const reply = await sendJson<Reply>("POST", "/api/learner/tutor-model/test", { provider: row.id, model: m });
-    let result: { ok: boolean; text: string };
-    if (reply === null) result = { ok: false, text: "Not tested: the server did not answer." };
-    else if (reply.status === 200 && reply.data.ok === true) {
-      result = { ok: true, text: `Works${reply.data.served && reply.data.served !== m ? `, answered by ${reply.data.served}` : ""}.` };
-    } else if (reply.status === 200) {
-      const outcome = typeof reply.data.status === "number" ? `Refused (HTTP ${reply.data.status})` : "No answer";
-      result = { ok: false, text: `${outcome}: ${reply.data.message ?? "no reason given."}` };
-    } else result = { ok: false, text: reply.data.error ?? `Not tested (HTTP ${reply.status}).` };
-    focusNext.current = idFor(m, "test");
-    setTests((t) => ({ ...t, [m]: result }));
-    setStatus({ kind: result.ok ? "done" : "error", text: `${m}: ${result.text}` });
-  };
-
-  const add = async (event: FormEvent) => {
-    event.preventDefault();
-    setStatus({ kind: "busy", text: "Adding…" });
-    setError(null);
-    const reply = await sendJson<Reply>("POST", "/api/learner/tutor-model", { provider: row.id, model });
-    if (reply === null || reply.status !== 200 || reply.data.ok !== true || reply.data.chain === undefined) {
-      focusNext.current = `${base}-model`;
-      setStatus({ kind: "idle" });
-      return setError(failure("added", reply));
-    }
-    const added = model.trim();
-    setModel("");
-    focusNext.current = `${base}-model`;
-    setStatus({ kind: "done", text: `Added ${added}. Test it to check ${row.label} answers.` });
-    router.refresh();
-  };
-
-  const suggestions = useMemo(
-    () =>
-      list?.state === "ready"
-        ? list.models.filter((m) => !row.models.includes(m.id)).map((m) => ({ value: m.id, label: m.id, detail: m.free ? "free" : undefined }))
-        : NO_MODELS,
-    [list, row.models],
-  );
-  const reason = !keyed ? `Add a ${row.label} key first: Edit above.` : full ? "The tutor keeps at most 10 models. Remove one first." : undefined;
-
-  return (
-    <div className="mt-3 flex flex-col gap-3 rounded-2xl bg-surface2 p-4">
-      {row.models.length === 0 ? (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[13px] text-text2">
-          <p>
-            {usingDefaults && keyed && row.custom === undefined
-              ? `No models yet. Until you add one to any provider, the tutor calls ${row.label}'s built-in default, ${row.model}.`
-              : `No models yet, so the tutor skips ${row.label}.`}
-          </p>
-          {keyed && row.custom === undefined && (
-            <Button id={testKeyId} variant="ghost" size="sm" disabled={disabled} onClick={onTestKey}>
-              Test the key
-            </Button>
-          )}
-        </div>
-      ) : (
-        <ol className="flex flex-col gap-2">
-          {row.models.map((m, index) => {
-            const last = tests[m];
-            return (
-              <li key={m} className="flex animate-fade-in flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border-2 border-border bg-surface px-3 py-2.5 motion-reduce:animate-none">
-                <span aria-hidden className="w-4 shrink-0 text-[13px] font-semibold text-text2 tabular-nums">
-                  {index + 1}
-                </span>
-                <div className="flex min-w-0 flex-1 basis-[200px] flex-col gap-0.5">
-                  <p id={`${base}-${m}-name`} className="font-mono text-[13px] break-all text-text">
-                    {m}
-                  </p>
-                  {last !== undefined && (
-                    <p key={last.text} className={cx("animate-fade-in text-[12px] motion-reduce:animate-none", last.ok ? "text-ok-text" : "text-danger")}>
-                      Last test: {last.text}
-                    </p>
-                  )}
-                </div>
-                <div role="group" aria-labelledby={`${base}-${m}-name`} className="flex shrink-0 flex-wrap gap-1.5">
-                  <Button id={idFor(m, "test")} variant="secondary" size="sm" disabled={disabled || busy || !keyed} onClick={() => void test(m)}>
-                    Test
-                  </Button>
-                  <Button
-                    id={idFor(m, "up")}
-                    variant="secondary"
-                    size="sm"
-                    className="w-9 px-0"
-                    aria-label={`Move ${m} up`}
-                    title="Move up"
-                    disabled={disabled || busy || index === 0}
-                    onClick={() => void move(m, "up")}
-                  >
-                    <Glyph name="up" size={16} />
-                  </Button>
-                  <Button
-                    id={idFor(m, "down")}
-                    variant="secondary"
-                    size="sm"
-                    className="w-9 px-0"
-                    aria-label={`Move ${m} down`}
-                    title="Move down"
-                    disabled={disabled || busy || index === row.models.length - 1}
-                    onClick={() => void move(m, "down")}
-                  >
-                    <Glyph name="down" size={16} />
-                  </Button>
-                  <Button id={idFor(m, "remove")} variant="secondary" size="sm" aria-label={`Remove ${m}`} disabled={disabled || busy} onClick={() => void remove(m)}>
-                    Remove
-                  </Button>
-                </div>
-              </li>
-            );
-          })}
-        </ol>
-      )}
-
-      <form onSubmit={(e) => void add(e)} aria-label={`Add a ${row.label} model`} className="flex flex-col gap-1.5">
-        <FormRow id={`${base}-model`} label="Add a model" error={error}>
-          {({ id, invalid }) => (
-            <div className="flex flex-wrap items-start gap-2.5">
-              <Combobox
-                id={id}
-                name="model"
-                label={`${row.label} model`}
-                options={suggestions}
-                autoCapitalize="off"
-                autoCorrect="off"
-                spellCheck={false}
-                value={model}
-                onChange={(v) => {
-                  setModel(v);
-                  setError(null);
-                }}
-                placeholder={keyed ? "Search models or type an id" : "Add a key first"}
-                describedBy={`${base}-list`}
-                invalid={invalid}
-                disabled={disabled || reason !== undefined}
-                className="min-w-0 flex-1 basis-[240px]"
-              />
-              <Button type="submit" size="sm" className="mt-[3px]" disabled={disabled || busy || reason !== undefined || model.trim() === ""} disabledReason={reason}>
-                Add model
-              </Button>
-            </div>
-          )}
-        </FormRow>
-        {keyed && (
-          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-            <p id={`${base}-list`} aria-live="polite" className="text-[12px] text-text2">
-              {list === null || list.state === "loading"
-                ? `Loading ${row.label}'s models…`
-                : list.state === "ready"
-                  ? list.models.length > 0
-                    ? `${list.models.length} ${list.models.length === 1 ? "model" : "models"} from ${row.label}. Type to search, or type any model id.`
-                    : `${row.label} listed no models. Type a model id.`
-                  : `The list could not be loaded (${list.message}). Type a model id.`}
-            </p>
-            {list?.state === "error" && (
-              <Button variant="ghost" size="sm" onClick={() => void load()}>
-                Try again
-              </Button>
-            )}
-          </div>
-        )}
-      </form>
-      <div className="-mt-3">
-        <LiveStatus text={textOf(status)} tone={tone(status)} className="pt-3" />
-      </div>
-    </div>
   );
 }
 
@@ -940,5 +563,3 @@ function goes(key: boolean, models: number): string {
   return `${said.charAt(0).toUpperCase()}${said.slice(1)} ${parts.length > 1 ? "go" : "goes"} with it.`;
 }
 
-/** The model box's suggestions while the list is not in: none, the same array each time. */
-const NO_MODELS: { value: string; label: string; detail?: string }[] = [];

@@ -26,7 +26,7 @@ prefix T to keep them apart from BYOK's D1 to D11.
 | Move or delete a whole provider | `PATCH` and `DELETE /api/learner/tutor-model/provider` (T12) |
 | Test one entry | `POST /api/learner/tutor-model/test` |
 | List a provider's models | `POST /api/learner/tutor-model/models` |
-| The Settings card | `apps/web/src/components/settings/Providers.tsx`, fed by `apps/web/src/lib/providers/view.ts` (T12) |
+| The Settings cards | `apps/web/src/components/settings/Providers.tsx` (every provider, keyed or not) and `apps/web/src/components/settings/ModelSelection.tsx` (the tutor's pick and Studio chats), fed by `apps/web/src/lib/providers/view.ts` (T12, T16) |
 
 A turn of the tutor, with and without a chain:
 
@@ -75,12 +75,8 @@ works by keyboard, and after a move or a remove focus returns to the entry
 acted on or the one that took its place. Adding does not require a passing
 Test. The last Test result per entry is shown, held in the page's memory only.
 
-**T3. No chain behaves exactly as before.** A new owner, an owner who removed
-every entry, and any request whose chain cannot be read (the database is
-down) get `orderCredentials` unchanged: the built-in defaults, the env
-overrides, the existing provider order. The card says the tutor is using the
-built-in defaults until you add a model, and lists them. The defaults stay in
-code only as that fallback.
+**T3. Superseded by T15.** No chain once meant the built-in defaults; T15
+removed them, so an empty chain means the tutor calls nothing.
 
 **T4. An entry without a key is skipped, not fatal.** When nothing holds a
 key for an entry's provider (the owner removed their key and the server has
@@ -318,3 +314,36 @@ Ollama or LM Studio), by a name, a base URL and a key, from Add provider's
 - **The learner export** carries the custom providers' names and base URLs
   as `customProviders`, never a key, beside `tutorModels` (T6).
 
+## T15. No built-in defaults: the chain alone is what the tutor calls
+
+**Decided 2026-10-09.** Before this, a keyed provider answered for its
+built-in default model whenever the chain was empty, and the Providers card
+listed every provider with a key — the server's included — so the tutor
+always had somewhere to go but the owner never saw why that model. Now the
+chain is the whole call set: `tutorSteps` returns empty when the owner has
+added no models, `availableProviderSummary` says "add a provider and a
+model", and the card lists only providers the owner connected — a saved key
+or chain entries — with the rest offered under Add provider. A provider's
+built-in default still feeds one place: the key Test, which needs a model
+to call (`keyTestModel`, `used` false). `orderCredentials` remains for
+callers with no owner — scripts and tests — and is not the tutor's
+fallback anymore.
+
+## T16. Two cards: every provider listed, and the picks as dropdowns
+
+**Decided 2026-10-09.** The owner asked for the Models tab to shrink to
+Providers and Model selection. The Providers card now lists every built-in,
+keyed or not, then the custom providers — an unkeyed row is where its key
+goes ("Add key" opens the same form Edit does), so no provider waits behind
+the add dialog, which remains only for custom providers (T14). A built-in's
+Delete takes the key and the models but the row stays.
+
+Model selection replaces the Tutor models card and the Studio chats (BYOK)
+card. The tutor's side is one provider-and-model pick, the provider's own
+`/models` list behind a `Combobox`, saved as the whole chain it replaces
+through `PUT /api/learner/tutor-model`, one locked rewrite (`setTutorModel`)
+so a refused save keeps the chain it would have replaced.
+The Studio chats side is the picker's `ByokConfig` trimmed to selection
+(`manageKeys` off): connected providers and tutor-saved ones that connect
+with their key, no key field, the Lite/Default/Max tiers unchanged. The
+harness picker's dialog keeps the full `ByokConfig`, key entry included.

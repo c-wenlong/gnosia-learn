@@ -9,7 +9,7 @@ import {
   type ThemeAppearance,
   type ThemeMode,
   type ThemePalette,
-} from "@self-learn/schema/shared";
+} from "@gnosia/schema/shared";
 
 import { writeCookie } from "@/lib/client-cookie";
 import { prefersReducedMotion } from "@/lib/motion";
@@ -47,7 +47,10 @@ export { appearanceOf, asThemeMode, paletteOf, THEME_APPEARANCES, THEME_MODES, T
  * whenever the mode or the device setting changes.
  */
 
-export const THEME_COOKIE = "self-learn-theme";
+export const THEME_COOKIE = "gnosia-theme";
+
+/** The same cookie as browsers named it before the rename; read as a fallback only. */
+export const LEGACY_THEME_COOKIE = "self-learn-theme";
 
 /** A year. Long enough that it outlives the browser sessions that matter. */
 export const THEME_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;

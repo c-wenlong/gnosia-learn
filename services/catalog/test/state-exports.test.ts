@@ -4,7 +4,7 @@ import * as store from "../src/state";
 import { byKind, type AssetRef } from "../src/state";
 
 /**
- * What comes out of `@self-learn/catalog/state`.
+ * What comes out of `@gnosia/catalog/state`.
  *
  * `apps/web/` may import this package through exactly one specifier
  * (ARCHITECTURE.md layering rule 1), so this list is not an implementation
@@ -72,9 +72,13 @@ const REQUIRED = [
   "dbSource",
   // The blob store's root, so the route serving a blob opens the store the CLI uploaded to.
   "blobRoot",
-  // Which blob serves an asset, and a video's stored poster, for the asset routes.
+  // Which blob serves an asset, and a video's stored poster and PDF, for the asset routes.
   "assetBlobs",
   "posterBlob",
+  "pdfBlob",
+  "videosWithStoredPoster",
+  "videosWithStoredPdf",
+  "PDF_CONTENT_TYPE",
   // The poster recipe the upload command and the web app's ffmpeg fallback share.
   "ffmpegArgs",
   "POSTER_OFFSETS_SECONDS",

@@ -86,6 +86,21 @@ export function DownloadButton({ href }: { href: string }) {
   );
 }
 
+/**
+ * PDF: the video's pages as a document (`assetPdfHref`), served inline so
+ * the browser's own viewer opens it. A new tab — reading the document
+ * should not leave the watch page behind. Rendered only when the upload or
+ * put stored one (`storedPdfs`), since a video without a PDF 404s.
+ */
+export function PdfButton({ href }: { href: string }) {
+  return (
+    <a href={href} target="_blank" rel="noreferrer" className={buttonClasses({ variant: "secondary", size: "sm" })}>
+      <Glyph name="open" size={18} className="text-text2" />
+      PDF
+    </a>
+  );
+}
+
 /** Ask: opens the unsaved chat about this asset (`AskPanel`). */
 export function AskButton({
   open,

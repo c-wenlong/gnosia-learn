@@ -16,7 +16,7 @@ import { createContext, useContext, type ReactNode } from "react";
 export interface PaneLayout {
   /** True inside `StudioPane`. */
   inline: boolean;
-  /** What the header draws before its title: the sidebar's toggle on a phone. */
+  /** What the header draws before its title: the conversation's harness picker. */
   leading: ReactNode;
 }
 

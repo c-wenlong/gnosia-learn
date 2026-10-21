@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { PREFERENCE_KEYS } from "@self-learn/schema/shared";
-import { readPreference, withLearnerLock, writePreference } from "@self-learn/catalog/state";
+import { PREFERENCE_KEYS } from "@gnosia/schema/shared";
+import { readPreference, withLearnerLock, writePreference } from "@gnosia/catalog/state";
 
 import { enforceRateLimit } from "@/lib/agent/guard";
 import { BadRequest, handler, LEARNER_RATE_LIMIT, requestOwner } from "@/lib/learner-api";

@@ -4,9 +4,10 @@ import { stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 
 import { BriefError, loadVocabulary, validateBrief, vocabularyStatusNow, type ValidBrief, type Vocabulary } from "./brief";
+import { byokStatus, checkByokProvider, listByokModels, loadByok, removeByokProvider, saveByok, saveByokModels, setByokActive } from "./byok";
 import { canvas, doctor, doctorChecks, type DoctorCheck } from "./canvas";
 import { preferenceSet, videoList } from "./catalog";
-import { STUDIO_OWNER_HEADER, studioAgentPreference } from "@self-learn/schema/shared";
+import { STUDIO_OWNER_HEADER, studioAgentPreference } from "@gnosia/schema/shared";
 
 import { agentAuthReport, CONCURRENCY, HOST, PORT, studioOwner, VERB_TIMEOUT_MS } from "./config";
 import { recompare } from "./compare";
@@ -383,6 +384,21 @@ async function handle(
     return agentSettingsRoute(request, response, method, probes);
   }
 
+  /* /api/settings/byok: the open harness's provider, key and model. */
+  if (segments[1] === "settings" && segments[2] === "byok" && segments.length === 3) {
+    return byokSettingsRoute(request, response, method, probes);
+  }
+
+  /* /api/settings/byok/models: POST lists the provider's models; PUT saves a provider's tier picks (D94). */
+  if (segments[1] === "settings" && segments[2] === "byok" && segments[3] === "models" && segments.length === 4) {
+    return byokModelsRoute(request, response, method, probes);
+  }
+
+  /* /api/settings/byok/active: which connected provider a byok turn runs on (D94). */
+  if (segments[1] === "settings" && segments[2] === "byok" && segments[3] === "active" && segments.length === 4) {
+    return byokActiveRoute(request, response, method, probes);
+  }
+
   /* /api/vocabulary: the topics a brief is checked against, as the screens show them. */
   if (segments[1] === "vocabulary" && segments.length === 2) {
     if (method !== "GET") return fail(response, 405, `${method} is not a thing /api/vocabulary does`);
@@ -412,7 +428,9 @@ async function handle(
         "/api/drafts/{id}",
         "/api/drafts/{id}/messages|events|draw|abandon",
         "PUT /api/drafts/{id}/brief",
-        "PUT /api/drafts/{id}/name|model",
+        "PUT /api/drafts/{id}/name|model|harness",
+        "/api/settings/agent",
+        "/api/settings/byok",
         "/api/diagrams",
         "/api/diagrams/{name}",
         "/api/diagrams/{name}/svg",
@@ -1472,6 +1490,8 @@ async function draftRoutes(
         tutor: input.tutor,
         // The composer picker's pick (D90): checked in `drafts.ts`.
         model: input.model,
+        // The pane picker's pick: `claude` when absent; checked in `drafts.ts`.
+        harness: input.harness,
       });
       return send(response, created ? 201 : 200, {
         draftId: record.id,
@@ -1628,6 +1648,24 @@ async function draftRoutes(
         return refusal(error);
       }
     }
+    case "PUT harness": {
+      // The pane picker's pick: only a conversation that has not spoken yet
+      // can move harnesses, which `setHarness` is the one gate on.
+      const input = await body();
+      if (input === null) return;
+      if (!("harness" in input)) return fail(response, 400, `"harness" is required: "claude" or "byok"`, { field: "harness" });
+      try {
+        const { record, changed } = await drafts.setHarness(id, input.harness);
+        return send(response, 200, {
+          draftId: id,
+          harness: record.harness ?? "claude",
+          changed,
+          note: !changed ? "the harness is unchanged" : `the conversation runs on ${record.harness ?? "claude"}`,
+        });
+      } catch (error) {
+        return refusal(error);
+      }
+    }
     case "PUT brief": {
       const input = await body();
       if (input === null) return;
@@ -1651,7 +1689,7 @@ async function draftRoutes(
     }
     default:
       return fail(response, 404, `no route ${method} ${url.pathname}`, {
-        routes: ["POST messages", "GET events", "POST draw", "POST abandon", "PUT brief", "PUT name", "PUT model", "POST slots/{kind}/stop-waiting", "POST slots/{kind}/use"],
+        routes: ["POST messages", "GET events", "POST draw", "POST abandon", "PUT brief", "PUT name", "PUT model", "PUT harness", "POST slots/{kind}/stop-waiting", "POST slots/{kind}/use"],
       });
   }
 }
@@ -1779,6 +1817,107 @@ async function agentSettingsRoute(
 }
 
 /**
+ * `GET /api/settings/byok`: whether the open harness (`qwen`) can run and on
+ * which provider and model, never the key. `PUT` with `{ provider, apiKey,
+ * model }` writes `$STUDIO_HOME/byok.json` mode 0600 and answers as `GET`;
+ * the key goes no further than that file and a spawn's env.
+ */
+async function byokSettingsRoute(
+  request: IncomingMessage,
+  response: ServerResponse,
+  method: string,
+  probes: HealthProbes,
+): Promise<void> {
+  if (method === "GET") return send(response, 200, await byokStatus());
+  if (method !== "PUT" && method !== "DELETE") return fail(response, 405, `${method} is not a thing /api/settings/byok does`);
+  let body: Record<string, unknown>;
+  try {
+    const parsed = await readJson(request);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return fail(response, 400, "the request body must be a JSON object");
+    body = parsed as Record<string, unknown>;
+  } catch (error) {
+    return badBody(response, error);
+  }
+  try {
+    const saved = method === "PUT" ? await saveByok(body) : await removeByokProvider(body);
+    // Health's copy of the agent block is now wrong.
+    probes.agent.forget();
+    return send(response, 200, saved);
+  } catch (error) {
+    if (error instanceof JobRefused) return fail(response, error.status, error.message, error.detail);
+    throw error;
+  }
+}
+
+/**
+ * `POST /api/settings/byok/models` `{ provider, apiKey? }`: the provider's own
+ * `/models` on the key the dialog holds — typed, or the stored one when the
+ * field was left blank on that provider (D93's combobox). A POST rather than a
+ * GET so the key is never in a URL. Answers `{ models: [{ value, label }] }`,
+ * `label` null when the provider sends ids only.
+ *
+ * `PUT /api/settings/byok/models` `{ provider, models: { lite?, default?,
+ * max? } }` (D94): a connected provider's tier picks, merged over what it
+ * has — omitted keeps, empty clears.
+ */
+async function byokModelsRoute(request: IncomingMessage, response: ServerResponse, method: string, probes: HealthProbes): Promise<void> {
+  let body: Record<string, unknown>;
+  try {
+    const parsed = await readJson(request);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return fail(response, 400, "the request body must be a JSON object");
+    body = parsed as Record<string, unknown>;
+  } catch (error) {
+    return badBody(response, error);
+  }
+  try {
+    if (method === "PUT") {
+      const saved = await saveByokModels(body);
+      probes.agent.forget();
+      return send(response, 200, saved);
+    }
+    if (method !== "POST") return fail(response, 405, `${method} is not a thing /api/settings/byok/models does`);
+    const provider = checkByokProvider(body.provider);
+    let apiKey = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
+    if (apiKey === "") {
+      const held = await loadByok();
+      const entry = held === null ? undefined : held.providers[provider];
+      if (entry === undefined) {
+        throw new JobRefused(400, `"apiKey" is the provider's key, or the stored one when the field is left blank`, { field: "apiKey" });
+      }
+      apiKey = entry.apiKey;
+    }
+    return send(response, 200, { models: await listByokModels(provider, apiKey) });
+  } catch (error) {
+    if (error instanceof JobRefused) return fail(response, error.status, error.message, error.detail);
+    throw error;
+  }
+}
+
+/**
+ * `PUT /api/settings/byok/active` `{ provider }`: which connected provider a
+ * `byok` turn runs on (D94). Answers as `GET /api/settings/byok` does.
+ */
+async function byokActiveRoute(request: IncomingMessage, response: ServerResponse, method: string, probes: HealthProbes): Promise<void> {
+  if (method !== "PUT") return fail(response, 405, `${method} is not a thing /api/settings/byok/active does`);
+  let body: Record<string, unknown>;
+  try {
+    const parsed = await readJson(request);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return fail(response, 400, "the request body must be a JSON object");
+    body = parsed as Record<string, unknown>;
+  } catch (error) {
+    return badBody(response, error);
+  }
+  try {
+    const saved = await setByokActive(body);
+    probes.agent.forget();
+    return send(response, 200, saved);
+  } catch (error) {
+    if (error instanceof JobRefused) return fail(response, error.status, error.message, error.detail);
+    throw error;
+  }
+}
+
+/**
  * `GET /api/videos`: the owner's landed studio videos, from `catalog video
  * list` (owner-scoped there). `posterAssetId` is the video's own asset id,
  * which the web app's `/api/assets/{id}/poster` takes, or null when no poster
@@ -1830,9 +1969,11 @@ async function health(
   // starts a refresh for the next call (health-probes.ts has the measurements
   // that made this necessary). Only a probe that has never answered is waited
   // for, which `npm run studio` avoids by warming them all at start.
-  const [doctorRead, claudeRead, catalogRead, agentRead, vocabulary] = await Promise.all([
+  const [doctorRead, claudeRead, qwenRead, codexRead, catalogRead, agentRead, vocabulary] = await Promise.all([
     probes.doctor.read(),
     probes.claude.read(),
+    probes.qwen.read(),
+    probes.codex.read(),
     probes.catalog.read(),
     probes.agent.read(),
     // The last read any route made, however old, rather than a `catalog topic
@@ -1841,6 +1982,8 @@ async function health(
   ]);
   const checked = doctorRead.value.result;
   const claudeVersion = claudeRead.value;
+  const qwenVersion = qwenRead.value;
+  const codexVersion = codexRead.value;
   const catalog = catalogRead.value;
   const agent = agentRead.value;
   // The video doctor's cached answer: it takes seconds, so health never
@@ -1889,6 +2032,15 @@ async function health(
     chromium: tldrawkc,
     claude,
     claudeVersion: claudeVersion?.stdout.trim() ?? null,
+    // The BYOK harness's binary (Qwen Code): absent does not warn, since the
+    // picker's BYOK row is the only thing that uses it.
+    qwen: qwenVersion !== null && qwenVersion.code === 0,
+    qwenVersion: qwenVersion?.stdout.trim() ?? null,
+    // OpenAI's harness (Codex CLI), the picker's Codex row: absent does not
+    // warn for the same reason. `codex login` state is checked at pick time,
+    // not here — the file check is cheap but health should not stat it.
+    codex: codexVersion !== null && codexVersion.code === 0,
+    codexVersion: codexVersion?.stdout.trim() ?? null,
     // Which credential the next agent will run on, and whether a key is in
     // the runner's environment at all. A job whose first request is refused
     // offers "doctor", and this is the line that answers it.
@@ -1933,6 +2085,8 @@ async function health(
     freshness: {
       tldrawkc: freshness(doctorRead),
       claude: freshness(claudeRead),
+      qwen: freshness(qwenRead),
+      codex: freshness(codexRead),
       postgres: freshness(catalogRead),
       agent: freshness(agentRead),
     },

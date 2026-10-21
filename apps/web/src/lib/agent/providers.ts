@@ -7,7 +7,7 @@ import {
   TUTOR_MODEL_LIMITS,
   type ProviderId,
   type ProviderName,
-} from "@self-learn/schema/shared";
+} from "@gnosia/schema/shared";
 
 import { redactSecrets } from "@/lib/agent/redact";
 import { resolveSiteUrl } from "@/lib/site-url";
@@ -155,7 +155,7 @@ function baseUrl(env: EnvMap, id: ProviderId, variable: string): string {
  * an explicit answer to exactly this question, and a header is all it becomes.
  *
  * Below it, `resolveSiteUrl` answers, in place of the literal
- * `https://self-learn-one.vercel.app` that used to sit here. That was this
+ * `https://gnosia-one.vercel.app` that used to sit here. That was this
  * deployment's own domain, so a fork that set `NEXT_PUBLIC_SITE_URL` and
  * nothing else was crediting its requests to us.
  *
@@ -288,7 +288,7 @@ export function providerConfigs(
       keyUrl: "https://openrouter.ai/keys",
       extraHeaders: {
         "HTTP-Referer": openRouterReferer(env),
-        "X-Title": env.OPENROUTER_APP_TITLE?.trim() || "Self-Learn",
+        "X-Title": env.OPENROUTER_APP_TITLE?.trim() || "Gnosia",
       },
     },
     ...added,
@@ -352,11 +352,9 @@ export function keyFor(
  * With a model chain, the chain alone, top to bottom: each entry calls its
  * provider's endpoint with its own model id and the key `keyFor` finds, and
  * an entry with no key is kept in place as a `SkippedEntry` rather than
- * dropped, so the attempts say why it was passed over (T4). With no chain, the
- * built-in defaults in the provider order, `orderCredentials` exactly as
- * before the chain existed (T3). A chain never falls back to the defaults
- * once it runs out: the owner chose it, and a default answering behind it
- * would hide an entry that stopped working, the reason D9 gives for keys.
+ * dropped, so the attempts say why it was passed over (T4). With no chain,
+ * nothing: the built-in defaults are gone (T15) — the tutor calls only the
+ * models the owner added, and an unconfigured provider is one it skips.
  */
 export function tutorSteps(
   chain: readonly ChainEntry[],
@@ -364,7 +362,7 @@ export function tutorSteps(
   env: EnvMap = process.env,
   custom: readonly ProviderConfig[] = [],
 ): ChainStep[] {
-  if (chain.length === 0) return orderCredentials(saved, env).map((c) => ({ ...c, modelFrom: "default" as const }));
+  if (chain.length === 0) return [];
   const configs = new Map<string, ProviderConfig>([...providerConfigs(env), ...custom].map((c) => [c.id, c]));
   const keyed = [...PROVIDER_IDS, ...custom.map((c) => c.id)].filter((id) => keyFor(id, saved, env) !== null);
   return chain.flatMap((entry): ChainStep[] => {
@@ -381,10 +379,8 @@ export function tutorSteps(
 /**
  * The model a provider's key Test sends, and whether the tutor uses that key
  * at all (docs/TUTOR-MODELS.md, T9): the owner's first chain entry for the
- * provider; else, with no chain, the provider's built-in default, which the
- * tutor uses; else (a chain that names other providers only) the default
- * too, but the tutor does not call this provider. The Provider keys card
- * shows it and the key Test route sends it, so the two cannot disagree.
+ * provider; else the provider's built-in default, which the test still calls
+ * but the tutor never will — it serves nothing but the chain now (T15).
  */
 export function keyTestModel(
   chain: readonly ChainEntry[],
@@ -396,7 +392,7 @@ export function keyTestModel(
   // A custom provider has no default (T14): an empty model, which the key
   // Test refuses rather than sending.
   const config = providerConfigs(env).find((c) => c.id === provider);
-  return { model: config?.model ?? "", modelFrom: "default", used: chain.length === 0 && config !== undefined };
+  return { model: config?.model ?? "", modelFrom: "default", used: false };
 }
 
 /** The server's keys alone, for a caller with no owner (the tests, a script). */
@@ -411,7 +407,7 @@ export function serverCredentials(env: EnvMap = process.env): ProviderCredential
 export function availableProviderSummary(
   steps: readonly ChainStep[],
 ): string {
-  if (steps.length === 0) return "none (add a provider key in Settings)";
+  if (steps.length === 0) return "none (add a provider and a model in Settings)";
   return steps
     .map((step) => {
       if (!isCallable(step)) return `${step.provider} ${step.model} (no key)`;
@@ -437,20 +433,20 @@ function either(labels: readonly string[]): string {
 
 /**
  * What a tutor surface says when nothing it would try has a key (T4). Two
- * different situations: no provider has a key and there is no chain, which
- * is the old message; or the owner's chain names only providers without a
- * key, possibly while others have one, which says which providers need a
- * key and which could take a model instead.
+ * different situations: the chain is empty, meaning the owner has set up no
+ * model at all; or the owner's chain names only providers without a key,
+ * possibly while others have one, which says which providers need a key and
+ * which could take a model instead.
  */
 export function missingKeyMessage(steps: readonly ChainStep[]): string {
   const skips = steps.filter((s): s is SkippedEntry => !isCallable(s));
-  if (skips.length === 0) return "No model provider key is set. Add one in Settings, under Providers.";
+  if (skips.length === 0) return "No model is set up. In Settings, add a key under Providers and pick a model under Model selection.";
   const lacking = [...new Set(skips.map((s) => s.reason.replace(/^no key for /, "")))];
   const keyed = (skips[0]?.keyed ?? []).map((id) => providerLabel(id));
   const addKey = `add a key for ${either(lacking)} under Providers`;
   return keyed.length === 0
     ? `None of your models has a key. In Settings, ${addKey}.`
-    : `None of your models has a key. In Settings, ${addKey}, or add a model from ${either(keyed)} there.`;
+    : `None of your models has a key. In Settings, ${addKey}, or pick a model from ${either(keyed)} under Model selection.`;
 }
 
 /** A provider's error body, with every key the caller holds taken out, then clipped. */
@@ -638,7 +634,7 @@ function reportIfModelGone(attempt: ProviderAttemptError, baseUrl: string, model
   const variable = (["nvidia", "gemini", "openrouter"] as string[]).includes(attempt.provider)
     ? `${attempt.provider.toUpperCase()}_MODEL`
     : `TUTOR_${attempt.provider.toUpperCase()}_MODEL`;
-  const fix = modelFrom === "chain" ? "replace it under Providers in Settings" : `set ${variable}`;
+  const fix = modelFrom === "chain" ? "replace it under Model selection in Settings" : `set ${variable}`;
   console.error(
     attempt.status === 410
       ? `agent: ${attempt.provider} answered 410 Gone for model ${attempt.model}; it is retired, ${fix}`

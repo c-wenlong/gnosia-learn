@@ -158,7 +158,7 @@ describe("the catalog error under an indexed: false banner", () => {
   it("collapses a multi-line CLI failure to one capped line", () => {
     const raw =
       'catalog job accept --job de8dcacb --path learn/assets/x.tldr exited 1:\n' +
-      '  "command": "job",\n  "database": "postgres://localhost:5432/self_learn",\n  "error": ""\n}';
+      '  "command": "job",\n  "database": "postgres://localhost:5432/gnosia",\n  "error": ""\n}';
     const line = catalogErrorLine([raw]);
     expect(line).not.toBeNull();
     expect(line).not.toContain("\n");

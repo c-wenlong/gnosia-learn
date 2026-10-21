@@ -15,4 +15,4 @@
  * identical and are not.
  */
 export { loadKnowledgeBase, type KnowledgeBaseSnapshot } from "@/lib/learner-store";
-export { dueConcepts } from "@self-learn/catalog/state";
+export { dueConcepts } from "@gnosia/catalog/state";

@@ -2,8 +2,8 @@ import { constants as fsConstants, readFileSync, realpathSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import type { BlobStore } from "@self-learn/blob";
-import { sessionLogEntry } from "@self-learn/schema";
+import type { BlobStore } from "@gnosia/blob";
+import { sessionLogEntry } from "@gnosia/schema";
 import { sql } from "drizzle-orm";
 
 import { openBlobStore, readBlob } from "../content/blob";
@@ -21,6 +21,7 @@ import { sqlstate } from "../state/errors";
 import { withFileLock, writeAtomically } from "./file-lock";
 import { repoRoot } from "./paths";
 
+import { inTransaction } from "../db";
 /**
  * `learn vault pull` and `learn vault push`: the notes and the session logs
  * as a folder of markdown Obsidian opens as a vault, once the database owns
@@ -122,7 +123,7 @@ const KEPT = /\.kept-\d+(?:-\d+)?\.md$/;
 
 const README_TEXT = `# Notes vault
 
-This folder is a copy of the notes and session logs in the self-learn database, made by \`npm run learn -- vault pull\`, for reading and editing in Obsidian.
+This folder is a copy of the notes and session logs in the gnosia database, made by \`npm run learn -- vault pull\`, for reading and editing in Obsidian.
 \`vault pull\` brings it up to date and never overwrites a file you edited: when the database moved on, its version lands beside yours as \`<name>.incoming.md\`.
 \`vault push\` writes your edited notes back, one revision each; a note that changed in the database since your pull is refused, with its current version left as \`<name>.conflict.md\`.
 To settle an \`.incoming\` or \`.conflict\` copy, merge what you want of it into your note, delete the copy, and push.
@@ -135,7 +136,7 @@ const LOG_REFUSAL =
   "a correction belongs in the note it touched. Delete this copy and run learn vault pull to put the database's back.";
 
 /**
- * `$SELF_LEARN_HOME/vault`, else `~/.self-learn/vault`: the same data root
+ * `$GNOSIA_HOME/vault`, else `~/.gnosia/vault`: the same data root
  * the blob store reads, resolved by the same rules (a leading `~`, and a
  * relative value refused), so one variable moves both.
  */
@@ -178,15 +179,15 @@ export function resolveVaultDir(given: string | undefined): string {
   return dir;
 }
 
-/** The root `package.json`'s name, which every checkout of this repository carries. */
-const REPOSITORY_NAME = "self-learn";
+/** The root `package.json`'s name, which every checkout of this repository carries, now and before the rename. */
+const REPOSITORY_NAMES = new Set(["gnosia", "self-learn"]);
 
 /** The nearest folder at or above `dir` whose `package.json` names this repository, or null. */
 function checkoutAbove(dir: string): string | null {
   for (let at = dir; ; at = path.dirname(at)) {
     try {
       const manifest = JSON.parse(readFileSync(path.join(at, "package.json"), "utf8")) as { name?: unknown };
-      if (manifest.name === REPOSITORY_NAME) return at;
+      if (typeof manifest.name === "string" && REPOSITORY_NAMES.has(manifest.name)) return at;
     } catch {
       // No package.json here, or not JSON: not a checkout, keep walking up.
     }
@@ -598,8 +599,7 @@ async function assertOwned(db: CatalogDatabase, types: readonly ("concepts" | "s
  * entries it does not hold.
  */
 async function readItems(db: CatalogDatabase): Promise<{ items: Item[]; problems: string[] }> {
-  return db.transaction(
-    async (tx) => {
+  return inTransaction(db, async (tx) => {
       const problems: string[] = [];
       const items: Item[] = [];
       // The learner's vault (phase 4): their notes and the commons', and
@@ -630,10 +630,10 @@ async function readItems(db: CatalogDatabase): Promise<{ items: Item[]; problems
         }
       }
       const { rows: logs } = await tx.execute<{ id: string; markdown: string; entries: number }>(sql`
-        select e.session_id as id, string_agg(e.markdown, '' order by e.seq) as markdown, count(*)::int as entries
+        select e.session_id as id, group_concat(e.markdown, '' order by e.seq) as markdown, count(*) as entries
         from ${sessionLogEntry} e join session s on s.id = e.session_id
         where s.learner_id = ${CLI_OWNER}
-        group by e.session_id order by e.session_id collate "C"
+        group by e.session_id order by e.session_id collate binary
       `);
       for (const log of logs) {
         try {
@@ -650,9 +650,7 @@ async function readItems(db: CatalogDatabase): Promise<{ items: Item[]; problems
         }
       }
       return { items, problems };
-    },
-    { isolationLevel: "repeatable read", accessMode: "read only" },
-  );
+    });
 }
 
 /* -------------------------------------------------------------------- pull */
@@ -862,7 +860,7 @@ async function readSvgs(db: CatalogDatabase, problems: string[]): Promise<Svg[]>
     select d.slug, d.svg_blob_key as key, b.sha256
     from diagram d join blob_object b on b.key = d.svg_blob_key
     where d.archived_at is null${andOwnedBy(sql`d.owner_id`, cliScope().readable)}
-    order by d.slug collate "C"
+    order by d.slug collate binary
   `);
   const svgs: Svg[] = [];
   for (const row of rows) {
@@ -1113,7 +1111,7 @@ async function pushLog(db: CatalogDatabase, rel: string, entry: Entry, text: str
   // A copy made identical to the database's (the `.incoming` copied over it)
   // is not an edit: record it as unedited, and nothing is refused.
   const { rows } = await db.execute<{ markdown: string | null; entries: number }>(sql`
-    select string_agg(markdown, '' order by seq) as markdown, count(*)::int as entries
+    select group_concat(markdown, '' order by seq) as markdown, count(*) as entries
     from ${sessionLogEntry} where session_id = ${entry.id}
   `);
   const now = rows[0];

@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { isCoverFile } from "@self-learn/content";
+import { isCoverFile } from "@gnosia/content";
 import { parse } from "yaml";
 
 import type { CatalogDatabase } from "../db";

@@ -1,8 +1,8 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 
-import { key as blobKey } from "@self-learn/blob";
-import { COURSES_DIR, loadCourses } from "@self-learn/content";
+import { key as blobKey } from "@gnosia/blob";
+import { COURSES_DIR, loadCourses } from "@gnosia/content";
 import {
   LOCAL_LEARNER_ID,
   type NewAsset,
@@ -14,7 +14,7 @@ import {
   type NewCurriculumItem,
   type NewCurriculumItemAsset,
   type NewCurriculumItemTopic,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 
 import {
   type CoverCredit,
@@ -38,7 +38,7 @@ import { VOCABULARY_FILE } from "./vocabulary";
  * ticks. That three-level shape is why `collection` self-references rather than
  * having separate course and module tables.
  *
- * **It does not parse YAML.** `@self-learn/content` does, and the web app reads
+ * **It does not parse YAML.** `@gnosia/content` does, and the web app reads
  * the same function, so a course file means one thing in both places. What is
  * left here is the mapping from courses to rows, plus the one check only the
  * catalog can make: a module carries `topic: <slug>`, and that slug is also
@@ -297,7 +297,7 @@ export const coursesIndexer: Indexer = {
             contentHash: null,
             bytes: null,
             title: resource.title,
-            sourceRepo: "self-learn",
+            sourceRepo: "gnosia",
             resourceType: resource.type,
           });
           assetTopics.push({ assetId: id, topicSlug: declared });

@@ -147,7 +147,7 @@ export default async function ConceptWorkspacePage({ params, searchParams }: Par
         tutorAside={
           // The style the tutor is told to use (hi-fi 04's "Learning guide ·
           // concise"), linking to where it is changed.
-          <TextLink href="/settings?tab=tutor" title="Tutor style, set in Settings" tone="muted" size="xs" weight="normal">
+          <TextLink href="/settings?tab=models" title="Tutor style, set in Settings" tone="muted" size="xs" weight="normal">
             {tutorStyleLabel(style)}
           </TextLink>
         }

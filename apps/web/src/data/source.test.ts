@@ -1,4 +1,4 @@
-import type { ContentSource, SelectedSource, SelectSourceOptions } from "@self-learn/content";
+import type { ContentSource, SelectedSource, SelectSourceOptions } from "@gnosia/content";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -36,8 +36,8 @@ vi.mock("react", async (importOriginal) => {
 
 const reads = vi.hoisted(() => ({ select: 0, topics: 0, tags: 0, courses: 0 }));
 
-vi.mock("@self-learn/content", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@self-learn/content")>();
+vi.mock("@gnosia/content", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@gnosia/content")>();
   return {
     ...actual,
     selectSource: (options: SelectSourceOptions): SelectedSource => {
@@ -81,7 +81,7 @@ vi.mock("@/lib/auth/session", async (importOriginal) => ({
   isSignedIn: async () => true,
 }));
 vi.mock("@/lib/learner-store", () => ({ catalogDatabase: async () => ({}) }));
-vi.mock("@self-learn/catalog/state", () => ({
+vi.mock("@gnosia/catalog/state", () => ({
   contentOwnership: () => catalog.ownership(),
   dbSource: () => rowsSource,
 }));

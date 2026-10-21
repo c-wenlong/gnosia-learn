@@ -1,7 +1,7 @@
 import "server-only";
 
-import { deleteProviderKey, readProviderKeys, saveCustomProviderKey, writeProviderKey } from "@self-learn/catalog/state";
-import { isCustomProviderId, type ProviderName } from "@self-learn/schema/shared";
+import { deleteProviderKey, readProviderKeys, saveCustomProviderKey, writeProviderKey } from "@gnosia/catalog/state";
+import { isCustomProviderId, type ProviderName } from "@gnosia/schema/shared";
 
 import { AUTH_SECRET_VAR, MIN_SECRET_LENGTH } from "@/lib/auth/core";
 import { catalogDatabase } from "@/lib/learner-store";

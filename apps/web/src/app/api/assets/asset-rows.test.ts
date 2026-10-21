@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { asset, assetDerivation, blobObject, LOCAL_LEARNER_ID, ownerScope } from "@self-learn/schema";
+import { asset, assetDerivation, blobObject, LOCAL_LEARNER_ID, ownerScope } from "@gnosia/schema";
 
 import { runImportCommand } from "../../../../../../services/catalog/src/commands/index-command";
 import { documentBytes } from "../../../../../../services/catalog/src/content/diagram-document";
@@ -115,7 +115,7 @@ describe.skipIf(!reachable.ok)("asset routes on a flipped database", () => {
     });
 
   beforeAll(async () => {
-    for (const key of ["DATABASE_URL", "SELF_LEARN_HOME", "MANIMKC_ROOT", "CONTENT_SOURCE"]) {
+    for (const key of ["DATABASE_URL", "GNOSIA_HOME", "MANIMKC_ROOT", "CONTENT_SOURCE"]) {
       saved[key] = process.env[key];
     }
     scratch = await createScratchDatabase();
@@ -125,7 +125,7 @@ describe.skipIf(!reachable.ok)("asset routes on a flipped database", () => {
     await applyMigrations(scratch.db, { folder: await withoutBlobContract() });
     home = await mkdtemp(path.join(tmpdir(), "asset-rows-"));
     process.env.DATABASE_URL = scratch.url;
-    process.env.SELF_LEARN_HOME = home;
+    process.env.GNOSIA_HOME = home;
     process.env.MANIMKC_ROOT = path.join(tmpdir(), "asset-rows-no-manimkc");
     delete process.env.CONTENT_SOURCE;
 
@@ -186,7 +186,7 @@ describe.skipIf(!reachable.ok)("asset routes on a flipped database", () => {
       contentHash: "0".repeat(64),
       bytes: 10,
       title: id,
-      sourceRepo: kind === "poster" ? "self-learn" : "manimkc",
+      sourceRepo: kind === "poster" ? "gnosia" : "manimkc",
       blobKey,
     });
     await scratch.db.insert(asset).values([
@@ -370,7 +370,7 @@ describe.skipIf(!reachable.ok)("asset routes on a flipped database", () => {
       url: null,
       bytes: 1,
       title: null,
-      sourceRepo: kind === "note" ? "self-learn" : "manimkc",
+      sourceRepo: kind === "note" ? "gnosia" : "manimkc",
       topics: [],
       createdAt: "",
       updatedAt: "",

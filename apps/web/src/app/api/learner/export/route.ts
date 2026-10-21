@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { readCustomProviders, readEvents, readLearnerSnapshot, readPreferences, readTutorModels } from "@self-learn/catalog/state";
+import { readCustomProviders, readEvents, readLearnerSnapshot, readPreferences, readTutorModels } from "@gnosia/catalog/state";
 
 import { enforceRateLimit } from "@/lib/agent/guard";
 import { LEARNER_RATE_LIMIT, requestOwner } from "@/lib/learner-api";
@@ -69,11 +69,11 @@ export async function GET(req: Request): Promise<NextResponse> {
 
   const stamp = exportedAt.toISOString().slice(0, 10);
   return NextResponse.json(
-    { format: "self-learn-export", version: 1, exportedAt: exportedAt.toISOString(), ...body },
+    { format: "gnosia-export", version: 1, exportedAt: exportedAt.toISOString(), ...body },
     {
       headers: {
         "Cache-Control": "no-store",
-        "Content-Disposition": `attachment; filename="self-learn-${stamp}.json"`,
+        "Content-Disposition": `attachment; filename="gnosia-${stamp}.json"`,
       },
     },
   );

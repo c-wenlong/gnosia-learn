@@ -7,7 +7,7 @@ import {
   type KnowledgeInput,
   type KnowledgeSource,
   type TopicKnowledge,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { and, eq, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
@@ -22,7 +22,7 @@ import { assertReadableItems, type WriteOptions } from "./progress";
  * column whatever wrote it, and as `clampSummary`/`clampKnowledgeList` on the
  * way in, so a long recap is trimmed and saved rather than refused with a
  * 23514 the learner reads as "save failed". Both come from the same constants
- * in `@self-learn/schema/shared`, so they cannot disagree.
+ * in `@gnosia/schema/shared`, so they cannot disagree.
  */
 
 function asSource(value: unknown): KnowledgeSource {
@@ -116,8 +116,8 @@ export async function upsertRecap(
         misconceptions: sql`excluded.misconceptions`,
         openQuestions: sql`excluded.open_questions`,
         source: sql`excluded.source`,
-        sessions: sql`greatest(${recap.sessions} + ${increment}, ${floor ?? 0}, 1)`,
-        updatedAt: sql`now()`,
+        sessions: sql`max(${recap.sessions} + ${increment}, ${floor ?? 0}, 1)`,
+        updatedAt: sql`cast(unixepoch('subsec') * 1000 as integer)`,
       },
     })
     .returning();

@@ -12,7 +12,7 @@ import {
   mastery,
   mirror,
   topic,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { asc, eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
@@ -252,7 +252,7 @@ describe.skipIf(!reachable.ok)("writer", () => {
             id: "note:learn/concepts/x/a.md",
             kind: "note",
             path: "learn/concepts/x/a.md",
-            sourceRepo: "self-learn",
+            sourceRepo: "gnosia",
           },
         ],
       },

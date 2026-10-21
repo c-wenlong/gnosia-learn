@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { TopicEntry } from "@self-learn/content";
+import type { TopicEntry } from "@gnosia/content";
 import { cache } from "react";
 
 import { contentSource } from "@/data/source";

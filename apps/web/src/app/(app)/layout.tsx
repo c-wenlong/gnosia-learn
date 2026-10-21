@@ -5,11 +5,11 @@ import { MotionSeed } from "@/components/settings/MotionSeed";
 import { requireSignedIn } from "@/lib/auth/session";
 import { LearnerProvider } from "@/lib/learner-context";
 import { loadLearnerSnapshot } from "@/lib/learner-store";
-import { asMotionMode, MOTION_COOKIE, MOTION_REDUCE_SCRIPT } from "@/lib/motion";
+import { asMotionMode, LEGACY_MOTION_COOKIE, MOTION_COOKIE, MOTION_REDUCE_SCRIPT } from "@/lib/motion";
 import { readStoredMotion } from "@/lib/motion-preference";
 import { SIDEBAR_COOKIE, sidebarCollapsed } from "@/lib/sidebar-cookie";
 import { studioEnabled } from "@/lib/studio";
-import { asThemeMode, THEME_COOKIE } from "@/lib/theme-cookie";
+import { asThemeMode, LEGACY_THEME_COOKIE, THEME_COOKIE } from "@/lib/theme-cookie";
 
 /**
  * The owner's half of the app: every page except the landing and sign-in.
@@ -47,7 +47,8 @@ export default async function AppLayout({
 }>) {
   await requireSignedIn();
   const cookieStore = await cookies();
-  const motionKnown = asMotionMode(cookieStore.get(MOTION_COOKIE)?.value) !== null;
+  const motionKnown =
+    asMotionMode(cookieStore.get(MOTION_COOKIE)?.value ?? cookieStore.get(LEGACY_MOTION_COOKIE)?.value) !== null;
   const [{ state, reachable }, storedMotion] = await Promise.all([
     loadLearnerSnapshot(),
     motionKnown ? Promise.resolve(null) : readStoredMotion(),
@@ -55,7 +56,7 @@ export default async function AppLayout({
 
   // The cookie wins when both are present: it is what the browser last chose,
   // and it may have been chosen while the database was unreachable.
-  const theme = asThemeMode(cookieStore.get(THEME_COOKIE)?.value) ?? state.theme;
+  const theme = asThemeMode(cookieStore.get(THEME_COOKIE)?.value ?? cookieStore.get(LEGACY_THEME_COOKIE)?.value) ?? state.theme;
   const initialState = theme === state.theme ? state : { ...state, theme };
 
   return (

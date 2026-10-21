@@ -1,17 +1,15 @@
 import { sql } from "drizzle-orm";
 import {
-  type AnyPgColumn,
-  bigint,
+  type AnySQLiteColumn,
   check,
   index,
   integer,
-  jsonb,
-  numeric,
-  pgTable,
   primaryKey,
+  real,
+  sqliteTable,
   text,
   uniqueIndex,
-} from "drizzle-orm/pg-core";
+} from "drizzle-orm/sqlite-core";
 
 import { archivedAt, createdAt, instant, ownerId, updatedAt } from "./columns";
 // `content` and `state` reference each other: every content entity carries
@@ -30,11 +28,16 @@ import { session } from "./studio";
  * the indexers, so nothing in this file is a source of truth. The state half
  * (state.ts) is the opposite: those rows are the only copy.
  *
- * Kind columns are `text` plus a CHECK rather than a Postgres ENUM. An enum
- * reads better in psql, but widening one is `ALTER TYPE ... ADD VALUE`, which
- * has awkward transaction rules and cannot remove a value at all. A CHECK is a
- * one-line DROP/ADD in a migration, and these vocabularies are expected to grow
- * (bundle 6 adds asset kinds). The constraint is just as real either way.
+ * Kind columns are `text` plus a CHECK rather than a SQLite ENUM — SQLite has
+ * no ENUM type at all, and a `text` CHECK is a one-line change in a migration,
+ * so these vocabularies can grow (bundle 6 added asset kinds).
+ *
+ * Every `regexp(pattern, value)` / `value regexp 'pattern'` in a CHECK reads
+ * the `regexp` function `services/catalog/src/db.ts` registers on every
+ * connection; the pattern is a JavaScript `RegExp`, not a POSIX one. A
+ * statement reaching the database without that connection (a bare sqlite3
+ * shell) fails the check with `no such function`, which is loud rather than
+ * wrong.
  */
 
 /** Kinds an `asset` row may take. Note the absence of `curriculum_item`: see SCHEMA.md. */
@@ -51,6 +54,9 @@ export const ASSET_KINDS = [
   // A still frame made from a video at upload time, stored as a blob and
   // derived from its video through `asset_derivation` (plan 0.2, Track E).
   "poster",
+  // A video's pages as a document, made at upload or `catalog video put`
+  // time the same way the poster is (one page per narration beat).
+  "pdf",
 ] as const;
 export type AssetKind = (typeof ASSET_KINDS)[number];
 
@@ -60,10 +66,36 @@ export type AssetKind = (typeof ASSET_KINDS)[number];
  * blob (`asset_stored_blob_check`). A note, a session log and a `.tldr` are
  * rows the database renders; a link is a URL.
  */
-export const BLOB_STORED_KINDS = ["video", "transcript", "chapters", "captions", "poster", "diagram_svg"] as const satisfies readonly AssetKind[];
+export const BLOB_STORED_KINDS = [
+  "video",
+  "transcript",
+  "chapters",
+  "captions",
+  "poster",
+  "pdf",
+  "diagram_svg",
+] as const satisfies readonly AssetKind[];
 
 /**
- * A blob key as `@self-learn/blob`'s `key()` makes it (`packages/blob/src/key.ts`):
+ * Which tool wrote an asset's bytes (`asset.generated_by`): the four video
+ * tools, the diagram tool, `video` for a studio-made video, `manual` for
+ * anything a person added by hand. Backfilled from the `id`'s `tool:` prefix
+ * by the Postgres-to-SQLite port (services/catalog/scripts/pg-to-sqlite.mjs);
+ * null only where a port or a test made a row without one.
+ */
+export const GENERATED_BY = [
+  "manimkc",
+  "remotionkc",
+  "revideokc",
+  "blenderkc",
+  "tldrawkc",
+  "video",
+  "manual",
+] as const;
+export type GeneratedBy = (typeof GENERATED_BY)[number];
+
+/**
+ * A blob key as `@gnosia/blob`'s `key()` makes it (`packages/blob/src/key.ts`):
  * a lowercase owner of 1 to 64 characters, a lowercase hex sha256, and a
  * required extension of 1 to 16 lowercase letters and digits. The database's
  * `blob_object_key_check` holds a key to it from 0013 on.
@@ -72,10 +104,10 @@ export const BLOB_KEY_PATTERN = "^[a-z0-9][a-z0-9_-]{0,63}/[0-9a-f]{64}[.][a-z0-
 
 /**
  * Which repository an asset's bytes live in, or which tool made them:
- * `manimkc`, `remotionkc` and `revideokc` are the video tools, `tldrawkc` the
- * diagrams.
+ * `manimkc`, `remotionkc`, `revideokc` and `blenderkc` are the video tools,
+ * `tldrawkc` the diagrams.
  */
-export const SOURCE_REPOS = ["self-learn", "manimkc", "tldrawkc", "remotionkc", "revideokc"] as const;
+export const SOURCE_REPOS = ["gnosia", "manimkc", "tldrawkc", "remotionkc", "revideokc", "blenderkc"] as const;
 export type SourceRepo = (typeof SOURCE_REPOS)[number];
 
 /** A `collection` is any ordered container. Courses and modules today, decks next. */
@@ -105,7 +137,7 @@ export type AssetResourceType = (typeof RESOURCE_TYPES)[number];
 export const TOPIC_RELATION_KINDS = ["broader", "related", "precedes"] as const;
 export type TopicRelationKind = (typeof TOPIC_RELATION_KINDS)[number];
 
-/** Where a blob's bytes live. `fs` is the laptop's store under `~/.self-learn/blobs`. */
+/** Where a blob's bytes live. `fs` is the laptop's store under `~/.gnosia/blobs`. */
 export const BLOB_PROVIDERS = ["fs", "vercel-blob", "r2"] as const;
 export type BlobProvider = (typeof BLOB_PROVIDERS)[number];
 
@@ -122,10 +154,12 @@ const inList = (column: string, values: readonly string[]) =>
  * The id rule the content readers enforce at parse time
  * (`KEBAB_SLUG` in packages/content/src/read.ts), stated once more where it
  * cannot be skipped. Every existing slug and id already satisfies it.
+ * `regexp` is the connection-registered JS RegExp function, so the pattern is
+ * JavaScript syntax here.
  */
-const kebab = (column: string) => sql.raw(`${column} ~ '^[a-z0-9]+(-[a-z0-9]+)*$'`);
+const kebab = (column: string) => sql.raw(`${column} regexp '^[a-z0-9]+(-[a-z0-9]+)*$'`);
 
-const jsonArray = (column: string) => sql.raw(`jsonb_typeof(${column}) = 'array'`);
+const jsonArray = (column: string) => sql.raw(`json_type(${column}) = 'array'`);
 
 /**
  * The shared vocabulary. One row per subject label, and the required join for
@@ -133,7 +167,7 @@ const jsonArray = (column: string) => sql.raw(`jsonb_typeof(${column}) = 'array'
  * point at the same `topic` row, which is the only reason a query can find them
  * together. Seeded from the manimkc domain tree plus the course modules.
  */
-export const topic = pgTable(
+export const topic = sqliteTable(
   "topic",
   {
     slug: text("slug").primaryKey(),
@@ -144,12 +178,13 @@ export const topic = pgTable(
     /**
      * Other names for the same subject, so `catalog search tomasulo` finds
      * "Tomasulo's algorithm" and `catalog search "common data bus"` finds it
-     * too. jsonb rather than text[] because every other list column in this
-     * schema is jsonb (`subtopics`, `key_points`) and one array representation
-     * is easier to reason about than two; the search is
-     * `jsonb_array_elements_text(...) ilike ...` either way.
+     * too. JSON text rather than a Postgres `text[]`: SQLite holds one
+     * array representation, so the choice the Postgres schema made (jsonb
+     * because `subtopics` and `key_points` were jsonb) carries over as the
+     * only choice. The search is `json_each` over it instead of
+     * `jsonb_array_elements_text`, `like` instead of `ilike`.
      */
-    aliases: jsonb("aliases").notNull().default(sql`'[]'::jsonb`),
+    aliases: text("aliases", { mode: "json" }).notNull().default(sql`'[]'`),
     /**
      * Where the topic sits in `content/topics.yaml`, which is authored in
      * domain groups and rendered in that order. Kept so an export writes the
@@ -168,13 +203,9 @@ export const topic = pgTable(
     check("topic_aliases_array_check", jsonArray("aliases")),
     index("topic_domain_idx").on(t.domain),
     index("topic_owner_id_idx").on(t.ownerId),
-    // Near-duplicate detection for `catalog topic add` (D14): trigram
-    // similarity over the title, and over the aliases as one string. The
-    // aliases index is on the jsonb's text form rather than on each element,
-    // because an index expression cannot unnest an array; `word_similarity`
-    // against that string is the query it serves.
-    index("topic_title_trgm_idx").using("gin", sql`"title" gin_trgm_ops`),
-    index("topic_aliases_trgm_idx").using("gin", sql`("aliases"::text) gin_trgm_ops`),
+    // The Postgres schema carried trigram GIN indexes here for `catalog topic
+    // add`'s near-duplicate detection (D14). SQLite has no pg_trgm; the check
+    // runs as a `like` scan instead, cheap at this table's size.
   ],
 );
 
@@ -183,7 +214,7 @@ export const topic = pgTable(
  * thing that carries mastery and prerequisites; it is optional enrichment
  * *under* a topic, and every concept is filed under exactly one.
  */
-export const concept = pgTable(
+export const concept = sqliteTable(
   "concept",
   {
     slug: text("slug").primaryKey(),
@@ -212,8 +243,8 @@ export const concept = pgTable(
      */
     domain: text("domain"),
     body: text("body"),
-    tags: jsonb("tags").notNull().default(sql`'[]'::jsonb`),
-    sources: jsonb("sources").notNull().default(sql`'[]'::jsonb`),
+    tags: text("tags", { mode: "json" }).notNull().default(sql`'[]'`),
+    sources: text("sources", { mode: "json" }).notNull().default(sql`'[]'`),
     authoredAt: instant("authored_at"),
     /**
      * Where the concept sits in its topic's `maps.concepts` list, as a
@@ -245,7 +276,7 @@ export const concept = pgTable(
  * joins on: `inferred`, `code`, `credits`, `track`, `tags`, `capstone`, and a
  * course's `coverCredit` beside its `cover_blob_key`.
  */
-export const collection = pgTable(
+export const collection = sqliteTable(
   "collection",
   {
     /** The authored id, e.g. `cs4263` or `cs4263-m1`. Opaque; never parsed. */
@@ -253,12 +284,12 @@ export const collection = pgTable(
     kind: text("kind").notNull(),
     slug: text("slug").notNull(),
     title: text("title").notNull(),
-    parentId: text("parent_id").references((): AnyPgColumn => collection.id, {
+    parentId: text("parent_id").references((): AnySQLiteColumn => collection.id, {
       onDelete: "cascade",
       onUpdate: "cascade",
     }),
     position: integer("position").notNull().default(0),
-    metadata: jsonb("metadata").notNull().default(sql`'{}'::jsonb`),
+    metadata: text("metadata", { mode: "json" }).notNull().default(sql`'{}'`),
     ownerId: ownerId(() => learner.id),
     /**
      * Set instead of deleting when a course file stops listing the module
@@ -285,7 +316,7 @@ export const collection = pgTable(
   (t) => [
     check("collection_id_check", kebab("id")),
     check("collection_kind_check", inList("kind", COLLECTION_KINDS)),
-    check("collection_not_own_parent_check", sql`parent_id is distinct from id`),
+    check("collection_not_own_parent_check", sql`parent_id is not id`),
     // Only a course has a cover: a module is a page inside one, and a cover
     // on it would be a photo nothing shows.
     check("collection_cover_course_check", sql`cover_blob_key is null or kind = 'course'`),
@@ -293,7 +324,7 @@ export const collection = pgTable(
     // photo whose licence was lost on the way in is the failure this is for.
     check(
       "collection_cover_credit_check",
-      sql`(cover_blob_key is null) = ((metadata -> 'coverCredit') is null)`,
+      sql`(cover_blob_key is null) = (json_type(metadata, '$.coverCredit') is null)`,
     ),
     index("collection_parent_id_idx").on(t.parentId),
     index("collection_owner_id_idx").on(t.ownerId),
@@ -302,10 +333,12 @@ export const collection = pgTable(
     // URL segment. `coalesce` so two top-level courses (parent_id NULL) collide
     // too; partial so an archived module does not hold its slug against the
     // module that replaced it. A unique *constraint* could do neither: it
-    // cannot take a WHERE, and it treats every NULL parent as distinct unless
-    // declared NULLS NOT DISTINCT, which an expression index has no need for.
+    // cannot take a WHERE, and it treats every NULL parent as distinct.
+    // `case … end` rather than `coalesce`: drizzle-kit splits an index
+    // expression on commas, and `coalesce(x, y)` is the same check with one
+    // inside it.
     uniqueIndex("collection_parent_slug_key")
-      .on(sql`coalesce("parent_id", '')`, t.slug)
+      .on(sql`case when "parent_id" is null then '' else "parent_id" end`, t.slug)
       .where(sql`archived_at is null`),
   ],
 );
@@ -320,7 +353,7 @@ export const collection = pgTable(
  * or reparenting changes `position` and `collectionId`, never the id, and
  * nothing parses the id's course/module prefix.
  */
-export const curriculumItem = pgTable(
+export const curriculumItem = sqliteTable(
   "curriculum_item",
   {
     id: text("id").primaryKey(),
@@ -339,7 +372,7 @@ export const curriculumItem = pgTable(
     position: integer("position").notNull().default(0),
     title: text("title").notNull(),
     /** The bullet list under the item. Display-only, never joined on. */
-    subtopics: jsonb("subtopics").notNull().default(sql`'[]'::jsonb`),
+    subtopics: text("subtopics", { mode: "json" }).notNull().default(sql`'[]'`),
     /**
      * The lesson's `videos:`, catalog asset ids in the order the course file
      * lists them (0022). Data, deliberately not a foreign key: the courses
@@ -348,7 +381,7 @@ export const curriculumItem = pgTable(
      * (docs/proposals/module-learning-path.md). A module's list is
      * `collection.metadata.videos`.
      */
-    videos: jsonb("videos").notNull().default(sql`'[]'::jsonb`),
+    videos: text("videos", { mode: "json" }).notNull().default(sql`'[]'`),
     ownerId: ownerId(() => learner.id),
     /**
      * Set instead of deleting when the course file stops listing the item.
@@ -369,8 +402,8 @@ export const curriculumItem = pgTable(
 
 /**
  * One stored object in the blob store (D5): videos, their posters and
- * sidecars, diagram SVGs. The bytes are never in Postgres (D7); this row says
- * where they are, how big, and whether the upload has been confirmed.
+ * sidecars, diagram SVGs. The bytes are never in the database (D7); this row
+ * says where they are, how big, and whether the upload has been confirmed.
  *
  * The key is `<owner_id>/<sha256>.<ext>`. Content-addressed, so an upload is
  * idempotent and resumable and an old revision's SVG stays resolvable; prefixed
@@ -378,14 +411,14 @@ export const curriculumItem = pgTable(
  * prefix. The CHECK holds the key to that shape, so a row can never name bytes
  * other than the ones its hash describes.
  */
-export const blobObject = pgTable(
+export const blobObject = sqliteTable(
   "blob_object",
   {
     key: text("key").primaryKey(),
     ownerId: ownerId(() => learner.id),
     /** Lowercase hex sha256 of the bytes. Checked against the store after upload. */
     sha256: text("sha256").notNull(),
-    bytes: bigint("bytes", { mode: "number" }).notNull(),
+    bytes: integer("bytes").notNull(),
     mime: text("mime").notNull(),
     provider: text("provider").notNull(),
     state: text("state").notNull().default("pending"),
@@ -395,10 +428,13 @@ export const blobObject = pgTable(
     confirmedAt: instant("confirmed_at"),
   },
   (t) => [
-    check("blob_object_sha256_check", sql`sha256 ~ '^[0-9a-f]{64}$'`),
+    check("blob_object_sha256_check", sql`sha256 regexp '^[0-9a-f]{64}$'`),
     check(
       "blob_object_key_check",
-      sql.raw(`key ~ '${BLOB_KEY_PATTERN}' and starts_with(key, owner_id || '/' || sha256)`),
+      sql.raw(
+        `key regexp '${BLOB_KEY_PATTERN}' and ` +
+          `substr(key, 1, length(owner_id) + length(sha256) + 1) = owner_id || '/' || sha256`,
+      ),
     ),
     check("blob_object_bytes_check", sql`bytes >= 0`),
     check("blob_object_provider_check", inList("provider", BLOB_PROVIDERS)),
@@ -418,7 +454,7 @@ export const blobObject = pgTable(
  * three repos, and from the content migration on a logical name that survives
  * the files, D11), `blob_key` (the object store), or both while the two agree.
  */
-export const asset = pgTable(
+export const asset = sqliteTable(
   "asset",
   {
     /** Stable id minted by the indexer, e.g. `manimkc:algorithms/master-theorem/video`. */
@@ -428,7 +464,14 @@ export const asset = pgTable(
     url: text("url"),
     /** sha256 of the bytes. Null for links and for anything not yet hashed. */
     contentHash: text("content_hash"),
-    bytes: bigint("bytes", { mode: "number" }),
+    /**
+     * A derived asset's word on what it was made from: the pdf's `pdfInputs`
+     * hash of its video's bytes, its title and its transcript's segments.
+     * Null for everything else. Compared against the inputs this run sees,
+     * it says stale-or-not without reading the stored document.
+     */
+    inputsHash: text("inputs_hash"),
+    bytes: integer("bytes"),
     title: text("title"),
     sourceRepo: text("source_repo").notNull(),
     /** The stored bytes, once uploaded. Restrict: an object an asset serves is not deletable. */
@@ -438,6 +481,8 @@ export const asset = pgTable(
     }),
     /** What a curated `link` is: one of `RESOURCE_TYPES`. Null for every other kind. */
     resourceType: text("resource_type"),
+    /** Which tool or person produced it (`GENERATED_BY`). */
+    generatedBy: text("generated_by"),
     ownerId: ownerId(() => learner.id),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -460,6 +505,10 @@ export const asset = pgTable(
       // Only a curated link has a resource type; every other kind is its own answer.
       sql.raw(`resource_type is null or (kind = 'link' and resource_type in (${quoted(RESOURCE_TYPES)}))`),
     ),
+    check(
+      "asset_generated_by_check",
+      sql.raw(`generated_by is null or generated_by in (${quoted(GENERATED_BY)})`),
+    ),
     uniqueIndex("asset_repo_path_key").on(t.sourceRepo, t.path),
     index("asset_kind_idx").on(t.kind),
     index("asset_content_hash_idx").on(t.contentHash),
@@ -473,11 +522,11 @@ export const asset = pgTable(
  * ends. A single generic `edge(from_type, from_id, to_type, to_id)` table
  * would have to drop the foreign keys, and then a typo in an indexer is a
  * row that reads fine and joins to nothing. Here it is a constraint error
- * at write time, which is the entire reason this data is in Postgres.
+ * at write time, which is the entire reason this data is in a database.
  * ------------------------------------------------------------------ */
 
 /** This asset is about this topic. The join that makes the vocabulary useful. */
-export const assetTopic = pgTable(
+export const assetTopic = sqliteTable(
   "asset_topic",
   {
     assetId: text("asset_id")
@@ -495,7 +544,7 @@ export const assetTopic = pgTable(
 );
 
 /** This asset is about this concept. Narrower than asset_topic, and optional. */
-export const assetConcept = pgTable(
+export const assetConcept = sqliteTable(
   "asset_concept",
   {
     assetId: text("asset_id")
@@ -518,7 +567,7 @@ export const assetConcept = pgTable(
  * pair may legitimately appear under both labels in different revisions and
  * the graph code distinguishes them.
  */
-export const conceptPrerequisite = pgTable(
+export const conceptPrerequisite = sqliteTable(
   "concept_prerequisite",
   {
     conceptSlug: text("concept_slug")
@@ -556,10 +605,12 @@ export const conceptPrerequisite = pgTable(
  * and are authored inside it, so they carry `collection_id` directly rather
  * than paying for a many-to-many they will never use.
  */
-export const collectionItem = pgTable(
+export const collectionItem = sqliteTable(
   "collection_item",
   {
-    id: bigint("id", { mode: "number" }).generatedAlwaysAsIdentity().primaryKey(),
+    // Was `GENERATED ALWAYS AS IDENTITY`: a rowid-style autoincrement, which
+    // is the same "the database numbers it" rule. Callers never supply it.
+    id: integer("id").primaryKey({ autoIncrement: true }),
     collectionId: text("collection_id")
       .notNull()
       .references(() => collection.id, { onDelete: "cascade", onUpdate: "cascade" }),
@@ -587,9 +638,10 @@ export const collectionItem = pgTable(
     createdAt: createdAt(),
   },
   (t) => [
+    // `num_nonnulls` has no SQLite equivalent; this counts the same three.
     check(
       "collection_item_one_target_check",
-      sql`num_nonnulls(topic_slug, concept_slug, asset_id) = 1`,
+      sql`(topic_slug is not null) + (concept_slug is not null) + (asset_id is not null) = 1`,
     ),
     index("collection_item_collection_id_idx").on(t.collectionId),
     index("collection_item_topic_slug_idx").on(t.topicSlug),
@@ -608,7 +660,7 @@ export const collectionItem = pgTable(
  * SVG from a .tldr. This is what lets bundle 6 spot a derived file that
  * outlived its source, the drift that already happened once in manimkc.
  */
-export const assetDerivation = pgTable(
+export const assetDerivation = sqliteTable(
   "asset_derivation",
   {
     assetId: text("asset_id")
@@ -627,7 +679,7 @@ export const assetDerivation = pgTable(
 );
 
 /** This checklist item covers this topic. How a course row reaches the assets. */
-export const curriculumItemTopic = pgTable(
+export const curriculumItemTopic = sqliteTable(
   "curriculum_item_topic",
   {
     curriculumItemId: text("curriculum_item_id")
@@ -651,7 +703,7 @@ export const curriculumItemTopic = pgTable(
  * `position` is the list's order, 1-based: it orders links inside one item's
  * snapshot, so it stays dense (D22).
  */
-export const conceptCurriculumItem = pgTable(
+export const conceptCurriculumItem = sqliteTable(
   "concept_curriculum_item",
   {
     conceptSlug: text("concept_slug")
@@ -680,7 +732,7 @@ export const conceptCurriculumItem = pgTable(
  * module's `resources:` instead. `collection_item` stays the module's own
  * list, so a reading is on its module whether or not it names lessons.
  */
-export const curriculumItemAsset = pgTable(
+export const curriculumItemAsset = sqliteTable(
   "curriculum_item_asset",
   {
     curriculumItemId: text("curriculum_item_id")
@@ -707,9 +759,9 @@ export const curriculumItemAsset = pgTable(
 /**
  * A cross-course theme, from `content/tags.yaml`. Before this table a course's
  * tags were strings inside `collection.metadata`, checked only at parse time;
- * `collection_tag` makes a stale tag a `23503`.
+ * `collection_tag` makes a stale tag a foreign-key failure.
  */
-export const tag = pgTable(
+export const tag = sqliteTable(
   "tag",
   {
     /** The permanent key a course file's `tags:` names. */
@@ -726,7 +778,7 @@ export const tag = pgTable(
 );
 
 /** This course carries this tag, at this position in its `tags:` list. Part of the collection's snapshot. */
-export const collectionTag = pgTable(
+export const collectionTag = sqliteTable(
   "collection_tag",
   {
     collectionId: text("collection_id")
@@ -735,7 +787,7 @@ export const collectionTag = pgTable(
     tagId: text("tag_id")
       .notNull()
       // Restrict: a tag a course still uses is not deletable, which is the
-      // whole reason this is a table and not a string in jsonb.
+      // whole reason this is a table and not a string in JSON.
       .references(() => tag.id, { onDelete: "restrict", onUpdate: "cascade" }),
     position: integer("position").notNull().default(0),
     createdAt: createdAt(),
@@ -751,18 +803,18 @@ export const collectionTag = pgTable(
  * topic can say where it sits. Foreign keys at both ends, per the standing
  * rule against a generic edge table.
  *
- * `related` is symmetric and stored once, with `from_slug` the smaller slug
- * under the "C" collation. The collation is spelled out so the rule means the
- * same byte order on every database this is restored into; a writer compares
- * with plain JavaScript `<`, which is the same order for kebab-case ASCII.
- * Because the order is part of the row, renaming a slug with `ON UPDATE
- * CASCADE` can put a `related` edge the wrong way round and fail the check; a
- * rename deletes and re-inserts its `related` edges rather than relying on the
- * cascade.
+ * `related` is symmetric and stored once, with `from_slug` the smaller slug in
+ * byte order (`collate binary`, SQLite's default for text — named here so the
+ * rule means the same order on every file this is restored into; a writer
+ * compares with plain JavaScript `<`, which is the same order for kebab-case
+ * ASCII). Because the order is part of the row, renaming a slug with `ON
+ * UPDATE CASCADE` can put a `related` edge the wrong way round and fail the
+ * check; a rename deletes and re-inserts its `related` edges rather than
+ * relying on the cascade.
  *
  * Owned by the `from` topic: a change here is a revision of that topic.
  */
-export const topicRelation = pgTable(
+export const topicRelation = sqliteTable(
   "topic_relation",
   {
     fromSlug: text("from_slug")
@@ -786,7 +838,7 @@ export const topicRelation = pgTable(
     check("topic_relation_no_self_check", sql`from_slug <> to_slug`),
     check(
       "topic_relation_related_order_check",
-      sql`kind <> 'related' or from_slug collate "C" < to_slug collate "C"`,
+      sql`kind <> 'related' or from_slug collate binary < to_slug collate binary`,
     ),
     index("topic_relation_to_slug_idx").on(t.toSlug),
     index("topic_relation_owner_id_idx").on(t.ownerId),
@@ -801,7 +853,7 @@ export const topicRelation = pgTable(
  *
  * Owned by its topic, so it cascades with it and a change is a revision of it.
  */
-export const manimkcTopic = pgTable(
+export const manimkcTopic = sqliteTable(
   "manimkc_topic",
   {
     /** `<domain>/<subdomain>/<topic>`, manimkc's own path with `topics/` dropped. */
@@ -821,7 +873,7 @@ export const manimkcTopic = pgTable(
 );
 
 /**
- * A teaching diagram: the `.tldr` document in jsonb, its SVG in the blob store
+ * A teaching diagram: the `.tldr` document as JSON, its SVG in the blob store
  * (D6). The two hashes replace the modification-time comparison behind the
  * studio's freshness pill: the SVG is stale exactly when `svg_document_hash`
  * differs from `document_hash`.
@@ -829,7 +881,7 @@ export const manimkcTopic = pgTable(
  * `topic_slug` is NOT NULL from the start, the same rule `job.topic_slug`
  * follows and the diagrams indexer already refuses by name.
  */
-export const diagram = pgTable(
+export const diagram = sqliteTable(
   "diagram",
   {
     slug: text("slug").primaryKey(),
@@ -839,7 +891,7 @@ export const diagram = pgTable(
       .notNull()
       .references(() => topic.slug, { onDelete: "restrict", onUpdate: "cascade" }),
     /** The whole `.tldr`, parsed. */
-    document: jsonb("document").notNull(),
+    document: text("document", { mode: "json" }).notNull(),
     /** sha256 of the canonical document. */
     documentHash: text("document_hash").notNull(),
     svgBlobKey: text("svg_blob_key").references(() => blobObject.key, {
@@ -854,7 +906,7 @@ export const diagram = pgTable(
   },
   (t) => [
     check("diagram_slug_check", kebab("slug")),
-    check("diagram_document_object_check", sql`jsonb_typeof(document) = 'object'`),
+    check("diagram_document_object_check", sql`json_type(document) = 'object'`),
     // An SVG with no record of what it was exported from cannot be judged
     // fresh or stale, and a source hash with no SVG describes nothing.
     check(
@@ -870,7 +922,7 @@ export const diagram = pgTable(
 /**
  * A video made through the studio's chat (docs/STUDIO-VIDEOS.md, D49): the
  * editable source (the scene files and `topic.yml`, with the brief it was made
- * from) in jsonb, the rendered cut in the blob store. The same shape as
+ * from) as JSON, the rendered cut in the blob store. The same shape as
  * `diagram`, for the same reason: a change starts from the source, and the
  * owner's history holds it revision by revision.
  *
@@ -883,7 +935,7 @@ export const diagram = pgTable(
  * so its write guard is armed from the migration that creates it: unlike the
  * older content tables there was never a writer outside the seam to wait for.
  */
-export const video = pgTable(
+export const video = sqliteTable(
   "video",
   {
     slug: text("slug").primaryKey(),
@@ -893,7 +945,7 @@ export const video = pgTable(
       .notNull()
       .references(() => topic.slug, { onDelete: "restrict", onUpdate: "cascade" }),
     /** `{ files: { "<name>": "<text>" }, brief: { ... } }`: what a change job starts from. */
-    source: jsonb("source").notNull(),
+    source: text("source", { mode: "json" }).notNull(),
     /** sha256 of the canonical source. */
     sourceHash: text("source_hash").notNull(),
     /** The rendered cut. */
@@ -904,15 +956,15 @@ export const video = pgTable(
     /** The `source_hash` the mp4 was rendered from. */
     renderedSourceHash: text("rendered_source_hash"),
     /** ffprobe's figure, from the studio's gate; the asset row has no column for it. */
-    durationSeconds: numeric("duration_seconds", { mode: "number" }),
+    durationSeconds: real("duration_seconds"),
     archivedAt: archivedAt(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (t) => [
     check("video_slug_check", kebab("slug")),
-    check("video_source_object_check", sql`jsonb_typeof(source) = 'object'`),
-    check("video_source_hash_check", sql`source_hash ~ '^[0-9a-f]{64}$'`),
+    check("video_source_object_check", sql`json_type(source) = 'object'`),
+    check("video_source_hash_check", sql`source_hash regexp '^[0-9a-f]{64}$'`),
     // As `diagram_svg_pair_check`: a cut with no record of what it was
     // rendered from cannot be judged current, and a hash with no cut
     // describes nothing.
@@ -931,7 +983,7 @@ export const video = pgTable(
  * Append-only by the same per-row trigger as `event`, created in the migration.
  * The owner is `session.learner_id`, so there is no `owner_id` here.
  */
-export const sessionLogEntry = pgTable(
+export const sessionLogEntry = sqliteTable(
   "session_log_entry",
   {
     sessionId: text("session_id")

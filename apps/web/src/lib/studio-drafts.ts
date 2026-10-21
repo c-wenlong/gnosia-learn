@@ -1,4 +1,5 @@
 import type { Mention } from "@/components/ui/mention-text";
+import { storedHarness } from "@/lib/studio-harness";
 import { VIDEO_TOOL_NAMES, type VideoBrief, type VideoToolName, type VideoToolOption } from "@/lib/studio-brief-video";
 import type { Brief } from "@/lib/studio-jobs";
 
@@ -233,6 +234,12 @@ export interface DraftView {
    * runner's default. Optional: a runner from before it does not send it.
    */
   model?: string | null;
+  /**
+   * The harness the conversation's turns run on: `"claude"` or `"byok"`
+   * (Qwen Code on the owner's key). Optional: a runner from before it does
+   * not send it.
+   */
+  harness?: string | null;
   transcript: TranscriptEntry[];
   brief: Brief | null;
   /** The seq of the entry carrying the brief in force. Optional: a runner from before phase 3 does not send it. */
@@ -427,11 +434,18 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<ApiResult<
   return { ok: true, status: response.status, data: body as T };
 }
 
-/** `POST /api/drafts`: a new conversation, or one opened on a diagram to extend it. `model` is the picker its composer carries (D90). */
-export function createDraft(input: { source?: string; sourceKind?: "diagram" | "video"; idempotencyKey: string; model?: string }) {
+/**
+ * `POST /api/drafts`: a new conversation, or one opened on a diagram to
+ * extend it. `model` is the picker its composer carries (D90); `harness` is
+ * the pane picker's last pick, so the conversation's turns run on the harness
+ * it shows. `"claude"` is the runner's default and is not sent.
+ */
+export function createDraft(input: { source?: string; sourceKind?: "diagram" | "video"; idempotencyKey: string; model?: string; harness?: string }) {
+  const { harness: picked, ...rest } = input;
+  const harness = picked ?? storedHarness();
   return call<{ draftId: string; state: DraftState; note: string }>(BASE, {
     method: "POST",
-    body: JSON.stringify(input),
+    body: JSON.stringify({ ...rest, ...(harness === "claude" ? {} : { harness }) }),
   });
 }
 
@@ -492,6 +506,98 @@ export function setDraftModel(draftId: string, model: string | null) {
   return call<{ draftId: string; model: string | null; changed: boolean; note: string }>(draftPath(draftId, "/model"), {
     method: "PUT",
     body: JSON.stringify({ model: model ?? "default" }),
+  });
+}
+
+/**
+ * `PUT /api/drafts/{id}/harness`: the pane picker's write. The runner refuses
+ * a conversation that has already spoken (`harness-locked`): a harness's
+ * session store is its own, so the pick moves only before the first turn.
+ */
+export function setDraftHarness(draftId: string, harness: string) {
+  return call<{ draftId: string; harness: string; changed: boolean; note: string }>(draftPath(draftId, "/harness"), {
+    method: "PUT",
+    body: JSON.stringify({ harness }),
+  });
+}
+
+/** One connected BYOK provider as the API reports it: tiers and a key tail, never the key. */
+export interface ByokProviderStatus {
+  provider: string;
+  last4: string;
+  models: { default?: string; lite?: string; max?: string };
+}
+
+/** Window event a successful BYOK write fires, so open composers and panes re-read the tiers (D94). */
+export const BYOK_SETTINGS_CHANGED = "gnosia:byok-settings";
+
+function announceByokWrite<T>(result: Promise<T>): Promise<T> {
+  void result.then((outcome) => {
+    if (typeof window !== "undefined" && (outcome as { ok?: boolean }).ok === true) {
+      window.dispatchEvent(new Event(BYOK_SETTINGS_CHANGED));
+    }
+  });
+  return result;
+}
+
+/** `GET /api/settings/byok`: the connected providers, the active one, and its Default model. Never a key. */
+export function getByokSettings() {
+  return call<{ configured: boolean; active: string | null; model: string | null; providers: ByokProviderStatus[] }>("/studio/api/settings/byok");
+}
+
+/**
+ * `PUT /api/settings/byok`: the BYOK dialog's Connect — `{ provider, apiKey,
+ * model? }`. The key is written to `$STUDIO_HOME/byok.json` and never sent
+ * back; it powers `qwen` spawns only. Connecting makes the provider active.
+ */
+export function saveByokSettings(input: { provider: string; apiKey: string; model?: string }) {
+  return announceByokWrite(
+    call<{ configured: boolean; active: string | null; model: string | null; providers: ByokProviderStatus[] }>("/studio/api/settings/byok", {
+      method: "PUT",
+      body: JSON.stringify(input),
+    }),
+  );
+}
+
+/** `DELETE /api/settings/byok` (D94): unhook a provider — its key, tiers and the active pick go with it. */
+export function removeByokProvider(provider: string) {
+  return announceByokWrite(
+    call<{ configured: boolean; active: string | null; model: string | null; providers: ByokProviderStatus[] }>("/studio/api/settings/byok", {
+      method: "DELETE",
+      body: JSON.stringify({ provider }),
+    }),
+  );
+}
+
+/** `PUT /api/settings/byok/active` (D94): which connected provider a `byok` turn runs on. */
+export function setByokActive(provider: string) {
+  return announceByokWrite(
+    call<{ configured: boolean; active: string | null; model: string | null; providers: ByokProviderStatus[] }>("/studio/api/settings/byok/active", {
+      method: "PUT",
+      body: JSON.stringify({ provider }),
+    }),
+  );
+}
+
+/** `PUT /api/settings/byok/models` (D94): a connected provider's tier picks; omitted keeps, empty clears. */
+export function saveByokModels(provider: string, models: { default?: string; lite?: string; max?: string }) {
+  return announceByokWrite(
+    call<{ configured: boolean; active: string | null; model: string | null; providers: ByokProviderStatus[] }>("/studio/api/settings/byok/models", {
+      method: "PUT",
+      body: JSON.stringify({ provider, models }),
+    }),
+  );
+}
+
+/**
+ * `POST /api/settings/byok/models` (D93): the provider's own model list, on
+ * the key typed into the dialog or the stored one when the field was left
+ * blank. The key rides the POST body, never a URL.
+ */
+export function listByokModels(provider: string, apiKey?: string) {
+  return call<{ models: { value: string; label: string | null }[] }>("/studio/api/settings/byok/models", {
+    method: "POST",
+    body: JSON.stringify(apiKey === undefined || apiKey === "" ? { provider } : { provider, apiKey }),
   });
 }
 
