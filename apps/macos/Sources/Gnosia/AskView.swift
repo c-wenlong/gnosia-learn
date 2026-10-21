@@ -114,8 +114,7 @@ struct AskView: View {
     private func bubble(_ turn: SidecarClient.ChatMessage) -> some View {
         HStack {
             if turn.role == "user" { Spacer(minLength: 80) }
-            Text(turn.content)
-                .font(.body)
+            MathText(text: turn.content, font: .body)
                 .foregroundStyle(turn.role == "user" ? G.btnText : G.text)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)

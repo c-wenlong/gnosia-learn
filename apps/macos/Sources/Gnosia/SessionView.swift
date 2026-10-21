@@ -638,7 +638,7 @@ struct SessionView: View {
             Text("\(title) · Teach")
                 .font(.gnosiaTitle(26))
             if !teach.isEmpty {
-                MarkdownText(source: teach)
+                NoteBodyView(source: teach)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else if !summary.isEmpty {
                 Text(summary)

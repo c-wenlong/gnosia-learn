@@ -64,7 +64,7 @@ struct LearnView: View {
                     .listStyle(.sidebar)
                 }
             }
-            .navigationSplitViewColumnWidth(min: 320, ideal: 380)
+            .navigationSplitViewColumnWidth(min: 340, ideal: 430)
             .searchable(text: $search, placement: .sidebar, prompt: "Search concepts")
         } detail: {
             NavigationStack {
@@ -150,7 +150,9 @@ private struct ConceptRow: View {
             BucketDot(bucket: row.bucket)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(row.title).lineLimit(1)
+                Text(row.title)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 6) {
                     if row.isDue {
                         Text(row.dueLabel)
