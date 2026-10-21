@@ -36,9 +36,7 @@ describe.skipIf(!reachable.ok)("topics and tags from rows, on the seed", () => {
 
   beforeAll(async () => {
     scratch = await migratedScratchDatabase();
-    const url = new URL(process.env["DATABASE_URL"] ?? "postgres://localhost:5432/gnosia");
-    url.pathname = `/${scratch.name}`;
-    process.env["DATABASE_URL"] = url.toString();
+    process.env["DATABASE_URL"] = scratch.url;
     process.env["MANIMKC_ROOT"] = path.join(tmpdir(), "catalog-test-no-manimkc");
     await runImportCommand({ dir: SEED });
   }, 120_000);

@@ -49,6 +49,16 @@ const KNOWN: Record<string, { unreachable: boolean; reason: string }> = {
   "3D000": { unreachable: false, reason: "database does not exist" },
   "53300": { unreachable: false, reason: "too many connections" },
   "57P03": { unreachable: false, reason: "server is not accepting connections yet" },
+  // SQLite's. An unopenable file is this app's "nothing there"; a locked one
+  // is up and busy, and one that opens but is not a database is up and saying
+  // no — the same shape a refused pg connection had.
+  SQLITE_CANTOPEN: { unreachable: true, reason: "cannot open the database file" },
+  SQLITE_BUSY: { unreachable: false, reason: "database is locked" },
+  SQLITE_NOTADB: { unreachable: false, reason: "file is not a database" },
+  // Node fs errnos from the mkdir/open a path that cannot be a file throws.
+  ENOTDIR: { unreachable: true, reason: "a path component is not a directory" },
+  EACCES: { unreachable: true, reason: "permission denied" },
+  EROFS: { unreachable: true, reason: "read-only filesystem" },
 };
 
 /**

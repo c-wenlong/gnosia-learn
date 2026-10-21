@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  clearTables,
   migratedScratchDatabase,
   probe,
   type Scratch,
@@ -89,13 +90,7 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
   });
 
   beforeEach(async () => {
-    await scratch.db.execute(
-      "alter table event disable trigger event_no_update; " +
-        "alter table event disable trigger event_no_delete; " +
-        "truncate event, mastery, review, progress, recap, preference; " +
-        "alter table event enable trigger event_no_update; " +
-        "alter table event enable trigger event_no_delete;",
-    );
+    await clearTables(scratch.db, ["event", "mastery", "review", "progress", "recap", "preference"]);
   });
 
   const call = async (name: string, body: unknown, origin?: string | null) => {
@@ -214,7 +209,7 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
         expect((await call("preference", { key, value: "x" })).status).toBe(400);
       }
       const { rows } = await scratch.db.execute<{ n: number }>(
-        "select count(*)::int as n from preference",
+        "select cast(count(*) as integer) as n from preference",
       );
       expect(rows[0]?.n).toBe(0);
     });

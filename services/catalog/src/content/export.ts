@@ -147,7 +147,7 @@ async function renderTopics(db: CatalogDatabase, filter?: RenderFilter): Promise
     await rows<{ slug: string; title: string; domain: string; summary: string | null; aliases: unknown }>(
       db,
       sql`select slug, title, domain, summary, aliases from topic
-          where archived_at is null order by position, slug collate "C"`,
+          where archived_at is null order by position, slug collate binary`,
     ),
     filter?.topics,
     (t) => t.slug,
@@ -159,7 +159,7 @@ async function renderTopics(db: CatalogDatabase, filter?: RenderFilter): Promise
     kept(
       await rows<{ from_slug: string; to_slug: string; kind: string }>(
         db,
-        sql`select from_slug, to_slug, kind from topic_relation order by from_slug collate "C", position, kind collate "C", to_slug collate "C"`,
+        sql`select from_slug, to_slug, kind from topic_relation order by from_slug collate binary, position, kind collate binary, to_slug collate binary`,
       ),
       filter?.topics,
       (r) => r.to_slug,
@@ -170,7 +170,7 @@ async function renderTopics(db: CatalogDatabase, filter?: RenderFilter): Promise
     filter === undefined
       ? await rows<{ topic_slug: string; path: string }>(
           db,
-          sql`select topic_slug, path from manimkc_topic order by topic_slug collate "C", position, path collate "C"`,
+          sql`select topic_slug, path from manimkc_topic order by topic_slug collate binary, position, path collate binary`,
         )
       : [],
     (r) => r.topic_slug,
@@ -181,7 +181,7 @@ async function renderTopics(db: CatalogDatabase, filter?: RenderFilter): Promise
         db,
         sql`select topic_slug, slug from concept
             where topic_slug is not null and archived_at is null
-            order by topic_slug collate "C", topic_position, slug collate "C"`,
+            order by topic_slug collate binary, topic_position, slug collate binary`,
       ),
       filter?.concepts,
       (r) => r.slug,
@@ -195,7 +195,7 @@ async function renderTopics(db: CatalogDatabase, filter?: RenderFilter): Promise
         sql`select m.topic_slug, m.collection_id from collection_item m
             join collection c on c.id = m.collection_id
             where m.topic_slug is not null and c.kind = 'module' and c.archived_at is null
-            order by m.topic_slug collate "C", m.topic_position, m.collection_id collate "C"`,
+            order by m.topic_slug collate binary, m.topic_position, m.collection_id collate binary`,
       ),
       filter?.modules,
       (r) => r.collection_id,
@@ -237,7 +237,7 @@ async function renderTags(db: CatalogDatabase, filter?: RenderFilter): Promise<E
   const tags = kept(
     await rows<{ id: string; label: string; description: string | null }>(
       db,
-      sql`select id, label, description from tag order by position, id collate "C"`,
+      sql`select id, label, description from tag order by position, id collate binary`,
     ),
     filter?.tags,
     (t) => t.id,
@@ -287,7 +287,7 @@ async function renderCourses(db: CatalogDatabase, given?: BlobStore, filter?: Re
     }>(
       db,
       sql`select id, slug, title, position, metadata, cover_blob_key from collection
-          where kind = 'course' and archived_at is null order by position, id collate "C"`,
+          where kind = 'course' and archived_at is null order by position, id collate binary`,
     ),
     filter?.courses,
     (c) => c.id,
@@ -295,7 +295,7 @@ async function renderCourses(db: CatalogDatabase, given?: BlobStore, filter?: Re
   const tags = groupBy(
     await rows<{ collection_id: string; tag_id: string }>(
       db,
-      sql`select collection_id, tag_id from collection_tag order by collection_id collate "C", position, tag_id collate "C"`,
+      sql`select collection_id, tag_id from collection_tag order by collection_id collate binary, position, tag_id collate binary`,
     ),
     (r) => r.collection_id,
   );
@@ -317,7 +317,7 @@ async function renderCourses(db: CatalogDatabase, given?: BlobStore, filter?: Re
                     order by m.position limit 1) as topic
             from collection c
             where c.kind = 'module' and c.archived_at is null
-            order by c.parent_id collate "C", c.position, c.id collate "C"`,
+            order by c.parent_id collate binary, c.position, c.id collate binary`,
       ),
       filter?.modules,
       (m) => m.id,
@@ -328,7 +328,7 @@ async function renderCourses(db: CatalogDatabase, given?: BlobStore, filter?: Re
     await rows<{ id: string; collection_id: string; title: string; subtopics: unknown; videos: unknown }>(
       db,
       sql`select id, collection_id, title, subtopics, videos from curriculum_item
-          where archived_at is null order by collection_id collate "C", position, id collate "C"`,
+          where archived_at is null order by collection_id collate binary, position, id collate binary`,
     ),
     (r) => r.collection_id,
   );
@@ -336,7 +336,7 @@ async function renderCourses(db: CatalogDatabase, given?: BlobStore, filter?: Re
     await rows<{ curriculum_item_id: string; concept_slug: string }>(
       db,
       sql`select curriculum_item_id, concept_slug from concept_curriculum_item
-          order by curriculum_item_id collate "C", position, concept_slug collate "C"`,
+          order by curriculum_item_id collate binary, position, concept_slug collate binary`,
     ),
     (r) => r.curriculum_item_id,
   );
@@ -348,7 +348,7 @@ async function renderCourses(db: CatalogDatabase, given?: BlobStore, filter?: Re
       sql`select l.asset_id, l.curriculum_item_id, i.collection_id
           from curriculum_item_asset l join curriculum_item i on i.id = l.curriculum_item_id
           where i.archived_at is null
-          order by l.asset_id collate "C", l.position, l.curriculum_item_id collate "C"`,
+          order by l.asset_id collate binary, l.position, l.curriculum_item_id collate binary`,
     ),
     (r) => r.asset_id,
   );
@@ -357,8 +357,8 @@ async function renderCourses(db: CatalogDatabase, given?: BlobStore, filter?: Re
       db,
       sql`select m.collection_id, a.id, a.title, a.url, a.resource_type
           from collection_item m join asset a on a.id = m.asset_id
-          where a.kind = 'link' and starts_with(a.id, ${ASSET_PREFIX.courses})
-          order by m.collection_id collate "C", m.position, a.id collate "C"`,
+          where a.kind = 'link' and instr(a.id, ${ASSET_PREFIX.courses}) = 1
+          order by m.collection_id collate binary, m.position, a.id collate binary`,
     ),
     (r) => r.collection_id,
   );
@@ -516,7 +516,7 @@ async function renderDiagrams(db: CatalogDatabase, given?: BlobStore, filter?: R
   const documents = kept(
     await rows<{ slug: string; document: unknown; document_hash: string }>(
       db,
-      sql`select slug, document, document_hash from diagram where archived_at is null order by slug collate "C"`,
+      sql`select slug, document, document_hash from diagram where archived_at is null order by slug collate binary`,
     ),
     filter?.diagrams,
     (d) => d.slug,
@@ -534,8 +534,8 @@ async function renderDiagrams(db: CatalogDatabase, given?: BlobStore, filter?: R
     await rows<{ path: string | null; content_hash: string | null; blob_key: string | null }>(
       db,
       sql`select path, content_hash, blob_key from asset
-          where kind = 'diagram_svg' and starts_with(id, ${ASSET_PREFIX.diagrams})
-          order by path collate "C"`,
+          where kind = 'diagram_svg' and instr(id, ${ASSET_PREFIX.diagrams}) = 1
+          order by path collate binary`,
     ),
     svgPaths,
     (svg) => svg.path ?? "",

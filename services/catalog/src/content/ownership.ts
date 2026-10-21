@@ -63,7 +63,7 @@ export async function recordExport(db: CatalogDatabase, type: ContentType, hash:
   await ensureRow(db, type);
   await db
     .update(contentSource)
-    .set({ exportHash: hash, exportedAt: sql`now()`, updatedAt: sql`now()` })
+    .set({ exportHash: hash, exportedAt: sql`cast(unixepoch('subsec') * 1000 as integer)`, updatedAt: sql`cast(unixepoch('subsec') * 1000 as integer)` })
     .where(eq(contentSource.type, type));
 }
 

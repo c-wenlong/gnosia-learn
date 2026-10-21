@@ -90,9 +90,7 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
     // CLI takes. Pointing it at the scratch database exercises that path
     // rather than a test-only one.
     previousUrl = process.env["DATABASE_URL"];
-    const url = new URL(process.env["DATABASE_URL"] ?? "postgres://localhost:5432/gnosia");
-    url.pathname = `/${scratch.name}`;
-    process.env["DATABASE_URL"] = url.toString();
+    process.env["DATABASE_URL"] = scratch.url;
     previousManimkc = process.env["MANIMKC_ROOT"];
     noManimkc = await mkdtemp(path.join(tmpdir(), "catalog-no-manimkc-"));
     process.env["MANIMKC_ROOT"] = noManimkc;
@@ -154,7 +152,7 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
 
     it("holds every other count the seed has", async () => {
       const count = async (table: string) =>
-        (await scratch.db.execute<{ n: number }>(sql`select count(*)::int as n from ${sql.identifier(table)}`)).rows[0]?.n;
+        (await scratch.db.execute<{ n: number }>(sql`select count(*) as n from ${sql.identifier(table)}`)).rows[0]?.n;
       expect({
         tags: await count("tag"),
         items: await count("curriculum_item"),
@@ -193,7 +191,7 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
 
     it("gives every module a topic, and every curriculum item its module's", async () => {
       const { rows } = await scratch.db.execute<{ n: number }>(sql`
-        select count(*)::int as n from collection c
+        select count(*) as n from collection c
          where c.kind = 'module'
            and not exists (
              select 1 from collection_item ci
@@ -203,7 +201,7 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
 
       const items = await scratch.db.select().from(curriculumItem);
       const untagged = await scratch.db.execute<{ n: number }>(sql`
-        select count(*)::int as n from curriculum_item ci
+        select count(*) as n from curriculum_item ci
          where not exists (
            select 1 from curriculum_item_topic cit where cit.curriculum_item_id = ci.id)
       `);
@@ -300,16 +298,13 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
     });
 
     it("reports pending migrations instead of failing on a table that does not exist yet", async () => {
-      // `index_run` arrives in 0002, so a database stopped at 0000 or 0001 has
-      // a non-null head and no such table. Counting there used to throw
-      // "relation does not exist" rather than saying the obvious thing.
+      // A database one migration behind has a non-null head and a pending
+      // entry: status must report both rather than throw.
       const partial = await createScratchDatabase();
       const saved = process.env["DATABASE_URL"];
       try {
-        await applyMigrations(partial.db, { folder: await partialMigrations() });
-        const url = new URL(saved ?? "postgres://localhost:5432/gnosia");
-        url.pathname = `/${partial.name}`;
-        process.env["DATABASE_URL"] = url.toString();
+        await applyMigrations(partial.db, { folder: await partialMigrations(1) });
+        process.env["DATABASE_URL"] = partial.url;
 
         const status = await runStatus();
         expect(status.migrations.head).not.toBeNull();
@@ -462,7 +457,7 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
     // import (D12), kept for the learner rows under them, on no page. Set
     // directly here and put back, so the cases above see the tree as it is.
     const archive = async (on: boolean) => {
-      const at = on ? sql`now()` : sql`null`;
+      const at = on ? sql`cast(unixepoch('subsec') * 1000 as integer)` : sql`null`;
       await scratch.db.execute(sql`update curriculum_item set archived_at = ${at} where id = 'cp4284-m3-t1'`);
       await scratch.db.execute(sql`update collection set archived_at = ${at} where id = 'cp4284-m1'`);
       await scratch.db.execute(sql`update curriculum_item set archived_at = ${at} where collection_id = 'cp4284-m1'`);
@@ -524,7 +519,7 @@ describe.skipIf(!reachable.ok)("catalog end to end", () => {
     it("keeps a live course whose items are all archived in the coverage, at zero", async () => {
       const courses = (await runStatus()).coverage.map((c) => c.course);
       await scratch.db.execute(
-        sql`update curriculum_item set archived_at = now()
+        sql`update curriculum_item set archived_at = cast(unixepoch('subsec') * 1000 as integer)
             where collection_id in (select id from collection where parent_id = 'cp4284')`,
       );
       try {
@@ -590,9 +585,7 @@ describe.skipIf(!reachable.ok)("mirror coverage", () => {
   beforeAll(async () => {
     scratch = await migratedScratchDatabase();
     previousUrl = process.env["DATABASE_URL"];
-    const url = new URL(previousUrl ?? "postgres://localhost:5432/gnosia");
-    url.pathname = `/${scratch.name}`;
-    process.env["DATABASE_URL"] = url.toString();
+    process.env["DATABASE_URL"] = scratch.url;
   }, 60_000);
 
   afterAll(async () => {

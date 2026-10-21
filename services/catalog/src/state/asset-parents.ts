@@ -179,7 +179,7 @@ function parentsQuery(ids: readonly string[], owners: Owners): SQL {
   );
   // Ordered so the TypeScript above only appends: the branch rank keeps a
   // module listing (`item`) ahead of a topic match for the same course, and
-  // `collate "C"` keeps the order the same on CI's en_US database as on a
+  // `collate binary` keeps the order the same on CI's en_US database as on a
   // Homebrew one (the "CI is Linux" gotcha).
   return sql`
     with wanted as (
@@ -189,8 +189,8 @@ function parentsQuery(ids: readonly string[], owners: Owners): SQL {
       select w.id as asset_id, 'item' as branch,
              c.slug as course, c.metadata ->> 'code' as code, c.title as course_title,
              m.slug as module, m.title as module_title, m.position as position,
-             null::text as ref, null::text as ref_title, null::text as ref_name, null::timestamptz as ref_updated,
-             null::timestamptz as at, 0 as rank
+             null as ref, null as ref_title, null as ref_name, null as ref_updated,
+             null as at, 0 as rank
       from wanted w
       join collection_item ci on ci.asset_id = w.id
       join collection m on m.id = ci.collection_id and m.kind = 'module' and m.archived_at is null${owned("m.owner_id", owners)}
@@ -236,7 +236,7 @@ function parentsQuery(ids: readonly string[], owners: Owners): SQL {
       from wanted w
       join session s on s.log_asset_id = w.id${owned("s.learner_id", owners)}
     ) parents
-    order by asset_id collate "C", rank,
-             code collate "C" nulls last, course collate "C", position, module collate "C" nulls first,
-             at desc nulls last, ref collate "C"`;
+    order by asset_id collate binary, rank,
+             code collate binary nulls last, course collate binary, position, module collate binary nulls first,
+             at desc nulls last, ref collate binary`;
 }

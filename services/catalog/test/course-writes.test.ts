@@ -35,9 +35,7 @@ const reachable = await probe();
 
 function pointAt(name: string): () => void {
   const saved = { url: process.env["DATABASE_URL"], manimkc: process.env["MANIMKC_ROOT"] };
-  const url = new URL(process.env["DATABASE_URL"] ?? "postgres://localhost:5432/gnosia");
-  url.pathname = `/${name}`;
-  process.env["DATABASE_URL"] = url.toString();
+  process.env["DATABASE_URL"] = name;
   process.env["MANIMKC_ROOT"] = path.join(tmpdir(), "catalog-test-no-manimkc");
   return () => {
     for (const [key, value] of [["DATABASE_URL", saved.url], ["MANIMKC_ROOT", saved.manimkc]] as const) {
@@ -147,7 +145,7 @@ async function tree(): Promise<Fixture> {
 }
 
 async function revisionTotal(scratch: Scratch): Promise<number> {
-  const [row] = await scratch.db.select({ n: sql<number>`count(*)::int` }).from(contentRevision);
+  const [row] = await scratch.db.select({ n: sql<number>`count(*)` }).from(contentRevision);
   return row?.n ?? 0;
 }
 
@@ -198,7 +196,7 @@ describe.skipIf(!reachable.ok)("catalog course import, export and the item verbs
       ]),
     );
     edits = await mkdtemp(path.join(tmpdir(), "catalog-course-edits-"));
-    restore = pointAt(scratch.name);
+    restore = pointAt(scratch.url);
     await runImportCommand({ dir: fixture.root });
     // The fixture's YAML is hand-written; the write-through keeps files in
     // step only from the database's own export of them, so start from that.

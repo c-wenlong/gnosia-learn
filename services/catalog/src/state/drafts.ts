@@ -36,7 +36,7 @@ export interface RecentDraft {
  * space character, so a title of tabs or of U+3000 would read as a title
  * there and as nothing on the page.
  */
-const HAS_VISIBLE = String.raw`[^[:space:]\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]`;
+const HAS_VISIBLE = String.raw`\S`;
 
 export async function recentDrafts(db: CatalogDatabase, ownerId: string, limit = 5): Promise<RecentDraft[]> {
   const rows = await db
@@ -48,8 +48,8 @@ export async function recentDrafts(db: CatalogDatabase, ownerId: string, limit =
       and(
         eq(draft.ownerId, ownerId),
         or(
-          and(isNotNull(draft.name), sql`${draft.name} ~ ${HAS_VISIBLE}`),
-          and(isNotNull(draft.title), sql`${draft.title} ~ ${HAS_VISIBLE}`),
+          and(isNotNull(draft.name), sql`${draft.name} regexp ${HAS_VISIBLE}`),
+          and(isNotNull(draft.title), sql`${draft.title} regexp ${HAS_VISIBLE}`),
         ),
         ne(draft.state, "abandoned"),
       ),

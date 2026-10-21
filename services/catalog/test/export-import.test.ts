@@ -52,9 +52,7 @@ function pointAt(name: string): () => void {
     manimkc: process.env["MANIMKC_ROOT"],
     home: process.env["GNOSIA_HOME"],
   };
-  const url = new URL(process.env["DATABASE_URL"] ?? "postgres://localhost:5432/gnosia");
-  url.pathname = `/${name}`;
-  process.env["DATABASE_URL"] = url.toString();
+  process.env["DATABASE_URL"] = name;
   process.env["MANIMKC_ROOT"] = path.join(tmpdir(), "catalog-test-no-manimkc");
   process.env["GNOSIA_HOME"] = path.join(tmpdir(), `gnosia-home-${name}`);
   return () => {
@@ -86,8 +84,11 @@ async function tempDir(label: string): Promise<string> {
 /** The newest snapshot hash of every entity, which is the database's content in one map. */
 async function latestSnapshots(scratch: Scratch): Promise<Map<string, string>> {
   const { rows } = await scratch.db.execute<{ key: string; hash: string }>(sql`
-    select distinct on (entity_type, entity_id) entity_type || ' ' || entity_id as key, snapshot_hash as hash
-    from ${contentRevision} order by entity_type, entity_id, seq desc
+    select entity_type || ' ' || entity_id as key, snapshot_hash as hash
+    from (select entity_type, entity_id, snapshot_hash,
+                 row_number() over (partition by entity_type, entity_id order by seq desc) as rn
+          from ${contentRevision})
+    where rn = 1 order by entity_type, entity_id
   `);
   return new Map(rows.map((row) => [row.key, row.hash]));
 }
@@ -166,13 +167,13 @@ describe.skipIf(!reachable.ok)("export, import and parity on the seed tree", () 
   });
 
   it("imports the tree, exports it, and finds zero mismatches against both", async () => {
-    await against(first.name, async () => {
+    await against(first.url, async () => {
       await runImportCommand({ dir: SEED });
       await runExport({ out });
     });
 
     for (const dir of [out, SEED]) {
-      const result = await against(first.name, () => runParity({ dir }));
+      const result = await against(first.url, () => runParity({ dir }));
       const summary = result.types.map((t) => ({
         type: t.type,
         mismatches: t.mismatches.map((m) => `${m.kind} ${m.id}: ${m.detail}`),
@@ -207,7 +208,7 @@ describe.skipIf(!reachable.ok)("export, import and parity on the seed tree", () 
   });
 
   it("reads the export back into a second database with the same content, entity by entity", async () => {
-    await against(second.name, async () => {
+    await against(second.url, async () => {
       await runImportCommand({ dir: out });
       await runExport({ out: again });
       expect((await runParity({ dir: out })).clean).toBe(true);
@@ -233,7 +234,7 @@ describe.skipIf(!reachable.ok)("export, import and parity on the seed tree", () 
   }, 240_000);
 
   it("writes zero revisions on a second import of the same tree", async () => {
-    const result = await against(first.name, () => runImportCommand({ dir: SEED }));
+    const result = await against(first.url, () => runImportCommand({ dir: SEED }));
     expect(revisionCount(result)).toBe(0);
     expect(result.totals.deleted).toBe(0);
   }, 120_000);
@@ -339,7 +340,7 @@ describe.skipIf(!reachable.ok)("the round trip on a small tree", () => {
     scratch = await migratedScratchDatabase();
     fixture = await smallTree();
     out = await tempDir("small-export");
-    restore = pointAt(scratch.name);
+    restore = pointAt(scratch.url);
   }, 60_000);
 
   afterAll(async () => {
@@ -450,7 +451,7 @@ describe.skipIf(!reachable.ok)("flip, and importing a type the database owns", (
     scratch = await migratedScratchDatabase();
     fixture = await smallTree();
     out = await tempDir("flip-export");
-    restore = pointAt(scratch.name);
+    restore = pointAt(scratch.url);
     await runImportCommand({ dir: fixture.root });
   }, 60_000);
 
@@ -722,7 +723,7 @@ describe.skipIf(!reachable.ok)("a tag gone from tags.yaml while the database own
     scratch = await migratedScratchDatabase();
     fixture = await smallTree({ secondItemConcepts: ["derived"] });
     out = await tempDir("owned-courses");
-    restore = pointAt(scratch.name);
+    restore = pointAt(scratch.url);
     await runImportCommand({ dir: fixture.root });
     await runExport({ out });
     await runImportCommand({ dir: out });
@@ -757,7 +758,7 @@ describe.skipIf(!reachable.ok)("flip --waive", () => {
   beforeAll(async () => {
     scratch = await migratedScratchDatabase();
     fixture = await smallTree();
-    restore = pointAt(scratch.name);
+    restore = pointAt(scratch.url);
     await runImportCommand({ dir: fixture.root });
   }, 60_000);
 
@@ -831,7 +832,7 @@ describe.skipIf(!reachable.ok)("sparse positions (D22) on a copy of the seed tre
     for (const dir of ["content", "learn"]) {
       await cp(path.join(SEED, dir), path.join(copy, dir), { recursive: true });
     }
-    restore = pointAt(scratch.name);
+    restore = pointAt(scratch.url);
     await runImportCommand({ dir: copy });
   }, 120_000);
 
@@ -917,7 +918,7 @@ describe.skipIf(!reachable.ok)("sparse positions (D22) inside a module, and renu
   beforeAll(async () => {
     scratch = await migratedScratchDatabase();
     fixture = await smallTree();
-    restore = pointAt(scratch.name);
+    restore = pointAt(scratch.url);
     await runImportCommand({ dir: fixture.root });
   }, 60_000);
 
@@ -1022,7 +1023,7 @@ describe.skipIf(!reachable.ok)("sparse positions (D22) inside a module, and renu
     expect(await revisionsWritten(scratch, since)).toEqual(["collection xx1000-m1 update"]);
     // The module's resource rows came through the rewrite of its links.
     const links = await scratch.db.execute<{ n: number }>(
-      sql`select count(*)::int as n from collection_item where collection_id = 'xx1000-m1'`,
+      sql`select count(*) as n from collection_item where collection_id = 'xx1000-m1'`,
     );
     expect(links.rows[0]?.n).toBe(3);
     expect((await runParity({ dir: fixture.root })).clean).toBe(true);

@@ -17,6 +17,7 @@ import { latestRevisions, lockEntity } from "./revisions";
 import { writeContent } from "./write";
 import { CLI_OWNER } from "./scope";
 
+import { inTransaction } from "../db";
 /**
  * Session logs as rows (Track C, D20 of docs/CONTENT-MIGRATION.md).
  *
@@ -56,9 +57,16 @@ export class LogError extends Error {
   }
 }
 
-/** Serialises writers of one log: two appends cannot take the same `seq`. */
+/**
+ * Serialises writers of one log: two appends cannot take the same `seq`.
+ * On Postgres a `pg_advisory_xact_lock` keyed on the log did it; on SQLite
+ * `inTransaction`'s `begin immediate` serialises every writer at the file,
+ * and `session_log_entry`'s primary key on (session_id, seq) refuses the
+ * collision regardless, so the lock is a marker now rather than a mechanism.
+ */
 async function lockLog(db: CatalogDatabase, id: string): Promise<void> {
-  await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`session_log:${id}`}, 0))`);
+  void db;
+  void id;
 }
 
 /** The highest `seq` a log has, 0 when it has none. */
@@ -89,8 +97,8 @@ export async function readLog(db: CatalogDatabase, id: string): Promise<string |
 /** Every log with at least one entry, by id, each concatenated. Sorted by id. */
 export async function readLogs(db: CatalogDatabase): Promise<{ id: string; markdown: string }[]> {
   const { rows } = await db.execute<{ id: string; markdown: string }>(sql`
-    select session_id as id, string_agg(markdown, '' order by seq) as markdown
-    from ${sessionLogEntry} group by session_id order by session_id collate "C"
+    select session_id as id, group_concat(markdown, '' order by seq) as markdown
+    from ${sessionLogEntry} group by session_id order by session_id collate binary
   `);
   return rows;
 }
@@ -195,7 +203,7 @@ export async function appendLog(
   options: { ifEmpty?: boolean } = {},
 ): Promise<{ seq: number; path: string; appended: boolean }> {
   if (markdown === "") throw new LogError(`nothing to append to the log of session "${id}"`);
-  return db.transaction(async (tx) => {
+  return inTransaction(db, async (tx) => {
     const assetId = logAssetId(id);
     await lockEntity(tx, "asset", assetId);
     await lockLog(tx, id);

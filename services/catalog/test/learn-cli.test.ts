@@ -8,7 +8,7 @@ import { promisify } from "node:util";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { readReviews, upsertReview } from "../src/state";
-import { markImported, migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { clearTables, markImported, migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { seedContent, TOPIC_SLUG } from "./state-fixture";
 
 /**
@@ -85,13 +85,7 @@ describe.skipIf(!reachable.ok)("learn CLI", () => {
   });
 
   beforeEach(async () => {
-    await scratch.db.execute(
-      "alter table event disable trigger event_no_update; " +
-        "alter table event disable trigger event_no_delete; " +
-        "truncate event, mastery, review, progress, recap, preference; " +
-        "alter table event enable trigger event_no_update; " +
-        "alter table event enable trigger event_no_delete;",
-    );
+    await clearTables(scratch.db, ["event", "mastery", "review", "progress", "recap", "preference"]);
   });
 
   describe("the pinned --json shapes", () => {
@@ -222,7 +216,7 @@ describe.skipIf(!reachable.ok)("learn CLI", () => {
 
       // The observations are retained for audit, alongside the void marker.
       const { rows } = await scratch.db.execute<{ type: string; n: number }>(
-        "select type, count(*)::int as n from event group by type order by type",
+        "select type, count(*) as n from event group by type order by type",
       );
       expect(rows).toEqual([
         { type: "observation", n: 3 },
@@ -517,10 +511,8 @@ describe.skipIf(!reachable.ok)("learn CLI", () => {
     });
   });
 
-  /** A port nothing is listening on, for the "database is down" paths. */
+  /** A file used as a directory: opening it fails, for the "database is down" paths. */
   function unreachableUrl(): string {
-    const url = new URL(scratch.url);
-    url.port = "59999";
-    return url.toString();
+    return `${scratch.url}/child.db`;
   }
 });

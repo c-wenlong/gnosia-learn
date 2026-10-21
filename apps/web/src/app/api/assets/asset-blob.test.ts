@@ -10,11 +10,11 @@ import { asset, assetDerivation, blobObject } from "@gnosia/schema";
 import { eq } from "drizzle-orm";
 
 import { applyMigrations } from "../../../../../../services/catalog/src/migrations";
-import { assetBefore0031, BEFORE_BLOB_CONTRACT, partialMigrations } from "../../../../../../services/catalog/test/partial-migrations";
 import {
   createScratchDatabase,
   probe,
   type Scratch,
+  withoutConstraint,
 } from "../../../../../../services/catalog/test/scratch-database";
 
 // A signed-in request, so the owner seam (`@/lib/owner`) resolves `local`.
@@ -97,12 +97,13 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
 
   beforeAll(async () => {
     scratch = await createScratchDatabase();
-    // At 0012: the diagram SVG with no blob, whose not-uploaded hint this
-    // checks, is a row the contract (0013) forbids. Every other row here
-    // carries a blob and would pass it. Rows go in through `assetBefore0031`,
-    // since `insert(asset)` names `inputs_hash`, a column this schema has not
-    // grown (0031), and the `source_repo` check still speaks `self-learn`.
-    await applyMigrations(scratch.db, { folder: await partialMigrations(BEFORE_BLOB_CONTRACT) });
+    // The diagram SVG with no blob, whose not-uploaded hint this checks, is
+    // a row the contract forbids — in the SQLite schema a CHECK constraint
+    // from 0000 on, so the table is rebuilt without it rather than the
+    // migrations stopped before it. Every other row here carries a blob and
+    // would pass it.
+    await applyMigrations(scratch.db);
+    await withoutConstraint(scratch.db, "asset", "asset_stored_blob_check");
     home = await mkdtemp(path.join(tmpdir(), "asset-blob-"));
     process.env.DATABASE_URL = scratch.url;
     process.env.GNOSIA_HOME = home;
@@ -128,7 +129,7 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
       sourceRepo: "manimkc",
       blobKey: key,
     });
-    await scratch.db.insert(assetBefore0031).values([
+    await scratch.db.insert(asset).values([
       video(VIDEO_ID, "out/algorithms/demo/demo.mp4", videoKey, VIDEO),
       video(PENDING_ID, "out/algorithms/demo/pending.mp4", pendingKey, pendingBytes),
       video(LOST_ID, "out/algorithms/demo/lost.mp4", lostKey, lostBytes),
@@ -140,7 +141,7 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
         contentHash: sha256(Buffer.from("<svg/>")),
         bytes: 6,
         title: "Demo diagram",
-        sourceRepo: "self-learn",
+        sourceRepo: "gnosia",
         blobKey: null,
       },
       {
@@ -151,7 +152,7 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
         contentHash: sha256(JPEG),
         bytes: JPEG.length,
         title: "Demo (poster)",
-        sourceRepo: "self-learn",
+        sourceRepo: "gnosia",
         blobKey: posterKey,
       },
     ]);
@@ -324,7 +325,7 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
   it("reads a stored transcript's text for the page", async () => {
     const text = Buffer.from('{"cues":[{"text":"hello"}]}');
     const key = await stored(text, "json");
-    await scratch.db.insert(assetBefore0031).values({
+    await scratch.db.insert(asset).values({
       id: "manimkc:out/algorithms/demo/demo.transcript.json",
       kind: "transcript",
       path: "out/algorithms/demo/demo.transcript.json",

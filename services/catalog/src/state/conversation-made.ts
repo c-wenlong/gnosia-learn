@@ -73,7 +73,8 @@ interface MadeRow extends Record<string, unknown> {
   path: string | null;
   job_id: string;
   written_at: Date | string;
-  thumbnail: boolean | null;
+  /** SQLite's `exists()`/`=` reads 0 or 1. */
+  thumbnail: number | null;
 }
 
 /**
@@ -92,7 +93,7 @@ export async function conversationMade(db: CatalogDatabase, draftId: string, sco
     name: madeName(row.id, row.kind, row.path),
     jobId: row.job_id,
     madeAt: new Date(row.written_at).toISOString(),
-    thumbnail: row.thumbnail === true,
+    thumbnail: row.thumbnail === 1,
   }));
 }
 
@@ -125,8 +126,11 @@ function madeQuery(draftId: string, owners: Owners): SQL {
   // en_US database agrees with a Homebrew one (the "CI is Linux" gotcha).
   return sql`
     select * from (
-      select distinct on (a.id)
-             a.id, a.kind, a.title, a.path, aj.job_id, aj.written_at,
+      select id, kind, title, path, job_id, written_at, thumbnail from (
+        select a.id, a.kind, a.title, a.path, aj.job_id, aj.written_at,
+             row_number() over (
+               partition by a.id order by aj.written_at desc, aj.job_id collate binary
+             ) as rn,
              case
                when a.kind = 'diagram_svg' then coalesce(b.state = 'present', false)
                else exists (
@@ -153,9 +157,9 @@ function madeQuery(draftId: string, owners: Owners): SQL {
           where later.asset_id = a.id${owned("later.owner_id", owners)}
             and ld.id <> d.id
             and (later.written_at > aj.written_at
-                 or (later.written_at = aj.written_at and ld.id collate "C" < d.id collate "C"))
+                 or (later.written_at = aj.written_at and ld.id collate binary < d.id collate binary))
         )
-      order by a.id, aj.written_at desc, aj.job_id collate "C"
+      ) where rn = 1
     ) made
-    order by written_at desc, id collate "C"`;
+    order by written_at desc, id collate binary`;
 }

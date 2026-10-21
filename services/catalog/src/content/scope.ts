@@ -1,6 +1,6 @@
 import { LOCAL_LEARNER_ID, ownerScope, readableOwners, type OwnerScope } from "@gnosia/schema";
 import { inArray, sql, type SQL } from "drizzle-orm";
-import type { PgColumn } from "drizzle-orm/pg-core";
+import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 
 import type { CatalogDatabase } from "../db";
 import { sqlstate } from "../state/errors";
@@ -51,7 +51,7 @@ export type Owners = readonly string[] | undefined;
  * owner is read, so it drops out of an `and(...)`. An empty list reads
  * nothing, rather than turning into `in ()`, which Postgres refuses.
  */
-export function ownedBy(column: PgColumn, owners: Owners): SQL | undefined {
+export function ownedBy(column: SQLiteColumn, owners: Owners): SQL | undefined {
   if (owners === undefined) return undefined;
   if (owners.length === 0) return sql`false`;
   return inArray(column, [...owners]);
@@ -98,12 +98,11 @@ export function cacheKey(db: CatalogDatabase): object {
 export async function ownersExist(db: CatalogDatabase): Promise<boolean> {
   const key = cacheKey(db);
   if (hasOwners.has(key)) return true;
-  const { rows } = await db.execute<{ present: boolean }>(sql`
+  const { rows } = await db.execute<{ present: number }>(sql`
     select exists (
-      select 1 from information_schema.columns
-      where table_schema = current_schema() and table_name = 'asset' and column_name = 'owner_id'
+      select 1 from pragma_table_info('asset') where name = 'owner_id'
     ) as present`);
-  const present = rows[0]?.present === true;
+  const present = rows[0]?.present === 1;
   if (present) hasOwners.set(key, true);
   return present;
 }

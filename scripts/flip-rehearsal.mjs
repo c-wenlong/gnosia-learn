@@ -1,16 +1,16 @@
 // Flip day, rehearsed: every step that moves a database's content from files to
 // rows, in the order docs/CONTENT-MIGRATION.md gives it, run against a copy.
 //
-// usage: node scripts/flip-rehearsal.mjs [--cutover] [--from DB] [--name COPY] [--tree-from DIR] [--keep] [--json]
+// usage: node scripts/flip-rehearsal.mjs [--cutover] [--from FILE] [--name FILE] [--tree-from DIR] [--keep] [--json]
 //                                        [--waive-reason TEXT]
-//        node scripts/flip-rehearsal.mjs --cutover --checkout DIR [--from DB] [--name COPY] [--blob-store DIR] [--keep]
+//        node scripts/flip-rehearsal.mjs --cutover --checkout DIR [--from FILE] [--name FILE] [--blob-store DIR] [--keep]
 //                                        [--json] [--waive-reason TEXT]
-//        node scripts/flip-rehearsal.mjs --real [--cutover] --database DB --checkout DIR
+//        node scripts/flip-rehearsal.mjs --real [--cutover] --database FILE --checkout DIR
 //
 // A rehearsal (the default):
-//   1. `createdb -T <from> <copy>` (pg_dump into an empty database when the
-//      template has other sessions open). <from> defaults to gnosia and is
-//      only ever read.
+//   1. Copies the SQLite file <from> names (the catalog's own file unless a
+//      path is given) to <name>, through the backup API so a file other
+//      connections hold still copies whole. <from> is only ever read.
 //   2. Copies <tree-from>/content and <tree-from>/learn (default: this checkout)
 //      into a temp directory, the tree the copy imports, flips and exports.
 //      Never the checkout itself: the exports rewrite a few files (five notes'
@@ -18,11 +18,11 @@
 //      working tree alone.
 //   3. Runs the procedure below against the copy, with CATALOG_COPY_OK=1 and
 //      GNOSIA_HOME at a temp directory, so blobs go nowhere real.
-//   4. Prints a summary, and drops the copy and the temp directories unless
+//   4. Prints a summary, and removes the copy and the temp directories unless
 //      --keep.
 //
 // The procedure (PROCEDURE below, the same list for both modes):
-//   back up the database (pg_dump -Fc, checked to list the learner tables);
+//   back up the database (a file copy, checked to hold the learner tables);
 //   migrate; doctor;
 //   import the tree into a throwaway copy of the database, which must remove
 //   nothing; import the tree, which must remove nothing; parity;
@@ -35,7 +35,8 @@
 //   second stores and writes nothing);
 //   blob audit;
 //   doctor (nothing stands in the contract's way) and migrate again, which
-//   applies the contract migration (0013) the first migrate held back.
+//   applies whatever the first migrate held back (the Postgres journal's
+//   contract migration; the SQLite one holds nothing, so it is a no-op).
 // Each step is checked, and the first step that fails its check stops the run.
 //
 // Why an import must remove nothing: a removal is the catalog agreeing that
@@ -45,40 +46,37 @@
 // throwaway copy finds that before the database itself is touched; the check
 // on the real import is the second line.
 //
-// --real is flip day itself: the same procedure against the named database in
-// place, the flip that lets the readers go database-only. It imports and
-// exports this checkout's own tree (so the exports' rewrites land in the
+// --real is flip day itself: the same procedure against the named database
+// file in place, the flip that lets the readers go database-only. It imports
+// and exports this checkout's own tree (so the exports' rewrites land in the
 // working tree, to commit), uses the blob store the environment names, and
 // runs without CATALOG_COPY_OK. It refuses unless --database names the
-// database and --checkout names the checkout this script is in, shows `git
-// status` of content/ and learn/, and asks for the name to be typed on a
+// file and --checkout names the checkout this script is in, shows `git
+// status` of content/ and learn/, and asks for the path to be typed on a
 // terminal. It has no --yes: an agent or a script cannot answer it, on purpose.
 //
-// Its first step writes ~/<database>-preflip-<UTC time>.dump, and nothing else
-// runs unless that file is there, is not empty, and lists the data of `event`,
+// Its first step writes ~/<file>-preflip-<UTC time>.db, and nothing else
+// runs unless that file is there, is not empty, and holds the data of `event`,
 // `mastery` and `review`. Everything after it is forward-only (migrations,
 // flips, and once the readers are database-only CONTENT_SOURCE=files is no way
 // back), and the learner state lives in this database alone, so that file is
 // the way back. The summary prints it, and the commands that restore it.
 //
 // Signals: every child runs in its own process group. A SIGINT, SIGTERM or
-// SIGHUP to this script is forwarded to the catalog command in flight (and to
-// the backup's pg_dump), and the run stops once that has exited; a createdb or
-// a copy's dump is left to finish and its database is then dropped. A second
-// signal sends SIGKILL.
+// SIGHUP to this script is forwarded to the catalog command in flight, and
+// the run stops once that has exited; a file copy in flight is left to finish
+// and its file is then removed. A second signal sends SIGKILL.
 //
 // Environment: the per-owner blob caps are off for every step (see `env`
-// below). DATABASE_URL (its host and credentials are kept; its database
-// name is replaced), PG_BIN (default: the pg_dump on PATH, then
-// `pg_config --bindir`, then Homebrew's postgresql@17),
+// below). CATALOG_DB and DATABASE_URL (the file each step runs against),
 // MANIMKC_ROOT and TLDRAWKC_ROOT as the catalog reads them (a worktree with no
 // submodules points them at a checkout that has them).
 //
 // --cutover is cut-over day (phase 3), which comes after flip day and before
 // the PR that removes content/ and learn/ from the tree merges. Its steps
 // (CUTOVER below), each checked before the next:
-//   back up the database (<database>-precutover-<UTC>.dump);
-//   migrate, which must hold nothing (the contract, 0013, is applied);
+//   back up the database (<file>-precutover-<UTC>.db);
+//   migrate, which must hold nothing and leave the head applied (CONTRACT);
 //   every content type is the database's (flip day ran);
 //   import the tree into a throwaway copy, then into the database: each must
 //   remove nothing, and the second must skip all six types as their own
@@ -128,7 +126,7 @@
 // tree rather than the checkout, and takes the waiver's reason from
 // --waive-reason when there is no terminal. It refuses a template that is
 // flipped already: its blobs are in a store the rehearsal does not use, so
-// rehearse from an unflipped database (the pre-flip dump restored into one).
+// rehearse from an unflipped database (the pre-flip backup restored into one).
 // A rehearsal with --cutover --checkout <worktree at the tag> is the other
 // way round: it copies a --from that flip day has run on (every type flipped),
 // runs only the cut-over's steps on the copy, and reads the worktree in place
@@ -145,7 +143,7 @@
 // prerequisite was wrong, 130 interrupted.
 import { constants, cpSync, existsSync, mkdtempSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -163,16 +161,17 @@ import {
   writeHeadTree,
 } from './lib/cutover.mjs';
 import { FLIP_GROUPS, FLIP_ORDER } from './lib/flip-order.mjs';
-import { copyDatabase, exec, missingPgTools, PG_BIN, pgEnv, pgTool } from './lib/pg.mjs';
+import { exec } from './lib/proc.mjs';
+import { copyDatabase, dropDatabase, openDatabase, rowsIn, tablesIn } from './lib/sqlite.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const CLI = join(ROOT, 'services/catalog/src/cli.ts');
 const USAGE =
-  'usage: node scripts/flip-rehearsal.mjs [--cutover] [--from DB] [--name COPY] [--tree-from DIR] [--keep] [--json]\n' +
+  'usage: node scripts/flip-rehearsal.mjs [--cutover] [--from FILE] [--name FILE] [--tree-from DIR] [--keep] [--json]\n' +
   '                                       [--waive-reason TEXT]\n' +
-  '       node scripts/flip-rehearsal.mjs --cutover --checkout DIR [--from DB] [--name COPY] [--blob-store DIR] [--keep]\n' +
+  '       node scripts/flip-rehearsal.mjs --cutover --checkout DIR [--from FILE] [--name FILE] [--blob-store DIR] [--keep]\n' +
   '                                       [--json] [--waive-reason TEXT]\n' +
-  '       node scripts/flip-rehearsal.mjs --real [--cutover] --database DB --checkout DIR';
+  '       node scripts/flip-rehearsal.mjs --real [--cutover] --database FILE --checkout DIR';
 
 /** The learner state: a backup whose archive does not list these tables' data is no backup. */
 const LEARNER_TABLES = ['event', 'mastery', 'review'];
@@ -185,8 +184,15 @@ const LEARNER_TABLES = ['event', 'mastery', 'review'];
  */
 const WAIVABLE = 'item-has-concept';
 
-/** The migration the cut-over PR stops treating as a contract; it must be applied first. */
-const CONTRACT = '0013_asset_blob_contract';
+/**
+ * What the cut-over needs applied before it starts. In the Postgres
+ * journal that was 0013_asset_blob_contract, the held contract migration;
+ * the SQLite schema carries that contract as CHECK constraints from 0000 on,
+ * and CONTRACT_MIGRATIONS (services/catalog/src/migrations.ts) is empty, so
+ * the guard that survives is the one the armed-rule machinery needs: the
+ * database is at the head, `0001_catalog_armed_rule` applied.
+ */
+const CONTRACT = '0001_catalog_armed_rule';
 
 /** Why the invocation cannot run, exit 2. */
 class Refusal extends Error {}
@@ -252,10 +258,10 @@ function procedure(tree, own) {
     ];
   });
   return [
-    { name: 'back up the database', command: 'pg_dump -Fc', action: own.backUp },
+    { name: 'back up the database', command: 'a copy of the database file', action: own.backUp },
     { name: 'migrate', args: ['migrate'] },
     { name: 'doctor', args: ['doctor'] },
-    { name: 'import into a throwaway copy', command: `createdb -T; catalog import ${tree}`, action: own.importIntoCopy },
+    { name: 'import into a throwaway copy', command: `copy the database file; catalog import ${tree}`, action: own.importIntoCopy },
     { name: 'import the tree', args: ['import', tree], check: removesNothing },
     { name: 'parity', args: ['parity', tree], check: clean },
     // Courses flip without --strict: the item-has-concept rule has violators
@@ -291,8 +297,9 @@ function procedure(tree, own) {
           : `the second upload stored ${json.uploaded} object(s) and wrote ${json.rowsWritten} row(s); it should do neither`),
     },
     { name: 'blob audit', args: ['blob', 'audit'] },
-    // The contract (0013): a blob behind every video, sidecar, poster and
-    // diagram SVG. The first migrate held it back; now nothing stands in its way.
+    // The blob contract: a blob behind every video, sidecar, poster and
+    // diagram SVG — a CHECK constraint in the SQLite schema, a held
+    // migration in the Postgres journal. Nothing may stand in its way.
     {
       name: 'doctor again',
       args: ['doctor'],
@@ -328,7 +335,7 @@ function cutoverProcedure(tree, own, state) {
     return missing.length === 0 ? null : `the waiver for ${missing.map((w) => w.rule).join(', ')} was not recorded`;
   };
   return [
-    { name: 'cut-over: back up the database', command: 'pg_dump -Fc', action: own.backUp },
+    { name: 'cut-over: back up the database', command: 'a copy of the database file', action: own.backUp },
     {
       name: 'cut-over: migrate',
       args: ['migrate'],
@@ -342,7 +349,7 @@ function cutoverProcedure(tree, own, state) {
             : null,
     },
     { name: 'cut-over: every type flipped', command: 'select from content_source', action: own.allFlipped },
-    { name: 'cut-over: import into a throwaway copy', command: `createdb -T; catalog import ${tree}`, action: own.importIntoCopy },
+    { name: 'cut-over: import into a throwaway copy', command: `copy the database file; catalog import ${tree}`, action: own.importIntoCopy },
     {
       name: 'cut-over: import the tree',
       args: ['import', tree],
@@ -470,7 +477,7 @@ function options(argv) {
       );
     }
     if (parsed.database === undefined || parsed.database.trim() === '') {
-      throw new Refusal('--real needs --database <name>: the database it changes is never a default.');
+      throw new Refusal('--real needs --database <file>: the database it changes is never a default.');
     }
     if (parsed.checkout === undefined || parsed.checkout.trim() === '') {
       throw new Refusal(
@@ -480,7 +487,7 @@ function options(argv) {
     }
   } else {
     if (parsed.database !== undefined) {
-      throw new Refusal('--database goes with --real. A rehearsal copies --from (default gnosia) instead.');
+      throw new Refusal("--database goes with --real. A rehearsal copies --from (default: the catalog's own file) instead.");
     }
     if (parsed.checkout !== undefined) {
       if (!parsed.cutover) {
@@ -506,21 +513,22 @@ function options(argv) {
   return parsed;
 }
 
-/** DATABASE_URL with its database swapped for `name`; host and credentials kept. */
-function urlFor(name) {
-  const url = new URL(process.env.DATABASE_URL ?? 'postgres://localhost:5432/gnosia');
-  url.pathname = `/${name}`;
-  return url.toString();
-}
-
-function redact(url) {
-  const parsed = new URL(url);
-  if (parsed.password !== '') parsed.password = '***';
-  return parsed.toString();
-}
-
 /** A leading ~ as the home directory, the way a shell would have read it. */
 const tilde = (path) => path.replace(/^~(?=$|\/)/, homedir());
+
+/**
+ * The file the catalog's own resolution names when --from is not given:
+ * `CATALOG_DB`, then `DATABASE_URL` when it names a file, then the data
+ * root's `catalog.db` — the same chain `databaseUrl()` in
+ * services/catalog/src/env.ts walks.
+ */
+function defaultDatabase() {
+  const fromCatalogDb = process.env.CATALOG_DB?.trim();
+  if (fromCatalogDb) return tilde(fromCatalogDb);
+  const raw = process.env.DATABASE_URL?.trim();
+  if (raw && !raw.startsWith('postgres')) return tilde(raw);
+  return join(process.env.GNOSIA_HOME?.trim() || join(homedir(), '.gnosia'), 'catalog.db');
+}
 
 /** One argument for a POSIX shell, quoted only when it has to be. */
 function shellQuote(value) {
@@ -528,22 +536,15 @@ function shellQuote(value) {
 }
 
 /**
- * The commands that put `database` back from `file`, naming the host, port
- * and user `url` does (the password stays in PGPASSWORD or ~/.pgpass, never
- * on a command line). `dropdb --force` ends the sessions still open on it.
+ * The commands that put `database` back from `file`: the file and its -wal
+ * and -shm sidecars removed first — a stale -wal beside a replaced main file
+ * would be read as part of it — then the backup copied into place. `rm -f`
+ * over `mv` so the backup stays where it is.
  */
-function restoreCommands(url, database, file) {
-  const parsed = new URL(url);
-  const server = [
-    ...(parsed.hostname === '' ? [] : ['-h', decodeURIComponent(parsed.hostname)]),
-    ...(parsed.port === '' ? [] : ['-p', parsed.port]),
-    ...(parsed.username === '' ? [] : ['-U', decodeURIComponent(parsed.username)]),
-  ];
-  const argv = (tool, ...args) => [join(PG_BIN, tool), ...server, ...args];
+function restoreCommands(database, file) {
   return [
-    argv('dropdb', '--force', database),
-    argv('createdb', database),
-    argv('pg_restore', '--no-owner', '--exit-on-error', '-d', database, file),
+    ['rm', '-f', database, `${database}-wal`, `${database}-shm`],
+    ['cp', file, database],
   ];
 }
 
@@ -656,34 +657,24 @@ async function ask(question, signal, { interrupted, closed }) {
   }
 }
 
-/** The operator types the database's name on a terminal, or nothing runs. */
-async function confirm(name, lines, signal, what) {
+/** The operator types the database's path on a terminal, or nothing runs. */
+async function confirm(file, lines, signal, what) {
   process.stdout.write(`${lines.join('\n')}\n\n`);
-  const typed = await ask(`Type the database name (${name}) to run ${what} against it: `, signal, {
+  const typed = await ask(`Type the database's path (${file}) to run ${what} against it: `, signal, {
     interrupted: 'Interrupted at the confirmation. Nothing was run.',
-    closed: 'No name was typed. Nothing was run.',
+    closed: 'No path was typed. Nothing was run.',
   });
-  if (typed !== name) throw new Refusal(`"${typed}" is not ${name}. Nothing was run.`);
+  if (typed !== file) throw new Refusal(`"${typed}" is not ${file}. Nothing was run.`);
 }
 
-/** One query's rows through psql, each row's columns split on `|`; null when psql fails. */
-async function query(database, env, text) {
-  const ran = await pgTool('psql', ['-X', '-q', '-t', '-A', '-v', 'ON_ERROR_STOP=1', '-d', database, '-c', text], { env });
-  if (ran.status !== 0) return null;
-  return ran.stdout
-    .split('\n')
-    .filter((line) => line !== '')
-    .map((line) => line.split('|'));
-}
-
-/** The content types `database` says it owns, from `content_source`; empty before 0010. */
-async function flippedTypes(database, env) {
-  const present = await query(database, env, "select to_regclass('public.content_source') is not null");
-  if (present === null) throw new Refusal(`could not read ${database}: is it there, and is Postgres up?`);
-  if (present[0]?.[0] !== 't') return [];
-  const rows = await query(database, env, "select type from content_source where source = 'db' order by type collate \"C\"");
-  if (rows === null) throw new Refusal(`could not read content_source in ${database}`);
-  return rows.map(([type]) => type);
+/** The content types the database `file` says it owns, from `content_source`; empty before 0010. */
+async function flippedTypes(file) {
+  const present = rowsIn(file, "select count(*) as n from sqlite_master where type = 'table' and name = 'content_source'");
+  if (present === null) throw new Refusal(`could not read ${file}: is it there?`);
+  if (present[0]?.n !== 1) return [];
+  const rows = rowsIn(file, "select type from content_source where source = 'db' order by type");
+  if (rows === null) throw new Refusal(`could not read content_source in ${file}`);
+  return rows.map((row) => row.type);
 }
 
 async function main(argv) {
@@ -700,27 +691,31 @@ async function main(argv) {
   const cutover = opts.cutover;
   const day = cutover ? 'the cut-over' : 'flip day';
   const stamp = `${process.pid}_${Date.now().toString(36)}`;
-  /** The throwaway copy the first import runs on, named in the report so a caller can check it was dropped. */
+  /** The throwaway copy the first import runs on, named in the report so a caller can check it was removed. */
   const preflight = `gnosia_preflight_${stamp}`;
-  const from = opts.from ?? 'gnosia';
-  const database = real ? opts.database.trim() : (opts.name ?? `gnosia_rehearsal_${stamp}`);
-  if (!real && database === from) throw new Refusal(`--name ${database} is the template; a rehearsal never runs on its template.`);
+  const scratch = real ? null : realpathSync(mkdtempSync(join(tmpdir(), 'gnosia-flip-rehearsal-')));
+  const from = opts.from === undefined ? resolve(defaultDatabase()) : resolve(tilde(opts.from));
+  const database = real
+    ? resolve(tilde(opts.database.trim()))
+    : resolve(tilde(opts.name ?? join(scratch, `gnosia_rehearsal_${stamp}.db`)));
+  if (!real && database === from) {
+    throw new Refusal(`--name ${opts.name ?? database} is the template; a rehearsal never runs on its template.`);
+  }
   const confirmed = opts.checkout === undefined ? null : await confirmedCheckout(opts.checkout, { cutover, real });
   const checkout = confirmed?.path ?? null;
   /** A cut-over rehearsal on a worktree at the tag: that tree in place, and a copy of a flipped --from. */
   const inPlace = !real && checkout !== null;
   if (real && (!process.stdin.isTTY || !process.stdout.isTTY)) {
     throw new Refusal(
-      '--real asks for the database name to be typed on a terminal, and this process has none. ' +
+      "--real asks for the database's path to be typed on a terminal, and this process has none. " +
         'Run it yourself, in a terminal; nothing else may confirm it.',
     );
   }
-  const missingTools = missingPgTools(['createdb', 'dropdb', 'pg_dump', 'pg_restore', 'psql']);
-  if (missingTools !== null) throw new Refusal(missingTools);
+  if (!real && !existsSync(from)) {
+    throw new Refusal(`--from ${from} does not exist${opts.from === undefined ? ': the catalog has no database file there' : ''}.`);
+  }
 
-  const scratch = real ? null : realpathSync(mkdtempSync(join(tmpdir(), 'gnosia-flip-rehearsal-')));
   const tree = checkout ?? join(scratch, 'tree');
-  const url = urlFor(database);
   // The per-owner blob caps (phase 4) are off for every step. Flip day stores
   // the bytes the owner already has, some 160 objects in one sitting, and an
   // uploads-per-day cap below that would refuse part of it and fail the
@@ -728,17 +723,23 @@ async function main(argv) {
   // the empty string rather than removed, since an existing variable wins
   // over services/catalog/.env and the empty string reads as no cap. The day
   // window still counts flip day's objects for the 24 hours after it.
-  const env = { ...process.env, DATABASE_URL: url, GNOSIA_OWNER_BYTES_CAP: '', GNOSIA_OWNER_UPLOADS_PER_DAY: '' };
+  const env = {
+    ...process.env,
+    CATALOG_DB: database,
+    DATABASE_URL: database,
+    GNOSIA_OWNER_BYTES_CAP: '',
+    GNOSIA_OWNER_UPLOADS_PER_DAY: '',
+  };
   if (real) delete env.CATALOG_COPY_OK;
   else Object.assign(env, { CATALOG_COPY_OK: '1', GNOSIA_HOME: join(scratch, 'home') });
-  // The server the catalog commands reach, for the client tools.
-  const maintenance = pgEnv(url);
   const kept = real ? homedir() : scratch;
-  const backupFile = (label) => join(kept, `${database}-${label}-${fileStamp()}.dump`);
+  /** The backup's name is the database file's own, minus a `.db`/`*.sqlite*` suffix: `catalog-preflip-<UTC>.db`. */
+  const stem = (file) => basename(file).replace(/\.(db|sqlite\d*)$/, '');
+  const backupFile = (label) => join(kept, `${stem(database)}-${label}-${fileStamp()}.db`);
   const report = {
     mode: real ? 'real' : 'rehearsal',
     cutover,
-    database: redact(url),
+    database,
     template: real ? null : from,
     tree,
     checkout: null,
@@ -796,13 +797,13 @@ async function main(argv) {
   };
   for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, onSignal);
 
-  /** Copies this run made and has not dropped yet, by name. */
+  /** Files this run made and has not removed yet: the copies. */
   const made = new Set();
-  const drop = async (name) => {
-    const dropped = await pgTool('dropdb', ['--if-exists', '--force', name], { env: maintenance });
-    if (dropped.status === 0) made.delete(name);
-    else say(`could not drop ${name}: ${dropped.stderr.trim()}. Drop it by hand: ${join(PG_BIN, 'dropdb')} --force ${name}`);
-    return dropped.status === 0;
+  const drop = async (file) => {
+    const dropped = dropDatabase(file);
+    if (dropped) made.delete(file);
+    else say(`could not remove ${file}. Remove it by hand: rm -f '${file}' '${file}-wal' '${file}-shm'`);
+    return dropped;
   };
 
   // --- The script's own steps. ---------------------------------------------
@@ -829,42 +830,45 @@ async function main(argv) {
   };
 
   /**
-   * pg_dump -Fc of the database before a day's first change, then
-   * `pg_restore --list` of the file: an archive that will not list, or
-   * lists no data for the learner tables, is no way back.
+   * A copy of the database file before a day's first change, through the
+   * backup API so open connections cannot leave it torn, then the copy read
+   * back for its table list: a file that will not open, or names no learner
+   * table, is no way back.
    */
   const backUp = (label) => async () => {
     const file = backupFile(label);
     if (existsSync(file)) {
       return { problem: `${file} already exists, and a backup is never written over`, result: null };
     }
-    const dumped = await pgTool('pg_dump', ['-Fc', '-f', file, '-d', database], { env: maintenance, onSpawn: forwardTo });
-    if (dumped.status !== 0) {
-      return { problem: `pg_dump failed${dumped.signal ? ` (${dumped.signal})` : ''}: ${dumped.stderr.trim().slice(-600)}`, result: null };
+    try {
+      const db = openDatabase(database);
+      try {
+        await db.backup(file);
+      } finally {
+        db.close();
+      }
+    } catch (error) {
+      rmSync(file, { force: true });
+      return { problem: `the file copy failed: ${error?.message ?? error}`, result: null };
     }
     const bytes = existsSync(file) ? statSync(file).size : 0;
-    if (bytes === 0) return { problem: `pg_dump exited 0 and ${file} is empty`, result: null };
-    const listed = await pgTool('pg_restore', ['--list', file], { env: maintenance });
-    if (listed.status !== 0) return { problem: `pg_restore --list cannot read ${file}: ${listed.stderr.trim()}`, result: null };
-    const tables = [
-      ...new Set(
-        listed.stdout
-          .split('\n')
-          .map((line) => / TABLE DATA public (\S+) /.exec(line)?.[1])
-          .filter((table) => table !== undefined),
-      ),
-    ].sort();
+    if (bytes === 0) return { problem: `the copy ran and ${file} is empty`, result: null };
+    let tables;
+    try {
+      tables = tablesIn(file);
+    } catch (error) {
+      return { problem: `the copy at ${file} does not read back: ${error?.message ?? error}`, result: null };
+    }
     const missing = LEARNER_TABLES.filter((table) => !tables.includes(table));
     if (missing.length > 0) {
       return {
-        problem: `${file} lists no data for ${missing.join(', ')}, so it would not bring the learner state back`,
+        problem: `${file} holds no table named ${missing.join(', ')}, so it would not bring the learner state back`,
         result: { path: file, bytes, tables },
       };
     }
-    // Spelled out with the server and the user the backup was taken from, and
-    // quoted: the client tools do not read DATABASE_URL, so a bare `dropdb
-    // gnosia` in another shell could drop a different server's database.
-    const restoreArgv = restoreCommands(url, database, file);
+    // Spelled out whole, path and sidecars: a bare `rm catalog.db` in another
+    // shell could hit a different directory's file.
+    const restoreArgv = restoreCommands(database, file);
     const backup = { label, path: file, bytes, tables: tables.length, restore: asShellLine(restoreArgv), restoreArgv };
     report.backups.push(backup);
     // The first backup is the way back from everything after it.
@@ -872,7 +876,7 @@ async function main(argv) {
     return {
       problem: null,
       result: backup,
-      gist: `${file}, ${bytes} bytes, data for ${tables.length} tables (${LEARNER_TABLES.join(', ')} among them)`,
+      gist: `${file}, ${bytes} bytes, ${tables.length} tables (${LEARNER_TABLES.join(', ')} among them)`,
     };
   };
 
@@ -885,14 +889,18 @@ async function main(argv) {
      * would otherwise be the only way to undo.
      */
     importIntoCopy: async () => {
-      const name = preflight;
+      // Beside the tree on a rehearsal (removed with it unless --keep); its
+      // own temp directory on a real run.
+      const dir = scratch ?? mkdtempSync(join(tmpdir(), 'gnosia-flip-preflight-'));
+      const file = join(dir, `${preflight}.db`);
       const home = mkdtempSync(join(tmpdir(), 'gnosia-flip-preflight-'));
       try {
-        await copyDatabase(database, name, { env: maintenance, created: () => made.add(name) });
+        await copyDatabase(database, file, { created: () => made.add(file) });
         if (report.interrupted) return { problem: 'interrupted', result: null };
         const { json, failed } = await catalog(['import', tree], {
           ...env,
-          DATABASE_URL: urlFor(name),
+          CATALOG_DB: file,
+          DATABASE_URL: file,
           CATALOG_COPY_OK: '1',
           GNOSIA_HOME: home,
         });
@@ -900,10 +908,11 @@ async function main(argv) {
         return {
           problem: problem === null ? null : `on a copy, before touching ${database}: ${problem}`,
           result: json,
-          gist: problem === null ? `${json.totals.written} rows written, 0 removed, on ${name}; dropped` : undefined,
+          gist: problem === null ? `${json.totals.written} rows written, 0 removed, on ${preflight}; dropped` : undefined,
         };
       } finally {
-        if (made.has(name)) await drop(name);
+        if (made.has(file)) await drop(file);
+        if (dir !== scratch) rmSync(dir, { recursive: true, force: true });
         rmSync(home, { recursive: true, force: true });
       }
     },
@@ -929,7 +938,7 @@ async function main(argv) {
     importIntoCopy: own.importIntoCopy,
 
     allFlipped: async () => {
-      const types = await flippedTypes(database, maintenance);
+      const types = await flippedTypes(database);
       const missing = FLIP_ORDER.filter((type) => !types.includes(type));
       return missing.length === 0
         ? { problem: null, result: { flipped: types }, gist: `${types.length} of ${FLIP_ORDER.length}: ${types.join(', ')}` }
@@ -980,10 +989,10 @@ async function main(argv) {
           rmSync(dir, { recursive: true, force: true });
         }
       }
-      const file = join(kept, `${database}-cutover-${fileStamp()}.parity.json`);
+      const file = join(kept, `${stem(database)}-cutover-${fileStamp()}.parity.json`);
       const saved = {
         at: new Date().toISOString(),
-        database: redact(url),
+        database,
         tree,
         head: state.head,
         export: state.exportDir,
@@ -1171,7 +1180,7 @@ async function main(argv) {
      * starts; and the lines that say it.
      */
     const cutoverPreflight = async (git, owner) => {
-      const flipped = await flippedTypes(owner, maintenance);
+      const flipped = await flippedTypes(owner);
       const missing = FLIP_ORDER.filter((type) => !flipped.includes(type));
       if (missing.length > 0) {
         throw new Refusal(
@@ -1220,10 +1229,10 @@ async function main(argv) {
       const lines = [];
       if (cutover) {
         lines.push(
-          `the cut-over against ${redact(url)}, in place: every type flipped already.`,
+          `the cut-over against ${database}, in place: every type flipped already.`,
           ...(await cutoverPreflight(git, database)),
           `blob store  ${report.blobRoot}`,
-          `backup      ${join(kept, `${database}-precutover-<UTC>.dump`)} (pg_dump -Fc, before anything else)`,
+          `backup      ${join(kept, `${stem(database)}-precutover-<UTC>.db`)} (a file copy, before anything else)`,
           `waiver      ${WAIVABLE}, if it has violators: you will be asked why`,
           `steps       ${steps.map((s) => s.name.replace(/^cut-over: /, '')).join('; ')}`,
         );
@@ -1237,14 +1246,14 @@ async function main(argv) {
         }
         const status = git.status.length === 0 ? ['            clean'] : git.status.map((line) => `            ${line}`);
         lines.push(
-          `flip day against ${redact(url)}, in place.`,
+          `flip day against ${database}, in place.`,
           `checkout    ${checkout} (${git.branch ?? '?'} at ${git.head ?? '?'})` +
             (git.worktreeOf === null ? '' : `, a linked worktree of ${git.worktreeOf}`),
           '            imported from, and exported into: the exports rewrite files here, to commit',
           'content/ and learn/ against HEAD (these are what gets imported):',
           ...status,
           `blob store  ${report.blobRoot}`,
-          `backup      ${join(kept, `${database}-preflip-<UTC>.dump`)} (pg_dump -Fc, before anything else)`,
+          `backup      ${join(kept, `${stem(database)}-preflip-<UTC>.db`)} (a file copy, before anything else)`,
           `steps       ${steps.map((s) => s.name).join('; ')}`,
         );
       }
@@ -1268,18 +1277,18 @@ async function main(argv) {
       const skip = new Set([join(store, '.owner'), join(store, '.tmp')]);
       cpSync(store, report.blobRoot, { recursive: true, mode: constants.COPYFILE_FICLONE, filter: (file) => !skip.has(file) });
       lines.push(`blob store  a copy of ${store}`);
-      report.copy.method = await copyDatabase(from, database, { env: maintenance, created: () => made.add(database) });
+      report.copy.method = await copyDatabase(from, database, { created: () => made.add(database) });
       say(`copied ${from} into ${database} (${report.copy.method}); blobs under ${report.blobRoot}`);
       for (const line of lines) say(line);
     } else {
       if (cutover) {
         // Flip day's steps run first on the copy, and they need blobs this
         // rehearsal's temp store has; a flipped template's are elsewhere.
-        const flipped = await flippedTypes(from, maintenance);
+        const flipped = await flippedTypes(from);
         if (flipped.length > 0) {
           throw new Refusal(
             `${from} owns ${flipped.join(', ')} already, and a --cutover rehearsal runs flip day first, into a temp blob ` +
-              'store. Rehearse from an unflipped database (restore the pre-flip dump into a new one and pass it as --from), ' +
+              'store. Rehearse from an unflipped database (the pre-flip backup restored into one and passed as --from), ' +
               `or rehearse the cut-over alone on the worktree flip day ran from: --cutover --from ${from} --checkout <dir>.`,
           );
         }
@@ -1294,7 +1303,7 @@ async function main(argv) {
           filter: (file) => !file.includes(`${join('learn', 'assets', '.candidates')}`),
         });
       }
-      report.copy.method = await copyDatabase(from, database, { env: maintenance, created: () => made.add(database) });
+      report.copy.method = await copyDatabase(from, database, { created: () => made.add(database) });
       say(`copied ${from} into ${database} (${report.copy.method}); tree ${tree}; blobs under ${report.blobRoot}`);
     }
 
@@ -1393,8 +1402,8 @@ async function main(argv) {
     if (!real) {
       say(
         opts.keep
-          ? `kept ${database} and ${scratch}. Drop them with: ${join(PG_BIN, 'dropdb')} ${database} && rm -rf ${scratch}`
-          : `dropped ${database}${report.ok ? '' : '; rerun with --keep to look at it'}`,
+          ? `kept ${database} and ${scratch}. Remove them with: rm -f '${database}' '${database}-wal' '${database}-shm' && rm -rf '${scratch}'`
+          : `removed ${database}${report.ok ? '' : '; rerun with --keep to look at it'}`,
       );
     }
     if (report.ok && cutover && checkout !== null) {

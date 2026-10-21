@@ -58,7 +58,7 @@ export async function readPreferencesWithPrefix(
   const rows = await db
     .select({ key: preference.key, value: preference.value })
     .from(preference)
-    .where(and(eq(preference.learnerId, learnerId), sql`starts_with(${preference.key}, ${prefix})`));
+    .where(and(eq(preference.learnerId, learnerId), sql`instr(${preference.key}, ${prefix}) = 1`));
   const out: Record<string, unknown> = {};
   for (const row of rows) out[row.key] = row.value;
   return out;
@@ -90,7 +90,7 @@ export async function writePreference(
     .values({ learnerId, key, value })
     .onConflictDoUpdate({
       target: [preference.learnerId, preference.key],
-      set: { value: sql`excluded.value`, updatedAt: sql`now()` },
+      set: { value: sql`excluded.value`, updatedAt: sql`cast(unixepoch('subsec') * 1000 as integer)` },
     });
 }
 

@@ -2,6 +2,7 @@ import type { ContentType } from "@gnosia/schema";
 import { sql, type SQL } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
+import { ARMED_RULES_TABLE, registerDeferredRule } from "../db";
 
 /**
  * The triggers migration 0010 creates disabled, by name, and the queries that
@@ -70,14 +71,15 @@ export const COMPLETENESS_RULES: readonly CompletenessRule[] = [
       ["curriculum_item", "curriculum_item_module_has_item"],
     ],
     violators: sql`
-      select c.id, coalesce(c.parent_id, '') as detail
+      select c.id, coalesce(c.parent_id, '') as detail,
+        'module "' || c.id || '" has no curriculum items' as message
       from collection c
       where c.kind = 'module' and c.archived_at is null
         and not exists (
           select 1 from curriculum_item i
           where i.collection_id = c.id and i.archived_at is null
         )
-      order by c.id collate "C"`,
+      order by c.id collate binary`,
   },
   {
     name: "item-has-concept",
@@ -88,14 +90,15 @@ export const COMPLETENESS_RULES: readonly CompletenessRule[] = [
       ["concept_curriculum_item", "concept_curriculum_item_item_has_concept"],
     ],
     violators: sql`
-      select i.id, coalesce(m.parent_id, m.id) as detail
+      select i.id, coalesce(m.parent_id, m.id) as detail,
+        '"' || i.id || '" names no concept' as message
       from curriculum_item i
       join collection m on m.id = i.collection_id
       where i.archived_at is null
         and not exists (
           select 1 from concept_curriculum_item l where l.curriculum_item_id = i.id
         )
-      order by i.id collate "C"`,
+      order by i.id collate binary`,
   },
   {
     name: "item-concept-in-module-topic",
@@ -108,7 +111,8 @@ export const COMPLETENESS_RULES: readonly CompletenessRule[] = [
       ["collection_item", "collection_item_concept_topic"],
     ],
     violators: sql`
-      select l.curriculum_item_id as id, l.concept_slug as detail
+      select l.curriculum_item_id as id, l.concept_slug as detail,
+        'concept "' || l.concept_slug || '" is not filed under its module''s topic' as message
       from concept_curriculum_item l
       join curriculum_item i on i.id = l.curriculum_item_id
       join concept c on c.slug = l.concept_slug
@@ -117,7 +121,7 @@ export const COMPLETENESS_RULES: readonly CompletenessRule[] = [
           select 1 from collection_item m
           where m.collection_id = i.collection_id and m.topic_slug = c.topic_slug
         )
-      order by l.curriculum_item_id collate "C", l.concept_slug collate "C"`,
+      order by l.curriculum_item_id collate binary, l.concept_slug collate binary`,
   },
   {
     name: "course-order-respects-requires",
@@ -142,17 +146,24 @@ export const COMPLETENESS_RULES: readonly CompletenessRule[] = [
  */
 export function outOfOrder(kind: "requires" | "assumes"): SQL {
   return sql`
+    -- Was distinct-on (m.parent_id, l.concept_slug): a row_number window is
+    -- the same first-by-ordering pick in SQLite.
     with taught as (
-      select distinct on (m.parent_id, l.concept_slug)
-        m.parent_id as course, l.concept_slug as concept,
-        m.position as module_position, i.position as item_position, l.position as link_position
-      from concept_curriculum_item l
-      join curriculum_item i on i.id = l.curriculum_item_id and i.archived_at is null
-      join collection m on m.id = i.collection_id and m.kind = 'module' and m.archived_at is null
-      join collection c on c.id = m.parent_id and c.archived_at is null
-      order by m.parent_id, l.concept_slug, m.position, i.position, l.position
+      select course, concept, module_position, item_position, link_position from (
+        select m.parent_id as course, l.concept_slug as concept,
+          m.position as module_position, i.position as item_position, l.position as link_position,
+          row_number() over (
+            partition by m.parent_id, l.concept_slug
+            order by m.position, i.position, l.position
+          ) as rn
+        from concept_curriculum_item l
+        join curriculum_item i on i.id = l.curriculum_item_id and i.archived_at is null
+        join collection m on m.id = i.collection_id and m.kind = 'module' and m.archived_at is null
+        join collection c on c.id = m.parent_id and c.archived_at is null
+      ) where rn = 1
     )
     select a.course as id, a.concept || ' before ' || b.concept as detail,
+           '"' || a.concept || '" is taught before "' || b.concept || '", which it requires' as message,
            a.concept as concept, b.concept as prerequisite
     from concept_prerequisite e
     join taught a on a.concept = e.concept_slug
@@ -160,48 +171,111 @@ export function outOfOrder(kind: "requires" | "assumes"): SQL {
     where e.kind = ${kind}
       and (b.module_position, b.item_position, b.link_position)
         > (a.module_position, a.item_position, a.link_position)
-    order by a.course collate "C", a.concept collate "C", b.concept collate "C"`;
+    order by a.course collate binary, a.concept collate binary, b.concept collate binary`;
 }
 
 /**
- * Whether each named trigger is enabled, from `pg_trigger`. `O` is enabled
- * for ordinary sessions; `D` is disabled. A missing trigger is absent from
- * the map, which the doctor reports as a schema problem.
+ * The three SQLite triggers that stand in for one Postgres
+ * `INSERT OR UPDATE OR DELETE` guard — the suffixes `writeGuardNames` makes.
+ */
+export const TRIGGER_EVENTS = ["ins", "upd", "del"] as const;
+
+export function writeGuardNames(pgName: string): string[] {
+  return TRIGGER_EVENTS.map((event) => `${pgName}_${event}`);
+}
+
+/**
+ * The SQLite trigger set `catalog flip` creates where `ALTER TABLE … ENABLE
+ * TRIGGER` armed the Postgres one. Each guards the table named by the
+ * Postgres trigger's prefix, and asks the same question: is the seam writing?
+ */
+function writeGuardDdl(table: string, pgName: string): string[] {
+  const guard = (table: string, trigger: string, event: "INSERT" | "UPDATE" | "DELETE", suffix: string) =>
+    `create trigger if not exists "${trigger}_${suffix}" before ${event} on "${table}" for each row` +
+    ` when catalog_revision_id() is null begin` +
+    ` select raise(abort, '42501: ${table} is written only through the content write seam: ${event.toLowerCase()} refused. ` +
+    `Write through services/catalog/src/content/write.ts, which records who wrote it and why.'); end`;
+  return [
+    guard(table, pgName, "INSERT", "ins"),
+    guard(table, pgName, "UPDATE", "upd"),
+    guard(table, pgName, "DELETE", "del"),
+  ];
+}
+
+/**
+ * Whether each named trigger is enabled. On Postgres `pg_trigger.tgenabled`
+ * answered; on SQLite a completeness rule is a row in `catalog_armed_rule`
+ * (checked before commit by `inTransaction`) and a write guard is armed by
+ * existence — all three of its per-event triggers being present.
  */
 export async function triggerStates(
   db: CatalogDatabase,
   names: readonly string[],
 ): Promise<Map<string, boolean>> {
-  const { rows } = await db.execute<{ name: string; enabled: string }>(sql`
-    select t.tgname as name, t.tgenabled as enabled
-    from pg_trigger t
-    join pg_class c on c.oid = t.tgrelid
-    join pg_namespace n on n.oid = c.relnamespace
-    where n.nspname = 'public' and not t.tgisinternal
-      and t.tgname = any(${sql.param([...names])}::text[])
-  `);
-  return new Map(rows.map((row) => [row.name, row.enabled !== "D"]));
+  const armedTable = db.get<{ name: string }>(
+    sql`select name from sqlite_master where type = 'table' and name = ${ARMED_RULES_TABLE}`,
+  );
+  const armed = new Set<string>(
+    armedTable === undefined
+      ? []
+      : db.all<{ name: string }>(sql.raw(`select name from ${ARMED_RULES_TABLE}`)).map((row) => row.name),
+  );
+  const existing = new Set(
+    db.all<{ name: string }>(sql`select name from sqlite_master where type = 'trigger'`).map((row) => row.name),
+  );
+  const ruleByTrigger = new Map(
+    COMPLETENESS_RULES.flatMap((rule) => rule.triggers.map(([, trigger]) => [trigger, rule.name] as const)),
+  );
+  const out = new Map<string, boolean>();
+  for (const name of names) {
+    const rule = ruleByTrigger.get(name);
+    out.set(name, rule !== undefined ? armed.has(rule) : writeGuardNames(name).every((t) => existing.has(t)));
+  }
+  return out;
 }
 
 /**
- * Arm or disarm triggers by name. `ALTER TABLE ... ENABLE TRIGGER` takes the
- * table's exclusive lock, so this belongs in a flip or a test, never on a hot
- * path.
+ * Arm or disarm triggers by name. `ALTER TABLE … ENABLE TRIGGER` did this on
+ * Postgres; on SQLite arming a write guard creates its three triggers and
+ * disarming drops them, while a completeness rule's pair is a row in
+ * `catalog_armed_rule` — the deferred-trigger stand-in `inTransaction`
+ * checks at commit.
  */
 export async function setTriggers(
   db: CatalogDatabase,
   pairs: readonly (readonly [string, string])[],
   enabled: boolean,
 ): Promise<void> {
-  for (const [table, trigger] of pairs) {
+  if (enabled) {
     await db.execute(
-      sql.raw(
-        `alter table ${quoteIdent(table)} ${enabled ? "enable" : "disable"} trigger ${quoteIdent(trigger)}`,
-      ),
+      sql.raw(`create table if not exists ${ARMED_RULES_TABLE} (name text primary key)`),
     );
+  }
+  for (const [table, trigger] of pairs) {
+    const rule = COMPLETENESS_RULES.find((rule) => rule.triggers.some(([, name]) => name === trigger));
+    if (rule !== undefined) {
+      await db.execute(
+        enabled
+          ? sql`insert into ${sql.raw(ARMED_RULES_TABLE)} (name) values (${rule.name}) on conflict do nothing`
+          : sql`delete from ${sql.raw(ARMED_RULES_TABLE)} where name = ${rule.name}`,
+      );
+      continue;
+    }
+    if (enabled) {
+      for (const ddl of writeGuardDdl(table, trigger)) await db.execute(sql.raw(ddl));
+    } else {
+      for (const name of writeGuardNames(trigger)) {
+        await db.execute(sql.raw(`drop trigger if exists ${quoteIdent(name)}`));
+      }
+    }
   }
 }
 
 function quoteIdent(value: string): string {
   return `"${value.replaceAll('"', '""')}"`;
 }
+
+// `inTransaction` asks this map when a `catalog_armed_rule` row says a rule
+// is armed; registering at module load means the check works however the
+// connection was opened.
+for (const rule of COMPLETENESS_RULES) registerDeferredRule(rule.name, rule.violators);

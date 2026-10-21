@@ -137,6 +137,11 @@ if (!process.env.GNOSIA_HOME?.trim()) {
   process.env.GNOSIA_HOME = blobHome;
 }
 
+// Concurrency tests hold a write lock while a contender waits: Postgres's
+// lock queue waited for ever, and this is the whole queue SQLite has. The CLI
+// keeps the 5 s default; the suites give a holder room for its own asserts.
+process.env.CATALOG_DB_TIMEOUT_MS ??= "30000";
+
 // The remotionkc checkout, pointed at a directory that does not exist. A bare
 // `catalog import` runs every video tool whose CLI it finds, and the ones the
 // suites spawn resolve tools against the repository, so with the submodule

@@ -130,7 +130,7 @@ describe.skipIf(!reachable.ok)("the seed's notes and logs, imported into a scrat
       if (type === "sessions") expect(result.identicalFiles).toBe(result.files);
       expect(result.counts.expected).toEqual(result.counts.actual);
     }
-    const { rows } = await scratch.db.execute<{ n: number }>("select count(*)::int as n from concept_prerequisite");
+    const { rows } = await scratch.db.execute<{ n: number }>("select count(*) as n from concept_prerequisite");
     const files = compare("concepts", [], await readTypeFiles(SEED, "concepts"));
     expect(rows[0]?.n).toBe(files.counts.actual["prerequisites"]);
   });

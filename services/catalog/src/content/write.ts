@@ -25,6 +25,7 @@ import {
 import { readSnapshots, type Snapshot, type SnapshotRead } from "./snapshot";
 import { updateSet } from "./upsert";
 
+import { inTransaction } from "../db";
 /**
  * The one write seam for authored content (docs/CONTENT-MIGRATION.md 0.3).
  *
@@ -140,7 +141,7 @@ export async function writeContent(
 ): Promise<WriteContentResult> {
   validate(input);
 
-  return db.transaction(async (tx) => {
+  return inTransaction(db, async (tx) => {
     // Serialise writers of one entity, including two that both create it
     // (there is no row yet for FOR UPDATE to lock), and wait for an import of
     // this type. Transaction-scoped, so it cannot outlive a failure.
@@ -183,7 +184,7 @@ export async function writeContents(
   }
   if (inputs.length === 0) return [];
 
-  return db.transaction(async (tx) => {
+  return inTransaction(db, async (tx) => {
     for (const input of [...inputs].sort(byLockOrder)) await lockEntity(tx, input.type, input.id);
     const results: WriteContentResult[] = [];
     for (const input of inputs) {
@@ -256,7 +257,7 @@ async function writeLocked(tx: CatalogDatabase, input: WriteContentInput): Promi
   const holder: { after?: SnapshotRead; repaired?: true } = {};
   let unchanged = false;
   try {
-    await tx.transaction(async (sp) => {
+    await inTransaction(tx, async (sp) => {
       await writeRows(sp, input);
       const read = (await readSnapshots(sp, input.type, [input.id])).get(input.id);
       if (read === undefined) throw new Error(`${input.type} "${input.id}" is missing after its own write`);
