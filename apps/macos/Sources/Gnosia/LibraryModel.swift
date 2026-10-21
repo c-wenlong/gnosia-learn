@@ -503,6 +503,14 @@ func topicRanks(
     conceptTopic: [String: String],
     edges: [LearnEdge]
 ) -> [String: Int] {
+    // `topicOrder`'s last tiebreak is the vocabulary's own order — the
+    // `position` the snapshot carries (0 when it predates the column),
+    // then the slug, so the headings do not move between launches.
+    let vocabulary = vocabulary.sorted { lhs, rhs in
+        let lp = lhs.position > 0 ? lhs.position : Int.max
+        let rp = rhs.position > 0 ? rhs.position : Int.max
+        return lp != rp ? lp < rp : lhs.slug < rhs.slug
+    }
     let domainOf = Dictionary(uniqueKeysWithValues: vocabulary.map { ($0.slug, $0.domain) })
     var domains: [String: [String]] = [:]
     for t in vocabulary { domains[t.domain, default: []].append(t.slug) }
