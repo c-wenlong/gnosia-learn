@@ -160,6 +160,8 @@ private struct ThreadRow: View {
         case .module: return "graduationcap"
         case .video: return "play.rectangle"
         case .concept: return "brain"
+        case .draft: return "square.and.pencil"
+        case .session: return "bubble.left.and.bubble.right"
         }
     }
 }

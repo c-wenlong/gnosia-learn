@@ -1298,7 +1298,9 @@ typealias RecentDestination = AppDestination
 /// One row of Recent — RecentItem. `key` is `<kind>:<id>` as on the web.
 struct RecentItem: Identifiable, Hashable {
     var id: String { key }
-    enum Kind: String, Hashable { case module, video, concept }
+    /// RECENT_KINDS in recent-core.ts. `draft` rows still have no local
+    /// source — the runner's conversation list lives inside StudioView.
+    enum Kind: String, Hashable { case module, video, draft, concept, session }
     let key: String
     let kind: Kind
     let title: String
@@ -1306,7 +1308,9 @@ struct RecentItem: Identifiable, Hashable {
     /// shows its mastery instead.
     let detail: String?
     let destination: RecentDestination
-    let at: Date
+    /// `var` for the session fold: a session that opens a concept's page the
+    /// list already holds moves that row's `at` to the later of the two.
+    var at: Date
     /// How far into a video, 0 to 100.
     var percent: Int? = nil
     var bucket: MasteryBucket? = nil
@@ -1416,10 +1420,16 @@ func recentItems(
             key: "video:\(video.assetId)",
             kind: .video,
             title: video.title!,
-            detail: "\(clock(video.position)) of \(clock(video.duration))",
+            // A local watch row can predate the duration column — the
+            // position alone still names where it stopped.
+            detail: video.duration > 0
+                ? "\(clock(video.position)) of \(clock(video.duration))"
+                : clock(video.position),
             destination: .asset(video.assetId),
             at: isoDate(video.updatedAt) ?? .distantPast,
-            percent: min(100, Int((video.position / video.duration * 100).rounded()))
+            percent: video.duration > 0
+                ? min(100, Int((video.position / video.duration * 100).rounded()))
+                : nil
         ))
     }
     for c in concepts {
@@ -1446,6 +1456,285 @@ private func isoDate(_ s: String) -> Date? {
     let f = ISO8601DateFormatter()
     f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     return f.date(from: s)
+}
+
+/// `at` in the shape Postgres writes it — ISO 8601 with fractional seconds.
+private func isoString(_ date: Date) -> String {
+    let f = ISO8601DateFormatter()
+    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return f.string(from: date)
+}
+
+// MARK: - The sidebar (Sections.tsx over recent-core.ts)
+
+/// One row of the sidebar's Courses section — SidebarCourse in
+/// recent-core.ts: the course and where its row opens.
+struct SidebarCourse: Identifiable {
+    var id: String { slug }
+    let slug: String
+    let code: String
+    let title: String
+    /// The module visited last, else the course page — the web's `open`.
+    let destination: RecentDestination
+    /// The module visited last, when one is recorded — the web's `resume`,
+    /// drawn as "<order>. <title>" under the course's name.
+    let resume: (order: Int, title: String)?
+}
+
+/// A stored pin — PinnedRow, with the web href already read into the
+/// destination it names. `opensStudio` marks the one link no destination
+/// expresses (`/studio…`), which the sidebar opens as a section instead.
+struct SidebarPinned: Identifiable, Hashable {
+    var id: String { key }
+    let key: String
+    let kind: RecentItem.Kind
+    let title: String
+    let destination: RecentDestination?
+    let opensStudio: Bool
+    let at: Date?
+}
+
+/// The rows under one day heading — RecentGroup.
+struct RecentGroup: Identifiable, Hashable {
+    var id: String { label }
+    let label: String
+    let rows: [RecentItem]
+}
+
+/// What the sidebar's sections draw — the pieces of RecentModel Sections.tsx
+/// reads (its `reachable`/`more` stay on the web's paged API; the whole
+/// local list is already here).
+struct SidebarModel {
+    var courses: [SidebarCourse] = []
+    var pinned: [SidebarPinned] = []
+    var groups: [RecentGroup] = []
+}
+
+/// The AppDestination a web href names, or nil outside the pushable pages —
+/// `/studio`, `/home`, `/settings` and anything else the shell opens as a
+/// section rather than a pushed page. Unknown and unsafe hrefs drop the
+/// same way (isAppPath still gates what reaches this far).
+func appDestination(forHref href: String) -> RecentDestination? {
+    var path = href
+    if let i = path.firstIndex(of: "?") { path = String(path[..<i]) }
+    if let i = path.firstIndex(of: "#") { path = String(path[..<i]) }
+    let parts = path.split(separator: "/", omittingEmptySubsequences: true)
+        .map { $0.removingPercentEncoding ?? String($0) }
+    switch parts.count {
+    case 2 where parts[0] == "courses": return .course(parts[1])
+    case 3 where parts[0] == "courses": return .module(course: parts[1], module: parts[2])
+    case 2 where parts[0] == "learn": return .concept(parts[1])
+    case 2 where parts[0] == "library": return .asset(parts[1])
+    default: return nil
+    }
+}
+
+/// isAppPath: one leading slash, never two, no backslash, no control
+/// characters — the stored value goes back into a link, so that is the
+/// line between a pin and a stored link to anywhere.
+private func isAppPath(_ href: Any?) -> Bool {
+    guard let href = href as? String, href.count <= 1000,
+          href.hasPrefix("/"), !href.hasPrefix("//"), !href.contains("\\"),
+          href.range(of: #"[\u{0}-\u{1f}\u{7f}]"#, options: .regularExpression) == nil
+    else { return false }
+    return true
+}
+
+/// asPinnedRow + asPinned over the mirrored `pinned` preference: each entry
+/// read defensively, a non-pin dropped, each key once, capped at 50.
+func asPinnedRows(_ preferences: [String: String]) -> [SidebarPinned] {
+    guard let list = parsePreferenceJSON(preferences["pinned"]) as? [Any] else { return [] }
+    var seen = Set<String>()
+    var out: [SidebarPinned] = []
+    for entry in list {
+        guard let raw = entry as? [String: Any],
+              let kindName = raw["kind"] as? String,
+              let kind = RecentItem.Kind(rawValue: kindName),
+              let key = raw["key"] as? String,
+              let colon = key.firstIndex(of: ":"),
+              colon > key.startIndex, colon < key.index(before: key.endIndex),
+              key.prefix(upTo: colon) == kindName, key.count <= 600,
+              let title = (raw["title"] as? String)
+                    .map({ $0.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+                            .trimmingCharacters(in: .whitespaces).prefix(200) }),
+              !title.isEmpty,
+              isAppPath(raw["href"]), let href = raw["href"] as? String,
+              let atString = raw["at"] as? String, let at = isoDate(atString),
+              seen.insert(key).inserted
+        else { continue }
+        out.append(SidebarPinned(
+            key: key, kind: kind, title: String(title),
+            destination: appDestination(forHref: href),
+            opensStudio: href.hasPrefix("/studio"),
+            at: at
+        ))
+        if out.count >= 50 { break }
+    }
+    return out
+}
+
+/// The day headings of recent-core.ts — DAY_GROUPS, by the local calendar
+/// day of `at` against `now`; empty groups stay out, rows keep their order.
+func recentGroups(_ rows: [RecentItem], now: Date = Date(), in calendar: Calendar = .current) -> [RecentGroup] {
+    let order = ["Today", "Yesterday", "Previous 7 days", "Previous 30 days", "Older"]
+    var byLabel: [String: [RecentItem]] = [:]
+    for row in rows {
+        let ago = DayMath.diff(row.at, now, in: calendar)
+        let label = ago <= 0 ? order[0] : ago == 1 ? order[1] : ago <= 7 ? order[2] : ago <= 30 ? order[3] : order[4]
+        byLabel[label, default: []].append(row)
+    }
+    return order.compactMap { label in
+        byLabel[label].map { RecentGroup(label: label, rows: $0) }
+    }
+}
+
+extension LearnGraph {
+    /// The sidebar's Courses section — sidebarCourses in recent.ts: the
+    /// courses of the module visits, each once in visit order; for an owner
+    /// with no visit yet, the active courses with a tick, in authored order.
+    /// Each opens at the module visited last in it — the second line —
+    /// or the course page when none is.
+    @MainActor
+    func sidebarCourses(store: CatalogStore, visits: [ModuleVisit], limit: Int = 12) -> [SidebarCourse] {
+        let live = store.courses.filter { !inactiveCourses.contains($0.slug) }
+        let bySlug = Dictionary(uniqueKeysWithValues: live.map { ($0.slug, $0) })
+        var seen = Set<String>()
+        var picked = visits.compactMap { v in
+            seen.insert(v.courseSlug).inserted ? bySlug[v.courseSlug] : nil
+        }
+        if picked.isEmpty {
+            picked = live.sorted { $0.order < $1.order }
+                .filter { c in c.modules.contains { m in m.items.contains { isDone($0.id) } } }
+        }
+        return picked.prefix(limit).map { c in
+            // Visits are newest first, so the first in this course whose
+            // module still exists is where the row opens.
+            let last = visits.lazy
+                .filter { $0.courseSlug == c.slug && $0.moduleSlug != nil }
+                .compactMap { v in c.modules.first { $0.slug == v.moduleSlug } }
+                .first
+            return SidebarCourse(
+                slug: c.slug, code: c.code, title: c.title,
+                destination: last.map { .module(course: c.slug, module: $0.slug) } ?? .course(c.slug),
+                resume: last.map { (order: $0.order, title: $0.title) }
+            )
+        }
+    }
+}
+
+extension CatalogStore {
+    /// The playback rows the preferences hold, merged with learner.db's own
+    /// watch marks — a video this app played is recent even before the
+    /// Postgres row it mirrored comes back in a snapshot. The newer of the
+    /// two is the truth, the merge clock the progress rows already use; a
+    /// watched verdict either file holds still counts (a position saved
+    /// after it is a second watch, as the web's second `watched` event is).
+    private var sidebarVideoProgress: [VideoProgress] {
+        var rows: [String: VideoProgress] = [:]
+        for v in videoProgress { rows[v.assetId] = v }
+        for (id, mark) in watch {
+            let markAt = mark.updatedAt ?? .distantPast
+            let current = rows[id]
+            if let current, (isoDate(current.updatedAt) ?? .distantPast) > markAt { continue }
+            let duration = mark.duration ?? current?.duration ?? 0
+            rows[id] = VideoProgress(
+                assetId: id,
+                title: asset(id).map { displayTitle(for: $0) },
+                position: mark.seconds,
+                duration: duration,
+                watchedAt: mark.done ? (current?.watchedAt ?? isoString(markAt)) : current?.watchedAt,
+                updatedAt: isoString(markAt)
+            )
+        }
+        return Array(rows.values)
+    }
+
+    /// sessionTouches in recent.ts over learner.db's session rows: titled by
+    /// the session, else its log asset, else the concept it set out to
+    /// learn; opening the log in the Library when there is one, else the
+    /// concept's page. A session with neither is left out, as a video whose
+    /// asset is gone is.
+    private var sessionTouches: [RecentItem] {
+        sessions.compactMap { s in
+            let logID = "session:learn/sessions/\(s.id).md"
+            let log = asset(logID)
+            let goal = s.goal.flatMap { learn.byId[$0] }
+            let title = [s.title, log.map { displayTitle(for: $0) }, goal?.title]
+                .compactMap { $0?.trimmingCharacters(in: .whitespaces) }
+                .first { !$0.isEmpty }
+            let destination: RecentDestination?
+            if log != nil {
+                destination = .asset(logID)
+            } else if let goalSlug = s.goal, goal != nil {
+                destination = .concept(goalSlug)
+            } else {
+                destination = nil
+            }
+            guard let title, let destination else { return nil }
+            return RecentItem(
+                key: "session:\(s.id)",
+                kind: .session,
+                title: title,
+                detail: "Tutor session",
+                destination: destination,
+                at: s.updatedAt ?? .distantPast
+            )
+        }
+    }
+
+    /// What the sidebar's sections draw — Sections.tsx's read over
+    /// readRecent: module visits from the events and preferences, videos
+    /// stopped partway (the preferences' and learner.db's own), concepts
+    /// answered on, and tutor sessions, with the stored pins moved out and
+    /// the rest under its day headings. Studio drafts have no local read —
+    /// the runner's list lives inside StudioView — so they stay a gap the
+    /// Recent section does not pretend to fill.
+    func sidebarRecent(now: Date = Date(), in calendar: Calendar = .current) -> SidebarModel {
+        let visits = moduleVisits(
+            events: events,
+            stored: LearnGraph.storedVisits(preferences: preferences)
+        )
+        var items = recentItems(
+            visits: visits,
+            place: { modulePlace($0, store: self) },
+            videos: sidebarVideoProgress,
+            concepts: conceptTouches(events: events, graph: learn)
+        )
+        // The session fold of recentItems: a session that opens a concept's
+        // page the list already holds is that row, dated by the later of the
+        // two; a session with a log, or none the list holds, is its own row.
+        var byDestination: [RecentDestination: Int] = [:]
+        for (i, item) in items.enumerated() where item.kind == .concept {
+            byDestination[item.destination] = i
+        }
+        for row in sessionTouches.sorted(by: { $0.at > $1.at }) {
+            if let i = byDestination[row.destination] {
+                items[i].at = max(items[i].at, row.at)
+                continue
+            }
+            byDestination[row.destination] = items.count
+            items.append(row)
+        }
+        items.sort { $0.at > $1.at }
+
+        // splitPinned: a pinned row leaves Recent and shows in pin order
+        // under Pinned, titled as the live row is now when the list holds it.
+        let live = Dictionary(uniqueKeysWithValues: items.map { ($0.key, $0) })
+        let pinned = asPinnedRows(preferences).map { pin in
+            live[pin.key].map {
+                SidebarPinned(key: pin.key, kind: pin.kind, title: $0.title,
+                              destination: pin.destination, opensStudio: pin.opensStudio, at: pin.at)
+            } ?? pin
+        }
+        let pinKeys = Set(pinned.map(\.key))
+        let unpinned = items.filter { !pinKeys.contains($0.key) }
+
+        return SidebarModel(
+            courses: learn.sidebarCourses(store: self, visits: visits),
+            pinned: pinned,
+            groups: recentGroups(unpinned, now: now, in: calendar)
+        )
+    }
 }
 
 // MARK: - Home (home-core.ts + home.ts)
