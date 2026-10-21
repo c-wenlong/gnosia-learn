@@ -8,8 +8,9 @@
 //
 //  Job detail carries the job panel's whole content: the runner-computed
 //  comparison (before and after PNGs, inspect counts), the log tail, the
-//  state-appropriate verbs, and for a video job the scene sheets plus the
-//  candidate mp4 the media route streams.
+//  state-appropriate verbs, the events stream's live progress line, the
+//  accepted job's `indexed: false` reindex callout, and for a video job
+//  the scene sheets plus the candidate mp4 the media route streams.
 //
 //  Diagram detail is the inspector: the stored SVG's preview, the checkout
 //  state, the canvas verbs (export, verify, inspect, commit), the mirror's
@@ -69,6 +70,9 @@ struct StudioJobView: View {
     @State private var seek: Double?
     @State private var changes = ""
     @State private var busy = false
+    /// The verb `busy` is about, the web's `busy === "reindex"` check —
+    /// it is what the callout's button labels itself with.
+    @State private var busyVerb: String?
     @State private var confirmAction: Confirm?
 
     private enum Confirm: Identifiable {
@@ -127,6 +131,23 @@ struct StudioJobView: View {
                 StudioBanner(text: outcome, tone: outcomeBad ? .danger : .quiet)
             }
             actions(job)
+            if active, let note = studio.latestNote(jobId) {
+                // The stream's newest progress line, the web panel's
+                // narration; the dot is green while the stream is open.
+                HStack(alignment: .top, spacing: 7) {
+                    Circle()
+                        .fill(studio.isLive(jobId) ? G.ok : G.text3)
+                        .frame(width: 7, height: 7)
+                        .padding(.top, 4)
+                    Text(note)
+                        .font(.callout)
+                        .foregroundStyle(G.text2)
+                        .lineLimit(3)
+                }
+            }
+            if job.state == "accepted", job.indexed == false, job.jobKind != "video" {
+                reindexCallout(job)
+            }
             if let draftId = job.draftId {
                 Button { push(.draft(draftId)) } label: {
                     Label("The conversation that asked for it", systemImage: "bubble.left.and.bubble.right")
@@ -207,6 +228,58 @@ struct StudioJobView: View {
             }
             if busy { ProgressView().controlSize(.small) }
         }
+    }
+
+    /// The accepted job's recovery, the web's `Accepted` callout on the
+    /// comparison panel: shown only when the diagram landed but the job
+    /// row did not record it (`indexed: false`). `POST
+    /// /api/jobs/{id}/reindex` re-runs the accept's index step alone; it
+    /// changes nothing about the drawing. Diagrams only — the video
+    /// runner's route list has no reindex, which is why the web's video
+    /// panel never offers one.
+    private func reindexCallout(_ job: StudioClient.Job) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("indexed: false")
+                .font(.caption.monospaced().weight(.medium))
+                .foregroundStyle(G.warnText)
+            Text("The diagram is stored; the job row did not record the accept. Reindex finishes it, and changes nothing about the diagram.")
+                .font(.callout)
+                .foregroundStyle(G.text2)
+            if let errorLine = lastCatalogError(job) {
+                Text(errorLine)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(G.text3)
+                    .textSelection(.enabled)
+            }
+            HStack(spacing: 8) {
+                Button {
+                    act("Reindex") { try await studio.client.jobAction(jobId, "reindex") }
+                } label: {
+                    if busy, busyVerb == "Reindex" {
+                        HStack(spacing: 6) {
+                            ProgressView().controlSize(.small)
+                            Text("Reindexing…")
+                        }
+                    } else {
+                        Text("Reindex")
+                    }
+                }
+                .disabled(busy)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(G.streak.opacity(0.14), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    /// The last catalog error the job recorded, as the web's
+    /// `catalogErrorLine` prints it: flattened to one line, 140 chars.
+    private func lastCatalogError(_ job: StudioClient.Job) -> String? {
+        guard let raw = job.catalogErrors?.last?.describe
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !raw.isEmpty else { return nil }
+        let flat = raw.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+        return flat.count <= 140 ? flat : String(flat.prefix(139)) + "…"
     }
 
     /// The revise field: `changes` is the change request the new job's notes
@@ -451,6 +524,7 @@ struct StudioJobView: View {
     /// Run one verb: the reply's `note` is the banner, a refusal the reason.
     private func act(_ label: String, _ body: @escaping () async throws -> String?) {
         busy = true
+        busyVerb = label
         outcome = nil
         Task {
             do {
@@ -464,6 +538,7 @@ struct StudioJobView: View {
                 outcomeBad = true
             }
             busy = false
+            busyVerb = nil
             await loadOnce()
             await studio.refresh()
         }
