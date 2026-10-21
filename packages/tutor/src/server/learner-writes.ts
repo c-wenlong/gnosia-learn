@@ -1,5 +1,7 @@
 import {
   appendEvent,
+  asLastVisited,
+  asRecentModules,
   assetsByIds,
   clearPreference,
   closeTutorSession,
@@ -10,6 +12,7 @@ import {
   setProgress,
   StateError,
   withLearnerLock,
+  withRecentModule,
   writeAssetName,
   writeDisplayName,
   writePreference,
@@ -20,6 +23,8 @@ import {
   cleanAssetName,
   cleanDisplayName,
   DISPLAY_NAME_MAX,
+  PREFERENCE_KEYS,
+  type LastVisited,
 } from "@self-learn/schema/shared";
 
 import { isConceptSlug } from "../concept-workspace-core";
@@ -58,9 +63,12 @@ import type { TurnReply } from "./turns";
  * the same-origin check (`guard.ts` has its own), the rate limit, and the
  * session — `deps.owner` is the owner every write lands against.
  *
- * The skip list, and why each is absent: `preference` (the allow-list is the
- * web's own — theme, lastVisited, resources, Settings choices; nothing native
- * writes them), `recent` (pins are the web sidebar's), `avatar`, `export`,
+ * The skip list, and why each is absent: `preference` carries only the one
+ * key the native app writes — `lastVisited`, so a module visit the app
+ * records reaches the same event log and `recentModules` list the web's
+ * route keeps (the rest of the allow-list is the browser's own: theme,
+ * resources, Settings choices), `recent` (pins are the web sidebar's),
+ * `avatar`, `export`,
  * `import`, `reset`, `recap`, `home` and `ask` (reads, destructive resets or
  * surfaces the app has no equivalent of). `custom-provider` is a Settings
  * write rather than a learner-state one, so it lives in `turns.ts` with the
@@ -549,5 +557,119 @@ export async function sessionCloseTurn(deps: TutorDeps, body: unknown): Promise<
       return { sessionId: record.sessionId };
     },
     (db, input: { sessionId: string }, owner) => closeTutorSession(db, input.sessionId, { learnerId: owner }),
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Preference — the one key the native app writes                              */
+/* -------------------------------------------------------------------------- */
+
+/** `object` in the web route: the `value` field read as a record, or a 400. */
+function object(value: unknown): Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new BadRequest(`"value" must be an object.`);
+  }
+  return value as Record<string, unknown>;
+}
+
+/** `lastVisited` in the web route: the visit's validator, verbatim. */
+function lastVisitedValue(value: unknown): LastVisited {
+  const raw = object(value);
+  const courseSlug = raw.courseSlug;
+  if (typeof courseSlug !== "string" || courseSlug === "" || courseSlug.length > MAX_ID_CHARS) {
+    throw new BadRequest(`"value.courseSlug" must be a non-empty slug.`);
+  }
+  const moduleSlug = raw.moduleSlug;
+  if (
+    moduleSlug !== undefined &&
+    (typeof moduleSlug !== "string" || moduleSlug.length > MAX_ID_CHARS)
+  ) {
+    throw new BadRequest(`"value.moduleSlug" must be a slug.`);
+  }
+  return {
+    courseSlug,
+    ...(typeof moduleSlug === "string" ? { moduleSlug } : {}),
+    at: typeof raw.at === "string" ? raw.at : new Date().toISOString(),
+  };
+}
+
+/** A failed write's SQLSTATE, read down drizzle's `cause` chain; never its message, which carries the bind parameters. */
+function failureCode(error: unknown): string {
+  for (let at: unknown = error; at instanceof Error; at = at.cause) {
+    const code = (at as { code?: unknown }).code;
+    if (typeof code === "string") return code;
+  }
+  return "unknown";
+}
+
+/** Whether a failed write names `constraint`, down the same chain. */
+function mentions(error: unknown, constraint: string): boolean {
+  for (let at: unknown = error; at instanceof Error; at = at.cause) {
+    if ((at as { constraint?: unknown }).constraint === constraint) return true;
+  }
+  return false;
+}
+
+/**
+ * `rememberVisit` in the web route: `lastVisited` written is also a `visit`
+ * event appended and the front of `recentModules`, in the one transaction
+ * under the learner's row lock so two module pages opened together cannot
+ * drop each other's entry. The event goes in a nested transaction — a
+ * savepoint, which drizzle's `tx.transaction` is inside one — so a database
+ * that has not taken migration 0025 loses the event and still keeps the
+ * preferences, which Recent reads as well; any other refusal fails the
+ * write. A `lastVisited` that is no visit still lands as the preference,
+ * which is the web route's own last branch.
+ */
+async function rememberVisit(db: CatalogDatabase, value: unknown, owner: string): Promise<void> {
+  const visit = asLastVisited(value);
+  await withLearnerLock(db, owner, async (tx) => {
+    if (visit !== undefined) {
+      try {
+        await tx.transaction(async (savepoint) =>
+          appendEvent(
+            savepoint,
+            {
+              type: "visit",
+              course: visit.courseSlug,
+              ...(visit.moduleSlug === undefined ? {} : { module: visit.moduleSlug }),
+            },
+            owner,
+          ),
+        );
+      } catch (error) {
+        if (failureCode(error) !== "23514" || !mentions(error, "event_type_check")) throw error;
+        console.warn("preference: visit event not written, the database has not taken migration 0025");
+      }
+      const stored = asRecentModules(await readPreference(tx, PREFERENCE_KEYS.recentModules, owner));
+      const previous = asLastVisited(await readPreference(tx, PREFERENCE_KEYS.lastVisited, owner));
+      const list = stored ?? (previous !== undefined ? [previous] : []);
+      await writePreference(tx, PREFERENCE_KEYS.recentModules, withRecentModule(list, visit), owner);
+    }
+    await writePreference(tx, PREFERENCE_KEYS.lastVisited, value, owner);
+  });
+}
+
+/**
+ * `POST /api/learner/preference` with `{ key: "lastVisited", value }`: the
+ * one key of the web route's allow-list the native app writes — the rest
+ * are the browser's own and refuse as the web's unlisted keys do. The write
+ * is `rememberVisit`, so what the app records lands on the web's Recent and
+ * Home exactly as a browser's visit does.
+ */
+export async function preferenceTurn(deps: TutorDeps, body: unknown): Promise<TurnReply> {
+  return learnerWrite(
+    deps,
+    body,
+    (record) => {
+      if (record.key !== PREFERENCE_KEYS.lastVisited) {
+        throw new BadRequest(`"key" must be "${PREFERENCE_KEYS.lastVisited}".`);
+      }
+      return { key: record.key, value: lastVisitedValue(record.value) };
+    },
+    async (db, input, owner) => {
+      await rememberVisit(db, input.value, owner);
+      return { key: input.key };
+    },
   );
 }

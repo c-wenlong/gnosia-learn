@@ -28,6 +28,7 @@ private let stepKinds: Set<String> = ["video", "diagram_svg"]
 
 struct ModuleView: View {
     @Environment(CatalogStore.self) private var store
+    @Environment(LearnerStore.self) private var learner: LearnerStore?
     let course: CatalogCourse
     let module: CourseModule
     /// The module's place in `course.modules`.
@@ -176,6 +177,14 @@ struct ModuleView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .navigationTitle(module.title)
+        .onAppear {
+            // The web's VisitTracker: opening a module page is a `visit`
+            // event, the row Recent's module rows and the Courses
+            // section's resume lines fold from. learner.db keeps it; the
+            // catalog re-read picks it up.
+            learner?.recordVisit(courseSlug: course.slug, moduleSlug: module.slug)
+            store.refreshLearner()
+        }
     }
 
     private var header: some View {

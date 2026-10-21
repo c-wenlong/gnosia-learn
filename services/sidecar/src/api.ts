@@ -13,6 +13,7 @@ import {
   noteTurn,
   observeTurn,
   playbackTurn,
+  preferenceTurn,
   progressTurn,
   sessionCloseTurn,
   watchedTurn,
@@ -61,6 +62,7 @@ import { guard } from "./guard";
  *   POST   /api/learner/watched                → watchedTurn
  *   POST   /api/learner/playback               → playbackTurn
  *   POST   /api/learner/progress               → progressTurn
+ *   POST   /api/learner/preference             → preferenceTurn (lastVisited — the app's module visits)
  *   POST   /api/learner/asset-name             → assetNameTurn
  *   POST   /api/learner/note                   → noteTurn
  *   POST   /api/learner/name                   → nameTurn
@@ -101,6 +103,7 @@ const TURNS: Record<string, Record<string, Turn>> = {
   "/api/learner/watched": { POST: watchedTurn },
   "/api/learner/playback": { POST: playbackTurn },
   "/api/learner/progress": { POST: progressTurn },
+  "/api/learner/preference": { POST: preferenceTurn },
   "/api/learner/asset-name": { POST: assetNameTurn },
   "/api/learner/note": { POST: noteTurn },
   "/api/learner/name": { POST: nameTurn },
