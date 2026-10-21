@@ -90,8 +90,14 @@ struct LibraryView: View {
         }
         let terms = librarySearchTerms(search)
         if !terms.isEmpty {
+            // `searchHits` runs over every row, not the tab the reader is
+            // in: a line said in a video lives in its transcript, a
+            // companion All and Videos exclude — the lift is what makes
+            // searching spoken words find the video at all. The filters
+            // apply after it, so a video lifted in does not appear under
+            // Notes either.
             var hits = Set<String>()
-            for asset in rows {
+            for asset in store.assets {
                 // `searchableName`: the title, the filename and the URL —
                 // not the displayTitle fallbacks, so "untitled" is not a
                 // word the search claims a row has.
@@ -287,6 +293,13 @@ struct LibraryView: View {
             .appDestinations()
             .searchable(text: $search, placement: .toolbar, prompt: "Search the library")
             .task(id: wantsTextIndex) { indexSearchText() }
+            // A reload replaces the rows and the note bodies behind them;
+            // the index built for the old snapshot goes with it.
+            .onChange(of: store.assets) {
+                searchTexts = [:]
+                searchLift = [:]
+                searchIndexed = false
+            }
             .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 Text(countLine)
