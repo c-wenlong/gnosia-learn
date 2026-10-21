@@ -55,6 +55,13 @@ final class StudioManager {
     private(set) var topics: [String: String] = [:]
     private(set) var refreshedAt: Date?
 
+    /// A detached launch is in flight. Set when `launch()` fires and
+    /// cleared when health answers or the launch times out — the runner's
+    /// first minute runs doctor and manual work before it binds.
+    private(set) var launching = false
+    /// Why the last launch attempt did not reach `.up`, when it did not.
+    private(set) var launchNote: String?
+
     private var loop: Task<Void, Never>?
 
     /// Begin the poll; idempotent, so `.task` can call it freely.
@@ -92,6 +99,8 @@ final class StudioManager {
         }
         self.health = health
         status = .up
+        launching = false
+        launchNote = nil
 
         // The reads: each tolerates its own failure, the way the page costs
         // a section rather than the screen, except diagrams, which the web
@@ -114,6 +123,59 @@ final class StudioManager {
         if let d { drafts = d }
         if let t { topics = Dictionary(t.map { ($0.slug, $0.title ?? $0.slug) }, uniquingKeysWith: { a, _ in a }) }
         refreshedAt = .now
+    }
+
+    /// `npm run studio`, launched **detached** (`nohup … &`, output to
+    /// `.studio/runner.log`): the runner is reparented to launchd and
+    /// outlives the app. That detachment is the point — a managed child
+    /// killed on quit would mark in-flight renders `interrupted`, the state
+    /// the runner's reconcile pass deliberately leaves for a person.
+    ///
+    /// The poll loop picks the runner up once `/api/health` answers; until
+    /// then `launching` shows the card's starting state, cleared by
+    /// `refresh()` on `.up` or by a 150s timeout for a wedged first run.
+    func launch() {
+        guard !launching else { return }
+        guard let root = Self.repoRoot() else {
+            launchNote = "No checkout found — set GNOSIA_REPO to the repository root."
+            return
+        }
+        let studioHome = root.appending(path: ".studio")
+        try? FileManager.default.createDirectory(at: studioHome, withIntermediateDirectories: true)
+
+        launching = true
+        launchNote = nil
+        // A login shell so nvm/volta/homebrew PATH reaches npm, as with the
+        // sidecar; nohup + & detach the runner from this process entirely.
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        proc.arguments = ["-lc", "nohup npm run studio >> .studio/runner.log 2>&1 &"]
+        proc.currentDirectoryURL = root
+        proc.standardOutput = FileHandle.nullDevice
+        proc.standardError = FileHandle.nullDevice
+        proc.terminationHandler = { [weak self] p in
+            Task { @MainActor in
+                guard let self else { return }
+                if p.terminationStatus != 0 {
+                    self.launching = false
+                    self.launchNote = "the launch failed (exit \(p.terminationStatus)) — npm may be missing from PATH"
+                }
+                await self.refresh()
+            }
+        }
+        do {
+            try proc.run()
+        } catch {
+            launching = false
+            launchNote = "Could not launch npm: \(error.localizedDescription)"
+            return
+        }
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(150))
+            guard let self, self.launching else { return }
+            self.launching = false
+            self.launchNote = "still not answering after 2½ minutes — see .studio/runner.log"
+        }
     }
 
     /// The jobs still doing something, strip order: the states that hold a

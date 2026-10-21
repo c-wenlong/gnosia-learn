@@ -111,7 +111,10 @@ struct StudioView: View {
                 lead: why,
                 lines: [],
                 commands: ["npm run studio", "# from the repository root"],
-                retry: { Task { await studio.refresh() } }
+                retry: { Task { await studio.refresh() } },
+                launch: { studio.launch() },
+                launching: studio.launching,
+                launchNote: studio.launchNote
             )
         case .up:
             monitor
@@ -517,13 +520,17 @@ struct StudioBanner: View {
 }
 
 /// The blocked card, the web `BlockedCard`'s shape: a title, a lead, the
-/// doctor's lines, the commands, a retry.
+/// doctor's lines, the commands, a retry. `launch` shows the detached
+/// `npm run studio` starter; nil on the doctor card, which no launch fixes.
 struct StudioBlockedCard: View {
     let title: String
     let lead: String
     let lines: [StudioClient.DoctorCheck]
     let commands: [String]
     let retry: () -> Void
+    var launch: (() -> Void)? = nil
+    var launching = false
+    var launchNote: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -559,9 +566,37 @@ struct StudioBlockedCard: View {
                 .padding(.vertical, 9)
                 .background(G.surface2, in: RoundedRectangle(cornerRadius: 8))
             }
-            Button("Try again", action: retry)
-                .buttonStyle(.borderedProminent)
-                .tint(G.btnFace)
+            HStack(spacing: 10) {
+                Button("Try again", action: retry)
+                    .buttonStyle(.borderedProminent)
+                    .tint(G.btnFace)
+                if let launch {
+                    Button {
+                        launch()
+                    } label: {
+                        if launching {
+                            HStack(spacing: 6) {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("Starting the runner…")
+                            }
+                        } else {
+                            Text("Launch studio")
+                        }
+                    }
+                    .disabled(launching)
+                }
+            }
+            if launching {
+                Text("Detached — it keeps running after Gnosia quits. The first minute runs checks before it answers.")
+                    .font(.caption)
+                    .foregroundStyle(G.text3)
+            }
+            if let launchNote, !launching {
+                Text(launchNote)
+                    .font(.caption)
+                    .foregroundStyle(G.danger)
+            }
         }
         .padding(28)
         .frame(maxWidth: 560, alignment: .leading)
