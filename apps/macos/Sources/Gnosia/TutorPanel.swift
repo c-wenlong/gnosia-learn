@@ -2,13 +2,25 @@
 //  TutorPanel.swift
 //  Gnosia
 //
-//  The web's concept session — apps/web/src/components/session/
-//  SessionFocus.tsx — walked natively over the sidecar, as a panel rather
-//  than a page so the concept workspace's centre column can run it in
-//  place. `SessionView` mounts the same panel standalone for the session
-//  route the workspace's close screen and Home still push.
+//  The workspace's centre panel, chat-first as the web's is
+//  (apps/web/src/components/workspace/TutorChat.tsx): its resting state
+//  is `TutorChatView`, a freeform chat with the concept tutor, and the
+//  structured session — the web's concept session
+//  (apps/web/src/components/session/SessionFocus.tsx) walked natively
+//  over the sidecar — takes the panel over only when it is asked for:
+//  Teach me, Quiz me, or the chat's "Give me a check" chip. `SessionView`
+//  mounts the same panel standalone for the session route the
+//  workspace's close screen and Home still push, which always opens on
+//  the walk.
 //
-//  The modes are the web's own: learn (Teach me — probe, teach, check,
+//  `TutorPanel` below is the switcher: `mode` names a session to open
+//  on, or nil leaves the chat. The chat stays mounted under a session —
+//  the WorkspacePanels fold pattern — so a "Give me a check" detour
+//  keeps its thread, and the session's "Back to chat" hands the panel
+//  back. `TutorSessionView` is the walk itself, unchanged from when it
+//  was the panel's whole job.
+//
+//  The session's modes are the web's own: learn (Teach me — probe, teach, check,
 //  close) and check (`?mode=check`, the workspace's Quiz me — the note's
 //  checks in turn, then close). A question step asks the note's own check
 //  when the plan has one; otherwise it asks the tutor for a question
@@ -26,7 +38,8 @@
 //
 //  `embedded` is the workspace form for the standalone page: the
 //  navigation title and Exit button the page chrome owns drop away, the
-//  top bar's escape becomes "Start over" (the web's reload through Teach
+//  top bar gains "Back to chat" for the surface the session took over,
+//  its other escape becomes "Start over" (the web's reload through Teach
 //  me), and the close screen's "Back to the workspace" — already where
 //  the learner stands — becomes that same Start over.
 //
@@ -36,7 +49,64 @@
 
 import SwiftUI
 
+/// The panel as the workspace mounts it: the chat by default, the
+/// session `mode` names when Teach me, Quiz me or the chat's check chip
+/// asks for one. The standalone session page always names one.
 struct TutorPanel: View {
+    /// The concept the tutor works on.
+    let slug: String
+    /// A session this mount opens straight into — nil, the workspace's
+    /// default, opens the chat instead. `.learn` is Teach me, `.check`
+    /// is Quiz me; the standalone session page always passes one.
+    var mode: SessionMode? = nil
+    /// Inside the workspace's centre column rather than a pushed page.
+    var embedded = false
+    /// What the standalone page's Exit does; nil leaves the
+    /// environment's own dismiss.
+    var onLeave: (() -> Void)? = nil
+
+    /// The session in flight, or nil while the panel rests on its chat.
+    @State private var session: SessionMode?
+
+    init(
+        slug: String, mode: SessionMode? = nil,
+        embedded: Bool = false, onLeave: (() -> Void)? = nil
+    ) {
+        self.slug = slug
+        self.mode = mode
+        self.embedded = embedded
+        self.onLeave = onLeave
+        _session = State(initialValue: mode)
+    }
+
+    var body: some View {
+        ZStack {
+            // The chat stays mounted under a session — the web keeps
+            // its thread for a return visit, and the mounted view is
+            // the native form of that. The standalone page is only the
+            // session, so it pays for no chat beneath.
+            if embedded || session == nil {
+                TutorChatView(slug: slug) { session = $0 }
+                    .opacity(session == nil ? 1 : 0)
+                    .allowsHitTesting(session == nil)
+                    .accessibilityHidden(session != nil)
+            }
+            if let session {
+                TutorSessionView(
+                    slug: slug, mode: session, embedded: embedded,
+                    onLeave: onLeave,
+                    onChat: embedded ? { self.session = nil } : nil
+                )
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// The structured session — probe, teach, check, close — taking the
+/// whole panel when it runs. Every piece of the walk is unchanged from
+/// when this was `TutorPanel` itself.
+struct TutorSessionView: View {
     @Environment(CatalogStore.self) private var store
     @Environment(LearnerStore.self) private var learner
     @Environment(SidecarManager.self) private var sidecar
@@ -54,6 +124,10 @@ struct TutorPanel: View {
     /// What the standalone page's Exit does; nil leaves the environment's
     /// own dismiss.
     var onLeave: (() -> Void)? = nil
+    /// The embedded session's way back to the chat surface — the panel's
+    /// resting state the session took over. nil (the standalone page)
+    /// hides it: there the way out is Exit's.
+    var onChat: (() -> Void)? = nil
 
     // MARK: The plan, built at open
 
@@ -422,6 +496,13 @@ struct TutorPanel: View {
                     .lineLimit(1)
                 Spacer()
                 if embedded {
+                    if let onChat {
+                        Button("Back to chat", action: onChat)
+                            .buttonStyle(.plain)
+                            .font(.callout)
+                            .foregroundStyle(G.text2)
+                            .padding(.trailing, 14)
+                    }
                     Button("Start over") { reset() }
                         .buttonStyle(.plain)
                         .font(.callout)

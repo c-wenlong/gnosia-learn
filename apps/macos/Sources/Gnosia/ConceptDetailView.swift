@@ -31,8 +31,10 @@ struct ConceptDetailView: View {
     /// Which panel the narrow tabbed layout shows; wide shows all three.
     /// Teach me and Quiz me put the tutor forward.
     @State private var activePanel: WorkspacePanelKey = .note
-    /// The embedded session's mode — Teach me runs learn, Quiz me check.
-    @State private var tutorMode: SessionMode = .learn
+    /// The session the centre panel was asked to open — Teach me runs
+    /// learn, Quiz me check. nil leaves the panel on its chat, the
+    /// web workspace's default surface.
+    @State private var tutorMode: SessionMode? = nil
     /// Bumped to restart the embedded walk: a new TutorPanel mounts, the
     /// way a fresh visit to the web's session page starts clean.
     @State private var tutorEpoch = 0
@@ -53,7 +55,7 @@ struct ConceptDetailView: View {
                     NoteSourcesPanel(w: workspace)
                 } tutor: {
                     TutorPanel(slug: workspace.slug, mode: tutorMode, embedded: true)
-                        .id("\(workspace.slug)\u{1f}\(tutorMode.rawValue)\u{1f}\(tutorEpoch)")
+                        .id("\(workspace.slug)\u{1f}\(tutorMode?.rawValue ?? "chat")\u{1f}\(tutorEpoch)")
                 } studio: {
                     StudioPanel(w: workspace, quizMe: { startTutor(.check) })
                 }
