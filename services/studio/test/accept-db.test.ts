@@ -19,7 +19,7 @@ import {
   targetSvgPath,
 } from "../src/paths";
 import { NPM, run } from "../src/proc";
-import type { JobRecord } from "../src/store";
+import type { JobRecord } from "../src/data/store";
 
 /**
  * Accept through the real catalog CLI, on a scratch database that owns
@@ -40,8 +40,8 @@ import type { JobRecord } from "../src/store";
  */
 
 const canvasMock = vi.hoisted(() => ({ canvas: vi.fn() }));
-vi.mock("../src/canvas", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../src/canvas")>();
+vi.mock("../src/canvas/canvas", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/canvas/canvas")>();
   return { ...actual, canvas: canvasMock.canvas };
 });
 
@@ -132,9 +132,9 @@ describe.skipIf(!reachable.ok)("Accept through the real catalog on a database th
   });
 
   it("lands a row and a blob, writes no file under the sandbox tree, and says it wrote none", async () => {
-    const catalog = await import("../src/catalog");
-    const { accept } = await import("../src/review");
-    const { JobStore } = await import("../src/store");
+    const catalog = await import("../src/data/catalog");
+    const { accept } = await import("../src/diagram/review");
+    const { JobStore } = await import("../src/data/store");
 
     // The job, as the runner records it: enqueued, claimed, finished.
     const briefFile = path.join(home, "brief.json");

@@ -1,9 +1,9 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { stat } from "node:fs/promises";
 
-import { MIRROR_HEALTH_MS, MIRROR_IDLE_MS, MIRROR_START_MS } from "./config";
-import { absolute, REPO_ROOT, slugOf, workPath } from "./paths";
-import { NPM, stopChild } from "./proc";
+import { MIRROR_HEALTH_MS, MIRROR_IDLE_MS, MIRROR_START_MS } from "../config";
+import { absolute, REPO_ROOT, slugOf, workPath } from "../paths";
+import { NPM, stopChild } from "../proc";
 
 /**
  * One `canvas serve` per document, held open for as long as someone is looking.

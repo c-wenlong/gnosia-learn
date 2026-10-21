@@ -2,8 +2,8 @@ import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { conceptShow } from "./catalog";
-import { absolute, scratchDir } from "./paths";
+import { conceptShow } from "../data/catalog";
+import { absolute, scratchDir } from "../paths";
 
 /**
  * A brief's `source`: the note or file the diagram came out of, the one path

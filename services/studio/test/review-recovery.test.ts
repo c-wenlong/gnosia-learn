@@ -11,7 +11,7 @@ import {
   targetPath,
   targetSvgPath,
 } from "../src/paths";
-import type { JobRecord } from "../src/store";
+import type { JobRecord } from "../src/data/store";
 import { fixtureDocument } from "./fixture-document";
 
 /**
@@ -25,8 +25,8 @@ import { fixtureDocument } from "./fixture-document";
  */
 
 const canvasMock = vi.hoisted(() => ({ canvas: vi.fn() }));
-vi.mock("../src/canvas", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../src/canvas")>();
+vi.mock("../src/canvas/canvas", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/canvas/canvas")>();
   return { ...actual, canvas: canvasMock.canvas };
 });
 
@@ -37,16 +37,16 @@ const catalogMock = vi.hoisted(() => ({
   diagramPut: vi.fn(),
   diagramCheckout: vi.fn(),
 }));
-vi.mock("../src/catalog", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../src/catalog")>();
+vi.mock("../src/data/catalog", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/data/catalog")>();
   return { ...actual, ...catalogMock };
 });
 
 /** The diagram as the fake catalog holds it. */
 const diagram = { revision: 3, revisionJob: null as string | null };
 
-const { accept, discard, reindex } = await import("../src/review");
-const { JobStore } = await import("../src/store");
+const { accept, discard, reindex } = await import("../src/diagram/review");
+const { JobStore } = await import("../src/data/store");
 
 const SLUG = "studio-recovery-fixture";
 /**

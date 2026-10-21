@@ -14,7 +14,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const procMock = vi.hoisted(() => ({ run: vi.fn(), NPM: "npm" }));
 vi.mock("../src/proc", () => procMock);
 
-const { CATALOG_UNREACHABLE, status } = await import("../src/catalog");
+const { CATALOG_UNREACHABLE, status } = await import("../src/data/catalog");
 
 function fails(stderr: string, timedOut = false, code: number | null = 1) {
   procMock.run.mockResolvedValue({

@@ -1,4 +1,4 @@
-import { agentModelName, BriefError, SLUG_PATTERN, type Vocabulary } from "../brief";
+import { agentModelName, BriefError, SLUG_PATTERN, type Vocabulary } from "../diagram/brief";
 import { charsPerSecond } from "./narration";
 import { isVideoToolName, notInStudio, VIDEO_TOOL_NAMES, type VideoToolName } from "./tools";
 import { VOICES } from "./voices";

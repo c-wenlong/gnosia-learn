@@ -24,7 +24,7 @@ const FAKE = path.join(HOME, "fake-claude.mjs");
 process.env.STUDIO_HOME = HOME;
 process.env.STUDIO_CLAUDE_BIN = FAKE;
 
-const { AGENT_AUTH_ENV, agentEnv, startAgent } = await import("../src/agent");
+const { AGENT_AUTH_ENV, agentEnv, startAgent } = await import("../src/agent/agent");
 const { agentAuth, agentAuthReport } = await import("../src/config");
 const { candidateDir, jobDir, scratchDir, tmpDir } = await import("../src/paths");
 const { JobCostMeter } = await import("../src/cost");

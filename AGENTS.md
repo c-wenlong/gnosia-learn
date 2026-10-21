@@ -457,7 +457,7 @@ Rules of engagement:
   request naming anyone else: its queue, checkouts, cached list and agent
   account are that one owner's, so there is no view of them to scope.
 - The spawned agent does not inherit the runner's Anthropic credentials.
-  `agentEnv` in `services/studio/src/agent.ts` strips the auth variables
+  `agentEnv` in `services/studio/src/agent/agent.ts` strips the auth variables
   (`ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL` and the rest, listed there) so
   `claude -p` uses the machine's logged-in account; `STUDIO_AGENT_AUTH=env`
   passes them through. Inheriting was wrong because `-p` uses an environment
@@ -472,15 +472,15 @@ Rules of engagement:
   deny list, because a deny list over `rm`, `mv`, `git` and the rest does not
   stop a shell redirect, `tee`, or a command substitution from writing
   anywhere in the tree. In front of it, a `PreToolUse` hook written into each
-  job's settings (`services/studio/src/diagram-guard.ts`, the check in
+  job's settings (`services/studio/src/diagram/diagram-guard.ts`, the check in
   `canvas-guard.cjs`) refuses every command but `npm run --silent canvas --
   <verb>` with each file argument an absolute path to the job's candidate,
   its SVG or its scratch, and no pipe, list, substitution, redirect or
   variable, failing closed: measured on CLI 2.1.274, the prefix alone ran
   `canvas -- inspect … | base64` and a `canvas -- new` that wrote outside the
   workspace. The video agent's guard shares its hook program
-  (`services/studio/src/bash-guard.ts`). Read and write rules in
-  `services/studio/src/settings.ts` are absolute paths resolved from
+  (`services/studio/src/agent/bash-guard.ts`). Read and write rules in
+  `services/studio/src/diagram/settings.ts` are absolute paths resolved from
   `REPO_ROOT` and `STUDIO_HOME` at spawn time, not relative ones, because
   manimkc already shipped the bug where a relative rule stops matching the
   moment its data root moves. `REPO_ROOT` in `services/studio/src/paths.ts` is
@@ -528,7 +528,7 @@ Rules of engagement:
   such file is on disk the runner reads it with `learn concept show --owner
   <STUDIO_OWNER> --json` (theirs or the commons', never another owner's)
   into the job's scratch directory, `source/<slug>.md`, and points the agent
-  there (`services/studio/src/source-note.ts`). Any other file in the tree is
+  there (`services/studio/src/diagram/source-note.ts`). Any other file in the tree is
   passed through as it is, and a slug the database does not answer for leaves
   the agent drawing from the brief alone.
 - Every `canvas` verb and the mirror run on the diagram's checkout,
@@ -543,7 +543,7 @@ Rules of engagement:
   per-message usage after a cancel, timeout or interrupt killed the session
   before it could report. Both agents run with `--include-partial-messages`
   so the meter can read each message's finished output from its
-  `message_delta` frame (`keepsStreamEvent` in `services/studio/src/agent.ts`
+  `message_delta` frame (`keepsStreamEvent` in `services/studio/src/agent/agent.ts`
   drops the other partial frames before the log); without it the stream
   carried only the output count as each message began, 80% to 93% of the
   true cost on diagram jobs and about two thirds on a video job. A `stream`
@@ -562,7 +562,7 @@ Rules of engagement:
   none, so the cap still counts a killed attempt.
 - **The grid's three lists are kept in the runner's memory.**
   `GET /api/diagrams`, `/api/vocabulary` and `/api/videos` answer through
-  `services/studio/src/listings.ts`: the last read at once, and a read older
+  `services/studio/src/probes/listings.ts`: the last read at once, and a read older
   than 30 seconds is served while a fresh one runs, with `cache.renewing`
   set so the page refreshes itself once (`RenewLists`). Each read is a
   `catalog` subprocess, and the three together took 2 to 4 seconds on every
@@ -578,10 +578,10 @@ Rules of engagement:
   heartbeat, and a mirror nobody has asked about for `STUDIO_MIRROR_IDLE_MS`
   (15 minutes by default) is closed.
 - **The planner is a second `claude -p`, with no tools at all.** A draft
-  (`services/studio/src/drafts.ts`, the `draft` table, `/api/drafts`) is one
+  (`services/studio/src/drafts/drafts.ts`, the `draft` table, `/api/drafts`) is one
   conversation, disk first under `$STUDIO_HOME/drafts/<id>/`, mirrored with
   `catalog draft upsert --owner`. Each person turn spawns the planner from
-  `services/studio/src/planner.ts` with `--tools ""`, `--strict-mcp-config`
+  `services/studio/src/drafts/planner.ts` with `--tools ""`, `--strict-mcp-config`
   and an empty `--mcp-config`, `--safe-mode`, `--disable-slash-commands`,
   `--setting-sources ""` plus a deny-everything `--settings` file, and
   `--permission-prompts none`; `test/planner.test.ts` pins every one, and a
@@ -1323,7 +1323,7 @@ not have to be worked out again.
   at all. A low overall percentage is not a regression signal; the thresholds
   in `vitest.config.ts` are.
 - **Killing a spawned `npm run` child does not kill what it started.**
-  `child.pid` in `services/studio/src/mirrors.ts` is the `npm` launcher; the
+  `child.pid` in `services/studio/src/canvas/mirrors.ts` is the `npm` launcher; the
   process actually holding the port, `canvas serve`, is two levels down.
   `stopChild` in `services/studio/src/proc.ts` signals the whole process
   group, polls `kill(-pid, 0)` until nothing answers, and escalates to
@@ -1408,7 +1408,7 @@ not have to be worked out again.
   are required parameters, so the compiler refuses the rest. A request with no
   session gets `NoOwnerError`, never `local`: a fallback there would be a hole.
 - **A studio job reaching a terminal state does not mean the runner has
-  finished writing it.** `Runner.finish` in `services/studio/src/runner.ts`
+  finished writing it.** `Runner.finish` in `services/studio/src/diagram/runner.ts`
   does five things in order: put the new state in the store's in-memory map,
   persist `job.json`, call `job finish` on the catalog, write any catalog error
   back onto the record, and close the session. `JobStore.update` sets that map

@@ -1,12 +1,12 @@
 import { rm, stat } from "node:fs/promises";
 import path from "node:path";
 
-import { canvas, EXIT, explainExit, type VerifyReport } from "./canvas";
-import { diagramPut, diagramShow, jobAccept, jobDiscard } from "./catalog";
-import { ensureCheckout, forgetDiagramList } from "./diagrams";
-import { absolute, ASSETS_DIR, REPO_ROOT, studioHome, workDir } from "./paths";
-import { run } from "./proc";
-import type { JobRecord, JobStore } from "./store";
+import { canvas, EXIT, explainExit, type VerifyReport } from "../canvas/canvas";
+import { diagramPut, diagramShow, jobAccept, jobDiscard } from "../data/catalog";
+import { ensureCheckout, forgetDiagramList } from "../canvas/diagrams";
+import { absolute, ASSETS_DIR, REPO_ROOT, studioHome, workDir } from "../paths";
+import { run } from "../proc";
+import type { JobRecord, JobStore } from "../data/store";
 
 /**
  * Accept and discard: the only writes outside a job's own workspace, and the

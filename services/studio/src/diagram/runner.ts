@@ -8,8 +8,8 @@ import { readFile } from "node:fs/promises";
 import type { JobState } from "@self-learn/schema";
 
 import { type ValidBrief } from "./brief";
-import { AgentRun, startAgent, sweepOrphans, type AgentInit } from "./agent";
-import { resolveDiagramAgent } from "./agent-settings";
+import { AgentRun, startAgent, sweepOrphans, type AgentInit } from "../agent/agent";
+import { resolveDiagramAgent } from "../agent/agent-settings";
 import { buildComparison, readSide, sideFromGate, type Side } from "./compare";
 import {
   agentAuth,
@@ -21,11 +21,11 @@ import {
   MAX_ATTEMPTS,
   RUNNER_NAME,
   type AgentAuth,
-} from "./config";
-import { costFromLog, JobCostMeter, spendWindow, type CostReading, type SpendEntry } from "./cost";
-import { diagramShow, jobClaim, jobEnqueue, jobFinish, sessionEnd, sessionStart } from "./catalog";
+} from "../config";
+import { costFromLog, JobCostMeter, spendWindow, type CostReading, type SpendEntry } from "../cost";
+import { diagramShow, jobClaim, jobEnqueue, jobFinish, sessionEnd, sessionStart } from "../data/catalog";
 import { diagramPathProblem } from "./diagram-guard";
-import { checkoutRevision, documentHashOf, ensureCheckout } from "./diagrams";
+import { checkoutRevision, documentHashOf, ensureCheckout } from "../canvas/diagrams";
 import { narrate, runGate } from "./gate";
 import {
   absolute,
@@ -46,7 +46,7 @@ import {
   workDir,
   workPath,
   workSvgPath,
-} from "./paths";
+} from "../paths";
 import {
   buildPrompt,
   buildResumePrompt,
@@ -54,11 +54,11 @@ import {
   buildRevisePrompt,
   type CandidateFiles,
 } from "./prompt";
-import type { ManualSource } from "./manual/source";
+import type { ManualSource } from "../manual/source";
 import { dirtyFiles } from "./review";
 import { resolveSource } from "./source-note";
-import type { GateResult, JobRecord, JobStore } from "./store";
-import type { AgentSetting } from "./video/types";
+import type { GateResult, JobRecord, JobStore } from "../data/store";
+import type { AgentSetting } from "../video/types";
 
 /**
  * The queue, the claim, the attempts and the verdict.

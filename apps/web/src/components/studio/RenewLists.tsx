@@ -6,7 +6,7 @@ import { useEffect } from "react";
 /**
  * Asks the server for the page again once the runner has renewed its lists.
  *
- * The runner answers the grid's lists from memory (`services/studio/src/listings.ts`),
+ * The runner answers the grid's lists from memory (`services/studio/src/probes/listings.ts`),
  * and a list older than its lifetime is served while a fresh read runs behind
  * it, so the visit does not wait. The page draws this only when one of its
  * lists said so (`cache.renewing`), and it refreshes after about as long as the

@@ -17,7 +17,7 @@ import { HOSTILE_PROBE_JS } from "../src/video/hostile-probe";
 import { readPorts } from "../src/video/ports";
 import { lanAddress, watchPorts } from "./lan-probe";
 import { remotionkcPaths } from "../src/video/remotionkc/paths";
-import { remotionkcEnv } from "./../src/video/remotionkc/sandbox";
+import { remotionkcEnv } from "../src/video/remotionkc/sandbox";
 import { discoverRemotionkcToolchain, remotionkcProblems, type RemotionkcToolchain } from "../src/video/remotionkc/toolchain";
 
 /**

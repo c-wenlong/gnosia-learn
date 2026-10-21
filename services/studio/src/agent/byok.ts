@@ -2,8 +2,8 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { agentEnv } from "./agent";
-import { studioHome } from "./paths";
-import { JobRefused } from "./runner";
+import { studioHome } from "../paths";
+import { JobRefused } from "../diagram/runner";
 
 /**
  * The BYOK harness: Qwen Code (`qwen`), run on the owner's own provider key.

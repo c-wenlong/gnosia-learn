@@ -1,8 +1,8 @@
 import { readdirSync, realpathSync, type Dirent } from "node:fs";
 import path from "node:path";
 
-import { guardHooks } from "./bash-guard";
-import { cacheDir } from "./content-cache";
+import { guardHooks } from "../agent/bash-guard";
+import { cacheDir } from "../data/content-cache";
 import { guardPath } from "./diagram-guard";
 import {
   absolute,
@@ -18,7 +18,7 @@ import {
   ASSETS_DIR,
   REPO_ROOT,
   workDir,
-} from "./paths";
+} from "../paths";
 
 /**
  * The per-job permission file. This is the primary control, not the prompt.

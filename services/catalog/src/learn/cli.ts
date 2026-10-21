@@ -912,7 +912,7 @@ commands.concept = async ({ values, positionals }, session) => {
     const id = positionals[2] ?? values.id;
     if (id === undefined) fail("concept show requires an id");
     // `--owner`: the studio runner reads a brief's note as the owner it
-    // serves, never as `local` (services/studio/src/source-note.ts).
+    // serves, never as `local` (services/studio/src/diagram/source-note.ts).
     const scope = scopeOf(values);
     const concept = await readConcept(id, scope);
     if (concept === null) fail(`no such concept: ${id}`);

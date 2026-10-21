@@ -16,7 +16,7 @@ import {
   plannerSettings,
   vocabularyBlock,
   type TopicChecker,
-} from "../src/planner";
+} from "../src/drafts/planner";
 import { proposing } from "./fake-claude";
 import { testVocabulary } from "./vocabulary";
 

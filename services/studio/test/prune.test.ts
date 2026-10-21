@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
-import type { CatalogResult } from "../src/catalog";
+import type { CatalogResult } from "../src/data/catalog";
 
 import { fakeClaude, proposing, type FakeClaude } from "./fake-claude";
 import { topicListAnswer } from "./vocabulary";
@@ -28,19 +28,19 @@ const catalogMock = vi.hoisted(() => ({
   topicAddDryRun: vi.fn(),
   diagramList: vi.fn(),
 }));
-vi.mock("../src/catalog", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/catalog")>()),
+vi.mock("../src/data/catalog", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/data/catalog")>()),
   ...catalogMock,
 }));
 const canvasMock = vi.hoisted(() => ({ doctor: vi.fn() }));
-vi.mock("../src/canvas", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/canvas")>()),
+vi.mock("../src/canvas/canvas", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/canvas/canvas")>()),
   doctor: canvasMock.doctor,
 }));
 
-const { Drafts } = await import("../src/drafts");
-const { JobStore } = await import("../src/store");
-const { pruneDrafts, DraftPruner } = await import("../src/prune");
+const { Drafts } = await import("../src/drafts/drafts");
+const { JobStore } = await import("../src/data/store");
+const { pruneDrafts, DraftPruner } = await import("../src/drafts/prune");
 const { draftDir, jobDir, jobJsonPath } = await import("../src/paths");
 
 const ok = (json: unknown = {}) => ({ ok: true, json, error: null, offline: false });
