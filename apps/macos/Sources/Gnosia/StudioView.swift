@@ -2,14 +2,18 @@
 //  StudioView.swift
 //  Gnosia
 //
-//  The Studio surface, the native counterpart of `/studio`: a monitor over
-//  the local runner's corpus and queue.
+//  The Studio surface, the native counterpart of `/studio`: the creation
+//  composer over the runner's corpus, and the queue's monitor under it.
 //
 //  What the web page does and what this does:
 //
-//  - The web's home view is a conversation composer over the corpus. Here
-//    the corpus comes first (jobs, diagrams, videos, conversations) and a
-//    "New conversation" button opens the same draft the composer does.
+//  - The web's home view is a conversation composer over the corpus, and
+//    this matches it now: StudioHome.swift's composer creates the same
+//    `POST /api/drafts` conversation the web's does (kind toggles, the
+//    harness/model picks, the opener sent as the draft's first turn) and
+//    StudioArtifactGrid is the corpus under it — one filtered, grouped
+//    and sorted grid of diagrams and studio videos, the jobs making new
+//    artifacts leading it and the jobs drawing on tiles riding them.
 //  - JobStrip's live cards and the history panel are the Jobs section;
 //    progress is the manager's SSE stream per active job, the poll as
 //    the record and the fallback, the web's own split.
@@ -21,7 +25,7 @@
 //    conversation. The canvas itself still opens in the browser, since a
 //    mirror is a `canvas serve` page rather than something the runner
 //    renders.
-//  - Settings (agent model/effort, BYOK) and the mention picker are the
+//  - Settings (agent effort, BYOK keys) and the @ mention menu are the
 //    gaps; the runner applies its own defaults and plain "@diagram" text
 //    tags.
 //
@@ -55,8 +59,6 @@ extension EnvironmentValues {
 struct StudioView: View {
     @State private var studio = StudioManager()
     @State private var path = NavigationPath()
-    /// The diagram grid's topic chip, nil for the whole corpus.
-    @State private var topicFilter: String?
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -141,11 +143,13 @@ struct StudioView: View {
         } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: 26) {
+                    // The web's own order: the composer first, the corpus
+                    // under it, the queue and the conversations below.
+                    StudioHomeComposer()
                     statusCard
                     banners
+                    StudioArtifactGrid()
                     jobsSection
-                    diagramsSection
-                    videosSection
                     conversationsSection
                 }
                 .padding(.horizontal, 24)
@@ -285,95 +289,6 @@ struct StudioView: View {
         }
     }
 
-    // MARK: - Diagrams
-
-    /// The corpus grid: one tile per diagram, filtered by the topic chips
-    /// the page draws over it.
-    private var diagramsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .center, spacing: 14) {
-                SectionHead(title: "Diagrams", count: filteredDiagrams.count, tail: studio.listing.map { "\($0.counts?.withTopic ?? 0) with a topic" })
-                Spacer()
-                if !topicChips.isEmpty {
-                    ScrollView(.horizontal) {
-                        HStack(spacing: 6) {
-                            Chip(label: "All", on: topicFilter == nil) { topicFilter = nil }
-                            ForEach(topicChips) { chip in
-                                Chip(label: "\(chip.title) (\(chip.count))", on: topicFilter == chip.slug) { topicFilter = chip.slug }
-                            }
-                        }
-                    }
-                    .scrollIndicators(.never)
-                }
-            }
-
-            let diagrams = filteredDiagrams
-            if diagrams.isEmpty {
-                Text(topicFilter == nil ? "No diagrams in the catalog yet." : "No diagrams under this topic.")
-                    .font(.callout)
-                    .foregroundStyle(G.text3)
-            } else {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 190, maximum: 250), spacing: 16)], spacing: 16) {
-                    ForEach(diagrams) { diagram in
-                        DiagramTile(diagram: diagram)
-                    }
-                }
-            }
-        }
-    }
-
-    private var filteredDiagrams: [StudioClient.Diagram] {
-        let all = studio.listing?.diagrams ?? []
-        guard let topicFilter else { return all }
-        return all.filter { $0.topic == topicFilter }
-    }
-
-    /// One chip per topic the corpus uses, with the titles the vocabulary
-    /// read carries (slugs when there is no copy).
-    private struct TopicChip: Identifiable {
-        let slug: String
-        let title: String
-        let count: Int
-        var id: String { slug }
-    }
-
-    private var topicChips: [TopicChip] {
-        var counts: [String: Int] = [:]
-        for diagram in studio.listing?.diagrams ?? [] {
-            if let topic = diagram.topic { counts[topic, default: 0] += 1 }
-        }
-        return counts.keys.sorted { (studio.topics[$0] ?? $0) < (studio.topics[$1] ?? $1) }
-            .map { TopicChip(slug: $0, title: studio.topics[$0] ?? $0, count: counts[$0] ?? 0) }
-    }
-
-    // MARK: - Videos
-
-    /// The owner's landed studio videos. The runner serves no poster of its
-    /// own (the web reads the Next app's asset route for that), so a row is
-    /// text plus the link into the library, where the asset plays.
-    private var videosSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            SectionHead(title: "Videos", count: studio.videos.count, tail: nil)
-            if studio.videos.isEmpty {
-                Text("No studio videos yet. One lands here when a video job is accepted.")
-                    .font(.callout)
-                    .foregroundStyle(G.text3)
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(Array(studio.videos.enumerated()), id: \.element.id) { index, video in
-                        if index > 0 { Divider().overlay(G.hair).padding(.leading, 12) }
-                        NavigationLink(value: AppDestination.asset(video.assetId ?? "video:\(video.slug)")) {
-                            VideoRow(video: video)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .background(G.surface, in: RoundedRectangle(cornerRadius: 10))
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(G.border))
-            }
-        }
-    }
-
     // MARK: - Conversations
 
     /// The planner conversations, the web sidebar's own list. "New" is the
@@ -385,7 +300,7 @@ struct StudioView: View {
                 Spacer()
                 Button {
                     Task {
-                        if let id = try? await studio.client.createDraft() {
+                        if let id = try? await studio.client.createDraft(harness: studio.harness) {
                             path.append(StudioPick.draft(id))
                         }
                     }

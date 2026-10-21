@@ -156,6 +156,53 @@ struct StudioClient {
             let stale: Bool?
             let readAt: String?
         }
+        /// Health's `agent` block: the resolved settings the home composer's
+        /// picker lists (D90), as `runnerSettings` reads them on the web.
+        /// Optional: a runner from before it does not send it.
+        struct Agent: Decodable {
+            struct Pick: Decodable {
+                let passed: String?
+                let source: String?
+            }
+            struct Row: Decodable {
+                let model: Pick?
+            }
+            struct Defaults: Decodable {
+                let model: String?
+                let effort: String?
+            }
+            struct Byok: Decodable {
+                struct Provider: Decodable {
+                    struct Tiers: Decodable {
+                        let `default`: String?
+                        let lite: String?
+                        let max: String?
+                    }
+                    let provider: String
+                    let models: Tiers?
+                }
+                let configured: Bool?
+                let active: String?
+                let providers: [Provider]?
+            }
+            let planner: String?
+            let defaults: Defaults?
+            let video: Row?
+            let diagram: Row?
+            let byok: Byok?
+
+            /// `resolved` in the web's `runnerSettings`: what each part runs
+            /// on with no pick, for the Default tier's detail line.
+            var resolvedTurns: String? { planner }
+            var resolvedVideo: String? { video?.model?.passed ?? defaults?.model }
+            var resolvedDiagram: String? { diagram?.model?.passed ?? defaults?.model }
+            /// The active BYOK provider's tier picks (D94); nil unconfigured.
+            var byokTiers: Byok.Provider.Tiers? {
+                guard let active = byok?.active,
+                      let entry = byok?.providers?.first(where: { $0.provider == active }) else { return nil }
+                return entry.models
+            }
+        }
 
         let ok: Bool
         let tldrawkc: Bool
@@ -173,6 +220,7 @@ struct StudioClient {
         let video: VideoHealth?
         let vocabulary: Vocabulary?
         let diagramAgent: DiagramAgent?
+        let agent: Agent?
     }
 
     struct DiagramFile: Decodable {
@@ -229,9 +277,12 @@ struct StudioClient {
     }
 
     /// `catalog topic ls` rows: slug plus display title for the chips.
+    /// `domain` drives the grid's "group by domain" (the web's
+    /// `topicDomain` from `/api/vocabulary`).
     struct Topic: Decodable, Identifiable {
         let slug: String
         let title: String?
+        let domain: String?
         var id: String { slug }
     }
 
@@ -310,6 +361,13 @@ struct StudioClient {
         let requested: String?
         let started: String?
         let finished: String?
+        /// Set once a cancel lands: the strip says "Stopping" until the
+        /// job's state catches up (`JobStrip.tsx`'s `cancelRequestedAt`).
+        let cancelRequestedAt: String?
+        /// A video job's pipeline steps, `{ name, state, rounds }` rows —
+        /// `videoHeadline`'s `currentStep` reads them. Diagram jobs carry
+        /// `phase` instead and leave this null.
+        let steps: [Step]?
         var updated: String?
         var note: String?
         let indexed: Bool?
@@ -331,6 +389,15 @@ struct StudioClient {
             guard let target, target.hasPrefix("learn/assets/"), target.hasSuffix(".tldr") else { return nil }
             return String(target.dropFirst("learn/assets/".count).dropLast(".tldr".count))
         }
+    }
+
+    /// One pipeline step on a video job record (`studio-video.ts`'s
+    /// `VideoStep`): `state` is pending/doing/done/skipped/failed and
+    /// `rounds` how many times the step has run (the "· round N" suffix).
+    struct Step: Decodable {
+        let name: String?
+        let state: String?
+        let rounds: Int?
     }
 
     struct LogWindow: Decodable {
@@ -489,7 +556,7 @@ struct StudioClient {
         let object = try await get("api/vocabulary")
         return (object["topics"] as? [[String: Any]] ?? []).compactMap { raw in
             guard let slug = raw["slug"] as? String else { return nil }
-            return Topic(slug: slug, title: raw["title"] as? String)
+            return Topic(slug: slug, title: raw["title"] as? String, domain: raw["domain"] as? String)
         }
     }
 
@@ -631,13 +698,19 @@ struct StudioClient {
         return reply?["gone"] as? Bool ?? true
     }
 
-    /// `POST /api/drafts`, a blank conversation (`source: null`), answered
-    /// with its id. The key makes a retry land on the same draft.
-    func createDraft() async throws -> String {
-        let reply = try await post("api/drafts", body: [
+    /// `POST /api/drafts`, a blank conversation, answered with its id. The
+    /// key makes a retry land on the same draft. `model` and `harness` are
+    /// the web composer's picks (studio.ts `createDraft`): both are sent
+    /// only when set — `"default"` and the Claude harness are omitted so
+    /// the runner's own settings stand.
+    func createDraft(model: String? = nil, harness: String? = nil) async throws -> String {
+        var body: [String: Any] = [
             "source": NSNull(),
             "idempotencyKey": "gnosia-macos:\(UUID().uuidString)",
-        ])
+        ]
+        if let model, model != "default" { body["model"] = model }
+        if let harness, harness != "claude" { body["harness"] = harness }
+        let reply = try await post("api/drafts", body: body)
         guard let id = reply["draftId"] as? String else {
             throw StudioError(status: 200, message: "the runner answered with no draft", detail: nil)
         }

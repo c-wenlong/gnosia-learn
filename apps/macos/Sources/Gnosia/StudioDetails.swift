@@ -840,6 +840,11 @@ struct StudioDraftView: View {
     @State private var message = ""
     @State private var busy = false
     @State private var confirming = false
+    /// The home composer parks the opening message by draft id until the
+    /// view has read its record — `leaveOpener` on the web — so the first
+    /// turn lands as a turn rather than arriving in the POST. True while
+    /// the send is in flight so a poll does not send it twice.
+    @State private var sendingOpener = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1098,10 +1103,34 @@ struct StudioDraftView: View {
         do {
             draft = try await studio.client.draft(draftId)
             error = nil
+            await sendOpenerIfParked()
         } catch let failure as StudioError {
             if draft == nil { self.error = failure.errorDescription }
         } catch {
             if draft == nil { self.error = "The studio did not answer." }
         }
+    }
+
+    /// The composer's opening words: once the record reads, send them as
+    /// the first person turn — the web's "the conversation sends them
+    /// once it has read its empty record, so the planner's first reply
+    /// answers it". A refusal surfaces like any send's and hands the
+    /// words back into the box, since `takeOpener` took them once.
+    private func sendOpenerIfParked() async {
+        guard !sendingOpener, let opener = studio.takeOpener(for: draftId) else { return }
+        sendingOpener = true
+        do {
+            try await studio.client.sendDraftMessage(draftId, text: opener, mentions: draftMentions(opener))
+            draft = try? await studio.client.draft(draftId)
+        } catch let failure as StudioError {
+            outcome = failure.errorDescription
+            outcomeBad = true
+            if message.isEmpty { message = opener }
+        } catch {
+            outcome = "The studio did not answer."
+            outcomeBad = true
+            if message.isEmpty { message = opener }
+        }
+        sendingOpener = false
     }
 }
