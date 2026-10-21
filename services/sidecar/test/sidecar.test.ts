@@ -309,6 +309,9 @@ describe("the learner state writes, database down", () => {
       ["/api/learner/observe", { conceptSlug: "alpha", correct: true, source: "review", requestId: "r1" }],
       ["/api/learner/observe", { conceptSlug: "alpha", correct: true, source: "teach" }],
       ["/api/learner/session/close", { sessionId: "has spaces" }],
+      ["/api/learner/preference", { key: "theme", value: "dark" }],
+      ["/api/learner/preference", { key: "lastVisited", value: {} }],
+      ["/api/learner/preference", { key: "lastVisited", value: { courseSlug: "c", moduleSlug: 42 } }],
       ["/api/learner/favorite", "not an object"],
     ];
     for (const [path, body] of cases) {
@@ -329,6 +332,7 @@ describe("the learner state writes, database down", () => {
       ["/api/learner/name", { name: "Ada" }],
       ["/api/learner/observe", { conceptSlug: "alpha", correct: true, source: "teach", requestId: "r1" }],
       ["/api/learner/session/close", { sessionId: "s1" }],
+      ["/api/learner/preference", { key: "lastVisited", value: { courseSlug: "cs4263", moduleSlug: "m1" } }],
     ];
     for (const [path, body] of cases) {
       const response = await call(path, "POST", body);
@@ -739,6 +743,26 @@ describe.skipIf(!reachable.ok)("the learner write routes, against a scratch data
       // session has already said which concepts it touched.
       const late = await call2("/api/learner/observe", "POST", { ...answer, requestId: "req-alpha-2" });
       expect(late.status).toBe(400);
+    });
+
+    it("a module visit is the web's: the event, the list and the preference", async () => {
+      const visit = { courseSlug: "course-alpha", moduleSlug: "m1", at: "2026-10-21T10:00:00.000Z" };
+      const response = await call2("/api/learner/preference", "POST", { key: "lastVisited", value: visit });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ ok: true, result: { key: "lastVisited" } });
+
+      // The web's three writes, all visible in the rows the web reads.
+      expect(await readPreference(scratch.db, "lastVisited", "local")).toEqual(visit);
+      const recents = await readPreference(scratch.db, "recentModules", "local");
+      expect(recents).toEqual([visit]);
+      const visits = (await readEvents(scratch.db, "local")).filter((e) => e.type === "visit");
+      expect(visits).toHaveLength(1);
+      expect(visits[0]).toMatchObject({ course: "course-alpha", module: "m1" });
+
+      // A second visit moves its entry to the front, replacing the first.
+      const later = { courseSlug: "course-beta", at: "2026-10-21T11:00:00.000Z" };
+      await call2("/api/learner/preference", "POST", { key: "lastVisited", value: later });
+      expect(await readPreference(scratch.db, "recentModules", "local")).toEqual([later, visit]);
     });
   });
 });
