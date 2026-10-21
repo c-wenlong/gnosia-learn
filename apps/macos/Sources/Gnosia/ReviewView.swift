@@ -24,7 +24,10 @@ struct ReviewView: View {
     private var queue: ReviewQueue { store.reviewQueue() }
 
     var body: some View {
-        NavigationSplitView {
+        // Fixed-width rail, same as Learn: a nested NavigationSplitView
+        // here squeezed the outer columns and slid the app sidebar
+        // offscreen on narrower windows.
+        HStack(spacing: 0) {
             VStack(spacing: 0) {
                 if let error = store.error {
                     ContentUnavailableView {
@@ -58,8 +61,12 @@ struct ReviewView: View {
                     .listStyle(.sidebar)
                 }
             }
-            .navigationSplitViewColumnWidth(min: 300, ideal: 360)
-        } detail: {
+            .frame(width: 300)
+            .frame(maxHeight: .infinity)
+            .background(G.surface)
+
+            Divider().overlay(G.border)
+
             NavigationStack {
                 Group {
                     if let id = selection, let item = queue.items.first(where: { $0.conceptId == id }) {
@@ -75,6 +82,7 @@ struct ReviewView: View {
                 }
                 .appDestinations()
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .onAppear {
             if selection == nil { selection = queue.items.first?.conceptId }
