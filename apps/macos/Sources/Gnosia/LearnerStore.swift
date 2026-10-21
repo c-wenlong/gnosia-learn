@@ -9,16 +9,20 @@
 //  (GNOSIA_HOME, then SELF_LEARN_HOME, then ~/.gnosia — the rule
 //  CatalogLocation.dataHome already resolves, shared rather than repeated).
 //
-//  Four tables: `watch` (where playback stopped and whether it finished),
-//  `favorite` (the star) and `asset_name` (the learner's own title — the
-//  same job Postgres's asset_name does for the web app, and a separate row
-//  from it: a rename made here does not pretend to have come from the
-//  catalog), all keyed by asset id — plus `progress`, the course checklist
-//  ticks, keyed by curriculum item id and shaped exactly like the Postgres
-//  table the snapshot mirrors, so a sync that one day lifts these rows does
-//  not have to reshape them. Everything reads into memory on open and
-//  writes update memory only after the row lands; the tables are small
-//  enough that no read needs the file.
+//  Two groups of tables. The small marks: `watch` (where playback stopped
+//  and whether it finished), `favorite` (the star) and `asset_name` (the
+//  learner's own title — the same job Postgres's asset_name does for the
+//  web app, and a separate row from it: a rename made here does not pretend
+//  to have come from the catalog), all keyed by asset id — plus `progress`,
+//  the course checklist ticks, keyed by curriculum item id. And the
+//  learning state a tutor session writes: `session`, `event`, `mastery`
+//  and `review`, column for column the Postgres tables the snapshot
+//  mirrors, so the web's `POST /api/learner/observe` has a faithful local
+//  equivalent (recordSessionAnswer) and a sync that one day lifts these
+//  rows does not have to reshape them. Everything reads into memory on
+//  open and writes update memory only after the row lands; the mark tables
+//  are small enough that no read needs the file, and the session tables
+//  need no memory at all — CatalogStore re-reads the file.
 //
 //  SQLiteDatabase is not reused: it opens read-only by design, so the
 //  writable open below is its own thin shell over the same primitives.
@@ -32,6 +36,7 @@ private enum Bind {
     case text(String)
     case real(Double)
     case int(Int64)
+    case null
 }
 
 /// A writable connection to learner.db. The counterpart of SQLiteDatabase:
@@ -76,6 +81,7 @@ private final class WritableDatabase {
             case .text(let s): sqlite3_bind_text(stmt, i, s, -1, SQLITE_TRANSIENT)
             case .real(let d): sqlite3_bind_double(stmt, i, d)
             case .int(let n): sqlite3_bind_int64(stmt, i, n)
+            case .null: sqlite3_bind_null(stmt, i)
             }
         }
         guard sqlite3_step(stmt) == SQLITE_DONE else {
@@ -300,6 +306,187 @@ final class LearnerStore {
         }
     }
 
+    // MARK: - Sessions, observations, mastery and review
+
+    /// The web's `POST /api/learner/observe` as a local write — observe.ts's
+    /// transaction: open the session row if this is its first answer,
+    /// append the `observation` event, upsert the mastery rows the model
+    /// computed (the concept's own and every prerequisite propagation
+    /// touched) and the review card, all inside one transaction so a
+    /// half-written answer cannot leave mastery ahead of the log it came
+    /// from.
+    ///
+    /// Returns false when the write failed — `error` says why, and the
+    /// caller is expected to keep the pick so "Try again" can replay it.
+    @discardableResult
+    func recordSessionAnswer(_ write: SessionAnswerWrite) -> Bool {
+        var saved = false
+        self.write { db in
+            try db.exec("BEGIN IMMEDIATE")
+            do {
+                try applySessionAnswer(db, write)
+                try db.exec("COMMIT")
+                saved = true
+            } catch {
+                try? db.exec("ROLLBACK")
+                throw error
+            }
+        }
+        return saved
+    }
+
+    /// `session-close` for a session this file opened — closeInTransaction:
+    /// the event, then state flipped to `closed`. A session that never
+    /// opened or is closed already writes nothing, so exit paths can call
+    /// this without tracking whether an answer ever landed.
+    func closeSession(_ id: String, concepts: [String], at: Date = Date()) {
+        write { db in
+            try db.exec("BEGIN IMMEDIATE")
+            do {
+                let rows = try db.query(
+                    "SELECT state FROM session WHERE id = ? AND learner_id = 'local'",
+                    bind: [id]
+                )
+                if rows.next(), rows.text(0) == "running" {
+                    try db.run(
+                        "INSERT INTO event (at, learner_id, type, payload) VALUES (?, 'local', 'session-close', ?)",
+                        [
+                            .real(at.timeIntervalSince1970),
+                            .text(Self.json([
+                                "session": id,
+                                "concepts": concepts,
+                            ])),
+                        ]
+                    )
+                    try db.run(
+                        "UPDATE session SET state = 'closed', updated_at = ? WHERE id = ?",
+                        [.real(at.timeIntervalSince1970), .text(id)]
+                    )
+                }
+                try db.exec("COMMIT")
+            } catch {
+                try? db.exec("ROLLBACK")
+                throw error
+            }
+        }
+    }
+
+    /// The inserts recordSessionAnswer wraps in its transaction — split out
+    /// only so the transaction's shape reads on its own.
+    private func applySessionAnswer(_ db: WritableDatabase, _ write: SessionAnswerWrite) throws {
+        let at = write.at.timeIntervalSince1970
+        let outcome = write.outcome
+
+        // openInTransaction: the session row opens with the first answer —
+        // a session no answer recorded has nothing to open, and an id that
+        // exists must be this learner's running tutor session, or this is
+        // not the log it thinks it is writing to.
+        let existing = try db.query(
+            "SELECT kind, learner_id, state FROM session WHERE id = ?",
+            bind: [write.sessionId]
+        )
+        if existing.next() {
+            guard
+                existing.text(0) == "tutor",
+                existing.text(1) == "local",
+                existing.text(2) == "running"
+            else {
+                throw CatalogError(
+                    message: "session \(write.sessionId) is \(existing.text(2) ?? "unknown"), not a running tutor session"
+                )
+            }
+        } else {
+            try db.run("""
+                INSERT INTO session (id, kind, learner_id, state, title, goal, started_at, updated_at)
+                VALUES (?, 'tutor', 'local', 'running', ?, ?, ?, ?)
+                """,
+                [
+                    .text(write.sessionId), .text(write.sessionTitle), .text(write.sessionGoal),
+                    .real(at), .real(at),
+                ])
+            // session-start — the event readSessionHome's conceptTouches
+            // folds for "last opened". Postgres promotes `session` out of
+            // the payload into session_id; the mirror keeps the flat record
+            // whole so this row alone still names its session.
+            try db.run(
+                "INSERT INTO event (at, learner_id, type, payload) VALUES (?, 'local', 'session-start', ?)",
+                [.real(at), .text(Self.json(["session": write.sessionId, "goal": write.sessionGoal]))]
+            )
+        }
+
+        // The observation event — the flat EventRecord, the same shape the
+        // old events.jsonl wrote: concept, verdict and schedule evidence in
+        // payload, since the mirror's event table promotes nothing.
+        var payload: [String: Any] = [
+            "concept": outcome.concept,
+            "correct": outcome.correct,
+            "propagated": outcome.propagated.map { ["concept": $0.concept, "hops": $0.hops] as [String: Any] },
+            "source": outcome.source,
+            "opportunity": outcome.opportunity,
+            "grade": outcome.grade,
+            "scheduled": true,
+            "pLBefore": outcome.pLBefore,
+            "pLAfter": outcome.pLAfter,
+            "session": write.sessionId,
+            "requestId": write.requestId,
+        ]
+        payload["question"] = write.question ?? NSNull()
+        payload["answer"] = write.answer ?? NSNull()
+        payload["chosen"] = write.chosen ?? NSNull()
+        try db.run(
+            "INSERT INTO event (at, learner_id, type, payload) VALUES (?, 'local', 'observation', ?)",
+            [.real(at), .text(Self.json(payload))]
+        )
+
+        // writeModel: the mastery rows the answer touched — the concept's
+        // own and each prerequisite propagation created or moved.
+        for row in write.masteryRows {
+            try db.run("""
+                INSERT INTO mastery (learner_id, concept_slug, p_l, observations, correct,
+                    last_seen, created_at, updated_at)
+                VALUES ('local', ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (learner_id, concept_slug) DO UPDATE SET
+                    p_l = excluded.p_l, observations = excluded.observations,
+                    correct = excluded.correct, last_seen = excluded.last_seen,
+                    updated_at = excluded.updated_at
+                """,
+                [
+                    .text(row.conceptSlug), .real(row.pL), .int(row.observations), .int(row.correct),
+                    // A prerequisite only ever propagated to was never seen:
+                    // its last_seen stays NULL, as the web's row reads.
+                    row.lastSeen.map { Bind.real($0.timeIntervalSince1970) } ?? .null,
+                    .real(at), .real(at),
+                ])
+        }
+
+        // writeCard: the concept's card as SM-2 left it — due, ease, lapses
+        // and all, the same columns the snapshot's review mirror carries.
+        let card = outcome.card
+        try db.run("""
+            INSERT INTO review (learner_id, concept_slug, repetitions, ease, interval_days,
+                lapses, due, last_reviewed, leech, created_at, updated_at)
+            VALUES ('local', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (learner_id, concept_slug) DO UPDATE SET
+                repetitions = excluded.repetitions, ease = excluded.ease,
+                interval_days = excluded.interval_days, lapses = excluded.lapses,
+                due = excluded.due, last_reviewed = excluded.last_reviewed,
+                leech = excluded.leech, updated_at = excluded.updated_at
+            """,
+            [
+                .text(card.conceptSlug), .int(card.repetitions), .real(card.ease),
+                .int(card.intervalDays), .int(card.lapses), .real(card.due.timeIntervalSince1970),
+                .real((card.lastReviewed ?? write.at).timeIntervalSince1970), .int(card.leech ? 1 : 0),
+                .real(at), .real(at),
+            ])
+    }
+
+    /// JSONSerialization of a small payload, "" on failure — a payload that
+    /// will not encode has no business landing as `{}` pretending to be one.
+    private static func json(_ object: [String: Any]) -> String {
+        (try? JSONSerialization.data(withJSONObject: object))
+            .flatMap { String(data: $0, encoding: .utf8) } ?? ""
+    }
+
     // MARK: - The file
 
     private func open() throws {
@@ -331,6 +518,52 @@ final class LearnerStore {
               created_at         REAL,
               updated_at         REAL,
               PRIMARY KEY (learner_id, curriculum_item_id)
+            );
+            -- The learning-state tables a session writes, column for column
+            -- the tables catalog-snapshot.mjs mirrors into catalog.db, so a
+            -- read that expects the mirror's shape finds it here and a
+            -- future sync does not have to reshape anything.
+            CREATE TABLE IF NOT EXISTS session (
+              id         TEXT PRIMARY KEY,
+              kind       TEXT NOT NULL DEFAULT 'tutor',
+              learner_id TEXT NOT NULL DEFAULT 'local',
+              state      TEXT NOT NULL DEFAULT 'running',
+              title      TEXT,
+              goal       TEXT,
+              started_at REAL,
+              updated_at REAL
+            );
+            CREATE TABLE IF NOT EXISTS event (
+              id         INTEGER PRIMARY KEY,
+              at         REAL NOT NULL,
+              learner_id TEXT NOT NULL DEFAULT 'local',
+              type       TEXT NOT NULL,
+              payload    TEXT NOT NULL DEFAULT '{}'
+            );
+            CREATE TABLE IF NOT EXISTS mastery (
+              learner_id   TEXT NOT NULL DEFAULT 'local',
+              concept_slug TEXT NOT NULL,
+              p_l          REAL NOT NULL DEFAULT 0,
+              observations INTEGER NOT NULL DEFAULT 0,
+              correct      INTEGER NOT NULL DEFAULT 0,
+              last_seen    REAL,
+              created_at   REAL,
+              updated_at   REAL,
+              PRIMARY KEY (learner_id, concept_slug)
+            );
+            CREATE TABLE IF NOT EXISTS review (
+              learner_id    TEXT NOT NULL DEFAULT 'local',
+              concept_slug  TEXT NOT NULL,
+              repetitions   INTEGER NOT NULL DEFAULT 0,
+              ease          REAL NOT NULL DEFAULT 0,
+              interval_days INTEGER NOT NULL DEFAULT 1,
+              lapses        INTEGER NOT NULL DEFAULT 0,
+              due           REAL NOT NULL,
+              last_reviewed REAL,
+              leech         INTEGER NOT NULL DEFAULT 0,
+              created_at    REAL,
+              updated_at    REAL,
+              PRIMARY KEY (learner_id, concept_slug)
             );
             """)
         self.db = db

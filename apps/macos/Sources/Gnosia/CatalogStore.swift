@@ -449,6 +449,19 @@ final class CatalogStore {
     /// `snapshotProgress` is the half that survives a learner-only refresh).
     private(set) var progress: [String: CatalogProgress] = [:]
     private var snapshotProgress: [String: CatalogProgress] = [:]
+    /// The snapshot's own rows of the tables a tutor session can also
+    /// write to learner.db — like `snapshotProgress`, the half that
+    /// survives a learner-only refresh so re-merging never doubles rows.
+    /// `*Stamp` is each snapshot row's `updated_at`, the merge clock.
+    private var snapshotMastery: [String: CatalogMastery] = [:]
+    private var snapshotMasteryStamp: [String: Double] = [:]
+    private var snapshotReviews: [CatalogReview] = []
+    private var snapshotReviewStamp: [String: Double] = [:]
+    private var snapshotEvents: [CatalogEvent] = []
+    /// True once the first `learn` graph stands at the end of load() —
+    /// loadLearner rebuilds it from then on, so a session write moves the
+    /// frontier and the review queue without a catalog reload.
+    private var learnPrimed = false
     private(set) var recaps: [String: CatalogRecap] = [:]
     /// The key/value corner as raw JSON text: playback rows
     /// (`playback:<asset id>`), stars (`favorite:<asset id>`) and the rest.
@@ -720,9 +733,14 @@ final class CatalogStore {
         }
 
         var mastery: [String: CatalogMastery] = [:]
+        var masteryStamp: [String: Double] = [:]
         if tables.contains("mastery") {
+            // `updated_at` is each row's merge clock against learner.db's
+            // own session writes; a snapshot that predates the column reads
+            // as infinitely old, so the local row always wins.
+            let stamped = ((try? db.columns(of: "mastery")) ?? []).contains("updated_at")
             let rows = try db.query("""
-                SELECT concept_slug, p_l, observations, correct, last_seen
+                SELECT concept_slug, p_l, observations, correct, last_seen\(stamped ? ", updated_at" : "")
                 FROM mastery WHERE learner_id = 'local'
                 """)
             while rows.next() {
@@ -734,14 +752,17 @@ final class CatalogStore {
                     correct: rows.int64(3) ?? 0,
                     lastSeen: rows.double(4).map { Date(timeIntervalSince1970: $0) }
                 )
+                if stamped { masteryStamp[slug] = rows.double(5) ?? -.infinity }
             }
         }
 
         var reviews: [CatalogReview] = []
+        var reviewStamp: [String: Double] = [:]
         if tables.contains("review") {
+            let stamped = ((try? db.columns(of: "review")) ?? []).contains("updated_at")
             let rows = try db.query("""
                 SELECT concept_slug, repetitions, ease, interval_days, lapses,
-                       due, last_reviewed, leech
+                       due, last_reviewed, leech\(stamped ? ", updated_at" : "")
                 FROM review WHERE learner_id = 'local'
                 ORDER BY due
                 """)
@@ -757,6 +778,7 @@ final class CatalogStore {
                     lastReviewed: rows.double(6).map { Date(timeIntervalSince1970: $0) },
                     leech: (rows.int64(7) ?? 0) != 0
                 ))
+                if stamped { reviewStamp[slug] = rows.double(8) ?? -.infinity }
             }
         }
 
@@ -903,6 +925,11 @@ final class CatalogStore {
         self.reviews = reviews
         self.progress = progress
         snapshotProgress = progress
+        snapshotMastery = mastery
+        snapshotMasteryStamp = masteryStamp
+        snapshotReviews = reviews
+        snapshotReviewStamp = reviewStamp
+        snapshotEvents = events
         self.recaps = recaps
         self.preferences = preferences
         self.watchedAt = watchedAt
@@ -924,9 +951,30 @@ final class CatalogStore {
 
         // The learning graph goes last: it folds the course tree, the
         // concept rows and the learner state into the knowledge base the
-        // learn surfaces all read.
+        // learn surfaces all read. It reads `self`, not the locals, so it
+        // stands on the mastery, reviews and progress learner.db merged in.
         learn = LearnGraph(
             concepts: conceptList,
+            prerequisites: prerequisites,
+            mastery: self.mastery,
+            reviews: self.reviews,
+            conceptItems: conceptItems,
+            courses: courses,
+            progress: self.progress,
+            preferences: preferences,
+            knownTopics: Set(topicsBySlug.keys)
+        )
+        learnPrimed = true
+    }
+
+    /// The `learn` graph rebuilt from the rows it folded at load — the
+    /// pieces `loadLearner` keeps merged (mastery, reviews, progress) plus
+    /// the ones only load() reads. Called on every learner refresh once
+    /// primed, so a session's writes move the same numbers the surfaces
+    /// read — the frontier, the review queue, the workspace's own row.
+    private func rebuildLearn() {
+        learn = LearnGraph(
+            concepts: concepts,
             prerequisites: prerequisites,
             mastery: mastery,
             reviews: reviews,
@@ -934,7 +982,7 @@ final class CatalogStore {
             courses: courses,
             progress: progress,
             preferences: preferences,
-            knownTopics: Set(topicsBySlug.keys)
+            knownTopics: Set(topics.keys)
         )
     }
 
@@ -1510,6 +1558,12 @@ extension CatalogStore {
         var marks: [String: WatchMark] = [:]
         var renames: [String: String] = [:]
         var ticks: [String: CatalogProgress] = [:]
+        /// The learning-state rows a session wrote, to merge over the
+        /// snapshot's mirror — the stamp being `updated_at`, the merge
+        /// clock the progress merge already uses.
+        var localMastery: [String: (row: CatalogMastery, stamp: Double)] = [:]
+        var localReviews: [String: (row: CatalogReview, stamp: Double)] = [:]
+        var localEvents: [CatalogEvent] = []
 
         if
             FileManager.default.fileExists(atPath: path),
@@ -1552,11 +1606,109 @@ extension CatalogStore {
                     )
                 }
             }
+
+            // learner.db's own mastery/review/event are the tables
+            // recordSessionAnswer writes; missing tables (or a half-written
+            // row) read as empty state, the way a missing file does.
+            if (try? db.hasTable("mastery")) == true,
+               let rows = try? db.query("""
+                   SELECT concept_slug, p_l, observations, correct, last_seen, updated_at
+                   FROM mastery WHERE learner_id = 'local'
+                   """)
+            {
+                while rows.next() {
+                    guard let slug = rows.text(0) else { continue }
+                    localMastery[slug] = (CatalogMastery(
+                        conceptSlug: slug,
+                        pL: rows.double(1) ?? 0,
+                        observations: rows.int64(2) ?? 0,
+                        correct: rows.int64(3) ?? 0,
+                        lastSeen: rows.double(4).map { Date(timeIntervalSince1970: $0) }
+                    ), rows.double(5) ?? 0)
+                }
+            }
+
+            if (try? db.hasTable("review")) == true,
+               let rows = try? db.query("""
+                   SELECT concept_slug, repetitions, ease, interval_days, lapses,
+                          due, last_reviewed, leech, updated_at
+                   FROM review WHERE learner_id = 'local'
+                   """)
+            {
+                while rows.next() {
+                    guard let slug = rows.text(0), let due = rows.double(5) else { continue }
+                    localReviews[slug] = (CatalogReview(
+                        conceptSlug: slug,
+                        repetitions: rows.int64(1) ?? 0,
+                        ease: rows.double(2) ?? 0,
+                        intervalDays: rows.int64(3) ?? 1,
+                        lapses: rows.int64(4) ?? 0,
+                        due: Date(timeIntervalSince1970: due),
+                        lastReviewed: rows.double(6).map { Date(timeIntervalSince1970: $0) },
+                        leech: (rows.int64(7) ?? 0) != 0
+                    ), rows.double(8) ?? 0)
+                }
+            }
+
+            if (try? db.hasTable("event")) == true,
+               let rows = try? db.query("""
+                   SELECT id, at, type, payload FROM event
+                   WHERE learner_id = 'local' ORDER BY at, id
+                   """)
+            {
+                while rows.next() {
+                    guard let at = rows.double(1) else { continue }
+                    localEvents.append(CatalogEvent(
+                        id: rows.int64(0) ?? 0,
+                        at: Date(timeIntervalSince1970: at),
+                        type: rows.text(2) ?? "",
+                        payload: Self.jsonObject(rows.text(3))
+                    ))
+                }
+            }
         }
 
         favorites = starred
         watch = marks
         names = renames
+
+        // Mastery and review merge the way progress does: per concept, the
+        // row with the newer `updated_at` is the truth whichever file it
+        // sits in — a session write hides the snapshot row it came after,
+        // and a re-snapshot that picked up a web-side change outdates the
+        // local row in turn.
+        var mergedMastery = snapshotMastery
+        for (slug, local) in localMastery {
+            if snapshotMastery[slug] != nil,
+               (snapshotMasteryStamp[slug] ?? -.infinity) > local.stamp { continue }
+            mergedMastery[slug] = local.row
+        }
+        mastery = mergedMastery
+
+        var mergedReviews = [String: CatalogReview](
+            uniqueKeysWithValues: snapshotReviews.map { ($0.conceptSlug, $0) }
+        )
+        for (slug, local) in localReviews {
+            if mergedReviews[slug] != nil,
+               (snapshotReviewStamp[slug] ?? -.infinity) > local.stamp { continue }
+            mergedReviews[slug] = local.row
+        }
+        reviews = mergedReviews.values.sorted {
+            $0.due != $1.due ? $0.due < $1.due : $0.conceptSlug < $1.conceptSlug
+        }
+
+        // The event log appends, never merges rows: snapshot events first,
+        // the session's own observations after them at the same instant —
+        // chronological, so checkStatuses' latest-match reads the freshest.
+        var ordered: [(event: CatalogEvent, source: Int, offset: Int)] =
+            snapshotEvents.enumerated().map { ($0.element, 0, $0.offset) }
+            + localEvents.enumerated().map { ($0.element, 1, $0.offset) }
+        ordered.sort { a, b in
+            if a.event.at != b.event.at { return a.event.at < b.event.at }
+            if a.source != b.source { return a.source < b.source }
+            return a.offset < b.offset
+        }
+        events = ordered.map(\.event)
 
         // The two progress sources merge per item: the snapshot's mirror of
         // Postgres and this app's own writes in learner.db. The row with the
@@ -1571,6 +1723,12 @@ extension CatalogStore {
             merged[item] = tick
         }
         progress = merged
+
+        // Mastery, reviews, progress and the event log moved under us —
+        // rebuild the knowledge base so the frontier, the review queue and
+        // the workspaces read them. Skipped while load() is still running:
+        // it builds `learn` itself once, on these same merged rows.
+        if learnPrimed { rebuildLearn() }
     }
 }
 
