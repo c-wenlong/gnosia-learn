@@ -110,23 +110,17 @@ struct AskView: View {
     }
 
     /// User turns sit right in an ink bubble, tutor turns left on a surface
-    /// card — the web's `UserMessage`/`TutorMessage` split.
+    /// card — the web's `UserMessage`/`TutorMessage` split. The bubble and
+    /// its contents are one webview (ChatMarkdownView): the tutor's turn
+    /// renders markdown + KaTeX, the learner's literal text + KaTeX maths,
+    /// matching the web's NoteProse/MathText split.
     private func bubble(_ turn: SidecarClient.ChatMessage) -> some View {
         HStack {
             if turn.role == "user" { Spacer(minLength: 80) }
-            MathText(text: turn.content, font: .body)
-                .foregroundStyle(turn.role == "user" ? G.btnText : G.text)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(
-                    turn.role == "user" ? G.btnFace : G.surface,
-                    in: RoundedRectangle(cornerRadius: 14)
-                )
-                .overlay {
-                    if turn.role != "user" {
-                        RoundedRectangle(cornerRadius: 14).stroke(G.border)
-                    }
-                }
+            ChatMarkdownView(
+                text: turn.content,
+                role: turn.role == "user" ? .user : .assistant
+            )
             if turn.role != "user" { Spacer(minLength: 80) }
         }
     }
