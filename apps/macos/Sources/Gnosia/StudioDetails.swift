@@ -506,6 +506,7 @@ private struct SheetGrid: View {
 
 struct StudioDiagramView: View {
     @Environment(StudioManager.self) private var studio
+    @Environment(\.openWindow) private var openWindow
     let name: String
 
     @State private var diagram: StudioClient.Diagram?
@@ -588,8 +589,8 @@ struct StudioDiagramView: View {
 
     /// The inspector's verbs, all POSTs through the runner: export writes
     /// the SVG, verify checks it, inspect lints the document, commit lands
-    /// the canvas's edits, and Open canvas starts the mirror and hands the
-    /// URL to the browser.
+    /// the canvas's edits, and Open canvas opens the live tldraw surface
+    /// in a window of its own (CanvasView).
     @ViewBuilder
     private func verbs(_ diagram: StudioClient.Diagram) -> some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -674,32 +675,12 @@ struct StudioDiagramView: View {
         }
     }
 
-    /// `POST /api/mirrors` answers the serve URL, which the browser opens.
-    /// The canvas itself never runs inside the app: the mirror page and its
-    /// own overlay carry the editing.
+    /// The canvas lives in its own window now (`canvas` scene, CanvasView):
+    /// the mirror's serve page in a WKWebView, with the keep-alive the
+    /// idle sweep needs. The browser open moved in there as the escape
+    /// hatch.
     private func openCanvas() {
-        busy = "mirror"
-        outcome = nil
-        Task {
-            do {
-                let mirror = try await studio.client.openMirror(file: "learn/assets/\(name).tldr")
-                if let url = mirror.url {
-                    NSWorkspace.shared.open(url)
-                    outcome = mirror.note ?? "The canvas opened in the browser."
-                    outcomeBad = false
-                } else {
-                    outcome = mirror.note ?? "The mirror started without a URL."
-                    outcomeBad = true
-                }
-            } catch let failure as StudioError {
-                outcome = failure.errorDescription
-                outcomeBad = true
-            } catch {
-                outcome = "The studio did not answer."
-                outcomeBad = true
-            }
-            busy = nil
-        }
+        openWindow(id: "canvas", value: name)
     }
 
     private var preview: some View {
