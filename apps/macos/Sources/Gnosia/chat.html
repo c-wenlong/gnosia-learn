@@ -1,0 +1,226 @@
+<!doctype html>
+<!--
+  One chat bubble's renderer, note.html's smaller sibling. Two render
+  modes, matching the web's chat surfaces (TutorChat, OpenTutorChat,
+  AskPanel): assistant turns arrive as markdown blocks — the same split
+  MarkdownText runs for the note — and get the full inline pass plus
+  KaTeX maths, the way the web's NoteProse typesets a tutor reply. User
+  turns arrive as raw text in "math" mode, the web's MathText inside
+  UserMessage: maths typeset, everything else literal, newlines kept.
+
+  The bubble itself is drawn here — fill, border width, radius, padding
+  and font size arrive per-turn as CSS vars — so the height the page
+  reports is the bubble the caller shows. Compact by chat standards:
+  paragraphs and lists take a fraction of the note's air, and a
+  max-height caps a runaway reply instead of growing the frame forever.
+-->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="katex/katex.min.css">
+<style>
+  :root {
+    --fg: #15283a; --muted: #605b54; --faint: #878276;
+    --border: #e6dfd0; --codebg: #f3eee1; --accent: #0f5f61;
+    --danger: #c43939; --sel: rgba(20, 130, 133, .25);
+    --bg: #fffdf8; --stroke: #e6dfd0; --line: 1px; --radius: 14px;
+    --pad-x: 14px; --pad-y: 10px; --fs: 13px; --max-h: 900px;
+  }
+  html, body { margin: 0; padding: 0; overflow: hidden; background: transparent; }
+  body {
+    font: var(--fs)/1.5 -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+    color: var(--fg);
+  }
+  .bubble {
+    background: var(--bg);
+    border: var(--line) solid var(--stroke);
+    border-radius: var(--radius);
+    padding: var(--pad-y) var(--pad-x);
+    max-height: var(--max-h);
+    overflow-y: auto;
+    overflow-wrap: break-word;
+    -webkit-font-smoothing: antialiased;
+  }
+  .bubble > :first-child { margin-top: 0; }
+  .bubble > :last-child { margin-bottom: 0; }
+  /* The user turn's plain run: literal text, newlines kept — the web's
+     whitespace-pre-wrap on UserMessage. */
+  .plain { margin: 0; white-space: pre-wrap; }
+  h1, h2, h3, h4 { font-weight: 700; line-height: 1.3; color: var(--fg); }
+  h1 { font-size: 1.25em; margin: .8em 0 .3em; }
+  h2 { font-size: 1.12em; margin: .85em 0 .3em; }
+  h3, h4 { font-size: 1em; margin: .8em 0 .25em; }
+  p { margin: .3em 0 .55em; }
+  ul { margin: .25em 0 .55em; padding-left: 1.3em; }
+  li { margin: .15em 0; }
+  pre {
+    background: var(--codebg); border: 1px solid var(--border);
+    border-radius: 6px; padding: 7px 9px; margin: .3em 0 .6em;
+    font: 11.5px/1.5 ui-monospace, Menlo, monospace;
+    overflow-x: auto; white-space: pre;
+  }
+  code { font: .88em ui-monospace, Menlo, monospace; background: var(--codebg); border-radius: 4px; padding: .08em .3em; }
+  pre code { background: none; padding: 0; }
+  hr { border: none; border-top: 1px solid var(--border); margin: .8em 0; }
+  a { color: var(--accent); }
+  .wl, .embed { color: var(--muted); }
+  .embed { border: 1px dashed var(--border); border-radius: 5px; padding: 0 .4em; font-size: .86em; }
+  .katex { font-size: 1.05em; }
+  .katex-display { margin: .4em 0 .6em; overflow-x: auto; overflow-y: hidden; padding: .1em 0; }
+  .merr { color: var(--danger); font: .88em ui-monospace, Menlo, monospace; }
+  ::selection { background: var(--sel); }
+</style>
+<body><div id="root" class="bubble"></div></body>
+<script src="katex/katex.min.js"></script>
+<script>
+"use strict";
+
+const root = document.getElementById("root");
+const shell = window.webkit && window.webkit.messageHandlers
+  && window.webkit.messageHandlers.gnosia;
+function post(msg) { if (shell) shell.postMessage(msg); }
+
+function esc(s) {
+  return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+
+/* The $ rules from packages/tutor markdown.ts, the same ones
+   MathSupport.swift ports and note.html runs: $$…$$ is display; $…$ is
+   inline only when both dollars hug their content and the closing one is
+   not followed by a digit (so "$5-$10" stays prose); \$ is a literal. */
+const DISPLAY = /^\$\$((?:\\[\s\S]|[^\\$]|\$(?!\$))+?)\$\$/;
+const INLINE = /^\$((?:\\[^\n]|[^\\$\s])(?:(?:\\[^\n]|[^\\$\n])*(?:\\[^\n]|[^\\$\s]))?)\$(?!\d)/;
+
+/* lib/math.ts's options, unchanged: a failed formula shows its own
+   source, never a throw; the link/resource commands stay refused. */
+const KATEX_OPTS = {
+  throwOnError: false, strict: "ignore", output: "htmlAndMathml",
+  trust: false, maxSize: 20, maxExpand: 1000,
+};
+
+function math(source, display) {
+  try {
+    const html = katex.renderToString(source, { ...KATEX_OPTS, displayMode: display });
+    return display ? '<div class="kdisplay">' + html + "</div>" : html;
+  } catch (e) {
+    return '<span class="merr">' + esc(source) + "</span>";
+  }
+}
+
+/* Emphasis, links, wikilinks and embeds on plain prose — note.html's
+   inline pass verbatim. User turns never see it: their prose is escaped
+   and nothing more, matching the web's MathText. */
+function inlineMd(s) {
+  let h = esc(s);
+  h = h.replace(/!\[\[([^\]|]+?)(?:\|([^\]]*))?\]\]/g,
+    (_, name, label) => '<span class="embed">' + esc(label || name) + "</span>");
+  h = h.replace(/\[\[([^\]|]+?)(?:\|([^\]]*))?\]\]/g,
+    (_, target, label) => '<span class="wl">' + esc(label || target) + "</span>");
+  h = h.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  h = h.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
+  h = h.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+|mailto:[^)\s]+)\)/g,
+    (_, text, url) => '<a href="' + url + '">' + text + "</a>");
+  return h;
+}
+
+/* Prose split on maths: each formula renders through KaTeX now, prose
+   through inlineMd (md mode) or a bare escape (math mode). */
+function mathSpans(text, md) {
+  let out = "", prose = "", i = 0;
+  const emit = () => { out += md ? inlineMd(prose) : esc(prose); prose = ""; };
+  while (i < text.length) {
+    const c = text[i];
+    if (c === "\\" && text[i + 1] === "$") { prose += "$"; i += 2; continue; }
+    if (c === "$") {
+      const rest = text.slice(i);
+      if (rest[1] === "$") {
+        const m = DISPLAY.exec(rest);
+        if (m && m[1].trim() !== "") {
+          emit();
+          out += math(m[1].trim(), true);
+          i += m[0].length; continue;
+        }
+        prose += "$$"; i += 2; continue;
+      }
+      const m = INLINE.exec(rest);
+      if (m) {
+        emit();
+        out += math(m[1], false);
+        i += m[0].length; continue;
+      }
+    }
+    prose += c; i += 1;
+  }
+  emit();
+  return out;
+}
+
+/* Code spans first, so $…$ inside backticks stays literal code. Only
+   called in md mode — math mode treats backticks as plain characters,
+   the way the web's MathText does. */
+function renderInline(src) {
+  let out = "", i = 0;
+  const tick = /^(`+)([\s\S]*?)\1/;
+  while (i < src.length) {
+    if (src[i] === "`") {
+      const m = tick.exec(src.slice(i));
+      if (m) { out += "<code>" + esc(m[2]) + "</code>"; i += m[0].length; continue; }
+      out += "`"; i += 1; continue;
+    }
+    const next = src.indexOf("`", i);
+    const piece = next === -1 ? src.slice(i) : src.slice(i, next);
+    out += mathSpans(piece, true);
+    i += piece.length;
+  }
+  return out;
+}
+
+let lastH = -1;
+function postHeight() {
+  const h = Math.ceil(root.getBoundingClientRect().height);
+  if (h !== lastH) { lastH = h; post({ h: h }); }
+}
+
+/* md mode: the block stream Swift's MarkdownText.parse produced — the
+   same wire shape note.html renders. */
+function render(blocks) {
+  let html = "", ul = false;
+  for (const b of blocks) {
+    if (b.t === "b") { if (!ul) { html += "<ul>"; ul = true; } html += "<li>" + renderInline(b.s) + "</li>"; continue; }
+    if (ul) { html += "</ul>"; ul = false; }
+    if (b.t === "h") { const l = Math.min(4, Math.max(1, b.l)); html += "<h" + l + ">" + renderInline(b.s) + "</h" + l + ">"; }
+    else if (b.t === "p") html += "<p>" + renderInline(b.s) + "</p>";
+    else if (b.t === "c") html += "<pre><code>" + esc(b.s) + "</code></pre>";
+    else if (b.t === "r") html += "<hr>";
+  }
+  if (ul) html += "</ul>";
+  root.innerHTML = html;
+  requestAnimationFrame(postHeight);
+}
+
+/* math mode: the web's MathText inside UserMessage — literal prose with
+   its maths typeset, newlines kept, no markdown. */
+function renderMaths(text) {
+  root.innerHTML = '<div class="plain">' + mathSpans(text, false) + "</div>";
+  requestAnimationFrame(postHeight);
+}
+
+function theme(vars) {
+  for (const k in vars) document.documentElement.style.setProperty("--" + k, vars[k]);
+  requestAnimationFrame(postHeight);
+}
+
+/* One call from Swift carries theme + mode + content, so a theme flip
+   and a new turn can never land half-applied. */
+function gnosia(payload) {
+  theme(payload.theme);
+  if (payload.mode === "math") renderMaths(payload.text || "");
+  else render(payload.blocks || []);
+}
+
+new ResizeObserver(postHeight).observe(root);
+document.addEventListener("click", (e) => {
+  const a = e.target.closest("a");
+  if (a) { e.preventDefault(); post({ nav: a.getAttribute("href") }); }
+});
+document.addEventListener("DOMContentLoaded", () => post({ ready: true }));
+</script>
