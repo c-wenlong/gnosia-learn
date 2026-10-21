@@ -113,6 +113,21 @@ struct ConceptDetailView: View {
                         .font(.caption)
                         .foregroundStyle(G.text2)
                 }
+                // The module path's last step, offered where the concept
+                // sits on it — the web's "Module check" row: the module's
+                // own check over all of its concepts.
+                if let target = moduleCheckTarget(w) {
+                    NavigationLink(value: target) {
+                        Text("Module check")
+                            .font(.callout.weight(.medium))
+                            .foregroundStyle(G.text)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 7)
+                            .background(G.surface, in: RoundedRectangle(cornerRadius: 8))
+                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(G.border, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                }
                 // The web workspace's Teach me — runs the concept
                 // session (probe, teach, check) in the centre panel.
                 Button { startTutor(.learn) } label: {
@@ -152,6 +167,22 @@ struct ConceptDetailView: View {
                     .foregroundStyle(G.text3)
             }
         }
+    }
+
+    /// The module this concept's place names, when it holds a concept the
+    /// knowledge base can ask — the gate the web's module path puts on its
+    /// check row (`taught.filter(byId.has)`), so a module with nothing to
+    /// check offers no check.
+    private func moduleCheckTarget(_ w: ConceptWorkspace) -> AppDestination? {
+        guard
+            let place = w.place,
+            let course = store.course(place.courseSlug),
+            let module = course.modules.first(where: { $0.slug == place.moduleSlug || $0.id == place.moduleSlug })
+        else { return nil }
+        var taught = Set<String>()
+        for item in module.items { taught.formUnion(item.concepts) }
+        guard taught.contains(where: { store.learn.byId[$0] != nil }) else { return nil }
+        return .check(course: course.slug, module: module.slug)
     }
 
     /// The eyebrow's words — the web's `placeLabel(w.place) ?? domain ·
