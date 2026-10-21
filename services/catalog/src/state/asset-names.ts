@@ -85,7 +85,7 @@ export async function writeAssetName(
       // The database's clock, as the insert's default and every revision's
       // `created_at` use: `listAssets` orders a rename against revisions by
       // time to find the last change, so the two must share one clock.
-      set: { title: cleaned, updatedAt: sql`now()` },
+      set: { title: cleaned, updatedAt: sql`cast(unixepoch('subsec') * 1000 as integer)` },
     });
   return { title: cleaned, name: cleaned, original: before.original };
 }

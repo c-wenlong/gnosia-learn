@@ -26,7 +26,7 @@ import {
   putSvgOnly,
   type PutInput,
 } from "../src/content/diagrams";
-import { connect } from "../src/db";
+import { connect, inTransaction } from "../src/db";
 import { REPO_ROOT } from "../src/env";
 import { canvasCliPath, hasCanvasCli } from "../src/index/tldr";
 import { lockEntity } from "../src/content/revisions";
@@ -93,9 +93,7 @@ const svgOf = (label: string) =>
 function pointAt(name: string, blobHome: string): () => void {
   const keys = ["DATABASE_URL", "MANIMKC_ROOT", "GNOSIA_HOME"] as const;
   const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
-  const url = new URL(process.env["DATABASE_URL"] ?? "postgres://localhost:5432/gnosia");
-  url.pathname = `/${name}`;
-  process.env["DATABASE_URL"] = url.toString();
+  process.env["DATABASE_URL"] = name;
   process.env["MANIMKC_ROOT"] = path.join(tmpdir(), "catalog-test-no-manimkc");
   process.env["GNOSIA_HOME"] = blobHome;
   return () => {
@@ -164,7 +162,7 @@ describe.skipIf(!reachable.ok)("diagrams in the database", () => {
     work = await mkdtemp(path.join(tmpdir(), "catalog-diagram-work-"));
     blobHome = await mkdtemp(path.join(tmpdir(), "catalog-diagram-blobs-"));
     store = fsStore(path.join(blobHome, "blobs"));
-    restore = pointAt(scratch.name, blobHome);
+    restore = pointAt(scratch.url, blobHome);
   }, 60_000);
 
   afterAll(async () => {
@@ -529,22 +527,14 @@ describe.skipIf(!reachable.ok)("diagrams in the database", () => {
     const other = connect({ url: scratch.url });
     let pending: Promise<unknown> = Promise.resolve();
     try {
-      await other.db.transaction(async (tx) => {
+      await inTransaction(other.db, async (tx) => {
         await lockEntity(tx, "asset", `diagram:learn/assets/${slug}.svg`);
         pending = putSvg(slug, "beta", [], svgOf("by hand, late"));
         pending.catch(() => undefined);
-        const deadline = Date.now() + 10_000;
-        for (;;) {
-          const waiting = await tx.execute<{ n: number }>(
-            // This scratch database is this file's alone, and its tests run one at a time.
-            sql`select count(*)::int as n from pg_locks
-                where locktype = 'advisory' and not granted
-                  and database = (select oid from pg_database where datname = current_database())`,
-          );
-          if ((waiting.rows[0]?.n ?? 0) > 0) break;
-          if (Date.now() > deadline) throw new Error("the SVG-only put never waited on the lock");
-          await new Promise((resolve) => setTimeout(resolve, 20));
-        }
+        // No waiter list on SQLite: the put's `begin immediate` simply waits
+        // its busy timeout behind this transaction's write lock, so it is
+        // still pending a moment later.
+        await new Promise((resolve) => setTimeout(resolve, 100));
         await putDiagram(tx, store, {
           slug,
           tldr: await file("raced.tldr", documentOf({ title: "Raced" })),

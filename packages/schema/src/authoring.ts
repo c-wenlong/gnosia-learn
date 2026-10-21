@@ -1,16 +1,13 @@
 import { sql } from "drizzle-orm";
 import {
-  type AnyPgColumn,
-  bigint,
-  boolean,
+  type AnySQLiteColumn,
   check,
   index,
   integer,
-  jsonb,
-  pgTable,
+  sqliteTable,
   text,
   uniqueIndex,
-} from "drizzle-orm/pg-core";
+} from "drizzle-orm/sqlite-core";
 
 import { createdAt, instant, ownerId, updatedAt } from "./columns";
 import { learner } from "./state";
@@ -113,10 +110,10 @@ export type InstanceRole = (typeof INSTANCE_ROLES)[number];
  * setting can name the revision before the entity write it authorises; that
  * is why the identity is BY DEFAULT rather than ALWAYS.
  */
-export const contentRevision = pgTable(
+export const contentRevision = sqliteTable(
   "content_revision",
   {
-    id: bigint("id", { mode: "number" }).generatedByDefaultAsIdentity().primaryKey(),
+    id: integer("id").primaryKey({ autoIncrement: true }),
     ownerId: ownerId(() => learner.id),
     entityType: text("entity_type").notNull(),
     /** The entity's primary key, as text. Not a foreign key: history outlives the row. */
@@ -124,12 +121,12 @@ export const contentRevision = pgTable(
     /** 1, 2, 3 per entity. */
     seq: integer("seq").notNull(),
     /** The revision this one replaced. Null on the first revision of an entity. */
-    previousId: bigint("previous_id", { mode: "number" }).references(
-      (): AnyPgColumn => contentRevision.id,
+    previousId: integer("previous_id").references(
+      (): AnySQLiteColumn => contentRevision.id,
       { onDelete: "restrict", onUpdate: "cascade" },
     ),
     op: text("op").notNull(),
-    snapshot: jsonb("snapshot").notNull(),
+    snapshot: text("snapshot", { mode: "json" }).notNull(),
     /** Lowercase hex sha256 of the canonical snapshot. */
     snapshotHash: text("snapshot_hash").notNull(),
     authorKind: text("author_kind").notNull(),
@@ -153,11 +150,11 @@ export const contentRevision = pgTable(
     // Every revision after the first says what it replaced. The first may too:
     // a rename starts a new id's chain from the old id's last revision.
     check("content_revision_previous_check", sql`seq = 1 or previous_id is not null`),
-    check("content_revision_not_own_previous_check", sql`previous_id is distinct from id`),
-    check("content_revision_snapshot_object_check", sql`jsonb_typeof(snapshot) = 'object'`),
-    check("content_revision_snapshot_hash_check", sql`snapshot_hash ~ '^[0-9a-f]{64}$'`),
-    check("content_revision_author_check", sql`btrim(author) <> ''`),
-    check("content_revision_reason_check", sql`btrim(reason) <> ''`),
+    check("content_revision_not_own_previous_check", sql`previous_id is not id`),
+    check("content_revision_snapshot_object_check", sql`json_type(snapshot) = 'object'`),
+    check("content_revision_snapshot_hash_check", sql`snapshot_hash regexp '^[0-9a-f]{64}$'`),
+    check("content_revision_author_check", sql`trim(author) <> ''`),
+    check("content_revision_reason_check", sql`trim(reason) <> ''`),
     index("content_revision_owner_id_idx").on(t.ownerId),
     index("content_revision_previous_id_idx").on(t.previousId),
     index("content_revision_job_id_idx").on(t.jobId),
@@ -177,16 +174,16 @@ export const contentRevision = pgTable(
  * `waivers` holds `catalog flip --waive <rule> --reason` entries, which
  * `catalog doctor` reports on every run (phase 3).
  */
-export const contentSource = pgTable(
+export const contentSource = sqliteTable(
   "content_source",
   {
     type: text("type").primaryKey(),
     source: text("source").notNull().default("files"),
     flippedAt: instant("flipped_at"),
-    parityReport: jsonb("parity_report"),
+    parityReport: text("parity_report", { mode: "json" }),
     exportHash: text("export_hash"),
     exportedAt: instant("exported_at"),
-    waivers: jsonb("waivers").notNull().default(sql`'[]'::jsonb`),
+    waivers: text("waivers", { mode: "json" }).notNull().default(sql`'[]'`),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -196,9 +193,9 @@ export const contentSource = pgTable(
     check("content_source_flipped_check", sql`source <> 'db' or flipped_at is not null`),
     check(
       "content_source_parity_report_check",
-      sql`parity_report is null or jsonb_typeof(parity_report) = 'object'`,
+      sql`parity_report is null or json_type(parity_report) = 'object'`,
     ),
-    check("content_source_waivers_check", sql`jsonb_typeof(waivers) = 'array'`),
+    check("content_source_waivers_check", sql`json_type(waivers) = 'array'`),
   ],
 );
 
@@ -214,10 +211,10 @@ export const contentSource = pgTable(
  * `CATALOG_COPY_OK=1`) is let through. The boolean key with a CHECK is what
  * makes it a single row.
  */
-export const catalogInstance = pgTable(
+export const catalogInstance = sqliteTable(
   "catalog_instance",
   {
-    id: boolean("id").primaryKey().default(true),
+    id: integer("id", { mode: "boolean" }).primaryKey().default(true),
     role: text("role").notNull().default("primary"),
     /** Where writes go when this is a copy: a host name, never a URL with a password in it. */
     primaryHost: text("primary_host"),

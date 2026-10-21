@@ -12,6 +12,7 @@ import { ownRoot, resolvedPath, writableRoot, WriteThroughError } from "./import
 import { EXPORT_TYPES, type ExportFile, exportHash, type ExportType, readTypeFiles, TYPE_LOCATION } from "./layout";
 import { mayRecord, readContentSources, recordExport } from "./ownership";
 
+import { inTransaction } from "../db";
 /**
  * A content write that keeps the type's files in step with the rows
  * (D17 of docs/CONTENT-MIGRATION.md), for as long as any type is on files.
@@ -266,8 +267,8 @@ export async function writeThrough<T>(
     if (touched.length === 0) return null;
     let locked = false;
     try {
-      await db.transaction(async (tx) => {
-        for (const type of sorted) await tx.execute(sql`select pg_advisory_xact_lock(${exportLock(type)})`);
+      await inTransaction(db, async (tx) => {
+        for (const type of sorted) void exportLock(type); // `begin immediate` holds the file lock
         locked = true;
         await putBack();
       });
@@ -287,8 +288,8 @@ export async function writeThrough<T>(
   };
 
   try {
-    return await db.transaction(async (tx) => {
-      for (const type of sorted) await tx.execute(sql`select pg_advisory_xact_lock(${exportLock(type)})`);
+    return await inTransaction(db, async (tx) => {
+      for (const type of sorted) void exportLock(type); // `begin immediate` holds the file lock
       const steps = await assertInStep(tx, sorted, options);
       const exempt = new Set(await Promise.all((options.exempt ?? []).map(resolvedPath)));
 

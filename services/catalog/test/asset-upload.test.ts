@@ -17,8 +17,9 @@ import { writeSource } from "../src/index/writer";
 import { applyMigrations } from "../src/migrations";
 import { ensureLearner } from "../src/state";
 import { BEFORE_BLOB_CONTRACT, partialMigrations } from "./partial-migrations";
-import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { clearTables, createScratchDatabase, probe, type Scratch, withoutConstraint } from "./scratch-database";
 
+import { inTransaction } from "../src/db";
 /**
  * `catalog asset upload --source manimkc` and `catalog blob audit`
  * (docs/CONTENT-MIGRATION.md, Track E; edge cases 5 and 9), against a scratch
@@ -152,16 +153,12 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
     // kind check is widened by hand for `pdf`: its migration (0030) comes
     // after 0013, so it cannot apply to a database stopped before it. The
     // pdf's `inputs_hash` column (0031) is added by hand for the same reason.
-    await applyMigrations(scratch.db, { folder: await partialMigrations(BEFORE_BLOB_CONTRACT) });
-    await scratch.db.execute(sql`
-      alter table asset drop constraint asset_kind_check;
-    `);
-    await scratch.db.execute(sql`
-      alter table asset add constraint asset_kind_check check (kind in ('video', 'transcript', 'chapters', 'captions', 'diagram_source', 'diagram_svg', 'note', 'session', 'link', 'poster', 'pdf'));
-    `);
-    await scratch.db.execute(sql`
-      alter table asset add column inputs_hash text;
-    `);
+    await applyMigrations(scratch.db);
+    // The contract-era check that keeps a stored kind's row without its
+    // blob: the upload flow under test exists to move rows first, bytes
+    // after, so the fixture removes it (SQLite cannot drop one; the helper
+    // rebuilds the table).
+    await withoutConstraint(scratch.db, "asset", "asset_stored_blob_check");
     base = await mkdtemp(path.join(tmpdir(), "asset-upload-"));
     outRoot = path.join(base, "manimkc-home");
     ffmpeg = path.join(base, "ffmpeg");
@@ -182,7 +179,7 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
   });
 
   beforeEach(async () => {
-    await scratch.db.execute(sql`truncate asset, blob_object, content_revision cascade`);
+    await clearTables(scratch.db, ["asset", "blob_object", "content_revision"]);
     blobRoot = await mkdtemp(path.join(base, "blobs-"));
     store = fsStore(blobRoot);
     await writeFixture();
@@ -721,7 +718,7 @@ describe.skipIf(!reachable.ok)("catalog asset upload and blob audit", () => {
       await uploadAssets(scratch.db, options());
       const video = await assetRow(VIDEO_ID);
       const transcript = await assetRow(TRANSCRIPT_ID);
-      const rows = await scratch.db.transaction((tx) =>
+      const rows = await inTransaction(scratch.db, (tx) =>
         keepBlobKeys(tx, {
           asset: [
             row(VIDEO_ID, "video", VIDEO_PATH, VIDEO),

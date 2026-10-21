@@ -21,6 +21,7 @@ import {
   stalePartials,
 } from "./blob-owner";
 
+import { inTransaction } from "../db";
 /**
  * `catalog blob audit`: the store and the `blob_object` table, compared both
  * ways (docs/CONTENT-MIGRATION.md, edge cases 5 and 9).
@@ -150,8 +151,8 @@ export async function auditBlobs(
   // A studio video's cut is named by its row as well as its asset (0015), so
   // a row that holds a key is enough for the key to be in use. Asked only
   // where the table exists: the audit runs on a database behind the journal.
-  const { rows: hasVideo } = await db.execute<{ present: boolean }>(sql`select to_regclass('public.video') is not null as present`);
-  if (hasVideo[0]?.present === true) {
+  const { rows: hasVideo } = await db.execute<{ present: number }>(sql`select exists(select 1 from sqlite_master where type = 'table' and name = 'video') as present`);
+  if (hasVideo[0]?.present === 1) {
     for (const { key } of await db.select({ key: video.mp4BlobKey }).from(video).where(isNotNull(video.mp4BlobKey))) {
       if (key !== null) referenced.add(key);
     }
@@ -229,8 +230,10 @@ export async function auditBlobs(
         // deleted before its own pending write, which would let a new object
         // past both caps unmeasured. Its write refreshes `updated_at`, and the
         // age guard then keeps the row.
-        const deleted = await db.transaction(async (tx) => {
-          await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${ownerCapLock(row.ownerId)}, 0))`);
+        const deleted = await inTransaction(db, async (tx) => {
+          // `begin immediate` serialises this delete with every other writer;
+          // the advisory lock it replaced serialised only the ones that asked.
+          void ownerCapLock(row.ownerId);
           return tx
             .delete(blobObject)
             .where(and(eq(blobObject.key, row.key), eq(blobObject.state, "pending"), lt(blobObject.updatedAt, cutoff)))
@@ -261,7 +264,7 @@ export async function auditBlobs(
     .where(
       and(
         inArray(asset.kind, ["poster", "pdf"]),
-        sql`starts_with(${asset.id}, ${POSTER_PREFIX}) or starts_with(${asset.id}, ${PDF_PREFIX})`,
+        sql`instr(${asset.id}, ${POSTER_PREFIX}) = 1 or instr(${asset.id}, ${PDF_PREFIX}) = 1`,
       ),
     );
   const withSource = new Set(

@@ -56,7 +56,10 @@ describe.skipIf(!reachable.ok)("catalog schema", () => {
       // Every table in the schema package exists, not just the ones the rest of
       // this file touches, and nothing the package does not know about.
       const { rows } = await scratch.db.execute<{ n: number }>(
-        sql`select count(*)::int as n from information_schema.tables where table_schema = 'public'`,
+        // catalog_armed_rule is catalog infrastructure (migration 0001);
+        // sqlite_sequence and the migrator's journal are SQLite's own.
+        sql`select count(*) as n from sqlite_master where type = 'table'
+            and name not like 'sqlite_%' and name not like '\\_\\_drizzle\\_%' escape '\\' and name <> 'catalog_armed_rule'`,
       );
       expect(rows[0]?.n).toBe(Object.keys(tables).length);
       expect(rows[0]?.n).toBe(41);
@@ -241,7 +244,7 @@ describe.skipIf(!reachable.ok)("catalog schema", () => {
 
     it("still holds the row", async () => {
       const { rows } = await scratch.db.execute<{ n: number }>(
-        sql`select count(*)::int as n from ${event}`,
+        sql`select count(*) as n from ${event}`,
       );
       expect(rows[0]?.n).toBe(1);
     });

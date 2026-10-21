@@ -21,7 +21,7 @@ import {
   video,
 } from "@gnosia/schema";
 import { getTableColumns, getTableName } from "drizzle-orm";
-import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
+import type { SQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core";
 
 /**
  * Which tables make up one content entity, for the revision history.
@@ -36,20 +36,20 @@ import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
 export interface LinkSpec {
   /** SQL table name, which is also the key under `snapshot.links`. */
   name: string;
-  table: PgTable;
+  table: SQLiteTable;
   /** The column pointing at the parent entity, by its TypeScript key. */
   parent: string;
 }
 
 export interface EntitySpec {
   type: RevisionEntityType;
-  table: PgTable;
+  table: SQLiteTable;
   /** The primary key column, by its TypeScript key. */
   key: string;
   links: readonly LinkSpec[];
 }
 
-const link = (table: PgTable, parent: string): LinkSpec => ({
+const link = (table: SQLiteTable, parent: string): LinkSpec => ({
   name: getTableName(table),
   table,
   parent,
@@ -201,8 +201,8 @@ export const OMITTED_WHEN_EMPTY: ReadonlyMap<string, ReadonlySet<string>> = new 
 export const LINKS_OMITTED_WHEN_EMPTY: ReadonlySet<string> = new Set(["curriculum_item_asset"]);
 
 /** One column off a table, by its TypeScript key. Throws rather than passing undefined on. */
-export function column(table: PgTable, key: string): PgColumn {
-  const found = (getTableColumns(table) as Record<string, PgColumn | undefined>)[key];
+export function column(table: SQLiteTable, key: string): SQLiteColumn {
+  const found = (getTableColumns(table) as Record<string, SQLiteColumn | undefined>)[key];
   if (found === undefined) throw new Error(`table ${getTableName(table)} has no column "${key}"`);
   return found;
 }
@@ -212,7 +212,7 @@ export function column(table: PgTable, key: string): PgColumn {
  * table's own order. `except` drops one more by TypeScript key: a link's
  * parent column, which the snapshot already says by nesting.
  */
-export function contentColumns(table: PgTable, except?: string): [string, string][] {
+export function contentColumns(table: SQLiteTable, except?: string): [string, string][] {
   const skip = NOT_CONTENT_IN.get(getTableName(table));
   return Object.entries(getTableColumns(table))
     .filter(([key, col]) => key !== except && !NOT_CONTENT.has(col.name) && !(skip?.has(col.name) ?? false))

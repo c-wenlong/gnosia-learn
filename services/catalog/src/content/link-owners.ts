@@ -1,6 +1,6 @@
 import { COMMONS_OWNER, type RevisionEntityType } from "@gnosia/schema";
 import { getTableColumns, getTableName, sql, type SQL } from "drizzle-orm";
-import type { PgTable } from "drizzle-orm/pg-core";
+import type { SQLiteTable } from "drizzle-orm/sqlite-core";
 
 import type { CatalogDatabase } from "../db";
 import { ENTITIES, LINK_FAR_ENDS, ROW_FAR_ENDS } from "./entities";
@@ -44,7 +44,7 @@ export interface LinkOwnerReport {
 }
 
 /** A column's SQL name, from the table's own definition. */
-function sqlName(table: PgTable, key: string): string {
+function sqlName(table: SQLiteTable, key: string): string {
   const found = (getTableColumns(table) as Record<string, { name: string } | undefined>)[key];
   if (found === undefined) throw new Error(`table ${getTableName(table)} has no column "${key}"`);
   return found.name;
@@ -54,7 +54,7 @@ const ident = (name: string): SQL => sql.raw(`"${name.replaceAll('"', '""')}"`);
 
 export async function linkOwners(db: CatalogDatabase): Promise<LinkOwnerReport> {
   const { rows: mixed } = await db.execute<{ link: string; parent: string; far: string; owner: string; parent_owner: string }>(sql`
-    select 'topic_relation' collate "C" as link, r.from_slug collate "C" as parent, r.to_slug collate "C" as far,
+    select 'topic_relation' collate binary as link, r.from_slug collate binary as parent, r.to_slug collate binary as far,
       r.owner_id as owner, t.owner_id as parent_owner
     from topic_relation r join topic t on t.slug = r.from_slug
     where r.owner_id <> t.owner_id
@@ -67,7 +67,7 @@ export async function linkOwners(db: CatalogDatabase): Promise<LinkOwnerReport> 
   // Doctor runs on a database behind the journal too, to say so: an entity
   // whose table a later migration adds (`video`, 0015) has nothing to probe.
   const { rows: present } = await db.execute<{ name: string }>(
-    sql`select table_name as name from information_schema.tables where table_schema = 'public'`,
+    sql`select name from sqlite_master where type = 'table'`,
   );
   const exists = new Set(present.map((row) => row.name));
   const probes: SQL[] = [];
@@ -79,7 +79,7 @@ export async function linkOwners(db: CatalogDatabase): Promise<LinkOwnerReport> 
       const target = ENTITIES[end.target];
       const column = sqlName(spec.table, end.column);
       probes.push(sql`
-        select ${`${getTableName(spec.table)}.${column}`} as link, p.${parentKey}::text as parent, f.${ident(sqlName(target.table, target.key))}::text as far,
+        select ${`${getTableName(spec.table)}.${column}`} as link, p.${parentKey} as parent, f.${ident(sqlName(target.table, target.key))} as far,
           p.owner_id as parent_owner, f.owner_id as far_owner
         from ${parentTable} p join ${ident(getTableName(target.table))} f on f.${ident(sqlName(target.table, target.key))} = p.${ident(column)}
         where f.owner_id <> p.owner_id and f.owner_id <> ${COMMONS_OWNER}`);
@@ -91,7 +91,7 @@ export async function linkOwners(db: CatalogDatabase): Promise<LinkOwnerReport> 
       for (const end of LINK_FAR_ENDS[link.name] ?? []) {
         const target = ENTITIES[end.target];
         probes.push(sql`
-          select ${link.name} as link, p.${parentKey}::text as parent, f.${ident(sqlName(target.table, target.key))}::text as far,
+          select ${link.name} as link, p.${parentKey} as parent, f.${ident(sqlName(target.table, target.key))} as far,
             p.owner_id as parent_owner, f.owner_id as far_owner
           from ${ident(link.name)} l
           join ${parentTable} p on p.${parentKey} = l.${ident(sqlName(link.table, link.parent))}
