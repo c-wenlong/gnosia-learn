@@ -230,11 +230,11 @@ struct SidecarClient {
 
     // MARK: - learner state writes
 
-    // The native app's Postgres half: the same `/api/learner/*` bodies the
+    // The native app's catalog half: the same `/api/learner/*` bodies the
     // web's pages post, so one write lands in learner.db and its mirror in
-    // Postgres. The LearnerStore queues each call in `mirror_queue` beside
+    // the catalog. The LearnerStore queues each call in `mirror_queue` beside
     // the row it commits with, and the flusher sends them through `replay`
-    // — a down sidecar or unreachable Postgres holds the row for retry,
+    // — a down sidecar or unreachable catalog holds the row for retry,
     // never drops the write. The typed methods below stay as the routes'
     // reference; the queue replays bodies it persisted, not calls.
 

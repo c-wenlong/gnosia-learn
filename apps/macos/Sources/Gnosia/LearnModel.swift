@@ -1458,7 +1458,7 @@ private func isoDate(_ s: String) -> Date? {
     return f.date(from: s)
 }
 
-/// `at` in the shape Postgres writes it — ISO 8601 with fractional seconds.
+/// `at` in the shape the `/api/learner/*` bodies carry — ISO 8601 with fractional seconds.
 private func isoString(_ date: Date) -> String {
     let f = ISO8601DateFormatter()
     f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
@@ -1625,7 +1625,7 @@ extension LearnGraph {
 extension CatalogStore {
     /// The playback rows the preferences hold, merged with learner.db's own
     /// watch marks — a video this app played is recent even before the
-    /// Postgres row it mirrored comes back in a snapshot. The newer of the
+    /// catalog row it mirrored comes back in a snapshot. The newer of the
     /// two is the truth, the merge clock the progress rows already use; a
     /// watched verdict either file holds still counts (a position saved
     /// after it is a second watch, as the web's second `watched` event is).

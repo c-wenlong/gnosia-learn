@@ -1,33 +1,38 @@
-// The catalog snapshot Gnosia reads: the parts of the Postgres catalog the
-// macOS app draws, mirrored into one SQLite file it can open read-only.
+// The catalog snapshot Gnosia reads: the parts of the catalog the macOS app
+// draws, mirrored into one SQLite file it can open read-only.
 //
 // usage: node apps/macos/scripts/catalog-snapshot.mjs [--out PATH]
 //
-// The Postgres it reads is the same one every catalog command reads:
-// DATABASE_URL when set, services/catalog/.env's DATABASE_URL next, and
-// postgres://localhost:5432/gnosia last — the resolution
+// The catalog it reads is the same SQLite file every catalog command reads:
+// CATALOG_DB when set, services/catalog/.env's DATABASE_URL (or the shell's)
+// next, and $GNOSIA_HOME/catalog.db last — the resolution
 // services/catalog/src/env.ts gives `npm run catalog`, so a shell that can
-// run the CLI can run this.
+// run the CLI can run this. A postgres:// value is refused, not read as a
+// path: that is the old world, and services/catalog/scripts/pg-to-sqlite.mjs
+// is the way across it.
 //
 // Where the file lands, in order: --out, GNOSIA_CATALOG, and then
-// $GNOSIA_HOME/catalog.db (~/.gnosia/catalog.db with no home variable
-// unset — the same default the blob store resolves, and the path the app
-// opens when nothing tells it otherwise).
+// $GNOSIA_HOME/app-catalog.db (~/.gnosia/app-catalog.db with no home
+// variable set — the path the app opens when nothing tells it otherwise).
+// Not catalog.db: that name now belongs to the live database the snapshot
+// reads, and writing the mirror over it would destroy it — the script
+// refuses when source and target resolve to the same file.
 //
 // The mirror is written into a `.partial` file beside the target and renamed
 // over it, so Gnosia never opens a half-written catalog — the same reason
 // scripts/nightly-export.mjs renames exports into place.
 //
-// It reads Postgres and writes only the snapshot file: nothing here mutates
-// the catalog, and the file it makes is the app's read model, not a second
-// source of truth. The drizzle schema (packages/schema/src/content.ts) stays
-// authoritative; the SQLite DDL below is the transport the app reads until
-// the catalog itself lives in SQLite, and it is intentionally small — only
-// the tables and columns the app draws.
+// It reads the catalog and writes only the snapshot file: nothing here
+// mutates the source, and the file it makes is the app's read model, not a
+// second source of truth. The drizzle schema (packages/schema) stays
+// authoritative; the SQLite DDL below is the transport the app reads, and it
+// is intentionally smaller than the live schema — only the tables and
+// columns the app draws, in the shape it draws them.
 //
-// Timestamps are stored as REAL seconds since 1970-01-01 UTC, not ISO text,
-// because both sides lose nothing to it: Postgres hands over
-// `extract(epoch from ...)` and Swift compares Doubles.
+// Timestamps are stored as REAL seconds since 1970-01-01 UTC, not the live
+// schema's millisecond integers: the app compares Doubles
+// (`Date(timeIntervalSince1970:)`), so `ms / 1000.0` at copy time is the
+// whole conversion.
 //
 // Exit codes: 0 snapshot written, 1 the read or write failed, 2 the
 // invocation was wrong.
@@ -39,11 +44,9 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
 import Database from 'better-sqlite3';
-import pg from 'pg';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const CATALOG_ENV = join(ROOT, 'services/catalog/.env');
-const DEFAULT_DATABASE_URL = 'postgres://localhost:5432/gnosia';
 const USAGE = 'usage: node catalog-snapshot.mjs [--out PATH]';
 
 class Refusal extends Error {}
@@ -94,10 +97,37 @@ function loadCatalogEnv() {
   }
 }
 
-function databaseUrl() {
+/**
+ * The catalog file to snapshot, resolved the way env.ts's `databaseUrl` and
+ * `databasePath` resolve it: CATALOG_DB, then DATABASE_URL, then
+ * $GNOSIA_HOME/catalog.db. A `sqlite:` or `file:` URL becomes a path; a
+ * `postgres:`/`postgresql:` URL is the old world and is refused with the
+ * pointer env.ts's refusal carries. `:memory:` is refused too — a snapshot
+ * needs the file another process wrote, not a fresh empty in-memory one.
+ */
+function catalogPath() {
   loadCatalogEnv();
-  const raw = process.env.DATABASE_URL?.trim();
-  return raw ? raw : DEFAULT_DATABASE_URL;
+  const raw = process.env.CATALOG_DB?.trim()
+    || process.env.DATABASE_URL?.trim()
+    || join(dataHome(), 'catalog.db');
+  if (raw.startsWith('postgres://') || raw.startsWith('postgresql://')) {
+    throw new Refusal(
+      'the catalog is a SQLite file now, not Postgres (docs/SQLITE-MIGRATION.md); ' +
+        'point CATALOG_DB at the file services/catalog/scripts/pg-to-sqlite.mjs wrote',
+    );
+  }
+  const memory = ':memory: names an in-memory database only its process can see; point CATALOG_DB at the file';
+  if (raw === ':memory:') throw new Refusal(memory);
+  if (raw.startsWith('sqlite:')) {
+    // env.ts's stripScheme: sqlite:///abs and sqlite:rel both name /abs-style
+    // paths; sqlite::memory: is the in-memory literal this script refuses.
+    const rest = raw.slice('sqlite:'.length);
+    if (rest === ':memory:') throw new Refusal(memory);
+    const withoutSlashes = rest.replace(/^\/+/, '');
+    return resolve(withoutSlashes.startsWith('/') ? withoutSlashes : `/${withoutSlashes}`);
+  }
+  if (raw.startsWith('file:')) return fileURLToPath(raw);
+  return resolve(expandHome(raw));
 }
 
 /**
@@ -126,11 +156,13 @@ function dataHome() {
 function outputPath(args) {
   const raw = args.out ?? process.env.GNOSIA_CATALOG;
   if (raw !== undefined && raw.trim() !== '') return resolve(expandHome(raw.trim()));
-  return join(dataHome(), 'catalog.db');
+  // app-catalog.db, not catalog.db: the live catalog already owns that name
+  // under the data home, and the mirror must not stand where it does.
+  return join(dataHome(), 'app-catalog.db');
 }
 
 /**
- * The SQLite half of the mirror. `asset` keeps Postgres's column names so a
+ * The mirror half of the file. `asset` keeps the catalog's column names so a
  * reader that knows the catalog knows the snapshot; `generated_by` is the
  * one computed column, filled by `generatedBy` above. `snapshot_meta` says
  * where the file came from and when, for the app's settings pane.
@@ -207,11 +239,11 @@ CREATE TABLE concept (
 CREATE INDEX concept_topic_idx ON concept(topic_slug);
 
 -- ==== wave-1 surfaces ====
--- The learner half: rows Postgres holds the only copy of (packages/schema's
--- state.ts), mirrored so the app reads the review queue, watch state and
--- renames without a server. jsonb lands as TEXT holding the same JSON and
--- leech as 0/1 — the file is a transport, and the app parses only what it
--- draws.
+-- The learner half: rows the catalog holds the only copy of
+-- (packages/schema's state.ts), mirrored so the app reads the review queue,
+-- watch state and renames without a server. JSON columns land as TEXT
+-- holding the same JSON and leech as 0/1 — the file is a transport, and the
+-- app parses only what it draws.
 CREATE TABLE concept_prerequisite (
   concept_slug      TEXT NOT NULL,
   prerequisite_slug TEXT NOT NULL,
@@ -287,7 +319,8 @@ CREATE TABLE preference (
 
 -- Deliberately partial: watched state and last-playback need only when (at),
 -- what kind (type) and which asset (payload's asset), so concept_slug,
--- session_id and created_at stay in Postgres until a surface reads them.
+-- session_id and created_at stay out of the mirror until a surface reads
+-- them.
 CREATE TABLE event (
   id         INTEGER PRIMARY KEY,
   at         REAL NOT NULL,
@@ -307,9 +340,9 @@ CREATE TABLE asset_name (
 );
 -- ==== courses ====
 -- The course tree and the link tables the course pages read, with the same
--- columns Postgres has (packages/schema/src/content.ts). jsonb columns land
--- as text the app parses; archived rows are mirrored too, because the web
--- reader's archived_at-is-null filter is part of the shape.
+-- columns the catalog has (packages/schema/src/content.ts). JSON columns
+-- land as text the app parses; archived rows are mirrored too, because the
+-- web reader's archived_at-is-null filter is part of the shape.
 CREATE TABLE collection (
   id             TEXT PRIMARY KEY,
   kind           TEXT NOT NULL,
@@ -394,15 +427,37 @@ CREATE TABLE snapshot_meta (
 );
 `;
 
-/** The select-list `asset` shares across every row the mirror copies. */
+/**
+ * The select-list `asset` shares across every row the mirror copies. The
+ * live schema stores instants as integer milliseconds (timestamp_ms in
+ * packages/schema/src/columns.ts); the mirror stores REAL seconds, so every
+ * timestamp the queries read is divided by 1000.0 on the way over.
+ */
 const ASSET_COLUMNS = `id, kind, path, url, content_hash, inputs_hash, bytes,
   title, source_repo, blob_key, resource_type,
-  extract(epoch from created_at)::double precision AS created_at,
-  extract(epoch from updated_at)::double precision AS updated_at`;
+  created_at / 1000.0 AS created_at,
+  updated_at / 1000.0 AS updated_at`;
 
-async function snapshot(url, out) {
-  const client = new pg.Client({ connectionString: url });
-  await client.connect();
+async function snapshot(sourcePath, out) {
+  // The live catalog and its mirror cannot be one file: the write goes
+  // through a `.partial` rename that would put the reduced shape over the
+  // full database, deleting everything the mirror leaves out.
+  if (resolve(sourcePath) === resolve(out)) {
+    throw new Refusal(
+      `the snapshot would overwrite its own source (${out}); ` +
+        'pass --out or set GNOSIA_CATALOG to a different file',
+    );
+  }
+  if (!existsSync(sourcePath)) {
+    throw new Refusal(
+      `no catalog at ${sourcePath} — run \`npm run catalog -- migrate\` first, ` +
+        'or point CATALOG_DB at the file',
+    );
+  }
+  const source = new Database(sourcePath, { readonly: true, fileMustExist: true });
+  // `.all()` returns plain rows the way pg's `result.rows` did, so the
+  // reads below keep their old shape.
+  const all = (sql) => source.prepare(sql).all();
 
   const partial = `${out}.partial-${process.pid}`;
   rmSync(partial, { force: true });
@@ -621,117 +676,94 @@ async function snapshot(url, out) {
       // ==== end courses ====
     });
 
-    // Sequential, not Promise.all: pg@8 deprecates queuing a second query on
-    // a client mid-flight, and small reads buy nothing from it anyway.
-    // jsonb goes over as `::text` so the file holds the same JSON Postgres
-    // does, not the driver's parse of it; booleans as 0/1.
-    const assets = await client.query(`SELECT ${ASSET_COLUMNS} FROM asset`);
-    const derivations = await client.query('SELECT asset_id, source_asset_id FROM asset_derivation');
-    const assetTopics = await client.query('SELECT asset_id, topic_slug FROM asset_topic');
-    const assetConcepts = await client.query('SELECT asset_id, concept_slug FROM asset_concept');
-    const topics = await client.query(`SELECT slug, title, domain, summary, position,
-      extract(epoch from archived_at)::double precision AS archived_at FROM topic`);
-    const concepts = await client.query(`SELECT slug, title, summary, topic_slug, path, domain, body,
-      tags::text AS tags, sources::text AS sources,
-      extract(epoch from authored_at)::double precision AS authored_at,
-      topic_position, owner_id,
-      extract(epoch from archived_at)::double precision AS archived_at,
-      extract(epoch from created_at)::double precision AS created_at,
-      extract(epoch from updated_at)::double precision AS updated_at FROM concept`);
-    const prerequisites = await client.query(`SELECT concept_slug, prerequisite_slug, kind, position,
-      extract(epoch from created_at)::double precision AS created_at FROM concept_prerequisite`);
-    const masteries = await client.query(`SELECT learner_id, concept_slug, p_l, observations, correct,
-      extract(epoch from last_seen)::double precision AS last_seen,
-      extract(epoch from created_at)::double precision AS created_at,
-      extract(epoch from updated_at)::double precision AS updated_at FROM mastery`);
-    const reviews = await client.query(`SELECT learner_id, concept_slug, repetitions, ease, interval_days,
-      lapses, extract(epoch from due)::double precision AS due,
-      extract(epoch from last_reviewed)::double precision AS last_reviewed,
-      leech::integer AS leech,
-      extract(epoch from created_at)::double precision AS created_at,
-      extract(epoch from updated_at)::double precision AS updated_at FROM review`);
-    const progress = await client.query(`SELECT learner_id, curriculum_item_id,
-      extract(epoch from completed_at)::double precision AS completed_at, note,
-      extract(epoch from created_at)::double precision AS created_at,
-      extract(epoch from updated_at)::double precision AS updated_at FROM progress`);
-    const recaps = await client.query(`SELECT learner_id, curriculum_item_id, summary,
-      key_points::text AS key_points, misconceptions::text AS misconceptions,
-      open_questions::text AS open_questions, source, sessions,
-      extract(epoch from created_at)::double precision AS created_at,
-      extract(epoch from updated_at)::double precision AS updated_at FROM recap`);
-    const preferences = await client.query(`SELECT learner_id, key, value::text AS value,
-      extract(epoch from created_at)::double precision AS created_at,
-      extract(epoch from updated_at)::double precision AS updated_at FROM preference`);
-    // Ordered as readEvents orders (`at`, then `id`): replay and
-    // last-watched both read the log's order, not just its set.
-    const events = await client.query(`SELECT id,
-      extract(epoch from at)::double precision AS at,
-      learner_id, type, payload::text AS payload FROM event ORDER BY at, id`);
-    const assetNames = await client.query(`SELECT learner_id, asset_id, title,
-      extract(epoch from created_at)::double precision AS created_at,
-      extract(epoch from updated_at)::double precision AS updated_at FROM asset_name`);
-    // ==== courses ====
-    // The tables readCourses joins to build a Course (readers/courses.ts):
-    // the collection tree, the checklist rows, the membership rows that give
-    // a module its topic and its curated links, the item's concept list, and
-    // the reading-to-lesson links. jsonb columns go over as text for the app
-    // to parse, so `metadata::text`, `subtopics::text`, `videos::text`.
-    const collections = await client.query(`SELECT id, kind, slug, title, parent_id, position,
-      metadata::text AS metadata, cover_blob_key,
-      extract(epoch from archived_at)::double precision AS archived_at,
-      extract(epoch from created_at)::double precision AS created_at,
-      extract(epoch from updated_at)::double precision AS updated_at FROM collection`);
-    const curriculumItems = await client.query(`SELECT id, collection_id, position, title,
-      subtopics::text AS subtopics, videos::text AS videos,
-      extract(epoch from archived_at)::double precision AS archived_at,
-      extract(epoch from created_at)::double precision AS created_at,
-      extract(epoch from updated_at)::double precision AS updated_at FROM curriculum_item`);
-    const collectionItems = await client.query(`SELECT id, collection_id, position, topic_slug,
-      concept_slug, asset_id, topic_position,
-      extract(epoch from created_at)::double precision AS created_at FROM collection_item`);
-    const itemConcepts = await client.query(`SELECT concept_slug, curriculum_item_id, position,
-      extract(epoch from created_at)::double precision AS created_at FROM concept_curriculum_item`);
-    const itemAssets = await client.query(`SELECT curriculum_item_id, asset_id, position,
-      extract(epoch from created_at)::double precision AS created_at FROM curriculum_item_asset`);
-    const tags = await client.query(`SELECT id, label, description, position,
-      extract(epoch from created_at)::double precision AS created_at,
-      extract(epoch from updated_at)::double precision AS updated_at FROM tag`);
-    const collectionTags = await client.query(`SELECT collection_id, tag_id, position,
-      extract(epoch from created_at)::double precision AS created_at FROM collection_tag`);
-    // ==== end courses ====
-
+    // The catalog is already SQLite, so these reads go straight through
+    // better-sqlite3. JSON columns are text on both sides — the file holds
+    // the same JSON the live schema does — and instants arrive as integer
+    // milliseconds, divided by 1000.0 into the REAL seconds the mirror
+    // stores.
     const rows = {
-      assets: assets.rows,
-      derivations: derivations.rows,
-      assetTopics: assetTopics.rows,
-      assetConcepts: assetConcepts.rows,
-      topics: topics.rows,
-      concepts: concepts.rows,
-      prerequisites: prerequisites.rows,
-      masteries: masteries.rows,
-      reviews: reviews.rows,
-      progress: progress.rows,
-      recaps: recaps.rows,
-      preferences: preferences.rows,
-      events: events.rows,
-      assetNames: assetNames.rows,
-      collections: collections.rows,
-      curriculumItems: curriculumItems.rows,
-      collectionItems: collectionItems.rows,
-      itemConcepts: itemConcepts.rows,
-      itemAssets: itemAssets.rows,
-      tags: tags.rows,
-      collectionTags: collectionTags.rows,
+      assets: all(`SELECT ${ASSET_COLUMNS} FROM asset`),
+      derivations: all('SELECT asset_id, source_asset_id FROM asset_derivation'),
+      assetTopics: all('SELECT asset_id, topic_slug FROM asset_topic'),
+      assetConcepts: all('SELECT asset_id, concept_slug FROM asset_concept'),
+      topics: all(`SELECT slug, title, domain, summary, position,
+        archived_at / 1000.0 AS archived_at FROM topic`),
+      concepts: all(`SELECT slug, title, summary, topic_slug, path, domain, body,
+        tags, sources,
+        authored_at / 1000.0 AS authored_at,
+        topic_position, owner_id,
+        archived_at / 1000.0 AS archived_at,
+        created_at / 1000.0 AS created_at,
+        updated_at / 1000.0 AS updated_at FROM concept`),
+      prerequisites: all(`SELECT concept_slug, prerequisite_slug, kind, position,
+        created_at / 1000.0 AS created_at FROM concept_prerequisite`),
+      masteries: all(`SELECT learner_id, concept_slug, p_l, observations, correct,
+        last_seen / 1000.0 AS last_seen,
+        created_at / 1000.0 AS created_at,
+        updated_at / 1000.0 AS updated_at FROM mastery`),
+      reviews: all(`SELECT learner_id, concept_slug, repetitions, ease, interval_days,
+        lapses, due / 1000.0 AS due,
+        last_reviewed / 1000.0 AS last_reviewed,
+        leech,
+        created_at / 1000.0 AS created_at,
+        updated_at / 1000.0 AS updated_at FROM review`),
+      progress: all(`SELECT learner_id, curriculum_item_id,
+        completed_at / 1000.0 AS completed_at, note,
+        created_at / 1000.0 AS created_at,
+        updated_at / 1000.0 AS updated_at FROM progress`),
+      recaps: all(`SELECT learner_id, curriculum_item_id, summary,
+        key_points, misconceptions, open_questions, source, sessions,
+        created_at / 1000.0 AS created_at,
+        updated_at / 1000.0 AS updated_at FROM recap`),
+      preferences: all(`SELECT learner_id, key, value,
+        created_at / 1000.0 AS created_at,
+        updated_at / 1000.0 AS updated_at FROM preference`),
+      // Ordered as readEvents orders (`at`, then `id`): replay and
+      // last-watched both read the log's order, not just its set.
+      events: all(`SELECT id, at / 1000.0 AS at,
+        learner_id, type, payload FROM event ORDER BY at, id`),
+      assetNames: all(`SELECT learner_id, asset_id, title,
+        created_at / 1000.0 AS created_at,
+        updated_at / 1000.0 AS updated_at FROM asset_name`),
+      // ==== courses ====
+      // The tables readCourses joins to build a Course (readers/courses.ts):
+      // the collection tree, the checklist rows, the membership rows that give
+      // a module its topic and its curated links, the item's concept list, and
+      // the reading-to-lesson links. JSON columns go over as text for the app
+      // to parse, so `metadata`, `subtopics`, `videos` come across uncast.
+      collections: all(`SELECT id, kind, slug, title, parent_id, position,
+        metadata, cover_blob_key,
+        archived_at / 1000.0 AS archived_at,
+        created_at / 1000.0 AS created_at,
+        updated_at / 1000.0 AS updated_at FROM collection`),
+      curriculumItems: all(`SELECT id, collection_id, position, title,
+        subtopics, videos,
+        archived_at / 1000.0 AS archived_at,
+        created_at / 1000.0 AS created_at,
+        updated_at / 1000.0 AS updated_at FROM curriculum_item`),
+      collectionItems: all(`SELECT id, collection_id, position, topic_slug,
+        concept_slug, asset_id, topic_position,
+        created_at / 1000.0 AS created_at FROM collection_item`),
+      itemConcepts: all(`SELECT concept_slug, curriculum_item_id, position,
+        created_at / 1000.0 AS created_at FROM concept_curriculum_item`),
+      itemAssets: all(`SELECT curriculum_item_id, asset_id, position,
+        created_at / 1000.0 AS created_at FROM curriculum_item_asset`),
+      tags: all(`SELECT id, label, description, position,
+        created_at / 1000.0 AS created_at,
+        updated_at / 1000.0 AS updated_at FROM tag`),
+      collectionTags: all(`SELECT collection_id, tag_id, position,
+        created_at / 1000.0 AS created_at FROM collection_tag`),
+      // ==== end courses ====
     };
     write(rows);
 
     const meta = db.prepare('INSERT INTO snapshot_meta (key, value) VALUES (?, ?)');
     meta.run('generator', 'catalog-snapshot.mjs');
     meta.run('schema_version', '3');
-    meta.run('source', 'postgres');
+    meta.run('source', 'sqlite');
     meta.run('taken_at', String(Date.now() / 1000));
-    // The database name, never the URL: a URL can carry a password.
-    meta.run('source_database', new URL(url).pathname.replace(/^\//, ''));
+    // The file path: a path can carry no password, so it is safe to show.
+    meta.run('source_database', sourcePath);
 
     db.close();
     renameSync(partial, out);
@@ -741,7 +773,7 @@ async function snapshot(url, out) {
     rmSync(partial, { force: true });
     throw error;
   } finally {
-    await client.end().catch(() => {});
+    source.close();
   }
 }
 
@@ -763,7 +795,7 @@ async function main(argv) {
   }
   try {
     const out = outputPath(args);
-    const { counts } = await snapshot(databaseUrl(), out);
+    const { counts } = await snapshot(catalogPath(), out);
     const total = Object.values(counts).reduce((a, b) => a + b, 0);
     console.log(`catalog snapshot → ${out}`);
     for (const [table, n] of Object.entries(counts)) console.log(`  ${table}: ${n}`);

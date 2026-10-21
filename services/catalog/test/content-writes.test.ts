@@ -31,9 +31,10 @@ const SEAM = ["services/catalog/src/content/", "services/catalog/src/index/"];
  */
 const ALLOWED: Record<string, string> = {
   // Mirrors catalog rows into the macOS app's own SQLite read model
-  // (apps/macos); it reads Postgres and writes only that file. Removed with
-  // the mirror itself, or when the app's snapshot moves inside the seam.
-  "apps/macos/scripts/catalog-snapshot.mjs": "writes the native app's SQLite snapshot, not a Postgres content table",
+  // (apps/macos); its INSERTs target the snapshot file, never the catalog it
+  // reads. Removed with the mirror itself, or when the app's snapshot moves
+  // inside the seam.
+  "apps/macos/scripts/catalog-snapshot.mjs": "writes the native app's SQLite snapshot, not the catalog's own tables",
 };
 
 /**

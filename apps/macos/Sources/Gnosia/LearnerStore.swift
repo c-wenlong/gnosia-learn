@@ -2,8 +2,8 @@
 //  LearnerStore.swift
 //  Gnosia
 //
-//  The writable side of the app, kept out of catalog.db on purpose: the
-//  catalog is a read-only mirror that a snapshot run replaces wholesale, so
+//  The writable side of the app, kept out of app-catalog.db on purpose: the
+//  mirror is a read-only file that a snapshot run replaces wholesale, so
 //  anything the learner writes — resume points, stars, renames — would be
 //  lost with it. learner.db sits beside it under the same data home
 //  (GNOSIA_HOME, then SELF_LEARN_HOME, then ~/.gnosia — the rule
@@ -11,12 +11,12 @@
 //
 //  Two groups of tables. The small marks: `watch` (where playback stopped
 //  and whether it finished), `favorite` (the star) and `asset_name` (the
-//  learner's own title — the same job Postgres's asset_name does for the
+//  learner's own title — the same job the catalog's asset_name does for the
 //  web app, and a separate row from it: a rename made here does not pretend
 //  to have come from the catalog), all keyed by asset id — plus `progress`,
 //  the course checklist ticks, keyed by curriculum item id. And the
 //  learning state a tutor session writes: `session`, `event`, `mastery`
-//  and `review`, column for column the Postgres tables the snapshot
+//  and `review`, column for column the catalog tables the snapshot
 //  mirrors, so the web's `POST /api/learner/observe` has a faithful local
 //  equivalent (recordSessionAnswer) and a sync that one day lifts these
 //  rows does not have to reshape them. Everything reads into memory on
@@ -27,14 +27,14 @@
 //  SQLiteDatabase is not reused: it opens read-only by design, so the
 //  writable open below is its own thin shell over the same primitives.
 //
-//  The Postgres half: every write here is also the web's write. GnosiaApp
+//  The catalog half: every write here is also the web's write. GnosiaApp
 //  hands the store the SidecarManager, and each method's local row commits
 //  beside the matching `/api/learner/*` call in one transaction — the
 //  `mirror_queue` table, the outbox — so a committed write always owes
-//  Postgres its mirror and a crash between commit and send loses nothing.
+//  the catalog its mirror and a crash between commit and send loses nothing.
 //  A flusher drains the queue oldest-first through the sidecar, and the
-//  routes are the web's, so Postgres sees the same bodies the pages post.
-//  A down or spawning sidecar and an unreachable Postgres just make rows
+//  routes are the web's, so the catalog sees the same bodies the pages post.
+//  A down or spawning sidecar and an unreachable catalog just make rows
 //  wait: sends retry with backoff, bounded by attempts and by age, and
 //  whatever outlives both is dropped, counted and logged — the divergence
 //  a future sync would reconcile.
@@ -144,7 +144,7 @@ func cleanAssetName(_ value: String) -> String? {
     return cleaned.isEmpty ? nil : cleaned
 }
 
-/// One `/api/learner/*` call the store owes Postgres — the queue's unit:
+/// One `/api/learner/*` call the store owes the catalog — the queue's unit:
 /// the route's path and its JSON body, already encoded so it can persist.
 /// `dedupeKey` on upsert mirrors collapses a newer queued write over an
 /// older one for the same row (the file itself only ever holds the latest
@@ -159,7 +159,7 @@ private struct MirrorCall {
     let body: Data
 
     /// nil when the body will not encode — a mirror that never formed owes
-    /// Postgres nothing.
+    /// the catalog nothing.
     init?(path: String, dedupeKey: String? = nil, body: [String: Any]) {
         guard let data = try? JSONSerialization.data(withJSONObject: body) else { return nil }
         self.init(path: path, dedupeKey: dedupeKey, data: data)
@@ -199,7 +199,7 @@ final class LearnerStore {
     let path: String
     private var db: WritableDatabase?
 
-    /// The Postgres mirror's sidecar, wired by the app shell. Nil in a
+    /// The catalog mirror's sidecar, wired by the app shell. Nil in a
     /// preview or a test is "no mirror": the local writes all still land
     /// and nothing is queued.
     var sidecar: SidecarManager?
@@ -281,7 +281,7 @@ final class LearnerStore {
         watches[assetID]
     }
 
-    /// What a watch save mirrors to Postgres. The app has two kinds of
+    /// What a watch save mirrors to the catalog. The app has two kinds of
     /// write here — a player heartbeat and an explicit mark — and they are
     /// two different web routes, so the caller names its own.
     enum WatchMirror {
@@ -359,7 +359,7 @@ final class LearnerStore {
     /// The web VisitTracker's `markVisited` as a local write: a `visit`
     /// event — the row Recent's module rows and the Courses section's
     /// resume lines fold from — beside the `lastVisited` preference write
-    /// the web page posts, queued as the mirror. Postgres's route turns
+    /// the web page posts, queued as the mirror. The catalog's route turns
     /// that same body into its own visit event plus `recentModules` update,
     /// so the server and this file record the same thing. It is an append
     /// mirror like `watched`: each visit owes its own send.
@@ -443,7 +443,7 @@ final class LearnerStore {
     /// services/catalog/src/state/progress.ts: a tick writes `completed_at`,
     /// an untick nulls it.
     ///
-    /// One deliberate difference: Postgres's pruneEmpty deletes a row left
+    /// One deliberate difference: the catalog's pruneEmpty deletes a row left
     /// with neither tick nor note, and this one does not. There the row's
     /// absence means "untouched"; here the row is an overlay on the
     /// snapshot's progress mirror, so deleting an untick would let the
@@ -503,7 +503,7 @@ final class LearnerStore {
     ///
     /// The row is kept rather than deleted when it ends up holding neither
     /// tick nor note — the same tombstone rule setProgress documents:
-    /// Postgres's pruneEmpty can delete because absence means "untouched"
+    /// The catalog's pruneEmpty can delete because absence means "untouched"
     /// there, while this file's row masks the snapshot's progress mirror,
     /// and a deleted row would let a stale mirrored note show through.
     func setNote(_ itemID: String, note: String) {
@@ -552,7 +552,7 @@ final class LearnerStore {
     ///
     /// Returns false when the write failed — `error` says why, and the
     /// caller is expected to keep the pick so "Try again" can replay it.
-    /// The Postgres mirror is queued in the same commit — it lands only
+    /// The catalog mirror is queued in the same commit — it lands only
     /// when the row does — and a replayed write queues the same requestId,
     /// which the server answers `replayed` rather than recording twice.
     @discardableResult
@@ -572,8 +572,8 @@ final class LearnerStore {
     }
 
     /// The `POST /api/learner/observe` body for one recorded answer, encoded:
-    /// what the web's session page posts, evidence fields only, so Postgres
-    /// recomputes mastery and scheduling through `recordObservation` rather
+    /// what the web's session page posts, evidence fields only, so the
+    /// catalog recomputes mastery and scheduling through `recordObservation` rather
     /// than trusting this file's numbers. Fields the route reads as optional
     /// text travel as null when absent; an empty session title is simply not
     /// sent (the route refuses one). Encoded here rather than in the client
@@ -668,7 +668,7 @@ final class LearnerStore {
                     .real(at), .real(at),
                 ])
             // session-start — the event readSessionHome's conceptTouches
-            // folds for "last opened". Postgres promotes `session` out of
+            // folds for "last opened". The catalog promotes `session` out of
             // the payload into session_id; the mirror keeps the flat record
             // whole so this row alone still names its session.
             try db.run(
@@ -759,7 +759,7 @@ final class LearnerStore {
     /// write asked for, or on a replay the first write's, since a review
     /// event cannot be deleted and a double count would be permanent —
     /// or nil when the write failed, `error` saying why and the caller
-    /// keeping the card for the retry. The Postgres mirror queues in the
+    /// keeping the card for the retry. The catalog mirror queues in the
     /// same commit with the route's own body: `grade` there is the
     /// rating, the button pressed, which the server maps onto SM-2.
     @discardableResult
@@ -869,9 +869,9 @@ final class LearnerStore {
             .flatMap { String(data: $0, encoding: .utf8) } ?? ""
     }
 
-    // MARK: - The Postgres mirror (the retry queue)
+    // MARK: - The catalog mirror (the retry queue)
 
-    /// The Settings-readable counts: rows still owed to Postgres, rows the
+    /// The Settings-readable counts: rows still owed to the catalog, rows the
     /// queue gave up on, and the latest send's error.
     private(set) var pendingMirrors = 0
     private(set) var droppedMirrors = 0
@@ -971,7 +971,7 @@ final class LearnerStore {
     }
 
     /// One send pass over the due rows, oldest first — strict FIFO, so a
-    /// retried write never overtakes a newer one on its way to Postgres. A
+    /// retried write never overtakes a newer one on its way to the catalog. A
     /// send that cannot land ends the pass: the row keeps its place and its
     /// backoff says when the queue wakes next. A permanent refusal ends the
     /// row, not the pass — that write is unresolvable, the rest are not.
@@ -1098,7 +1098,7 @@ final class LearnerStore {
               PRIMARY KEY (learner_id, curriculum_item_id)
             );
             -- The learning-state tables a session writes, column for column
-            -- the tables catalog-snapshot.mjs mirrors into catalog.db, so a
+            -- the tables catalog-snapshot.mjs mirrors into app-catalog.db, so a
             -- read that expects the mirror's shape finds it here and a
             -- future sync does not have to reshape anything.
             CREATE TABLE IF NOT EXISTS session (
@@ -1143,7 +1143,7 @@ final class LearnerStore {
               updated_at    REAL,
               PRIMARY KEY (learner_id, concept_slug)
             );
-            -- The mirror outbox: each write's Postgres call, persisted with
+            -- The mirror outbox: each write's catalog call, persisted with
             -- the row it commits beside, until the sidecar answers it.
             -- `dedupe` collapses pending upserts of the same key — nil on
             -- append mirrors, which each owe their own send — and
@@ -1223,9 +1223,9 @@ final class LearnerStore {
     /// reads on demand, so a write before load still starts from what the
     /// file holds rather than from empty.
     ///
-    /// `mirror` is the Postgres half of the same commit: the call's queue
+    /// `mirror` is the catalog half of the same commit: the call's queue
     /// row is inserted inside the write's transaction first, so a committed
-    /// row always owes Postgres its mirror and a rolled-back one never
+    /// row always owes the catalog its mirror and a rolled-back one never
     /// does. The queue — not the caller — then owns getting it sent, and a
     /// flush pass starts as soon as this returns. When no sidecar is wired
     /// the mirror is simply not owed: the row commits alone, as it always

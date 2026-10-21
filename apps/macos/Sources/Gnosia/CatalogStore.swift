@@ -2,16 +2,18 @@
 //  CatalogStore.swift
 //  Gnosia
 //
-//  The whole read model. One file on purpose: while the catalog moves from
-//  Postgres to SQLite underneath, everything the app knows about storage —
-//  the sqlite3 C calls, the mirrored column names, the blob-key-to-path rule,
-//  the generated_by fallback — lives here, so a different transport later is
-//  one file to replace rather than a layer to untangle.
+//  The whole read model. One file on purpose: the catalog underneath is
+//  already SQLite, and the app reads a smaller mirror of it — everything the
+//  app knows about storage — the sqlite3 C calls, the mirrored column
+//  names, the blob-key-to-path rule, the generated_by fallback — lives
+//  here, so a different transport later is one file to replace rather than
+//  a layer to untangle.
 //
 //  The file this reads is written by scripts/catalog-snapshot.mjs, which is
 //  also where its DDL lives. Column names mirror the drizzle schema
 //  (packages/schema/src/content.ts); timestamps are seconds since
-//  1970-01-01 UTC as REAL.
+//  1970-01-01 UTC as REAL — the live schema's millisecond integers divided
+//  by 1000.0 at snapshot time.
 //
 //  It also reads <data home>/learner.db — the owner's own marks (stars,
 //  watch positions, renames, course ticks), a file beside the snapshot
@@ -283,7 +285,7 @@ struct CatalogMastery: Hashable {
 }
 
 /// One row of the mirrored event log. The snapshot ships only these fields —
-/// Postgres' promoted `concept_slug` and `session_id` columns are not
+/// the catalog's promoted `concept_slug` and `session_id` columns are not
 /// mirrored — so `payload` is where `course`/`module`, `asset`, `goal` and
 /// `concepts` live, and an `observation` row cannot name its concept.
 struct CatalogEvent {
@@ -363,8 +365,10 @@ struct TranscriptSegment: Hashable {
 
 /// Where the two paths the app needs come from, in order.
 ///
-/// The catalog: GNOSIA_CATALOG, then the Settings pane's field (UserDefaults
-/// `catalogPath`), then <data home>/catalog.db.
+/// The catalog mirror: GNOSIA_CATALOG, then the Settings pane's field
+/// (UserDefaults `catalogPath`), then <data home>/app-catalog.db —
+/// app-catalog.db, not catalog.db, because the live catalog already owns
+/// that name and the two files hold different shapes.
 ///
 /// The blobs: GNOSIA_BLOBS, then <data home>/blobs — the same layout
 /// @gnosia/blob resolves (defaultBlobRoot in packages/blob/src/fs.ts), so a
@@ -385,7 +389,7 @@ struct CatalogLocation {
         let home = dataHome(env: env)
         let catalog = firstNonEmpty(env["GNOSIA_CATALOG"])
             ?? firstNonEmpty(defaults.string(forKey: "catalogPath"))
-            ?? home.appendingPathComponent("catalog.db").path
+            ?? home.appendingPathComponent("app-catalog.db").path
         let blobs = firstNonEmpty(env["GNOSIA_BLOBS"])
             ?? home.appendingPathComponent("blobs").path
         let learner = firstNonEmpty(env["GNOSIA_LEARNER"])
@@ -397,9 +401,9 @@ struct CatalogLocation {
         )
     }
 
-    /// The data home both stores live under: catalog.db here, learner.db in
-    /// LearnerStore. Not private so the sidecar resolves the same rule rather
-    /// than a second copy of it.
+    /// The data home both stores live under: app-catalog.db here, learner.db
+    /// in LearnerStore. Not private so the sidecar resolves the same rule
+    /// rather than a second copy of it.
     static func dataHome(env: [String: String]) -> URL {
         if let raw = env["GNOSIA_HOME"], !raw.trimmingCharacters(in: .whitespaces).isEmpty {
             return URL(fileURLWithPath: expandHome(raw.trimmingCharacters(in: .whitespaces)))
@@ -472,7 +476,7 @@ final class CatalogStore {
     /// Asset id → the learner's own title, from the catalog's asset_name.
     private(set) var assetNames: [String: String] = [:]
     /// The mirrored event log, in log order. The snapshot ships only
-    /// id/at/type/payload — Postgres' promoted `concept_slug` and
+    /// id/at/type/payload — the catalog's promoted `concept_slug` and
     /// `session_id` columns stay behind (catalog-snapshot.mjs), so a surface
     /// reads the payload for `course`/`module`/`asset`/`goal`/`concepts`
     /// and accepts that an observation cannot name its concept.
@@ -1556,7 +1560,7 @@ extension CatalogStore {
     func watchMark(_ id: String) -> WatchMark? { watch[id] }
 
     /// The learner's rename when either file carries one — this app's own
-    /// (learner.db) first, then the mirrored Postgres asset_name — else the
+    /// (learner.db) first, then the mirrored catalog asset_name — else the
     /// asset's own title. What rows and detail panes should all print.
     func displayTitle(for asset: CatalogAsset) -> String {
         names[asset.id] ?? assetNames[asset.id] ?? asset.displayTitle
@@ -1769,7 +1773,7 @@ extension CatalogStore {
         events = ordered.map(\.event)
 
         // The two progress sources merge per item: the snapshot's mirror of
-        // Postgres and this app's own writes in learner.db. The row with the
+        // the catalog and this app's own writes in learner.db. The row with the
         // newer `updated_at` is the truth whichever file it sits in — a
         // learner.db untick (a NULL completed_at tombstone) masks the stale
         // snapshot tick it came after, and a re-snapshot that picked up a
