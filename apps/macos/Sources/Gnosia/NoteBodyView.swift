@@ -2,19 +2,26 @@
 //  NoteBodyView.swift
 //  Gnosia
 //
-//  A note's body typeset the way the web page typesets it: the same block
-//  split MarkdownText runs, then an offscreen-shaped WKWebView renders the
-//  inline half — emphasis, links, wikilinks, code — and the maths with the
-//  bundled KaTeX, the renderer lib/math.ts runs on the same content. Raw
-//  `$\operatorname{FFN}(x)…$` was readable to nobody; this is why the web
-//  switched to KaTeX too (the unicode-macro table failed on \frac, \sum,
-//  \begin — exactly what these notes are full of).
+//  A note's body typeset the way the web page typesets it. The whole parse
+//  now lives in the bundled note.html — its block and inline parsers are a
+//  port of the web's packages/tutor/src/markdown.ts plus GFM tables,
+//  ~~strikethrough~~ and <autolinks> — and the maths go through the bundled
+//  KaTeX, the same renderer lib/math.ts runs on this content. Splitting in
+//  the page means the port is near-verbatim rather than a second
+//  translation in Swift that would drift: a note gets tables, nested
+//  lists, blockquotes and [!kind] callouts the web draws, for free the day
+//  the shared parser learns them.
+//
+//  `![[name]]` embeds resolve through the catalog the way the web's
+//  embedAssetId does — the `diagram:learn/assets/<name>` row's blob,
+//  carried into the page as a data URI so the webview needs no extra file
+//  access. An embed that resolves to nothing renders the named gap the
+//  web draws for an unavailable asset. Wikilinks stay muted text —
+//  resolving them is native routing work, not renderer work.
 //
 //  The view sizes itself: note.html reports its laid-out height over the
 //  "gnosia" message handler and the frame follows, so it sits inside a
-//  ScrollView like any other block. Links open in the browser; wikilinks
-//  and embeds render as muted text for now — resolving them is native
-//  routing work, not renderer work.
+//  ScrollView like any other block.
 //
 
 import SwiftUI
@@ -28,12 +35,14 @@ struct NoteBodyView: View {
     /// repeat reads as a heading; in the single column it reads as a bug.
     var stripTitle: String? = nil
 
+    /// Where `![[name]]` resolves: the same store every pane reads.
+    @Environment(CatalogStore.self) private var store
     @Environment(\.colorScheme) private var scheme
     @State private var height: CGFloat = 60
 
     var body: some View {
         NoteWeb(
-            payload: Self.payload(source: source, stripTitle: stripTitle, dark: scheme == .dark),
+            payload: payload(source: source, stripTitle: stripTitle, dark: scheme == .dark),
             onHeight: { height = max(20, $0) }
         )
         .frame(maxWidth: .infinity)
@@ -42,45 +51,92 @@ struct NoteBodyView: View {
 
     // MARK: - payload
 
-    private struct JBlock: Encodable {
-        let t: String
-        var l: Int = 0
-        var s: String = ""
+    private struct JPayload: Encodable {
+        let theme: [String: String]
+        let source: String
+        let stripTitle: String?
+        let embeds: [String: String]
     }
 
-    /// `{"theme":…, "blocks":…}` as a JS literal for `gnosia(payload)`.
-    private static func payload(source: String, stripTitle: String?, dark: Bool) -> String {
-        var blocks = MarkdownText.parse(source)
-        if let title = stripTitle, case .heading(1, let text)? = blocks.first,
-           text.trimmingCharacters(in: .whitespaces).caseInsensitiveCompare(title) == .orderedSame {
-            blocks.removeFirst()
-        }
-        let jblocks: [JBlock] = blocks.map {
-            switch $0 {
-            case .heading(let l, let s): return JBlock(t: "h", l: l, s: s)
-            case .para(let s): return JBlock(t: "p", s: s)
-            case .bullet(let s): return JBlock(t: "b", s: s)
-            case .code(let s): return JBlock(t: "c", s: s)
-            case .rule: return JBlock(t: "r")
-            }
-        }
+    /// `{"theme":…,"source":…,"stripTitle":…,"embeds":…}` as a JS literal
+    /// for `gnosia(payload)`. Sorted keys keep identical payloads
+    /// byte-identical, so the webview's pending-compare stays a dedupe.
+    private func payload(source: String, stripTitle: String?, dark: Bool) -> String {
         // The G palette, one CSS var per token the page uses.
         let theme: [String: String] = dark ? [
             "fg": "#eee8dc", "muted": "#a3b2bf", "faint": "#74828f",
             "border": "#3d4c5b", "codebg": "#1b2c3c", "bg": "#0a1621",
-            "accent": "#5cbab3", "danger": "#ff8585", "sel": "rgba(92,186,179,.3)",
+            "accent": "#5cbab3", "ok": "#5ed981", "warn": "#f9d25c",
+            "violet": "#8b5cf6", "danger": "#ff8585", "sel": "rgba(92,186,179,.3)",
         ] : [
             "fg": "#15283a", "muted": "#605b54", "faint": "#878276",
             "border": "#e6dfd0", "codebg": "#f3eee1", "bg": "#faf6ec",
-            "accent": "#0f5f61", "danger": "#c43939", "sel": "rgba(20,130,133,.25)",
+            "accent": "#0f5f61", "ok": "#008024", "warn": "#8c6800",
+            "violet": "#8b5cf6", "danger": "#c43939", "sel": "rgba(20,130,133,.25)",
         ]
+        let body = JPayload(
+            theme: theme,
+            source: source,
+            stripTitle: stripTitle,
+            embeds: embedSources(in: source)
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .sortedKeys
         guard
-            let blocksData = try? JSONEncoder().encode(jblocks),
-            let themeData = try? JSONEncoder().encode(theme),
-            let bj = String(data: blocksData, encoding: .utf8),
-            let tj = String(data: themeData, encoding: .utf8)
-        else { return #"{"theme":{},"blocks":[]}"# }
-        return #"{"theme":\#(tj),"blocks":\#(bj)}"#
+            let data = try? encoder.encode(body),
+            let js = String(data: data, encoding: .utf8)
+        else { return #"{"theme":{},"source":"","stripTitle":null,"embeds":{}}"# }
+        return js
+    }
+
+    // MARK: - embed resolution
+
+    /// Every `![[name]]` in the source to the blob its diagram row names,
+    /// as a `data:` URI — the web's embedAssetId (`diagram:learn/assets/<name>`)
+    /// over the local blob store. An embed that resolves to nothing stays
+    /// out of the map and the page draws its named gap. Matches inside
+    /// code spans still resolve; the page just never looks them up.
+    private func embedSources(in source: String) -> [String: String] {
+        guard let re = try? NSRegularExpression(pattern: #"!\[\[([^\]|]+?)(?:\|[^\]]*)?\]\]"#)
+        else { return [:] }
+        var out: [String: String] = [:]
+        for match in re.matches(in: source, range: NSRange(source.startIndex..., in: source)) {
+            guard let range = Range(match.range(at: 1), in: source) else { continue }
+            let name = source[range].trimmingCharacters(in: .whitespaces)
+            guard out[name] == nil, let uri = embedDataURI(name: name) else { continue }
+            out[name] = uri
+        }
+        return out
+    }
+
+    /// One embed name to `data:<mime>;base64,…`, or nil when the row or the
+    /// blob is missing or the file is not an image — the cases the web's
+    /// figure answers with a panel naming the file. Capped so a stray
+    /// multi-megabyte blob never lands in the JS payload.
+    private func embedDataURI(name: String) -> String? {
+        guard
+            let mime = Self.embedMime(name),
+            let asset = store.asset("diagram:learn/assets/\(name)"),
+            let key = asset.blobKey,
+            let data = try? Data(contentsOf: store.blobURL(for: key)),
+            !data.isEmpty, data.count <= 8_000_000
+        else { return nil }
+        return "data:\(mime);base64,\(data.base64EncodedString())"
+    }
+
+    /// The types an `<img>` draws. Anything else in the slot — a video, a
+    /// document — is the named gap, which is the answer the web's
+    /// EmbedImage gives for a file that cannot load.
+    private static func embedMime(_ name: String) -> String? {
+        switch (name as NSString).pathExtension.lowercased() {
+        case "svg", "svgz": return "image/svg+xml"
+        case "png": return "image/png"
+        case "jpg", "jpeg": return "image/jpeg"
+        case "gif": return "image/gif"
+        case "webp": return "image/webp"
+        case "avif": return "image/avif"
+        default: return nil
+        }
     }
 }
 
