@@ -211,6 +211,99 @@ struct SidecarClient {
         try await object("POST", "/api/learner/tutor-model/models", body: ["provider": provider])
     }
 
+    // MARK: - learner state writes
+
+    // The native app's Postgres half: the same `/api/learner/*` bodies the
+    // web's pages post, so one write lands in learner.db and its mirror in
+    // Postgres. Every caller is fire-and-forget — the LearnerStore bridges
+    // after its local row commits, and a sidecar that is down drops the
+    // mirror, never the write.
+
+    /// `POST /api/learner/favorite`: `{ assetId, favorite }` → `{ ok, result }`.
+    @discardableResult
+    func setFavorite(_ assetId: String, favorite: Bool) async throws -> [String: Any] {
+        try await object("POST", "/api/learner/favorite", body: ["assetId": assetId, "favorite": favorite])
+    }
+
+    /// `POST /api/learner/watched`: `{ assetId }` → `{ ok, result }`. One
+    /// press, one `watched` event — the server's append does not dedupe.
+    @discardableResult
+    func markWatched(_ assetId: String) async throws -> [String: Any] {
+        try await object("POST", "/api/learner/watched", body: ["assetId": assetId])
+    }
+
+    /// `POST /api/learner/playback`: `{ assetId, duration, position, ranges }`
+    /// → `{ ok, result }`. The ranges merge under the learner lock; the save
+    /// that takes coverage past the watched fraction appends the `watched`
+    /// event server-side.
+    @discardableResult
+    func savePlayback(_ assetId: String, duration: Double, position: Double, ranges: [[Double]]) async throws -> [String: Any] {
+        try await object("POST", "/api/learner/playback", body: [
+            "assetId": assetId,
+            "duration": duration,
+            "position": position,
+            "ranges": ranges,
+        ])
+    }
+
+    /// `POST /api/learner/progress`: `{ curriculumItemId, completed }` → `{ ok, result }`.
+    @discardableResult
+    func setProgress(_ curriculumItemId: String, completed: Bool) async throws -> [String: Any] {
+        try await object("POST", "/api/learner/progress", body: [
+            "curriculumItemId": curriculumItemId,
+            "completed": completed,
+        ])
+    }
+
+    /// `POST /api/learner/asset-name`: `{ assetId, name }` → `{ ok, result }`;
+    /// a nil `name` goes over the wire as null, which clears the learner's name.
+    @discardableResult
+    func renameAsset(_ assetId: String, name: String?) async throws -> [String: Any] {
+        try await object("POST", "/api/learner/asset-name", body: [
+            "assetId": assetId,
+            "name": name ?? NSNull(),
+        ])
+    }
+
+    /// `POST /api/learner/note`: `{ curriculumItemId, note }` → `{ ok, result }`.
+    /// No native surface writes notes today; the method exists so the bridge
+    /// contract is complete when one does.
+    @discardableResult
+    func setNote(_ curriculumItemId: String, note: String) async throws -> [String: Any] {
+        try await object("POST", "/api/learner/note", body: [
+            "curriculumItemId": curriculumItemId,
+            "note": note,
+        ])
+    }
+
+    /// `POST /api/learner/name`: `{ name }` → `{ ok, result }`; null clears.
+    /// As with `setNote`, kept for completeness — nothing native asks the
+    /// learner's name.
+    @discardableResult
+    func setDisplayName(_ name: String?) async throws -> [String: Any] {
+        try await object("POST", "/api/learner/name", body: ["name": name ?? NSNull()])
+    }
+
+    /// `POST /api/learner/observe`: one graded answer, the body the web's
+    /// session page posts — `{ conceptSlug, correct, source, requestId,
+    /// sessionId, … }`. The server recomputes mastery and the card; the
+    /// `requestId` makes a resent answer a replay rather than a second write.
+    /// The body arrives already encoded: `Data` is Sendable, so the caller's
+    /// main-actor dictionary crosses the isolation boundary as bytes.
+    @discardableResult
+    func observe(json body: Data) async throws -> [String: Any] {
+        let (data, response) = try await send("POST", "/api/learner/observe", data: body)
+        return try decode([String: Any].self, from: data, response: response)
+    }
+
+    /// `POST /api/learner/session/close`: `{ sessionId }` → `{ ok, result }`.
+    /// Idempotent: an already-closed or never-opened session answers
+    /// `closed: false` and writes nothing.
+    @discardableResult
+    func closeSession(_ sessionId: String) async throws -> [String: Any] {
+        try await object("POST", "/api/learner/session/close", body: ["sessionId": sessionId])
+    }
+
     // MARK: - transport
 
     private func post(_ path: String, body: [String: Any]) async throws -> [String: Any] {
@@ -238,6 +331,16 @@ struct SidecarClient {
         if let body {
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
         }
+        return try await session.data(for: request)
+    }
+
+    /// `send` with the body already encoded: `observe`, whose dictionary is
+    /// built on another actor and so has to cross as bytes, not an object.
+    private func send(_ method: String, _ path: String, data: Data) async throws -> (Data, URLResponse) {
+        var request = URLRequest(url: baseURL.appending(path: path))
+        request.httpMethod = method
+        request.setValue("application/json", forHTTPHeaderField: "content-type")
+        request.httpBody = data
         return try await session.data(for: request)
     }
 

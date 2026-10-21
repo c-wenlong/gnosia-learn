@@ -26,6 +26,9 @@ struct GnosiaApp: App {
     init() {
         NSApplication.shared.setActivationPolicy(.regular)
         NSApplication.shared.activate(ignoringOtherApps: true)
+        // Every learner.db write also mirrors into Postgres through the
+        // sidecar — the bridge the store's file header describes.
+        learner.sidecar = sidecar
     }
 
     var body: some Scene {

@@ -27,6 +27,15 @@
 //  SQLiteDatabase is not reused: it opens read-only by design, so the
 //  writable open below is its own thin shell over the same primitives.
 //
+//  The Postgres half: every write here is also the web's write. GnosiaApp
+//  hands the store the SidecarManager, and each method's local row commits
+//  first, then fires the matching `/api/learner/*` route through the
+//  sidecar, fire-and-forget — a sidecar that is down, spawning or slow
+//  never blocks or un-writes the local row, and the routes are the web's,
+//  so Postgres sees the same bodies the pages post. Nothing is queued: a
+//  write made while the sidecar cannot be reached is not retried, which
+//  is the remaining divergence a sync would one day reconcile.
+//
 
 import Foundation
 import CSQLite3
@@ -147,8 +156,30 @@ final class LearnerStore {
     let path: String
     private var db: WritableDatabase?
 
+    /// The Postgres mirror's sidecar, wired by the app shell. Nil in a
+    /// preview or a test is "no mirror": the local writes all still land.
+    var sidecar: SidecarManager?
+
     init(path: String = LearnerStore.defaultPath()) {
         self.path = path
+    }
+
+    /// Mirror a committed write into Postgres through the sidecar. The
+    /// local row already landed, so this is strictly fire-and-forget:
+    /// `readyClient()` spawns the service on a cold start, and whatever a
+    /// down sidecar or an unreachable Postgres throws is dropped — the
+    /// store's `error` belongs to the file, not the mirror.
+    private func bridge(_ call: @escaping (SidecarClient) async throws -> Void) {
+        guard let sidecar else { return }
+        Task {
+            do {
+                let client = try await sidecar.readyClient()
+                try await call(client)
+            } catch {
+                // Intentionally silent: this file is the record, the mirror
+                // is best-effort, and a missed write is not replayed.
+            }
+        }
     }
 
     /// <data home>/learner.db, the data home resolved exactly as the
@@ -189,15 +220,20 @@ final class LearnerStore {
     }
 
     func toggleFavorite(_ assetID: String) {
-        write { db in
+        var favorited = false
+        let saved = write { db in
             if favorites.contains(assetID) {
                 try db.run("DELETE FROM favorite WHERE asset_id = ?", [.text(assetID)])
                 favorites.remove(assetID)
             } else {
                 try db.run("INSERT OR IGNORE INTO favorite (asset_id) VALUES (?)", [.text(assetID)])
                 favorites.insert(assetID)
+                favorited = true
             }
         }
+        // The web's `favorite` route: a preference row, upserted or cleared.
+        guard saved else { return }
+        bridge { try await $0.setFavorite(assetID, favorite: favorited) }
     }
 
     // MARK: - Watch marks
@@ -206,16 +242,47 @@ final class LearnerStore {
         watches[assetID]
     }
 
+    /// What a watch save mirrors to Postgres. The app has two kinds of
+    /// write here — a player heartbeat and an explicit mark — and they are
+    /// two different web routes, so the caller names its own.
+    enum WatchMirror {
+        /// The player's heartbeat: `POST /api/learner/playback`. This app
+        /// tracks no ranges, so the save claims the prefix up to the
+        /// playhead — the same approximation the local `done` verdict makes
+        /// when the playhead crosses `watchedFraction`, and the route's own
+        /// merge is what appends the `watched` event on the crossing.
+        case position(duration: Double)
+        /// The "Mark watched" / "Mark read" press: `POST /api/learner/watched`,
+        /// one `watched` event, as the web's button appends.
+        case marked
+    }
+
     /// Record where an asset's playback is. `done` is the watched verdict —
     /// the caller decides the fraction, the store only remembers.
-    func setWatch(_ assetID: String, seconds: Double, done: Bool) {
+    func setWatch(_ assetID: String, seconds: Double, done: Bool, mirror: WatchMirror) {
         let now = Date()
-        write { db in
+        let saved = write { db in
             try db.run(
                 "INSERT OR REPLACE INTO watch (asset_id, seconds, done, updated_at) VALUES (?, ?, ?, ?)",
                 [.text(assetID), .real(seconds), .int(done ? 1 : 0), .real(now.timeIntervalSince1970)]
             )
             watches[assetID] = WatchEntry(seconds: seconds, done: done, updatedAt: now)
+        }
+        guard saved else { return }
+        switch mirror {
+        case .position(let duration):
+            guard duration > 0 else { return }
+            // `[0, position]` is this store's honest coverage: it holds no
+            // ranges, so the playhead's prefix is all it can claim. The
+            // server merges it into what it stored, so each heartbeat just
+            // stretches the one range.
+            let position = min(max(0, seconds), duration)
+            bridge {
+                try await $0.savePlayback(assetID, duration: duration, position: position,
+                                          ranges: position > 0 ? [[0, position]] : [])
+            }
+        case .marked:
+            bridge { try await $0.markWatched(assetID) }
         }
     }
 
@@ -233,18 +300,22 @@ final class LearnerStore {
             clearName(assetID)
             return
         }
-        write { db in
+        let saved = write { db in
             try db.run("INSERT OR REPLACE INTO asset_name (asset_id, name) VALUES (?, ?)",
                        [.text(assetID), .text(cleaned)])
             names[assetID] = cleaned
         }
+        guard saved else { return }
+        bridge { try await $0.renameAsset(assetID, name: cleaned) }
     }
 
     func clearName(_ assetID: String) {
-        write { db in
+        let saved = write { db in
             try db.run("DELETE FROM asset_name WHERE asset_id = ?", [.text(assetID)])
             names.removeValue(forKey: assetID)
         }
+        guard saved else { return }
+        bridge { try await $0.renameAsset(assetID, name: nil) }
     }
 
     // MARK: - Course ticks
@@ -272,7 +343,7 @@ final class LearnerStore {
     /// rows the catalog itself rendered, so the item exists by construction.
     func setProgress(_ itemID: String, completed: Bool) {
         let now = Date().timeIntervalSince1970
-        write { db in
+        let saved = write { db in
             if completed {
                 try db.run("""
                     INSERT INTO progress
@@ -308,6 +379,8 @@ final class LearnerStore {
                 progress.removeValue(forKey: itemID)
             }
         }
+        guard saved else { return }
+        bridge { try await $0.setProgress(itemID, completed: completed) }
     }
 
     /// The learner's note on one curriculum item — setNote in
@@ -362,21 +435,53 @@ final class LearnerStore {
     ///
     /// Returns false when the write failed — `error` says why, and the
     /// caller is expected to keep the pick so "Try again" can replay it.
+    /// The sidecar mirror fires only once the row holds: a replayed write
+    /// resends the same requestId, which the server answers `replayed`
+    /// rather than recording twice.
     @discardableResult
     func recordSessionAnswer(_ write: SessionAnswerWrite) -> Bool {
-        var saved = false
-        self.write { db in
+        let saved = self.write { db in
             try db.exec("BEGIN IMMEDIATE")
             do {
                 try applySessionAnswer(db, write)
                 try db.exec("COMMIT")
-                saved = true
             } catch {
                 try? db.exec("ROLLBACK")
                 throw error
             }
         }
+        if saved {
+            // The web's observe body: the server recomputes mastery and the
+            // card from the evidence, so the local outcome numbers stay this
+            // file's own — they are never sent.
+            if let json = Self.observeJSON(write) {
+                bridge { try await $0.observe(json: json) }
+            }
+        }
         return saved
+    }
+
+    /// The `POST /api/learner/observe` body for one recorded answer, encoded:
+    /// what the web's session page posts, evidence fields only, so Postgres
+    /// recomputes mastery and scheduling through `recordObservation` rather
+    /// than trusting this file's numbers. Fields the route reads as optional
+    /// text travel as null when absent; an empty session title is simply not
+    /// sent (the route refuses one). Encoded here rather than in the client
+    /// so the dictionary — built on this actor — crosses as bytes.
+    private static func observeJSON(_ write: SessionAnswerWrite) -> Data? {
+        var body: [String: Any] = [
+            "conceptSlug": write.outcome.concept,
+            "correct": write.outcome.correct,
+            "source": write.outcome.source,
+            "requestId": write.requestId,
+            "sessionId": write.sessionId,
+            "question": write.question ?? NSNull(),
+            "answer": write.answer ?? NSNull(),
+            "chosen": write.chosen ?? NSNull(),
+        ]
+        if !write.sessionTitle.isEmpty { body["sessionTitle"] = write.sessionTitle }
+        if !write.sessionGoal.isEmpty { body["sessionGoal"] = write.sessionGoal }
+        return try? JSONSerialization.data(withJSONObject: body)
     }
 
     /// `session-close` for a session this file opened — closeInTransaction:
@@ -384,7 +489,7 @@ final class LearnerStore {
     /// opened or is closed already writes nothing, so exit paths can call
     /// this without tracking whether an answer ever landed.
     func closeSession(_ id: String, concepts: [String], at: Date = Date()) {
-        write { db in
+        let saved = write { db in
             try db.exec("BEGIN IMMEDIATE")
             do {
                 let rows = try db.query(
@@ -413,6 +518,11 @@ final class LearnerStore {
                 throw error
             }
         }
+        // The close is the server's own idempotent write too, so it fires
+        // even when this file had nothing to close — the session the server
+        // opened on the first bridged answer may still be running.
+        guard saved else { return }
+        bridge { try await $0.closeSession(id) }
     }
 
     /// The inserts recordSessionAnswer wraps in its transaction — split out
@@ -664,7 +774,12 @@ final class LearnerStore {
     /// nothing draws as if it had, and `error` says why. The file opens and
     /// reads on demand, so a write before load still starts from what the
     /// file holds rather than from empty.
-    private func write(_ body: (WritableDatabase) throws -> Void) {
+    ///
+    /// Returns whether the write landed, so the caller knows whether a
+    /// Postgres mirror of it should fire — the bridge mirrors what the file
+    /// holds, never what it refused.
+    @discardableResult
+    private func write(_ body: (WritableDatabase) throws -> Void) -> Bool {
         do {
             if db == nil { try open() }
             guard let db else { throw CatalogError(message: "learner store did not open") }
@@ -674,10 +789,12 @@ final class LearnerStore {
             }
             try body(db)
             error = nil
+            return true
         } catch let failure as CatalogError {
             error = failure.message
         } catch {
             self.error = error.localizedDescription
         }
+        return false
     }
 }

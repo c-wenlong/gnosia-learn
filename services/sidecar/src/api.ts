@@ -7,6 +7,17 @@ import {
 
 import type { TutorDeps } from "@self-learn/tutor/server/deps";
 import {
+  assetNameTurn,
+  favoriteTurn,
+  nameTurn,
+  noteTurn,
+  observeTurn,
+  playbackTurn,
+  progressTurn,
+  sessionCloseTurn,
+  watchedTurn,
+} from "@self-learn/tutor/server/learner-writes";
+import {
   chatTurn,
   judgeTurn,
   modelListTurn,
@@ -44,6 +55,15 @@ import { guard } from "./guard";
  *   POST   /api/agent/judge                    → judgeTurn
  *   POST   /api/agent/session                  → sessionQuestionTurn
  *   POST   /api/agent/summarize                → summarizeTurn
+ *   POST   /api/learner/favorite               → favoriteTurn
+ *   POST   /api/learner/watched                → watchedTurn
+ *   POST   /api/learner/playback               → playbackTurn
+ *   POST   /api/learner/progress               → progressTurn
+ *   POST   /api/learner/asset-name             → assetNameTurn
+ *   POST   /api/learner/note                   → noteTurn
+ *   POST   /api/learner/name                   → nameTurn
+ *   POST   /api/learner/observe                → observeTurn
+ *   POST   /api/learner/session/close          → sessionCloseTurn
  *   GET    /api/learner/provider-key           → providerKeyStatusTurn (the card's rows; the web reads them server-side)
  *   POST   /api/learner/provider-key           → providerKeySaveTurn
  *   DELETE /api/learner/provider-key           → providerKeyRemoveTurn
@@ -73,6 +93,15 @@ const TURNS: Record<string, Record<string, Turn>> = {
   "/api/agent/judge": { POST: judgeTurn },
   "/api/agent/session": { POST: sessionQuestionTurn },
   "/api/agent/summarize": { POST: summarizeTurn as Turn },
+  "/api/learner/favorite": { POST: favoriteTurn },
+  "/api/learner/watched": { POST: watchedTurn },
+  "/api/learner/playback": { POST: playbackTurn },
+  "/api/learner/progress": { POST: progressTurn },
+  "/api/learner/asset-name": { POST: assetNameTurn },
+  "/api/learner/note": { POST: noteTurn },
+  "/api/learner/name": { POST: nameTurn },
+  "/api/learner/observe": { POST: observeTurn },
+  "/api/learner/session/close": { POST: sessionCloseTurn },
   "/api/learner/provider-key": {
     GET: providerKeyStatusTurn as Turn,
     POST: providerKeySaveTurn,
