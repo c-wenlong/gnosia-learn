@@ -42,7 +42,7 @@ Where the app looks for the mirror, in order:
 
 1. `GNOSIA_CATALOG` (environment)
 2. The Settings pane's "Catalog SQLite file" field (⌘,)
-3. `$GNOSIA_HOME/app-catalog.db` (then `$SELF_LEARN_HOME`, then `~/.gnosia`)
+3. `$GNOSIA_HOME/app-catalog.db` (then `~/.gnosia`)
 
 Blobs are found the same way the blob store lays them out:
 `$GNOSIA_BLOBS` or `<data home>/blobs`, plus the
