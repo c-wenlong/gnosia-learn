@@ -11,6 +11,7 @@ import SwiftUI
 /// (last-30 turns; the thread is small, so the cap is the only trimming).
 struct AskView: View {
     @Environment(SidecarManager.self) private var sidecar
+    @Environment(CatalogStore.self) private var store
 
     @State private var subject = ""
     @State private var turns: [SidecarClient.ChatMessage] = []
@@ -18,6 +19,7 @@ struct AskView: View {
     @State private var busy = false
     @State private var started = false
     @State private var error: String?
+    @FocusState private var composerFocused: Bool
 
     var body: some View {
         Group {
@@ -127,14 +129,19 @@ struct AskView: View {
 
     private var composer: some View {
         HStack(spacing: 10) {
-            TextField("Answer, or ask a question", text: $draft, axis: .vertical)
-                .textFieldStyle(.plain)
-                .lineLimit(1 ... 6)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 9)
-                .background(G.surface, in: RoundedRectangle(cornerRadius: 10))
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(G.border))
-                .onSubmit { ask(draft) }
+            // The @ menu rides the field (MentionPicker.swift): `@` opens
+            // the catalog's concepts and standalone assets, a pick writes
+            // `@<slug>` / `@<asset id>` into the draft.
+            MentionField(
+                text: $draft,
+                focused: $composerFocused,
+                prompt: "Answer, or ask a question",
+                lineLimit: 1 ... 6,
+                horizontalPadding: 12,
+                verticalPadding: 9,
+                options: { store.mentionOptions },
+                onSubmit: { ask(draft) }
+            )
             Button {
                 ask(draft)
             } label: {
