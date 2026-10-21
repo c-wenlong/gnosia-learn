@@ -64,7 +64,54 @@ final class StudioManager {
     private(set) var videos: [StudioClient.StudioVideo] = []
     private(set) var drafts: [StudioClient.DraftSummary] = []
     private(set) var topics: [String: String] = [:]
+    /// slug → domain, the vocabulary rows' second column; the grid's
+    /// "group by domain" reads it (`topicDomain` in the web's vocabulary).
+    private(set) var topicDomains: [String: String] = [:]
     private(set) var refreshedAt: Date?
+
+    /* ------------------------------------------------------------------ */
+    /* The composer: harness/model picks and the opener a new draft owes. */
+    /* ------------------------------------------------------------------ */
+
+    /// The composer's harness pick, `claude` | `codex` | `byok`
+    /// (`HarnessPicker`'s set; the runner's health decides what byok
+    /// means). Persisted like the web's `studio:harness` key.
+    var harness: String {
+        didSet { UserDefaults.standard.set(harness, forKey: "studio:harness") }
+    }
+    /// The composer's model tier per harness — `default`, or the tier
+    /// the picker offers (`sonnet`/`fable`, `gpt-6-luna`/`gpt-6-astra`,
+    /// `lite`/`max` on byok). Persisted per harness, the web's `picks`.
+    var modelPicks: [String: String] {
+        didSet {
+            for (h, m) in modelPicks { UserDefaults.standard.set(m, forKey: "studio:model:\(h)") }
+        }
+    }
+    var model: String {
+        get { modelPicks[harness] ?? "default" }
+        set { modelPicks[harness] = newValue }
+    }
+
+    /// What the composer's text carried, parked by draft id until the
+    /// conversation view picks it up — `useStartDraft`'s `leaveOpener`:
+    /// the POST creates an empty draft, then the view sends the first
+    /// message so the person watches it land. The mention triples are not
+    /// parked: they are `draftMentions` of the text, recomputed at send.
+    private var pendingOpeners: [String: String] = [:]
+    func stashOpener(_ text: String, for draftId: String) { pendingOpeners[draftId] = text }
+    func takeOpener(for draftId: String) -> String? { pendingOpeners.removeValue(forKey: draftId) }
+
+    /// Jobs that ended on the grid's watch (failed/interrupted) and stay
+    /// as cards until dismissed — the web provider's `ended` and
+    /// `dismissed` sets behind `showOnGrid` in studio-tile-jobs.ts.
+    private(set) var endedJobs: Set<String> = []
+    private(set) var dismissedJobs: Set<String> = []
+    /// The previous pass's states, so `refresh` can tell a job that just
+    /// ended from one that was already ended when the surface opened —
+    /// only the first kind lands a grid card, matching `trackEnded`.
+    private var lastStates: [String: String] = [:]
+    /// Take a ended/interrupted card off the grid (the web's `dismiss`).
+    func dismiss(jobId: String) { dismissedJobs.insert(jobId) }
 
     /* ------------------------------------------------------------------ */
     /* The live half, the web's EventSource streams.                      */
@@ -118,6 +165,16 @@ final class StudioManager {
     private(set) var launchNote: String?
 
     private var loop: Task<Void, Never>?
+
+    init() {
+        let defaults = UserDefaults.standard
+        harness = defaults.string(forKey: "studio:harness") ?? "claude"
+        var picks: [String: String] = [:]
+        for h in ["claude", "codex", "byok"] {
+            if let m = defaults.string(forKey: "studio:model:\(h)") { picks[h] = m }
+        }
+        modelPicks = picks
+    }
 
     /// Begin the poll; idempotent, so `.task` can call it freely.
     func start() {
@@ -182,10 +239,28 @@ final class StudioManager {
         } else {
             listingError = "the diagram list could not be read"
         }
-        if let j { jobs = j }
+        if let j {
+            // `trackEnded`: a job that moved to failed/interrupted while
+            // the surface watched earns a grid card until dismissed; one
+            // that was already ended when the list first arrived does
+            // not — that is the Jobs section's ground, not the grid's.
+            for job in j {
+                let was = lastStates[job.jobId]
+                if ["failed", "interrupted"].contains(job.state), let was, was != job.state {
+                    endedJobs.insert(job.jobId)
+                }
+                lastStates[job.jobId] = job.state
+            }
+            endedJobs.formIntersection(j.map(\.jobId))
+            dismissedJobs.formIntersection(j.map(\.jobId))
+            jobs = j
+        }
         if let v { videos = v }
         if let d { drafts = d }
-        if let t { topics = Dictionary(t.map { ($0.slug, $0.title ?? $0.slug) }, uniquingKeysWith: { a, _ in a }) }
+        if let t {
+            topics = Dictionary(t.map { ($0.slug, $0.title ?? $0.slug) }, uniquingKeysWith: { a, _ in a })
+            topicDomains = Dictionary(t.compactMap { row in row.domain.map { (row.slug, $0) } }, uniquingKeysWith: { a, _ in a })
+        }
         refreshedAt = .now
         reconcileStreams(activeIds: Set(activeJobs.map(\.jobId)))
     }
@@ -259,7 +334,13 @@ final class StudioManager {
         // The live patch: the event's state/phase/note land on the row
         // now; the next poll is the record and wins whatever disagrees.
         if let index = jobs.firstIndex(where: { $0.jobId == jobId }) {
-            if let state = event.state { jobs[index].state = state }
+            if let state = event.state {
+                if ["failed", "interrupted"].contains(state), jobs[index].state != state {
+                    endedJobs.insert(jobId)
+                }
+                jobs[index].state = state
+                lastStates[jobId] = state
+            }
             if let phase = event.phase { jobs[index].phase = phase }
             if let note = event.note { jobs[index].note = note }
             if let at = event.at { jobs[index].updated = at }
