@@ -15,11 +15,22 @@
 //  would mark in-flight jobs `interrupted`, which is exactly the state the
 //  runner's own reconcile pass is careful to leave for a person to resume.
 //
-//  So this type owns the port probe and the five reads the surface draws
-//  from, health, diagrams, jobs, videos, drafts, polled on a short loop
-//  while the surface is up. The runner's own lists are cached or in-memory,
-//  so a four-second ask is cheap; it is also the whole progress story,
-//  since the web's SSE streams are a nicety the poll stands in for.
+//  So this type owns the port probe, the five reads the surface draws
+//  from — health, diagrams, jobs, videos, drafts — polled on a short
+//  loop while the surface is up, and the live half the web gets from
+//  `EventSource`: one SSE stream per job still holding its lease, over
+//  `GET /api/jobs/{id}/events` (StudioEvents.swift is the client).
+//
+//  The web's own split is kept (JobsProvider's `connection`): an event
+//  moves the screen the moment it lands — the note line and the
+//  state/phase patch apply to the polled row, a `done`/`error`/`gate`
+//  event re-polls the record at once — while the polled list stays the
+//  record. The poll slows to the web's ten-second reconcile cadence
+//  while a stream is live and keeps its old four-second cadence
+//  otherwise, which is also the fallback when a stream has dropped. A
+//  drop reconnects with a doubling backoff, `Last-Event-ID` resuming
+//  where the buffer left off, the same contract the browser's
+//  EventSource follows.
 //
 
 import AppKit
@@ -55,6 +66,50 @@ final class StudioManager {
     private(set) var topics: [String: String] = [:]
     private(set) var refreshedAt: Date?
 
+    /* ------------------------------------------------------------------ */
+    /* The live half, the web's EventSource streams.                      */
+    /* ------------------------------------------------------------------ */
+
+    /// The jobs whose `/events` stream is open right now: an id sits in
+    /// here only between the response headers arriving and the stream's
+    /// drop, so `isLive` is the honest "am I streaming" answer.
+    private(set) var liveJobs: Set<String> = []
+    /// The events each job's stream has carried, deduped by seq and kept
+    /// in seq order — the web provider's `stream.events`, held per job
+    /// rather than only for the watched one.
+    private(set) var streamEvents: [String: [StudioJobEvent]] = [:]
+    /// The seq each job's next connect resumes from, sent as
+    /// `Last-Event-ID`; the runner replays buffer events above it.
+    private var lastSeq: [String: Int] = [:]
+    /// One reconnect task per job it watches, cancelled when the job
+    /// leaves the active set.
+    private var streams: [String: Task<Void, Never>] = [:]
+
+    /// The web's `Connection`: nothing to watch is `off`, an open stream
+    /// for the watched job is `live`, anything else the polling fallback.
+    enum StreamStatus { case off, polling, live }
+
+    /// The job the strip follows — `activeJob` in studio-jobs.ts, the
+    /// first row still holding its lease.
+    var watching: String? { activeJobs.first?.jobId }
+
+    var streamStatus: StreamStatus {
+        guard let watching else { return .off }
+        return liveJobs.contains(watching) ? .live : .polling
+    }
+
+    /// Whether a job's stream is open right now.
+    func isLive(_ jobId: String) -> Bool { liveJobs.contains(jobId) }
+
+    /// The buffered events for a job, oldest first.
+    func events(for jobId: String) -> [StudioJobEvent] { streamEvents[jobId] ?? [] }
+
+    /// The newest progress line the stream carried for a job — what the
+    /// web's narration list is built from.
+    func latestNote(_ jobId: String) -> String? {
+        streamEvents[jobId]?.last(where: { $0.note?.isEmpty == false })?.note
+    }
+
     /// A detached launch is in flight. Set when `launch()` fires and
     /// cleared when health answers or the launch times out — the runner's
     /// first minute runs doctor and manual work before it binds.
@@ -70,7 +125,12 @@ final class StudioManager {
         loop = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.refresh()
-                try? await Task.sleep(for: .seconds(4))
+                // The web's cadence: ten seconds while the stream is live,
+                // since it carries the moment and the poll only reconciles;
+                // the old four otherwise, which is also the fallback while
+                // a stream is down.
+                let every: Double = self?.streamStatus == .live ? 10 : 4
+                try? await Task.sleep(for: .seconds(every))
             }
         }
     }
@@ -78,6 +138,9 @@ final class StudioManager {
     func stop() {
         loop?.cancel()
         loop = nil
+        for (_, task) in streams { task.cancel() }
+        streams.removeAll()
+        liveJobs.removeAll()
         status = .off
     }
 
@@ -95,6 +158,7 @@ final class StudioManager {
                 "Nothing is listening on \(client.baseURL.absoluteString). " +
                     "Start it with `npm run studio` from the repository root."
             )
+            reconcileStreams(activeIds: [])
             return
         }
         self.health = health
@@ -123,6 +187,87 @@ final class StudioManager {
         if let d { drafts = d }
         if let t { topics = Dictionary(t.map { ($0.slug, $0.title ?? $0.slug) }, uniquingKeysWith: { a, _ in a }) }
         refreshedAt = .now
+        reconcileStreams(activeIds: Set(activeJobs.map(\.jobId)))
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* The streams: open per active job, dropped when it leaves.          */
+    /* ------------------------------------------------------------------ */
+
+    /// Start a stream task for every job still holding a lease, cancel
+    /// the ones whose job left the set. Where the web opens one stream
+    /// for `activeJob` plus a second inside a panel watching a different
+    /// job, one task per active job covers the same ground — a diagram
+    /// and a video can both be live at once.
+    private func reconcileStreams(activeIds: Set<String>) {
+        for (id, task) in streams where !activeIds.contains(id) {
+            task.cancel()
+            streams[id] = nil
+            liveJobs.remove(id)
+        }
+        for id in activeIds where streams[id] == nil {
+            streams[id] = Task { [weak self] in
+                await self?.streamLoop(jobId: id)
+            }
+        }
+    }
+
+    /// One job's connection: connect, mark live, hand events to `ingest`
+    /// until the stream ends or the task is cancelled; on a drop, back
+    /// off and reconnect resuming from the last seq. The doubling waits
+    /// (1s to 30s) reset the moment a connect answers — a stream that
+    /// opens is healthy whatever happened before it.
+    private func streamLoop(jobId: String) async {
+        var backoff: Double = 1
+        while !Task.isCancelled {
+            do {
+                let request = StudioEventStream.request(
+                    baseURL: client.baseURL,
+                    jobId: jobId,
+                    after: lastSeq[jobId] ?? 0
+                )
+                let stream = try await StudioEventStream.connect(request, session: .shared)
+                backoff = 1
+                liveJobs.insert(jobId)
+                for try await event in stream {
+                    ingest(event, jobId: jobId)
+                }
+            } catch {
+                // Dropped, refused, or the runner went away: polling is
+                // the record while the loop sleeps and retries.
+            }
+            liveJobs.remove(jobId)
+            guard !Task.isCancelled else { break }
+            try? await Task.sleep(for: .seconds(backoff))
+            backoff = min(backoff * 2, 30)
+        }
+    }
+
+    /// One event: remember the resume token, fold it into the job's
+    /// buffer, patch the polled row with what it carries, and re-poll
+    /// the record on the events that end something — exactly what the
+    /// web's `receive` does in JobsProvider.
+    private func ingest(_ event: StudioJobEvent, jobId: String) {
+        lastSeq[jobId] = max(lastSeq[jobId] ?? 0, event.seq)
+        var held = streamEvents[jobId] ?? []
+        if !held.contains(where: { $0.seq == event.seq }) {
+            held.append(event)
+            held.sort { $0.seq < $1.seq }
+            if held.count > 200 { held = Array(held.suffix(200)) }
+            streamEvents[jobId] = held
+        }
+        // The live patch: the event's state/phase/note land on the row
+        // now; the next poll is the record and wins whatever disagrees.
+        if let index = jobs.firstIndex(where: { $0.jobId == jobId }) {
+            if let state = event.state { jobs[index].state = state }
+            if let phase = event.phase { jobs[index].phase = phase }
+            if let note = event.note { jobs[index].note = note }
+            if let at = event.at { jobs[index].updated = at }
+        }
+        if event.terminal {
+            // The stream said the job moved; the record says where to.
+            Task { await refresh() }
+        }
     }
 
     /// `npm run studio`, launched **detached** (`nohup … &`, output to
