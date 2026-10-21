@@ -315,10 +315,7 @@ npm run catalog -- course cover cs2111 --clear --reason "why"
 The image must be a WebP, JPEG or PNG by its first bytes and at most 2 MiB (a
 card shows it at 960x540). It is stored first (`pending` row, put, `head`,
 `present`), then the course row is pointed at its key and given the credit in
-one revision. The same image and credit again changes nothing. The ten photos
-that were `apps/web/public/course-covers/` moved with
-`node scripts/move-course-covers.mjs --from <dir of the ten .webp files>
-[--dry-run]`, whose credits are `scripts/course-covers.json`.
+one revision. The same image and credit again changes nothing.
 
 ### Filling it
 
