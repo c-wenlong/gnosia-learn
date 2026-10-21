@@ -1877,3 +1877,34 @@ extension CatalogStore {
         return total
     }
 }
+
+// MARK: - Mention options
+
+extension CatalogStore {
+    /// The @ menu's entries for the mention pickers (MentionPicker.swift):
+    /// every concept, its slug the token a pick writes, then every
+    /// standalone asset — the library's `All` kinds, the companion
+    /// sidecars left out since a transcript or poster is never the thing a
+    /// question names. Order is the store's own.
+    var mentionOptions: [MentionOption] {
+        let conceptRows = concepts.map { concept in
+            MentionOption(
+                token: concept.slug,
+                name: concept.title,
+                detail: topics[concept.topicSlug]?.title ?? concept.domain ?? "",
+                symbol: "lightbulb",
+                group: .concept
+            )
+        }
+        let assetRows = assets.filter { !isCompanionKind($0.kind) }.map { asset in
+            MentionOption(
+                token: asset.id,
+                name: displayTitle(for: asset),
+                detail: assetKindLabel(asset.kind),
+                symbol: assetKindSymbol(asset.kind),
+                group: .asset
+            )
+        }
+        return conceptRows + assetRows
+    }
+}
