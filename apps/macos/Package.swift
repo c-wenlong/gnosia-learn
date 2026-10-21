@@ -24,7 +24,7 @@ let package = Package(
             name: "Gnosia",
             dependencies: ["CSQLite3"],
             path: "Sources/Gnosia",
-            resources: [.process("Resources"), .copy("katex"), .copy("note.html"), .copy("chat.html")]
+            resources: [.process("Resources"), .copy("katex"), .copy("note.html"), .copy("chat.html"), .copy("mdcore.js")]
         ),
     ]
 )

@@ -8,8 +8,8 @@
 //  learner's turn is MathText inside UserMessage (maths typeset, the
 //  rest literal) while the tutor's is NoteProse inside TutorMessage
 //  (full markdown) — so the view takes a Role and does the same: `.user`
-//  renders chat.html's math mode, `.assistant` its markdown mode on the
-//  same MarkdownText block split the note uses.
+//  renders chat.html's math mode, `.assistant` its markdown mode, which
+//  runs the same mdcore.js parser and renderer the note page runs.
 //
 //  The bubble chrome — fill, border, radius, padding, font size — is
 //  drawn inside the page from per-turn CSS vars, so the frame the page
@@ -98,12 +98,6 @@ struct ChatMarkdownView: View {
 
     // MARK: - payload
 
-    private struct JBlock: Encodable {
-        let t: String
-        var l = 0
-        var s = ""
-    }
-
     /// A CGFloat as a CSS length, without the trailing ".0".
     private static func px(_ v: CGFloat) -> String {
         v == v.rounded() ? "\(Int(v))px" : String(format: "%.2fpx", v)
@@ -121,6 +115,7 @@ struct ChatMarkdownView: View {
                 "fg": "#faf6ec", "muted": "rgba(250,246,236,.75)", "faint": "rgba(250,246,236,.55)",
                 "border": "rgba(255,255,255,.3)", "codebg": "rgba(255,255,255,.16)",
                 "accent": "#faf6ec", "danger": "#ffb3b3", "sel": "rgba(250,246,236,.3)",
+                "ok": "#7de2a0", "warn": "#f0c96a", "violet": "#c4b5fd", "matte": "#f7f6f3",
             ]
         case (.user, true):
             return [
@@ -128,6 +123,7 @@ struct ChatMarkdownView: View {
                 "fg": "#0a1621", "muted": "rgba(10,22,33,.72)", "faint": "rgba(10,22,33,.5)",
                 "border": "rgba(10,22,33,.3)", "codebg": "rgba(10,22,33,.14)",
                 "accent": "#0a1621", "danger": "#8f1d1d", "sel": "rgba(10,22,33,.28)",
+                "ok": "#005c18", "warn": "#6d4e00", "violet": "#6d28d9", "matte": "#f7f6f3",
             ]
         case (.assistant, false):
             return [
@@ -135,6 +131,7 @@ struct ChatMarkdownView: View {
                 "fg": "#15283a", "muted": "#605b54", "faint": "#878276",
                 "border": "#e6dfd0", "codebg": "#f3eee1",
                 "accent": "#0f5f61", "danger": "#c43939", "sel": "rgba(20,130,133,.25)",
+                "ok": "#008024", "warn": "#8c6800", "violet": "#8b5cf6", "matte": "#f7f6f3",
             ]
         case (.assistant, true):
             return [
@@ -142,13 +139,15 @@ struct ChatMarkdownView: View {
                 "fg": "#eee8dc", "muted": "#a3b2bf", "faint": "#74828f",
                 "border": "#3d4c5b", "codebg": "#1b2c3c",
                 "accent": "#5cbab3", "danger": "#ff8585", "sel": "rgba(92,186,179,.3)",
+                "ok": "#4ade80", "warn": "#eab308", "violet": "#a78bfa", "matte": "#f7f6f3",
             ]
         }
     }
 
-    /// `{"theme":…, "mode":…, "blocks"|"text":…}` as a JS literal for
+    /// `{"theme":…, "mode":…, "source"|"text":…}` as a JS literal for
     /// `gnosia(payload)` — the same one-call-carries-all shape
-    /// NoteBodyView sends to note.html.
+    /// NoteBodyView sends to note.html; md mode hands the page the raw
+    /// source, which mdcore.js parses exactly as note.html does.
     private static func payload(
         text: String, role: Role, dark: Bool,
         fontSize: CGFloat, radius: CGFloat, padX: CGFloat, padY: CGFloat
@@ -165,29 +164,13 @@ struct ChatMarkdownView: View {
             let tj = String(data: themeData, encoding: .utf8)
         else { return #"{"theme":{},"mode":"math","text":""}"# }
 
-        let content: String
-        if role == .assistant {
-            let jblocks: [JBlock] = MarkdownText.parse(text).map {
-                switch $0 {
-                case .heading(let l, let s): return JBlock(t: "h", l: l, s: s)
-                case .para(let s): return JBlock(t: "p", s: s)
-                case .bullet(let s): return JBlock(t: "b", s: s)
-                case .code(let s): return JBlock(t: "c", s: s)
-                case .rule: return JBlock(t: "r")
-                }
-            }
-            guard
-                let blocksData = try? JSONEncoder().encode(jblocks),
-                let bj = String(data: blocksData, encoding: .utf8)
-            else { return #"{"theme":\#(tj),"mode":"md","blocks":[]}"# }
-            content = #""mode":"md","blocks":\#(bj)"#
-        } else {
-            guard
-                let textData = try? JSONEncoder().encode(text),
-                let xj = String(data: textData, encoding: .utf8)
-            else { return #"{"theme":\#(tj),"mode":"math","text":""}"# }
-            content = #""mode":"math","text":\#(xj)"#
-        }
+        guard
+            let textData = try? JSONEncoder().encode(text),
+            let xj = String(data: textData, encoding: .utf8)
+        else { return #"{"theme":\#(tj),"mode":"math","text":""}"# }
+        let content = role == .assistant
+            ? #""mode":"md","source":\#(xj)"#
+            : #""mode":"math","text":\#(xj)"#
         return #"{"theme":\#(tj),\#(content)}"#
     }
 }
