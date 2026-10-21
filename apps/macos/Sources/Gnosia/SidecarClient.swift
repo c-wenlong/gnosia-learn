@@ -101,15 +101,120 @@ struct SidecarClient {
         ])
     }
 
+    // MARK: - learner settings
+
+    /// A provider row of `GET /api/learner/provider-key`: what Settings may
+    /// know about a key — its last four and the day, never the key itself.
+    struct ProviderRow: Decodable, Identifiable {
+        struct Saved: Decodable {
+            let last4: String
+            let updatedAt: String
+            let readable: Bool
+        }
+        struct Custom: Decodable {
+            let baseUrl: String
+        }
+        let id: String
+        let label: String
+        let model: String
+        let keyUrl: String?
+        let custom: Custom?
+        let saved: Saved?
+        let server: Bool
+        /// "saved", "server", or nil — whose key the tutor calls this provider with.
+        let inUse: String?
+    }
+
+    struct ProviderKeysReply: Decodable {
+        let ok: Bool
+        let reachable: Bool
+        let rows: [ProviderRow]
+    }
+
+    /// One entry of the owner's model chain, as `tutor_model` stores it.
+    struct ChainEntry: Codable, Equatable, Hashable {
+        let provider: String
+        let model: String
+    }
+
+    /// The chain answers: the GET's `reachable`, and `{ ok, chain }` from the writes.
+    struct ChainReply: Decodable {
+        let ok: Bool
+        let reachable: Bool?
+        let chain: [ChainEntry]
+    }
+
+    /// `GET /api/learner/provider-key`: every provider with its key state.
+    func providerKeys() async throws -> ProviderKeysReply {
+        try await typed("GET", "/api/learner/provider-key", as: ProviderKeysReply.self)
+    }
+
+    /// `GET /api/learner/tutor-model`: the owner's chain, top first.
+    func tutorChain() async throws -> ChainReply {
+        try await typed("GET", "/api/learner/tutor-model", as: ChainReply.self)
+    }
+
+    /// `POST /api/learner/provider-key`: `{ provider, key }` → `{ ok, key }`.
+    @discardableResult
+    func saveProviderKey(_ provider: String, key: String) async throws -> [String: Any] {
+        try await object("POST", "/api/learner/provider-key", body: ["provider": provider, "key": key])
+    }
+
+    /// `DELETE /api/learner/provider-key`: `{ provider }` → `{ ok, removed }`.
+    @discardableResult
+    func removeProviderKey(_ provider: String) async throws -> [String: Any] {
+        try await object("DELETE", "/api/learner/provider-key", body: ["provider": provider])
+    }
+
+    /// `POST /api/learner/provider-key/test`: `{ provider }` → `{ ok, provider, source, model, tested }`.
+    func testProviderKey(_ provider: String) async throws -> [String: Any] {
+        try await object("POST", "/api/learner/provider-key/test", body: ["provider": provider])
+    }
+
+    /// `POST /api/learner/tutor-model`: `{ provider, model }` → `{ ok, chain }`.
+    func addTutorModel(_ provider: String, model: String) async throws -> ChainReply {
+        try await typed("POST", "/api/learner/tutor-model", body: ["provider": provider, "model": model], as: ChainReply.self)
+    }
+
+    /// `PUT /api/learner/tutor-model`: the whole chain becomes this entry.
+    func setTutorModel(_ provider: String, model: String) async throws -> ChainReply {
+        try await typed("PUT", "/api/learner/tutor-model", body: ["provider": provider, "model": model], as: ChainReply.self)
+    }
+
+    /// `DELETE /api/learner/tutor-model`: `{ provider, model }` → `{ ok, chain }`.
+    func removeTutorModel(_ provider: String, model: String) async throws -> ChainReply {
+        try await typed("DELETE", "/api/learner/tutor-model", body: ["provider": provider, "model": model], as: ChainReply.self)
+    }
+
+    /// `PATCH /api/learner/tutor-model`: `{ provider, model, direction }` → `{ ok, chain }`.
+    func moveTutorModel(_ provider: String, model: String, direction: String) async throws -> ChainReply {
+        try await typed("PATCH", "/api/learner/tutor-model", body: ["provider": provider, "model": model, "direction": direction], as: ChainReply.self)
+    }
+
+    /// `PATCH /api/learner/tutor-model/provider`: `{ provider, direction }` → `{ ok, chain }`.
+    func moveTutorProvider(_ provider: String, direction: String) async throws -> ChainReply {
+        try await typed("PATCH", "/api/learner/tutor-model/provider", body: ["provider": provider, "direction": direction], as: ChainReply.self)
+    }
+
+    /// `DELETE /api/learner/tutor-model/provider`: `{ provider }` → `{ ok, chain, keyRemoved }`.
+    func removeTutorProvider(_ provider: String) async throws -> [String: Any] {
+        try await object("DELETE", "/api/learner/tutor-model/provider", body: ["provider": provider])
+    }
+
+    /// `POST /api/learner/tutor-model/test`: `{ provider, model }` → `{ ok, provider, model, source, served }`.
+    func testTutorModel(_ provider: String, model: String) async throws -> [String: Any] {
+        try await object("POST", "/api/learner/tutor-model/test", body: ["provider": provider, "model": model])
+    }
+
+    /// `POST /api/learner/tutor-model/models`: `{ provider }` → `{ ok, models, cached }`.
+    func tutorModelList(_ provider: String) async throws -> [String: Any] {
+        try await object("POST", "/api/learner/tutor-model/models", body: ["provider": provider])
+    }
+
     // MARK: - transport
 
     private func post(_ path: String, body: [String: Any]) async throws -> [String: Any] {
-        var request = URLRequest(url: baseURL.appending(path: path))
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "content-type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        let (data, response) = try await session.data(for: request)
-        return try decode([String: Any].self, from: data, response: response)
+        try await object("POST", path, body: body)
     }
 
     /// `post` for a Codable body: encode, read back as a JSON object, and send
@@ -118,6 +223,34 @@ struct SidecarClient {
         let data = try JSONEncoder().encode(body)
         let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
         return try await post(path, body: object)
+    }
+
+    /// One request on the shared transport: JSON body in, raw reply out —
+    /// the refusal check happens in `decode`, so each caller parses what it asked for.
+    private func send(_ method: String, _ path: String, body: [String: Any]?) async throws -> (Data, URLResponse) {
+        var request = URLRequest(url: baseURL.appending(path: path))
+        request.httpMethod = method
+        // The sidecar's guard wants application/json on every body-carrying
+        // method, so a DELETE or PATCH sends its content-type too.
+        if method != "GET", method != "HEAD" {
+            request.setValue("application/json", forHTTPHeaderField: "content-type")
+        }
+        if let body {
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        }
+        return try await session.data(for: request)
+    }
+
+    /// The reply as a JSON object: the agent and learner-write envelopes.
+    private func object(_ method: String, _ path: String, body: [String: Any]? = nil) async throws -> [String: Any] {
+        let (data, response) = try await send(method, path, body: body)
+        return try decode([String: Any].self, from: data, response: response)
+    }
+
+    /// The reply decoded: the status reads' envelopes.
+    private func typed<T: Decodable>(_ method: String, _ path: String, body: [String: Any]? = nil, as type: T.Type) async throws -> T {
+        let (data, response) = try await send(method, path, body: body)
+        return try decode(T.self, from: data, response: response)
     }
 
     /// The shared status check: a 2xx passes through, anything else is read

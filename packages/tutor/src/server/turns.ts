@@ -1,3 +1,4 @@
+import { CustomProviderError, TutorModelError } from "@self-learn/catalog/state";
 import {
   isProviderName,
   PROVIDER_IDS,
@@ -18,7 +19,11 @@ import {
   availableProviderSummary,
   type ChatMessage,
   completeWithFallback,
+  customProviderConfig,
+  keyFor,
   missingKeyMessage,
+  providerConfigs,
+  type SavedKeys,
   skippedEntries,
   testProviderKey,
 } from "../providers";
@@ -54,22 +59,42 @@ import { MAX_ASSET_ID_CHARS, readAssetDetail, readAssetText } from "./asset-deta
 import { ContentUnavailableError } from "./content-source";
 import { readConceptWorkspace } from "./concept-workspace";
 import { entryCredential, keyTestCredential, tutorCredentials } from "./credentials";
-import type { TutorDeps } from "./deps";
+import { readOwnerCustomProviders, type CustomProvider } from "./custom-providers";
+import type { Env, TutorDeps } from "./deps";
 import { cachedModelList } from "./model-list";
+import {
+  failureCode,
+  keySecret,
+  NoKeySecretError,
+  openSavedKeys,
+  removeProviderKey,
+  savedKeyStatuses,
+  saveProviderKey,
+  type SavedKeyStatus,
+} from "./provider-keys";
+import { checkKeyShape } from "./seal";
 import { readTutorStyle } from "./settings";
-import { readChain } from "./tutor-models";
+import {
+  addChainEntry,
+  deleteChainProvider,
+  moveChainEntry,
+  moveChainProvider,
+  readChain,
+  removeChainEntry,
+  setChainEntry,
+} from "./tutor-models";
 import { svgText } from "../svg-text";
 import { parseTranscript } from "../transcript";
 import { measurePayload, PAYLOAD_LIMITS } from "../guards";
 import { checkModelId, KNOWLEDGE_LIMITS, providerLabel } from "@self-learn/schema/shared";
 
 /**
- * The request-independent core of the `/api/agent/*` and the three
- * `/api/learner/*-test|models` route handlers. Each function takes the
- * request's resolved seams (`TutorDeps`) and a parsed body, and answers a
- * plain `{ status, body, headers }` the transport writes out — the Next
- * routes map it onto `NextResponse.json`, the sidecar writes it directly.
- * Nothing here knows `Request`/`NextResponse`/cookies.
+ * The request-independent core of the `/api/agent/*` and the `/api/learner/*`
+ * route handlers — the provider-call reads and the Settings writes alike.
+ * Each function takes the request's resolved seams (`TutorDeps`) and a parsed
+ * body, and answers a plain `{ status, body, headers }` the transport writes
+ * out — the Next routes map it onto `NextResponse.json`, the sidecar writes
+ * it directly. Nothing here knows `Request`/`NextResponse`/cookies.
  */
 
 export interface TurnReply {
@@ -891,4 +916,367 @@ export async function modelListTurn(deps: TutorDeps, body: unknown): Promise<Tur
       : { ok: false, provider, status: result.status, message: result.message },
     { "Cache-Control": "no-store" },
   );
+}
+
+/* -------------------------------------------------------------------------- */
+/* The Settings writes                                                         */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The request-independent core of the `/api/learner/provider-key` and
+ * `/api/learner/tutor-model` write routes (docs/BYOK.md,
+ * docs/TUTOR-MODELS.md): the same bodies, the same `{ ok, error, code }`
+ * answers and statuses the Next routes give. What is not ported is what a
+ * loopback single-owner service does not have — the session, origin and
+ * rate-limit guards (the sidecar's own `guard.ts` answers origin) — and the
+ * `byok` mirror, which is the web deployment pushing a saved key into the
+ * studio runner's `byok.json`; a deployment without the runner omits the
+ * field there too, so its absence here is the same contract.
+ *
+ * `AUTH_SECRET` reads `process.env`, never `deps.env`: `env` is the provider
+ * map a request resolves keys and models against (a test hands in `{}` for
+ * "the server holds no key"), while the secret the saved keys are sealed
+ * under is the process's own and is never part of that map — the same split
+ * `credentials.ts` makes.
+ */
+
+/** `answer` in the web routes' requests.ts: `Cache-Control: no-store` on everything. */
+function writeAnswer(body: unknown, status = 200): TurnReply {
+  return reply(status, body, { "Cache-Control": "no-store" });
+}
+
+/** `refuse` there: `{ ok: false, error, code }`, a 400 unless said otherwise. */
+function writeRefuse(error: string, code = "BAD_REQUEST", status = 400): TurnReply {
+  return writeAnswer({ ok: false, error, code }, status);
+}
+
+/** The body as a record, or the refusal the web's `readBody` gives a non-object. */
+function writeRecord(body: unknown): { record: Record<string, unknown> } | { refused: TurnReply } {
+  if (body === null || typeof body !== "object" || Array.isArray(body)) {
+    return { refused: writeRefuse("The body must be a JSON object.") };
+  }
+  return { record: body as Record<string, unknown> };
+}
+
+/**
+ * `POST /api/learner/provider-key` with `{ provider, key }`: seal and save
+ * the owner's key for that provider, replacing any there. 200
+ * `{ ok, key: { provider, last4, updatedAt, readable } }`. 404 `NOT_FOUND`
+ * for a `custom-…` id that is not the owner's, 503 `NO_SECRET` when there is
+ * no `AUTH_SECRET` to seal with, 503 `STORE_UNAVAILABLE` when the write
+ * could not happen. No answer carries the key or its ciphertext.
+ */
+export async function providerKeySaveTurn(deps: TutorDeps, body: unknown): Promise<TurnReply> {
+  const read = writeRecord(body);
+  if ("refused" in read) return read.refused;
+  const provider = readProvider(read.record);
+  if (typeof provider !== "string") return provider;
+  const shape = checkKeyShape(read.record.key);
+  if (!shape.ok) return writeRefuse(shape.reason);
+  // The sealer would throw `NoKeySecretError` inside `saveProviderKey`, before
+  // the write — but `deps.db` is awaited first, and a store that rejects its
+  // handle would hide it behind STORE_UNAVAILABLE. The web's order is the
+  // sealer first (its pool handle resolves before the write), so check it here.
+  if (keySecret(process.env) === null) {
+    return writeRefuse("This server has no AUTH_SECRET, so it cannot store a key.", "NO_SECRET", 503);
+  }
+
+  try {
+    const key = await saveProviderKey(await deps.db, deps.owner, provider, shape.key, process.env);
+    return writeAnswer({ ok: true, key });
+  } catch (error) {
+    return keyWriteFailed("save", error);
+  }
+}
+
+/**
+ * `DELETE /api/learner/provider-key` with `{ provider }`: the owner's saved
+ * key for it goes. 200 `{ ok, removed }` — `removed` false when there was
+ * none. The same refusals as a save.
+ */
+export async function providerKeyRemoveTurn(deps: TutorDeps, body: unknown): Promise<TurnReply> {
+  const read = writeRecord(body);
+  if ("refused" in read) return read.refused;
+  const provider = readProvider(read.record);
+  if (typeof provider !== "string") return provider;
+
+  try {
+    const removed = await removeProviderKey(await deps.db, deps.owner, provider);
+    return writeAnswer({ ok: true, removed });
+  } catch (error) {
+    return keyWriteFailed("remove", error);
+  }
+}
+
+/** A failed provider-key write, mapped exactly as the web route's `failed`. */
+function keyWriteFailed(what: string, error: unknown): TurnReply {
+  if (error instanceof CustomProviderError && error.code === "NOT_FOUND") {
+    return writeRefuse("That is not one of your providers.", "NOT_FOUND", 404);
+  }
+  if (error instanceof NoKeySecretError) {
+    return writeRefuse("This server has no AUTH_SECRET, so it cannot store a key.", "NO_SECRET", 503);
+  }
+  console.warn(`provider key ${what} failed (${failureCode(error)})`);
+  return writeRefuse("Not saved: the database is unreachable.", "STORE_UNAVAILABLE", 503);
+}
+
+/** One provider's row in the status answer: what Settings may know — never the key, never its ciphertext. */
+export interface ProviderKeyRow {
+  id: ProviderName;
+  label: string;
+  /** The model the provider's key Test would call: its default, or "" for an owner's own provider. */
+  model: string;
+  keyUrl?: string;
+  /** A provider the owner added (T14): its base URL. Absent for a built-in. */
+  custom?: { baseUrl: string };
+  saved: { last4: string; /** ISO instant of the last save. */ updatedAt: string; readable: boolean } | null;
+  /** The server's environment holds a key for this provider. */
+  server: boolean;
+  /** Whose key the tutor calls this provider with now, or null when it has none. */
+  inUse: "saved" | "server" | null;
+}
+
+/**
+ * `GET /api/learner/provider-key`: the Provider keys card's rows — every
+ * provider, built-in and the owner's own, with its key state. The web page
+ * builds the same rows server-side (`providerKeyViews`); a native client has
+ * no server component, so the sidecar answers them. Never throws: a database
+ * that cannot be read answers `reachable: false` and rows holding the
+ * server's keys only, as the web's `loadProviderKeys` does.
+ */
+export async function providerKeyStatusTurn(deps: TutorDeps): Promise<TurnReply> {
+  let statuses: SavedKeyStatus[] = [];
+  let custom: CustomProvider[] = [];
+  let reachable = true;
+  try {
+    const db = await deps.db;
+    [statuses, custom] = await Promise.all([
+      savedKeyStatuses(db, deps.owner, process.env),
+      readOwnerCustomProviders(db, deps.owner),
+    ]);
+  } catch (error) {
+    console.warn(`settings: saved provider keys unavailable (${failureCode(error)})`);
+    reachable = false;
+  }
+
+  const byProvider = new Map<string, SavedKeyStatus>(statuses.map((s) => [s.provider, s]));
+  const configs = [...providerConfigs(deps.env), ...custom.map(customProviderConfig)];
+  const rows = configs.map((config): ProviderKeyRow => {
+    const status = byProvider.get(config.id);
+    const server = config.apiKeyEnv !== "" && Boolean(deps.env[config.apiKeyEnv]?.trim());
+    const own = status?.readable === true;
+    return {
+      id: config.id,
+      label: config.label,
+      model: config.model,
+      ...(config.keyUrl === undefined ? {} : { keyUrl: config.keyUrl }),
+      ...(config.custom ? { custom: { baseUrl: config.baseUrl } } : {}),
+      saved:
+        status === undefined
+          ? null
+          : { last4: status.last4, updatedAt: status.updatedAt, readable: status.readable },
+      server,
+      inUse: own ? "saved" : server ? "server" : null,
+    };
+  });
+  // `providerKeyViews`' order: the owner's usable keys in the cascade's
+  // order, then the server's. A custom provider has no built-in default and
+  // is never in it (T14).
+  const builtIn = rows.filter((row) => row.custom === undefined);
+  const order = [
+    ...builtIn.filter((row) => row.inUse === "saved"),
+    ...builtIn.filter((row) => row.inUse === "server"),
+  ].map((row) => ({ id: row.id, label: `${row.label} (${row.model})`, source: row.inUse }));
+  return writeAnswer({ ok: true, reachable, rows, order });
+}
+
+/** `{ provider, model }` read from a body, or the refusal the web's `entry` gives. */
+function chainEntryOf(body: unknown): { entry: { provider: ProviderName; model: string } } | { refused: TurnReply } {
+  const read = writeRecord(body);
+  if ("refused" in read) return read;
+  const provider = readProvider(read.record);
+  if (typeof provider !== "string") return { refused: provider };
+  const checked = checkModelId(read.record.model);
+  if (!checked.ok) return { refused: writeRefuse(checked.reason) };
+  return { entry: { provider, model: checked.model } };
+}
+
+/**
+ * The key gate an add and a replace share (docs/TUTOR-MODELS.md): the
+ * provider must hold a key — a saved key that cannot be read because the
+ * database is down is not "no key" — and the model id must not be, hold, or
+ * be a long part of any key the tutor could call with (T11). Answers the
+ * refusal, or `serverKey` for the write's own under-lock check.
+ */
+async function chainKeyGate(
+  deps: TutorDeps,
+  provider: ProviderName,
+  model: string,
+  what: "added" | "saved",
+): Promise<{ serverKey: boolean } | { refused: TurnReply }> {
+  let saved: SavedKeys;
+  try {
+    saved = await openSavedKeys(await deps.db, deps.owner, process.env);
+  } catch (error) {
+    console.warn(`tutor model ${what === "added" ? "add" : "set"}: saved provider keys unavailable (${failureCode(error)})`);
+    return { refused: writeRefuse(`Not ${what}: your saved keys could not be read just now. Try again in a moment.`, "STORE_UNAVAILABLE", 503) };
+  }
+  if (keyFor(provider, saved, deps.env) === null) {
+    return { refused: writeRefuse(`There is no key for ${providerLabel(provider)}. Add one under Providers first.`, "NO_KEY") };
+  }
+  if (echoesKey(model, saved, deps.env)) {
+    return { refused: writeRefuse("That is one of your API keys, not a model id. Keys go in a provider's API key field.") };
+  }
+  return { serverKey: keyFor(provider, {}, deps.env) !== null };
+}
+
+/** Whether `model` is, holds, or is a long part of any key the tutor could call with. */
+function echoesKey(model: string, saved: SavedKeys, env: Env): boolean {
+  // The server's keys come through `keyFor`; every saved key is checked as
+  // well, a custom provider's included, which `PROVIDER_IDS` does not name.
+  const keys = [
+    ...PROVIDER_IDS.flatMap((id) => {
+      const key = keyFor(id, saved, env);
+      return key === null ? [] : [key.apiKey];
+    }),
+    ...Object.values(saved).filter((key): key is string => typeof key === "string" && key !== ""),
+  ];
+  return keys.some((key) => model.includes(key) || (model.length >= 12 && key.includes(model)));
+}
+
+const CHAIN_STATUS: Record<TutorModelError["code"], number> = {
+  INVALID: 400,
+  DUPLICATE: 409,
+  FULL: 409,
+  NOT_FOUND: 404,
+  NO_KEY: 400,
+};
+
+/** `chainFailed` in the web routes: the chain's own refusal, or a database that could not be reached. */
+function chainWriteFailed(what: string, error: unknown): TurnReply {
+  if (error instanceof TutorModelError) return writeRefuse(error.message, error.code, CHAIN_STATUS[error.code]);
+  console.warn(`tutor model ${what} failed (${failureCode(error)})`);
+  return writeRefuse(`Not ${what === "read" ? "read" : "saved"}: the database is unreachable.`, "STORE_UNAVAILABLE", 503);
+}
+
+/**
+ * `POST /api/learner/tutor-model` with `{ provider, model }`: the entry joins
+ * the chain at the bottom of its provider's models. 200 `{ ok, chain }`, the
+ * whole chain after the change, top first.
+ */
+export async function tutorModelAddTurn(deps: TutorDeps, body: unknown): Promise<TurnReply> {
+  const read = chainEntryOf(body);
+  if ("refused" in read) return read.refused;
+  const gate = await chainKeyGate(deps, read.entry.provider, read.entry.model, "added");
+  if ("refused" in gate) return gate.refused;
+  try {
+    const chain = await addChainEntry(await deps.db, deps.owner, read.entry.provider, read.entry.model, gate.serverKey);
+    return writeAnswer({ ok: true, chain });
+  } catch (error) {
+    return chainWriteFailed("add", error);
+  }
+}
+
+/**
+ * `PUT /api/learner/tutor-model` with `{ provider, model }`: the whole chain
+ * becomes this one entry, in one locked rewrite — a refused write keeps the
+ * chain it would have replaced (T16). 200 `{ ok, chain }`.
+ */
+export async function tutorModelSetTurn(deps: TutorDeps, body: unknown): Promise<TurnReply> {
+  const read = chainEntryOf(body);
+  if ("refused" in read) return read.refused;
+  const gate = await chainKeyGate(deps, read.entry.provider, read.entry.model, "saved");
+  if ("refused" in gate) return gate.refused;
+  try {
+    const chain = await setChainEntry(await deps.db, deps.owner, read.entry.provider, read.entry.model, gate.serverKey);
+    return writeAnswer({ ok: true, chain });
+  } catch (error) {
+    return chainWriteFailed("saved", error);
+  }
+}
+
+/**
+ * `DELETE /api/learner/tutor-model` with `{ provider, model }`: the entry
+ * leaves the chain. 200 `{ ok, chain }`; 404 `NOT_FOUND` for one that is not
+ * there.
+ */
+export async function tutorModelRemoveTurn(deps: TutorDeps, body: unknown): Promise<TurnReply> {
+  const read = chainEntryOf(body);
+  if ("refused" in read) return read.refused;
+  try {
+    const chain = await removeChainEntry(await deps.db, deps.owner, read.entry.provider, read.entry.model);
+    return writeAnswer({ ok: true, chain });
+  } catch (error) {
+    return chainWriteFailed("remove", error);
+  }
+}
+
+/**
+ * `PATCH /api/learner/tutor-model` with `{ provider, model, direction }`:
+ * the entry moves a place among its provider's models. 200 `{ ok, chain }`.
+ */
+export async function tutorModelMoveTurn(deps: TutorDeps, body: unknown): Promise<TurnReply> {
+  const read = chainEntryOf(body);
+  if ("refused" in read) return read.refused;
+  const direction = (body as Record<string, unknown>).direction;
+  if (direction !== "up" && direction !== "down") return writeRefuse(`"direction" must be "up" or "down".`);
+  try {
+    const chain = await moveChainEntry(await deps.db, deps.owner, read.entry.provider, read.entry.model, direction);
+    return writeAnswer({ ok: true, chain });
+  } catch (error) {
+    return chainWriteFailed("move", error);
+  }
+}
+
+/**
+ * `PATCH /api/learner/tutor-model/provider` with `{ provider, direction }`:
+ * the provider's models move together past the next provider's (T12) — how
+ * the card's provider order is stored.
+ */
+export async function tutorProviderMoveTurn(deps: TutorDeps, body: unknown): Promise<TurnReply> {
+  const read = writeRecord(body);
+  if ("refused" in read) return read.refused;
+  const provider = readProvider(read.record);
+  if (typeof provider !== "string") return provider;
+  const direction = read.record.direction;
+  if (direction !== "up" && direction !== "down") return writeRefuse(`"direction" must be "up" or "down".`);
+  try {
+    const chain = await moveChainProvider(await deps.db, deps.owner, provider, direction);
+    return writeAnswer({ ok: true, chain });
+  } catch (error) {
+    return chainWriteFailed("move", error);
+  }
+}
+
+/**
+ * `DELETE /api/learner/tutor-model/provider` with `{ provider }`: the
+ * provider's models leave the chain and the owner's saved key for it goes,
+ * in one transaction under the learner lock. 200 `{ ok, chain, keyRemoved }`.
+ */
+export async function tutorProviderRemoveTurn(deps: TutorDeps, body: unknown): Promise<TurnReply> {
+  const read = writeRecord(body);
+  if ("refused" in read) return read.refused;
+  const provider = readProvider(read.record);
+  if (typeof provider !== "string") return provider;
+  try {
+    const removed = await deleteChainProvider(await deps.db, deps.owner, provider);
+    return writeAnswer({ ok: true, ...removed });
+  } catch (error) {
+    return chainWriteFailed("remove", error);
+  }
+}
+
+/**
+ * `GET /api/learner/tutor-model`: the owner's chain, top first. The web page
+ * reads it server-side (`loadTutorModels`); a native client has no server
+ * component, so the sidecar answers it. Never throws: a database that cannot
+ * be read answers `reachable: false` and an empty chain.
+ */
+export async function tutorModelChainTurn(deps: TutorDeps): Promise<TurnReply> {
+  try {
+    return writeAnswer({ ok: true, reachable: true, chain: await readChain(await deps.db, deps.owner) });
+  } catch (error) {
+    console.warn(`settings: model chain unavailable (${failureCode(error)})`);
+    return writeAnswer({ ok: true, reachable: false, chain: [] });
+  }
 }
