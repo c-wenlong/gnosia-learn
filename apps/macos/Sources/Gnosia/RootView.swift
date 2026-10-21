@@ -186,7 +186,7 @@ struct RootView: View {
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     var body: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
+        NavigationSplitView(columnVisibility: splitVisibility) {
             sidebar
                 .navigationSplitViewColumnWidth(min: 210, ideal: 230, max: 260)
         } detail: {
@@ -212,12 +212,21 @@ struct RootView: View {
     /// in the web sidebar's order.
     private var primaryNav: [Section] { [.home, .courses, .learn, .review, .library] }
 
+    /// Review mounts the web's focus layout — `data-layout="focus"` there —
+    /// so the sidebar steps away while its surface is up. The binding is a
+    /// constant for that section, which also makes the toolbar's sidebar
+    /// toggle inert rather than letting the rail back in; the section
+    /// switch hands the column back to whatever visibility it held.
+    private var splitVisibility: Binding<NavigationSplitViewVisibility> {
+        section == .review ? .constant(.detailOnly) : $columnVisibility
+    }
+
     @ViewBuilder
     private var surface: some View {
         switch section {
         case .home: HomeView()
         case .learn: LearnView()
-        case .review: ReviewView()
+        case .review: ReviewView(onExit: { section = .home })
         case .courses: CoursesView()
         case .library: LibraryView()
         case .studio: StudioView()
