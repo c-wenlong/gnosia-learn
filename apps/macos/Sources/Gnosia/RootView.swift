@@ -23,6 +23,8 @@ enum AppDestination: Hashable {
     case course(String)
     case module(course: String, module: String)
     case asset(String)
+    /// A tutor session on a concept — the web's /learn/<slug>/session.
+    case session(concept: String)
 }
 
 extension View {
@@ -40,6 +42,8 @@ extension View {
                 CourseDestination(slug: course, moduleID: module)
             case .asset(let id):
                 AssetDestination(id: id)
+            case .session(let slug):
+                SessionDestination(slug: slug)
             }
         }
     }
@@ -96,6 +100,25 @@ private struct AssetDestination: View {
                 "Asset not in the catalog",
                 systemImage: "questionmark.circle",
                 description: Text("“\(id)” is not an asset this snapshot knows.")
+            )
+        }
+    }
+}
+
+/// A concept slug to its tutor session, or the honest "gone" — same rule
+/// as ConceptDestination: the row leaving the catalog reads as missing.
+private struct SessionDestination: View {
+    @Environment(CatalogStore.self) private var store
+    let slug: String
+
+    var body: some View {
+        if store.concept(slug) != nil {
+            SessionView(slug: slug)
+        } else {
+            ContentUnavailableView(
+                "Concept not in the catalog",
+                systemImage: "questionmark.circle",
+                description: Text("“\(slug)” is not a concept this snapshot knows.")
             )
         }
     }
