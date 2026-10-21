@@ -1004,6 +1004,14 @@ final class CatalogStore {
         return transcript(blobKey: key)
     }
 
+    /// The cue lines a video's `.vtt` captions blob holds — what the web
+    /// player's CC layer draws over the picture (VideoPlayer.tsx reads the
+    /// transcript for the same lines; the blob here is the `.vtt` itself).
+    func captions(for videoID: String) -> [CaptionCue] {
+        guard let key = companions[videoID]?.captionsKey else { return [] }
+        return captions(blobKey: key)
+    }
+
     // MARK: - Courses
 
     /// Every live course in authored order (`collection.position`, then id —
