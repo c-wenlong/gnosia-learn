@@ -27,6 +27,9 @@ enum AppDestination: Hashable {
     /// `mode` is its `?mode=` query: `.learn` is Teach me, `.check` is
     /// the workspace's Quiz me.
     case session(concept: String, mode: SessionMode = .learn)
+    /// A module's check — the web's /courses/<slug>/<module>/check,
+    /// the week check's session over the module's concepts.
+    case check(course: String, module: String)
 }
 
 extension View {
@@ -46,6 +49,8 @@ extension View {
                 AssetDestination(id: id)
             case .session(let slug, let mode):
                 SessionDestination(slug: slug, mode: mode)
+            case .check(let course, let module):
+                CheckDestination(courseSlug: course, moduleSlug: module)
             }
         }
     }
@@ -122,6 +127,29 @@ private struct SessionDestination: View {
                 "Concept not in the catalog",
                 systemImage: "questionmark.circle",
                 description: Text("“\(slug)” is not a concept this snapshot knows.")
+            )
+        }
+    }
+}
+
+/// A course slug and a module slug to the module's check, or the honest
+/// "gone" — same rule as the other destinations: a module the course no
+/// longer lists reads as missing rather than crashing.
+private struct CheckDestination: View {
+    @Environment(CatalogStore.self) private var store
+    let courseSlug: String
+    let moduleSlug: String
+
+    var body: some View {
+        if let course = store.course(courseSlug),
+           let module = course.modules.first(where: { $0.slug == moduleSlug || $0.id == moduleSlug }) {
+            ModuleCheckView(course: course, module: module)
+                .id(module.id)
+        } else {
+            ContentUnavailableView(
+                "Module not in the catalog",
+                systemImage: "questionmark.circle",
+                description: Text("“\(moduleSlug)” is not a module of “\(courseSlug)” this snapshot knows.")
             )
         }
     }
