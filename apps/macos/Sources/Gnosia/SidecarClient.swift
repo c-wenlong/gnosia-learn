@@ -232,9 +232,19 @@ struct SidecarClient {
 
     // The native app's Postgres half: the same `/api/learner/*` bodies the
     // web's pages post, so one write lands in learner.db and its mirror in
-    // Postgres. Every caller is fire-and-forget — the LearnerStore bridges
-    // after its local row commits, and a sidecar that is down drops the
-    // mirror, never the write.
+    // Postgres. The LearnerStore queues each call in `mirror_queue` beside
+    // the row it commits with, and the flusher sends them through `replay`
+    // — a down sidecar or unreachable Postgres holds the row for retry,
+    // never drops the write. The typed methods below stay as the routes'
+    // reference; the queue replays bodies it persisted, not calls.
+
+    /// The retry queue's send: `POST` a persisted body back to its route.
+    /// The body arrives already encoded — it was stored as bytes — and the
+    /// reply only needs checking, which `decode`'s refusal pass does.
+    func replay(route: String, body: Data) async throws {
+        let (data, response) = try await send("POST", route, data: body)
+        _ = try decode([String: Any].self, from: data, response: response)
+    }
 
     /// `POST /api/learner/favorite`: `{ assetId, favorite }` → `{ ok, result }`.
     @discardableResult
