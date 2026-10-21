@@ -9,7 +9,7 @@ cd "$(dirname "$0")/.."
 
 APP=.build/Gnosia.app
 CONTENTS="$APP/Contents"
-MARK=Sources/Gnosia/Resources/mark.png
+MARK=Sources/Gnosia/AppIcon.png
 
 swift build -c release
 
