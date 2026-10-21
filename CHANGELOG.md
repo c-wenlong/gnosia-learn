@@ -7,6 +7,85 @@ This project is continuously deployed and not versioned; entries are grouped by 
 
 ## [Unreleased]
 
+### Added
+
+- **A native macOS app, `apps/macos`, that runs the same product as the web
+  app — Home, Learn, Review, Courses, Library, Studio and Settings.** It is a
+  SwiftUI target (`Gnosia`) bundled as `Gnosia.app` by
+  `scripts/bundle-app.sh`, which writes a real `.icns` from the brand mark
+  rather than a placeholder. The app is local-first: every learner write
+  (watch marks, stars, renames, progress ticks, review grades, session
+  observations) lands in a per-owner SQLite file (`<data home>/learner.db`)
+  before it is mirrored to the catalog through a Node sidecar the app spawns
+  itself (`npx tsx services/sidecar/src/index.ts`, the same
+  `services/sidecar` the web app uses). A `mirror_queue` table holds each
+  write until the sidecar accepts it, so the app works with no server running
+  and replays the queue when one comes back.
+
+  **The surface is the web's, not a second design.** The sidebar mirrors the
+  web's `AppSidebar`: wordmark, collapse, New chat, Search, Home, Courses
+  with resume rows, Pinned, Recent grouped Today/Yesterday/Previous 7
+  days/Previous 30 days/Older, Review with the due-count badge, Studio and
+  the account footer. The Learn index is the web's domain-cluster board —
+  thirteen domain cards with progress, mastered and due counts, and a
+  Table/Graph toggle — not a list. Review opens a fullscreen focus mode
+  ("Review · N of M", estimated time, Exit to Home) with no shell chrome.
+  The Studio landing is the web's creation composer ("What shall we make?",
+  Diagram/Video `@tag` tokens, harness and model-tier menus, a two-phase
+  draft flow that POSTs `/api/drafts` then sends the parked opener as the
+  first turn) with the unified artifact grid and per-job SSE strips; the job
+  monitor folds in below it. The concept workspace is the web's three-panel
+  layout — note & sources | tutor | studio — that folds each panel into a
+  rail and falls back to a tab row under the same 960pt breakpoint. The Tutor
+  panel defaults to the web's freeform chat (welcome, `[1]`-style citation
+  chips, suggestion pills, `@`-mention composer, "Learning guide · concise")
+  and opts into the structured probe/check sessions on demand rather than
+  auto-starting one. Chat bubbles render the assistant's markdown through a
+  WKWebView (`note.html` + vendored KaTeX) while the user's own text stays
+  literal, matching the web's `NoteProse`/`MathText` split. The Ask inspector
+  supports the same `@` mention picker over concepts and assets. A canvas
+  surface embeds tldrawkc's `canvas serve` URL for diagram editing. Settings
+  has the web's provider-key management — list, add, test, delete, plus a
+  custom-provider flow (`POST`/`PATCH /api/learner/custom-provider`) that
+  registers a named provider with its own key and model picker.
+
+  **The learner-store merge is correct about tombstones.** A star that was
+  unstarred, a name that was cleared and a progress item that was unticked
+  all keep a row (`starred=0`, `name=''`, `completed_at=NULL`) rather than
+  deleting it — a delete would let the snapshot's mirrored value show through
+  again until the next mirror run, which is a longer window than the
+  interaction implies. `CatalogStore` merges the snapshot's
+  `favorite:<id>` preference rows with the local `favorite` table using the
+  same tombstone rule, so stars made in the web app are visible on first
+  launch and unstars made in the app mask them correctly.
+
+  **The mirror queue is strict FIFO, head-of-line.** A backed-off row blocks
+  every newer row behind it rather than being overtaken — a session
+  observation must not land before the session-open write it depends on.
+  `scheduleMirrorWake()` arms the retry timer from `MIN(next_at)`, which is
+  the head row's deadline.
+
+  **Review grading is the same SM-2 the catalog runs.** The app maps its
+  0–3 rating to the catalog's 1–5 grade through the same `gradeForRating`
+  the web uses, writes a `review` event with `pLBefore`/`pLAfter`, and is
+  idempotent on `requestId` — a retried grade returns the first recorded
+  result rather than double-writing. The sidecar gained the matching
+  `POST /api/review/grade` route so the native app's rating reaches the
+  catalog unchanged.
+
+  **The blob store's `assetBlobStore()` call is lazy.** A `seams()` wrapper
+  forwards `BlobStore` methods on first use rather than eagerly resolving
+  the store at construction, so a down blob store no longer breaks
+  catalog-only paths; the refusal lands inside the cores' existing
+  `blobStoreProblem` mapping where the caller expects it.
+
+- **The catalog's learner tables moved to SQLite** (`24b5cec0`). What was
+  stored in Postgres under the `self-learn` line now lives in
+  `<data home>/catalog.db` (the mirrored catalog) and `<data
+  home>/learner.db` (the app's own writes). The schema migrates legacy
+  `self-learn*` preference values to `gnosia*`, and `source_repo` reads both
+  `"gnosia"` and `"self-learn"` so pre-rename clones keep working.
+
 ### Changed
 
 - **The database is the only home of the content; `content/` and `learn/`
