@@ -11,7 +11,8 @@
 //    the corpus comes first (jobs, diagrams, videos, conversations) and a
 //    "New conversation" button opens the same draft the composer does.
 //  - JobStrip's live cards and the history panel are the Jobs section;
-//    progress is the manager's poll rather than the web's SSE streams.
+//    progress is the manager's SSE stream per active job, the poll as
+//    the record and the fallback, the web's own split.
 //  - The grid is the same grid: SVG tiles rasterized from
 //    `/api/diagrams/{name}/svg`, topic chips, the unreadable banner.
 //  - Tile and job detail screens carry the verbs the panels carry: export,
@@ -189,6 +190,9 @@ struct StudioView: View {
         }
         if let cap = health.dailyCap?.capUsd {
             parts.append("cap $\(String(format: "%.2f", cap))")
+        }
+        if studio.streamStatus == .live {
+            parts.append("live")
         }
         return parts.joined(separator: " · ")
     }
@@ -634,6 +638,7 @@ struct MetaRow: View {
 
 /// A live job's card in the strip grid.
 struct JobCard: View {
+    @Environment(StudioManager.self) private var studio
     let job: StudioClient.Job
 
     var body: some View {
@@ -658,6 +663,20 @@ struct JobCard: View {
                     .font(.callout.weight(.medium))
                     .foregroundStyle(G.text)
                     .lineLimit(2)
+                if let note = studio.latestNote(job.jobId) {
+                    // The stream's progress line — the web strip's
+                    // narration — with the dot saying it is arriving live.
+                    HStack(alignment: .top, spacing: 6) {
+                        Circle()
+                            .fill(studio.isLive(job.jobId) ? G.ok : G.text3)
+                            .frame(width: 6, height: 6)
+                            .padding(.top, 3)
+                        Text(note)
+                            .font(.caption)
+                            .foregroundStyle(G.text2)
+                            .lineLimit(2)
+                    }
+                }
                 Text(cardTail)
                     .font(.caption)
                     .foregroundStyle(G.text3)
