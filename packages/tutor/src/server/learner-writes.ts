@@ -5,7 +5,10 @@ import {
   assetsByIds,
   clearPreference,
   closeTutorSession,
+  gradeForRating,
+  gradeReview,
   inTransaction,
+  ratingForGrade,
   readConceptGraph,
   readPreference,
   recordObservation,
@@ -41,6 +44,7 @@ import {
   playbackKey,
   type Range,
 } from "../playback";
+import { isRating, type Rating } from "../review-core";
 import {
   isSessionToken,
   OBSERVE_SOURCES,
@@ -539,6 +543,63 @@ export async function observeTurn(deps: TutorDeps, body: unknown): Promise<TurnR
       closed: recorded.closed,
     };
   });
+}
+
+/**
+ * `POST /api/review/grade` with `{ conceptId, grade, requestId? }`, the
+ * review page's route ported for the native app's queued mirror: `grade` is
+ * the button pressed (0 Again, 1 Hard, 2 Good, 3 Easy), mapped onto SM-2's
+ * 1, 3, 4, 5 by `gradeForRating`, and `gradeReview` writes the `review`
+ * event, the rescheduled card and the mastery move in one transaction — the
+ * same write `learn review grade` runs. `requestId` makes a retried grade
+ * idempotent: a replay records nothing and answers the first write's rating,
+ * since a review event cannot be deleted and a double count would be
+ * permanent.
+ */
+export async function reviewGradeTurn(deps: TutorDeps, body: unknown): Promise<TurnReply> {
+  return learnerWrite(
+    deps,
+    body,
+    (b) => {
+      const conceptId = requireId(b, "conceptId");
+      const rating = b.grade;
+      if (!isRating(rating)) {
+        throw new BadRequest(`"grade" must be 0, 1, 2 or 3 (Again, Hard, Good, Easy).`);
+      }
+      const requestId = b.requestId;
+      if (
+        requestId !== undefined &&
+        (typeof requestId !== "string" || !/^[A-Za-z0-9_-]+$/.test(requestId) || requestId.length > MAX_ID_CHARS)
+      ) {
+        throw new BadRequest(`"requestId" must be a short token of letters, digits, "-" and "_".`);
+      }
+      return { conceptId, rating, requestId };
+    },
+    async (db, input: { conceptId: string; rating: Rating; requestId?: string }, owner) => {
+      const recorded = await gradeReview(db, {
+        learnerId: owner,
+        conceptId: input.conceptId,
+        grade: gradeForRating(input.rating),
+        now: new Date(),
+        requestId: input.requestId,
+      });
+      const { card, pL, replayed, grade } = recorded;
+      return {
+        concept: input.conceptId,
+        // On a replay, the rating that was recorded, not the one this retry
+        // asked for: the first write stands, and the page counts what stood.
+        rating: ratingForGrade(grade),
+        grade,
+        due: card.due,
+        intervalDays: card.intervalDays,
+        ease: Number(card.ease.toFixed(2)),
+        lapses: card.lapses,
+        leech: card.leech,
+        pL,
+        replayed,
+      };
+    },
+  );
 }
 
 /**

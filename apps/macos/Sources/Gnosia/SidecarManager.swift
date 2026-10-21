@@ -31,6 +31,11 @@ final class SidecarManager {
     private var stdoutData = Data()
     private var stderrTail = ""
     private var startupWaits: [UUID: CheckedContinuation<Int, Error>] = [:]
+    /// The port from the `listening` line, kept whether or not a waiter is
+    /// registered when it arrives — a line printed after the 20s cap would
+    /// otherwise be discarded and every later `readyClient()` would wait on
+    /// a line that never repeats.
+    private var listeningPort: Int?
 
     init() {
         NotificationCenter.default.addObserver(
@@ -59,6 +64,15 @@ final class SidecarManager {
     /// Ask's `send` awaits this so a cold start just looks like a slow turn.
     func readyClient() async throws -> SidecarClient {
         if let client { return client }
+        // A port the sidecar printed after an earlier caller timed out —
+        // the process is up even though no waiter caught the line.
+        if let port = listeningPort {
+            let made = SidecarClient(baseURL: URL(string: "http://127.0.0.1:\(port)")!)
+            _ = try await made.health()
+            client = made
+            status = .running(port: port)
+            return made
+        }
         start()
         let port = try await waitForListening()
         let made = SidecarClient(baseURL: URL(string: "http://127.0.0.1:\(port)")!)
@@ -127,6 +141,7 @@ final class SidecarManager {
                 text.hasPrefix("listening "),
                 let port = Int(text.dropFirst("listening ".count))
             else { continue }
+            listeningPort = port
             let waits = startupWaits
             startupWaits = [:]
             waits.values.forEach { $0.resume(returning: port) }
@@ -157,6 +172,7 @@ final class SidecarManager {
         process = nil
         client = nil
         stdoutData = Data()
+        listeningPort = nil
     }
 
     /// Suspends until the `listening` line or the process exits. Bounded by a
