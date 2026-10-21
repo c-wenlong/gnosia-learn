@@ -17,7 +17,7 @@ import { writeContent } from "../src/content/write";
 import { connect, type Connection } from "../src/db";
 import type { TopicsReport } from "../src/index/manimkc";
 import { applyMigrations } from "../src/migrations";
-import { BEFORE_BLOB_CONTRACT, partialMigrations } from "./partial-migrations";
+import { withoutBlobContract } from "./partial-migrations";
 import { createScratchDatabase, probe, type Scratch } from "./scratch-database";
 
 /**
@@ -103,8 +103,13 @@ describe.skipIf(!reachable.ok)("the blob store against a second writer", () => {
   beforeAll(async () => {
     a = await createScratchDatabase();
     b = await createScratchDatabase();
-    // Before the contract (0013), as flip day's upload is: see asset-upload.test.ts.
-    const beforeContract = await partialMigrations(BEFORE_BLOB_CONTRACT);
+    // The contract (0013) left unapplied, so a stored-kind row can hold a
+    // path and no blob, as on flip day's upload. Every other migration is in,
+    // unlike asset-upload.test.ts's stop at 0012: the upload reads each asset
+    // row whole and names `inputs_hash` (0031), which a database genuinely at
+    // 0012 does not have, and this suite makes no `pdf` (ffmpeg is null), so
+    // it needs nothing 0030 adds.
+    const beforeContract = await withoutBlobContract();
     await applyMigrations(a.db, { folder: beforeContract });
     await applyMigrations(b.db, { folder: beforeContract });
     two = connect({ url: a.url });

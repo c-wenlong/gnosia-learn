@@ -7,7 +7,7 @@ import { updateSet } from "../src/content/upsert";
 import { applyMigrations } from "../src/migrations";
 import { listVideos } from "../src/content/videos";
 import { assetsByIds, listAssets, readAssetNaming, StateError, writeAssetName } from "../src/state";
-import { partialMigrations } from "./partial-migrations";
+import { withoutMigration } from "./partial-migrations";
 import { createScratchDatabase, migratedScratchDatabase, probe, type Scratch, sqlstate } from "./scratch-database";
 import { storedBlob } from "./stored-blob";
 
@@ -162,8 +162,10 @@ describe.skipIf(!reachable.ok)("asset reads before 0024", () => {
 
   beforeAll(async () => {
     behind = await createScratchDatabase();
-    // Every migration but the one that makes `asset_name`.
-    await applyMigrations(behind.db, { folder: await partialMigrations(24) });
+    // Every migration but the one that makes `asset_name`, so the reads fall
+    // back to the source's title and the writer says migrate, while the
+    // asset table itself is today's, `inputs_hash` and all.
+    await applyMigrations(behind.db, { folder: await withoutMigration("0024_asset_name") });
     await behind.db.insert(learner).values({ id: LOCAL_LEARNER_ID }).onConflictDoNothing();
     await behind.db.insert(asset).values(link(MINE, LOCAL_LEARNER_ID, "lec03 v2 final"));
   }, 60_000);
