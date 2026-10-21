@@ -189,7 +189,7 @@ struct RootView: View {
         case .review: ReviewView()
         case .courses: CoursesView()
         case .library: LibraryView()
-        case .studio: StudioSurface()
+        case .studio: StudioView()
         case .ask: AskView()
         }
     }
@@ -314,19 +314,6 @@ struct RootView: View {
 }
 
 // MARK: - Placeholder surfaces
-
-/// Studio runs through the local service the sidecar wave adds; until
-/// then the destination says so rather than faking a surface.
-private struct StudioSurface: View {
-    var body: some View {
-        ContentUnavailableView(
-            "Studio",
-            systemImage: "wand.and.stars",
-            description: Text("Runs through the local sidecar service once that wave lands.")
-        )
-        .navigationTitle("Studio")
-    }
-}
 
 /// Ask lives in AskView: the open-tutor chat over the sidecar. The sidebar
 /// row is the web's "New chat".
