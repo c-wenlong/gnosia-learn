@@ -6,12 +6,12 @@ import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { fsStore, key as blobKey } from "@gnosia/blob";
-import { asset, blobObject, indexRun } from "@gnosia/schema";
+import { blobObject, indexRun } from "@gnosia/schema";
 
 import type { RouteProblemCode } from "@/lib/asset-problems";
 
 import { applyMigrations } from "../../../../../../services/catalog/src/migrations";
-import { BEFORE_BLOB_CONTRACT, partialMigrations } from "../../../../../../services/catalog/test/partial-migrations";
+import { assetBefore0031, BEFORE_BLOB_CONTRACT, partialMigrations } from "../../../../../../services/catalog/test/partial-migrations";
 import {
   createScratchDatabase,
   probe,
@@ -41,7 +41,9 @@ vi.mock("@/lib/auth/session", async (importOriginal) => ({
  * `blob_key` is the state the legacy branch served, and the phase 2 contract
  * migration forbids it; before that migration such rows are exactly what an
  * unflipped database holds, so this is the schema the property has to be
- * proved on.
+ * proved on. Rows go in through `assetBefore0031`, since `insert(asset)`
+ * names `inputs_hash`, a column this schema has not grown (0031), and the
+ * `source_repo` check still speaks `self-learn`.
  */
 
 
@@ -151,12 +153,12 @@ describe.skipIf(!reachable.ok)("asset file route", () => {
     ({ GET } = (await import("./[id]/file/route")) as { GET: Handler });
     ({ GET: STATUS } = (await import("./[id]/status/route")) as { GET: Handler });
 
-    await scratch.db.insert(asset).values([
+    await scratch.db.insert(assetBefore0031).values([
       row(ON_DISK_ID, "video", "out/algorithms/demo/demo.mp4", null),
-      row(SVG_ID, "diagram_svg", "learn/assets/dot-product.svg", await stored(SVG, "svg"), "gnosia"),
+      row(SVG_ID, "diagram_svg", "learn/assets/dot-product.svg", await stored(SVG, "svg"), "self-learn"),
       row(EMPTY_ID, "video", "out/empty.mp4", await stored(EMPTY, "mp4")),
       row(ODD_ID, "video", "out/odd.bin", await stored(ODD, "bin")),
-      row(LINK_ID, "link", null, null, "gnosia"),
+      row(LINK_ID, "link", null, null, "self-learn"),
     ]);
     // Where manimkc's `out/…` paths resolved, as the indexer records it: the
     // legacy branch's root, and the reason the video above is findable on disk.
