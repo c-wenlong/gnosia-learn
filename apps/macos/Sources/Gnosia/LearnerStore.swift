@@ -29,12 +29,15 @@
 //
 //  The Postgres half: every write here is also the web's write. GnosiaApp
 //  hands the store the SidecarManager, and each method's local row commits
-//  first, then fires the matching `/api/learner/*` route through the
-//  sidecar, fire-and-forget — a sidecar that is down, spawning or slow
-//  never blocks or un-writes the local row, and the routes are the web's,
-//  so Postgres sees the same bodies the pages post. Nothing is queued: a
-//  write made while the sidecar cannot be reached is not retried, which
-//  is the remaining divergence a sync would one day reconcile.
+//  beside the matching `/api/learner/*` call in one transaction — the
+//  `mirror_queue` table, the outbox — so a committed write always owes
+//  Postgres its mirror and a crash between commit and send loses nothing.
+//  A flusher drains the queue oldest-first through the sidecar, and the
+//  routes are the web's, so Postgres sees the same bodies the pages post.
+//  A down or spawning sidecar and an unreachable Postgres just make rows
+//  wait: sends retry with backoff, bounded by attempts and by age, and
+//  whatever outlives both is dropped, counted and logged — the divergence
+//  a future sync would reconcile.
 //
 
 import Foundation
@@ -138,6 +141,43 @@ func cleanAssetName(_ value: String) -> String? {
     return cleaned.isEmpty ? nil : cleaned
 }
 
+/// One `/api/learner/*` call the store owes Postgres — the queue's unit:
+/// the route's path and its JSON body, already encoded so it can persist.
+/// `dedupeKey` on upsert mirrors collapses a newer queued write over an
+/// older one for the same row (the file itself only ever holds the latest
+/// state, so replaying just that loses nothing); append mirrors —
+/// `observe`, `watched` — pass nil so each lands as its own event.
+private struct MirrorCall {
+    /// The route's path, exactly as `SidecarClient` appends it to the base URL.
+    let path: String
+    let dedupeKey: String?
+    /// The body as bytes — `Data` is `Sendable`, so the call crosses the
+    /// flusher's suspension points safely.
+    let body: Data
+
+    /// nil when the body will not encode — a mirror that never formed owes
+    /// Postgres nothing.
+    init?(path: String, dedupeKey: String? = nil, body: [String: Any]) {
+        guard let data = try? JSONSerialization.data(withJSONObject: body) else { return nil }
+        self.init(path: path, dedupeKey: dedupeKey, data: data)
+    }
+
+    init(path: String, dedupeKey: String? = nil, data: Data) {
+        self.path = path
+        self.dedupeKey = dedupeKey
+        self.body = data
+    }
+}
+
+/// A persisted `mirror_queue` row, as one flush pass reads it.
+private struct MirrorRow {
+    let id: Int64
+    let route: String
+    let body: String
+    let attempts: Int64
+    let createdAt: Double
+}
+
 /// The learner's own file: favorites, watch marks, renames and course ticks,
 /// loaded whole.
 @MainActor @Observable
@@ -157,29 +197,12 @@ final class LearnerStore {
     private var db: WritableDatabase?
 
     /// The Postgres mirror's sidecar, wired by the app shell. Nil in a
-    /// preview or a test is "no mirror": the local writes all still land.
+    /// preview or a test is "no mirror": the local writes all still land
+    /// and nothing is queued.
     var sidecar: SidecarManager?
 
     init(path: String = LearnerStore.defaultPath()) {
         self.path = path
-    }
-
-    /// Mirror a committed write into Postgres through the sidecar. The
-    /// local row already landed, so this is strictly fire-and-forget:
-    /// `readyClient()` spawns the service on a cold start, and whatever a
-    /// down sidecar or an unreachable Postgres throws is dropped — the
-    /// store's `error` belongs to the file, not the mirror.
-    private func bridge(_ call: @escaping (SidecarClient) async throws -> Void) {
-        guard let sidecar else { return }
-        Task {
-            do {
-                let client = try await sidecar.readyClient()
-                try await call(client)
-            } catch {
-                // Intentionally silent: this file is the record, the mirror
-                // is best-effort, and a missed write is not replayed.
-            }
-        }
     }
 
     /// <data home>/learner.db, the data home resolved exactly as the
@@ -199,6 +222,14 @@ final class LearnerStore {
             try load()
             loaded = true
             error = nil
+            // The launch retry: anything still owed goes due now rather
+            // than waiting out a backoff a restart likely made moot.
+            if let db {
+                try? db.run("UPDATE mirror_queue SET next_at = ?",
+                            [.real(Date().timeIntervalSince1970)])
+            }
+            refreshMirrorCounts()
+            kickMirrors()
         } catch let failure as CatalogError {
             error = failure.message
         } catch {
@@ -220,20 +251,25 @@ final class LearnerStore {
     }
 
     func toggleFavorite(_ assetID: String) {
-        var favorited = false
-        let saved = write { db in
-            if favorites.contains(assetID) {
-                try db.run("DELETE FROM favorite WHERE asset_id = ?", [.text(assetID)])
-                favorites.remove(assetID)
-            } else {
+        // Memory must reflect the file before the toggle decides — the
+        // write loads on demand, so a store opened but never read would
+        // otherwise invert the verdict.
+        loadIfNeeded()
+        let favorited = !favorites.contains(assetID)
+        // The web's `favorite` route: a preference row, upserted or cleared.
+        write(mirror: MirrorCall(
+            path: "/api/learner/favorite",
+            dedupeKey: "favorite:\(assetID)",
+            body: ["assetId": assetID, "favorite": favorited]
+        )) { db in
+            if favorited {
                 try db.run("INSERT OR IGNORE INTO favorite (asset_id) VALUES (?)", [.text(assetID)])
                 favorites.insert(assetID)
-                favorited = true
+            } else {
+                try db.run("DELETE FROM favorite WHERE asset_id = ?", [.text(assetID)])
+                favorites.remove(assetID)
             }
         }
-        // The web's `favorite` route: a preference row, upserted or cleared.
-        guard saved else { return }
-        bridge { try await $0.setFavorite(assetID, favorite: favorited) }
     }
 
     // MARK: - Watch marks
@@ -261,28 +297,42 @@ final class LearnerStore {
     /// the caller decides the fraction, the store only remembers.
     func setWatch(_ assetID: String, seconds: Double, done: Bool, mirror: WatchMirror) {
         let now = Date()
-        let saved = write { db in
+        // The mirror body, decided up front — a zero duration has nothing
+        // to claim, so no write of it is owed.
+        let call: MirrorCall?
+        switch mirror {
+        case .position(let duration):
+            // `[0, position]` is this store's honest coverage: it holds no
+            // ranges, so the playhead's prefix is all it can claim. The
+            // server merges it into what it stored, so each heartbeat just
+            // stretches the one range — and the dedupe key collapses queued
+            // heartbeats to the latest claim, exactly the row the file holds.
+            let position = min(max(0, seconds), duration)
+            call = duration > 0
+                ? MirrorCall(
+                    path: "/api/learner/playback",
+                    dedupeKey: "playback:\(assetID)",
+                    body: [
+                        "assetId": assetID,
+                        "duration": duration,
+                        "position": position,
+                        "ranges": position > 0 ? [[0, position]] : [],
+                    ])
+                : nil
+        case .marked:
+            // The "Mark watched" / "Mark read" press: one `watched` event,
+            // as the web's button appends. The server's append does not
+            // dedupe, so neither does the queue: each press owes a send.
+            call = MirrorCall(
+                path: "/api/learner/watched",
+                body: ["assetId": assetID])
+        }
+        write(mirror: call) { db in
             try db.run(
                 "INSERT OR REPLACE INTO watch (asset_id, seconds, done, updated_at) VALUES (?, ?, ?, ?)",
                 [.text(assetID), .real(seconds), .int(done ? 1 : 0), .real(now.timeIntervalSince1970)]
             )
             watches[assetID] = WatchEntry(seconds: seconds, done: done, updatedAt: now)
-        }
-        guard saved else { return }
-        switch mirror {
-        case .position(let duration):
-            guard duration > 0 else { return }
-            // `[0, position]` is this store's honest coverage: it holds no
-            // ranges, so the playhead's prefix is all it can claim. The
-            // server merges it into what it stored, so each heartbeat just
-            // stretches the one range.
-            let position = min(max(0, seconds), duration)
-            bridge {
-                try await $0.savePlayback(assetID, duration: duration, position: position,
-                                          ranges: position > 0 ? [[0, position]] : [])
-            }
-        case .marked:
-            bridge { try await $0.markWatched(assetID) }
         }
     }
 
@@ -300,22 +350,26 @@ final class LearnerStore {
             clearName(assetID)
             return
         }
-        let saved = write { db in
+        write(mirror: MirrorCall(
+            path: "/api/learner/asset-name",
+            dedupeKey: "asset-name:\(assetID)",
+            body: ["assetId": assetID, "name": cleaned]
+        )) { db in
             try db.run("INSERT OR REPLACE INTO asset_name (asset_id, name) VALUES (?, ?)",
                        [.text(assetID), .text(cleaned)])
             names[assetID] = cleaned
         }
-        guard saved else { return }
-        bridge { try await $0.renameAsset(assetID, name: cleaned) }
     }
 
     func clearName(_ assetID: String) {
-        let saved = write { db in
+        write(mirror: MirrorCall(
+            path: "/api/learner/asset-name",
+            dedupeKey: "asset-name:\(assetID)",
+            body: ["assetId": assetID, "name": NSNull()]
+        )) { db in
             try db.run("DELETE FROM asset_name WHERE asset_id = ?", [.text(assetID)])
             names.removeValue(forKey: assetID)
         }
-        guard saved else { return }
-        bridge { try await $0.renameAsset(assetID, name: nil) }
     }
 
     // MARK: - Course ticks
@@ -343,7 +397,11 @@ final class LearnerStore {
     /// rows the catalog itself rendered, so the item exists by construction.
     func setProgress(_ itemID: String, completed: Bool) {
         let now = Date().timeIntervalSince1970
-        let saved = write { db in
+        write(mirror: MirrorCall(
+            path: "/api/learner/progress",
+            dedupeKey: "progress:\(itemID)",
+            body: ["curriculumItemId": itemID, "completed": completed]
+        )) { db in
             if completed {
                 try db.run("""
                     INSERT INTO progress
@@ -379,8 +437,6 @@ final class LearnerStore {
                 progress.removeValue(forKey: itemID)
             }
         }
-        guard saved else { return }
-        bridge { try await $0.setProgress(itemID, completed: completed) }
     }
 
     /// The learner's note on one curriculum item — setNote in
@@ -397,7 +453,11 @@ final class LearnerStore {
         let value = note.prefix(maxNoteChars)
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         let now = Date().timeIntervalSince1970
-        write { db in
+        write(mirror: MirrorCall(
+            path: "/api/learner/note",
+            dedupeKey: "note:\(itemID)",
+            body: ["curriculumItemId": itemID, "note": String(value)]
+        )) { db in
             try db.run("""
                 INSERT INTO progress
                     (learner_id, curriculum_item_id, note, created_at, updated_at)
@@ -435,30 +495,23 @@ final class LearnerStore {
     ///
     /// Returns false when the write failed — `error` says why, and the
     /// caller is expected to keep the pick so "Try again" can replay it.
-    /// The sidecar mirror fires only once the row holds: a replayed write
-    /// resends the same requestId, which the server answers `replayed`
-    /// rather than recording twice.
+    /// The Postgres mirror is queued in the same commit — it lands only
+    /// when the row does — and a replayed write queues the same requestId,
+    /// which the server answers `replayed` rather than recording twice.
     @discardableResult
     func recordSessionAnswer(_ write: SessionAnswerWrite) -> Bool {
-        let saved = self.write { db in
-            try db.exec("BEGIN IMMEDIATE")
-            do {
-                try applySessionAnswer(db, write)
-                try db.exec("COMMIT")
-            } catch {
-                try? db.exec("ROLLBACK")
-                throw error
-            }
+        // The web's observe body: the server recomputes mastery and the
+        // card from the evidence, so the local outcome numbers stay this
+        // file's own — they are never sent.
+        let mirror = Self.observeJSON(write).map {
+            // Deduped by requestId — the server's own replay key: queueing
+            // the same answer twice (a "Try again" replay) collapses to one.
+            MirrorCall(path: "/api/learner/observe",
+                       dedupeKey: "observe:\(write.requestId)", data: $0)
         }
-        if saved {
-            // The web's observe body: the server recomputes mastery and the
-            // card from the evidence, so the local outcome numbers stay this
-            // file's own — they are never sent.
-            if let json = Self.observeJSON(write) {
-                bridge { try await $0.observe(json: json) }
-            }
+        return self.write(mirror: mirror) { db in
+            try applySessionAnswer(db, write)
         }
-        return saved
     }
 
     /// The `POST /api/learner/observe` body for one recorded answer, encoded:
@@ -487,42 +540,37 @@ final class LearnerStore {
     /// `session-close` for a session this file opened — closeInTransaction:
     /// the event, then state flipped to `closed`. A session that never
     /// opened or is closed already writes nothing, so exit paths can call
-    /// this without tracking whether an answer ever landed.
+    /// this without tracking whether an answer ever landed. The mirror is
+    /// owed even then — the close is the server's own idempotent write, and
+    /// the session the server opened on the first bridged answer may still
+    /// be running.
     func closeSession(_ id: String, concepts: [String], at: Date = Date()) {
-        let saved = write { db in
-            try db.exec("BEGIN IMMEDIATE")
-            do {
-                let rows = try db.query(
-                    "SELECT state FROM session WHERE id = ? AND learner_id = 'local'",
-                    bind: [id]
+        write(mirror: MirrorCall(
+            path: "/api/learner/session/close",
+            dedupeKey: "session-close:\(id)",
+            body: ["sessionId": id]
+        )) { db in
+            let rows = try db.query(
+                "SELECT state FROM session WHERE id = ? AND learner_id = 'local'",
+                bind: [id]
+            )
+            if rows.next(), rows.text(0) == "running" {
+                try db.run(
+                    "INSERT INTO event (at, learner_id, type, payload) VALUES (?, 'local', 'session-close', ?)",
+                    [
+                        .real(at.timeIntervalSince1970),
+                        .text(Self.json([
+                            "session": id,
+                            "concepts": concepts,
+                        ])),
+                    ]
                 )
-                if rows.next(), rows.text(0) == "running" {
-                    try db.run(
-                        "INSERT INTO event (at, learner_id, type, payload) VALUES (?, 'local', 'session-close', ?)",
-                        [
-                            .real(at.timeIntervalSince1970),
-                            .text(Self.json([
-                                "session": id,
-                                "concepts": concepts,
-                            ])),
-                        ]
-                    )
-                    try db.run(
-                        "UPDATE session SET state = 'closed', updated_at = ? WHERE id = ?",
-                        [.real(at.timeIntervalSince1970), .text(id)]
-                    )
-                }
-                try db.exec("COMMIT")
-            } catch {
-                try? db.exec("ROLLBACK")
-                throw error
+                try db.run(
+                    "UPDATE session SET state = 'closed', updated_at = ? WHERE id = ?",
+                    [.real(at.timeIntervalSince1970), .text(id)]
+                )
             }
         }
-        // The close is the server's own idempotent write too, so it fires
-        // even when this file had nothing to close — the session the server
-        // opened on the first bridged answer may still be running.
-        guard saved else { return }
-        bridge { try await $0.closeSession(id) }
     }
 
     /// The inserts recordSessionAnswer wraps in its transaction — split out
@@ -641,6 +689,198 @@ final class LearnerStore {
             .flatMap { String(data: $0, encoding: .utf8) } ?? ""
     }
 
+    // MARK: - The Postgres mirror (the retry queue)
+
+    /// The Settings-readable counts: rows still owed to Postgres, rows the
+    /// queue gave up on, and the latest send's error.
+    private(set) var pendingMirrors = 0
+    private(set) var droppedMirrors = 0
+    private(set) var lastMirrorError: String?
+
+    /// The waiter sleeping to the next row's backoff deadline — a new kick
+    /// cancels and replaces it. Passes themselves are serialized by
+    /// `mirrorSending`.
+    private var mirrorWaiter: Task<Void, Never>?
+    private var mirrorSending = false
+    /// A write that lands mid-pass marks the queue dirty so the running
+    /// pass loops once more — there is never a second concurrent sender.
+    private var mirrorDirty = false
+    /// When the sidecar itself cannot be reached the flusher rests this
+    /// long — without it each 15s playback heartbeat would spawn the
+    /// service again.
+    private var mirrorCooldownUntil = Date.distantPast
+
+    /// The retry bounds: backoff from 10s doubling to 30 minutes, at most
+    /// 12 sends, nothing retried past a week old, and a 4xx refusal
+    /// (the body is rejected, not the channel) dropped outright. What
+    /// outlives the bounds is dropped, logged and counted — the local row
+    /// is the record, the mirror is the copy.
+    private static let mirrorBaseDelay: TimeInterval = 10
+    private static let mirrorMaxDelay: TimeInterval = 30 * 60
+    private static let mirrorMaxAttempts: Int64 = 12
+    private static let mirrorMaxAge: TimeInterval = 7 * 24 * 3600
+    private static let mirrorCooldown: TimeInterval = 60
+
+    /// The outbox half of a write's commit — called inside the write's own
+    /// transaction, so the data row and the call it owes land or roll back
+    /// together. `INSERT OR REPLACE` is the dedupe: on a `dedupe` conflict
+    /// the older pending row for the same key is replaced, because the file
+    /// only ever holds the latest state and sending just that loses
+    /// nothing. nil-dedupe rows — appends — each keep their own row.
+    private func enqueueMirror(_ db: WritableDatabase, _ call: MirrorCall) throws {
+        guard let json = String(data: call.body, encoding: .utf8) else {
+            throw CatalogError(message: "mirror body did not encode as UTF-8")
+        }
+        let now = Date().timeIntervalSince1970
+        try db.run("""
+            INSERT OR REPLACE INTO mirror_queue (route, dedupe, body, created_at, next_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            [
+                .text(call.path),
+                call.dedupeKey.map { Bind.text($0) } ?? .null,
+                .text(json),
+                .real(now),
+                .real(now),
+            ])
+    }
+
+    /// Ask the flusher for a pass now. During a pass this only marks the
+    /// queue dirty — the running pass loops — so kicks never stack a second
+    /// sender.
+    private func kickMirrors() {
+        guard sidecar != nil else { return }
+        if mirrorSending { mirrorDirty = true; return }
+        mirrorWaiter?.cancel()
+        mirrorWaiter = Task { [weak self] in
+            await self?.runMirrorPasses()
+        }
+    }
+
+    /// The waiter after a pass: sleep to the earlier of the oldest row's
+    /// backoff deadline and the sidecar cooldown's end — or not at all when
+    /// the queue is empty and nothing is owed.
+    private func scheduleMirrorWake() {
+        guard let db,
+              let rows = try? db.query("SELECT MIN(next_at) FROM mirror_queue"),
+              rows.next(), let nextDue = rows.double(0)
+        else { return }
+        let now = Date().timeIntervalSince1970
+        let delay = max(nextDue - now, mirrorCooldownUntil.timeIntervalSince1970 - now, 0.5)
+        mirrorWaiter?.cancel()
+        mirrorWaiter = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled, let self else { return }
+            await self.runMirrorPasses()
+        }
+    }
+
+    /// Passes until the queue stops being dirtied, then arms the next wake.
+    /// Each pass drains what is due; a write that lands mid-pass just
+    /// queues the next one.
+    private func runMirrorPasses() async {
+        guard !mirrorSending else { mirrorDirty = true; return }
+        mirrorSending = true
+        defer { mirrorSending = false }
+        repeat {
+            mirrorDirty = false
+            await mirrorPass()
+            refreshMirrorCounts()
+        } while mirrorDirty
+        scheduleMirrorWake()
+    }
+
+    /// One send pass over the due rows, oldest first — strict FIFO, so a
+    /// retried write never overtakes a newer one on its way to Postgres. A
+    /// send that cannot land ends the pass: the row keeps its place and its
+    /// backoff says when the queue wakes next. A permanent refusal ends the
+    /// row, not the pass — that write is unresolvable, the rest are not.
+    private func mirrorPass() async {
+        guard let sidecar, let db else { return }
+        guard Date() >= mirrorCooldownUntil else { return }
+        let now = Date().timeIntervalSince1970
+        var due: [MirrorRow] = []
+        if let rows = try? db.query("""
+            SELECT id, route, body, attempts, created_at FROM mirror_queue
+            WHERE next_at <= unixepoch('now') ORDER BY id
+            """) {
+            while rows.next() {
+                guard let id = rows.int64(0),
+                      let route = rows.text(1),
+                      let body = rows.text(2)
+                else { continue }
+                due.append(MirrorRow(
+                    id: id, route: route, body: body,
+                    attempts: rows.int64(3) ?? 0,
+                    createdAt: rows.double(4) ?? now
+                ))
+            }
+        }
+        guard !due.isEmpty else { return }
+
+        let client: SidecarClient
+        do {
+            client = try await sidecar.readyClient()
+        } catch {
+            // Nothing was sent, so no row burns an attempt — the pass rests
+            // a minute, which also caps spawn attempts while it is down.
+            mirrorCooldownUntil = Date().addingTimeInterval(Self.mirrorCooldown)
+            lastMirrorError = error.localizedDescription
+            return
+        }
+
+        for row in due {
+            do {
+                try await client.replay(route: row.route, body: Data(row.body.utf8))
+                try? db.run("DELETE FROM mirror_queue WHERE id = ?", [.int(row.id)])
+            } catch let refusal as SidecarClient.SidecarError where (400 ... 499).contains(refusal.status) {
+                dropMirror(row, because: refusal.errorDescription ?? "refused", db: db)
+            } catch {
+                // A cancelled pass leaves the row untouched — whatever
+                // cancelled it owns the next wake.
+                if Task.isCancelled { break }
+                let attempts = row.attempts + 1
+                if attempts >= Self.mirrorMaxAttempts
+                    || now - row.createdAt > Self.mirrorMaxAge {
+                    dropMirror(row, because: error.localizedDescription, db: db)
+                } else {
+                    let delay = min(
+                        Self.mirrorBaseDelay * pow(2, Double(attempts - 1)),
+                        Self.mirrorMaxDelay
+                    )
+                    try? db.run(
+                        "UPDATE mirror_queue SET attempts = ?, next_at = ?, last_error = ? WHERE id = ?",
+                        [.int(attempts), .real(now + delay), .text(error.localizedDescription), .int(row.id)]
+                    )
+                    lastMirrorError = error.localizedDescription
+                }
+                break
+            }
+        }
+    }
+
+    /// A row the queue gives up on: refused permanently, out of attempts,
+    /// or past a week old. The local row — the actual record — is
+    /// untouched; only the mirror owed is dropped, and it is logged and
+    /// counted so the divergence is visible rather than silent.
+    private func dropMirror(_ row: MirrorRow, because reason: String, db: WritableDatabase) {
+        try? db.run("DELETE FROM mirror_queue WHERE id = ?", [.int(row.id)])
+        droppedMirrors += 1
+        lastMirrorError = reason
+        NSLog("gnosia learner mirror: dropped %@ after %@ send attempts: %@",
+              row.route, String(row.attempts), reason)
+    }
+
+    /// The queue's depth as Settings shows it — read from the file rather
+    /// than tracked, so it stays honest across passes and launches.
+    private func refreshMirrorCounts() {
+        guard let db,
+              let rows = try? db.query("SELECT COUNT(*) FROM mirror_queue"),
+              rows.next()
+        else { return }
+        pendingMirrors = Int(rows.int64(0) ?? 0)
+    }
+
     // MARK: - The file
 
     private func open() throws {
@@ -651,6 +891,9 @@ final class LearnerStore {
         let db = try WritableDatabase(path: path)
         try db.exec("""
             PRAGMA journal_mode = WAL;
+            -- A writer that finds the file locked waits out a transient
+            -- holder instead of failing the write straight away.
+            PRAGMA busy_timeout = 5000;
             CREATE TABLE IF NOT EXISTS watch (
               asset_id   TEXT PRIMARY KEY,
               seconds    REAL NOT NULL,
@@ -719,6 +962,21 @@ final class LearnerStore {
               updated_at    REAL,
               PRIMARY KEY (learner_id, concept_slug)
             );
+            -- The mirror outbox: each write's Postgres call, persisted with
+            -- the row it commits beside, until the sidecar answers it.
+            -- `dedupe` collapses pending upserts of the same key — nil on
+            -- append mirrors, which each owe their own send — and
+            -- `next_at`/`attempts` are the backoff's state.
+            CREATE TABLE IF NOT EXISTS mirror_queue (
+              id         INTEGER PRIMARY KEY,
+              route      TEXT NOT NULL,
+              dedupe     TEXT UNIQUE,
+              body       TEXT NOT NULL,
+              created_at REAL NOT NULL,
+              attempts   INTEGER NOT NULL DEFAULT 0,
+              next_at    REAL NOT NULL DEFAULT 0,
+              last_error TEXT
+            );
             """)
         self.db = db
     }
@@ -775,11 +1033,17 @@ final class LearnerStore {
     /// reads on demand, so a write before load still starts from what the
     /// file holds rather than from empty.
     ///
-    /// Returns whether the write landed, so the caller knows whether a
-    /// Postgres mirror of it should fire — the bridge mirrors what the file
-    /// holds, never what it refused.
+    /// `mirror` is the Postgres half of the same commit: the call's queue
+    /// row is inserted inside the write's transaction first, so a committed
+    /// row always owes Postgres its mirror and a rolled-back one never
+    /// does. The queue — not the caller — then owns getting it sent, and a
+    /// flush pass starts as soon as this returns. When no sidecar is wired
+    /// the mirror is simply not owed: the row commits alone, as it always
+    /// has without one.
+    ///
+    /// Returns whether the write landed.
     @discardableResult
-    private func write(_ body: (WritableDatabase) throws -> Void) -> Bool {
+    private func write(mirror call: MirrorCall? = nil, _ body: (WritableDatabase) throws -> Void) -> Bool {
         do {
             if db == nil { try open() }
             guard let db else { throw CatalogError(message: "learner store did not open") }
@@ -787,7 +1051,25 @@ final class LearnerStore {
                 try load()
                 loaded = true
             }
-            try body(db)
+            // Every write is one transaction — the multi-statement bodies
+            // (an answer's session/event/mastery/review spread, a tick's
+            // read-back) stay atomic, and when a mirror is owed its queue
+            // row commits beside them.
+            try db.exec("BEGIN IMMEDIATE")
+            do {
+                if let call, sidecar != nil {
+                    try enqueueMirror(db, call)
+                }
+                try body(db)
+                try db.exec("COMMIT")
+            } catch {
+                try? db.exec("ROLLBACK")
+                throw error
+            }
+            if call != nil, sidecar != nil {
+                refreshMirrorCounts()
+                kickMirrors()
+            }
             error = nil
             return true
         } catch let failure as CatalogError {

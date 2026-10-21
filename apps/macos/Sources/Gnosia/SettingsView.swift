@@ -3,8 +3,9 @@
 //  Gnosia
 //
 //  The Settings pane (⌘,): where the snapshot file is, when nothing in the
-//  environment says otherwise — and the tutor's provider keys and model
-//  chain, managed through the sidecar in TutorSettingsView.
+//  environment says otherwise; the mirror queue's pending and dropped
+//  counts, when it has any to report; and the tutor's provider keys and
+//  model chain, managed through the sidecar in TutorSettingsView.
 //  GNOSIA_CATALOG still wins over this field —
 //  the resolution order is documented on CatalogLocation.
 //
@@ -13,6 +14,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(CatalogStore.self) private var store
+    @Environment(LearnerStore.self) private var learner
     @Environment(SidecarManager.self) private var sidecar
     @AppStorage("catalogPath") private var catalogPath = ""
     @State private var tutor = TutorSettings()
@@ -39,6 +41,28 @@ struct SettingsView: View {
                         .textSelection(.enabled)
                 }
                 Button("Reload catalog now") { store.reload() }
+            }
+
+            // The mirror queue, only when it has something to say: writes
+            // learner.db still owes Postgres, plus what gave up retrying.
+            if learner.pendingMirrors > 0 || learner.droppedMirrors > 0 {
+                Section("Learner mirror") {
+                    if learner.pendingMirrors > 0 {
+                        LabeledContent("Writes owed to Postgres") {
+                            Text("\(learner.pendingMirrors)")
+                        }
+                    }
+                    if learner.droppedMirrors > 0 {
+                        LabeledContent("Dropped after retrying") {
+                            Text("\(learner.droppedMirrors)")
+                        }
+                    }
+                    if let lastMirrorError = learner.lastMirrorError {
+                        Text(lastMirrorError)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
 
             TutorSettingsSection(settings: tutor)
