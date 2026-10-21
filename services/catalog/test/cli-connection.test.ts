@@ -15,9 +15,9 @@ import { EXIT_UNREACHABLE } from "../src/connection-failure";
  *
  * The studio reads the exit code to decide between "run the job without the
  * database" and "refuse it", so the code is what these pin, and the one line on
- * stderr that says why. Neither needs a Postgres: a dead port is nothing, and a
- * refusal comes from a server that speaks just enough of the protocol to say
- * no (see `fake-postgres.ts`).
+ * stderr that says why. A file that cannot be opened is "nothing there", and a
+ * refusal comes from one that opens but cannot be used — a Postgres URL, a
+ * lock, a path that is not a database.
  */
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));

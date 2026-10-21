@@ -966,7 +966,8 @@ interface StudioRow extends Record<string, unknown> {
   concepts: string[] | null;
   poster_key: string | null;
   poster_id: string | null;
-  narrated: boolean;
+  /** SQLite's `exists()` reads 0 or 1, as `number` in every row type here. */
+  narrated: number;
   revision: string | number | null;
   revision_job: string | null;
   source: unknown;
@@ -1029,7 +1030,7 @@ function studioSummary(row: StudioRow): VideoSummary {
         ? null
         : { key: row.mp4_blob_key, bytes: Number(row.mp4_bytes ?? 0), sha256: row.mp4_sha256 ?? "" },
     poster: row.poster_id === null ? null : { assetId: row.poster_id, key: row.poster_key },
-    narrated: row.narrated,
+    narrated: row.narrated === 1,
     revision: num(row.revision),
     revisionJob: row.revision_job,
     updatedAt: iso(row.updated_at) as string,
@@ -1047,7 +1048,7 @@ interface RenderRow extends Record<string, unknown> {
   concepts: string[] | null;
   poster_id: string | null;
   poster_key: string | null;
-  narrated: boolean;
+  narrated: number;
 }
 
 /**
@@ -1101,7 +1102,7 @@ export async function listVideos(db: CatalogDatabase, scope: OwnerScope): Promis
           ? null
           : { key: row.blob_key, bytes: Number(row.bytes ?? 0), sha256: row.content_hash ?? "" },
       poster: row.poster_id === null ? null : { assetId: row.poster_id, key: row.poster_key },
-      narrated: row.narrated,
+      narrated: row.narrated === 1,
       revision: null,
       revisionJob: null,
       updatedAt: iso(row.updated_at) as string,

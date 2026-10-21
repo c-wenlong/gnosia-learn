@@ -388,12 +388,12 @@ async function listedVideos(db: CatalogDatabase): Promise<{
   sharedWithout: DoctorResult["sharedTopicWithoutVideos"];
 }> {
   const listed = sql`
-    select m.parent_id as course, m.id as module, null as item, v.id, m.owner_id
+    select m.parent_id as course, m.id as module, null as item, v.value as id, m.owner_id
     from collection m
     cross join json_each(coalesce(m.metadata -> 'videos', '[]')) as v
     where m.kind = 'module' and m.archived_at is null
     union all
-    select m.parent_id, m.id, i.id, v.id, m.owner_id
+    select m.parent_id, m.id, i.id, v.value as id, m.owner_id
     from curriculum_item i
     join collection m on m.id = i.collection_id
     cross join json_each(coalesce(i.videos, '[]')) as v

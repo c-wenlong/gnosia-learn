@@ -1,24 +1,25 @@
 import { execFile, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { existsSync, readdirSync } from "node:fs";
 import { cp, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 
 import { sql } from "drizzle-orm";
-import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { connect } from "../src/db";
 import { REPO_ROOT } from "../src/env";
 import { journalTags } from "../src/migrations";
 import { manimkcStandIn, seedWithManimkc } from "./manimkc-standin";
 import { latestTag } from "./partial-migrations";
-import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { dropDatabase, migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { storedBlob } from "./stored-blob";
 
 /**
  * `scripts/flip-rehearsal.mjs`, the flip-day procedure, run end to end
- * against a copy.
+ * against a copy of the file.
  *
  * Since phase 3's cut-over the contract migration (0013) is no longer held
  * back: the owner's database had applied it before the cut-over merged, and
@@ -31,11 +32,12 @@ import { storedBlob } from "./stored-blob";
  * transcript, so the two uploads have something to store and the second has
  * nothing left to. ffmpeg is the suites' stand-in (vitest.setup.ts): since
  * 2026-10-05 the import cuts each render's poster and fails without one, so
- * the uploads find the poster already there. The script copies the template, runs every step, and
- * drops the copy; the template is read and nothing else.
+ * the uploads find the poster already there. The script copies the template's
+ * file, runs every step, and removes the copy; the template is read and
+ * nothing else.
  *
  * The `--real` switch is tested only for its refusals. It runs flip day
- * against the owner's database in place, and nothing here may. Its two
+ * against the owner's database file in place, and nothing here may. Its two
  * safeguards run in a rehearsal too, so they are tested here on the copy: the
  * backup (its printed restore run as printed, then read back) and the import into a
  * throwaway copy that refuses a tree which would remove rows.
@@ -86,25 +88,6 @@ interface Report {
   warnings: number;
 }
 
-const url = (name: string) => {
-  const at = new URL(process.env["DATABASE_URL"] ?? "postgres://localhost:5432/self_learn");
-  at.pathname = `/${name}`;
-  return at.toString();
-};
-
-/** `createdb -T` needs the template to have no other session. */
-async function aloneOn(database: string): Promise<void> {
-  const admin = new pg.Client({ connectionString: url("postgres") });
-  await admin.connect();
-  try {
-    await admin.query("select pg_terminate_backend(pid) from pg_stat_activity where datname = $1 and pid <> pg_backend_pid()", [
-      database,
-    ]);
-  } finally {
-    await admin.end();
-  }
-}
-
 const execFileAsync = promisify(execFile);
 
 /**
@@ -120,61 +103,29 @@ function reportOf<T = Report>(ran: Ran): T {
   }
 }
 
-/** Drop a database the script made, whichever client tools this machine has. */
-async function dropDatabase(name: string): Promise<void> {
-  const admin = new pg.Client({ connectionString: url("postgres") });
-  await admin.connect();
-  try {
-    await admin.query(`drop database if exists "${name.replace(/"/g, '""')}" with (force)`);
-  } finally {
-    await admin.end();
-  }
-}
-
-/** The connection details the client tools read, from the DATABASE_URL the scratch databases use. */
-function pgToolEnv(): NodeJS.ProcessEnv {
-  const at = new URL(process.env["DATABASE_URL"] ?? "postgres://localhost:5432/self_learn");
-  const env: NodeJS.ProcessEnv = { ...process.env };
-  if (at.hostname !== "") env["PGHOST"] = decodeURIComponent(at.hostname);
-  if (at.port !== "") env["PGPORT"] = at.port;
-  if (at.username !== "") env["PGUSER"] = decodeURIComponent(at.username);
-  if (at.password !== "") env["PGPASSWORD"] = decodeURIComponent(at.password);
-  return env;
-}
-
 /**
- * Whether the throwaway copy one rehearsal named in its report is still on
- * the server. Never every preflight copy: another checkout's suite running at
- * the same time has its own, alive while this one looks, and an interrupted
- * run long ago may have left one behind.
+ * Whether the throwaway copy file one rehearsal named in its report is still
+ * there: `<preflight name>.db` beside the tree it copied into, inside the
+ * scratch directory the report's `tree` sits under.
  */
-async function databaseExists(name: string): Promise<boolean> {
-  const admin = new pg.Client({ connectionString: url("postgres") });
-  await admin.connect();
-  try {
-    const found = await admin.query("select 1 from pg_database where datname = $1", [name]);
-    return found.rows.length > 0;
-  } finally {
-    await admin.end();
-  }
+function preflightExists(report: Report): boolean {
+  return existsSync(path.join(path.dirname(report.tree), `${report.preflight}.db`));
 }
 
-async function databasesLike(pattern: string): Promise<string[]> {
-  const admin = new pg.Client({ connectionString: url("postgres") });
-  await admin.connect();
-  try {
-    const found = await admin.query<{ datname: string }>("select datname from pg_database where datname like $1", [pattern]);
-    return found.rows.map((r) => r.datname);
-  } finally {
-    await admin.end();
-  }
+/** Files under `file`'s directory that share its prefix — the `-wal`/`-shm` sidecars included. */
+function filesLike(file: string): string[] {
+  const dir = path.dirname(file);
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter((entry) => entry.startsWith(path.basename(file)))
+    .map((entry) => path.join(dir, entry));
 }
 
 describe("scripts/flip-rehearsal.mjs --real refuses", () => {
   it("without --database", async () => {
     const ran = await rehearse(["--real"]);
     expect(ran.code).toBe(2);
-    expect(ran.stderr).toContain("--real needs --database <name>");
+    expect(ran.stderr).toContain("--real needs --database <file>");
   });
 
   it("without --checkout", async () => {
@@ -301,8 +252,6 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a copy", () => {
     // A manimkc checkout whose data root holds one render and its transcript.
     manimkc = path.join(work, "manimkc");
     await manimkcStandIn(manimkc, randomBytes(4096));
-
-    await aloneOn(template.name);
   }, 60_000);
 
   afterAll(async () => {
@@ -311,9 +260,9 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a copy", () => {
   });
 
   it("runs every flip-day step on a copy of the template, and its backup restores the template as it was", async () => {
-    const name = `${template.name}_rehearsal`;
-    // --keep, so the backup is still there to restore; the test drops what it kept.
-    const ran = await rehearse(["--from", template.name, "--name", name, "--tree-from", tree, "--keep", "--json"], {
+    const name = path.join(work, "rehearsal.db");
+    // --keep, so the backup is still there to restore; the test removes what it kept.
+    const ran = await rehearse(["--from", template.url, "--name", name, "--tree-from", tree, "--keep", "--json"], {
       MANIMKC_ROOT: manimkc,
     });
     const report = reportOf(ran);
@@ -322,7 +271,7 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a copy", () => {
       expect(failed?.gist ?? null, `${failed?.name}: ${ran.stderr}`).toBeNull();
       expect(ran.code).toBe(0);
       expect(report.ok).toBe(true);
-      expect(report.copy).toMatchObject({ name, method: "createdb -T", kept: true, dropped: false });
+      expect(report.copy).toMatchObject({ name, method: "file copy", kept: true, dropped: false });
 
       // The procedure, in the plan's order.
       expect(report.steps.map((s) => s.name)).toEqual([
@@ -379,38 +328,29 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a copy", () => {
       expect(step("migrate the contract")).toMatchObject({ applied: [], head: latestTag(), held: [] });
 
       // The backup is the copy as it was before step 1, and restores as it.
-      expect(report.backup).toMatchObject({ path: expect.stringMatching(new RegExp(`${name}-preflip-\\d{8}T\\d{6}Z\\.dump$`)) });
+      expect(report.backup).toMatchObject({ path: expect.stringMatching(/rehearsal-preflip-\d{8}T\d{6}Z\.db$/) });
       expect(report.backup?.bytes).toBeGreaterThan(0);
-      // The printed restore names the server and user on every command, since
-      // the tools never read DATABASE_URL; and run as printed, with only the
-      // password left in the environment, it puts the flipped copy back as it
-      // was before step 1. That is the owner's way back from a failed --real.
-      const server = new URL(url(name));
-      const flags = [
-        ...(server.hostname === "" ? [] : ["-h", decodeURIComponent(server.hostname)]),
-        ...(server.port === "" ? [] : ["-p", server.port]),
-        ...(server.username === "" ? [] : ["-U", decodeURIComponent(server.username)]),
-      ];
+      // The printed restore removes the file and its sidecars, then puts the
+      // backup in place; run as printed, in a shell with nothing but PATH in
+      // its environment, it puts the flipped copy back as it was before step
+      // 1. That is the owner's way back from a failed --real.
       // Checked on the argument lists, which the printed line is the quoted
       // join of; running the line below is what checks the quoting.
       const commands = report.backup?.restoreArgv ?? [];
-      expect(commands.map((argv) => path.basename(argv[0] ?? ""))).toEqual(["dropdb", "createdb", "pg_restore"]);
-      for (const argv of commands) expect(argv.slice(1, 1 + flags.length), argv.join(" ")).toEqual(flags);
-      expect(commands[2]?.slice(-3)).toEqual(["-d", name, report.backup?.path]);
-      const onlyPassword = pgToolEnv();
-      for (const key of ["PGHOST", "PGPORT", "PGUSER", "PGDATABASE"]) delete onlyPassword[key];
-      await execFileAsync("/bin/sh", ["-c", report.backup?.restore ?? "false"], { env: onlyPassword });
-      const back = new pg.Client({ connectionString: url(name) });
-      await back.connect();
+      expect(commands.map((argv) => path.basename(argv[0] ?? ""))).toEqual(["rm", "cp"]);
+      expect(commands[0]?.slice(1)).toEqual(["-f", name, `${name}-wal`, `${name}-shm`]);
+      expect(commands[1]?.slice(-2)).toEqual([report.backup?.path, name]);
+      await execFileAsync("/bin/sh", ["-c", report.backup?.restore ?? "false"], { env: { PATH: "/usr/bin:/bin" } });
+      const back = connect({ url: name });
       try {
-        const counts = await back.query<{ migrations: number; assets: number; topics: number }>(
-          `select (select count(*) from __drizzle_migrations) as migrations,
-                  (select count(*) from asset) as assets,
-                  (select count(*) from topic) as topics`,
+        const counts = await back.db.execute<{ migrations: number; assets: number; topics: number }>(
+          sql`select (select count(*) from __drizzle_migrations) as migrations,
+                     (select count(*) from asset) as assets,
+                     (select count(*) from topic) as topics`,
         );
         expect(counts.rows[0]).toEqual({ migrations: (await journalTags()).length, assets: 0, topics: 0 });
       } finally {
-        await back.end();
+        await back.close();
       }
 
       // The throwaway copy is gone, and the template is as it was: no content.
@@ -419,7 +359,7 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a copy", () => {
       expect(report.steps.find((s) => s.name === "import into a throwaway copy")?.gist).toMatch(
         new RegExp(`on ${report.preflight}; dropped$`),
       );
-      expect(await databaseExists(report.preflight)).toBe(false);
+      expect(preflightExists(report)).toBe(false);
       const topics = await template.db.execute<{ n: number }>(sql`select count(*) as n from topic`);
       expect(topics.rows[0]?.n).toBe(0);
       const assets = await template.db.execute<{ n: number }>(sql`select count(*) as n from asset`);
@@ -455,7 +395,6 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a tree that would 
     await seedWithManimkc(tree);
     manimkc = path.join(work, "manimkc");
     await manimkcStandIn(manimkc, randomBytes(64));
-    await aloneOn(template.name);
   }, 60_000);
 
   afterAll(async () => {
@@ -464,8 +403,8 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a tree that would 
   });
 
   it("stops at the import into a throwaway copy, naming the row, before the copy under test is imported", async () => {
-    const name = `${template.name}_removes`;
-    const ran = await rehearse(["--from", template.name, "--name", name, "--tree-from", tree, "--json"], {
+    const name = path.join(work, "removes.db");
+    const ran = await rehearse(["--from", template.url, "--name", name, "--tree-from", tree, "--json"], {
       MANIMKC_ROOT: manimkc,
     });
     const report = reportOf(ran);
@@ -478,11 +417,11 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a tree that would 
       ["import into a throwaway copy", false],
     ]);
     expect(report.steps.at(-1)?.gist).toMatch(/^on a copy, before touching .*: the import removed 1 row\(s\).*manimkc:out\/demo\/one\/gone\.mp4/);
-    // Both copies are dropped, without --keep.
+    // Both copies are removed, without --keep.
     expect(report.copy).toMatchObject({ name, kept: false, dropped: true });
-    expect(await databasesLike(`${name}%`)).toEqual([]);
+    expect(filesLike(name)).toEqual([]);
     expect(report.preflight).toMatch(/^self_learn_preflight_\d+_[0-9a-z]+$/);
-    expect(await databaseExists(report.preflight)).toBe(false);
+    expect(preflightExists(report)).toBe(false);
   }, 120_000);
 });
 
@@ -501,7 +440,6 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs --cutover on a copy",
     await seedWithManimkc(tree);
     manimkc = path.join(work, "manimkc");
     await manimkcStandIn(manimkc, randomBytes(4096));
-    await aloneOn(template.name);
   }, 60_000);
 
   afterAll(async () => {
@@ -510,10 +448,10 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs --cutover on a copy",
   });
 
   it("runs flip day and then the cut-over on one copy: strict flips, the waiver on record, parity saved, the tag made", async () => {
-    const name = `${template.name}_cutover`;
+    const name = path.join(work, "cutover.db");
     const reason = "the seed's two items name no concept yet";
     const ran = await rehearse(
-      ["--cutover", "--from", template.name, "--name", name, "--tree-from", tree, "--keep", "--waive-reason", reason, "--json"],
+      ["--cutover", "--from", template.url, "--name", name, "--tree-from", tree, "--keep", "--waive-reason", reason, "--json"],
       { MANIMKC_ROOT: manimkc },
     );
     const report = reportOf<
@@ -555,7 +493,7 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs --cutover on a copy",
       const step = (stepName: string) => report.steps.find((s) => s.name === stepName)?.result ?? {};
 
       // Two backups: before flip day and before the cut-over, each its own file.
-      expect(report.steps[23]?.gist).toMatch(new RegExp(`${name}-precutover-\\d{8}T\\d{6}Z\\.dump`));
+      expect(report.steps[23]?.gist).toMatch(/cutover-precutover-\d{8}T\d{6}Z\.db/);
       expect(step("cut-over: migrate")).toMatchObject({ head: latestTag(), held: [] });
       const skipped = (step("cut-over: import the tree")["skipped"] as { source: string }[]).map((s) => s.source).sort();
       expect(skipped).toEqual(["blenderkc", "concepts", "courses", "diagrams", "remotionkc", "revideokc", "sessions", "tags", "topics"]);
@@ -627,7 +565,6 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs --cutover --checkout,
     work = await mkdtemp(path.join(tmpdir(), "catalog-cutover-worktree-"));
     manimkc = path.join(work, "manimkc");
     await manimkcStandIn(manimkc, randomBytes(4096));
-    await aloneOn(template.name);
   }, 60_000);
 
   afterAll(async () => {
@@ -644,7 +581,7 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs --cutover --checkout,
     // and the seed as content/ and learn/.
     const repo = path.join(work, "repo");
     await mkdir(path.join(repo, "scripts", "lib"), { recursive: true });
-    for (const file of ["flip-rehearsal.mjs", "lib/cutover.mjs", "lib/flip-order.mjs", "lib/pg.mjs"]) {
+    for (const file of ["flip-rehearsal.mjs", "lib/cutover.mjs", "lib/flip-order.mjs", "lib/proc.mjs", "lib/sqlite.mjs"]) {
       await cp(path.join(REPO_ROOT, "scripts", file), path.join(repo, "scripts", file));
     }
     for (const link of ["services", "packages", "node_modules"]) await symlink(path.join(REPO_ROOT, link), path.join(repo, link));
@@ -672,9 +609,9 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs --cutover --checkout,
 
     // Flip day, from the worktree's tree, kept: the copy is the database flip
     // day ran on, and its temp tree holds the export it wrote.
-    const flipDay = `${template.name}_flipday`;
+    const flipDay = path.join(work, "flipday.db");
     copies.push(flipDay);
-    const first = await rehearse(["--from", template.name, "--name", flipDay, "--tree-from", files, "--keep", "--json"], env, script);
+    const first = await rehearse(["--from", template.url, "--name", flipDay, "--tree-from", files, "--keep", "--json"], env, script);
     const day = reportOf(first);
     kept.push(path.dirname(day.tree));
     expect(day.steps.find((s) => !s.ok)?.gist ?? null, first.stderr).toBeNull();
@@ -696,7 +633,7 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs --cutover --checkout,
       );
       return { ran, report: reportOf<Report & { next: string[]; cutover: { tag: { commit: string; made: boolean } | null; rewrites: string[]; exported: string[] } }>(ran) };
     };
-    const { ran, report } = await cutover(`${template.name}_cut`);
+    const { ran, report } = await cutover(path.join(work, "cut.db"));
     const failed = report.steps.find((s) => !s.ok);
     expect(failed?.gist ?? null, `${failed?.name}: ${ran.stderr}`).toBeNull();
     expect(ran.code).toBe(0);
@@ -728,7 +665,7 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs --cutover --checkout,
 
     // Any other edit stops it, before anything is armed.
     await writeFile(path.join(files, "learn", "README.md"), "edited by hand\n");
-    const stray = await cutover(`${template.name}_stray`);
+    const stray = await cutover(path.join(work, "stray.db"));
     expect(stray.ran.code).toBe(1);
     expect(stray.report.steps.at(-1)).toMatchObject({ name: "cut-over: parity", ok: false });
     expect(stray.report.steps.at(-1)?.gist).toMatch(/learn\/README\.md \(no export writes this file\)/);

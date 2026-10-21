@@ -68,13 +68,13 @@ async function latestVisits(db: CatalogDatabase, learnerId: string): Promise<Eve
         e.at,
         e.payload ->> 'course' as course,
         case
-          when json_type(e.payload -> 'module') = 'string' then e.payload ->> 'module'
+          when json_type(e.payload -> 'module') = 'text' then e.payload ->> 'module'
           else ''
         end as module
       from event e
       where e.learner_id = ${learnerId}
         and e.type = 'visit'
-        and json_type(e.payload -> 'course') = 'string'
+        and json_type(e.payload -> 'course') = 'text'
         and e.payload ->> 'course' <> ''
     )
     select

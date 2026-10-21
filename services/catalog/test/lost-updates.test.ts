@@ -4,7 +4,6 @@ import path from "node:path";
 
 import { concept, contentRevision, curriculumItem, learner, recap } from "@self-learn/schema";
 import { eq, sql } from "drizzle-orm";
-import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { runCourseExport } from "../src/commands/course";
@@ -21,7 +20,7 @@ import type { NoteFields } from "../src/content/notes";
 import { exportHash, readTypeFiles } from "../src/content/layout";
 import { recordExport } from "../src/content/ownership";
 import { type By, renameTopic } from "../src/content/topics";
-import { type CatalogDatabase, connect, type Connection } from "../src/db";
+import { connect, type Connection, inTransaction } from "../src/db";
 import { conceptsIndexer } from "../src/index/concepts";
 import { tagsIndexer } from "../src/index/tags";
 import { topicsIndexer } from "../src/index/topics";
@@ -61,22 +60,15 @@ function pointAt(name: string): () => void {
   };
 }
 
-/** The backend behind a one-connection pool, so a test can watch it wait. */
-async function pidOf(db: CatalogDatabase): Promise<number> {
-  const { rows } = await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`);
-  return Number(rows[0]?.pid);
-}
-
-/** Resolves once `pid` is waiting on a lock of any kind, so two transactions can be ordered exactly. */
-async function waiting(db: CatalogDatabase, pid: number): Promise<void> {
-  for (let i = 0; i < 400; i += 1) {
-    const { rows } = await db.execute<{ n: number }>(
-      sql`select 0 as n`,
-    );
-    if ((rows[0]?.n ?? 0) > 0) return;
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
-  throw new Error(`backend ${pid} never waited on a lock`);
+/**
+ * Postgres showed waiting sessions in pg_stat_activity; SQLite exposes no
+ * waiter list — a contender is just a `begin immediate` queued behind the
+ * holder's write lock. The order a test needs is still there: the contender
+ * is pending until the holder commits, and a short beat is enough to order
+ * the rest.
+ */
+async function waiting(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 100));
 }
 
 describe.skipIf(!reachable.ok)("a note is written against the revision it was read at", () => {
@@ -384,22 +376,24 @@ describe.skipIf(!reachable.ok)("course files, item purges and topic renames agai
     await scratch.db.insert(recap).values({ learnerId: "local", curriculumItemId: id, summary: "a recap", source: "agent" });
 
     // A learner ticks the item while the purge runs: the tick's transaction
-    // has inserted its row and holds the recap, so the purge has to wait for
-    // it somewhere.
-    const b = new pg.Client({ connectionString: scratch.url });
-    await b.connect();
+    // has inserted its row and holds the write lock — what `for update`
+    // held on Postgres — so the purge has to wait for it.
+    const b = connect({ url: scratch.url });
     const a = connect({ url: scratch.url });
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => (release = resolve));
     try {
-      await b.query("begin");
-      await b.query(
-        `insert into progress (learner_id, curriculum_item_id, completed_at, note) values ('local', $1, cast(unixepoch('subsec') * 1000 as integer), 'ticked mid-purge')`,
-        [id],
-      );
-      await b.query("select 1 from recap where curriculum_item_id = $1 for update", [id]);
-      const pid = await pidOf(a.db);
+      const ticking = inTransaction(b.db, async (tx) => {
+        await tx.execute(sql`
+          insert into progress (learner_id, curriculum_item_id, completed_at, note)
+          values ('local', ${id}, cast(unixepoch('subsec') * 1000 as integer), 'ticked mid-purge')`);
+        await tx.execute(sql`select 1 from recap where curriculum_item_id = ${id}`);
+        await released;
+      });
       const purging = purgeItem(a.db, { id, reason: "gone", withLearnerData: true });
-      await waiting(scratch.db, pid);
-      await b.query("commit");
+      await waiting();
+      release();
+      await ticking;
       const purged = await purging;
 
       const [revision] = await scratch.db.select().from(contentRevision).where(eq(contentRevision.id, purged.revisionId));
@@ -409,7 +403,7 @@ describe.skipIf(!reachable.ok)("course files, item purges and topic renames agai
       expect(links["recap"]).toEqual([expect.objectContaining({ summary: "a recap" })]);
       expect(purged.detail).toContain("progress of local");
     } finally {
-      await b.end();
+      await b.close();
       await a.close();
     }
   }, 60_000);
@@ -447,22 +441,27 @@ describe.skipIf(!reachable.ok)("course files, item purges and topic renames agai
       .replace("          - other\n", "          - stray\n");
     const file = path.join(edits, "moved.yaml");
     await writeFile(file, moved);
-    const three = new pg.Client({ connectionString: scratch.url });
-    await three.connect();
+    const three = connect({ url: scratch.url });
     const one = connect({ url: scratch.url });
+    let release!: () => void;
+    const released = new Promise<void>((resolve) => (release = resolve));
     try {
-      await three.query("begin");
-      await three.query("select pg_advisory_xact_lock(hashtextextended('catalog:course-identity', 0))");
-      const importPid = await pidOf(two.db);
+      // Was `begin` + `pg_advisory_xact_lock('catalog:course-identity')`: a
+      // `begin immediate` held until `release` is the same hold — the whole
+      // file is the lock an import waits on now.
+      const holding = inTransaction(three.db, async () => {
+        await released;
+      });
+      await waiting();
       const importing = importCourse(two.db, { file, reason: "move module two under gamma" });
-      await waiting(scratch.db, importPid);
+      await waiting();
 
       // No module is under gamma yet, so the rename's first guess is topics
-      // alone; it then waits on the export lock the import holds.
-      const renamePid = await pidOf(one.db);
+      // alone; it then waits behind the import's transaction.
       const renaming = renameTopic(one.db, { from: "gamma", to: "delta" }, { ...by, reason: "a clearer slug" });
-      await waiting(scratch.db, renamePid);
-      await three.query("commit");
+      await waiting();
+      release();
+      await holding;
       await importing;
       const result = await renaming;
 
@@ -471,7 +470,8 @@ describe.skipIf(!reachable.ok)("course files, item purges and topic renames agai
       expect(await readFile(courseFile(), "utf8")).not.toContain("topic: gamma");
       expect(result.staleSvgs).toEqual(["learn/assets/gamma-map.svg"]);
     } finally {
-      await three.end();
+      release();
+      await three.close();
       await one.close();
     }
   }, 60_000);

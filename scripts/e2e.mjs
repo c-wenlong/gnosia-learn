@@ -9,12 +9,13 @@
 //      from the database only), and one `learn observe` so a review card is
 //      due. The default since phase 3 of docs/CONTENT-MIGRATION.md removed
 //      `content/` and `learn/`: `seed/` is the content a clone has.
-//      With --copy (or E2E_TEMPLATE_DB set) it copies a database instead,
-//      `self_learn` unless E2E_TEMPLATE_DB names another, with `createdb -T`.
-//      Every flow below that grades (a review rating, a session answer, Mark
-//      watched, a settings change) writes real rows, and AGENTS.md is plain
-//      that anything which grades runs against a copy, never `self_learn`.
-//      Either database is dropped in `finally`, on a failure and on Ctrl-C too.
+//      With --copy (or E2E_TEMPLATE_DB set) it copies a database file instead,
+//      the catalog's own unless E2E_TEMPLATE_DB names another, through the
+//      SQLite backup API. Every flow below that grades (a review rating, a
+//      session answer, Mark watched, a settings change) writes real rows, and
+//      AGENTS.md is plain that anything which grades runs against a copy,
+//      never `self_learn`. Either database's file is removed in `finally`,
+//      on a failure and on Ctrl-C too.
 //   2. Starts `next start` from `apps/web/` on a free port, pointed at the copy,
 //      with a fixed test password and secret and with every provider key blank.
 //      It builds nothing: run `npm run build` first.
@@ -34,9 +35,7 @@
 //   --seed       the default; accepted so an older command line still runs.
 //
 // Environment:
-//   E2E_TEMPLATE_DB=<name>  copy this database rather than build from seed/; every content type must be flipped
-//   PG_BIN=<dir>            the Postgres binaries (default: the pg_dump on PATH, then
-//                           `pg_config --bindir`, then Homebrew's postgresql@17)
+//   E2E_TEMPLATE_DB=<file>  copy this database file rather than build from seed/; every content type must be flipped
 //   PLAYWRIGHT_CORE=<path>  playwright-core's index.mjs, when the tldrawkc submodule
 //                           in this checkout is not installed
 //   CHROMIUM=<path>         the browser binary, when not in the Playwright cache
@@ -55,7 +54,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { FLIP_ORDER } from './lib/flip-order.mjs';
-import { copyDatabase, exec as execTool, missingPgTools, PG_BIN } from './lib/pg.mjs';
+import { exec as execTool } from './lib/proc.mjs';
+import { copyDatabase, dropDatabase, openDatabase } from './lib/sqlite.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const WEB = join(ROOT, 'apps/web');
@@ -79,14 +79,18 @@ const SEED = !COPY;
 /** Values the server is started with. Test values only; nothing real is typed anywhere. */
 const PASSWORD = 'e2e-smoke-owner-password';
 const SECRET = 'e2e-smoke-auth-secret-0123456789abcdef';
-// The database copied with --copy. `self_learn` by default; E2E_TEMPLATE_DB
-// names another, such as a scratch copy flipped for a rehearsal, since the app
+// The database file copied with --copy. The catalog's own by default
+// ($SELF_LEARN_HOME/catalog.db, else ~/.self-learn); E2E_TEMPLATE_DB names
+// another, such as a scratch copy flipped for a rehearsal, since the app
 // reads content from the database only and an unflipped template fails every
 // content page.
-const TEMPLATE_DB = process.env.E2E_TEMPLATE_DB || 'self_learn';
+const TEMPLATE_DB =
+  process.env.E2E_TEMPLATE_DB ||
+  join(process.env.SELF_LEARN_HOME ?? join(homedir(), '.self-learn'), 'catalog.db');
 // The pid and the start time, so a later run that happens to get the same pid
-// can never collide with (or drop) a copy an earlier run kept with --keep-db.
-const COPY_DB = `self_learn_e2e_${process.pid}_${Date.now().toString(36)}`;
+// can never collide with (or remove) a copy an earlier run kept with
+// --keep-db.
+const COPY_DB = join(tmpdir(), `self_learn_e2e_${process.pid}_${Date.now().toString(36)}.db`);
 
 // ---------------------------------------------------------------------------
 // Prerequisites. Each one names what is missing and how to get it, then exits 2.
@@ -99,9 +103,6 @@ function missing(message) {
 if (!existsSync(join(WEB, '.next/BUILD_ID'))) {
   missing('no production build at apps/web/.next. Run `npm run build` first; this script never builds.');
 }
-
-const missingTools = missingPgTools(['createdb', 'dropdb', 'psql', 'pg_dump']);
-if (missingTools !== null) missing(missingTools);
 
 const corePath = process.env.PLAYWRIGHT_CORE ?? join(ROOT, 'tools/tldrawkc/node_modules/playwright-core/index.mjs');
 if (!existsSync(corePath)) {
@@ -165,18 +166,15 @@ function cleanup() {
     if (browser !== null) await browser.close().catch(() => {});
     if (held.server !== null) await stopGroup(held.server);
     if (held.copying !== null) {
-      // Let an in-flight createdb or dump finish first; a drop that ran ahead
-      // of it would find nothing and leave the finished copy behind.
+      // Let an in-flight copy finish first; a removal that ran ahead of it
+      // would find nothing and leave the finished copy behind.
       await held.copying.catch(() => {});
       if (KEEP_DB) {
-        console.log(`e2e: kept the database ${COPY_DB}. Drop it with: ${join(PG_BIN, 'dropdb')} ${COPY_DB}`);
+        console.log(`e2e: kept the database ${COPY_DB}. Remove it with: rm -f '${COPY_DB}' '${COPY_DB}-wal' '${COPY_DB}-shm'`);
       } else {
-        // --force ends any connection still open, so a server that was slow to
-        // die cannot leave the copy behind.
-        const drop = await pg('dropdb', ['--if-exists', '--force', COPY_DB]);
-        if (drop.status === 0) console.log(`e2e: dropped ${COPY_DB}`);
+        if (dropDatabase(COPY_DB)) console.log(`e2e: removed ${COPY_DB}`);
         else {
-          teardownProblem = `could not drop ${COPY_DB}: ${drop.stderr.trim()}. Drop it by hand: ${join(PG_BIN, 'dropdb')} --force ${COPY_DB}`;
+          teardownProblem = `could not remove ${COPY_DB}. Remove it by hand: rm -f '${COPY_DB}' '${COPY_DB}-wal' '${COPY_DB}-shm'`;
           console.error(`e2e: ${teardownProblem}`);
         }
       }
@@ -204,13 +202,11 @@ function stopIfInterrupted() {
 
 /**
  * Run a command from the repository root and collect its output, in a process
- * group of its own (scripts/lib/pg.mjs), so a Ctrl-C meant for this script
- * does not kill createdb halfway through; the handler above decides what
+ * group of its own (scripts/lib/proc.mjs), so a Ctrl-C meant for this script
+ * does not kill a child halfway through; the handler above decides what
  * stops, and in what order.
  */
 const exec = (command, args, env = process.env) => execTool(command, args, { env, cwd: ROOT });
-
-const pg = (tool, args) => exec(join(PG_BIN, tool), args);
 
 /**
  * Signal the server's whole process group and wait until nothing in it answers.
@@ -253,7 +249,8 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 function seedEnv() {
   return {
     ...process.env,
-    DATABASE_URL: `postgres://localhost:5432/${COPY_DB}`,
+    CATALOG_DB: COPY_DB,
+    DATABASE_URL: COPY_DB,
     SELF_LEARN_HOME: SEED_HOME,
     MANIMKC_ROOT: NO_MANIMKC,
     REMOTIONKC_ROOT: NO_MANIMKC,
@@ -283,8 +280,8 @@ async function seedCommand(script, args) {
  */
 
 async function buildFromSeed() {
-  const made = await pg('createdb', [COPY_DB]);
-  if (made.status !== 0) throw new Error(`createdb ${COPY_DB} failed: ${made.stderr.trim()} (is Postgres running?)`);
+  // No create-database step: `catalog migrate` makes the file on first
+  // connect, which is the whole point of a SQLite catalog.
   await seedCommand('catalog', ['migrate']);
   await seedCommand('catalog', ['import', join(ROOT, 'seed')]);
   for (const type of FLIP_ORDER) await seedCommand('catalog', ['flip', type]);
@@ -296,15 +293,12 @@ async function createCopy() {
     await buildFromSeed();
     return markReviewDue();
   }
-  // No `catalog migrate` afterwards: a template copy carries the schema and the
-  // drizzle journal of `self_learn` exactly, so it is as migrated as its source.
-  // `createdb -T` needs the template to have no other connections, and a dev
-  // server or another session holding `self_learn` open is ordinary, so the
-  // copy falls back to a dump into an empty database, which does not care.
-  await copyDatabase(TEMPLATE_DB, COPY_DB, {
-    onFallback: () => console.log(`e2e: ${TEMPLATE_DB} is in use, copying it with pg_dump instead`),
-  }).catch((error) => {
-    throw new Error(`${error.message} (is Postgres running, and does ${TEMPLATE_DB} exist?)`);
+  // No `catalog migrate` afterwards: a file copy carries the schema and the
+  // drizzle journal of the template exactly, so it is as migrated as its
+  // source. The backup API reads a consistent snapshot even with the
+  // template open elsewhere, which `createdb -T` could not promise.
+  await copyDatabase(TEMPLATE_DB, COPY_DB).catch((error) => {
+    throw new Error(`${error.message} (does ${TEMPLATE_DB} exist?)`);
   });
   await markReviewDue();
   ACCOUNT_NAME = await displayName();
@@ -312,25 +306,35 @@ async function createCopy() {
 
 /** The signed-in learner's display name in the copy, which names the sidebar's account row; null for none. */
 async function displayName() {
-  const read = await pg('psql', ['-d', COPY_DB, '-v', 'ON_ERROR_STOP=1', '-Atc', "select coalesce(display_name, '') from learner where id = 'local'"]);
-  if (read.status !== 0) throw new Error(`could not read the learner's name in the copy: ${read.stderr.trim()}`);
-  return read.stdout.replace(/\n$/, '') || null;
+  const db = openDatabase(COPY_DB);
+  try {
+    const row = db.prepare("select coalesce(display_name, '') as name from learner where id = 'local'").get();
+    return row?.name || null;
+  } finally {
+    db.close();
+  }
 }
 
 async function markReviewDue() {
   // Make the review step deterministic: whatever the owner has already cleared,
   // the earliest card in the copy is due now. `review` is a projection of the
   // event log, and this is a throwaway copy, so rewriting one row is harmless.
-  // `self_learn.copy_ok` because the template may itself be a copy once the
+  // `catalog_copy_ok()` because the template may itself be a copy once the
   // primary has moved (edge case 14 of docs/CONTENT-MIGRATION.md), and a copy
-  // refuses every write that does not say it means it.
-  const due = await pg('psql', [
-    '-d', COPY_DB, '-v', 'ON_ERROR_STOP=1', '-Atc',
-    `set self_learn.copy_ok = on;
-     update review set due = now() - interval '1 minute'
-      where (learner_id, concept_slug) in (select learner_id, concept_slug from review order by due limit 1)`,
-  ]);
-  if (due.status !== 0) throw new Error(`could not mark a review due in the copy: ${due.stderr.trim()}`);
+  // refuses every write that does not say it means it; the bare handle has
+  // none of `connect`'s functions, so it is registered here.
+  const db = openDatabase(COPY_DB);
+  try {
+    db.function('catalog_copy_ok', () => 1);
+    db.exec(
+      `update review set due = cast(unixepoch('subsec') * 1000 as integer) - 60000
+        where (learner_id, concept_slug) in (select learner_id, concept_slug from review order by due limit 1)`,
+    );
+  } catch (error) {
+    throw new Error(`could not mark a review due in the copy: ${error?.message ?? error}`);
+  } finally {
+    db.close();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -362,7 +366,8 @@ async function startServer(port) {
   const env = {
     ...process.env,
     NODE_ENV: 'production',
-    DATABASE_URL: `postgres://localhost:5432/${COPY_DB}`,
+    CATALOG_DB: COPY_DB,
+    DATABASE_URL: COPY_DB,
     OWNER_PASSWORD: PASSWORD,
     AUTH_SECRET: SECRET,
     // The seed's blob store, where its import put the diagram SVG.

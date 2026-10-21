@@ -73,7 +73,8 @@ interface MadeRow extends Record<string, unknown> {
   path: string | null;
   job_id: string;
   written_at: Date | string;
-  thumbnail: boolean | null;
+  /** SQLite's `exists()`/`=` reads 0 or 1. */
+  thumbnail: number | null;
 }
 
 /**
@@ -92,7 +93,7 @@ export async function conversationMade(db: CatalogDatabase, draftId: string, sco
     name: madeName(row.id, row.kind, row.path),
     jobId: row.job_id,
     madeAt: new Date(row.written_at).toISOString(),
-    thumbnail: row.thumbnail === true,
+    thumbnail: row.thumbnail === 1,
   }));
 }
 

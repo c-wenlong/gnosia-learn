@@ -34,7 +34,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
-import { exec } from './lib/pg.mjs';
+import { exec } from './lib/proc.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const CLI = join(ROOT, 'services/catalog/src/cli.ts');
