@@ -63,7 +63,8 @@ struct MarkDoneButton: View {
             learner?.setWatch(
                 asset.id,
                 seconds: max(seconds, store.watchMark(asset.id)?.seconds ?? 0),
-                done: true
+                done: true,
+                mirror: .marked
             )
             store.refreshLearner()
         } label: {

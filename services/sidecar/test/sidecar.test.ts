@@ -2,10 +2,21 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 
-import { readProviderKeys, type CatalogDatabase } from "@self-learn/catalog/state";
+import {
+  readAssetNaming,
+  readDisplayName,
+  readEvents,
+  readModel,
+  readPreference,
+  readProgress,
+  readProviderKeys,
+  readReviews,
+  type CatalogDatabase,
+} from "@self-learn/catalog/state";
 import type { TutorDeps } from "@self-learn/tutor/server/deps";
 import { openSavedKeys } from "@self-learn/tutor/server/provider-keys";
 import { migratedScratchDatabase, probe, type Scratch } from "../../catalog/test/scratch-database";
+import { ASSETS, ITEMS, seedAssets, seedContent } from "../../catalog/test/state-fixture";
 
 import { createApi } from "../src/api";
 import { guard } from "../src/guard";
@@ -235,6 +246,57 @@ describe("the learner write routes, database down", () => {
 });
 
 /**
+ * The learner-state writes against the stub deps: every refusal the routes
+ * can give without reaching a row — a bad payload is a 400 before any read,
+ * a good one is a 503 STORE_UNAVAILABLE the way the web's `handler` answers
+ * a dead database.
+ */
+describe("the learner state writes, database down", () => {
+  it("400s bad payloads before touching the database", async () => {
+    const cases: [string, unknown][] = [
+      ["/api/learner/favorite", { assetId: 42, favorite: true }],
+      ["/api/learner/favorite", { assetId: "fx:video", favorite: "yes" }],
+      ["/api/learner/watched", {}],
+      ["/api/learner/playback", { assetId: "fx:video", duration: 0, position: 1, ranges: [] }],
+      ["/api/learner/playback", { assetId: "fx:video", duration: 10, position: 1, ranges: [[1, 2, 3]] }],
+      ["/api/learner/progress", { curriculumItemId: "fx-m1-t1" }],
+      ["/api/learner/asset-name", { assetId: "fx:video", name: 42 }],
+      ["/api/learner/note", { curriculumItemId: "fx-m1-t1", note: "x".repeat(20_001) }],
+      ["/api/learner/name", { name: 42 }],
+      ["/api/learner/observe", { conceptSlug: "UPPER", correct: true, source: "probe", requestId: "r1" }],
+      ["/api/learner/observe", { conceptSlug: "alpha", correct: true, source: "review", requestId: "r1" }],
+      ["/api/learner/observe", { conceptSlug: "alpha", correct: true, source: "teach" }],
+      ["/api/learner/session/close", { sessionId: "has spaces" }],
+      ["/api/learner/favorite", "not an object"],
+    ];
+    for (const [path, body] of cases) {
+      const response = await call(path, "POST", body);
+      expect(response.status, `${path} ${JSON.stringify(body)}`).toBe(400);
+      expect(await response.json()).toMatchObject({ ok: false, code: "BAD_REQUEST" });
+    }
+  });
+
+  it("503s good payloads STORE_UNAVAILABLE, as the web's handler does", async () => {
+    const cases: [string, unknown][] = [
+      ["/api/learner/favorite", { assetId: "fx:video", favorite: true }],
+      ["/api/learner/watched", { assetId: "fx:video" }],
+      ["/api/learner/playback", { assetId: "fx:video", duration: 10, position: 5, ranges: [[0, 5]] }],
+      ["/api/learner/progress", { curriculumItemId: "fx-m1-t1", completed: true }],
+      ["/api/learner/asset-name", { assetId: "fx:video", name: "x" }],
+      ["/api/learner/note", { curriculumItemId: "fx-m1-t1", note: "x" }],
+      ["/api/learner/name", { name: "Ada" }],
+      ["/api/learner/observe", { conceptSlug: "alpha", correct: true, source: "teach", requestId: "r1" }],
+      ["/api/learner/session/close", { sessionId: "s1" }],
+    ];
+    for (const [path, body] of cases) {
+      const response = await call(path, "POST", body);
+      expect(response.status, `${path}`).toBe(503);
+      expect(await response.json()).toMatchObject({ ok: false, code: "STORE_UNAVAILABLE" });
+    }
+  });
+});
+
+/**
  * The same routes end to end against a migrated scratch database — the web
  * contract verbatim: saves and removals, the chain's add/set/move/remove,
  * the provider-block move and delete, and the sealed row decrypting through
@@ -260,6 +322,11 @@ describe.skipIf(!reachable.ok)("the learner write routes, against a scratch data
     // under this secret and the suite reads them back under it.
     process.env.AUTH_SECRET = SECRET;
     scratch = await migratedScratchDatabase();
+    // The content half the state tables' foreign keys need: concepts for
+    // observations, curriculum items for ticks and notes, assets for the
+    // library writes.
+    await seedContent(scratch.db);
+    await seedAssets(scratch.db);
     server2 = createApi({ ...stubDeps({}), db: Promise.resolve(scratch.db) });
     await new Promise<void>((resolve) => server2.listen(0, "127.0.0.1", resolve));
     base2 = `http://127.0.0.1:${(server2.address() as AddressInfo).port}`;
@@ -387,5 +454,182 @@ describe.skipIf(!reachable.ok)("the learner write routes, against a scratch data
     // openai's key went with the provider; nvidia's and glm's stay.
     const keys = await readProviderKeys(scratch.db, "local");
     expect(keys.map((row) => row.provider)).toEqual(["glm", "nvidia"]);
+  });
+
+  /**
+   * The bridge's half of the app: every write the native LearnerStore makes
+   * lands in Postgres through these routes, in the web's own `{ ok, result }`
+   * envelope, so a check here reads the row the web would read.
+   */
+  describe("the learner state writes", () => {
+    it("stars and unstars an asset", async () => {
+      const starred = await call2("/api/learner/favorite", "POST", { assetId: ASSETS.video, favorite: true });
+      expect(starred.status).toBe(200);
+      const set = (await starred.json()) as { ok: boolean; result: { assetId: string; favorite: boolean; at: string | null } };
+      expect(set.result).toMatchObject({ assetId: ASSETS.video, favorite: true });
+      expect(typeof set.result.at).toBe("string");
+      expect(await readPreference(scratch.db, `favorite:${ASSETS.video}`, "local")).toEqual({ at: set.result.at });
+
+      const unstarred = await call2("/api/learner/favorite", "POST", { assetId: ASSETS.video, favorite: false });
+      expect((await unstarred.json()).result).toMatchObject({ assetId: ASSETS.video, favorite: false, at: null });
+      expect(await readPreference(scratch.db, `favorite:${ASSETS.video}`, "local")).toBeUndefined();
+
+      expect((await call2("/api/learner/favorite", "POST", { assetId: "fx:missing", favorite: true })).status).toBe(400);
+    });
+
+    it("appends a watched event per press, stamped by the server", async () => {
+      const first = await call2("/api/learner/watched", "POST", { assetId: ASSETS.video });
+      expect(first.status).toBe(200);
+      const second = await call2("/api/learner/watched", "POST", { assetId: ASSETS.link });
+      const events = (await readEvents(scratch.db, "local")).filter((e) => e.type === "watched");
+      // Two presses, two rows: the log does not dedupe a second viewing.
+      expect(events.length).toBeGreaterThanOrEqual(2);
+      expect(events.map((e) => e.asset)).toEqual(expect.arrayContaining([ASSETS.video, ASSETS.link]));
+      expect((await call2("/api/learner/watched", "POST", { assetId: "fx:missing" })).status).toBe(400);
+      expect(second.status).toBe(200);
+    });
+
+    it("merges playback saves and appends the watched event on the crossing", async () => {
+      const half = await call2("/api/learner/playback", "POST", {
+        assetId: ASSETS.video, duration: 100, position: 50, ranges: [[0, 50]],
+      });
+      expect(half.status).toBe(200);
+      const first = (await half.json()) as {
+        ok: boolean;
+        result: { coverage: number; watchedAt: string | null; watchedDay: string | null; position: number; crossed: boolean };
+      };
+      expect(first.result).toMatchObject({ coverage: 0.5, watchedAt: null, watchedDay: null, position: 50, crossed: false });
+
+      const second = await call2("/api/learner/playback", "POST", {
+        assetId: ASSETS.video, duration: 100, position: 95, ranges: [[50, 95]],
+      });
+      const done = (await second.json()) as typeof first;
+      expect(done.result).toMatchObject({ crossed: true, position: 95 });
+      expect(done.result.coverage).toBeGreaterThanOrEqual(0.9);
+      expect(done.result.watchedAt).not.toBeNull();
+      expect(done.result.watchedDay).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+
+      // The crossing appended exactly one `watched` event for this asset; a
+      // later save does not append again.
+      const before = (await readEvents(scratch.db, "local")).filter((e) => e.type === "watched" && e.asset === ASSETS.video).length;
+      await call2("/api/learner/playback", "POST", { assetId: ASSETS.video, duration: 100, position: 100, ranges: [[95, 100]] });
+      const after = (await readEvents(scratch.db, "local")).filter((e) => e.type === "watched" && e.asset === ASSETS.video).length;
+      expect(after).toBe(before);
+
+      // A page kind cannot carry a position, and an unknown id is a 400.
+      expect((await call2("/api/learner/playback", "POST", { assetId: ASSETS.link, duration: 10, position: 1, ranges: [] })).status).toBe(400);
+      expect((await call2("/api/learner/playback", "POST", { assetId: "fx:missing", duration: 10, position: 1, ranges: [] })).status).toBe(400);
+    });
+
+    it("ticks and unticks a curriculum item", async () => {
+      const tick = await call2("/api/learner/progress", "POST", { curriculumItemId: ITEMS[0], completed: true });
+      expect(tick.status).toBe(200);
+      expect(await tick.json()).toMatchObject({ ok: true, result: { curriculumItemId: ITEMS[0], completed: true } });
+      expect((await readProgress(scratch.db, "local")).find((r) => r.curriculumItemId === ITEMS[0])?.completedAt).not.toBeNull();
+
+      await call2("/api/learner/progress", "POST", { curriculumItemId: ITEMS[0], completed: false });
+      expect((await readProgress(scratch.db, "local")).find((r) => r.curriculumItemId === ITEMS[0])).toBeUndefined();
+      expect((await call2("/api/learner/progress", "POST", { curriculumItemId: "nope", completed: true })).status).toBe(400);
+    });
+
+    it("writes and clears a scratch note", async () => {
+      await call2("/api/learner/note", "POST", { curriculumItemId: ITEMS[0], note: "a thought" });
+      expect((await readProgress(scratch.db, "local")).find((r) => r.curriculumItemId === ITEMS[0])?.note).toBe("a thought");
+
+      const cleared = await call2("/api/learner/note", "POST", { curriculumItemId: ITEMS[0], note: "" });
+      expect((await cleared.json()).result).toMatchObject({ cleared: true });
+      expect((await readProgress(scratch.db, "local")).find((r) => r.curriculumItemId === ITEMS[0])).toBeUndefined();
+      expect((await call2("/api/learner/note", "POST", { curriculumItemId: "nope", note: "x" })).status).toBe(400);
+    });
+
+    it("renames an asset and clears the name back to the source's title", async () => {
+      const renamed = await call2("/api/learner/asset-name", "POST", { assetId: ASSETS.link, name: "  Somebody   else's " });
+      expect(renamed.status).toBe(200);
+      expect((await renamed.json()).result).toEqual({ title: "Somebody else's", name: "Somebody else's", original: "Somebody else's alpha" });
+      expect(await readAssetNaming(scratch.db, ASSETS.link, "local")).toMatchObject({ name: "Somebody else's" });
+
+      const cleared = await call2("/api/learner/asset-name", "POST", { assetId: ASSETS.link, name: null });
+      expect((await cleared.json()).result).toEqual({ title: "Somebody else's alpha", name: null, original: "Somebody else's alpha" });
+      expect((await call2("/api/learner/asset-name", "POST", { assetId: "fx:missing", name: "x" })).status).toBe(400);
+    });
+
+    it("stores the display name cleaned and clears it with null", async () => {
+      const named = await call2("/api/learner/name", "POST", { name: "  Ada   Lovelace " });
+      expect(named.status).toBe(200);
+      expect((await named.json()).result).toBe("Ada Lovelace");
+      expect(await readDisplayName(scratch.db, "local")).toBe("Ada Lovelace");
+      await call2("/api/learner/name", "POST", { name: null });
+      expect(await readDisplayName(scratch.db, "local")).toBeNull();
+    });
+
+    it("records an answer: the event, the session, the mastery spread and the card", async () => {
+      const sessionId = "sidecar-test-session-1";
+      const answer = {
+        conceptSlug: "gamma",
+        correct: true,
+        source: "teach",
+        requestId: "req-gamma-1",
+        sessionId,
+        question: "What is gamma?",
+        answer: "The third fixture concept",
+        chosen: "The third fixture concept",
+      };
+      const recorded = await call2("/api/learner/observe", "POST", answer);
+      expect(recorded.status).toBe(200);
+      const result = (await recorded.json()).result as {
+        concept: string; correct: boolean; pLBefore: number; pLAfter: number; mastered: boolean;
+        propagated: { concept: string; hops: number }[]; card: { created: boolean } | null;
+        session: string; replayed: boolean; closed: boolean;
+      };
+      expect(result).toMatchObject({ concept: "gamma", correct: true, session: sessionId, replayed: false, closed: false });
+      expect(result.pLAfter).toBeGreaterThan(result.pLBefore);
+      // A correct answer spread to the prerequisites: beta at one hop, alpha at two.
+      expect(result.propagated.map((p) => p.concept).sort()).toEqual(["alpha", "beta"]);
+      expect(result.card?.created).toBe(true);
+
+      // The session row and its session-start event opened with the answer.
+      const events = await readEvents(scratch.db, "local");
+      const starts = events.filter((e) => e.type === "session-start" && e.session === sessionId);
+      expect(starts).toHaveLength(1);
+      const observations = events.filter((e) => e.type === "observation" && e.concept === "gamma");
+      expect(observations).toHaveLength(1);
+
+      // Mastery moved on the concept and on a prerequisite it spread to.
+      const model = await readModel(scratch.db, "local");
+      expect(model.concepts.gamma?.pL).toBeCloseTo(result.pLAfter);
+      expect(model.concepts.beta?.pL).toBeGreaterThan(model.params.pL0);
+      const reviews = await readReviews(scratch.db, "local");
+      expect(reviews.cards.gamma).toBeDefined();
+
+      // A replayed request id records nothing and answers replayed.
+      const replay = await call2("/api/learner/observe", "POST", answer);
+      const replayed = (await replay.json()).result as { replayed: boolean };
+      expect(replayed.replayed).toBe(true);
+      expect((await readEvents(scratch.db, "local")).filter((e) => e.type === "observation")).toHaveLength(1);
+
+      // An answer naming a concept the catalog does not hold is a 400.
+      expect((await call2("/api/learner/observe", "POST", { ...answer, conceptSlug: "nope", requestId: "req-nope" })).status).toBe(400);
+    });
+
+    it("closes a session, once, and says so when there is nothing to close", async () => {
+      const answer = { conceptSlug: "alpha", correct: false, source: "probe", requestId: "req-alpha-1", sessionId: "sidecar-close-1" };
+      await call2("/api/learner/observe", "POST", answer);
+
+      const closed = await call2("/api/learner/session/close", "POST", { sessionId: "sidecar-close-1" });
+      expect(closed.status).toBe(200);
+      expect((await closed.json()).result).toMatchObject({ session: "sidecar-close-1", closed: true, answered: 1, correct: 0, concepts: ["alpha"] });
+
+      // Already closed: nothing written, closed:false.
+      const again = await call2("/api/learner/session/close", "POST", { sessionId: "sidecar-close-1" });
+      expect((await again.json()).result).toMatchObject({ closed: false });
+      // Never opened: the same answer.
+      const never = await call2("/api/learner/session/close", "POST", { sessionId: "sidecar-close-never" });
+      expect((await never.json()).result).toMatchObject({ closed: false });
+
+      // An answer arriving after the close is refused as the web's is: the
+      // session has already said which concepts it touched.
+      const late = await call2("/api/learner/observe", "POST", { ...answer, requestId: "req-alpha-2" });
+      expect(late.status).toBe(400);
+    });
   });
 });
