@@ -2,10 +2,11 @@
 //  VideoDetailView.swift
 //  Gnosia
 //
-//  One asset's page: the player when the video's bytes are in the blob store,
-//  the catalog's pdf beside it when `asset_derivation` says one was made, and
-//  the row's provenance — which tool rendered it, its topics and concepts,
-//  and which sidecars exist.
+//  One asset's page: the player when the video's bytes are in the blob
+//  store — with its `.vtt` captions on a CC toggle, as the web player's
+//  subtitle layer draws them — the catalog's pdf beside it when
+//  `asset_derivation` says one was made, and the row's provenance — which
+//  tool rendered it, its topics and concepts, and which sidecars exist.
 //
 
 import SwiftUI
@@ -17,6 +18,39 @@ private enum Pane: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+/// The mutable holder the player's quarter-second tick writes through.
+/// @Observable rather than a plain box so a reader (the caption line)
+/// re-renders on the tick while the page holding it does not.
+@Observable
+private final class LivePlayhead {
+    var seconds = 0.0
+}
+
+/// The caption over the picture — the web player's subtitle line: the cue
+/// being spoken, bottom-centre on a black scrim, untappable so the player
+/// under it keeps its clicks. Reads the playhead through `live` so the
+/// quarter-second tick re-renders this line alone.
+private struct CaptionLine: View {
+    let cues: [CaptionCue]
+    let live: LivePlayhead
+
+    var body: some View {
+        if let cue = captionAt(cues, live.seconds) {
+            Text(cue.text)
+                .font(.callout.weight(.medium))
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(.black.opacity(0.75), in: RoundedRectangle(cornerRadius: 6))
+                // Clears the transport when the floating controls show —
+                // the web's caption rides to the same height then.
+                .padding(.bottom, 44)
+                .padding(.horizontal, 40)
+        }
+    }
+}
+
 struct VideoDetailView: View {
     @Environment(CatalogStore.self) private var store
     @Environment(LearnerStore.self) private var learner: LearnerStore?
@@ -26,19 +60,20 @@ struct VideoDetailView: View {
     @State private var seekTo: Double?
     @State private var chapters: [VideoChapter] = []
     @State private var transcript: [TranscriptSegment] = []
+    /// The `.vtt` cues and whether they draw over the picture — the web
+    /// player's CC toggle, off at open as the web's is (its choice is
+    /// remembered per browser; here it is per viewing).
+    @State private var cues: [CaptionCue] = []
+    @State private var captionsOn = false
     /// The last position the player reported; what "Mark watched" stamps.
     @State private var playhead: Double = 0
     /// The inspector's Ask fold and the thread it is holding.
     @State private var asking = false
     @State private var ask = AssetAskModel()
-    /// The per-second playhead for Ask's `at` — a box rather than @State,
-    /// so the tick updates without re-rendering the page.
+    /// The quarter-second playhead for Ask's `at` and the captions — a
+    /// box rather than plain state, so the tick re-renders only the view
+    /// that reads it.
     @State private var live = LivePlayhead()
-
-    /// The mutable holder the player's per-second tick writes through.
-    private final class LivePlayhead {
-        var seconds = 0.0
-    }
 
     private var companions: VideoCompanions { store.companions(for: asset.id) }
 
@@ -91,10 +126,20 @@ struct VideoDetailView: View {
                             },
                             onPlayhead: { seconds in
                                 live.seconds = seconds
-                            }
+                            },
+                            // The caption tick: a cue switch should land
+                            // within a quarter-second of the words.
+                            playheadInterval: 0.25
                         )
                             .aspectRatio(16.0 / 9.0, contentMode: .fit)
                             .frame(maxWidth: .infinity)
+                            // The caption line over the picture, as the web
+                            // player's CC layer draws it.
+                            .overlay(alignment: .bottom) {
+                                if captionsOn {
+                                    CaptionLine(cues: cues, live: live)
+                                }
+                            }
                             .clipShape(RoundedRectangle(cornerRadius: 10))
                     } else {
                         MissingBlobView(expectedURL: videoFile)
@@ -133,12 +178,14 @@ struct VideoDetailView: View {
             pane = .video
             playhead = 0
             asking = false
+            captionsOn = false
             ask = AssetAskModel()
             live.seconds = 0
         }
         .task(id: asset.id) {
             chapters = store.chapters(for: asset.id)
             transcript = store.transcript(for: asset.id)
+            cues = store.captions(for: asset.id)
             // Seed Ask's `at` with the resume point — a question asked
             // before the first tick still lands where playback starts.
             live.seconds = resumePoint
@@ -220,7 +267,15 @@ struct VideoDetailView: View {
                 chip(asset.sourceRepo, systemImage: "shippingbox")
                 if companions.hasTranscript { chip("transcript", systemImage: "text.bubble") }
                 if companions.hasChapters { chip("chapters", systemImage: "list.bullet") }
-                if companions.hasCaptions { chip("captions", systemImage: "captions.bubble") }
+                if companions.hasCaptions {
+                    // The web player's CC button: toggles the caption line
+                    // over the picture, tinted while it is on.
+                    Button { captionsOn.toggle() } label: {
+                        chip("captions", systemImage: "captions.bubble", on: captionsOn)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Toggle captions")
+                }
             }
 
             // The web watch page's action pills: the star, Ask and the mark.
@@ -273,11 +328,12 @@ struct VideoDetailView: View {
         }
     }
 
-    private func chip(_ text: String, systemImage: String) -> some View {
+    private func chip(_ text: String, systemImage: String, on: Bool = false) -> some View {
         Label(text, systemImage: systemImage)
             .font(.caption)
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
-            .background(.quaternary, in: Capsule())
+            .background(on ? AnyShapeStyle(G.tint) : AnyShapeStyle(.quaternary), in: Capsule())
+            .foregroundStyle(on ? G.accentText : .primary)
     }
 }

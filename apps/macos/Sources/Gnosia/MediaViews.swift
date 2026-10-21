@@ -33,11 +33,17 @@ struct PlayerView: NSViewRepresentable {
     /// swap, which is the detail pane's version of a page navigation.
     var resumeAt: Double = 0
     var onPosition: @MainActor (Double, Double) -> Void = { _, _ in }
-    /// The live playhead in seconds, about once a second — far finer than
-    /// the heartbeat above, which lags up to fifteen seconds. The detail
-    /// pane reads it for Ask's `at`, so a mid-watch question grounds at
-    /// where the learner actually is rather than the last save.
+    /// The live playhead in seconds, about once a second by default — far
+    /// finer than the heartbeat above, which lags up to fifteen seconds.
+    /// The detail pane reads it for Ask's `at`, so a mid-watch question
+    /// grounds at where the learner actually is rather than the last save,
+    /// and for the captions overlay, which wants a tick fine enough for a
+    /// cue boundary to land when the line is said.
     var onPlayhead: @MainActor (Double) -> Void = { _ in }
+    /// `onPlayhead`'s cadence in seconds. The default keeps the tick cheap;
+    /// a caption layer asks for a quarter-second so a cue switch is never a
+    /// full second off the words.
+    var playheadInterval: Double = 1
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -45,7 +51,7 @@ struct PlayerView: NSViewRepresentable {
         let view = AVPlayerView()
         view.controlsStyle = .floating
         view.player = AVPlayer(url: url)
-        context.coordinator.arm(view, onPosition: onPosition, onPlayhead: onPlayhead)
+        context.coordinator.arm(view, onPosition: onPosition, onPlayhead: onPlayhead, every: playheadInterval)
         if resumeAt > 0 {
             view.player?.seek(to: CMTime(seconds: resumeAt, preferredTimescale: 600))
         }
@@ -63,7 +69,7 @@ struct PlayerView: NSViewRepresentable {
             context.coordinator.report(view)
             context.coordinator.disarm()
             view.player = AVPlayer(url: url)
-            context.coordinator.arm(view, onPosition: onPosition, onPlayhead: onPlayhead)
+            context.coordinator.arm(view, onPosition: onPosition, onPlayhead: onPlayhead, every: playheadInterval)
             if resumeAt > 0 {
                 view.player?.seek(to: CMTime(seconds: resumeAt, preferredTimescale: 600))
             }
@@ -114,7 +120,8 @@ struct PlayerView: NSViewRepresentable {
         func arm(
             _ view: AVPlayerView,
             onPosition: @escaping @MainActor (Double, Double) -> Void,
-            onPlayhead: @escaping @MainActor (Double) -> Void
+            onPlayhead: @escaping @MainActor (Double) -> Void,
+            every interval: Double = 1
         ) {
             self.onPosition = onPosition
             self.onPlayhead = onPlayhead
@@ -132,13 +139,13 @@ struct PlayerView: NSViewRepresentable {
                 self.playheadObserver = nil
             }
             guard let player = view.player else { return }
-            // A periodic observer over a second timer: it also reports the
-            // paused seeks a timer would miss, and costs nothing while the
-            // player is idle.
+            // A periodic observer over the caller's tick: it also reports
+            // the paused seeks a timer would miss, and costs nothing while
+            // the player is idle.
             playheadObserver = (
                 player,
                 player.addPeriodicTimeObserver(
-                    forInterval: CMTime(seconds: 1, preferredTimescale: 600),
+                    forInterval: CMTime(seconds: interval, preferredTimescale: 600),
                     queue: .main
                 ) { [weak self] time in
                     let seconds = time.seconds
@@ -244,6 +251,20 @@ struct PosterThumbnail: View {
             return NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
         }.value
     }
+}
+
+/// The caption a playhead at `time` hears — subtitleAt in
+/// packages/tutor/src/media.ts, minus its chunking: a `.vtt` cue is already
+/// caption-sized (the web chunks transcript.json's paragraph-long segments
+/// for the same overlay). The cue whose span holds the playhead; when two
+/// cues overlap, the later start wins, as the web's does. A cue with no end
+/// runs to the next one or forever.
+func captionAt(_ cues: [CaptionCue], _ time: Double) -> CaptionCue? {
+    var best: CaptionCue?
+    for cue in cues where cue.start <= time && time < (cue.end ?? .infinity) {
+        if best == nil || cue.start >= best!.start { best = cue }
+    }
+    return best
 }
 
 /// A missing-blob placeholder with the same frame as the player.
