@@ -442,7 +442,7 @@ phone drawer slid in by `translate`.
 
 **The motion preference is applied, the way the theme is.** Settings'
 Motion select (`reducedMotion`, `system` or `always`) writes the
-`self-learn-motion` cookie and sets `data-motion="reduce"` on `<html>` at
+`gnosia-motion` cookie and sets `data-motion="reduce"` on `<html>` at
 once, before the save lands; the root layout reads the cookie, so the next
 page is still from its first paint (`lib/motion.ts`). The `(app)` layout
 reads the stored row only for a browser with no cookie yet, and `MotionSeed`
@@ -469,7 +469,7 @@ file.
 ## The screenshot tool
 
 [kit/shots.mjs](kit/shots.mjs) screenshots routes of a running build at
-1440x900 and 390x844, light and dark (the `self-learn-theme` cookie), full
+1440x900 and 390x844, light and dark (the `gnosia-theme` cookie), full
 page by default.
 
 ```bash
@@ -584,7 +584,7 @@ turns a `[n]` that is in `sources` into a `Cite` chip (`citedNumbers` in
 The chat writes no evidence. Grading a probe and calling `learn observe` is
 1d's (`POST /api/learner/observe`), per DESIGN.md decision 12.
 
-**The thread lives in `sessionStorage`** under `self-learn:tutor:<slug>`,
+**The thread lives in `sessionStorage`** under `gnosia:tutor:<slug>`,
 per tab, mirrored in memory when storage is refused, and cleared by "Start a
 new thread". The browser sends at most the last 30 turns and 20000
 characters (`trimForRequest`). Moving it to the database is future work.
@@ -1033,8 +1033,8 @@ Left on purpose:
 - **Driving `/review` or a session in a browser writes real evidence.** A
   rating is a `review` event in the learner's own log, which is append-only.
   Screenshot a page that grades against a copy of the database
-  (`createdb -T self_learn self_learn_<phase>`, then start the server with
-  `DATABASE_URL` pointing at it), never against `self_learn`.
+  (`createdb -T gnosia gnosia_<phase>`, then start the server with
+  `DATABASE_URL` pointing at it), never against `gnosia`.
 - **On a check card the number keys mean two things.** Before the verdict 1
   to 4 pick an option; after it they rate. The review page keeps one phase
   per card so the second press of "2" is a rating, never a second pick.

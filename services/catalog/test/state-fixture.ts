@@ -9,7 +9,7 @@ import {
   conceptPrerequisite,
   curriculumItem,
   topic,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 
 import type { CatalogDatabase } from "../src/db";
 import { storedBlob } from "./stored-blob";
@@ -183,7 +183,7 @@ export async function seedAssets(db: CatalogDatabase): Promise<void> {
         kind: "link",
         url: "https://example.invalid/alpha",
         title: "Somebody else's alpha",
-        sourceRepo: "self-learn",
+        sourceRepo: "gnosia",
       },
       // Named by a collection directly, and by nothing else. The only way it
       // comes back is the `asset_id` branch.
@@ -191,7 +191,7 @@ export async function seedAssets(db: CatalogDatabase): Promise<void> {
         id: ASSETS.pinned,
         kind: "note",
         path: "learn/concepts/fixtures/pinned.md",
-        sourceRepo: "self-learn",
+        sourceRepo: "gnosia",
       },
       // About nothing: no topic, no concept, in no collection. The queries must
       // not reach it, which is the only thing it is here to prove.
@@ -199,19 +199,19 @@ export async function seedAssets(db: CatalogDatabase): Promise<void> {
         id: ASSETS.orphan,
         kind: "note",
         path: "learn/concepts/fixtures/unfiled.md",
-        sourceRepo: "self-learn",
+        sourceRepo: "gnosia",
       },
       {
         id: ASSETS.upperCase,
         kind: "note",
         path: "learn/concepts/fixtures/Beta.md",
-        sourceRepo: "self-learn",
+        sourceRepo: "gnosia",
       },
       {
         id: ASSETS.lowerCase,
         kind: "note",
         path: "learn/concepts/fixtures/alpha.md",
-        sourceRepo: "self-learn",
+        sourceRepo: "gnosia",
       },
     ])
     .onConflictDoNothing();

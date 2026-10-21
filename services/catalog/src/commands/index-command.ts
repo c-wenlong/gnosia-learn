@@ -1,4 +1,4 @@
-import type { IndexSource } from "@self-learn/schema";
+import type { IndexSource } from "@gnosia/schema";
 
 import path from "node:path";
 

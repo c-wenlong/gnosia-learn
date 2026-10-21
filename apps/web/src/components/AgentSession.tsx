@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { providerLabel } from "@self-learn/schema/shared";
+import { providerLabel } from "@gnosia/schema/shared";
 import { MathText } from "@/components/Math";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";

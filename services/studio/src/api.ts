@@ -7,7 +7,7 @@ import { BriefError, loadVocabulary, validateBrief, vocabularyStatusNow, type Va
 import { byokStatus, checkByokProvider, listByokModels, loadByok, removeByokProvider, saveByok, saveByokModels, setByokActive } from "./byok";
 import { canvas, doctor, doctorChecks, type DoctorCheck } from "./canvas";
 import { preferenceSet, videoList } from "./catalog";
-import { STUDIO_OWNER_HEADER, studioAgentPreference } from "@self-learn/schema/shared";
+import { STUDIO_OWNER_HEADER, studioAgentPreference } from "@gnosia/schema/shared";
 
 import { agentAuthReport, CONCURRENCY, HOST, PORT, studioOwner, VERB_TIMEOUT_MS } from "./config";
 import { recompare } from "./compare";

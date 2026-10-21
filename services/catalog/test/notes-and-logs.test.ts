@@ -1,8 +1,8 @@
 import { readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { fileSource } from "@self-learn/content";
-import { session, sessionLogEntry } from "@self-learn/schema";
+import { fileSource } from "@gnosia/content";
+import { session, sessionLogEntry } from "@gnosia/schema";
 import { asc, eq } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { renderType } from "../src/content/export";
@@ -18,7 +18,7 @@ import { writeSource } from "../src/index/writer";
 import { makeFixture, note, topicsYaml, type Fixture } from "./fixture-tree";
 import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { SEED } from "./seed";
-import { LOCAL_LEARNER_ID, ownerScope } from "@self-learn/schema";
+import { LOCAL_LEARNER_ID, ownerScope } from "@gnosia/schema";
 
 /** Who these reads are for: the one owner there is today (phase 4 scoping). */
 const LOCAL = ownerScope(LOCAL_LEARNER_ID);
@@ -130,7 +130,7 @@ describe.skipIf(!reachable.ok)("the seed's notes and logs, imported into a scrat
       if (type === "sessions") expect(result.identicalFiles).toBe(result.files);
       expect(result.counts.expected).toEqual(result.counts.actual);
     }
-    const { rows } = await scratch.db.execute<{ n: number }>("select count(*)::int as n from concept_prerequisite");
+    const { rows } = await scratch.db.execute<{ n: number }>("select count(*) as n from concept_prerequisite");
     const files = compare("concepts", [], await readTypeFiles(SEED, "concepts"));
     expect(rows[0]?.n).toBe(files.counts.actual["prerequisites"]);
   });

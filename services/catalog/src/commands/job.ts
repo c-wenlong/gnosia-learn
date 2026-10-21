@@ -23,11 +23,11 @@ import {
   session as sessionTable,
   topic as topicTable,
   video as videoTable,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { and, asc, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 
 import { CLI_OWNER, ownersExist } from "../content/scope";
-import { withDatabase, type CatalogDatabase } from "../db";
+import { withDatabase, type CatalogDatabase, inTransaction } from "../db";
 import { REPO_ROOT } from "../env";
 import { ASSETS_DIR } from "../index/diagrams";
 import { fileFacts } from "../index/files";
@@ -45,7 +45,7 @@ import { bytewise } from "../sql-order";
  * state IN (<the states that can reach this one>)`, so two runners cannot both
  * claim one job and a replayed finish against a row that already moved on
  * writes nothing and says it wrote nothing. The vocabulary of legal moves is
- * `JOB_TRANSITIONS` in `@self-learn/schema/shared`, which the runner and the UI
+ * `JOB_TRANSITIONS` in `@gnosia/schema/shared`, which the runner and the UI
  * read too: a second copy of a state machine is a second state machine.
  *
  * **Enqueue is idempotent through `idempotency_key`, not through the target.**
@@ -501,7 +501,7 @@ export async function runEnqueue(options: EnqueueOptions): Promise<EnqueueResult
       // One transaction, so a discarded parent and the new job land together
       // or not at all: a refused insert (the topic, the lease, the key) rolls
       // the discard back and the video in review is untouched.
-      const { inserted, discarded } = await db.transaction(async (tx) => {
+      const { inserted, discarded } = await inTransaction(db, async (tx) => {
         const discarded =
           discardParent === undefined ? null : await discardForChange(tx, discardParent, row, scoped ? owner : undefined);
         const [inserted] = await tx
@@ -542,7 +542,7 @@ export async function runEnqueue(options: EnqueueOptions): Promise<EnqueueResult
       // when nobody needs it.
       if (
         sqlstate(error) === "23505" &&
-        constraintName(error) === "job_idempotency_key_key"
+        (constraintName(error) === "job_idempotency_key_key" || constraintName(error) === "job.idempotency_key")
       ) {
         const winner = await byIdempotencyKey(db, idempotencyKey);
         if (theirs(winner)) throw keyTaken();
@@ -649,8 +649,7 @@ async function discardForChange(
     .select()
     .from(jobTable)
     .where(and(eq(jobTable.id, parentId), owner === undefined ? undefined : eq(jobTable.ownerId, owner)))
-    .limit(1)
-    .for("update");
+    .limit(1);
   if (parent === undefined) throw new JobError(`no job "${parentId}" to revise.`);
   if (parent.kind !== "video") {
     throw new JobError(`job ${parentId} is a ${parent.kind} job; --discard-parent discards only a video job for its change.`);
@@ -670,7 +669,7 @@ async function discardForChange(
   }
   const updated = await tx
     .update(jobTable)
-    .set({ state: "discarded", reviewedAt: sql`now()`, updatedAt: sql`now()` })
+    .set({ state: "discarded", reviewedAt: sql`cast(unixepoch('subsec') * 1000 as integer)`, updatedAt: sql`cast(unixepoch('subsec') * 1000 as integer)` })
     .where(and(eq(jobTable.id, parentId), eq(jobTable.state, "awaiting_review")))
     .returning({ id: jobTable.id });
   if (updated.length === 0) throw new JobError(`job ${parentId} moved while it was being discarded; nothing was changed.`);
@@ -777,7 +776,10 @@ async function explainEnqueue(
 ): Promise<Error> {
   const code = sqlstate(error);
   const constraint = constraintName(error);
-  if (code === "23505" && constraint === "job_active_target_key") {
+  // SQLite names the column (`job.target_path`), not the index, for a UNIQUE
+  // violation; the partial `job_active_target_key` index is the only unique
+  // constraint on that column, so either spelling means the same refusal.
+  if (code === "23505" && (constraint === "job_active_target_key" || constraint === "job.target_path")) {
     const holder = await db
       .select({ id: jobTable.id, state: jobTable.state, ownerId: jobTable.ownerId })
       .from(jobTable)
@@ -798,7 +800,7 @@ async function explainEnqueue(
         `first, because this brief would be written against a file it has not landed yet.`,
     );
   }
-  if (code === "23505" && constraint === "job_idempotency_key_key") {
+  if (code === "23505" && (constraint === "job_idempotency_key_key" || constraint === "job.idempotency_key")) {
     // Only reachable when the winning row has vanished between the failed
     // insert and this lookup, which takes a concurrent delete.
     return new JobError(
@@ -816,6 +818,23 @@ async function explainEnqueue(
   }
   if (code === SQLSTATE.foreignKeyViolation && constraint === "job_parent_job_id_job_id_fk") {
     return new JobError(`no job "${row.parentJobId}" to revise.`);
+  }
+  if (code === SQLSTATE.foreignKeyViolation && constraint === undefined) {
+    // SQLite reports a bare "FOREIGN KEY constraint failed" with no name, so
+    // find the missing referent by probing the row's own keys.
+    const missing = async (found: Promise<unknown[]>) => (await found).length === 0;
+    if (await missing(db.select({ slug: topicTable.slug }).from(topicTable).where(eq(topicTable.slug, row.topicSlug)).limit(1))) {
+      return noTopic(row.topicSlug);
+    }
+    if (row.sessionId != null && (await missing(db.select({ id: sessionTable.id }).from(sessionTable).where(eq(sessionTable.id, row.sessionId)).limit(1)))) {
+      return new JobError(`no session "${row.sessionId}". Start one before pointing a job at it.`);
+    }
+    if (row.draftId && (await missing(db.select({ id: draftTable.id }).from(draftTable).where(eq(draftTable.id, row.draftId)).limit(1)))) {
+      return noDraft(row.draftId);
+    }
+    if (row.parentJobId && (await missing(db.select({ id: jobTable.id }).from(jobTable).where(eq(jobTable.id, row.parentJobId)).limit(1)))) {
+      return new JobError(`no job "${row.parentJobId}" to revise.`);
+    }
   }
   return error as Error;
 }
@@ -841,13 +860,13 @@ export async function runClaim(options: ClaimOptions): Promise<ClaimResult> {
     await assertOwnReferences(db, { sessionId: options.sessionId ?? null, parentJobId: null }, owner, mine !== undefined);
     const assignments = {
       state: "running" as const,
-      startedAt: sql`now()`,
-      heartbeatAt: sql`now()`,
+      startedAt: sql`cast(unixepoch('subsec') * 1000 as integer)`,
+      heartbeatAt: sql`cast(unixepoch('subsec') * 1000 as integer)`,
       attempt: sql`${jobTable.attempt} + 1`,
       runner: options.runner ?? null,
       sessionId: options.sessionId ?? sql`${jobTable.sessionId}`,
       phase: null,
-      updatedAt: sql`now()`,
+      updatedAt: sql`cast(unixepoch('subsec') * 1000 as integer)`,
     };
 
     if (options.jobId !== undefined) {
@@ -873,8 +892,7 @@ export async function runClaim(options: ClaimOptions): Promise<ClaimResult> {
         ),
       )
       .orderBy(asc(jobTable.requestedAt))
-      .limit(1)
-      .for("update", { skipLocked: true });
+      .limit(1);
 
     const claimed = await db
       .update(jobTable)
@@ -1001,8 +1019,8 @@ export async function runFinish(options: FinishOptions): Promise<TransitionResul
       .update(jobTable)
       .set({
         state: to,
-        finishedAt: sql`now()`,
-        heartbeatAt: sql`now()`,
+        finishedAt: sql`cast(unixepoch('subsec') * 1000 as integer)`,
+        heartbeatAt: sql`cast(unixepoch('subsec') * 1000 as integer)`,
         phase: options.phase ?? (to === "awaiting_review" ? "ready" : null),
         candidatePath: candidatePath ?? sql`${jobTable.candidatePath}`,
         exitCode: options.exitCode ?? null,
@@ -1013,7 +1031,7 @@ export async function runFinish(options: FinishOptions): Promise<TransitionResul
         errorKind: options.errorKind ?? null,
         error: options.error ?? null,
         errorDetail: options.errorDetail ?? null,
-        updatedAt: sql`now()`,
+        updatedAt: sql`cast(unixepoch('subsec') * 1000 as integer)`,
       })
       .where(and(eq(jobTable.id, options.jobId), inArray(jobTable.state, from), mine))
       .returning();
@@ -1048,7 +1066,7 @@ export interface VerdictOptions {
  */
 export async function runAccept(options: VerdictOptions): Promise<TransitionResult> {
   const owner = options.owner ?? CLI_OWNER;
-  return withDatabase(({ db }) => db.transaction((tx) => acceptJobIn(tx, options.jobId, owner)));
+  return withDatabase(({ db }) => inTransaction(db, (tx) => acceptJobIn(tx, options.jobId, owner)));
 }
 
 /**
@@ -1096,8 +1114,8 @@ export async function acceptJobIn(tx: CatalogDatabase, jobId: string, owner: str
     .update(jobTable)
     .set({
       state: "accepted",
-      reviewedAt: sql`now()`,
-      updatedAt: sql`now()`,
+      reviewedAt: sql`cast(unixepoch('subsec') * 1000 as integer)`,
+      updatedAt: sql`cast(unixepoch('subsec') * 1000 as integer)`,
     })
     .where(and(eq(jobTable.id, jobId), inArray(jobTable.state, sourcesOf("accepted")), mine))
     .returning();
@@ -1125,7 +1143,7 @@ export async function runDiscard(options: VerdictOptions): Promise<TransitionRes
       .limit(1);
     const updated = await db
       .update(jobTable)
-      .set({ state: "discarded", reviewedAt: sql`now()`, updatedAt: sql`now()` })
+      .set({ state: "discarded", reviewedAt: sql`cast(unixepoch('subsec') * 1000 as integer)`, updatedAt: sql`cast(unixepoch('subsec') * 1000 as integer)` })
       .where(and(eq(jobTable.id, options.jobId), inArray(jobTable.state, sourcesOf("discarded")), mine))
       .returning();
     if (updated.length === 0) throw await explainRefusal(db, options.jobId, "discarded", owner);
@@ -1170,7 +1188,7 @@ export async function runList(options: ListOptions = {}): Promise<ListResult> {
     const where = filters.length === 0 ? undefined : and(...filters);
 
     const counted = await db
-      .select({ total: sql<number>`count(*)::int` })
+      .select({ total: sql<number>`count(*)` })
       .from(jobTable)
       .where(where);
     const rows = await db

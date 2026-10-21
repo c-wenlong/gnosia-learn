@@ -3,7 +3,7 @@ import { act, createElement, useEffect, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { emptyLearnerState, type LearnerState } from "@self-learn/schema/shared";
+import { emptyLearnerState, type LearnerState } from "@gnosia/schema/shared";
 
 /**
  * A snapshot read before a write landed carries the old row: held back while

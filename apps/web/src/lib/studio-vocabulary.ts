@@ -1,4 +1,4 @@
-import type { TopicEntry } from "@self-learn/content";
+import type { TopicEntry } from "@gnosia/content";
 
 /**
  * The topic vocabulary as the studio screens get it: from the runner, never

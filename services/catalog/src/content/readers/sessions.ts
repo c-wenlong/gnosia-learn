@@ -1,5 +1,5 @@
-import type { SessionLogSource } from "@self-learn/content";
-import { session } from "@self-learn/schema";
+import type { SessionLogSource } from "@gnosia/content";
+import { session } from "@gnosia/schema";
 import { and, eq } from "drizzle-orm";
 
 import { ownedBy } from "../scope";

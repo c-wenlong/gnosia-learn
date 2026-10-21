@@ -1,6 +1,6 @@
 import "server-only";
 
-import { conceptSummaries, type AssetRef, type ConceptSummary } from "@self-learn/catalog/state";
+import { conceptSummaries, type AssetRef, type ConceptSummary } from "@gnosia/catalog/state";
 
 import { tutorCredentials } from "@/lib/agent/credentials";
 import { isCallable } from "@/lib/agent/providers";

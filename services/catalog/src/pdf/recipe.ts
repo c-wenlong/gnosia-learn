@@ -5,7 +5,7 @@
  * docs/CONTENT-MIGRATION.md Track E), and the web app serves that blob inline.
  *
  * Pure: no spawn, no filesystem. The web app takes `PDF_CONTENT_TYPE`
- * through `@self-learn/catalog/state`, the package's one door.
+ * through `@gnosia/catalog/state`, the package's one door.
  */
 
 /**

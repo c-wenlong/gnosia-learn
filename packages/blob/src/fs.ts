@@ -44,8 +44,8 @@ const TEMP_DIR = ".tmp";
 const READ_NO_FOLLOW = constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0);
 
 /**
- * Where the laptop's blobs live: `$SELF_LEARN_HOME/blobs`, or
- * `~/.self-learn/blobs` when the variable is unset.
+ * Where the laptop's blobs live: `$GNOSIA_HOME/blobs`, or
+ * `~/.gnosia/blobs` when the variable is unset.
  *
  * Outside the repository for the reason `$MANIMKC_HOME` exists: moving the
  * manimkc submodule on 2026-09-13 deleted 25 rendered videos, because git does
@@ -58,13 +58,13 @@ const READ_NO_FOLLOW = constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (const
  * would name a different directory each time, and one of them is the repo.
  */
 export function defaultBlobRoot(env: NodeJS.ProcessEnv = process.env): string {
-  const raw = env.SELF_LEARN_HOME?.trim();
-  if (!raw) return path.join(homedir(), ".self-learn", "blobs");
+  const raw = env.GNOSIA_HOME?.trim();
+  if (!raw) return path.join(homedir(), ".gnosia", "blobs");
   const expanded = raw === "~" || raw.startsWith("~/") ? path.join(homedir(), raw.slice(1)) : raw;
   if (!path.isAbsolute(expanded)) {
     throw new BlobError(
       "BLOB_ROOT",
-      `SELF_LEARN_HOME must be absolute or start with ~/, not ${JSON.stringify(raw)}`,
+      `GNOSIA_HOME must be absolute or start with ~/, not ${JSON.stringify(raw)}`,
     );
   }
   return path.join(expanded, "blobs");
@@ -104,11 +104,11 @@ export function fsStore(root: string = defaultBlobRoot()): BlobStore {
     throw new BlobError("BLOB_LINK", `the fs blob store needs O_NOFOLLOW, which ${process.platform} does not have`);
   }
   const base = path.resolve(root);
-  const checkout = selfLearnCheckoutAbove(base);
+  const checkout = gnosiaCheckoutAbove(base);
   if (checkout !== null) {
     throw new BlobError(
       "BLOB_ROOT",
-      `refusing blob root ${base}: it is inside the self-learn checkout at ${checkout}, where a git operation can delete it. Point SELF_LEARN_HOME outside the repository`,
+      `refusing blob root ${base}: it is inside the gnosia checkout at ${checkout}, where a git operation can delete it. Point GNOSIA_HOME outside the repository`,
     );
   }
 
@@ -271,22 +271,22 @@ export function fsStore(root: string = defaultBlobRoot()): BlobStore {
 }
 
 /**
- * The nearest directory at or above `dir` that is a self-learn checkout.
+ * The nearest directory at or above `dir` that is a gnosia checkout.
  * Symlinks are resolved first, so a root that is a link into the tree is
  * caught too.
  *
- * A checkout is a directory whose `package.json` is named `self-learn`, which
+ * A checkout is a directory whose `package.json` is named `gnosia`, which
  * holds for a clone, a worktree, an older checkout from before this package
  * existed, and a copy with no `.git` at all, any of which a `git clean` or a
  * move can empty. A directory with a `.git` and this package in it counts too.
  * Neither test is "any `.git`", so a home directory that happens to be a
  * dotfiles repository does not refuse the default root.
  */
-function selfLearnCheckoutAbove(dir: string): string | null {
+function gnosiaCheckoutAbove(dir: string): string | null {
   let current = resolveExisting(dir);
   for (;;) {
     if (
-      isSelfLearnPackage(path.join(current, "package.json")) ||
+      isGnosiaPackage(path.join(current, "package.json")) ||
       (existsSync(path.join(current, ".git")) && existsSync(path.join(current, "packages", "blob", "package.json")))
     ) {
       return current;
@@ -297,10 +297,10 @@ function selfLearnCheckoutAbove(dir: string): string | null {
   }
 }
 
-/** Whether `file` is a `package.json` naming the self-learn repository. */
-function isSelfLearnPackage(file: string): boolean {
+/** Whether `file` is a `package.json` naming the gnosia repository. */
+function isGnosiaPackage(file: string): boolean {
   try {
-    return (JSON.parse(readFileSync(file, "utf8")) as { name?: unknown }).name === "self-learn";
+    return (JSON.parse(readFileSync(file, "utf8")) as { name?: unknown }).name === "gnosia";
   } catch {
     // Absent, unreadable or not JSON: not this repository's root manifest.
     return false;

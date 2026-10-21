@@ -1,4 +1,4 @@
-import { CustomProviderError } from "@self-learn/catalog/state";
+import { CustomProviderError } from "@gnosia/catalog/state";
 import { NextResponse } from "next/server";
 
 import { dropByokProvider, pushByokKey } from "@/lib/byok-sync";

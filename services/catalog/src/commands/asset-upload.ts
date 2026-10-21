@@ -9,10 +9,10 @@ import { findFfmpeg } from "../poster/extract";
  * the connection, the store and the printing. What it uploads and why each
  * rule holds is in `../content/asset-upload.ts`.
  *
- * The store is the one `SELF_LEARN_HOME` names, the same one the web app
+ * The store is the one `GNOSIA_HOME` names, the same one the web app
  * serves. It had a `--blob-root` flag for a scratch store, which wrote rows
  * pointing at bytes the web app never read, since the app resolves its root
- * from `SELF_LEARN_HOME` alone. A scratch run sets that variable instead, and
+ * from `GNOSIA_HOME` alone. A scratch run sets that variable instead, and
  * both sides follow it.
  */
 

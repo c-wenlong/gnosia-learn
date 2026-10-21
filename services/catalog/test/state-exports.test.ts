@@ -4,7 +4,7 @@ import * as store from "../src/state";
 import { byKind, type AssetRef } from "../src/state";
 
 /**
- * What comes out of `@self-learn/catalog/state`.
+ * What comes out of `@gnosia/catalog/state`.
  *
  * `apps/web/` may import this package through exactly one specifier
  * (ARCHITECTURE.md layering rule 1), so this list is not an implementation

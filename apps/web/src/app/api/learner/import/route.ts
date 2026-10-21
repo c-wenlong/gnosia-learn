@@ -1,4 +1,4 @@
-import { importLegacyState, type LegacyPayload } from "@self-learn/catalog/state";
+import { importLegacyState, type LegacyPayload } from "@gnosia/catalog/state";
 
 import { BadRequest, handler } from "@/lib/learner-api";
 

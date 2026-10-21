@@ -1,4 +1,4 @@
-import { gradeForRating, gradeReview, ratingForGrade } from "@self-learn/catalog/state";
+import { gradeForRating, gradeReview, ratingForGrade } from "@gnosia/catalog/state";
 
 import { BadRequest, handler, MAX_ID_CHARS, requireId } from "@/lib/learner-api";
 import { isRating, type Rating } from "@/lib/review-core";

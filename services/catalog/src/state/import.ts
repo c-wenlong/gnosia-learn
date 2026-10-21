@@ -8,7 +8,7 @@ import {
   RECAP_SOURCES,
   type KnowledgeSource,
   type ThemeMode,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { and, inArray } from "drizzle-orm";
 
 import { ownedBy, readableFor } from "../content/scope";
@@ -20,7 +20,7 @@ import { upsertRecap } from "./recap";
 import { asLastVisited, asUserResources, readLearnerSnapshot } from "./snapshot";
 
 /**
- * The one-time import of a browser's `self-learn:v1` document.
+ * The one-time import of a browser's `gnosia:v1` document.
  *
  * Learner state used to live only in localStorage, so every browser that ever
  * opened the app is holding a copy of somebody's ticks, notes and recaps that

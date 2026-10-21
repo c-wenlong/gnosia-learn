@@ -1,4 +1,4 @@
-import { JOB_ACTIVE_STATES, type JobState } from "@self-learn/schema/shared";
+import { JOB_ACTIVE_STATES, type JobState } from "@gnosia/schema/shared";
 
 import type { Comparison } from "@/lib/studio-compare";
 

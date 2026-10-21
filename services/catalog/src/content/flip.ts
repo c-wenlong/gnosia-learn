@@ -1,4 +1,4 @@
-import { contentSource, type ContentType, type RevisionEntityType } from "@self-learn/schema";
+import { contentSource, type ContentType, type RevisionEntityType } from "@gnosia/schema";
 import { eq, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
@@ -11,6 +11,7 @@ import { lockTypes } from "./revisions";
 import { COMPLETENESS_RULES, setTriggers, WRITE_GUARDS, writeGuardName } from "./rules";
 import { readyTypes } from "./source";
 
+import { inTransaction } from "../db";
 /**
  * `catalog flip <type>`: the moment the database starts owning a type
  * (docs/CONTENT-MIGRATION.md, phase 1 and D18, D21).
@@ -149,9 +150,9 @@ export async function flip(db: CatalogDatabase, options: FlipOptions): Promise<F
     }
   }
 
-  return db.transaction(async (tx) => {
+  return inTransaction(db, async (tx) => {
     await lockTypes(tx, LOCKS[type]);
-    const [row] = await tx.select().from(contentSource).where(eq(contentSource.type, type)).for("update");
+    const [row] = await tx.select().from(contentSource).where(eq(contentSource.type, type));
     if (options.rearm === true) {
       if (row?.source !== "db") {
         throw new FlipRefused(
@@ -293,7 +294,7 @@ async function arm(tx: CatalogDatabase, input: ArmInput): Promise<FlipResult> {
     const already = row?.source === "db";
     const [written] = await tx
       .insert(contentSource)
-      .values({ type, source: "db", flippedAt: sql`now()`, waivers, parityReport: report })
+      .values({ type, source: "db", flippedAt: sql`cast(unixepoch('subsec') * 1000 as integer)`, waivers, parityReport: report })
       .onConflictDoUpdate({
         target: contentSource.type,
         set: {
@@ -301,9 +302,9 @@ async function arm(tx: CatalogDatabase, input: ArmInput): Promise<FlipResult> {
           // A re-arm checked nothing, so the last flip's parity report stays.
           ...(rearmed ? {} : { parityReport: report }),
           // A second flip re-arms; it is not a new moment of ownership.
-          flippedAt: sql`coalesce(${contentSource.flippedAt}, now())`,
+          flippedAt: sql`coalesce(${contentSource.flippedAt}, cast(unixepoch('subsec') * 1000 as integer))`,
           waivers,
-          updatedAt: sql`now()`,
+          updatedAt: sql`cast(unixepoch('subsec') * 1000 as integer)`,
         },
       })
       .returning({ flippedAt: contentSource.flippedAt });

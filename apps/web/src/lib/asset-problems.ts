@@ -125,7 +125,7 @@ export const ASSET_PROBLEMS: Readonly<Record<AssetProblemCode, AssetProblem>> = 
     label: "The blob store did not open",
     reason:
       "The server could not open the blob store this file is kept in, so it could not be read. The file itself is probably fine.",
-    fix: { kind: "note", text: "Check that SELF_LEARN_HOME is an absolute path outside the repository." },
+    fix: { kind: "note", text: "Check that GNOSIA_HOME is an absolute path outside the repository." },
     retry: true,
   },
   undecodable: {
@@ -167,7 +167,7 @@ export function uploadCommand(source: RenderSource): string {
 
 /**
  * The source a failure names for a studio video and its sidecars and poster.
- * Their rows say `self-learn`, as every row this repository writes does, but
+ * Their rows say `gnosia`, as every row this repository writes does, but
  * their bytes are stored only by the studio's Accept (`catalog video put
  * --job`), so no upload command brings one back.
  */

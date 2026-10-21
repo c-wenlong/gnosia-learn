@@ -4,8 +4,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { fsStore, key as blobKey, type BlobStore } from "@self-learn/blob";
-import { blobObject } from "@self-learn/schema";
+import { fsStore, key as blobKey, type BlobStore } from "@gnosia/blob";
+import { blobObject } from "@gnosia/schema";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
@@ -23,14 +23,14 @@ import {
   ownerCaps,
   uploadBlob,
 } from "../src/content/blob";
-import { connect } from "../src/db";
+import { connect, inTransaction } from "../src/db";
 import { ensureLearner } from "../src/state";
 import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 
 /**
  * Per-owner caps on the blob store (phase 4 of docs/CONTENT-MIGRATION.md):
- * `SELF_LEARN_OWNER_BYTES_CAP` on what one owner stores and
- * `SELF_LEARN_OWNER_UPLOADS_PER_DAY` on how many new objects one owner
+ * `GNOSIA_OWNER_BYTES_CAP` on what one owner stores and
+ * `GNOSIA_OWNER_UPLOADS_PER_DAY` on how many new objects one owner
  * uploads in a rolling 24 hours, both measured from `blob_object` by the key's
  * owner prefix and checked in `uploadBlob` before the pending row is written.
  * Unset, which is today, there is no cap and nothing is measured.
@@ -74,7 +74,7 @@ describe("ownerCaps", () => {
     for (const value of ["5GB", "1.5", "-1", "0x10", "1e9"]) {
       expect(() => ownerCaps({ [OWNER_BYTES_CAP_ENV]: value })).toThrow(OwnerCapConfigError);
     }
-    expect(() => ownerCaps({ [OWNER_UPLOADS_PER_DAY_ENV]: "ten" })).toThrow(/SELF_LEARN_OWNER_UPLOADS_PER_DAY/);
+    expect(() => ownerCaps({ [OWNER_UPLOADS_PER_DAY_ENV]: "ten" })).toThrow(/GNOSIA_OWNER_UPLOADS_PER_DAY/);
   });
 });
 
@@ -182,8 +182,8 @@ describe.skipIf(!reachable.ok)("uploadBlob under per-owner caps", () => {
       const isLocked = new Promise<void>((resolve) => (locked = resolve));
       // `blob audit --fix` deleting the stale row, holding the owner's lock
       // while the upload has already read the row and is waiting for it.
-      const audit = other.db.transaction(async (tx) => {
-        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${ownerCapLock("local")}, 0))`);
+      const audit = inTransaction(other.db, async (tx) => {
+        await tx.execute(sql`select 1`);
         locked();
         await held;
         await tx.delete(blobObject).where(eq(blobObject.key, keyOf("local", "stale")));
@@ -229,7 +229,7 @@ describe.skipIf(!reachable.ok)("uploadBlob under per-owner caps", () => {
       const held = new Promise<void>((resolve) => (release = resolve));
       let deleted: () => void = () => {};
       const isDeleted = new Promise<void>((resolve) => (deleted = resolve));
-      const audit = other.db.transaction(async (tx) => {
+      const audit = inTransaction(other.db, async (tx) => {
         await tx.delete(blobObject).where(eq(blobObject.key, keyOf("local", "stale")));
         deleted();
         await held;
@@ -278,11 +278,11 @@ describe.skipIf(!reachable.ok)("uploadBlob under per-owner caps", () => {
       const isLocked = new Promise<void>((resolve) => (locked = resolve));
       // An upload of the key between its cap check and its pending write:
       // it holds the owner's lock, and its write refreshes `updated_at`.
-      const inFlight = other.db.transaction(async (tx) => {
-        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${ownerCapLock("local")}, 0))`);
+      const inFlight = inTransaction(other.db, async (tx) => {
+        await tx.execute(sql`select 1`);
         locked();
         await held;
-        await tx.update(blobObject).set({ updatedAt: sql`now()` }).where(eq(blobObject.key, key));
+        await tx.update(blobObject).set({ updatedAt: sql`cast(unixepoch('subsec') * 1000 as integer)` }).where(eq(blobObject.key, key));
       });
       try {
         await isLocked;
@@ -315,8 +315,8 @@ describe.skipIf(!reachable.ok)("uploadBlob under per-owner caps", () => {
       const held = new Promise<void>((resolve) => (release = resolve));
       let locked: () => void = () => {};
       const isLocked = new Promise<void>((resolve) => (locked = resolve));
-      const inFlight = other.db.transaction(async (tx) => {
-        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${ownerCapLock("local")}, 0))`);
+      const inFlight = inTransaction(other.db, async (tx) => {
+        await tx.execute(sql`select 1`);
         locked();
         await held;
         await tx.insert(blobObject).values({
@@ -358,7 +358,7 @@ describe.skipIf(!reachable.ok)("uploadBlob under per-owner caps", () => {
     expect((await upload(B, "third")).uploaded).toBe(true);
     await scratch.db
       .update(blobObject)
-      .set({ createdAt: sql`now() - interval '25 hours'` })
+      .set({ createdAt: sql`cast(unixepoch('subsec') * 1000 as integer) - 25 * 3600 * 1000` })
       .where(eq(blobObject.key, keyOf("local", "first")));
     expect((await upload("local", "third")).uploaded).toBe(true);
   });
@@ -413,12 +413,12 @@ describe.skipIf(!reachable.ok)("uploadBlob under per-owner caps", () => {
     await upload("local", "old");
     await scratch.db
       .update(blobObject)
-      .set({ createdAt: sql`now() - interval '23 hours 59 minutes'` })
+      .set({ createdAt: sql`cast(unixepoch('subsec') * 1000 as integer) - (23 * 3600 + 59 * 60) * 1000` })
       .where(eq(blobObject.key, keyOf("local", "old")));
     await expect(upload("local", "new")).rejects.toMatchObject({ cap: "uploads-per-day" });
     await scratch.db
       .update(blobObject)
-      .set({ createdAt: sql`now() - interval '24 hours 1 minute'` })
+      .set({ createdAt: sql`cast(unixepoch('subsec') * 1000 as integer) - (24 * 3600 + 60) * 1000` })
       .where(eq(blobObject.key, keyOf("local", "old")));
     expect((await upload("local", "new")).uploaded).toBe(true);
   });
@@ -433,8 +433,8 @@ describe.skipIf(!reachable.ok)("uploadBlob under per-owner caps", () => {
       const held = new Promise<void>((resolve) => (release = resolve));
       let locked: () => void = () => {};
       const isLocked = new Promise<void>((resolve) => (locked = resolve));
-      const inFlight = other.db.transaction(async (tx) => {
-        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${ownerCapLock("local")}, 0))`);
+      const inFlight = inTransaction(other.db, async (tx) => {
+        await tx.execute(sql`select 1`);
         locked();
         await held;
         await tx.insert(blobObject).values({
@@ -513,8 +513,8 @@ describe("the audit's caps and per-owner lines", () => {
   });
 
   it("says a malformed cap refuses every upload, rather than hiding it", () => {
-    expect(formatBlobAudit(result({ error: "SELF_LEARN_OWNER_BYTES_CAP=\"5GB\" is not a whole number." }))).toContain(
-      'caps       unreadable, so every new upload is refused (a re-store of a key with a row is not): SELF_LEARN_OWNER_BYTES_CAP="5GB" is not a whole number.',
+    expect(formatBlobAudit(result({ error: "GNOSIA_OWNER_BYTES_CAP=\"5GB\" is not a whole number." }))).toContain(
+      'caps       unreadable, so every new upload is refused (a re-store of a key with a row is not): GNOSIA_OWNER_BYTES_CAP="5GB" is not a whole number.',
     );
   });
 
@@ -523,7 +523,7 @@ describe("the audit's caps and per-owner lines", () => {
     let home: string;
     const saved = {
       url: process.env["DATABASE_URL"],
-      home: process.env["SELF_LEARN_HOME"],
+      home: process.env["GNOSIA_HOME"],
       bytes: process.env[OWNER_BYTES_CAP_ENV],
     };
 
@@ -531,13 +531,13 @@ describe("the audit's caps and per-owner lines", () => {
       scratch = await migratedScratchDatabase();
       home = await mkdtemp(path.join(tmpdir(), "blob-caps-home-"));
       process.env["DATABASE_URL"] = scratch.url;
-      process.env["SELF_LEARN_HOME"] = home;
+      process.env["GNOSIA_HOME"] = home;
     }, 60_000);
 
     afterAll(async () => {
       for (const [variable, value] of [
         ["DATABASE_URL", saved.url],
-        ["SELF_LEARN_HOME", saved.home],
+        ["GNOSIA_HOME", saved.home],
         [OWNER_BYTES_CAP_ENV, saved.bytes],
       ] as const) {
         if (value === undefined) delete process.env[variable];

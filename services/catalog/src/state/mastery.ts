@@ -1,4 +1,4 @@
-import { concept, LOCAL_LEARNER_ID, mastery, PREFERENCE_KEYS, readableOwners } from "@self-learn/schema";
+import { concept, LOCAL_LEARNER_ID, mastery, PREFERENCE_KEYS, readableOwners } from "@gnosia/schema";
 import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
 
 import { ownedBy, scopedRead } from "../content/scope";
@@ -14,6 +14,7 @@ import { readPreference, writePreference } from "./preference";
 import { voidedSessions, type EventRecord } from "./events";
 import { ensureLearner } from "./learner";
 
+import { inTransaction } from "../db";
 /**
  * `learn/state/model.json` as the `mastery` table.
  *
@@ -210,7 +211,7 @@ export async function writeModel(
   await assertKnownConcepts(db, slugs);
 
   await ensureLearner(db, learnerId);
-  await db.transaction(async (tx) => {
+  await inTransaction(db, async (tx) => {
     if (slugs.length > 0) {
       await tx
         .insert(mastery)
@@ -234,7 +235,7 @@ export async function writeModel(
             observations: sql`excluded.observations`,
             correct: sql`excluded.correct`,
             lastSeen: sql`excluded.last_seen`,
-            updatedAt: sql`now()`,
+            updatedAt: sql`cast(unixepoch('subsec') * 1000 as integer)`,
           },
         });
     }

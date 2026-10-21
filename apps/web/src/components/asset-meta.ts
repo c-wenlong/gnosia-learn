@@ -16,7 +16,7 @@
  */
 
 /**
- * The asset as `@self-learn/catalog/state` hands it over. Restated here rather
+ * The asset as `@gnosia/catalog/state` hands it over. Restated here rather
  * than imported: a `"use client"` module that reaches the catalog would drag a
  * Postgres driver into the browser bundle, and the shapes a component renders
  * are its own contract anyway. `title` is nullable and usually exactly one of

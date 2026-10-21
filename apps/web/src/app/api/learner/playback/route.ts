@@ -5,7 +5,7 @@ import {
   StateError,
   withLearnerLock,
   writePreference,
-} from "@self-learn/catalog/state";
+} from "@gnosia/catalog/state";
 
 import { MAX_ASSET_ID_CHARS } from "@/app/api/learner/watched/route";
 import { appTimeZone } from "@/lib/time-zone";

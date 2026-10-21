@@ -7,8 +7,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { fsStore, key as blobKey, type BlobStore } from "@self-learn/blob";
-import { asset, assetDerivation, blobObject } from "@self-learn/schema";
+import { fsStore, key as blobKey, type BlobStore } from "@gnosia/blob";
+import { asset, assetDerivation, blobObject } from "@gnosia/schema";
 
 import {
   migratedScratchDatabase,
@@ -108,7 +108,7 @@ describe.skipIf(!reachable.ok)("asset routes redirecting to a signed URL", () =>
     signing.origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 
     process.env.DATABASE_URL = scratch.url;
-    process.env.SELF_LEARN_HOME = home;
+    process.env.GNOSIA_HOME = home;
     ({ GET: FILE } = (await import("./[id]/file/route")) as { GET: Handler });
     ({ GET: POSTER } = (await import("./[id]/poster/route")) as { GET: Handler });
 
@@ -145,7 +145,7 @@ describe.skipIf(!reachable.ok)("asset routes redirecting to a signed URL", () =>
         kind: "poster",
         contentHash: sha256(JPEG),
         bytes: JPEG.length,
-        sourceRepo: "self-learn",
+        sourceRepo: "gnosia",
         blobKey: posterKey,
       },
     ]);
@@ -156,7 +156,7 @@ describe.skipIf(!reachable.ok)("asset routes redirecting to a signed URL", () =>
     await new Promise<void>((resolve) => server?.close(() => resolve()));
     await scratch?.drop();
     if (home !== undefined) await rm(home, { recursive: true, force: true });
-    delete process.env.SELF_LEARN_HOME;
+    delete process.env.GNOSIA_HOME;
   });
 
   it("redirects to the store's URL for an hour, carrying no path, and never caches the redirect", async () => {

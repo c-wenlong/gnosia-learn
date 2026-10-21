@@ -1,5 +1,5 @@
-import { CONTENT_TYPES as READER_TYPES, type Ownership } from "@self-learn/content";
-import { catalogInstance, contentSource, type ContentType } from "@self-learn/schema";
+import { CONTENT_TYPES as READER_TYPES, type Ownership } from "@gnosia/content";
+import { catalogInstance, contentSource, type ContentType } from "@gnosia/schema";
 import { eq, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
@@ -63,7 +63,7 @@ export async function recordExport(db: CatalogDatabase, type: ContentType, hash:
   await ensureRow(db, type);
   await db
     .update(contentSource)
-    .set({ exportHash: hash, exportedAt: sql`now()`, updatedAt: sql`now()` })
+    .set({ exportHash: hash, exportedAt: sql`cast(unixepoch('subsec') * 1000 as integer)`, updatedAt: sql`cast(unixepoch('subsec') * 1000 as integer)` })
     .where(eq(contentSource.type, type));
 }
 

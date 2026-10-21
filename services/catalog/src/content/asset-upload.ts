@@ -3,8 +3,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { key as blobKey, type BlobStore } from "@self-learn/blob";
-import { asset, assetDerivation, blobObject, LOCAL_LEARNER_ID, readableOwners, type Asset } from "@self-learn/schema";
+import { key as blobKey, type BlobStore } from "@gnosia/blob";
+import { asset, assetDerivation, blobObject, LOCAL_LEARNER_ID, readableOwners, type Asset } from "@gnosia/schema";
 import { and, eq, inArray, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
@@ -33,6 +33,7 @@ import { latestRevisions } from "./revisions";
 import { ContentWriteError, writeContents, type WriteContentInput } from "./write";
 import { CLI_OWNER } from "./scope";
 
+import { inTransaction } from "../db";
 /**
  * `catalog asset upload --source manimkc|remotionkc|revideokc|blenderkc`: a video
  * tool's rendered videos and their sidecars into the blob store, a poster made for each video on the way, and
@@ -282,39 +283,46 @@ export async function unhookDerivations(
     videoIds.map((id) => sql`${id}`),
     sql`, `,
   );
-  const { posters, bases } = await db.transaction(
+  const { posters, bases } = await inTransaction(
+    db,
     async (tx) => {
       const { rows: derived } = await tx.execute<{ poster: string }>(sql`
         select d.asset_id as poster
         from asset_derivation d
         join asset v on v.id = d.source_asset_id
-        cross join lateral (
-          select max(p.id) as id
-          from (
-            select r.id, r.snapshot, lag(r.snapshot) over (order by r.id) as prev
-            from content_revision r
-            where r.entity_type = 'asset' and r.entity_id = d.asset_id
-          ) p
-          where p.snapshot -> 'links' -> 'asset_derivation' @> jsonb_build_array(jsonb_build_object('source_asset_id', v.id))
-            and (
-              p.prev is null
-              or not coalesce(
-                p.prev -> 'links' -> 'asset_derivation' @> jsonb_build_array(jsonb_build_object('source_asset_id', v.id)),
-                false
-              )
-              or p.prev -> 'entity' ->> 'blob_key' is distinct from p.snapshot -> 'entity' ->> 'blob_key'
-            )
-        ) cut
+        -- Was cross join lateral (…) cut: SQLite has no lateral, so the
+        -- correlated cut.id is spelled as a scalar subquery inline below,
+        -- and the @> jsonb_build_array(…) containment asks json_each
+        -- whether the derivation list holds this source's id.
         where d.source_asset_id in (${ids})
           and d.asset_id = ${prefix} || d.source_asset_id
           and (
             select r.snapshot -> 'entity' ->> 'blob_key'
             from content_revision r
-            where r.entity_type = 'asset' and r.entity_id = v.id and r.id < cut.id
+            where r.entity_type = 'asset' and r.entity_id = v.id and r.id < (
+              select max(p.id)
+              from (
+                select r2.id, r2.snapshot, lag(r2.snapshot) over (order by r2.id) as prev
+                from content_revision r2
+                where r2.entity_type = 'asset' and r2.entity_id = d.asset_id
+              ) p
+              where exists (
+                  select 1 from json_each(p.snapshot -> 'links' -> 'asset_derivation') e
+                  where e.value ->> 'source_asset_id' = v.id
+                )
+                and (
+                  p.prev is null
+                  or not exists (
+                    select 1 from json_each(p.prev -> 'links' -> 'asset_derivation') e
+                    where e.value ->> 'source_asset_id' = v.id
+                  )
+                  or p.prev -> 'entity' ->> 'blob_key' is not p.snapshot -> 'entity' ->> 'blob_key'
+                )
+            )
             order by r.id desc
             limit 1
-          ) is distinct from v.blob_key
-        order by d.asset_id collate "C"
+          ) is not v.blob_key
+        order by d.asset_id collate binary
       `);
       if (derived.length === 0) return { posters: [], bases: new Map<string, number | null>() };
       const stale = derived.map((d) => d.poster);
@@ -324,7 +332,10 @@ export async function unhookDerivations(
         bases: new Map(stale.map((id) => [id, latest.get(id)?.id ?? null] as const)),
       };
     },
-    { isolationLevel: "repeatable read", accessMode: "read only" },
+    // One snapshot is all this asks, so a deferred begin beside a writer —
+    // not `begin immediate`, which would serialise the read behind an
+    // upload's relink and report `moved` on nothing.
+    { readOnly: true },
   );
   const unhooked: string[] = [];
   const moved: string[] = [];
@@ -388,8 +399,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
   // below copies the row it read and changes its blob key, so it is based on
   // that revision: a `catalog import` that rewrote the row in the minutes an
   // upload takes is refused, not overwritten with the row as it was.
-  const { rows, bases } = await db.transaction(
-    async (tx) => {
+  const { rows, bases } = await inTransaction(db, async (tx) => {
       const all = [...ids, ...derivedIds];
       const read = all.length === 0 ? [] : await tx.select().from(asset).where(inArray(asset.id, all));
       const latest = await latestRevisions(tx, "asset", all);
@@ -397,9 +407,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
         rows: new Map(read.map((row) => [row.id, row] as const)),
         bases: new Map(all.map((id) => [id, latest.get(id)?.id ?? null] as const)),
       };
-    },
-    { isolationLevel: "repeatable read", accessMode: "read only" },
-  );
+    });
   const keys = [...rows.values()].map((row) => row.blobKey).filter((k): k is string => k !== null);
   const blobs = new Map(
     (keys.length === 0 ? [] : await db.select().from(blobObject).where(inArray(blobObject.key, keys))).map(
@@ -775,7 +783,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
       return detach(after);
     }
     const sha256 = createHash("sha256").update(frame.body).digest("hex");
-    const dir = await mkdtemp(path.join(os.tmpdir(), "self-learn-poster-"));
+    const dir = await mkdtemp(path.join(os.tmpdir(), "gnosia-poster-"));
     try {
       const file = path.join(dir, `poster${POSTER_EXTENSION}`);
       await writeFile(file, frame.body);
@@ -822,7 +830,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
             bytes: done.bytes,
             title: `${video.row.title ?? video.row.id} (poster)`,
             // Made by this repository's upload command, not rendered by the tool.
-            sourceRepo: "self-learn",
+            sourceRepo: "gnosia",
             blobKey: done.key,
             resourceType: null,
             ownerId: video.row.ownerId,
@@ -998,7 +1006,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
       return detach(after);
     }
     const sha256 = createHash("sha256").update(made.body).digest("hex");
-    const dir = await mkdtemp(path.join(os.tmpdir(), "self-learn-pdf-"));
+    const dir = await mkdtemp(path.join(os.tmpdir(), "gnosia-pdf-"));
     try {
       const file = path.join(dir, `video${PDF_EXTENSION}`);
       await writeFile(file, made.body);
@@ -1044,7 +1052,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
             // compares its inputs against without reading the document.
             inputsHash: made.inputs,
             // Made by this repository's upload command, not rendered by the tool.
-            sourceRepo: "self-learn",
+            sourceRepo: "gnosia",
             blobKey: done.key,
             resourceType: null,
             ownerId: video.row.ownerId,

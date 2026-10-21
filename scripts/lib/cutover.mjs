@@ -8,7 +8,7 @@
 import { copyFileSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync } from 'node:fs';
 import { dirname, join, relative, sep } from 'node:path';
 
-import { exec } from './pg.mjs';
+import { exec } from './proc.mjs';
 
 /** The tag on the last commit that has the files, named by open question 4 of the plan. */
 export const FINAL_TAG = 'content-files-final';

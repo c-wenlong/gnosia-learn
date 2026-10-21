@@ -8,7 +8,7 @@ import type {
   NewAssetTopic,
   NewConcept,
   NewConceptPrerequisite,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 
 import { IndexError, IndexErrors } from "./errors";
 import { directoriesIn, filesIn, relativeTo } from "./files";
@@ -161,7 +161,7 @@ export const conceptsIndexer: Indexer = {
         contentHash,
         bytes,
         title: note.title,
-        sourceRepo: "self-learn",
+        sourceRepo: "gnosia",
       });
       assetConcepts.push({ assetId: id, conceptSlug: slug });
       assetTopics.push({ assetId: id, topicSlug });

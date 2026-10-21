@@ -1,5 +1,5 @@
-import { courseCoverBlob, type CourseCoverBlob } from "@self-learn/catalog/state";
-import { COURSE_COVER_TYPES } from "@self-learn/schema/shared";
+import { courseCoverBlob, type CourseCoverBlob } from "@gnosia/catalog/state";
+import { COURSE_COVER_TYPES } from "@gnosia/schema/shared";
 import { NextResponse } from "next/server";
 
 import { blobStoreProblem, isRangeRefusal, openBlob, parseRange, webStreamFrom, type AssetFileProblem } from "@/lib/asset-files";

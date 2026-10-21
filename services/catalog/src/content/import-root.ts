@@ -2,10 +2,11 @@ import { execFileSync } from "node:child_process";
 import { realpath } from "node:fs/promises";
 import path from "node:path";
 
-import { indexRun } from "@self-learn/schema";
+import { indexRun } from "@gnosia/schema";
 import { eq, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
+import { databaseFile } from "../db";
 import { REPO_ROOT } from "../env";
 import type { ExportType } from "./layout";
 
@@ -54,12 +55,9 @@ export interface RecordedRoot {
  * copy from its template, since `createdb -T` gives the copy a new one.
  */
 export async function databaseIdentity(db: CatalogDatabase): Promise<string> {
-  const { rows } = await db.execute<{ id: string }>(
-    sql`select current_database() || ':' || oid::text as id from pg_database where datname = current_database()`,
-  );
-  const id = rows[0]?.id;
-  if (id === undefined) throw new Error("could not read this database's own name and oid from pg_database");
-  return id;
+  // The file path is the database's identity, the way `name:oid` was a
+  // Postgres database's: two names for one file resolve to the same string.
+  return databaseFile(db);
 }
 
 /** The root and the database that recorded it, or null when the type was never imported. */
@@ -80,8 +78,8 @@ export async function recordRoot(db: CatalogDatabase, type: ExportType, root: st
   await db
     .update(indexRun)
     .set({
-      metadata: sql`coalesce(${indexRun.metadata}, '{}'::jsonb) || ${JSON.stringify({ root, database })}::jsonb`,
-      updatedAt: sql`now()`,
+      metadata: sql`json_patch(coalesce(${indexRun.metadata}, '{}'), ${JSON.stringify({ root, database })})`,
+      updatedAt: sql`cast(unixepoch('subsec') * 1000 as integer)`,
     })
     .where(eq(indexRun.source, type));
 }

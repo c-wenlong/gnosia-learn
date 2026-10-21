@@ -6,7 +6,7 @@ import {
   type CustomProviderId,
   customProviderId,
   isCustomProviderId,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { and, asc, eq, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
@@ -152,7 +152,7 @@ export async function updateCustomProvider(
   sealed?: SealedProviderKey,
 ): Promise<{ provider: StoredCustomProvider; key: CustomProviderKeySaved | null }> {
   if (!isCustomProviderId(id)) throw new CustomProviderError("INVALID", "That is not one of your providers.");
-  const set: { label?: string; baseUrl?: string; updatedAt: ReturnType<typeof sql> } = { updatedAt: sql`now()` };
+  const set: { label?: string; baseUrl?: string; updatedAt: ReturnType<typeof sql> } = { updatedAt: sql`cast(unixepoch('subsec') * 1000 as integer)` };
   if (input.label !== undefined) set.label = label(input.label);
   if (input.baseUrl !== undefined) set.baseUrl = baseUrl(input.baseUrl);
   return withLearnerLock(db, owner, async (tx) => {

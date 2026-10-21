@@ -1,4 +1,4 @@
-import { providerLabel } from "@self-learn/schema/shared";
+import { providerLabel } from "@gnosia/schema/shared";
 import { NextResponse } from "next/server";
 
 import { entryCredential } from "@/lib/agent/credentials";

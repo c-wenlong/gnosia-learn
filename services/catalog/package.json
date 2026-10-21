@@ -1,10 +1,10 @@
 {
-  "name": "@self-learn/catalog",
+  "name": "@gnosia/catalog",
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
   "type": "module",
-  "//exports": "No build step, same as @self-learn/schema: the consumers are tsx, vitest and Next (which lists this package in transpilePackages), and all three compile the TypeScript directly. Only ./state is exported, because that is the only part the web app has any business importing — the indexers, the migrations and the CLI are the catalog's own, and a page reaching for them would be the layering violation ARCHITECTURE.md rule 10 exists to prevent.",
+  "//exports": "No build step, same as @gnosia/schema: the consumers are tsx, vitest and Next (which lists this package in transpilePackages), and all three compile the TypeScript directly. Only ./state is exported, because that is the only part the web app has any business importing — the indexers, the migrations and the CLI are the catalog's own, and a page reaching for them would be the layering violation ARCHITECTURE.md rule 10 exists to prevent.",
 
   "exports": {
     "./state": "./src/state/index.ts"
@@ -15,15 +15,17 @@
     "catalog": "tsx src/cli.ts"
   },
   "dependencies": {
-    "@self-learn/blob": "*",
-    "@self-learn/content": "*",
-    "@self-learn/schema": "*",
+    "@gnosia/blob": "*",
+    "@gnosia/content": "*",
+    "@gnosia/schema": "*",
+    "better-sqlite3": "^13.0.3",
     "drizzle-orm": "^0.45.2",
     "pdf-lib": "^1.17.1",
     "pg": "^8.16.3",
     "yaml": "^2.8.1"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
     "@types/pg": "^8.15.6",
     "drizzle-kit": "^0.31.11",
     "tsx": "^4.23.15",

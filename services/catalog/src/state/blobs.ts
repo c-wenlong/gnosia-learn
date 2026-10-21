@@ -1,6 +1,6 @@
-import { asset, assetDerivation, blobObject, collection, type OwnerScope } from "@self-learn/schema";
+import { asset, assetDerivation, blobObject, collection, type OwnerScope } from "@gnosia/schema";
 import { and, eq, inArray, isNull } from "drizzle-orm";
-import { alias } from "drizzle-orm/pg-core";
+import { alias } from "drizzle-orm/sqlite-core";
 
 import { ownedBy } from "../content/scope";
 import type { CatalogDatabase } from "../db";

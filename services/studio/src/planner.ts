@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
 
-import type { TopicEntry } from "@self-learn/content";
+import type { TopicEntry } from "@gnosia/content";
 
 import { agentEnv } from "./agent";
 import { BriefError, validateBrief, type ValidBrief, type Vocabulary } from "./brief";

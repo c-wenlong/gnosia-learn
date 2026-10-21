@@ -1,4 +1,4 @@
-import { asset, blobObject, type NewAsset } from "@self-learn/schema";
+import { asset, blobObject, type NewAsset } from "@gnosia/schema";
 import { eq, inArray } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";

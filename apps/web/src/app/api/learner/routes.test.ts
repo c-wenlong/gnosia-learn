@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  clearTables,
   migratedScratchDatabase,
   probe,
   type Scratch,
@@ -47,7 +48,7 @@ type Handler = (req: Request) => Promise<Response>;
 describe.skipIf(!reachable.ok)("learner API routes", () => {
   let scratch: Scratch;
   let routes: Record<string, Handler>;
-  let readLearnerSnapshot: typeof import("@self-learn/catalog/state").readLearnerSnapshot;
+  let readLearnerSnapshot: typeof import("@gnosia/catalog/state").readLearnerSnapshot;
   let recentGet: (req: Request) => Promise<Response>;
 
   beforeAll(async () => {
@@ -66,7 +67,7 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
       import("./avatar/route"),
       import("./asset-name/route"),
       import("./recent/route"),
-      import("@self-learn/catalog/state"),
+      import("@gnosia/catalog/state"),
     ]);
     routes = {
       progress: progress.POST,
@@ -89,13 +90,7 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
   });
 
   beforeEach(async () => {
-    await scratch.db.execute(
-      "alter table event disable trigger event_no_update; " +
-        "alter table event disable trigger event_no_delete; " +
-        "truncate event, mastery, review, progress, recap, preference; " +
-        "alter table event enable trigger event_no_update; " +
-        "alter table event enable trigger event_no_delete;",
-    );
+    await clearTables(scratch.db, ["event", "mastery", "review", "progress", "recap", "preference"]);
   });
 
   const call = async (name: string, body: unknown, origin?: string | null) => {
@@ -214,7 +209,7 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
         expect((await call("preference", { key, value: "x" })).status).toBe(400);
       }
       const { rows } = await scratch.db.execute<{ n: number }>(
-        "select count(*)::int as n from preference",
+        "select cast(count(*) as integer) as n from preference",
       );
       expect(rows[0]?.n).toBe(0);
     });
@@ -320,7 +315,7 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
 
     beforeAll(async () => {
       await scratch.db.execute(
-        `insert into asset (id, kind, url, title, source_repo, owner_id) values ('${ID}', 'link', 'https://example.com/r', 'lec03 v2 final', 'self-learn', 'local') on conflict do nothing`,
+        `insert into asset (id, kind, url, title, source_repo, owner_id) values ('${ID}', 'link', 'https://example.com/r', 'lec03 v2 final', 'gnosia', 'local') on conflict do nothing`,
       );
     });
 
@@ -403,7 +398,7 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
       expect((await call("name", { name: 42 })).status).toBe(400);
       expect((await snapshot()).displayName).toBe("Ada");
       // The catalog's writer holds the limit too, for a caller that is not this route.
-      const { writeDisplayName } = await import("@self-learn/catalog/state");
+      const { writeDisplayName } = await import("@gnosia/catalog/state");
       await expect(writeDisplayName(scratch.db, "x".repeat(61))).rejects.toThrow(RangeError);
       expect((await snapshot()).displayName).toBe("Ada");
       await call("name", { name: null });
@@ -412,7 +407,7 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
 
   describe("avatar", () => {
     it("has one from the start, stores a new one, and answers with it", async () => {
-      const { AVATARS } = await import("@self-learn/schema/shared");
+      const { AVATARS } = await import("@gnosia/schema/shared");
       expect(AVATARS).toContain((await snapshot()).avatar);
       const set = await call("avatar", { avatar: "fox" });
       expect(set.status).toBe(200);
@@ -427,7 +422,7 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
       expect((await call("avatar", {})).status).toBe(400);
       expect((await snapshot()).avatar).toBe("owl");
       // The catalog's writer refuses too, for a caller that is not this route.
-      const { writeAvatar } = await import("@self-learn/catalog/state");
+      const { writeAvatar } = await import("@gnosia/catalog/state");
       await expect(writeAvatar(scratch.db, "dragon")).rejects.toThrow(RangeError);
       expect((await snapshot()).avatar).toBe("owl");
     });
@@ -442,7 +437,7 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
       const { GET } = await import("./export/route");
       const response = await GET(new Request(`${ORIGIN}/api/learner/export`, { headers: { host: "localhost:3000" } }));
       expect(response.status).toBe(200);
-      expect(response.headers.get("content-disposition")).toMatch(/^attachment; filename="self-learn-\d{4}-\d{2}-\d{2}\.json"$/);
+      expect(response.headers.get("content-disposition")).toMatch(/^attachment; filename="gnosia-\d{4}-\d{2}-\d{2}\.json"$/);
       const body = (await response.json()) as {
         format: string;
         learner: { completed: Record<string, true> };
@@ -450,7 +445,7 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
         tutorModels: unknown;
         events: unknown[];
       };
-      expect(body.format).toBe("self-learn-export");
+      expect(body.format).toBe("gnosia-export");
       // Owner configuration, no secret (docs/TUTOR-MODELS.md, T6).
       expect(body.tutorModels).toEqual([{ provider: "gemini", model: "gemini-2.5-flash" }]);
       // Every preference row, not only the ones the snapshot folds in.

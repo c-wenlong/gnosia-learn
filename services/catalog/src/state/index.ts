@@ -7,7 +7,7 @@
  * `mastery`, `review`, `progress`, `recap` or `preference`. Three callers use
  * it and none of them talks to a pool of its own: the `learn` CLI in
  * `../learn/`, the backfill in `../commands/backfill.ts`, and the web app
- * through `@self-learn/catalog/state`.
+ * through `@gnosia/catalog/state`.
  *
  * **Reads of the content half.** `knowledge-base.ts` and `assets.ts` only read,
  * and what they read is `concept`, `asset` and the link tables, which this
@@ -33,16 +33,16 @@
  */
 
 /**
- * The connection, re-exported: `@self-learn/catalog/state` is the web app's
+ * The connection, re-exported: `@gnosia/catalog/state` is the web app's
  * only entry into this package, so making it import `../db` by a deep path
  * would either need a second export subpath or a relative reach into
  * `services/`. One door.
  */
-export { connect, withDatabase, type CatalogDatabase, type Connection } from "../db";
+export { connect, inTransaction, withDatabase, type CatalogDatabase, type Connection } from "../db";
 
 /**
  * The database half of the content reader seam (docs/CONTENT-MIGRATION.md
- * 0.6). The plan names it `@self-learn/catalog/content`; it is exported here
+ * 0.6). The plan names it `@gnosia/catalog/content`; it is exported here
  * instead because this is the web app's one door into the package (layering
  * rule 1), and a second subpath for one function would be a second door. Every
  * method refuses until its track fills it in.

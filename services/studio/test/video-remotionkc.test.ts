@@ -56,10 +56,10 @@ afterEach(async () => {
   }
 });
 
-const REMOTIONKC = "/Users/me/self-learn/tools/remotionkc";
+const REMOTIONKC = "/Users/me/gnosia/tools/remotionkc";
 const SHELL = `${REMOTIONKC}/node_modules/.remotion/chrome-headless-shell/mac-arm64/chrome-headless-shell-mac-arm64`;
 const TSC = `${REMOTIONKC}/node_modules/@typescript/typescript-darwin-arm64/lib/tsc`;
-const PARSER = "/Users/me/self-learn/node_modules/typescript/lib/typescript.js";
+const PARSER = "/Users/me/gnosia/node_modules/typescript/lib/typescript.js";
 
 /** A toolchain that names programs without running any. */
 function fixedTools(): RemotionkcToolchain {
@@ -68,18 +68,18 @@ function fixedTools(): RemotionkcToolchain {
     sandboxKind: "seatbelt",
     sandboxExec: "/usr/bin/sandbox-exec",
     libs: [],
-    manimkcRoot: "/Users/me/self-learn/tools/manimkc",
-    manimkcDirs: { manim: "/m/manim", venv: "/m/.venv", venvTts: "/Users/me/self-learn/tools/manimkc/.venv-tts", tools: "/m/tools" },
+    manimkcRoot: "/Users/me/gnosia/tools/manimkc",
+    manimkcDirs: { manim: "/m/manim", venv: "/m/.venv", venvTts: "/Users/me/gnosia/tools/manimkc/.venv-tts", tools: "/m/tools" },
     ffmpeg: { link: "/opt/homebrew/bin/ffmpeg", real: "/opt/homebrew/Cellar/ffmpeg/9/bin/ffmpeg", home: "/opt/homebrew/Cellar/ffmpeg/9" },
     ffprobe: { link: "/opt/homebrew/bin/ffprobe", real: "/opt/homebrew/Cellar/ffmpeg/9/bin/ffprobe", home: "/opt/homebrew/Cellar/ffmpeg/9" },
     python3: null,
     venvPython: null,
-    ttsPython: { link: "/Users/me/self-learn/tools/manimkc/.venv-tts/bin/python", real: "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3.12", home: "/Library/Frameworks/Python.framework" },
+    ttsPython: { link: "/Users/me/gnosia/tools/manimkc/.venv-tts/bin/python", real: "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3.12", home: "/Library/Frameworks/Python.framework" },
     node: "/usr/local/bin/node",
     hfHubCache: "/Users/me/.cache/huggingface/hub",
     kokoroModel: "/Users/me/.cache/huggingface/hub/models--hexgrad--Kokoro-82M",
     voicesInstalled: ["af_heart"],
-    sharedAudioCache: "/Users/me/.self-learn/manimkc/cache/audio",
+    sharedAudioCache: "/Users/me/.gnosia/manimkc/cache/audio",
     remotionkc: {
       root: REMOTIONKC,
       nodeModules: `${REMOTIONKC}/node_modules`,
@@ -93,7 +93,7 @@ function fixedTools(): RemotionkcToolchain {
       remotion: "4.0.530",
       sandboxReady: true,
       nodeVersion: "22.23.1",
-      ownerHome: "/Users/me/.self-learn/remotionkc",
+      ownerHome: "/Users/me/.gnosia/remotionkc",
       parser: PARSER,
       libs: [],
     },
@@ -181,7 +181,7 @@ describe("the remotionkc profiles", () => {
     const exec = block(text, "allow process-exec").join(" ");
     expect(exec).toContain(`(literal "${REMOTIONKC}/.venv/bin/gnosia-audio")`);
     expect(exec).toContain(`(literal "${REMOTIONKC}/.venv/bin/python")`);
-    expect(exec).toContain('(literal "/Users/me/self-learn/tools/manimkc/.venv-tts/bin/python")');
+    expect(exec).toContain('(literal "/Users/me/gnosia/tools/manimkc/.venv-tts/bin/python")');
     expect(exec).not.toMatch(/chrome-headless-shell|compositor|esbuild|\/bin\/sh"|\/bin\/bash/);
     // A console script uv wrote in its `#!/bin/sh` form needs sh and the shell sh runs, and only then.
     const shelled = buildRemotionkcProfile("narrate", { tools: { ...fixedTools(), remotionkc: { ...fixedTools().remotionkc, scriptShells: ["/bin/sh", "/bin/bash"] } }, paths, home: "/Users/me", studioHome: path.join(root, "home"), base: 47012 });
@@ -203,7 +203,7 @@ describe("the remotionkc profiles", () => {
   it("let the gate profile run node and the media programs, read candidate/ and the studio's TypeScript, and write the poster alone", async () => {
     const paths = await jobPaths();
     const text = profileFor("gate", paths);
-    expect(block(text, "allow file-read*").join(" ")).toBe(`(subpath "${paths.candidate}") (subpath "/Users/me/self-learn/node_modules/typescript"))`);
+    expect(block(text, "allow file-read*").join(" ")).toBe(`(subpath "${paths.candidate}") (subpath "/Users/me/gnosia/node_modules/typescript"))`);
     expect(block(text, "allow file-write*")).toEqual([`(literal "${paths.poster}")`, '(literal "/dev/null")', '(literal "/dev/dtracehelper"))']);
     expect(text).not.toMatch(/network|mach-lookup/);
   });
@@ -376,9 +376,9 @@ describe("the permission file", () => {
       jobId: "j",
       paths,
       remotionkcRoot: REMOTIONKC,
-      remotionkcHome: "/Users/me/.self-learn/remotionkc",
-      manimkcRoot: "/Users/me/self-learn/tools/manimkc",
-      manimkcHome: "/Users/me/.self-learn/manimkc",
+      remotionkcHome: "/Users/me/.gnosia/remotionkc",
+      manimkcRoot: "/Users/me/gnosia/tools/manimkc",
+      manimkcHome: "/Users/me/.gnosia/manimkc",
       guard: "/usr/local/bin/node /jobs/j/bin/bash-guard.cjs",
     });
     const { allow, deny } = settings.permissions;
@@ -401,8 +401,8 @@ describe("the permission file", () => {
       `Edit(/${paths.render}/**)`,
       `Edit(/${path.join(paths.checkout, "remotion.config.ts")})`,
       `Read(/${REMOTIONKC}/topics/**)`,
-      "Read(//Users/me/.self-learn/remotionkc/**)",
-      "Read(//Users/me/self-learn/tools/manimkc/topics/**)",
+      "Read(//Users/me/.gnosia/remotionkc/**)",
+      "Read(//Users/me/gnosia/tools/manimkc/topics/**)",
       `Read(/${path.join(paths.job, "ports.json")})`,
       "WebFetch",
     ]) {
