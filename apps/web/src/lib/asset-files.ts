@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { AssetBlob, AssetRef, CatalogDatabase } from "@self-learn/catalog/state";
-import type { BlobRead } from "@self-learn/blob";
+import type { BlobRead, BlobStore } from "@self-learn/blob";
 import type { AssetSeams } from "@self-learn/tutor/server/deps";
 import {
   openBlob as openBlobCore,
@@ -48,8 +48,31 @@ export type {
  * calls with its own blob store; this file hands it this app's three seams:
  * the request's owner scope, the selected content source and the blob store.
  */
+/**
+ * The store resolved on first use, not at seams() time: `assetBlobStore()`
+ * refuses a bad `SELF_LEARN_HOME` by throwing, and a throw here would turn
+ * every catalog-only read (`resolveRowText`, `servedAssets`, …) into a
+ * blob-store failure. Deferred, the refusal surfaces inside the core that
+ * touched the store, where `blobStoreProblem` classifies it.
+ */
+function lazyBlobStore(): BlobStore {
+  const store = () => assetBlobStore();
+  return {
+    get provider() {
+      return store().provider;
+    },
+    put: (key, body, meta) => store().put(key, body, meta),
+    head: (key) => store().head(key),
+    stat: (key) => store().stat(key),
+    get: (key, range) => store().get(key, range),
+    signedUrl: (key, ttl) => store().signedUrl(key, ttl),
+    delete: (key) => store().delete(key),
+    list: (prefix) => store().list(prefix),
+  };
+}
+
 async function seams(): Promise<AssetSeams> {
-  return { scope: await currentScope(), source: contentSource(), blobStore: assetBlobStore() };
+  return { scope: await currentScope(), source: contentSource(), blobStore: lazyBlobStore() };
 }
 
 export async function resolveBlob(blob: AssetBlob, name: string) {
