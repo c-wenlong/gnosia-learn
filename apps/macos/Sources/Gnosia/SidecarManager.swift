@@ -38,7 +38,7 @@ final class SidecarManager {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.process?.terminate()
+            MainActor.assumeIsolated { self?.process?.terminate() }
         }
     }
 

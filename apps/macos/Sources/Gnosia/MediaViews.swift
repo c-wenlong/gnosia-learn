@@ -127,8 +127,10 @@ struct PlayerView: NSViewRepresentable {
             self.onPlayhead = onPlayhead
             timer?.invalidate()
             timer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self, weak view] _ in
-                guard let view, (view.player?.rate ?? 0) > 0 else { return }
-                MainActor.assumeIsolated { self?.report(view) }
+                MainActor.assumeIsolated {
+                    guard let view, (view.player?.rate ?? 0) > 0 else { return }
+                    self?.report(view)
+                }
             }
             endObserver.map(NotificationCenter.default.removeObserver)
             endObserver = nil
