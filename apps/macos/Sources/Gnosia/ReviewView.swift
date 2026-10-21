@@ -171,8 +171,7 @@ private struct ReviewCardView: View {
     }
 
     private var prompt: some View {
-        Text(card.prompt)
-            .font(.title3)
+        MathText(text: card.prompt, font: .title3)
             .textSelection(.enabled)
     }
 
@@ -188,8 +187,7 @@ private struct ReviewCardView: View {
                     shown = true
                 } label: {
                     HStack {
-                        Text(choice)
-                            .font(.callout)
+                        MathText(text: choice, font: .callout)
                             .multilineTextAlignment(.leading)
                         Spacer()
                         if picked == index {
@@ -221,8 +219,7 @@ private struct ReviewCardView: View {
     @ViewBuilder
     private var recallAnswer: some View {
         if shown {
-            Text(card.answer.isEmpty ? "The note holds no summary to check against." : card.answer)
-                .font(.body)
+            MathText(text: card.answer.isEmpty ? "The note holds no summary to check against." : card.answer, font: .body)
                 .foregroundStyle(.secondary)
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -238,7 +235,7 @@ private struct ReviewCardView: View {
         if let why = card.why {
             VStack(alignment: .leading, spacing: 3) {
                 Text("Why").font(.caption).foregroundStyle(.secondary)
-                Text(why).font(.callout)
+                MathText(text: why, font: .callout)
             }
         }
         if let source = card.source {
