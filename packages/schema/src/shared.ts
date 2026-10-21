@@ -56,6 +56,16 @@ export const COURSE_COVER_MAX_BYTES = 2 * 1024 * 1024;
 export const LOCAL_LEARNER_ID = "local";
 
 /**
+ * The deployment secrets' environment names, shared so the web app's auth
+ * core, the BYOK seal and the sidecar all read the same variables.
+ */
+export const OWNER_PASSWORD_VAR = "OWNER_PASSWORD";
+export const AUTH_SECRET_VAR = "AUTH_SECRET";
+
+/** Shortest secret accepted: 32 characters is what `openssl rand -base64 32` yields. */
+export const MIN_SECRET_LENGTH = 32;
+
+/**
  * The reserved owner of shared content (phase 4 of docs/CONTENT-MIGRATION.md,
  * D23): rows every owner may read and nobody signs in as. A learner id like
  * any other, so `owner_id` needs no second kind of foreign key; its `learner`

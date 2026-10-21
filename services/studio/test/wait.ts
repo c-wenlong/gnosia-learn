@@ -1,5 +1,5 @@
-import type { Runner } from "../src/runner";
-import type { JobStore } from "../src/store";
+import type { Runner } from "../src/diagram/runner";
+import type { JobStore } from "../src/data/store";
 
 /**
  * The waits a studio test does, in one place, because `cap.test.ts` and

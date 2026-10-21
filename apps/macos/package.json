@@ -1,0 +1,15 @@
+{
+  "name": "@gnosia/macos",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "//": "Gnosia, the native macOS reader for the catalog. The app itself is a SwiftPM package (Package.swift); this manifest exists so the snapshot script's npm dependency resolves inside the repo's workspaces. `npm run snapshot` refreshes the SQLite file the app reads.",
+  "scripts": {
+    "snapshot": "node scripts/catalog-snapshot.mjs",
+    "typecheck": "node --check scripts/catalog-snapshot.mjs"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.0"
+  }
+}

@@ -4,10 +4,10 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { BriefError } from "../src/brief";
-import { describeVideoBriefEdit, EDITABLE_VIDEO_FIELDS } from "../src/drafts";
-import { PLANNER_VIDEO_FIELDS } from "../src/planner";
-import { changingSummary, combinedPrompt, toolsBlock } from "../src/planner-prompt";
+import { BriefError } from "../src/diagram/brief";
+import { describeVideoBriefEdit, EDITABLE_VIDEO_FIELDS } from "../src/drafts/drafts";
+import { PLANNER_VIDEO_FIELDS } from "../src/drafts/planner";
+import { changingSummary, combinedPrompt, toolsBlock } from "../src/drafts/planner-prompt";
 import { TOOL_REASON_MAX, validateVideoBrief } from "../src/video/brief";
 import { briefTool, notInStudio, toolsHealth, VIDEO_TOOL_CAPABILITIES, VIDEO_TOOL_NAMES, VIDEO_TOOL_ROUTES, VIDEO_TOOLS } from "../src/video/tools";
 

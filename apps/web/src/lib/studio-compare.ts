@@ -13,7 +13,7 @@
  * number beside them comes from the tool.
  */
 
-/** Mirrors `services/studio/src/compare.ts`. Structural, not imported. */
+/** Mirrors `services/studio/src/diagram/compare.ts`. Structural, not imported. */
 export interface LintRef {
   rule: string;
   shape: string | null;

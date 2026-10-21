@@ -51,21 +51,21 @@ const catalogMock = vi.hoisted(() => ({
   status: vi.fn(),
   preferenceGet: vi.fn(),
 }));
-vi.mock("../src/catalog", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/catalog")>()),
+vi.mock("../src/data/catalog", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/data/catalog")>()),
   ...catalogMock,
 }));
 
 const { createApi } = await import("../src/api");
-const { Drafts } = await import("../src/drafts");
-const { JobStore, RecordStore } = await import("../src/store");
-const { Mirrors } = await import("../src/mirrors");
+const { Drafts } = await import("../src/drafts/drafts");
+const { JobStore, RecordStore } = await import("../src/data/store");
+const { Mirrors } = await import("../src/canvas/mirrors");
 const { VideoRunner } = await import("../src/video/runner");
 const { CLAUDE_BIN } = await import("../src/config");
 const { narratedBrief } = await import("./video-fixture");
 if (CLAUDE_BIN !== fake.bin) throw new Error(`the planner would spawn ${CLAUDE_BIN}, not the fake`);
 
-import type { Runner } from "../src/runner";
+import type { Runner } from "../src/diagram/runner";
 import type { VideoDoctor, VideoDoctorReport } from "../src/video/doctor";
 import type { VideoJobRecord } from "../src/video/types";
 

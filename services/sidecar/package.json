@@ -1,0 +1,25 @@
+{
+  "name": "@gnosia/sidecar",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "//": "The native app's tutor boundary: a loopback HTTP service that exposes the shared tutor core (`@gnosia/tutor`) to the macOS app, so Swift never reimplements prompt, chain or key logic. Loopback-bound like the studio service, and reached through the catalog's own pool rather than a second one.",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "sidecar": "tsx src/index.ts",
+    "start": "tsx src/index.ts",
+    "test": "vitest run test"
+  },
+  "dependencies": {
+    "@gnosia/blob": "*",
+    "@gnosia/catalog": "*",
+    "@gnosia/schema": "*",
+    "@gnosia/tutor": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "tsx": "^4.23.15",
+    "typescript": "^6"
+  }
+}

@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { transcriptOf, type TranscriptEvent } from "../src/drafts";
+import { transcriptOf, type TranscriptEvent } from "../src/drafts/drafts";
 import { predictedSeconds, validateVideoBrief } from "../src/video/brief";
 import {
   abbreviationsIn,

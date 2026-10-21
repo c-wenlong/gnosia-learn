@@ -18,7 +18,7 @@ vi.mock("@/lib/auth/session", async (importOriginal) => ({
  */
 const catalog = vi.hoisted(() => ({ size: 0 }));
 const listAssets = vi.hoisted(() =>
-  vi.fn(async (_db: unknown, options: { limit?: number }, _scope: unknown) => {
+  vi.fn(async (_db: unknown, options: { limit?: number }) => {
     const size = Math.min(catalog.size, options.limit ?? Infinity);
     return Array.from({ length: size }, (_, i) => ({
       id: `note:n${String(i).padStart(6, "0")}`,

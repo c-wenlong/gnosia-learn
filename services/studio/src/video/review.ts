@@ -1,4 +1,4 @@
-import { jobDiscard, videoPut } from "../catalog";
+import { jobDiscard, videoPut } from "../data/catalog";
 import { backendFor } from "./backend";
 import { briefTool } from "./tools";
 import type { VideoRunner, VideoStore } from "./runner";

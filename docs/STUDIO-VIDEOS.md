@@ -527,7 +527,7 @@ the table already spells out, is not flagged, where the card's own fallback
 check (a runner that has not read the table) flags every capitalised word.
 The planner hears of them too, as a STUDIO note at the head of the turn
 after a video brief carrying them is proposed or edited
-(`abbreviationCheck` in `services/studio/src/drafts.ts`). The note lists the
+(`abbreviationCheck` in `services/studio/src/drafts/drafts.ts`). The note lists the
 words, says the brief stands as it is and is not refused, and says the planner
 may spell each one out ("A C L") in its next video brief or keep it where it
 is meant to be said as a word; after a person's own edit it says to keep

@@ -32,19 +32,19 @@ const catalogMock = vi.hoisted(() => ({
   topicAdd: vi.fn(),
   diagramList: vi.fn(),
 }));
-vi.mock("../src/catalog", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/catalog")>()),
+vi.mock("../src/data/catalog", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/data/catalog")>()),
   ...catalogMock,
 }));
 const canvasMock = vi.hoisted(() => ({ doctor: vi.fn() }));
-vi.mock("../src/canvas", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/canvas")>()),
+vi.mock("../src/canvas/canvas", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/canvas/canvas")>()),
   doctor: canvasMock.doctor,
 }));
 
-const { Drafts } = await import("../src/drafts");
-const { JobStore } = await import("../src/store");
-const { JobRefused } = await import("../src/runner");
+const { Drafts } = await import("../src/drafts/drafts");
+const { JobStore } = await import("../src/data/store");
+const { JobRefused } = await import("../src/diagram/runner");
 const { draftDir, draftTmpDir } = await import("../src/paths");
 
 type DraftsT = InstanceType<typeof Drafts>;

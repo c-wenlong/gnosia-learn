@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { validateBrief, type ValidBrief } from "../src/brief";
+import { validateBrief, type ValidBrief } from "../src/diagram/brief";
 import { absolute, sessionLogPath, targetPath, targetSvgPath } from "../src/paths";
 import { allSettled, until } from "./wait";
 import { testVocabulary } from "./vocabulary";
@@ -41,10 +41,10 @@ const catalogMock = vi.hoisted(() => ({
   diagramShow: vi.fn(async () => ({ ok: false, json: null, error: "unreachable", offline: true })),
   diagramCheckout: vi.fn(async () => ({ ok: false, json: null, error: "unreachable", offline: true })),
 }));
-vi.mock("../src/catalog", () => catalogMock);
+vi.mock("../src/data/catalog", () => catalogMock);
 
 const gateMock = vi.hoisted(() => ({ runGate: vi.fn(), narrate: vi.fn(() => "a step") }));
-vi.mock("../src/gate", () => gateMock);
+vi.mock("../src/diagram/gate", () => gateMock);
 
 const reviewMock = vi.hoisted(() => ({
   dirtyFiles: vi.fn(async () => [] as string[]),
@@ -52,7 +52,7 @@ const reviewMock = vi.hoisted(() => ({
   discard: vi.fn(),
   reindex: vi.fn(),
 }));
-vi.mock("../src/review", () => reviewMock);
+vi.mock("../src/diagram/review", () => reviewMock);
 
 interface FakeAgent {
   done: Promise<Record<string, unknown>>;
@@ -66,10 +66,10 @@ const agentMock = vi.hoisted(() => ({
   sweepOrphans: vi.fn(async () => [] as number[]),
   AgentRun: class {},
 }));
-vi.mock("../src/agent", () => agentMock);
+vi.mock("../src/agent/agent", () => agentMock);
 
-const { Runner, JobRefused } = await import("../src/runner");
-const { JobStore } = await import("../src/store");
+const { Runner, JobRefused } = await import("../src/diagram/runner");
+const { JobStore } = await import("../src/data/store");
 
 const FIXTURES = path.join(path.dirname(fileURLToPath(import.meta.url)), "fixtures");
 const ok = { ok: true, json: {}, error: null, offline: false };

@@ -1,7 +1,7 @@
 import { cp, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { cacheDir } from "../../content-cache";
+import { cacheDir } from "../../data/content-cache";
 import type { BackendJob, VideoBackend, VideoProfile } from "../backend";
 import { buildCheckout, resolvedPaths, scaffold } from "../checkout";
 import { safeHash, safeRead } from "../copy";
