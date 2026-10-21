@@ -3,17 +3,23 @@
 //  Gnosia
 //
 //  One concept's workspace, in the shape of the web's /learn/<slug> page:
-//  the title, summary and note body; the mastery card (bucket, p(L),
-//  observations, last seen); the review card's schedule state; where the
-//  concept sits in a course; its prerequisites, assumptions, dependants and
-//  backlinks; the note's check blocks with their answered state; and the
-//  assets linked to it, its own note left out.
+//  a header (course place eyebrow, title, the mastery dot with its
+//  caption, and Teach me) over the three-panel WorkspacePanels layout —
+//  the note and sources on the left, the tutor session in the centre,
+//  the studio cards on the right, each column scrolling on its own and
+//  the side pair folding to rails. Narrower windows get the tabbed
+//  layout instead.
 //
 //  concept-workspace-core.ts supplies the shape. One thing the mirror
-//  cannot carry: `observation` events name no concept here, so instead of
-//  the web's per-concept answer history the page shows the mastery row's
-//  own aggregate (which the pipeline replay stamps) and each check's
-//  status matched by question text across all observations.
+//  cannot carry: `observation` events name no concept here, so instead
+//  of the web's per-concept answer history the page shows the mastery
+//  row's own aggregate (which the pipeline replay stamps) and each
+//  check's status matched by question text across all observations.
+//
+//  Teach me and the checks card's Quiz me both point at the centre
+//  panel's session — learn mode and check mode respectively — rather
+//  than pushing the standalone session page; that route still works
+//  everywhere it did (the close screen's Keep going, Home's threads).
 //
 
 import SwiftUI
@@ -22,29 +28,37 @@ struct ConceptDetailView: View {
     @Environment(CatalogStore.self) private var store
     let concept: CatalogConcept
 
+    /// Which panel the narrow tabbed layout shows; wide shows all three.
+    /// Teach me and Quiz me put the tutor forward.
+    @State private var activePanel: WorkspacePanelKey = .note
+    /// The embedded session's mode — Teach me runs learn, Quiz me check.
+    @State private var tutorMode: SessionMode = .learn
+    /// Bumped to restart the embedded walk: a new TutorPanel mounts, the
+    /// way a fresh visit to the web's session page starts clean.
+    @State private var tutorEpoch = 0
+
     private var workspace: ConceptWorkspace? {
         store.workspace(for: concept.slug)
     }
 
     var body: some View {
-        ScrollView {
+        VStack(spacing: 0) {
             if let workspace {
-                VStack(alignment: .leading, spacing: 20) {
-                    header(workspace)
-                    stats(workspace)
-                    if let body = workspace.body, !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        NoteBodyView(source: body, stripTitle: workspace.title)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    } else {
-                        noBodyNote
-                    }
-                    if !workspace.checks.isEmpty { checksSection(workspace) }
-                    graphSection(workspace)
-                    if !workspace.assets.isEmpty { assetsSection(workspace) }
-                    metaSection(workspace)
+                header(workspace)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 16)
+                    .padding(.bottom, 12)
+
+                WorkspacePanels(active: $activePanel) {
+                    NoteSourcesPanel(w: workspace)
+                } tutor: {
+                    TutorPanel(slug: workspace.slug, mode: tutorMode, embedded: true)
+                        .id("\(workspace.slug)\u{1f}\(tutorMode.rawValue)\u{1f}\(tutorEpoch)")
+                } studio: {
+                    StudioPanel(w: workspace, quizMe: { startTutor(.check) })
                 }
-                .padding(24)
-                .frame(maxWidth: 720, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 16)
             } else {
                 ContentUnavailableView(
                     "No workspace data",
@@ -53,16 +67,35 @@ struct ConceptDetailView: View {
                 )
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(G.page)
         .navigationTitle(concept.title)
     }
 
-    /// Title, domain and course placement, and the summary.
+    /// Point the centre panel at a session — mode, fresh walk, and on
+    /// the narrow layout its tab forward. The web's navigation to the
+    /// session page, for a session that lives in the workspace.
+    private func startTutor(_ mode: SessionMode) {
+        tutorMode = mode
+        tutorEpoch += 1
+        activePanel = .tutor
+    }
+
+    /// The page's header: the course place or the honest "not in a
+    /// course yet" as the eyebrow, then title, mastery and Teach me on
+    /// one row, with the frontier flag and the note's tags as the quiet
+    /// line under it — the web's header block.
     @ViewBuilder
     private func header(_ w: ConceptWorkspace) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                BucketDot(bucket: w.bucket)
-                Text(w.title).font(.title2).bold()
+            Text(placeEyebrow(w))
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(G.text2)
+
+            HStack(alignment: .center, spacing: 10) {
+                Text(w.title)
+                    .font(.gnosiaTitle(24))
+                    .lineLimit(2)
                 if w.frontier {
                     Text("On your frontier")
                         .font(.caption)
@@ -71,10 +104,18 @@ struct ConceptDetailView: View {
                         .background(.green.opacity(0.15), in: Capsule())
                         .foregroundStyle(.green)
                 }
-                Spacer(minLength: 4)
-                // The web workspace's "Teach me" — starts the concept
-                // session (probe, teach, check) over the sidecar.
-                NavigationLink(value: AppDestination.session(concept: w.slug)) {
+                Spacer(minLength: 8)
+                // The web's MasteryDot with its label — the bucket's dot
+                // and caption in one mark.
+                HStack(spacing: 6) {
+                    BucketDot(bucket: w.bucket)
+                    Text(masteryCaption(bucket: w.bucket, pL: w.pL))
+                        .font(.caption)
+                        .foregroundStyle(G.text2)
+                }
+                // The web workspace's Teach me — runs the concept
+                // session (probe, teach, check) in the centre panel.
+                Button { startTutor(.learn) } label: {
                     Text("Teach me")
                         .font(.callout.weight(.semibold))
                         .foregroundStyle(G.btnText)
@@ -84,253 +125,41 @@ struct ConceptDetailView: View {
                 }
                 .buttonStyle(.plain)
             }
+
             HStack(spacing: 8) {
-                Text(masteryCaption(bucket: w.bucket, pL: w.pL))
-                if let domain = w.domain { Text("· \(domain)") }
+                if let domain = w.domain { Text(domain) }
                 if let place = w.place {
-                    Text("·")
                     NavigationLink(value: AppDestination.module(course: place.courseSlug, module: place.moduleSlug)) {
                         Text(place.label)
                             .underline()
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
+                }
+                if !w.tags.isEmpty {
+                    Text(w.tags.map { "#\($0)" }.joined(separator: "  "))
                 }
             }
             .font(.callout)
-            .foregroundStyle(.secondary)
-            if !w.summary.isEmpty {
-                Text(w.summary).font(.body)
-            }
-            if !w.tags.isEmpty {
-                Text(w.tags.map { "#\($0)" }.joined(separator: "  "))
+            .foregroundStyle(G.text2)
+
+            // The web page's caveat under Teach me when a session can ask
+            // nothing. The mirror cannot see the provider keys, so the
+            // honest half is the note's side: with no checks every
+            // question is the tutor's to write.
+            if w.checks.isEmpty {
+                Text("This note has no checks — a session's questions are the tutor's to write, so nothing may be recorded.")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(G.text3)
             }
         }
     }
 
-    /// The standing numbers: observations and correct, last seen, and the
-    /// review card's schedule — the web's two rail cards in one row.
-    @ViewBuilder
-    private func stats(_ w: ConceptWorkspace) -> some View {
-        HStack(alignment: .top, spacing: 24) {
-            GroupBox("Mastery") {
-                VStack(alignment: .leading, spacing: 6) {
-                    stat("p(L)", w.bucket == .untouched ? "–" : String(format: "%.2f", w.pL))
-                    stat("Observations", "\(w.observations)")
-                    stat("Correct", "\(w.correct)")
-                    stat("Last seen", lastSeenLabel(w.lastSeen))
-                }
-                .padding(4)
-                .frame(minWidth: 150, alignment: .leading)
-            }
-            GroupBox("Review") {
-                VStack(alignment: .leading, spacing: 6) {
-                    if let review = w.review {
-                        let due = dueLabel(review.due)
-                        stat("Due", due.label)
-                        stat("Interval", formatInterval(Int(review.intervalDays)))
-                        stat("Ease", String(format: "%.2f", review.ease))
-                        stat("Repetitions", "\(review.repetitions)")
-                        stat("Lapses", review.leech ? "\(review.lapses) — keeps slipping" : "\(review.lapses)")
-                    } else {
-                        Text("Not scheduled")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(4)
-                .frame(minWidth: 170, alignment: .leading)
-            }
-        }
-    }
-
-    private func stat(_ label: String, _ value: String) -> some View {
-        HStack {
-            Text(label).foregroundStyle(.secondary)
-            Spacer()
-            Text(value).monospacedDigit()
-        }
-        .font(.callout)
-    }
-
-    /// A concept without a note body still has a workspace — the mirror
-    /// says why honestly.
-    private var noBodyNote: some View {
-        Text("The concept row was mirrored without a note body — an older snapshot, or a note never indexed.")
-            .font(.callout)
-            .foregroundStyle(.secondary)
-    }
-
-    /// The note's checks, each with the state the latest matching
-    /// observation left it in.
-    @ViewBuilder
-    private func checksSection(_ w: ConceptWorkspace) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Checks").font(.headline)
-            ForEach(w.checks, id: \.check.id) { wc in
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 6) {
-                        Image(systemName: checkSymbol(wc.status))
-                            .foregroundStyle(checkColor(wc.status))
-                        Text(wc.check.question).font(.callout)
-                    }
-                    if !wc.check.answer.isEmpty {
-                        Text(wc.check.answer)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .padding(.leading, 22)
-                    }
-                }
-                .padding(.vertical, 2)
-            }
-            // The Checks card's Quiz me — the session's `?mode=check`:
-            // the note's checks as questions, no teaching. The web
-            // disables it when the note has no checks; here the section
-            // itself is absent then, so the button needn't be.
-            NavigationLink(value: AppDestination.session(concept: w.slug, mode: .check)) {
-                Text("Quiz me")
-                    .font(.callout.weight(.medium))
-                    .foregroundStyle(G.text)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(G.surface, in: RoundedRectangle(cornerRadius: 8))
-                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(G.border, lineWidth: 1))
-            }
-            .buttonStyle(.plain)
-            Text("Answered state is matched by question text — the mirrored observations name no concept.")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-        }
-    }
-
-    private func checkSymbol(_ status: CheckStatus) -> String {
-        switch status {
-        case .passed: return "checkmark.circle.fill"
-        case .missed: return "xmark.circle.fill"
-        case .untried: return "circle"
-        }
-    }
-
-    private func checkColor(_ status: CheckStatus) -> Color {
-        switch status {
-        case .passed: return .green
-        case .missed: return .red
-        case .untried: return .secondary
-        }
-    }
-
-    /// What the concept needs, what it assumes, what needs it and the rest
-    /// of the graph's backlinks — the web workspace's graph panels as chip
-    /// lists that push to each concept's own page.
-    @ViewBuilder
-    private func graphSection(_ w: ConceptWorkspace) -> some View {
-        if !w.requires.isEmpty || !w.assumes.isEmpty || !w.dependants.isEmpty || !w.backlinks.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
-                if !w.requires.isEmpty { neighbours("Prerequisites", w.requires) }
-                if !w.assumes.isEmpty { neighbours("Assumes", w.assumes) }
-                if !w.dependants.isEmpty { neighbours("Needed by", w.dependants) }
-                if !w.backlinks.isEmpty { neighbours("Backlinks", w.backlinks) }
-            }
-        }
-    }
-
-    private func neighbours(_ title: String, _ refs: [NeighbourRef]) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.headline)
-            FlowLayout(spacing: 6) {
-                ForEach(refs) { ref in
-                    NavigationLink(value: AppDestination.concept(ref.slug)) {
-                        HStack(spacing: 5) {
-                            BucketDot(bucket: ref.bucket)
-                            Text(ref.title).font(.callout)
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(.quaternary.opacity(0.5), in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-    }
-
-    /// The assets linked to the concept — the web workspace's asset list,
-    /// each opening its own detail pane.
-    @ViewBuilder
-    private func assetsSection(_ w: ConceptWorkspace) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Linked assets").font(.headline)
-            ForEach(w.assets) { asset in
-                NavigationLink(value: AppDestination.asset(asset.id)) {
-                    HStack(spacing: 8) {
-                        Image(systemName: assetKindSymbol(asset.kind))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 18)
-                        Text(store.displayTitle(for: asset))
-                            .font(.callout)
-                            .lineLimit(1)
-                        Spacer()
-                        Text(assetKindLabel(asset.kind))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.vertical, 2)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
-
-    /// The sources the note cites, and where the note would live.
-    @ViewBuilder
-    private func metaSection(_ w: ConceptWorkspace) -> some View {
-        if !w.sources.isEmpty {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Sources").font(.headline)
-                ForEach(w.sources, id: \.self) { source in
-                    Text(source).font(.caption).foregroundStyle(.secondary)
-                }
-            }
-        }
-    }
-}
-
-/// Chips laid out left to right, wrapping — the one layout SwiftUI does
-/// not give a FlowLayout-shaped thing itself.
-private struct FlowLayout: Layout {
-    var spacing: CGFloat = 6
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let width = proposal.width ?? .infinity
-        var x: CGFloat = 0, y: CGFloat = 0, row: CGFloat = 0
-        for view in subviews {
-            let size = view.sizeThatFits(.unspecified)
-            if x + size.width > width, x > 0 {
-                x = 0
-                y += row + spacing
-                row = 0
-            }
-            row = max(row, size.height)
-            x += size.width + spacing
-        }
-        return CGSize(width: width, height: y + row)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var x = bounds.minX, y = bounds.minY, row: CGFloat = 0
-        for view in subviews {
-            let size = view.sizeThatFits(.unspecified)
-            if x + size.width > bounds.maxX, x > bounds.minX {
-                x = bounds.minX
-                y += row + spacing
-                row = 0
-            }
-            view.place(at: CGPoint(x: x, y: y), proposal: .unspecified)
-            row = max(row, size.height)
-            x += size.width + spacing
-        }
+    /// The eyebrow's words — the web's `placeLabel(w.place) ?? domain ·
+    /// not in a course yet`, and the place itself also sits under the
+    /// title as the link it always was.
+    private func placeEyebrow(_ w: ConceptWorkspace) -> String {
+        if let place = w.place { return place.label }
+        if let domain = w.domain { return "\(domain) · not in a course yet" }
+        return "Not in a course yet"
     }
 }
