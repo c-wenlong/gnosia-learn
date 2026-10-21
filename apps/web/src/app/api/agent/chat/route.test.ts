@@ -466,7 +466,7 @@ describe("POST /api/agent/chat with assetId", () => {
     expect(res.status).toBe(200);
     expect(readAssetText.mock.calls[0][1]).toBe(NOTE);
     const sent = completeWithFallback.mock.calls[0][0] as { role: string; content: string }[];
-    expect(sent[0].content).toContain("# Self-Learn note Ask");
+    expect(sent[0].content).toContain("# Gnosia note Ask");
     expect(sent[0].content).toContain("It measures how aligned two vectors are.");
     expect(sent[0].content).toContain("It explains: dot-product.");
   });
@@ -488,7 +488,7 @@ describe("POST /api/agent/chat with assetId", () => {
     expect(res.status).toBe(200);
     expect(readAssetText.mock.calls[0][2]).toBeGreaterThan(1024 * 1024);
     const sent = completeWithFallback.mock.calls[0][0] as { role: string; content: string }[];
-    expect(sent[0].content).toContain("# Self-Learn diagram Ask");
+    expect(sent[0].content).toContain("# Gnosia diagram Ask");
     expect(sent[0].content).toContain("standard axes\n[ 1, 3 ]");
     expect(sent[0].content).not.toContain("base64");
     expect(sent[0].content).toContain("arrows, positions and grouping are not in them");
