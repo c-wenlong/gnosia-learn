@@ -3,6 +3,8 @@ import { copyFile, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import { bigint, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+
 import { MIGRATIONS_FOLDER } from "../src/migrations";
 
 /**
@@ -23,6 +25,17 @@ export async function partialMigrations(count = 2): Promise<string> {
 }
 
 /**
+ * Every migration but the ones named, in the journal's order: a database
+ * current except for the migration a suite is about. asset-names.test.ts
+ * drops 0024, which makes `asset_name`, so the reads and `writeAssetName`
+ * take their no-`asset_name` paths while `insert(asset)` still sees today's
+ * table.
+ */
+export async function withoutMigration(...dropped: string[]): Promise<string> {
+  return migrationsWhere((tag) => !dropped.includes(tag));
+}
+
+/**
  * Every migration but phase 2's contract, 0013: a database holding the rows
  * the contract forbids (a stored-kind asset with a path and no blob) that has
  * had every other migration since. A suite that writes content through
@@ -36,8 +49,35 @@ export async function partialMigrations(count = 2): Promise<string> {
  * `asset_kind_check` itself, as asset-upload.test.ts does.
  */
 export async function withoutBlobContract(): Promise<string> {
-  return migrationsWhere((tag) => tag !== "0013_asset_blob_contract" && tag !== "0030_nebulous_lester");
+  return withoutMigration("0013_asset_blob_contract", "0030_nebulous_lester");
 }
+
+/**
+ * `asset` as a database stopped before 0031 has it: today's columns minus
+ * `inputs_hash`, the column 0031 (`brown_rictor`) adds.
+ *
+ * `db.insert(asset)` names every column of today's schema, so against a
+ * database left behind it dies on `inputs_hash` whatever the row holds. A
+ * row written into such a database (a stored-kind asset with a path and no
+ * blob, which only a database stopped before 0013 admits) goes in through
+ * this table instead. Only the columns are declared; the checks and keys on
+ * the real table still judge what the row is.
+ */
+export const assetBefore0031 = pgTable("asset", {
+  id: text("id").primaryKey(),
+  kind: text("kind").notNull(),
+  path: text("path"),
+  url: text("url"),
+  contentHash: text("content_hash"),
+  bytes: bigint("bytes", { mode: "number" }),
+  title: text("title"),
+  sourceRepo: text("source_repo").notNull(),
+  blobKey: text("blob_key"),
+  resourceType: text("resource_type"),
+  ownerId: text("owner_id").notNull().default("local"),
+  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+});
 
 /** A migrations folder holding the journal's entries `keep` accepts, in order. */
 async function migrationsWhere(keep: (tag: string, index: number) => boolean): Promise<string> {

@@ -10,7 +10,7 @@ import { asset, assetDerivation, blobObject } from "@self-learn/schema";
 import { eq } from "drizzle-orm";
 
 import { applyMigrations } from "../../../../../../services/catalog/src/migrations";
-import { BEFORE_BLOB_CONTRACT, partialMigrations } from "../../../../../../services/catalog/test/partial-migrations";
+import { assetBefore0031, BEFORE_BLOB_CONTRACT, partialMigrations } from "../../../../../../services/catalog/test/partial-migrations";
 import {
   createScratchDatabase,
   probe,
@@ -99,7 +99,9 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
     scratch = await createScratchDatabase();
     // At 0012: the diagram SVG with no blob, whose not-uploaded hint this
     // checks, is a row the contract (0013) forbids. Every other row here
-    // carries a blob and would pass it.
+    // carries a blob and would pass it. Rows go in through `assetBefore0031`,
+    // since `insert(asset)` names `inputs_hash`, a column this schema has not
+    // grown (0031).
     await applyMigrations(scratch.db, { folder: await partialMigrations(BEFORE_BLOB_CONTRACT) });
     home = await mkdtemp(path.join(tmpdir(), "asset-blob-"));
     process.env.DATABASE_URL = scratch.url;
@@ -126,7 +128,7 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
       sourceRepo: "manimkc",
       blobKey: key,
     });
-    await scratch.db.insert(asset).values([
+    await scratch.db.insert(assetBefore0031).values([
       video(VIDEO_ID, "out/algorithms/demo/demo.mp4", videoKey, VIDEO),
       video(PENDING_ID, "out/algorithms/demo/pending.mp4", pendingKey, pendingBytes),
       video(LOST_ID, "out/algorithms/demo/lost.mp4", lostKey, lostBytes),
@@ -322,7 +324,7 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
   it("reads a stored transcript's text for the page", async () => {
     const text = Buffer.from('{"cues":[{"text":"hello"}]}');
     const key = await stored(text, "json");
-    await scratch.db.insert(asset).values({
+    await scratch.db.insert(assetBefore0031).values({
       id: "manimkc:out/algorithms/demo/demo.transcript.json",
       kind: "transcript",
       path: "out/algorithms/demo/demo.transcript.json",
