@@ -689,6 +689,122 @@ final class LearnerStore {
             ])
     }
 
+    // MARK: - Review grades
+
+    /// The web's `POST /api/review/grade` as a local write — gradeReview's
+    /// transaction in services/catalog/src/state/review.ts: a `review`
+    /// event first, then the card rescheduled and the concept's mastery
+    /// entry moved, one commit so a half-written grade cannot leave the
+    /// model ahead of the log it came from. No session row: a review
+    /// grade stands alone, the way `learn review grade` writes one.
+    ///
+    /// Returns the rating now on record for this requestId — the one the
+    /// write asked for, or on a replay the first write's, since a review
+    /// event cannot be deleted and a double count would be permanent —
+    /// or nil when the write failed, `error` saying why and the caller
+    /// keeping the card for the retry. The Postgres mirror queues in the
+    /// same commit with the route's own body: `grade` there is the
+    /// rating, the button pressed, which the server maps onto SM-2.
+    @discardableResult
+    func recordReviewGrade(_ write: ReviewGradeWrite) -> ReviewRating? {
+        var grade = write.grade
+        let ok = self.write(mirror: MirrorCall(
+            path: "/api/review/grade",
+            dedupeKey: "review-grade:\(write.requestId)",
+            body: ["conceptId": write.conceptId, "grade": write.rating, "requestId": write.requestId]
+        )) { db in
+            grade = try applyReviewGrade(db, write)
+        }
+        return ok ? ratingForGrade(grade) : nil
+    }
+
+    /// The inserts recordReviewGrade wraps in its transaction — split out
+    /// for the same reason applySessionAnswer is, and answering the grade
+    /// on record so a replay reports the first write's, not the retry's.
+    private func applyReviewGrade(_ db: WritableDatabase, _ write: ReviewGradeWrite) throws -> Int {
+        let at = write.at.timeIntervalSince1970
+
+        // gradeReview's replay check, inside the transaction as the web's
+        // is inside the learner lock: a second call naming the same
+        // requestId writes nothing and the first grade stands. The local
+        // event table has no concept column — it is the mirror's flat
+        // shape — so the match is inside the payload each row carries.
+        if !write.requestId.isEmpty {
+            let rows = try db.query(
+                "SELECT payload FROM event WHERE learner_id = 'local' AND type = 'review'")
+            while rows.next() {
+                guard
+                    let text = rows.text(0),
+                    let data = text.data(using: .utf8),
+                    let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                    payload["requestId"] as? String == write.requestId,
+                    payload["concept"] as? String == write.conceptId
+                else { continue }
+                return (payload["grade"] as? NSNumber)?.intValue ?? write.grade
+            }
+        }
+
+        // The `review` event — appendEvent's flat record: the concept,
+        // the SM-2 grade and the BKT move in payload, the instant in the
+        // row's own `at`, so `review rebuild` replays a grade written
+        // here exactly as it does one from the web or the CLI.
+        try db.run(
+            "INSERT INTO event (at, learner_id, type, payload) VALUES (?, 'local', 'review', ?)",
+            [
+                .real(at),
+                .text(Self.json([
+                    "concept": write.conceptId,
+                    "grade": write.grade,
+                    "pLBefore": write.pLBefore,
+                    "pLAfter": write.pLAfter,
+                    "requestId": write.requestId,
+                ])),
+            ]
+        )
+
+        // upsertReview: the card as SM-2 left it, the same columns the
+        // snapshot's review mirror carries.
+        let card = write.card
+        try db.run("""
+            INSERT INTO review (learner_id, concept_slug, repetitions, ease, interval_days,
+                lapses, due, last_reviewed, leech, created_at, updated_at)
+            VALUES ('local', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (learner_id, concept_slug) DO UPDATE SET
+                repetitions = excluded.repetitions, ease = excluded.ease,
+                interval_days = excluded.interval_days, lapses = excluded.lapses,
+                due = excluded.due, last_reviewed = excluded.last_reviewed,
+                leech = excluded.leech, updated_at = excluded.updated_at
+            """,
+            [
+                .text(card.conceptSlug), .int(card.repetitions), .real(card.ease),
+                .int(card.intervalDays), .int(card.lapses), .real(card.due.timeIntervalSince1970),
+                .real((card.lastReviewed ?? write.at).timeIntervalSince1970), .int(card.leech ? 1 : 0),
+                .real(at), .real(at),
+            ])
+
+        // writeModel's one changed row — the concept's entry as BKT moved
+        // it. Every other entry the model holds is already in the file,
+        // so the single upsert is all the write owes.
+        let entry = write.mastery
+        try db.run("""
+            INSERT INTO mastery (learner_id, concept_slug, p_l, observations, correct,
+                last_seen, created_at, updated_at)
+            VALUES ('local', ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (learner_id, concept_slug) DO UPDATE SET
+                p_l = excluded.p_l, observations = excluded.observations,
+                correct = excluded.correct, last_seen = excluded.last_seen,
+                updated_at = excluded.updated_at
+            """,
+            [
+                .text(entry.conceptSlug), .real(entry.pL), .int(entry.observations),
+                .int(entry.correct),
+                entry.lastSeen.map { Bind.real($0.timeIntervalSince1970) } ?? .null,
+                .real(at), .real(at),
+            ])
+
+        return write.grade
+    }
+
     /// JSONSerialization of a small payload, "" on failure — a payload that
     /// will not encode has no business landing as `{}` pretending to be one.
     private static func json(_ object: [String: Any]) -> String {
