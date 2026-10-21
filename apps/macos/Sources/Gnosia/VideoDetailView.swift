@@ -28,6 +28,17 @@ struct VideoDetailView: View {
     @State private var transcript: [TranscriptSegment] = []
     /// The last position the player reported; what "Mark watched" stamps.
     @State private var playhead: Double = 0
+    /// The inspector's Ask fold and the thread it is holding.
+    @State private var asking = false
+    @State private var ask = AssetAskModel()
+    /// The per-second playhead for Ask's `at` — a box rather than @State,
+    /// so the tick updates without re-rendering the page.
+    @State private var live = LivePlayhead()
+
+    /// The mutable holder the player's per-second tick writes through.
+    private final class LivePlayhead {
+        var seconds = 0.0
+    }
 
     private var companions: VideoCompanions { store.companions(for: asset.id) }
 
@@ -77,6 +88,9 @@ struct VideoDetailView: View {
                             resumeAt: resumePoint,
                             onPosition: { position, duration in
                                 save(position: position, duration: duration)
+                            },
+                            onPlayhead: { seconds in
+                                live.seconds = seconds
                             }
                         )
                             .aspectRatio(16.0 / 9.0, contentMode: .fit)
@@ -104,10 +118,30 @@ struct VideoDetailView: View {
             .padding(20)
         }
         .navigationTitle(store.displayTitle(for: asset))
-        .onChange(of: asset.id) { pane = .video; playhead = 0 }
+        // Ask lives in the trailing inspector column: the player stays on
+        // screen while the chat runs, where a sheet would cover it.
+        .inspector(isPresented: $asking) {
+            AssetAskPanel(
+                assetId: asset.id,
+                subject: "video",
+                position: { live.seconds },
+                model: ask
+            )
+            .inspectorColumnWidth(min: 280, ideal: 340, max: 480)
+        }
+        .onChange(of: asset.id) {
+            pane = .video
+            playhead = 0
+            asking = false
+            ask = AssetAskModel()
+            live.seconds = 0
+        }
         .task(id: asset.id) {
             chapters = store.chapters(for: asset.id)
             transcript = store.transcript(for: asset.id)
+            // Seed Ask's `at` with the resume point — a question asked
+            // before the first tick still lands where playback starts.
+            live.seconds = resumePoint
         }
     }
 
@@ -189,9 +223,10 @@ struct VideoDetailView: View {
                 if companions.hasCaptions { chip("captions", systemImage: "captions.bubble") }
             }
 
-            // The web watch page's action pills: the star and the mark.
+            // The web watch page's action pills: the star, Ask and the mark.
             HStack(spacing: 10) {
                 FavoriteButton(assetID: asset.id)
+                AssetAskButton(asking: $asking, subject: "video")
                 MarkDoneButton(asset: asset, seconds: playhead)
             }
             .buttonStyle(.bordered)

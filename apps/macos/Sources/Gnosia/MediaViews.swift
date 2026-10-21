@@ -33,6 +33,11 @@ struct PlayerView: NSViewRepresentable {
     /// swap, which is the detail pane's version of a page navigation.
     var resumeAt: Double = 0
     var onPosition: @MainActor (Double, Double) -> Void = { _, _ in }
+    /// The live playhead in seconds, about once a second — far finer than
+    /// the heartbeat above, which lags up to fifteen seconds. The detail
+    /// pane reads it for Ask's `at`, so a mid-watch question grounds at
+    /// where the learner actually is rather than the last save.
+    var onPlayhead: @MainActor (Double) -> Void = { _ in }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -40,7 +45,7 @@ struct PlayerView: NSViewRepresentable {
         let view = AVPlayerView()
         view.controlsStyle = .floating
         view.player = AVPlayer(url: url)
-        context.coordinator.arm(view, onPosition: onPosition)
+        context.coordinator.arm(view, onPosition: onPosition, onPlayhead: onPlayhead)
         if resumeAt > 0 {
             view.player?.seek(to: CMTime(seconds: resumeAt, preferredTimescale: 600))
         }
@@ -58,12 +63,13 @@ struct PlayerView: NSViewRepresentable {
             context.coordinator.report(view)
             context.coordinator.disarm()
             view.player = AVPlayer(url: url)
-            context.coordinator.arm(view, onPosition: onPosition)
+            context.coordinator.arm(view, onPosition: onPosition, onPlayhead: onPlayhead)
             if resumeAt > 0 {
                 view.player?.seek(to: CMTime(seconds: resumeAt, preferredTimescale: 600))
             }
         }
         context.coordinator.onPosition = onPosition
+        context.coordinator.onPlayhead = onPlayhead
         if let seconds = seekTo {
             view.player?.seek(to: CMTime(seconds: seconds, preferredTimescale: 600))
             DispatchQueue.main.async { self.seekTo = nil }
@@ -84,9 +90,14 @@ struct PlayerView: NSViewRepresentable {
     @MainActor
     final class Coordinator {
         var onPosition: (Double, Double) -> Void = { _, _ in }
+        var onPlayhead: (Double) -> Void = { _ in }
         private var timer: Timer?
         private var endObserver: NSObjectProtocol?
         private var pauseObservation: NSKeyValueObservation?
+        /// The periodic observer the per-second playhead tick comes from;
+        /// its player is kept beside the token because removing it is that
+        /// player's call.
+        private var playheadObserver: (player: AVPlayer, token: Any)?
 
         /// The playhead and the item's length, told to onPosition when both
         /// are known — a video still loading has nothing to write yet.
@@ -100,8 +111,13 @@ struct PlayerView: NSViewRepresentable {
 
         /// Point every edge at the player the view holds now; the timer is
         /// (re)started rather than shared so a stale one never reports.
-        func arm(_ view: AVPlayerView, onPosition: @escaping @MainActor (Double, Double) -> Void) {
+        func arm(
+            _ view: AVPlayerView,
+            onPosition: @escaping @MainActor (Double, Double) -> Void,
+            onPlayhead: @escaping @MainActor (Double) -> Void
+        ) {
             self.onPosition = onPosition
+            self.onPlayhead = onPlayhead
             timer?.invalidate()
             timer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self, weak view] _ in
                 guard let view, (view.player?.rate ?? 0) > 0 else { return }
@@ -111,7 +127,25 @@ struct PlayerView: NSViewRepresentable {
             endObserver = nil
             pauseObservation?.invalidate()
             pauseObservation = nil
+            if let playheadObserver {
+                playheadObserver.player.removeTimeObserver(playheadObserver.token)
+                self.playheadObserver = nil
+            }
             guard let player = view.player else { return }
+            // A periodic observer over a second timer: it also reports the
+            // paused seeks a timer would miss, and costs nothing while the
+            // player is idle.
+            playheadObserver = (
+                player,
+                player.addPeriodicTimeObserver(
+                    forInterval: CMTime(seconds: 1, preferredTimescale: 600),
+                    queue: .main
+                ) { [weak self] time in
+                    let seconds = time.seconds
+                    guard seconds.isFinite else { return }
+                    MainActor.assumeIsolated { self?.onPlayhead(seconds) }
+                }
+            )
             endObserver = NotificationCenter.default.addObserver(
                 forName: .AVPlayerItemDidPlayToEndTime, object: player.currentItem, queue: .main
             ) { [weak self, weak view] _ in
@@ -131,6 +165,10 @@ struct PlayerView: NSViewRepresentable {
             endObserver = nil
             pauseObservation?.invalidate()
             pauseObservation = nil
+            if let playheadObserver {
+                playheadObserver.player.removeTimeObserver(playheadObserver.token)
+                self.playheadObserver = nil
+            }
         }
     }
 }

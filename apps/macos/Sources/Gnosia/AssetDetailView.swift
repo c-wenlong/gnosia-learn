@@ -52,6 +52,9 @@ struct AssetDetailView: View {
 private struct DetailHeader: View {
     @Environment(CatalogStore.self) private var store
     let asset: CatalogAsset
+    /// The Ask fold's toggle binding, handed down only by the kinds Ask
+    /// answers (note, diagram) — nil for every other kind.
+    var asking: Binding<Bool>? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -70,6 +73,9 @@ private struct DetailHeader: View {
             }
             HStack(spacing: 10) {
                 FavoriteButton(assetID: asset.id)
+                if let asking, let subject = askSubject(of: asset.kind) {
+                    AssetAskButton(asking: asking, subject: subject)
+                }
                 MarkDoneButton(asset: asset)
             }
             .buttonStyle(.bordered)
@@ -194,12 +200,15 @@ private struct CueList: View {
 private struct ScrollingPane<Content: View>: View {
     @Environment(CatalogStore.self) private var store
     let asset: CatalogAsset
+    /// The Ask fold's toggle, forwarded to the header — only the askable
+    /// kinds set it.
+    var asking: Binding<Bool>? = nil
     @ViewBuilder let content: Content
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                DetailHeader(asset: asset)
+                DetailHeader(asset: asset, asking: asking)
                 content
                 DetailsBox(asset: asset)
             }
@@ -271,9 +280,13 @@ private struct SidecarDetail: View {
 private struct NoteDetail: View {
     @Environment(CatalogStore.self) private var store
     let asset: CatalogAsset
+    /// The Ask fold and its thread — the web's AskableTitle puts the same
+    /// chat under this asset's title row.
+    @State private var asking = false
+    @State private var ask = AssetAskModel()
 
     var body: some View {
-        ScrollingPane(asset: asset) {
+        ScrollingPane(asset: asset, asking: $asking) {
             if let markdown = store.noteBody(for: asset) {
                 MarkdownText(source: markdown)
             } else {
@@ -283,6 +296,14 @@ private struct NoteDetail: View {
                     description: Text("The concept row this note renders was not mirrored, or the link is missing.")
                 )
             }
+        }
+        .inspector(isPresented: $asking) {
+            AssetAskPanel(assetId: asset.id, subject: "note", model: ask)
+                .inspectorColumnWidth(min: 280, ideal: 340, max: 480)
+        }
+        .onChange(of: asset.id) {
+            asking = false
+            ask = AssetAskModel()
         }
     }
 }
@@ -409,9 +430,13 @@ private struct DiagramDetail: View {
     @Environment(CatalogStore.self) private var store
     let asset: CatalogAsset
     @State private var svg: String?
+    /// The Ask fold and its thread — the web's AskableTitle puts the same
+    /// chat under this asset's title row.
+    @State private var asking = false
+    @State private var ask = AssetAskModel()
 
     var body: some View {
-        ScrollingPane(asset: asset) {
+        ScrollingPane(asset: asset, asking: $asking) {
             if let svg {
                 SVGView(svg: svg)
                     .aspectRatio(Self.aspect(of: svg), contentMode: .fit)
@@ -421,6 +446,14 @@ private struct DiagramDetail: View {
                     .frame(minHeight: 240)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
             }
+        }
+        .inspector(isPresented: $asking) {
+            AssetAskPanel(assetId: asset.id, subject: "diagram", model: ask)
+                .inspectorColumnWidth(min: 280, ideal: 340, max: 480)
+        }
+        .onChange(of: asset.id) {
+            asking = false
+            ask = AssetAskModel()
         }
         // Read in a task rather than in body, so a re-render does not
         // re-read the file.
