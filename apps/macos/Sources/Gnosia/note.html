@@ -1,0 +1,186 @@
+<!doctype html>
+<!--
+  The note body's renderer: markdown blocks arrive from Swift already split
+  (the same parse MarkdownText runs); this page does the inline half —
+  code spans, emphasis, links, wikilinks, embeds and the $…$ / $$…$$ maths —
+  and typesets the maths with the bundled KaTeX, the same renderer the web
+  app runs on this content (lib/math.ts options included). The page reports
+  its own height after every layout so the Swift side can size the frame;
+  it never scrolls itself.
+-->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="katex/katex.min.css">
+<style>
+  :root {
+    --fg: #15283a; --muted: #605b54; --faint: #878276;
+    --border: #e6dfd0; --codebg: #f3eee1; --accent: #0f5f61;
+    --danger: #c43939; --sel: rgba(20, 130, 133, .25);
+  }
+  html, body { margin: 0; padding: 0; overflow: hidden; background: transparent; }
+  body {
+    font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+    color: var(--fg);
+    overflow-wrap: break-word;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3, h4 { font-weight: 700; line-height: 1.3; color: var(--fg); }
+  h1 { font-size: 20px; margin: 1.2em 0 .4em; }
+  h2 { font-size: 16px; margin: 1.25em 0 .4em; }
+  h3, h4 { font-size: 14px; margin: 1.2em 0 .35em; }
+  h1:first-child, h2:first-child, h3:first-child, p:first-child { margin-top: 0; }
+  p { margin: .35em 0 .8em; }
+  ul { margin: .3em 0 .8em; padding-left: 1.35em; }
+  li { margin: .18em 0; }
+  pre {
+    background: var(--codebg); border: 1px solid var(--border);
+    border-radius: 7px; padding: 9px 11px; margin: .4em 0 .9em;
+    font: 12px/1.55 ui-monospace, Menlo, monospace;
+    overflow-x: auto; white-space: pre;
+  }
+  code { font: .88em ui-monospace, Menlo, monospace; background: var(--codebg); border-radius: 4px; padding: .08em .3em; }
+  pre code { background: none; padding: 0; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 1.1em 0; }
+  a { color: var(--accent); }
+  .wl, .embed { color: var(--muted); }
+  .embed { border: 1px dashed var(--border); border-radius: 5px; padding: 0 .4em; font-size: .86em; }
+  .katex { font-size: 1.05em; }
+  .katex-display { margin: .55em 0 .95em; overflow-x: auto; overflow-y: hidden; padding: .1em 0; }
+  .merr { color: var(--danger); font: .88em ui-monospace, Menlo, monospace; }
+  ::selection { background: var(--sel); }
+</style>
+<body id="root"></body>
+<script src="katex/katex.min.js"></script>
+<script>
+"use strict";
+
+const root = document.getElementById("root");
+
+function esc(s) {
+  return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+
+/* The $ rules from packages/tutor markdown.ts: $$…$$ is display; $…$ is
+   inline only when both dollars hug their content and the closing one is
+   not followed by a digit (so "$5-$10" stays prose); \$ is a literal. */
+const DISPLAY = /^\$\$((?:\\[\s\S]|[^\\$]|\$(?!\$))+?)\$\$/;
+const INLINE = /^\$((?:\\[^\n]|[^\\$\s])(?:(?:\\[^\n]|[^\\$\n])*(?:\\[^\n]|[^\\$\s]))?)\$(?!\d)/;
+
+const KATEX_OPTS = {
+  throwOnError: false, strict: "ignore", output: "htmlAndMathml",
+  trust: false, maxSize: 20, maxExpand: 1000,
+};
+
+function math(source, display) {
+  try {
+    const html = katex.renderToString(source, { ...KATEX_OPTS, displayMode: display });
+    return display ? '<div class="kdisplay">' + html + "</div>" : html;
+  } catch (e) {
+    return '<span class="merr">' + esc(source) + "</span>";
+  }
+}
+
+/* Emphasis, links, wikilinks and embeds on plain prose — everything else
+   (code spans, maths) is already carved out by the callers. */
+function inlineMd(s) {
+  let h = esc(s);
+  h = h.replace(/!\[\[([^\]|]+?)(?:\|([^\]]*))?\]\]/g,
+    (_, name, label) => '<span class="embed">' + esc(label || name) + "</span>");
+  h = h.replace(/\[\[([^\]|]+?)(?:\|([^\]]*))?\]\]/g,
+    (_, target, label) => '<span class="wl">' + esc(label || target) + "</span>");
+  h = h.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  h = h.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
+  h = h.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+|mailto:[^)\s]+)\)/g,
+    (_, text, url) => '<a href="' + url + '">' + text + "</a>");
+  return h;
+}
+
+/* Prose split on maths: each math renders through KaTeX now, prose runs
+   through inlineMd. */
+function mathSpans(text) {
+  let out = "", prose = "", i = 0;
+  while (i < text.length) {
+    const c = text[i];
+    if (c === "\\" && text[i + 1] === "$") { prose += "$"; i += 2; continue; }
+    if (c === "$") {
+      const rest = text.slice(i);
+      if (rest[1] === "$") {
+        const m = DISPLAY.exec(rest);
+        if (m && m[1].trim() !== "") {
+          out += inlineMd(prose); prose = "";
+          out += math(m[1].trim(), true);
+          i += m[0].length; continue;
+        }
+        prose += "$$"; i += 2; continue;
+      }
+      const m = INLINE.exec(rest);
+      if (m) {
+        out += inlineMd(prose); prose = "";
+        out += math(m[1], false);
+        i += m[0].length; continue;
+      }
+    }
+    prose += c; i += 1;
+  }
+  return out + inlineMd(prose);
+}
+
+/* Code spans first, so $…$ inside backticks stays literal code. */
+function renderInline(src) {
+  let out = "", i = 0;
+  const tick = /^(`+)([\s\S]*?)\1/;
+  while (i < src.length) {
+    if (src[i] === "`") {
+      const m = tick.exec(src.slice(i));
+      if (m) { out += "<code>" + esc(m[2]) + "</code>"; i += m[0].length; continue; }
+      out += "`"; i += 1; continue;
+    }
+    const next = src.indexOf("`", i);
+    const piece = next === -1 ? src.slice(i) : src.slice(i, next);
+    out += mathSpans(piece);
+    i += piece.length;
+  }
+  return out;
+}
+
+let lastH = -1;
+function postHeight() {
+  const h = Math.ceil(root.getBoundingClientRect().height);
+  if (h !== lastH) { lastH = h; window.webkit.messageHandlers.gnosia.postMessage({ h: h }); }
+}
+
+function render(blocks) {
+  let html = "", ul = false;
+  for (const b of blocks) {
+    if (b.t === "b") { if (!ul) { html += "<ul>"; ul = true; } html += "<li>" + renderInline(b.s) + "</li>"; continue; }
+    if (ul) { html += "</ul>"; ul = false; }
+    if (b.t === "h") { const l = Math.min(4, Math.max(1, b.l)); html += "<h" + l + ">" + renderInline(b.s) + "</h" + l + ">"; }
+    else if (b.t === "p") html += "<p>" + renderInline(b.s) + "</p>";
+    else if (b.t === "c") html += "<pre><code>" + esc(b.s) + "</code></pre>";
+    else if (b.t === "r") html += "<hr>";
+  }
+  if (ul) html += "</ul>";
+  root.innerHTML = html;
+  requestAnimationFrame(postHeight);
+}
+
+function theme(vars) {
+  for (const k in vars) document.documentElement.style.setProperty("--" + k, vars[k]);
+  requestAnimationFrame(postHeight);
+}
+
+/* One call from Swift carries both, so a theme flip and a new document can
+   never land half-applied. */
+function gnosia(payload) {
+  theme(payload.theme);
+  render(payload.blocks);
+}
+
+new ResizeObserver(postHeight).observe(root);
+document.addEventListener("click", (e) => {
+  const a = e.target.closest("a");
+  if (a) { e.preventDefault(); window.webkit.messageHandlers.gnosia.postMessage({ nav: a.getAttribute("href") }); }
+});
+document.addEventListener("DOMContentLoaded", () =>
+  window.webkit.messageHandlers.gnosia.postMessage({ ready: true }));
+</script>

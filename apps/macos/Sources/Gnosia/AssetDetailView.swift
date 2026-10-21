@@ -288,7 +288,7 @@ private struct NoteDetail: View {
     var body: some View {
         ScrollingPane(asset: asset, asking: $asking) {
             if let markdown = store.noteBody(for: asset) {
-                MarkdownText(source: markdown)
+                NoteBodyView(source: markdown, stripTitle: store.displayTitle(for: asset))
             } else {
                 ContentUnavailableView(
                     "No body in the snapshot",
@@ -308,14 +308,13 @@ private struct NoteDetail: View {
     }
 }
 
-/// A note's markdown as readable text: headings, bullets, fenced code and
-/// paragraphs, with inline emphasis, code and links from AttributedString's
-/// own markdown pass. Deliberately small — no wikilink or embed resolution.
-/// Shared by the note detail and the concept workspace.
-struct MarkdownText: View {
-    let source: String
-
-    private enum Block {
+/// The note-body block split shared by NoteBodyView's renderer: headings,
+/// bullets, fenced code and paragraphs; the inline half (emphasis, maths,
+/// links) is the renderer's. Deliberately small — no wikilink or embed
+/// resolution this side of the webview.
+enum MarkdownText {
+    /// One markdown block; NoteBodyView feeds this split to its renderer.
+    enum Block {
         case heading(Int, String)
         case para(String)
         case bullet(String)
@@ -323,50 +322,10 @@ struct MarkdownText: View {
         case rule
     }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(Array(Self.parse(source).enumerated()), id: \.offset) { _, block in
-                switch block {
-                case .heading(let level, let text):
-                    Text(Self.inline(text))
-                        .font(level <= 1 ? .title3 : level == 2 ? .headline : .subheadline)
-                        .bold()
-                        .padding(.top, 6)
-                case .para(let text):
-                    Text(Self.inline(text)).font(.callout)
-                case .bullet(let text):
-                    (Text("• ") + Text(Self.inline(text))).font(.callout)
-                case .code(let text):
-                    Text(text)
-                        .font(.caption.monospaced())
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(8)
-                        .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
-                case .rule:
-                    Divider()
-                }
-            }
-        }
-        .textSelection(.enabled)
-        // ~80ch, not the full column — text set to the width of a wide pane
-        // is unreadable however good the rest of the page is.
-        .frame(maxWidth: 640, alignment: .leading)
-    }
-
-    /// One inline run: bold, italic, code and links via AttributedString's
-    /// markdown pass (inline only — the blocks above are already split);
-    /// the plain string when it refuses.
-    private static func inline(_ text: String) -> AttributedString {
-        (try? AttributedString(
-            markdown: text,
-            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        )) ?? AttributedString(text)
-    }
-
     /// The source split into blocks: code fences first, then headings,
     /// rules and bullets line by line, everything else folded into a
-    /// paragraph per blank-line run.
-    private static func parse(_ source: String) -> [Block] {
+    /// paragraph per blank-line run. Shared with NoteBodyView's renderer.
+    static func parse(_ source: String) -> [Block] {
         var blocks: [Block] = []
         var para: [String] = []
         var code: [String]?

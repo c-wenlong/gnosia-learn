@@ -33,7 +33,7 @@ struct ConceptDetailView: View {
                     header(workspace)
                     stats(workspace)
                     if let body = workspace.body, !body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        MarkdownText(source: body)
+                        NoteBodyView(source: body, stripTitle: workspace.title)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     } else {
                         noBodyNote

@@ -138,8 +138,7 @@ struct AssetAskPanel: View {
     private func bubble(_ turn: SidecarClient.ChatMessage) -> some View {
         HStack {
             if turn.role == "user" { Spacer(minLength: 40) }
-            Text(turn.content)
-                .font(.callout)
+            MathText(text: turn.content, font: .callout)
                 .foregroundStyle(turn.role == "user" ? G.btnText : G.text)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
