@@ -5,7 +5,7 @@ import { CHAT_RATE_LIMIT, enforceRateLimit, enforceSameOrigin } from "@/lib/agen
 import { isConceptSlug } from "@/lib/concept-workspace-core";
 import { requestOwner } from "@/lib/learner-api";
 import { CHAT_ANSWER_LIMIT, CHECK_QUESTION_LIMIT } from "@/lib/tutor-check";
-import { judgeTurn } from "@self-learn/tutor/server/turns";
+import { judgeTurn } from "@gnosia/tutor/server/turns";
 
 export const runtime = "nodejs";
 
@@ -20,7 +20,7 @@ export const runtime = "nodejs";
  * nothing: only the learner's tap writes, through `POST /api/learner/observe`.
  *
  * The turn itself — the workspace read, the judge prompt, the model chain and
- * the reply shape — is `judgeTurn` in `@self-learn/tutor/server`. This file
+ * the reply shape — is `judgeTurn` in `@gnosia/tutor/server`. This file
  * keeps the request-side guards and the validation that must answer before
  * the limiter is touched.
  */

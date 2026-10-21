@@ -1,4 +1,4 @@
-import { setNote } from "@self-learn/catalog/state";
+import { setNote } from "@gnosia/catalog/state";
 
 import { handler, requireId, requireString, MAX_NOTE_CHARS } from "@/lib/learner-api";
 

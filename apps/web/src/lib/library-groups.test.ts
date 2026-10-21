@@ -1,4 +1,4 @@
-import type { AssetConversation, AssetPlace } from "@self-learn/catalog/state";
+import type { AssetConversation, AssetPlace } from "@gnosia/catalog/state";
 import { describe, expect, it } from "vitest";
 
 import { conversationGroups, courseGroups, NO_GROUP, topicBucket, topicGroups, topicRanks, WHOLE_COURSE } from "./library-groups";

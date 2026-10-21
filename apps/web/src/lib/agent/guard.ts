@@ -9,7 +9,7 @@ import {
   resolveHost,
   storeFor,
   type RateLimitRule,
-} from "@self-learn/tutor/guards";
+} from "@gnosia/tutor/guards";
 
 export {
   CHAT_RATE_LIMIT,
@@ -23,12 +23,12 @@ export {
   type RateLimitRule,
   type RateLimitStore,
   type RateLimitVerdict,
-} from "@self-learn/tutor/guards";
+} from "@gnosia/tutor/guards";
 
 /**
  * Abuse prevention for the `/api/agent/*` routes. The checks themselves —
  * origin comparison, payload measurement and the fixed-window limiter — live
- * in `@self-learn/tutor/guards`, which the native sidecar calls directly;
+ * in `@gnosia/tutor/guards`, which the native sidecar calls directly;
  * this file keeps only the `NextResponse` wrappers around them.
  */
 

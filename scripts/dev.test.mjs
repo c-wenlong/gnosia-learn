@@ -96,11 +96,11 @@ case "$*" in *":$BUSY_PORT "*|*":$BUSY_PORT") echo "node 1 you 20u IPv4 TCP *:$B
   const flag = (name, content = "") => writeFileSync(join(state, name), content);
   /** The environment file a tmux call hands its pane, which a real pane would read and delete. */
   const paneEnv = (call) => {
-    const file = /(\S*self-learn-dev\.\w+)/.exec(call)?.[1];
+    const file = /(\S*gnosia-dev\.\w+)/.exec(call)?.[1];
     expect(file, `no pane file in: ${call}`).toBeTruthy();
     return { file, text: readFileSync(file, "utf8") };
   };
-  const leftovers = () => readdirSync(tmp).filter((name) => name.startsWith("self-learn-dev."));
+  const leftovers = () => readdirSync(tmp).filter((name) => name.startsWith("gnosia-dev."));
   return { root, bin, run, flag, calls, paneEnv, leftovers };
 }
 
@@ -133,7 +133,7 @@ describe("scripts/dev.sh start", () => {
     const ran = run(["start", "--detach", "--no-checks"]);
     expect(ran.code).toBe(0);
     const [created] = tmuxCall(ran.calls, "new-session");
-    expect(created).toContain("-d -P -F #{pane_id} -s self-learn");
+    expect(created).toContain("-d -P -F #{pane_id} -s gnosia");
     expect(created).toContain("npm run dev");
     expect(paneEnv(created).text).toContain("export STUDIO_ENABLED=1");
     expect(paneEnv(created).text).toContain("export PATH=");
@@ -151,7 +151,7 @@ describe("scripts/dev.sh start", () => {
     expect(ran.calls).toContain("tmux select-pane -t %0 -T web :19001");
     expect(tmuxCall(ran.calls, "split-window")[0]).toContain("-h -P -F #{pane_id} -t %0");
     expect(ran.calls).toContain("tmux select-pane -t %1 -T studio :19002");
-    // No `session:window.index` target anywhere (the pane files are named self-learn-dev.XXXXXX).
+    // No `session:window.index` target anywhere (the pane files are named gnosia-dev.XXXXXX).
     expect(ran.calls.filter((c) => /:dev\.\d/.test(c))).toEqual([]);
   });
 
@@ -163,7 +163,7 @@ describe("scripts/dev.sh start", () => {
 
   it("attaches unless told not to, and switches client when already inside tmux", () => {
     const attached = sandbox().run(["--no-checks"]);
-    expect(tmuxCall(attached.calls, "attach-session")[0]).toContain("-t =self-learn");
+    expect(tmuxCall(attached.calls, "attach-session")[0]).toContain("-t =gnosia");
     const detached = sandbox().run(["--no-checks", "--detach"]);
     expect(tmuxCall(detached.calls, "attach-session")).toEqual([]);
     const inside = sandbox().run(["--no-checks"], { env: { TMUX: "/tmp/tmux-1/default,1,0" } });
@@ -240,7 +240,7 @@ describe("scripts/dev.sh start", () => {
     const { run, flag } = sandbox();
     flag("session");
     const ran = run(["--no-checks"]);
-    expect(ran.out).toContain("already running in tmux session 'self-learn'");
+    expect(ran.out).toContain("already running in tmux session 'gnosia'");
     expect(tmuxCall(ran.calls, "new-session")).toEqual([]);
     expect(tmuxCall(ran.calls, "attach-session")).toHaveLength(1);
   });
@@ -323,7 +323,7 @@ describe("scripts/dev.sh checks", () => {
       "pg_isready -q -d postgres://env/db pw=",
     );
     expect(sandbox().run(["--detach"]).calls).toContain(
-      "pg_isready -q -d postgres://localhost:5432/self_learn pw=",
+      "pg_isready -q -d postgres://localhost:5432/gnosia pw=",
     );
   });
 
@@ -339,7 +339,7 @@ describe("scripts/dev.sh checks", () => {
     flag("no_database");
     const ran = run(["--detach"]);
     expect(ran.code).toBe(1);
-    expect(ran.err).toContain("createdb self_learn");
+    expect(ran.err).toContain("createdb gnosia");
   });
 
   it("warns, and still starts, when nobody could sign in", () => {

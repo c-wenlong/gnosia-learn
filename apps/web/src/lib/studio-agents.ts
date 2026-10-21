@@ -1,7 +1,7 @@
 import "server-only";
 
-import { readPreferences } from "@self-learn/catalog/state";
-import type { StudioAgentPreference } from "@self-learn/schema/shared";
+import { readPreferences } from "@gnosia/catalog/state";
+import type { StudioAgentPreference } from "@gnosia/schema/shared";
 
 import { catalogDatabase } from "@/lib/learner-store";
 import { currentOwner } from "@/lib/owner";

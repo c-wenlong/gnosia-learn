@@ -3,7 +3,7 @@ import { lstat, mkdir, mkdtemp, readdir, readFile, rename, rm, writeFile } from 
 import os from "node:os";
 import path from "node:path";
 
-import { BlobIntegrityError, key as blobKey, type BlobStore } from "@self-learn/blob";
+import { BlobIntegrityError, key as blobKey, type BlobStore } from "@gnosia/blob";
 import {
   assetJob,
   canonicalJson,
@@ -15,7 +15,7 @@ import {
   type AuthorKind,
   type Job,
   type OwnerScope,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { acceptJobIn, JobError, VIDEOS_DIR, VIDEO_SLUG } from "../commands/job";
@@ -35,6 +35,7 @@ import { andOwnedBy } from "./scope";
 import { ContentWriteError, deleteContent, writeContents, type WriteContentInput, type WriteContentResult } from "./write";
 import { VIDEO_SOURCE_BYTES_MAX, VIDEO_SOURCE_FILES_MAX } from "./video-source-limits";
 
+import { inTransaction } from "../db";
 /**
  * Studio videos in the database (docs/STUDIO-VIDEOS.md, "Accept", D49).
  *
@@ -586,7 +587,7 @@ export async function putVideo(db: CatalogDatabase, store: BlobStore, input: Put
     if (!made.ok) {
       notes.push(`no PDF: ${made.reason}`);
     } else {
-      pdfDir = await mkdtemp(path.join(os.tmpdir(), "self-learn-video-pdf-"));
+      pdfDir = await mkdtemp(path.join(os.tmpdir(), "gnosia-video-pdf-"));
       const file = path.join(pdfDir, `video${PDF_EXTENSION}`);
       try {
         await writeFile(file, made.body);
@@ -764,7 +765,7 @@ export async function putVideo(db: CatalogDatabase, store: BlobStore, input: Put
 
   let outcome: { retry: PutVideoResult } | { written: WriteContentResult[] };
   try {
-    outcome = await db.transaction(async (tx) => {
+    outcome = await inTransaction(db, async (tx) => {
       // Every lock this write takes, first and in the global order (type,
       // then id): the stale sidecars `deleteContent` removes after
       // `writeContents` would otherwise be locked out of order. Everything
@@ -815,7 +816,7 @@ export async function putVideo(db: CatalogDatabase, store: BlobStore, input: Put
                 bytes: p.bytes,
                 title: p.title,
                 inputsHash: p.inputsHash ?? null,
-                sourceRepo: "self-learn",
+                sourceRepo: "gnosia",
                 blobKey: keyOf(p),
                 resourceType: null,
               },
@@ -855,7 +856,7 @@ export async function putVideo(db: CatalogDatabase, store: BlobStore, input: Put
               contentHash: sql`excluded."content_hash"`,
               bytes: sql`excluded."bytes"`,
               writtenAt: sql`excluded."written_at"`,
-              updatedAt: sql`now()`,
+              updatedAt: sql`cast(unixepoch('subsec') * 1000 as integer)`,
             },
           });
       }
@@ -965,7 +966,8 @@ interface StudioRow extends Record<string, unknown> {
   concepts: string[] | null;
   poster_key: string | null;
   poster_id: string | null;
-  narrated: boolean;
+  /** SQLite's `exists()` reads 0 or 1, as `number` in every row type here. */
+  narrated: number;
   revision: string | number | null;
   revision_job: string | null;
   source: unknown;
@@ -979,7 +981,7 @@ async function studioRows(db: CatalogDatabase, scope: OwnerScope, only?: string,
       ${names ? sql`coalesce((select n.title from asset_name n where n.asset_id = ${VIDEO_PREFIX} || v.slug and n.learner_id = ${scope.owner}), v.title)` : sql`v.title`} as title,
       v.topic_slug, v.source_hash, v.rendered_source_hash, v.mp4_blob_key,
       v.duration_seconds, v.updated_at, b.bytes as mp4_bytes, b.sha256 as mp4_sha256,
-      (select array_agg(c.concept_slug order by c.concept_slug collate "C") from asset_concept c
+      (select json_group_array(c.concept_slug order by c.concept_slug collate binary) from asset_concept c
         join concept k on k.slug = c.concept_slug
         where c.asset_id = ${VIDEO_PREFIX} || v.slug${andOwnedBy(sql`k.owner_id`, scope.readable)}) as concepts,
       p.id as poster_id, p.blob_key as poster_key,
@@ -991,15 +993,25 @@ async function studioRows(db: CatalogDatabase, scope: OwnerScope, only?: string,
     from video v
     left join blob_object b on b.key = v.mp4_blob_key
     left join asset p on p.id = ${POSTER_PREFIX} || ${VIDEO_PREFIX} || v.slug${andOwnedBy(sql`p.owner_id`, scope.readable)}
-    left join lateral (
-      select id, job_id from content_revision
-      where entity_type = 'video' and entity_id = v.slug
-      order by seq desc limit 1
-    ) rev on true
+    -- Was a left join lateral: SQLite joins a table against a correlated
+    -- scalar instead, and rev.id here is the latest revision's.
+    left join content_revision rev
+      on rev.id = (select max(r.id) from content_revision r
+        where r.entity_type = 'video' and r.entity_id = v.slug)
     where v.archived_at is null ${only === undefined ? sql`` : sql`and v.slug = ${only}`}${andOwnedBy(sql`v.owner_id`, scope.readable)}
-    order by v.slug collate "C"
+    order by v.slug collate binary
   `);
   return rows;
+}
+
+/**
+ * `array_agg` handed Postgres a real array; `json_group_array` hands back its
+ * JSON text, which is what this parses. A null (no rows) reads as none.
+ */
+function jsonStrings(value: string[] | string | null): string[] {
+  if (value === null) return [];
+  if (Array.isArray(value)) return value;
+  return JSON.parse(value) as string[];
 }
 
 function studioSummary(row: StudioRow): VideoSummary {
@@ -1009,7 +1021,7 @@ function studioSummary(row: StudioRow): VideoSummary {
     assetId: `${VIDEO_PREFIX}${row.slug}`,
     title: row.title,
     topic: row.topic_slug,
-    concepts: row.concepts ?? [],
+    concepts: jsonStrings(row.concepts),
     durationSeconds: num(row.duration_seconds),
     sourceHash: row.source_hash,
     renderedSourceHash: row.rendered_source_hash,
@@ -1018,7 +1030,7 @@ function studioSummary(row: StudioRow): VideoSummary {
         ? null
         : { key: row.mp4_blob_key, bytes: Number(row.mp4_bytes ?? 0), sha256: row.mp4_sha256 ?? "" },
     poster: row.poster_id === null ? null : { assetId: row.poster_id, key: row.poster_key },
-    narrated: row.narrated,
+    narrated: row.narrated === 1,
     revision: num(row.revision),
     revisionJob: row.revision_job,
     updatedAt: iso(row.updated_at) as string,
@@ -1036,7 +1048,7 @@ interface RenderRow extends Record<string, unknown> {
   concepts: string[] | null;
   poster_id: string | null;
   poster_key: string | null;
-  narrated: boolean;
+  narrated: number;
 }
 
 /**
@@ -1053,9 +1065,9 @@ export async function listVideos(db: CatalogDatabase, scope: OwnerScope): Promis
     select a.id,
       ${names ? sql`coalesce((select n.title from asset_name n where n.asset_id = a.id and n.learner_id = ${scope.owner}), a.title)` : sql`a.title`} as title,
       a.blob_key, a.bytes, a.content_hash, a.updated_at,
-      (select min(t.topic_slug collate "C") from asset_topic t join topic o on o.slug = t.topic_slug
+      (select min(t.topic_slug collate binary) from asset_topic t join topic o on o.slug = t.topic_slug
         where t.asset_id = a.id${andOwnedBy(sql`o.owner_id`, scope.readable)}) as topic,
-      (select array_agg(c.concept_slug order by c.concept_slug collate "C") from asset_concept c join concept k on k.slug = c.concept_slug
+      (select json_group_array(c.concept_slug order by c.concept_slug collate binary) from asset_concept c join concept k on k.slug = c.concept_slug
         where c.asset_id = a.id${andOwnedBy(sql`k.owner_id`, scope.readable)}) as concepts,
       p.id as poster_id, p.blob_key as poster_key,
       exists (
@@ -1069,10 +1081,10 @@ export async function listVideos(db: CatalogDatabase, scope: OwnerScope): Promis
     left join asset p on p.id = ${POSTER_PREFIX} || a.id${andOwnedBy(sql`p.owner_id`, scope.readable)}
     where a.kind = 'video'
       and (${sql.join(
-        VIDEO_TOOLS.map((tool) => sql`starts_with(a.id, ${tool.prefix})`),
+        VIDEO_TOOLS.map((tool) => sql`instr(a.id, ${tool.prefix}) = 1`),
         sql` or `,
       )})${andOwnedBy(sql`a.owner_id`, scope.readable)}
-    order by a.id collate "C"
+    order by a.id collate binary
   `);
   const renders = rows.map(
     (row): VideoSummary => ({
@@ -1081,7 +1093,7 @@ export async function listVideos(db: CatalogDatabase, scope: OwnerScope): Promis
       assetId: row.id,
       title: row.title,
       topic: row.topic,
-      concepts: row.concepts ?? [],
+      concepts: jsonStrings(row.concepts),
       durationSeconds: null,
       sourceHash: null,
       renderedSourceHash: null,
@@ -1090,7 +1102,7 @@ export async function listVideos(db: CatalogDatabase, scope: OwnerScope): Promis
           ? null
           : { key: row.blob_key, bytes: Number(row.bytes ?? 0), sha256: row.content_hash ?? "" },
       poster: row.poster_id === null ? null : { assetId: row.poster_id, key: row.poster_key },
-      narrated: row.narrated,
+      narrated: row.narrated === 1,
       revision: null,
       revisionJob: null,
       updatedAt: iso(row.updated_at) as string,

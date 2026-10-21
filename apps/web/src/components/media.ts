@@ -1,4 +1,4 @@
 /**
- * Video chapter/cue math. The implementation lives in `@self-learn/tutor/media`; this file only keeps the `@/components/media` path working.
+ * Video chapter/cue math. The implementation lives in `@gnosia/tutor/media`; this file only keeps the `@/components/media` path working.
  */
-export * from "@self-learn/tutor/media";
+export * from "@gnosia/tutor/media";

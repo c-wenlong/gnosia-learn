@@ -74,7 +74,7 @@ reachable at the tag `content-files-final` (`git show
 content-files-final:content/topics.yaml`). Obsidian reads the notes from a
 **vault**:
 `npm run learn -- vault pull` writes every note, every log and every diagram's
-SVG (under `assets/`, read-only) to `~/.self-learn/vault/`, and
+SVG (under `assets/`, read-only) to `~/.gnosia/vault/`, and
 `npm run learn -- vault push --reason R` takes edited notes back, one revision
 each, refusing a note that moved in the database since the pull. Neither
 command overwrites an edit nobody pushed, and a vault inside any checkout of
@@ -140,7 +140,7 @@ Rules of engagement:
   which is exactly why it can live elsewhere: moving this submodule from
   `manimkc/` into `tools/` on 2026-09-13 deleted 25 rendered videos and the whole
   clip cache, because git does not carry gitignored files across a move. Point
-  `MANIMKC_HOME` outside the checkout (`manimkc home --migrate ~/.self-learn`)
+  `MANIMKC_HOME` outside the checkout (`manimkc home --migrate ~/.gnosia`)
   and a repo relayout cannot do that again.
 - **Never join a manimkc path onto the submodule root.** `manimkc topics --json`
   and `manimkc mirrors --json` report a top-level absolute `outRoot`; a
@@ -318,7 +318,7 @@ Rules of engagement:
   the same split as the others: the catalog reads the first
   (`services/catalog/src/env.ts`, defaulting to `tools/blenderkc`) and takes
   the second from the report's `outRoot`. On the owner's Mac the data root is
-  `~/.self-learn/blenderkc`, set by a `BLENDERKC_HOME=` line in the
+  `~/.gnosia/blenderkc`, set by a `BLENDERKC_HOME=` line in the
   checkout's `.env` (blenderkc reads the checkout's `.env`, never the data
   root's). A worktree's submodule has no `.env`, so set the variable in the
   environment there. **Never join a blenderkc path onto the submodule root.**
@@ -452,7 +452,7 @@ Rules of engagement:
   vocabulary is that owner's topics and the commons', a topic the planner
   proposed is filed as theirs, and its jobs and sessions are that owner's;
   `services/studio/test/owner.test.ts` fails a verb that leaves it out. The web app names the signed-in owner in
-  `x-self-learn-owner` (`STUDIO_OWNER_HEADER`), set by its server from the
+  `x-gnosia-owner` (`STUDIO_OWNER_HEADER`), set by its server from the
   session after dropping any value a page sent, and the runner refuses a
   request naming anyone else: its queue, checkouts, cached list and agent
   account are that one owner's, so there is no view of them to scope.
@@ -878,7 +878,7 @@ not have to be worked out again.
   (`*.ts`), and the app's config lives in `apps/web/` where it cannot reach
   `tools/` at all. Do not re-add an exclude for a directory nothing includes.
 - **`npm run canvas` needs `--silent`, or `--json` is unparseable.** npm
-  prints a two-line banner (`> self-learn@0.1.0 canvas` and the resolved
+  prints a two-line banner (`> gnosia@0.1.0 canvas` and the resolved
   command) on stdout before the tool writes anything, so
   `npm run canvas -- inspect x.tldr --json | jq` fails on the first token.
   `npm run --silent canvas -- ...` suppresses it. The same applies to
@@ -956,7 +956,7 @@ not have to be worked out again.
   checkout pointed at a database still at `0009` shows that panel, and one
   never imported has nothing to show: migrate, import the seed (or an export)
   and flip it (README.md, "Install"). A new reader takes `getCourses()`, `getTopics()`
-  or `getTags()` from `@/data/*`, never a parser from `@self-learn/content`;
+  or `getTags()` from `@/data/*`, never a parser from `@gnosia/content`;
   a test that wants real course data mocks `contentSource` with
   `apps/web/src/test/content-files.ts`, which reads `seed/`, rather than
   opening a database. There
@@ -970,7 +970,7 @@ not have to be worked out again.
   fails and says why. Setting a type to `files` only makes sense in a suite
   that hands the seam a tree of its own; the web app refuses it, and there is
   no tree in the repository to point it at.
-- **`@self-learn/content` needs no `transpilePackages` entry.** Next 16 builds
+- **`@gnosia/content` needs no `transpilePackages` entry.** Next 16 builds
   with Turbopack, which transpiles npm workspace packages automatically
   (`node_modules/next/dist/docs/01-app/03-api-reference/05-config/01-next-config-js/transpilePackages.md`).
   Adding one would be cargo cult. The package ships raw TypeScript with
@@ -1000,11 +1000,11 @@ not have to be worked out again.
   They are NOT eslint-ignored: unlike the two submodules they are ours, and the
   root config lints them correctly.
 - **The catalog needs a database before its tests do anything.**
-  `createdb self_learn` against the Homebrew Postgres 17, then
+  `createdb gnosia` against the Homebrew Postgres 17, then
   `npm run catalog -- migrate`. Without a reachable Postgres the schema tests
   skip themselves with a named reason and `npm test` still passes, so a green
   local run is not proof the schema is sound. CI runs a `postgres:17` service
-  and is where they are a real gate. The suites never read `self_learn`'s rows:
+  and is where they are a real gate. The suites never read `gnosia`'s rows:
   each makes a scratch database, and the end-to-end one imports `seed/`, a
   small real slice cut with `catalog export --subset` (seed/README.md), since
   the phase 3 cut-over removed `content/` and `learn/`. A database of your own
@@ -1025,7 +1025,7 @@ not have to be worked out again.
   `BEFORE_BLOB_CONTRACT`); `schema.test.ts` migrating from empty is what
   keeps the template honest. The template refuses connections, since
   Postgres will not copy a database anyone is connected to, so never connect
-  to a `self_learn_test_template_*` database or point a suite at it.
+  to a `gnosia_test_template_*` database or point a suite at it.
 - **`catalog import` is the name; `catalog index` is the alias.** `index`
   is `import` with no directory; it still runs it and prints the new name once
   on stderr, so a `--json` reader is unaffected. A few comments still say
@@ -1055,7 +1055,7 @@ not have to be worked out again.
   was imported from, which is why a test that flips some types sees files
   written.
 - **Flip day and the cut-over were a script, and it stays.**
-  `node scripts/flip-rehearsal.mjs --tree-from <dir>` copies `self_learn`
+  `node scripts/flip-rehearsal.mjs --tree-from <dir>` copies `gnosia`
   with `createdb -T`, imports a temp copy of `<dir>/content` and
   `<dir>/learn`, flips the six types in the plan's order with an export after
   each group, imports and checks parity again, uploads manimkc's renders
@@ -1088,7 +1088,7 @@ not have to be worked out again.
 - **The nightly export is the readable backup, and it lives outside the
   checkout.** `npm run export:nightly` (`scripts/nightly-export.mjs [--keep N]
   [--json]`) runs `catalog export --out` into
-  `$SELF_LEARN_HOME/archive/<UTC time>/` (default `~/.self-learn/archive/`).
+  `$GNOSIA_HOME/archive/<UTC time>/` (default `~/.gnosia/archive/`).
   It writes into `.<UTC time>.partial` first and renames it on success,
   replaces the `latest` symlink with a rename so the link is never missing,
   keeps the newest 30, removes partials more than a day old, and refuses an
@@ -1130,7 +1130,7 @@ not have to be worked out again.
   the hashes drizzle recorded. So an edited applied file shows as pending
   forever while drizzle skips it on every run, and `catalog migrate` now
   refuses with `MigrationSkipped` naming it rather than report success. Change
-  `packages/schema/src/`, then `npm run generate -w @self-learn/catalog`.
+  `packages/schema/src/`, then `npm run generate -w @gnosia/catalog`.
 - **`learn/state/` is gone, and `learn` needs Postgres.** `events.jsonl`,
   `model.json` and `reviews.json` are the `event`, `mastery` and `review`
   tables; `index.json` is a query. `npm run learn -- status` fails when the
@@ -1161,7 +1161,7 @@ not have to be worked out again.
   `catalog_instance` carries a statement trigger that refuses all writes when
   that row says `copy`; a database made with `createdb -T` from a copy is a
   copy too. Tests and `scripts/e2e.mjs` pass `CATALOG_COPY_OK=1` (or
-  `connect({ copyOk: true })`, or `set self_learn.copy_ok = on` in psql);
+  `connect({ copyOk: true })`, or `set gnosia.copy_ok = on` in psql);
   nothing else should. A content table is written only from
   `services/catalog/src/content/` or `src/index/`, which
   `services/catalog/test/content-writes.test.ts` checks by grep, and a
@@ -1198,15 +1198,15 @@ not have to be worked out again.
   no owner at all, so accounts need every type flipped first. Do not answer
   a scoped read's error by reading unscoped: `scopedRead` does that only
   after the catalog says `owner_id` is absent.
-- **The web app imports `@self-learn/catalog/state`, and `pg` stays external.**
+- **The web app imports `@gnosia/catalog/state`, and `pg` stays external.**
   `serverExternalPackages: ["pg"]` in `apps/web/next.config.ts` is
   load-bearing: the
   driver resolves its optional native binding through a runtime `require` no
   bundler can follow. `transpilePackages` is deliberately *not* there —
   Turbopack transpiles workspace packages on its own, verified by removing an
   entry and building. A client component must take the shared constants from
-  `@self-learn/schema/shared`, which imports nothing; taking them from
-  `@self-learn/schema` would drag drizzle into the browser bundle, and
+  `@gnosia/schema/shared`, which imports nothing; taking them from
+  `@gnosia/schema` would drag drizzle into the browser bundle, and
   `apps/web/src/lib/learner-store.ts` carries `import "server-only"` so that mistake
   fails the build rather than shipping a Postgres driver.
 - **Every page under `(app)/` has a loading boundary, and must keep one.**
@@ -1345,7 +1345,7 @@ not have to be worked out again.
   `stat` and set again can come out a microsecond short on Linux); the
   Postgres client tools (found through `PG_BIN`, `PATH`, `pg_config --bindir`
   or Homebrew, in `scripts/lib/pg.mjs`, and installed at version 17 by the
-  workflow); and `self_learn`, which on CI is the service's empty database.
+  workflow); and `gnosia`, which on CI is the service's empty database.
   History: from 2026-09-14 to about 2026-10-01 Actions was blocked by billing
   and every PR merged on the local gate alone. That failure looks like a run
   that fails in single-digit seconds with zero steps run, on `main` as well

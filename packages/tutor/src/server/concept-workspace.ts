@@ -6,9 +6,9 @@ import {
   readEvents,
   readKnowledgeBase,
   readReviews,
-} from "@self-learn/catalog/state";
-import type { ContentSource } from "@self-learn/content";
-import type { OwnerScope } from "@self-learn/schema/shared";
+} from "@gnosia/catalog/state";
+import type { ContentSource } from "@gnosia/content";
+import type { OwnerScope } from "@gnosia/schema/shared";
 
 import { findTopicAcrossCourses } from "../lookup";
 import { ownValue } from "../own-key";

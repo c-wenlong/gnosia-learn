@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { tutorDeps, turnResponse } from "@/lib/agent/env";
 import { guard, readBody } from "@/lib/provider-keys/requests";
 import { MODEL_LIST_RATE_LIMIT } from "@/lib/tutor-models/requests";
-import { modelListTurn } from "@self-learn/tutor/server/turns";
+import { modelListTurn } from "@gnosia/tutor/server/turns";
 
 export const runtime = "nodejs";
 
@@ -13,7 +13,7 @@ export const runtime = "nodejs";
  * configured base URL, which no request can change, with the key the tutor
  * would use; the key never reaches the browser.
  *
- * The call and its reply are `modelListTurn` in `@self-learn/tutor/server`,
+ * The call and its reply are `modelListTurn` in `@gnosia/tutor/server`,
  * which the native sidecar calls over the same contract. A POST rather than a
  * GET so the same-origin check applies: a browser sends no `Origin` on a
  * same-origin GET.

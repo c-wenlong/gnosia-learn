@@ -12,7 +12,7 @@ and the repository holds no `learn/` folder; how to read and edit the notes and
 logs is under [Where the notes and logs live](#where-the-notes-and-logs-live).
 
 ```
-postgres  (DATABASE_URL, default postgres://localhost:5432/self_learn)
+postgres  (DATABASE_URL, default postgres://localhost:5432/gnosia)
   concept            atomic concept notes: frontmatter as columns, markdown as body
   session_log_entry  one row per append to a session's log, written live
   diagram, asset     diagrams drawn during teaching; the SVG in the blob store
@@ -74,7 +74,7 @@ the checkout; check it out again and reapply. `concept edit <id> --body-file F
 To read and edit every note at once, in Obsidian, pull the vault:
 
 ```bash
-npm run learn -- vault pull                 # ~/.self-learn/vault, or --out <dir>
+npm run learn -- vault pull                 # ~/.gnosia/vault, or --out <dir>
 # edit notes in Obsidian
 npm run learn -- vault push --reason "tidied the proofs"
 ```
@@ -86,7 +86,7 @@ how many entries the log had) and the sha256 of what was written. The SVGs come
 from the blob store, so the `![[<slug>.svg]]` embeds in notes and logs
 resolve in Obsidian with no `learn/assets/` anywhere; they are read-only there,
 push never looks at them, and a diagram is changed in the studio or with
-`catalog diagram put`. The folder defaults to `$SELF_LEARN_HOME/vault`,
+`catalog diagram put`. The folder defaults to `$GNOSIA_HOME/vault`,
 outside the repository, and one inside this checkout or any other checkout of
 the repository is refused. Neither command overwrites an edit nobody pushed:
 
@@ -675,12 +675,12 @@ something concrete to ask:
 ## Setup
 
 ```bash
-createdb self_learn                    # once, against the Homebrew Postgres 17
+createdb gnosia                    # once, against the Homebrew Postgres 17
 npm run catalog -- migrate             # apply every outstanding migration
 npm run learn -- init                  # check the store
 ```
 
-`DATABASE_URL` defaults to `postgres://localhost:5432/self_learn`; see
+`DATABASE_URL` defaults to `postgres://localhost:5432/gnosia`; see
 [services/catalog/.env.example](../services/catalog/.env.example). Nothing
 works with the database down any more: mastery and the schedule are tables,
 and so are the notes and logs. `status`, which both skills run first, has
@@ -743,7 +743,7 @@ diagrams. This is a real constraint of the harness, not a style choice.
 ### Using it with Obsidian
 
 There is no live folder to point Obsidian at: the notes and logs are rows.
-`learn vault pull` writes them to `~/.self-learn/vault/` (the folder to open in
+`learn vault pull` writes them to `~/.gnosia/vault/` (the folder to open in
 Obsidian), with every diagram's SVG under `assets/` so the `![[<slug>.svg]]`
 embeds keep resolving, and `learn vault push` writes edited notes back, as
 described under "Where the notes and logs live" above. Wikilinks, embeds and

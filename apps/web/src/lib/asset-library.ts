@@ -15,7 +15,7 @@ import {
   type TopicTitles,
   type AssetWithTopics,
   type CatalogDatabase,
-} from "@self-learn/catalog/state";
+} from "@gnosia/catalog/state";
 
 import { resolveAsset, servedAssets, storedPosters } from "@/lib/asset-files";
 import type { RouteProblemCode } from "@/lib/asset-problems";
@@ -33,7 +33,7 @@ import { assetBlobStore } from "@/lib/blob-store";
 import { FAVORITE_PREFIX, favoriteKey, parseFavorite, type Favorite } from "@/lib/favorite";
 import { parsePlayback, playbackKey, type Playback } from "@/lib/playback";
 import { parseTranscript } from "@/lib/transcript";
-import type { AssetSeams } from "@self-learn/tutor/server/deps";
+import type { AssetSeams } from "@gnosia/tutor/server/deps";
 import {
   MAX_ASSET_ID_CHARS,
   noteIndex,
@@ -44,7 +44,7 @@ import {
   readAssetTextFor as readAssetTextForCore,
   TEXT_PREVIEW_BYTES,
   type AssetDetail,
-} from "@self-learn/tutor/server/asset-detail";
+} from "@gnosia/tutor/server/asset-detail";
 
 export { MAX_ASSET_ID_CHARS, noteIndex, optionalParents, TEXT_PREVIEW_BYTES };
 export type { AssetDetail };
@@ -218,7 +218,7 @@ async function assetSeams(): Promise<{ db: Promise<CatalogDatabase>; owner: stri
   return { db: catalogDatabase(), owner, scope: await currentScope() };
 }
 
-/** One asset's detail page, through the shared read in `@self-learn/tutor/server/asset-detail`. */
+/** One asset's detail page, through the shared read in `@gnosia/tutor/server/asset-detail`. */
 export async function readAssetDetail(id: string): Promise<AssetDetail> {
   return readAssetDetailCore(await assetSeams(), id);
 }

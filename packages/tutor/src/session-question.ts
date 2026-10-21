@@ -67,7 +67,7 @@ export function buildSessionQuestionPrompt(
   const avoidLines =
     avoid.length === 0 ? "" : `\nDo not repeat these questions, or ask them in other words:\n${avoid.map((q) => `- ${q}`).join("\n")}\n`;
 
-  return `# Self-Learn session · question writer · ${input.title}
+  return `# Gnosia session · question writer · ${input.title}
 
 You write one multiple-choice question about one concept from the learner's notebook.
 

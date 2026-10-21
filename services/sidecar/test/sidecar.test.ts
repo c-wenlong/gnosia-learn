@@ -12,9 +12,9 @@ import {
   readProviderKeys,
   readReviews,
   type CatalogDatabase,
-} from "@self-learn/catalog/state";
-import type { TutorDeps } from "@self-learn/tutor/server/deps";
-import { openSavedKeys } from "@self-learn/tutor/server/provider-keys";
+} from "@gnosia/catalog/state";
+import type { TutorDeps } from "@gnosia/tutor/server/deps";
+import { openSavedKeys } from "@gnosia/tutor/server/provider-keys";
 import { migratedScratchDatabase, probe, type Scratch } from "../../catalog/test/scratch-database";
 import { ASSETS, ITEMS, seedAssets, seedContent } from "../../catalog/test/state-fixture";
 

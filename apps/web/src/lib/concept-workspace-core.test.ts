@@ -1,4 +1,4 @@
-import type { KbConcept, KnowledgeBase } from "@self-learn/catalog/state";
+import type { KbConcept, KnowledgeBase } from "@gnosia/catalog/state";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -83,8 +83,8 @@ const input = (over: Partial<WorkspaceInput> = {}): WorkspaceInput => ({
     history: [],
   },
   assets: [
-    { id: "note:learn/concepts/foundations/dot-product.md", kind: "note", path: "learn/concepts/foundations/dot-product.md", url: null, bytes: 1, title: "Dot product", sourceRepo: "self-learn" },
-    { id: "diagram:learn/assets/dot-product.svg", kind: "diagram_svg", path: "learn/assets/dot-product.svg", url: null, bytes: 1, title: null, sourceRepo: "self-learn" },
+    { id: "note:learn/concepts/foundations/dot-product.md", kind: "note", path: "learn/concepts/foundations/dot-product.md", url: null, bytes: 1, title: "Dot product", sourceRepo: "gnosia" },
+    { id: "diagram:learn/assets/dot-product.svg", kind: "diagram_svg", path: "learn/assets/dot-product.svg", url: null, bytes: 1, title: null, sourceRepo: "gnosia" },
   ],
   place: {
     courseSlug: "cp4281",

@@ -6,7 +6,7 @@ import {
   type ProviderName,
   TUTOR_MODEL_LIMITS,
   tutorModel,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { asc, eq } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";

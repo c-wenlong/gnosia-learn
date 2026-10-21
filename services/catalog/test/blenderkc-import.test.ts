@@ -2,7 +2,7 @@ import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { asset, assetDerivation, assetTopic, blobObject, indexRun } from "@self-learn/schema";
+import { asset, assetDerivation, assetTopic, blobObject, indexRun } from "@gnosia/schema";
 import { eq, like } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -211,6 +211,6 @@ describe.skipIf(!reachable.ok)("blenderkc through catalog import", () => {
     expect((await blenderkcRows()).map((r) => r.id)).not.toContain(`blenderkc:${SECOND}`);
     // The poster lives outside the namespace, as manimkc's do, so no import prunes it.
     const [poster] = await scratch.db.select().from(asset).where(eq(asset.id, posterId(`blenderkc:${VIDEO}`)));
-    expect(poster?.sourceRepo).toBe("self-learn");
+    expect(poster?.sourceRepo).toBe("gnosia");
   });
 });

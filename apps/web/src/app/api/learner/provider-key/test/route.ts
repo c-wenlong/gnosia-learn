@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { tutorDeps, turnResponse } from "@/lib/agent/env";
 import { guard, readBody } from "@/lib/provider-keys/requests";
 import { KEY_TEST_RATE_LIMIT } from "@/lib/provider-keys/requests";
-import { providerKeyTestTurn } from "@self-learn/tutor/server/turns";
+import { providerKeyTestTurn } from "@gnosia/tutor/server/turns";
 
 export const runtime = "nodejs";
 
@@ -15,7 +15,7 @@ export const runtime = "nodejs";
  * else its default (docs/TUTOR-MODELS.md).
  *
  * The call and its reply are `providerKeyTestTurn` in
- * `@self-learn/tutor/server`, which the native sidecar calls over the same
+ * `@gnosia/tutor/server`, which the native sidecar calls over the same
  * contract. This file keeps the request-side guards and a tighter rate
  * limit, since each test spends a provider request.
  */

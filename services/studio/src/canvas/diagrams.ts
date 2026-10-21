@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
-import { canonicalJson } from "@self-learn/schema/shared";
+import { canonicalJson } from "@gnosia/schema/shared";
 
 import { diagramCheckout, diagramList, diagramShow } from "../data/catalog";
 import { studioOwner } from "../config";

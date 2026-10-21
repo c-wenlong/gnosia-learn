@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { isAgentModel } from "@self-learn/schema/shared";
+import { isAgentModel } from "@gnosia/schema/shared";
 
 import { preferenceGet } from "../data/catalog";
 import { readThrough } from "../data/content-cache";
@@ -34,7 +34,7 @@ export interface AgentPreference {
 export const DEFAULT_PREFERENCE: AgentPreference = { model: "default", effort: "default" };
 
 /** A model name the CLI takes: an alias or a full id, optionally with a `[1m]` context suffix. */
-// The model rule is `isAgentModel` in @self-learn/schema/shared, the one the
+// The model rule is `isAgentModel` in @gnosia/schema/shared, the one the
 // settings route and `catalog preference set` refuse by, so a stored value is
 // never read as something other than what was saved.
 

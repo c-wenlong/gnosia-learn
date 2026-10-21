@@ -15,20 +15,20 @@ import {
   isAgentModel,
   studioAgentPreference,
   video,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { runImportCommand } from "../src/commands/index-command";
 import { JobError, runClaim, runEnqueue, runFinish, runShow, type BriefDocument } from "../src/commands/job";
-import { BlobIntegrityError } from "@self-learn/blob";
+import { BlobIntegrityError } from "@gnosia/blob";
 import { runPreferenceGet, runPreferenceSet } from "../src/commands/preference";
 import { openBlobStore } from "../src/content/blob";
 import { auditBlobs } from "../src/content/blob-audit";
 import { lockEntity } from "../src/content/revisions";
 import { addTopic, archiveTopic, renameTopic } from "../src/content/topics";
 import { ContentWriteError, writeContents } from "../src/content/write";
-import { connect, type CatalogDatabase } from "../src/db";
+import { connect, type CatalogDatabase, inTransaction } from "../src/db";
 import {
   checkoutVideo,
   listVideos,
@@ -40,7 +40,7 @@ import {
   videoAssetIds,
   type PutVideoInput,
 } from "../src/content/videos";
-import { LOCAL_LEARNER_ID, ownerScope } from "@self-learn/schema";
+import { LOCAL_LEARNER_ID, ownerScope } from "@gnosia/schema";
 import { manimkcStandIn, seedWithManimkc } from "./manimkc-standin";
 import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 
@@ -94,8 +94,8 @@ async function holdLock(url: string, take: (tx: CatalogDatabase) => Promise<unkn
   const released = new Promise<void>((resolve) => (release = resolve));
   let holding!: (pid: number) => void;
   const held = new Promise<number>((resolve) => (holding = resolve));
-  const done = holder.db.transaction(async (tx) => {
-    const { rows } = await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`);
+  const done = inTransaction(holder.db, async (tx) => {
+    const { rows } = await tx.execute<{ pid: number }>(sql`select 0 as pid`);
     await take(tx);
     holding(Number(rows[0]!.pid));
     await released;
@@ -126,22 +126,13 @@ async function holdLock(url: string, take: (tx: CatalogDatabase) => Promise<unkn
 }
 
 /**
- * Wait until `count` client sessions on the database, other than the lock's
- * holder, are blocked on a lock. Only the contenders a test started can be:
- * the holder holds, and nothing else runs against a scratch database.
+ * Postgres showed waiting sessions in pg_stat_activity; SQLite exposes no
+ * waiter list — a blocked write is a `begin immediate` sitting out its busy
+ * timeout. The order a test needs is still there: the contender is pending
+ * until the holder commits, and a short beat is enough to order the rest.
  */
-async function waitForBlocked(db: Scratch["db"], name: string, count: number, holder: HeldLock): Promise<void> {
-  for (let i = 0; i < 400; i += 1) {
-    const { rows } = await db.execute<{ n: string }>(
-      sql`select count(*) as n from pg_stat_activity
-          where datname = ${name} and backend_type = 'client backend' and pid <> ${holder.pid} and wait_event_type = 'Lock'`,
-    );
-    const blocked = Number(rows[0]?.n);
-    if (blocked > count) throw new Error(`${blocked} sessions blocked, expected ${count}`);
-    if (blocked === count) return;
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
-  throw new Error(`fewer than ${count} sessions ever blocked`);
+async function waitForBlocked(_db: Scratch["db"], _name: string, _count: number, _holder: HeldLock): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 100));
 }
 
 function briefOf(slug: string, over: Record<string, unknown> = {}): Record<string, unknown> {
@@ -167,7 +158,7 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
   const saved = {
     url: process.env["DATABASE_URL"],
     manimkc: process.env["MANIMKC_ROOT"],
-    home: process.env["SELF_LEARN_HOME"],
+    home: process.env["GNOSIA_HOME"],
   };
   let serial = 0;
 
@@ -180,7 +171,7 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
     await manimkcStandIn(manimkc, Buffer.from("a manimkc render"));
     process.env["DATABASE_URL"] = scratch.url;
     process.env["MANIMKC_ROOT"] = manimkc;
-    process.env["SELF_LEARN_HOME"] = path.join(work, "home");
+    process.env["GNOSIA_HOME"] = path.join(work, "home");
     await runImportCommand({ dir: tree });
     await scratch.db.insert(learner).values({ id: "other" }).onConflictDoNothing();
   }, 120_000);
@@ -189,7 +180,7 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
     for (const [key, value] of [
       ["DATABASE_URL", saved.url],
       ["MANIMKC_ROOT", saved.manimkc],
-      ["SELF_LEARN_HOME", saved.home],
+      ["GNOSIA_HOME", saved.home],
     ] as const) {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
@@ -257,12 +248,17 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
     Number((await scratch.db.execute<{ n: string }>(sql`select count(*) as n from content_revision`)).rows[0]?.n);
 
   it("migrates: the video kinds, the table, and its guards armed", async () => {
-    const { rows } = await scratch.db.execute<{ trigger: string; enabled: string }>(sql`
-      select t.tgname as trigger, t.tgenabled as enabled from pg_trigger t
-      join pg_class c on c.oid = t.tgrelid where c.relname = 'video' and not t.tgisinternal order by 1`);
+    // One Postgres trigger is three SQLite triggers, one per event; presence
+    // is enablement on SQLite, which has no tgenabled.
+    const { rows } = await scratch.db.execute<{ trigger: string }>(sql`
+      select name as trigger from sqlite_master where type = 'trigger' and tbl_name = 'video' order by 1`);
     expect(rows).toEqual([
-      { trigger: "video_copy_guard", enabled: "O" },
-      { trigger: "video_write_guard", enabled: "O" },
+      { trigger: "video_copy_guard_del" },
+      { trigger: "video_copy_guard_ins" },
+      { trigger: "video_copy_guard_upd" },
+      { trigger: "video_write_guard_del" },
+      { trigger: "video_write_guard_ins" },
+      { trigger: "video_write_guard_upd" },
     ]);
     // Outside the seam, the table refuses a write.
     await expect(
@@ -375,12 +371,12 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
     const rows = await scratch.db.select().from(asset).where(sql`${asset.id} in (${sql.join(Object.values(ids).map((i) => sql`${i}`), sql`, `)})`);
     expect(rows.map((r) => [r.id, r.kind, r.sourceRepo]).sort()).toEqual(
       [
-        [ids.poster, "poster", "self-learn"],
-        [ids.pdf, "pdf", "self-learn"],
-        [ids.video, "video", "self-learn"],
-        [ids.captions, "captions", "self-learn"],
-        [ids.chapters, "chapters", "self-learn"],
-        [ids.transcript, "transcript", "self-learn"],
+        [ids.poster, "poster", "gnosia"],
+        [ids.pdf, "pdf", "gnosia"],
+        [ids.video, "video", "gnosia"],
+        [ids.captions, "captions", "gnosia"],
+        [ids.chapters, "chapters", "gnosia"],
+        [ids.transcript, "transcript", "gnosia"],
       ].sort(),
     );
     expect(rows.find((r) => r.id === ids.video)?.path).toBe(`videos/${slug}.mp4`);
@@ -493,8 +489,8 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
     // Every required blob is the same content-addressed bytes — already
     // stored, so the cap never sees them — and the PDF is the only new
     // object this put would store.
-    const saved = process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"];
-    process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"] = "0";
+    const saved = process.env["GNOSIA_OWNER_UPLOADS_PER_DAY"];
+    process.env["GNOSIA_OWNER_UPLOADS_PER_DAY"] = "0";
     try {
       const result = await put({ slug, dir, jobId: second.id, base: landed.revision });
       expect(result).toMatchObject({ jobState: "accepted" });
@@ -504,8 +500,8 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
       // No half-written outputs either: the job records the five it landed.
       expect((await scratch.db.select().from(assetJob).where(eq(assetJob.jobId, second.id)))).toHaveLength(5);
     } finally {
-      if (saved === undefined) delete process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"];
-      else process.env["SELF_LEARN_OWNER_UPLOADS_PER_DAY"] = saved;
+      if (saved === undefined) delete process.env["GNOSIA_OWNER_UPLOADS_PER_DAY"];
+      else process.env["GNOSIA_OWNER_UPLOADS_PER_DAY"] = saved;
     }
   });
 
@@ -744,9 +740,9 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
     try {
       const args = { slug, dir, jobId: queued.id, base: null, reason: "r", author: "local", authorKind: "person" as const, ownerId: "local" };
       const first = putVideo(a.db, openBlobStore(), args);
-      await waitForBlocked(scratch.db, scratch.name, 1, holder);
+      await waitForBlocked(scratch.db, scratch.url, 1, holder);
       const second = putVideo(b.db, openBlobStore(), args);
-      await waitForBlocked(scratch.db, scratch.name, 2, holder);
+      await waitForBlocked(scratch.db, scratch.url, 2, holder);
       await holder.release();
       const results = await Promise.all([first, second]);
       expect(results.map((r) => r.retry)).toEqual([false, true]);
@@ -763,10 +759,9 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
     const { job: queued } = await jobReady(slug);
     const dir = await candidate(slug);
     await scratch.db.execute(sql.raw(`
-      create function refuse_accept() returns trigger language plpgsql as $$
-      begin raise exception 'accept refused for the test'; end $$;
       create trigger refuse_accept before update on job for each row
-        when (new.id = '${queued.id}' and new.state = 'accepted') execute function refuse_accept();`));
+        when new.id = '${queued.id}' and new.state = 'accepted'
+        begin select raise(abort, 'accept refused for the test'); end;`));
     try {
       const before = await revisionCount();
       await expect(put({ slug, dir, jobId: queued.id, base: null })).rejects.toSatisfy((error) =>
@@ -781,7 +776,7 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
       expect((await scratch.db.select().from(assetJob).where(eq(assetJob.jobId, queued.id))).length).toBe(0);
       expect((await scratch.db.select().from(contentRevision).where(eq(contentRevision.jobId, queued.id))).length).toBe(0);
     } finally {
-      await scratch.db.execute(sql.raw(`drop trigger refuse_accept on job; drop function refuse_accept();`));
+      await scratch.db.execute(sql.raw(`drop trigger refuse_accept;`));
     }
     expect((await put({ slug, dir, jobId: queued.id, base: null })).jobState).toBe("accepted");
   });
@@ -832,7 +827,7 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
     const { job: parent } = await jobReady(slug);
     // Both submits look the key up, find nothing and queue on the parent's
     // row lock, the first behind the holder and the second behind the first.
-    const holder = await holdLock(scratch.url, (tx) => tx.execute(sql`select id from job where id = ${parent.id} for update`));
+    const holder = await holdLock(scratch.url, (tx) => tx.execute(sql`select id from job where id = ${parent.id}`));
     try {
       const submit = () =>
         runEnqueue({
@@ -840,9 +835,9 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
           discardParent: parent.id,
         });
       const first = submit();
-      await waitForBlocked(scratch.db, scratch.name, 1, holder);
+      await waitForBlocked(scratch.db, scratch.url, 1, holder);
       const second = submit();
-      await waitForBlocked(scratch.db, scratch.name, 2, holder);
+      await waitForBlocked(scratch.db, scratch.url, 2, holder);
       await holder.release();
       const results = await Promise.all([first, second]);
       expect(results.map((r) => r.created)).toEqual([true, false]);
@@ -860,7 +855,7 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
     // in a known order. A submit that looked the key up after the winner
     // committed would be handed the winner's job, the idempotent answer for a
     // key already taken, and the refusal under test would never be reached.
-    const holder = await holdLock(scratch.url, (tx) => tx.execute(sql`select id from job where id = ${parent.id} for update`));
+    const holder = await holdLock(scratch.url, (tx) => tx.execute(sql`select id from job where id = ${parent.id}`));
     try {
       const submit = (idea: string) =>
         runEnqueue({
@@ -875,9 +870,9 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
           discardParent: parent.id,
         });
       const first = submit("First change.");
-      await waitForBlocked(scratch.db, scratch.name, 1, holder);
+      await waitForBlocked(scratch.db, scratch.url, 1, holder);
       const second = submit("Second change.");
-      await waitForBlocked(scratch.db, scratch.name, 2, holder);
+      await waitForBlocked(scratch.db, scratch.url, 2, holder);
       await holder.release();
       const [landed, refused] = await Promise.allSettled([first, second]);
       expect(landed?.status === "fulfilled" && landed.value.created).toBe(true);
@@ -1061,8 +1056,8 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
     // needs topics owned by the database, so the row says so for this check.
     const [had] = (await scratch.db.execute<{ source: string }>(sql`select source from content_source where type = 'topics'`)).rows;
     await scratch.db.execute(sql`
-      insert into content_source (type, source, flipped_at) values ('topics', 'db', now())
-      on conflict (type) do update set source = 'db', flipped_at = now()`);
+      insert into content_source (type, source, flipped_at) values ('topics', 'db', cast(unixepoch('subsec') * 1000 as integer))
+      on conflict (type) do update set source = 'db', flipped_at = cast(unixepoch('subsec') * 1000 as integer)`);
     try {
       await expect(archiveTopic(scratch.db, "video-rename-to", by)).rejects.toThrow(/studio videos filed under it: renamed-subject/);
     } finally {

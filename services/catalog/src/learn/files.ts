@@ -25,6 +25,7 @@ import type { CatalogDatabase } from "../db";
 import { sqlstate } from "../state/errors";
 import { allDirs, conceptsDir, LEARN_ROOT_ENV, namedTree, rel, repoRoot, sessionsDir } from "./paths";
 
+import { inTransaction } from "../db";
 /**
  * Concept notes and session logs, for the `learn` CLI: the file half of the
  * old `scripts/learn/lib/store.mjs`, and since Track C of
@@ -309,13 +310,10 @@ export async function readConceptForWrite(id: string): Promise<ConceptRead | nul
     const note = await readConcept(id);
     return note === null ? null : { note, base: null };
   }
-  return db.transaction(
-    async (tx) => {
+  return inTransaction(db, async (tx) => {
       const [row] = await readNoteRows(tx, [id], cliScope().readable);
       return row === undefined ? null : { note: noteFromRow(row), base: await noteRevision(tx, id) };
-    },
-    { isolationLevel: "repeatable read", accessMode: "read only" },
-  );
+    });
 }
 
 /**

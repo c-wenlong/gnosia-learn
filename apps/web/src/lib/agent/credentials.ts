@@ -1,12 +1,12 @@
 import "server-only";
 
-import type { ProviderName } from "@self-learn/schema/shared";
+import type { ProviderName } from "@gnosia/schema/shared";
 import {
   entryCredential as entryCredentialCore,
   keyTestCredential as keyTestCredentialCore,
   tutorCredentials as tutorCredentialsCore,
-} from "@self-learn/tutor/server/credentials";
-import type { ChainStep, ProviderCredential } from "@self-learn/tutor/providers";
+} from "@gnosia/tutor/server/credentials";
+import type { ChainStep, ProviderCredential } from "@gnosia/tutor/providers";
 
 import { catalogDatabase } from "@/lib/learner-store";
 
@@ -14,7 +14,7 @@ type Env = Record<string, string | undefined>;
 
 /**
  * The owner's provider credentials (docs/BYOK.md, docs/TUTOR-MODELS.md). The
- * resolution itself lives in `@self-learn/tutor/server/credentials`, which
+ * resolution itself lives in `@gnosia/tutor/server/credentials`, which
  * the native sidecar calls with its own pool; this file hands it this app's.
  */
 

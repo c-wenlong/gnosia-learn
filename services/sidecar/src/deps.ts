@@ -1,8 +1,8 @@
-import { fsStore, type BlobStore } from "@self-learn/blob";
-import { blobRoot, connect, type CatalogDatabase, type Connection } from "@self-learn/catalog/state";
-import { ownerScope } from "@self-learn/schema/shared";
-import type { TutorDeps } from "@self-learn/tutor/server/deps";
-import { selectContentSource } from "@self-learn/tutor/server/content-source";
+import { fsStore, type BlobStore } from "@gnosia/blob";
+import { blobRoot, connect, type CatalogDatabase, type Connection } from "@gnosia/catalog/state";
+import { ownerScope } from "@gnosia/schema/shared";
+import type { TutorDeps } from "@gnosia/tutor/server/deps";
+import { selectContentSource } from "@gnosia/tutor/server/content-source";
 
 import { owner as configuredOwner } from "./config";
 
@@ -49,7 +49,7 @@ export function tutorDeps(env: Record<string, string | undefined> = process.env)
   };
 }
 
-/** The catalog's blob root (`SELF_LEARN_HOME`), as `fsStore` reads it. */
+/** The catalog's blob root (`GNOSIA_HOME`), as `fsStore` reads it. */
 function blobStoreOf(): BlobStore {
   return fsStore(blobRoot());
 }

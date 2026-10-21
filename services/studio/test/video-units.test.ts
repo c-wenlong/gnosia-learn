@@ -102,7 +102,7 @@ describe("the video agent's permission file", () => {
 
 describe("paths the one command cannot carry", () => {
   it("names a space, or any other character that needs quoting, in the studio home or node's path", () => {
-    expect(commandPathProblem("/Users/me/.self-learn/studio", "/opt/homebrew/bin/node")).toBeNull();
+    expect(commandPathProblem("/Users/me/.gnosia/studio", "/opt/homebrew/bin/node")).toBeNull();
     expect(commandPathProblem("/Users/me/My Studio", "/opt/homebrew/bin/node")).toBe("the studio home path contains a space; video jobs need a path without one (/Users/me/My Studio)");
     expect(commandPathProblem("/Users/me/studio's", "/opt/homebrew/bin/node")).toMatch(/^the studio home path contains a character other than/);
     expect(commandPathProblem("/Users/me/studio", "/Applications/My Node/node")).toBe("the node path contains a space; video jobs need a path without one (/Applications/My Node/node)");
@@ -276,7 +276,7 @@ describe("naming the clips through gnosia-audio's keys reply", () => {
     expect(() => keysFromReply(reply({ schema: 1, error: { kind: "request", message: "lines must be non-empty strings" } }, 2), 1, audio)).toThrow(/non-empty strings/);
     expect(() => keysFromReply(reply({ schema: 1, lines: one }), 2, audio)).toThrow(/shape/);
     expect(() => keysFromReply(reply({ schema: 1, lines: [{ clip: `${audio}/../x.wav` }] }), 1, audio)).toThrow(/shape/);
-    expect(() => keysFromReply(reply({ schema: 1, lines: [{ clip: "/Users/me/.self-learn/manimkc/cache/audio/0123456789abcdef.wav" }] }), 1, audio)).toThrow(/not this job's audio cache/);
+    expect(() => keysFromReply(reply({ schema: 1, lines: [{ clip: "/Users/me/.gnosia/manimkc/cache/audio/0123456789abcdef.wav" }] }), 1, audio)).toThrow(/not this job's audio cache/);
     expect(() => keysFromReply({ code: 1, stdout: "Traceback", stderr: "ModuleNotFoundError: No module named 'gnosia_audio'" }, 1, audio)).toThrow(/gnosia_audio/);
   });
 });

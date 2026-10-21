@@ -4,10 +4,11 @@ import {
   type NewContentRevision,
   type RevisionEntityType,
   type RevisionOp,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
+import { setRevisionId } from "../db";
 import type { Snapshot, SnapshotRead } from "./snapshot";
 
 /**
@@ -16,7 +17,7 @@ import type { Snapshot, SnapshotRead } from "./snapshot";
  */
 
 /** The session setting the per-table write guard checks (migration 0010, D4). */
-export const REVISION_SETTING = "self_learn.revision_id";
+export const REVISION_SETTING = "gnosia.revision_id";
 
 export interface LatestRevision {
   id: number;
@@ -65,30 +66,37 @@ export interface LatestRevision {
  * deadlock and its absence.
  */
 
-function lockKey(key: string) {
-  return sql`hashtextextended(${key}, 0)`;
-}
-
 const typeLock = (type: RevisionEntityType) => `content_revision:${type}`;
 
-/** The seam's locks: its type shared, its entity exclusive. */
+/**
+ * The seam's locks: its type shared, its entity exclusive.
+ *
+ * On Postgres these were `pg_advisory_xact_lock(_shared)` calls keyed by
+ * `typeLock`; on SQLite the whole file is the lock. `inTransaction` opens
+ * `begin immediate`, so a writer holds the write lock from its first
+ * statement to its last, no two writers overlap, and the shared/exclusive
+ * split and sorted lock order above collapse into "whoever begins first".
+ * The function stays — and stays async — so every caller keeps saying where
+ * a lock was taken, and the day a caller lands outside a transaction the
+ * shape is still here.
+ */
 export async function lockEntity(
   db: CatalogDatabase,
   type: RevisionEntityType,
   id: string,
 ): Promise<void> {
-  await db.execute(sql`select pg_advisory_xact_lock_shared(${lockKey(typeLock(type))})`);
-  await db.execute(sql`select pg_advisory_xact_lock(${lockKey(`${typeLock(type)}:${id}`)})`);
+  void db;
+  void id;
+  void typeLock(type);
 }
 
-/** An import's locks: every type it may touch, exclusive, in sorted order. */
+/** An import's locks: every type it may touch, exclusive, in sorted order. See `lockEntity`. */
 export async function lockTypes(
   db: CatalogDatabase,
   types: readonly RevisionEntityType[],
 ): Promise<void> {
-  for (const type of [...new Set(types)].sort()) {
-    await db.execute(sql`select pg_advisory_xact_lock(${lockKey(typeLock(type))})`);
-  }
+  void db;
+  for (const type of [...new Set(types)].sort()) void typeLock(type);
 }
 
 /** The newest revision of each entity named, keyed by entity id. */
@@ -108,13 +116,18 @@ export async function latestRevisions(
     archived: boolean;
     deleted: boolean;
   }>(sql`
-    select distinct on (entity_id)
-      entity_id, id, seq, snapshot_hash,
-      (snapshot -> 'entity' ->> 'archived_at') is not null as archived,
-      op = 'delete' as deleted
-    from ${contentRevision}
-    where entity_type = ${type} and entity_id = any(${sql.param(unique)}::text[])
-    order by entity_id, seq desc
+    -- Was distinct-on (entity_id) order by entity_id, seq desc; the
+    -- window keeps the highest-seq row per entity the same way. The bound
+    -- array is a json_each now that = any(…) is gone too.
+    select entity_id, id, seq, snapshot_hash, archived, deleted from (
+      select entity_id, id, seq, snapshot_hash,
+        (snapshot -> 'entity' ->> 'archived_at') is not null as archived,
+        op = 'delete' as deleted,
+        row_number() over (partition by entity_id order by seq desc) as rn
+      from ${contentRevision}
+      where entity_type = ${type}
+        and entity_id in (select value from json_each(${JSON.stringify(unique)}))
+    ) where rn = 1
   `);
   for (const row of rows) {
     out.set(row.entity_id, {
@@ -130,25 +143,31 @@ export async function latestRevisions(
 
 /**
  * Take revision ids from the table's own identity sequence before the rows
- * exist, so the seam can name the revision in `self_learn.revision_id` before
+ * exist, so the seam can name the revision in `gnosia.revision_id` before
  * the entity write that the guard checks.
  */
 export async function reserveRevisionIds(db: CatalogDatabase, count: number): Promise<number[]> {
   if (count === 0) return [];
-  const { rows } = await db.execute<{ id: string | number }>(sql`
-    select nextval(pg_get_serial_sequence('content_revision', 'id')) as id
-    from generate_series(1, ${count})
+  // `content_revision.id` is INTEGER PRIMARY KEY, so a rowid is taken by
+  // inserting; reserving the next `count` of them is `max(id) + 1 …`, safe
+  // because every caller runs inside `inTransaction`, whose `begin
+  // immediate` already holds the write lock no rival could insert under.
+  const { rows } = await db.execute<{ first: number }>(sql`
+    select coalesce(max(id), 0) + 1 as first from content_revision
   `);
-  return rows.map((row) => Number(row.id));
+  const first = Number(rows[0]?.first ?? 1);
+  return Array.from({ length: count }, (_, i) => first + i);
 }
 
 /**
  * Say, for the rest of this transaction, that its content writes come through
- * the seam. `is_local = true`, so the setting ends with the transaction and a
- * pooled connection cannot carry it into the next caller's writes.
+ * the seam. `set_config(…, true)` was transaction-local on Postgres;
+ * `setRevisionId` sets the per-connection flag the registered
+ * `catalog_revision_id()` function answers, and `inTransaction` clears it
+ * when the outermost transaction ends — the same scope, kept.
  */
 export async function markSeam(db: CatalogDatabase, value: string): Promise<void> {
-  await db.execute(sql`select set_config(${REVISION_SETTING}, ${value}, true)`);
+  setRevisionId(db, value);
 }
 
 export interface PendingRevision {

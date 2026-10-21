@@ -40,7 +40,7 @@ building it.
 to `learner`), `provider` (`nvidia`, `gemini` or `openrouter`), `ciphertext`,
 `iv`, `auth_tag`, `key_version`, `last4`, `created_at`, `updated_at`, with the
 primary key `(owner_id, provider)`. Added through `packages/schema/src/` and
-`npm run generate -w @self-learn/catalog`, with the copy guard of 0010
+`npm run generate -w @gnosia/catalog`, with the copy guard of 0010
 appended like every table since. `owner_id` has no default, unlike the content
 tables, so a key is never filed under `local` by omission, and it cascades on
 delete, so deleting an owner deletes their keys.

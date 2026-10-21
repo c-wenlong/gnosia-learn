@@ -28,11 +28,11 @@ export const HOME_PATH = "/home";
 /** The variables a deployment has to set before anyone can sign in. */
 /**
  * The deployment secrets' environment names. The constants live in
- * `@self-learn/schema/shared` so the BYOK seal in `@self-learn/tutor` reads
+ * `@gnosia/schema/shared` so the BYOK seal in `@gnosia/tutor` reads
  * the same variable this session cookie is signed with.
  */
-export { OWNER_PASSWORD_VAR, AUTH_SECRET_VAR, MIN_SECRET_LENGTH } from "@self-learn/schema/shared";
-import { AUTH_SECRET_VAR, MIN_SECRET_LENGTH, OWNER_PASSWORD_VAR } from "@self-learn/schema/shared";
+export { OWNER_PASSWORD_VAR, AUTH_SECRET_VAR, MIN_SECRET_LENGTH } from "@gnosia/schema/shared";
+import { AUTH_SECRET_VAR, MIN_SECRET_LENGTH, OWNER_PASSWORD_VAR } from "@gnosia/schema/shared";
 
 export interface AuthConfig {
   password: string;

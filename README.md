@@ -11,8 +11,8 @@ Gnosia
 </p>
 
 <p align="center">
-  <a href="https://github.com/c-wenlong/self-learn/actions/workflows/ci.yml"><img src="https://github.com/c-wenlong/self-learn/actions/workflows/ci.yml/badge.svg?event=pull_request" alt="CI status"></a>
-  <a href="https://app.codecov.io/gh/c-wenlong/self-learn"><img src="https://codecov.io/gh/c-wenlong/self-learn/graph/badge.svg?token=LRJZ81XZA4&branch=main" alt="Test coverage"></a>
+  <a href="https://github.com/c-wenlong/gnosia/actions/workflows/ci.yml"><img src="https://github.com/c-wenlong/gnosia/actions/workflows/ci.yml/badge.svg?event=pull_request" alt="CI status"></a>
+  <a href="https://app.codecov.io/gh/c-wenlong/gnosia"><img src="https://codecov.io/gh/c-wenlong/gnosia/graph/badge.svg?token=LRJZ81XZA4&branch=main" alt="Test coverage"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/typescript-5-blue.svg" alt="TypeScript 5"></a>
   <a href="https://nextjs.org/"><img src="https://img.shields.io/badge/next.js-16-black.svg" alt="Next.js 16"></a>
@@ -30,7 +30,7 @@ Gnosia
 
 ---
 
-**Self-Learn** is a personal study workspace built around the NUS School of Computing AY2026/27 course shortlist. A Next.js hub renders each course as a docs-style roadmap: topic checklists, notes, curated resources, and short Socratic tutoring sessions whose conclusions are saved back against the topic.
+**Gnosia** is a personal study workspace built around the NUS School of Computing AY2026/27 course shortlist. A Next.js hub renders each course as a docs-style roadmap: topic checklists, notes, curated resources, and short Socratic tutoring sessions whose conclusions are saved back against the topic.
 
 Behind the hub sits a tutoring loop that runs inside Claude Code. It measures what you already know, plans a path from there to a goal, teaches one reasoning step at a time, and schedules what you will forget. Everything it writes lands in Postgres, each change a revision with an author and a reason that `catalog history` shows, and `learn vault pull` hands the notes back as plain Markdown you can read and edit.
 
@@ -42,8 +42,8 @@ A third part, the `tools/manimkc/` submodule, renders narrated animations for co
 ```
 
 <p align="center">
-  <img src="apps/web/public/screenshot.png" alt="The Self-Learn Today page: a top bar with Today, Courses, Learn, Library and Review, the next concept on the path with Continue teaching, a list of reviews due with Start review, recent study activity, and a right column with today's target, a seven-day streak strip and courses in progress" width="900"><br>
-  <em>Today, the home page, live at <a href="https://self-learn-one.vercel.app">self-learn-one.vercel.app</a>.</em>
+  <img src="apps/web/public/screenshot.png" alt="The Gnosia Today page: a top bar with Today, Courses, Learn, Library and Review, the next concept on the path with Continue teaching, a list of reviews due with Start review, recent study activity, and a right column with today's target, a seven-day streak strip and courses in progress" width="900"><br>
+  <em>Today, the home page, live at <a href="https://gnosia-one.vercel.app">gnosia-one.vercel.app</a>.</em>
 </p>
 
 ## Why this exists
@@ -124,8 +124,8 @@ back in layers with `ls`, `show`, `path` and `search`, every one of them
 ## Install
 
 ```bash
-git clone https://github.com/c-wenlong/self-learn
-cd self-learn
+git clone https://github.com/c-wenlong/gnosia
+cd gnosia
 npm ci
 cp .env.example apps/web/.env.local   # Next reads it from apps/web/, never the root
 npm run dev
@@ -144,7 +144,7 @@ The diagram studio at `/studio` needs its runner beside the app. `npm run dev:up
 The app reads its courses, topics, notes and diagrams from Postgres, and nothing else, so it needs Postgres 17 running locally (`brew install postgresql@17 && brew services start postgresql@17`). The repository holds no content of its own beyond [`seed/`](seed/README.md), a small real slice in the export format, so a fresh clone builds its database from that. With Postgres up, the first time:
 
 ```bash
-createdb self_learn                                         # first checkout only; a second checkout reuses it
+createdb gnosia                                         # first checkout only; a second checkout reuses it
 npm run catalog -- migrate                                  # creates the tables, or brings them up to date
 MANIMKC_ROOT=/nonexistent REMOTIONKC_ROOT=/nonexistent REVIDEOKC_ROOT=/nonexistent BLENDERKC_ROOT=/nonexistent npm run catalog -- import seed    # the seed, leaving the video tools out
 for t in topics tags concepts sessions courses diagrams; do npm run catalog -- flip $t; done   # the database owns each type
@@ -154,7 +154,7 @@ The flips run in that order, the one `scripts/lib/flip-order.mjs` keeps. `MANIMK
 
 A type that has not been flipped is refused by name rather than read from the files: the page says it could not read its content, and the server log names the `catalog flip` to run ([CONTENT-MIGRATION.md](docs/CONTENT-MIGRATION.md) has the flip-day details). Without Postgres the app shows a banner saying nothing you change is saved, and each page that shows content says it could not read it.
 
-Both the app and the catalog CLI default to `postgres://localhost:5432/self_learn`. If you point `DATABASE_URL` anywhere else, set the same value in `services/catalog/.env` (copy `services/catalog/.env.example`): the CLI reads that file and never `apps/web/.env.local`, so a value set in only one place migrates one database while the app connects to another.
+Both the app and the catalog CLI default to `postgres://localhost:5432/gnosia`. If you point `DATABASE_URL` anywhere else, set the same value in `services/catalog/.env` (copy `services/catalog/.env.example`): the CLI reads that file and never `apps/web/.env.local`, so a value set in only one place migrates one database while the app connects to another.
 
 Three video-tool submodules are private, so a clone leaves `tools/manimkc/`, `tools/remotionkc/` and `tools/revideokc/` empty, and the app, the tests and `npm run catalog -- import seed` all work without them. On a machine with access, `git submodule update --init tools/manimkc` fetches one (add `--recursive` for manimkc, which nests a manim submodule of its own). A clone that predates the tools/ move needs `git submodule sync --recursive` first, because the submodule paths changed.
 
@@ -284,7 +284,7 @@ flowchart LR
 | --- | --- | --- |
 | `concept`, `session_log_entry`, `diagram` (Postgres) | Atomic concept notes (Obsidian-compatible and wikilinked once pulled), one log per session written live, and the diagrams drawn while teaching. `catalog export` or the nightly export is the copy | not in git |
 | `seed/` | A small slice of the content in the export format, for a fresh clone and the tests | tracked |
-| `~/.self-learn/` (`SELF_LEARN_HOME`) | The blob store (`blobs/`), the Obsidian vault (`vault/`) and the nightly export (`archive/`, `npm run export:nightly`) | outside the repo |
+| `~/.gnosia/` (`GNOSIA_HOME`) | The blob store (`blobs/`), the Obsidian vault (`vault/`) and the nightly export (`archive/`, `npm run export:nightly`) | outside the repo |
 | `event`, `mastery`, `review` (Postgres) | The trajectory and its projections. `event` is the only copy | not in git |
 | `progress`, `recap`, `preference` (Postgres) | The web hub's ticks, notes and recaps. Also the only copy | not in git |
 | `apps/web/.env.local` | `OWNER_PASSWORD`, `AUTH_SECRET`, `DATABASE_URL`, provider keys; read from `apps/web/`, never the root | gitignored |
@@ -319,7 +319,7 @@ Keys are read server-side only (`apps/web/src/lib/agent/providers.ts`); the brow
 | `npm run e2e` | Headless smoke test of a production build against a throwaway database it builds from `seed/`. Needs `npm run build` and Postgres first; see [CONTRIBUTING.md](CONTRIBUTING.md#end-to-end-smoke) |
 | `npm run learn -- <cmd>` | The learning pipeline CLI |
 | `npm run canvas -- <cmd>` | The `tools/tldrawkc/` diagram CLI. Needs `npm ci && npm run build` inside the submodule first |
-| `npm run catalog -- <cmd>` | The catalog CLI: `migrate`, `import` (`index` is its old name), `status`, `ls`, `show`, `path`, `search`. Needs `createdb self_learn` against a local Postgres 17 |
+| `npm run catalog -- <cmd>` | The catalog CLI: `migrate`, `import` (`index` is its old name), `status`, `ls`, `show`, `path`, `search`. Needs `createdb gnosia` against a local Postgres 17 |
 
 Thirteen Vitest files cover the three halves. On the web side: curriculum integrity, progress counting, learner-state reducers, topic recaps and the v1 to v2 migration, the recap summariser, and agent prompt/provider/objective selection. On the pipeline side: BKT update formulas and information-gain ordering, DAG cycle detection and frontier advance, the SM-2 interval ladder and leech handling, frontmatter and wikilink parsing, and `scripts/learn/cli.test.mjs` over the command surface itself. On the catalog side: migrations applying from empty and staying idempotent, and the constraints that make the database worth having — an unknown foreign key, a prerequisite kind outside `requires|assumes`, a `collection_item` with zero or two targets, and an `UPDATE` on `event`. Those need a reachable Postgres and skip themselves with a named reason without one, so `npm test` stays green on a machine that has none; CI runs a `postgres:17` service so they are a real gate there.
 

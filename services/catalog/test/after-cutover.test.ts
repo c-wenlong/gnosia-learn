@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 
-import { conceptCurriculumItem, contentSource, sessionLogEntry, topic } from "@self-learn/schema";
+import { conceptCurriculumItem, contentSource, sessionLogEntry, topic } from "@gnosia/schema";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 

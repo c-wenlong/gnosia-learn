@@ -1,13 +1,13 @@
 import "server-only";
 
 import { connection } from "next/server";
-import { ownerScope } from "@self-learn/schema/shared";
+import { ownerScope } from "@gnosia/schema/shared";
 import {
   courseSlugsOf,
   placeOf,
   readConceptWorkspace as readConceptWorkspaceCore,
   type ConceptWorkspaceRead,
-} from "@self-learn/tutor/server/concept-workspace";
+} from "@gnosia/tutor/server/concept-workspace";
 
 import { contentSource } from "@/data/source";
 import { catalogDatabase } from "@/lib/learner-store";
@@ -15,7 +15,7 @@ import { currentOwner } from "@/lib/owner";
 
 /**
  * The concept workspace's read. The assembly lives in
- * `@self-learn/tutor/server/concept-workspace`, which the native sidecar
+ * `@gnosia/tutor/server/concept-workspace`, which the native sidecar
  * calls with its own pool and owner; this file hands it this app's seams.
  */
 

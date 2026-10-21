@@ -7,7 +7,7 @@ import {
   asThemeMode,
   type ThemeMode,
   type UserResource,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 
 import type { CatalogDatabase } from "../db";
 import { readAvatar, readDisplayName } from "./learner";

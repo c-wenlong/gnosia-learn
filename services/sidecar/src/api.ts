@@ -5,7 +5,7 @@ import {
   type ServerResponse,
 } from "node:http";
 
-import type { TutorDeps } from "@self-learn/tutor/server/deps";
+import type { TutorDeps } from "@gnosia/tutor/server/deps";
 import {
   assetNameTurn,
   favoriteTurn,
@@ -17,7 +17,7 @@ import {
   progressTurn,
   sessionCloseTurn,
   watchedTurn,
-} from "@self-learn/tutor/server/learner-writes";
+} from "@gnosia/tutor/server/learner-writes";
 import {
   chatTurn,
   customProviderAddTurn,
@@ -39,7 +39,7 @@ import {
   tutorProviderMoveTurn,
   tutorProviderRemoveTurn,
   type TurnReply,
-} from "@self-learn/tutor/server/turns";
+} from "@gnosia/tutor/server/turns";
 
 import { guard } from "./guard";
 
@@ -47,7 +47,7 @@ import { guard } from "./guard";
  * The HTTP surface: JSON in, JSON out, on `127.0.0.1` and an ephemeral port.
  *
  * Every endpoint is a thin transport over one `*Turn` function from
- * `@self-learn/tutor/server` — the same functions `apps/web`'s routes call,
+ * `@gnosia/tutor/server` — the same functions `apps/web`'s routes call,
  * so the native app gets the web contract verbatim: same bodies, same
  * `{ error, code }` refusals, same provider-fallback fields. There is no SSE:
  * the tutor endpoints never streamed, they answer one JSON object per turn.

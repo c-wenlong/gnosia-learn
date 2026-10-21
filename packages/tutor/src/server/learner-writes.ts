@@ -5,6 +5,7 @@ import {
   assetsByIds,
   clearPreference,
   closeTutorSession,
+  inTransaction,
   readConceptGraph,
   readPreference,
   recordObservation,
@@ -17,7 +18,7 @@ import {
   writeDisplayName,
   writePreference,
   type CatalogDatabase,
-} from "@self-learn/catalog/state";
+} from "@gnosia/catalog/state";
 import {
   ASSET_NAME_MAX,
   cleanAssetName,
@@ -25,7 +26,7 @@ import {
   DISPLAY_NAME_MAX,
   PREFERENCE_KEYS,
   type LastVisited,
-} from "@self-learn/schema/shared";
+} from "@gnosia/schema/shared";
 
 import { isConceptSlug } from "../concept-workspace-core";
 import { dayKey } from "../days";
@@ -615,7 +616,7 @@ function mentions(error: unknown, constraint: string): boolean {
  * event appended and the front of `recentModules`, in the one transaction
  * under the learner's row lock so two module pages opened together cannot
  * drop each other's entry. The event goes in a nested transaction — a
- * savepoint, which drizzle's `tx.transaction` is inside one — so a database
+ * savepoint, which `inTransaction` opens inside one — so a database
  * that has not taken migration 0025 loses the event and still keeps the
  * preferences, which Recent reads as well; any other refusal fails the
  * write. A `lastVisited` that is no visit still lands as the preference,
@@ -626,7 +627,7 @@ async function rememberVisit(db: CatalogDatabase, value: unknown, owner: string)
   await withLearnerLock(db, owner, async (tx) => {
     if (visit !== undefined) {
       try {
-        await tx.transaction(async (savepoint) =>
+        await inTransaction(tx, async (savepoint) =>
           appendEvent(
             savepoint,
             {

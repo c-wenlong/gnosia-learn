@@ -1,8 +1,8 @@
 import "server-only";
 
-import { ownerScope } from "@self-learn/schema/shared";
-import type { TutorDeps } from "@self-learn/tutor/server/deps";
-import type { TurnReply } from "@self-learn/tutor/server/turns";
+import { ownerScope } from "@gnosia/schema/shared";
+import type { TutorDeps } from "@gnosia/tutor/server/deps";
+import type { TurnReply } from "@gnosia/tutor/server/turns";
 import { NextResponse } from "next/server";
 
 import { assetBlobStore } from "@/lib/blob-store";

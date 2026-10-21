@@ -2,7 +2,7 @@ import { rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { JOB_STATES, JOB_TRANSITIONS, canTransition } from "@self-learn/schema";
+import { JOB_STATES, JOB_TRANSITIONS, canTransition } from "@gnosia/schema";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { validateBrief, BriefError, type ValidBrief, type Vocabulary } from "../src/diagram/brief";
@@ -14,7 +14,7 @@ import { testVocabulary } from "./vocabulary";
  * The state machine, the lease, and the refusals a brief earns before anything
  * is spent.
  *
- * `JOB_TRANSITIONS` lives in `@self-learn/schema` and the runner reads it from
+ * `JOB_TRANSITIONS` lives in `@gnosia/schema` and the runner reads it from
  * there rather than keeping its own copy, so what is worth testing here is that
  * the runner *asks* — that a cancel, an accept and a discard each refuse the
  * states the table refuses — and that every state has something a person can

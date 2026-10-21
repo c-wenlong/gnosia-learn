@@ -3,7 +3,8 @@ import { copyFile, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { bigint, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 import { MIGRATIONS_FOLDER } from "../src/migrations";
 
@@ -63,20 +64,24 @@ export async function withoutBlobContract(): Promise<string> {
  * this table instead. Only the columns are declared; the checks and keys on
  * the real table still judge what the row is.
  */
-export const assetBefore0031 = pgTable("asset", {
+export const assetBefore0031 = sqliteTable("asset", {
   id: text("id").primaryKey(),
   kind: text("kind").notNull(),
   path: text("path"),
   url: text("url"),
   contentHash: text("content_hash"),
-  bytes: bigint("bytes", { mode: "number" }),
+  bytes: integer("bytes"),
   title: text("title"),
   sourceRepo: text("source_repo").notNull(),
   blobKey: text("blob_key"),
   resourceType: text("resource_type"),
   ownerId: text("owner_id").notNull().default("local"),
-  createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(cast(unixepoch('subsec') * 1000 as integer))`),
+  updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+    .notNull()
+    .default(sql`(cast(unixepoch('subsec') * 1000 as integer))`),
 });
 
 /** A migrations folder holding the journal's entries `keep` accepts, in order. */

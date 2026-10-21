@@ -2,7 +2,7 @@ import {
   contentOwnership,
   dbSource,
   type CatalogDatabase,
-} from "@self-learn/catalog/state";
+} from "@gnosia/catalog/state";
 import {
   CONTENT_SOURCE_VAR,
   selectSource,
@@ -10,8 +10,8 @@ import {
   type ContentType,
   type Resolutions,
   type SelectedSource,
-} from "@self-learn/content";
-import type { OwnerScope } from "@self-learn/schema/shared";
+} from "@gnosia/content";
+import type { OwnerScope } from "@gnosia/schema/shared";
 
 /**
  * The content seam's composition root, moved out of

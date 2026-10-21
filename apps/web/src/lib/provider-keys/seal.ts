@@ -1,7 +1,7 @@
 import "server-only";
 
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from "node:crypto";
-import { PROVIDER_KEY_LIMITS, type ProviderName } from "@self-learn/schema/shared";
+import { PROVIDER_KEY_LIMITS, type ProviderName } from "@gnosia/schema/shared";
 
 import { MIN_SECRET_LENGTH } from "@/lib/auth/core";
 

@@ -4,13 +4,13 @@ import {
   NOTE_READ_LIMIT,
   readConceptNote as readConceptNoteCore,
   type ConceptNoteRead,
-} from "@self-learn/tutor/server/concept-note";
+} from "@gnosia/tutor/server/concept-note";
 
 import { contentSource } from "@/data/source";
 
 /**
  * One concept's note through the reader seam. The read lives in
- * `@self-learn/tutor/server/concept-note`; this file hands it this app's
+ * `@gnosia/tutor/server/concept-note`; this file hands it this app's
  * selected seam.
  */
 

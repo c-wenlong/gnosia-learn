@@ -6,7 +6,7 @@ import {
   enforceSameOrigin,
 } from "@/lib/agent/guard";
 import { tutorDeps, turnResponse } from "@/lib/agent/env";
-import { chatTurn, type ChatBody } from "@self-learn/tutor/server/turns";
+import { chatTurn, type ChatBody } from "@gnosia/tutor/server/turns";
 import { requestOwner } from "@/lib/learner-api";
 
 export const runtime = "nodejs";
@@ -16,7 +16,7 @@ export const runtime = "nodejs";
  * topic tutor sends `courseSlug`, `moduleSlug` and `topicId`; the concept
  * tutor sends `conceptSlug`; the open tutor sends `subject`; Ask on a library
  * asset sends `assetId`. The turn itself — validation, prompt, the model
- * chain, the response shape — is `chatTurn` in `@self-learn/tutor/server`,
+ * chain, the response shape — is `chatTurn` in `@gnosia/tutor/server`,
  * which the native sidecar calls over the same contract. This file keeps the
  * request-side guards (origin, rate limit, the owner the session resolves)
  * and maps the plain reply onto `NextResponse`.

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 
-import { asset, assetDerivation, indexRun, LOCAL_LEARNER_ID, ownerScope } from "@self-learn/schema";
+import { asset, assetDerivation, indexRun, LOCAL_LEARNER_ID, ownerScope } from "@gnosia/schema";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -43,12 +43,12 @@ const LOCAL = ownerScope(LOCAL_LEARNER_ID);
 /** The real ffmpeg on PATH, ignoring the suites' FFMPEG_PATH stand-in. */
 const realFfmpeg = await findFfmpeg({ PATH: process.env.PATH });
 
-const SAVED = { manimkc: process.env.MANIMKC_ROOT, home: process.env.SELF_LEARN_HOME };
+const SAVED = { manimkc: process.env.MANIMKC_ROOT, home: process.env.GNOSIA_HOME };
 
 /**
  * The seed with the manimkc stand-in, and the two variables pointed at this
  * suite's own: the stand-in's CLI is found through `MANIMKC_ROOT`, and each
- * scratch database needs a blob store of its own (`SELF_LEARN_HOME`), since a
+ * scratch database needs a blob store of its own (`GNOSIA_HOME`), since a
  * store belongs to the database that first wrote it.
  */
 async function fixture(prefix: string, video: (dir: string) => Promise<Buffer>) {
@@ -58,12 +58,12 @@ async function fixture(prefix: string, video: (dir: string) => Promise<Buffer>) 
   const manimkc = path.join(work, "manimkc");
   const { videoFile } = await manimkcStandIn(manimkc, await video(work));
   process.env.MANIMKC_ROOT = manimkc;
-  process.env.SELF_LEARN_HOME = path.join(work, "home");
+  process.env.GNOSIA_HOME = path.join(work, "home");
   return { work, tree, manimkc, videoFile };
 }
 
 function restore(): void {
-  for (const [key, value] of [["MANIMKC_ROOT", SAVED.manimkc], ["SELF_LEARN_HOME", SAVED.home]] as const) {
+  for (const [key, value] of [["MANIMKC_ROOT", SAVED.manimkc], ["GNOSIA_HOME", SAVED.home]] as const) {
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
   }
@@ -106,7 +106,7 @@ describe.skipIf(!reachable.ok || realFfmpeg === null)("catalog import with a rea
     );
     expect(await videosWithStoredPoster(scratch.db, [VIDEO], LOCAL)).toEqual(new Set([VIDEO]));
     const [poster] = await scratch.db.select().from(asset).where(eq(asset.id, POSTER));
-    expect(poster).toMatchObject({ kind: "poster", ownerId: LOCAL_LEARNER_ID, sourceRepo: "self-learn" });
+    expect(poster).toMatchObject({ kind: "poster", ownerId: LOCAL_LEARNER_ID, sourceRepo: "gnosia" });
     expect(poster?.blobKey).toMatch(/^local\/[0-9a-f]{64}\.jpg$/);
     const read = await openBlobStore().get(poster?.blobKey as string);
     const chunks: Buffer[] = [];
@@ -118,7 +118,7 @@ describe.skipIf(!reachable.ok || realFfmpeg === null)("catalog import with a rea
     // silent cadence, so it is a document of one page at the midpoint.
     expect(await videosWithStoredPdf(scratch.db, [VIDEO], LOCAL)).toEqual(new Set([VIDEO]));
     const [pdf] = await scratch.db.select().from(asset).where(eq(asset.id, PDF));
-    expect(pdf).toMatchObject({ kind: "pdf", ownerId: LOCAL_LEARNER_ID, sourceRepo: "self-learn" });
+    expect(pdf).toMatchObject({ kind: "pdf", ownerId: LOCAL_LEARNER_ID, sourceRepo: "gnosia" });
     expect(pdf?.blobKey).toMatch(/^local\/[0-9a-f]{64}\.pdf$/);
     const pdfRead = await openBlobStore().get(pdf?.blobKey as string);
     const pdfChunks: Buffer[] = [];

@@ -1,4 +1,4 @@
-import { asset, assetName, concept, topic } from "@self-learn/schema";
+import { asset, assetName, concept, topic } from "@gnosia/schema";
 import { sql, type SQL } from "drizzle-orm";
 
 import { CLI_OWNER } from "../content/scope";
@@ -69,22 +69,31 @@ export async function runSearch(term: string, limit = SEARCH_LIMIT): Promise<Sea
       with hits as (
         select 'topic' as type, ${topic.slug} as id, ${topic.title} as title,
                ${topic.title} as matched, ${topic.domain} as context, 0 as type_rank
-          from ${topic} where ${topic.title} ilike ${pattern}
+          from ${topic} where ${topic.title} like ${pattern}
         union all
         select 'topic', ${topic.slug}, ${topic.title}, alias.value, ${topic.domain}, 0
-          from ${topic}, lateral jsonb_array_elements_text(${topic.aliases}) as alias(value)
-         where alias.value ilike ${pattern}
+          -- Was lateral jsonb_array_elements_text; json_each is the
+          -- SQLite table-valued function and needs no join keyword.
+          from ${topic}, json_each(${topic.aliases}) as alias
+         where alias.value like ${pattern}
         union all
         select 'concept', ${concept.slug}, ${concept.title}, ${concept.title}, ${concept.topicSlug}, 1
-          from ${concept} where ${concept.title} ilike ${pattern}
+          from ${concept} where ${concept.title} like ${pattern}
         union all
         ${names ? namedAssetHits(pattern) : plainAssetHits(pattern)}
+      ),
+      ranked as (
+        select type, id, title, matched, context, type_rank,
+               case when lower(matched) = lower(${trimmed}) then 0
+                    when matched like ${prefix} then 1
+                    else 2 end as rank
+          from hits
       )
-      select distinct on (type, id) type, id, title, matched, context, type_rank,
-             case when lower(matched) = lower(${trimmed}) then 0
-                  when matched ilike ${prefix} then 1
-                  else 2 end as rank
-        from hits
+      -- Was distinct on (type, id) order by type, id, rank; the
+      -- row_number window is the same "lowest rank per hit" pick in SQLite.
+      select type, id, title, matched, context, type_rank, rank
+        from (select *, row_number() over (partition by type, id order by rank) as rn from ranked)
+       where rn = 1
        order by type, id, rank
     `);
 
@@ -127,7 +136,7 @@ export function formatSearch(result: SearchResult): string {
 function plainAssetHits(pattern: string): SQL {
   return sql`select 'asset', ${asset.id}, coalesce(${asset.title}, ${asset.id}),
                coalesce(${asset.title}, ${asset.id}), coalesce(${asset.path}, ${asset.url}), 2
-          from ${asset} where ${asset.title} ilike ${pattern}`;
+          from ${asset} where ${asset.title} like ${pattern}`;
 }
 
 /**
@@ -141,8 +150,8 @@ function namedAssetHits(pattern: string): SQL {
   const named = sql`left join ${assetName} n on n.asset_id = "asset"."id" and n.learner_id = ${CLI_OWNER}`;
   const where = sql`coalesce("asset"."path", "asset"."url")`;
   return sql`select 'asset', "asset"."id", ${shown}, ${shown}, ${where}, 2
-          from ${asset} ${named} where n.title ilike ${pattern}
+          from ${asset} ${named} where n.title like ${pattern}
         union all
         select 'asset', "asset"."id", ${shown}, "asset"."title", ${where}, 2
-          from ${asset} ${named} where "asset"."title" ilike ${pattern}`;
+          from ${asset} ${named} where "asset"."title" like ${pattern}`;
 }

@@ -1,4 +1,4 @@
 /**
- * The hand-rolled markdown parser. The implementation lives in `@self-learn/tutor/markdown`; this file only keeps the `@/components/markdown` path working.
+ * The hand-rolled markdown parser. The implementation lives in `@gnosia/tutor/markdown`; this file only keeps the `@/components/markdown` path working.
  */
-export * from "@self-learn/tutor/markdown";
+export * from "@gnosia/tutor/markdown";

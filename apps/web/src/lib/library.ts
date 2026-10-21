@@ -1,9 +1,9 @@
-import type { MasteryLabel } from "@self-learn/catalog/state";
+import type { MasteryLabel } from "@gnosia/catalog/state";
 
 import { assetDisplayTitle, assetKindLabel, type AssetCardRef } from "@/components/asset-meta";
 import { safeNextPath } from "@/lib/auth/core";
 import { bucketOf, type MasteryBucket } from "@/lib/mastery-bucket";
-import { COMPANION_KINDS, compareByKindThenId, isCompanionKind, kindRank } from "@self-learn/tutor/kind-order";
+import { COMPANION_KINDS, compareByKindThenId, isCompanionKind, kindRank } from "@gnosia/tutor/kind-order";
 export { COMPANION_KINDS, compareByKindThenId, isCompanionKind, kindRank };
 
 /**

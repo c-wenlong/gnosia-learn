@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { ProviderName } from "@self-learn/schema/shared";
+import type { ProviderName } from "@gnosia/schema/shared";
 import {
   failureCode,
   keySecret,
@@ -12,13 +12,13 @@ import {
   saveProviderKey as saveProviderKeyCore,
   savedStatus,
   type SavedKeyStatus,
-} from "@self-learn/tutor/server/provider-keys";
+} from "@gnosia/tutor/server/provider-keys";
 
 import { catalogDatabase } from "@/lib/learner-store";
 
 /**
  * The owner's saved provider keys (docs/BYOK.md). The reads and writes live
- * in `@self-learn/tutor/server/provider-keys`, which the native sidecar calls
+ * in `@gnosia/tutor/server/provider-keys`, which the native sidecar calls
  * with its own pool; this file hands them this app's pool and its
  * `process.env`.
  */

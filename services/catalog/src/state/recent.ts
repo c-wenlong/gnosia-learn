@@ -1,4 +1,4 @@
-import { concept, mastery, readableOwners } from "@self-learn/schema";
+import { concept, mastery, readableOwners } from "@gnosia/schema";
 import { and, eq, inArray, type SQL, sql } from "drizzle-orm";
 
 import { andOwnedBy, ownedBy, scopedRead } from "../content/scope";
@@ -68,13 +68,13 @@ async function latestVisits(db: CatalogDatabase, learnerId: string): Promise<Eve
         e.at,
         e.payload ->> 'course' as course,
         case
-          when jsonb_typeof(e.payload -> 'module') = 'string' then e.payload ->> 'module'
+          when json_type(e.payload -> 'module') = 'text' then e.payload ->> 'module'
           else ''
         end as module
       from event e
       where e.learner_id = ${learnerId}
         and e.type = 'visit'
-        and jsonb_typeof(e.payload -> 'course') = 'string'
+        and json_type(e.payload -> 'course') = 'text'
         and e.payload ->> 'course' <> ''
     )
     select
@@ -82,7 +82,7 @@ async function latestVisits(db: CatalogDatabase, learnerId: string): Promise<Eve
       module,
       ${millis(sql`max(at)`)} as at,
       min(at) as first_at,
-      (array_agg(id order by at, id))[1] as first_id
+      json_extract(json_group_array(id order by at, id), '$[0]') as first_id
     from visits
     group by course, module
     order by first_at, first_id`);
@@ -116,7 +116,7 @@ async function latestObservations(db: CatalogDatabase, learnerId: string, limit?
           e.concept_slug as concept,
           max(e.at) as at,
           min(e.at) as first_at,
-          (array_agg(e.id order by e.at, e.id))[1] as first_id
+          json_extract(json_group_array(e.id order by e.at, e.id), '$[0]') as first_id
         from event e
         where e.learner_id = ${learnerId}
           and e.type = 'observation'
@@ -129,7 +129,7 @@ async function latestObservations(db: CatalogDatabase, learnerId: string, limit?
         select t.concept, t.at, t.first_at, t.first_id
         from touched t
         join concept c on c.slug = t.concept${andOwnedBy(sql`c.owner_id`, owners)}
-        order by date_trunc('milliseconds', t.at) desc, t.first_at, t.first_id
+        order by t.at desc, t.first_at, t.first_id
         ${limit === undefined ? sql`` : sql`limit ${Math.max(0, Math.floor(limit))}`}
       )
       select concept, ${millis(sql`at`)} as at from newest order by first_at, first_id`);
@@ -189,7 +189,7 @@ export async function recentConcepts(
  * timestamp parsing out of it.
  */
 function millis(column: SQL): SQL {
-  return sql`to_char(${column} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
+  return sql`strftime('%Y-%m-%dT%H:%M:%fZ', ${column} / 1000.0, 'unixepoch')`;
 }
 
 function iso(value: Date | string): string {

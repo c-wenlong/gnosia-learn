@@ -3,14 +3,14 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
 
-import { key as blobKey } from "@self-learn/blob";
+import { key as blobKey } from "@gnosia/blob";
 import {
   LOCAL_LEARNER_ID,
   type NewAsset,
   type NewAssetConcept,
   type NewAssetDerivation,
   type NewAssetTopic,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 
 import {
   BLENDERKC_DIR,

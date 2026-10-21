@@ -1,6 +1,6 @@
 "use server";
 
-import { readPreference, writePreference } from "@self-learn/catalog/state";
+import { readPreference, writePreference } from "@gnosia/catalog/state";
 import { redirect } from "next/navigation";
 
 import type { AgentRow } from "@/components/studio/StudioSettings";

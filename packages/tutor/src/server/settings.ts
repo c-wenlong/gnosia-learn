@@ -1,6 +1,6 @@
-import type { CatalogDatabase } from "@self-learn/catalog/state";
-import { readParams, readPreferences, type BktParams } from "@self-learn/catalog/state";
-import { PREFERENCE_KEYS } from "@self-learn/schema/shared";
+import type { CatalogDatabase } from "@gnosia/catalog/state";
+import { readParams, readPreferences, type BktParams } from "@gnosia/catalog/state";
+import { PREFERENCE_KEYS } from "@gnosia/schema/shared";
 
 import { parseMotionMode, parseTutorStyle, type MotionMode, type TutorStyle } from "../preferences";
 

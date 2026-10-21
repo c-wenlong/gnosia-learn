@@ -1,7 +1,7 @@
-import type { BlobStore } from "@self-learn/blob";
-import type { CatalogDatabase } from "@self-learn/catalog/state";
-import type { SelectedSource } from "@self-learn/content";
-import type { OwnerScope } from "@self-learn/schema/shared";
+import type { BlobStore } from "@gnosia/blob";
+import type { CatalogDatabase } from "@gnosia/catalog/state";
+import type { SelectedSource } from "@gnosia/content";
+import type { OwnerScope } from "@gnosia/schema/shared";
 
 /** The process environment, or whatever map a test hands in. */
 export type Env = Record<string, string | undefined>;
@@ -59,10 +59,10 @@ export interface TurnSeams {
   ) => Promise<import("../providers").CompleteOutcome>;
   assetDetail?: (deps: TutorDeps, id: string) => Promise<import("./asset-detail").AssetDetail>;
   assetText?: (deps: TutorDeps, db: CatalogDatabase, id: string, limit?: number) => Promise<string | null>;
-  keyCredential?: (deps: TutorDeps, provider: import("@self-learn/schema/shared").ProviderName) => Promise<import("../providers").ProviderCredential | null>;
+  keyCredential?: (deps: TutorDeps, provider: import("@gnosia/schema/shared").ProviderName) => Promise<import("../providers").ProviderCredential | null>;
   entryCredential?: (
     deps: TutorDeps,
-    provider: import("@self-learn/schema/shared").ProviderName,
+    provider: import("@gnosia/schema/shared").ProviderName,
     model?: string,
   ) => Promise<import("../providers").ProviderCredential | null>;
   chain?: (deps: TutorDeps) => Promise<import("../providers").ChainEntry[]>;

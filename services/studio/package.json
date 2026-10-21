@@ -1,5 +1,5 @@
 {
-  "name": "@self-learn/studio",
+  "name": "@gnosia/studio",
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
@@ -11,9 +11,9 @@
     "studio": "tsx src/index.ts"
   },
   "dependencies": {
-    "@self-learn/blob": "*",
-    "@self-learn/content": "*",
-    "@self-learn/schema": "*"
+    "@gnosia/blob": "*",
+    "@gnosia/content": "*",
+    "@gnosia/schema": "*"
   },
   "//devDependencies": "ignore is the gitignore matcher the claude CLI checks Read and Edit path rules with. The settings test runs the sibling-job globs through it, since a glob that matches this job's own workspace would silently take its candidate away.",
   "devDependencies": {

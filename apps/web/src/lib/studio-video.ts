@@ -1,4 +1,4 @@
-import type { JobState } from "@self-learn/schema/shared";
+import type { JobState } from "@gnosia/schema/shared";
 
 import type { TranscriptCue, VideoChapter } from "@/components/media";
 import { assetFileHref, assetStatusHref } from "@/lib/library";

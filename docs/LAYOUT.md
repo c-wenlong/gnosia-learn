@@ -12,9 +12,9 @@ plus one-off jobs. `docs/` is what you are reading, `seed/` is the content a
 fresh clone starts from, and `.studio/` is generated state, never source.
 
 ```
-self-learn/                       the checkout (the product's name is Gnosia)
+gnosia/                           the checkout
 ├── apps/
-│   ├── web/                      the Next.js app, @self-learn/web
+│   ├── web/                      the Next.js app, @gnosia/web
 │   └── macos/                    the SwiftUI app, a SwiftPM package + an npm shell
 ├── packages/                     schema · content · blob · tutor
 ├── services/                     catalog · studio · sidecar
@@ -25,25 +25,21 @@ self-learn/                       the checkout (the product's name is Gnosia)
 └── .studio/                      the studio runner's state, gitignored
 ```
 
-## The rename, mid-flight
+## The rename
 
-The product is Gnosia; the repository's directory and npm packages still say
-self-learn. Concretely: the workspace names are `@self-learn/web`,
-`@self-learn/catalog`, `@self-learn/schema`, `@self-learn/content`,
-`@self-learn/blob`, `@self-learn/tutor`, `@self-learn/studio` and
-`@self-learn/sidecar`, and only the macOS app is `@gnosia/macos`. The env
-vars are halfway too: `GNOSIA_HOME` is the data-root variable the snapshot
-script and the app read, falling back to `SELF_LEARN_HOME`, while the blob
-store in `packages/blob` still reads `SELF_LEARN_HOME` alone and defaults to
-`~/.self-learn`. On the owner's machine `~/.self-learn` is a symlink to
-`~/.gnosia`, which is what makes the two spellings interchangeable in
-practice — a fresh machine should set `GNOSIA_HOME` and keep the symlink.
+The product is Gnosia, renamed from self-learn: the workspace names are
+`@gnosia/web`, `@gnosia/catalog`, `@gnosia/schema`, `@gnosia/content`,
+`@gnosia/blob`, `@gnosia/tutor`, `@gnosia/studio`, `@gnosia/sidecar` and
+`@gnosia/macos`. `GNOSIA_HOME` is the data-root variable everywhere; the
+snapshot script and the app also read a stale `SELF_LEARN_HOME` as a
+fallback, and the web keeps the legacy storage key and cookies readable
+(`self-learn:v1`, `self-learn-theme`, `self-learn-motion`).
 
 ## apps/web — the web app
 
 Next.js, the app router, server components with client islands opted into
 one at a time. Nothing under it knows the CLI exists; it reaches the catalog
-through `@self-learn/catalog/state` and content through the reader seam in
+through `@gnosia/catalog/state` and content through the reader seam in
 `src/data/`, never the database directly.
 
 ```
@@ -286,10 +282,9 @@ deleted at will: nothing in it is the only copy of anything.
 
 Not in the repository at all, and deliberately so: the data a generator
 produces should not be pinned inside a checkout it can be moved out of.
-Resolved as `GNOSIA_HOME`, then `SELF_LEARN_HOME`, then `~/.gnosia` (the
-snapshot script and the app; the blob store still reads `SELF_LEARN_HOME`
-first — see the rename note). `GNOSIA_CATALOG` and `GNOSIA_BLOBS` override
-the two files directly.
+Resolved as `GNOSIA_HOME`, then `SELF_LEARN_HOME` as a fallback in the
+snapshot script and the app, then `~/.gnosia`. `GNOSIA_CATALOG` and
+`GNOSIA_BLOBS` override the two files directly.
 
 | Path | What it is |
 | --- | --- |

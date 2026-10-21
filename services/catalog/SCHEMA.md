@@ -5,8 +5,8 @@ Postgres 17. This document is the reasoning; [`packages/schema/src/`](../../pack
 definition, and `services/catalog/drizzle/` is the SQL that definition
 generates. When they disagree, the code is right and this file is stale.
 
-The plan is [#27](https://github.com/c-wenlong/self-learn/issues/27); this is
-the first half of bundle 3, [#21](https://github.com/c-wenlong/self-learn/issues/21).
+The plan is [#27](https://github.com/c-wenlong/gnosia/issues/27); this is
+the first half of bundle 3, [#21](https://github.com/c-wenlong/gnosia/issues/21).
 
 [docs/CONTENT-MIGRATION.md](../../docs/CONTENT-MIGRATION.md) is the plan
 that made Postgres the source of truth for content, and it is built through
@@ -23,7 +23,7 @@ directory being imported: an export, `seed/`, or `content-files-final`.
 
 | Half | Tables | Source of truth |
 | --- | --- | --- |
-| Content | `topic`, `concept`, `collection`, `curriculum_item`, `asset` and seven link tables; since 0010 also `tag`, `topic_relation`, `manimkc_topic`, `collection_tag`, `diagram`, `blob_object`, `session_log_entry` and `content_revision`; since 0015 `video` | Postgres, since the phase 3 cut-over: every type is authored here through the write seam, and files are an export (`catalog export --out`, and the nightly export under `$SELF_LEARN_HOME/archive/`). The manimkc rows and the mirror ledger are still rebuilt by `catalog import` from manimkc's own CLI. `content_revision` is the only record of who wrote what, and why. |
+| Content | `topic`, `concept`, `collection`, `curriculum_item`, `asset` and seven link tables; since 0010 also `tag`, `topic_relation`, `manimkc_topic`, `collection_tag`, `diagram`, `blob_object`, `session_log_entry` and `content_revision`; since 0015 `video` | Postgres, since the phase 3 cut-over: every type is authored here through the write seam, and files are an export (`catalog export --out`, and the nightly export under `$GNOSIA_HOME/archive/`). The manimkc rows and the mirror ledger are still rebuilt by `catalog import` from manimkc's own CLI. `content_revision` is the only record of who wrote what, and why. |
 | State | `learner`, `event`, `mastery`, `review`, `progress`, `recap`, `preference`, `provider_key`, `custom_provider`, `tutor_model`, `asset_name` | Postgres. `event` is the only copy; `mastery` and `review` are replayable from it. Filled by bundle 5's backfill — see [LEARN.md](LEARN.md). |
 | Operational | `index_run`, `mirror`, `content_source`, `catalog_instance` | Neither. What the indexers did, which content types the database owns, and whether this database is the primary. |
 | Studio | `session`, `draft`, `job`, `asset_job` | Postgres, and the only copy. Who asked for a file to be made, and what came out. |
@@ -58,7 +58,7 @@ reason.
 
 Losing the content half used to cost an index run. Since the cut-over it
 loses what was authored after the last export (the nightly one keeps thirty
-under `$SELF_LEARN_HOME/archive/`) and the revision history, which only a
+under `$GNOSIA_HOME/archive/`) and the revision history, which only a
 database backup holds; the manimkc, remotionkc, revideokc and blenderkc rows
 alone come back from an import.
 Losing the state half loses the study record, which is why `event` is
@@ -77,7 +77,7 @@ which brief produced them.
 | `concept` | One authored note (`learn/concepts/<domain>/<slug>.md` in the export layout). Carries prerequisites and mastery. Optional enrichment under a topic. Since Track C the row holds the whole note: its frontmatter as columns (`title`, `summary`, `tags`, `sources`, `authored_at` for `created:`, `requires:` and `assumes:` as `concept_prerequisite`), its folder as `domain`, and the markdown after the frontmatter as `body`, byte for byte. The file it renders writes the keys in one order and leaves out an empty `assumes`, since a row keeps values, not layout; `services/catalog/src/content/notes.ts` is the one rule. |
 | `collection` | Courses and modules today, decks next. A self-referencing tree with `kind`, `position` and a `metadata` jsonb. A course may name its cover photo's blob in `cover_blob_key` (0016), with its credit in `metadata.coverCredit`. |
 | `curriculum_item` | The checklist row a learner ticks: `cs4263-m1-t1`, its title and its subtopics. |
-| `asset` | A file or a link: video, transcript, chapters, captions, diagram source, diagram SVG, note, session, link. `source_repo` says which repository or tool made it: `self-learn`, `manimkc`, `tldrawkc`, `remotionkc` (0017, the second video tool), `revideokc` (0019, the third), or `blenderkc` (0029, the fourth). |
+| `asset` | A file or a link: video, transcript, chapters, captions, diagram source, diagram SVG, note, session, link. `source_repo` says which repository or tool made it: `gnosia`, `manimkc`, `tldrawkc`, `remotionkc` (0017, the second video tool), `revideokc` (0019, the third), or `blenderkc` (0029, the fourth). |
 | `asset_topic` | This asset is about this topic. |
 | `asset_concept` | This asset is about this concept. Written for a note (its own concept), for a session log (the notes its wikilinks name), for a diagram's SVG and source (its `meta.tldrawkc` concepts), for a studio video (its brief's concepts, `catalog video put`), and for a manimkc, remotionkc, revideokc or blenderkc render and each of its sidecars (its topic.yml's `concepts:`). |
 | `concept_prerequisite` | This concept `requires` or `assumes` that one. |
@@ -854,7 +854,7 @@ which destinations it audited, the writer clears only those, and
 An unresolved reference stops the run and names the file and the slug. A skipped
 row is an asset that is silently absent from the catalog, with nothing anywhere
 saying so — which is the failure the audit in
-[#27](https://github.com/c-wenlong/self-learn/issues/27) already recorded once,
+[#27](https://github.com/c-wenlong/gnosia/issues/27) already recorded once,
 when a rendered video outlived its source and nothing flagged it. Errors are
 collected per source and reported together, so one run fixes one edit rather
 than thirty runs fixing thirty.
@@ -988,7 +988,7 @@ would have failed on it.
 
 **Who reads what** (phase 4 of the plan). An owner is a learner id, and one
 owner may read its own rows and the commons', `readableOwners(owner)` in
-`@self-learn/schema`, which is `[owner, 'commons']`. `commons` is a reserved
+`@gnosia/schema`, which is `[owner, 'commons']`. `commons` is a reserved
 learner that owns shared content and never signs in; its `learner` row is
 created by the write seam on its first write, as `local`'s is by
 `ensureLearner`, and no read needs it. The filter is in the application, not in
@@ -1001,7 +1001,7 @@ row-level security, which waits for a second service to read the database:
 | `readNoteRows(db, slugs, owners)` (`src/content/note-rows.ts`) | Scoped, keeps a `requires:` or `assumes:` edge only when the concept it names is readable, as `readableEdges` does for the graph; the export's unscoped read keeps every edge |
 | A learner's write naming a curriculum item or a concept (`src/state/progress.ts`, `recap.ts`, `import.ts`, `mastery.ts`) | `assertReadableItems` and `assertReadableConcepts`: another owner's item or concept is refused with the sentence a missing one gets, so a tick is neither a foreign row nor a way to ask whether an id exists. A reset clears only rows on readable items; the legacy import reports another owner's item as unknown |
 | `catalog diagram list`, `show`, `checkout`, `commit`, `put` (`src/content/diagrams.ts`) | Take `--owner` (default `CLI_OWNER`): list and show only what that owner may read, check out another owner's slug as a slug with no diagram (no file, no revision number, and a checkout already on disk left untouched), and write as that owner. The studio passes the owner its runner serves |
-| The studio runner (`services/studio/src/api.ts`) | Serves one owner, `STUDIO_OWNER` (default `local`), and refuses a request the web app names as another's (`x-self-learn-owner`, set by the app's server from the session, never taken from a page), because its queue, checkouts, cache and agent account are that owner's |
+| The studio runner (`services/studio/src/api.ts`) | Serves one owner, `STUDIO_OWNER` (default `local`), and refuses a request the web app names as another's (`x-gnosia-owner`, set by the app's server from the session, never taken from a page), because its queue, checkouts, cache and agent account are that owner's |
 | The `learn` CLI's learner view (`src/learn/files.ts`, `vault.ts`) | Reads as `cliScope()`: `status`, `frontier`, `plan`, the note reads and checkouts, and `vault pull` see the CLI owner's notes and the commons', with edges to anything else dropped, and only the CLI owner's own session logs. The five pinned `--json` shapes did not change |
 | The write seam (`src/content/write.ts`) | Stamps `owner_id = owner` (required on every write) and refuses a write naming an id another owner holds, `foreign-owner`, since ids are global. Stamps its link rows the same way (D24: a link belongs to its parent's owner) and refuses a new far end, or a row's own reference, naming a row neither the writer's nor the commons' (`ROW_FAR_ENDS`, `LINK_FAR_ENDS` in `src/content/entities.ts`); one already there is carried over. `deleteContent` deletes through the same two checks. The CLIs write as `CLI_OWNER` (`src/content/scope.ts`), which is `local` |
 | The verbs that write around the seam | `topic rename` refuses another owner's topic; `item purge` refuses another owner's item and deletes only the purging learner's rows; `course import` deletes only its own orphaned links, through `deleteContent` |
@@ -1012,7 +1012,7 @@ row-level security, which waits for a second service to read the database:
 | `catalog export`, parity, `topic ls` without `--owner` | Read every owner, through an `owners` argument that is optional only on those internal functions |
 | `catalog import` (`src/index/writer.ts`, `src/index/run.ts`) | Writes as the importing owner (`CLI_OWNER`) and stamps every row it writes with it. Prunes, archives and clears links only among that owner's rows: a link is its parent's (D24), and one whose far end the owner cannot read is left for `catalog doctor`. Refuses, by id and before the source writes anything, a tree row on an id another owner holds, a link under another owner's entity or to one the owner cannot read, and a prune whose cascade would take another owner's rows (their links, their diagram under a topic, their `asset_job` record of an asset, another learner's mastery or review). Another learner's session log is neither called gone nor appended to. The cross-source lookups (`knownConcepts` and the rest) answer only for readable rows: once a source has run, what it produced plus the commons' |
 | `catalog asset upload` (`src/content/asset-upload.ts`) | Uploads the rows the CLI's owner or the commons holds, and writes each one as its own owner, so its bytes land under that owner's prefix and the seam's owner check passes. Another owner's row, and a poster whose owner is not its video's, are refused by name before a byte is read or cut |
-| `uploadBlob` (`src/content/blob.ts`) | With `SELF_LEARN_OWNER_BYTES_CAP` or `SELF_LEARN_OWNER_UPLOADS_PER_DAY` set, refuses a new object that would take its owner past either, measured from `blob_object` by `owner_id` (which the table's check ties to the key's prefix) under a per-owner advisory lock, with the row asked about locked. A key that has a row is never measured or refused, a malformed cap included. `catalog blob audit` prints each owner's totals, and its stale-pending delete takes the same lock |
+| `uploadBlob` (`src/content/blob.ts`) | With `GNOSIA_OWNER_BYTES_CAP` or `GNOSIA_OWNER_UPLOADS_PER_DAY` set, refuses a new object that would take its owner past either, measured from `blob_object` by `owner_id` (which the table's check ties to the key's prefix) under a per-owner advisory lock, with the row asked about locked. A key that has a row is never measured or refused, a malformed cap included. `catalog blob audit` prints each owner's totals, and its stale-pending delete takes the same lock |
 | Blob keys and their rows (`src/content/write.ts`, `src/state/blobs.ts`) | A row may name only a blob under its own owner's prefix: the seam refuses a new key under another owner's (a key the row already had passes, for D23's move), and the asset routes' blob reads serve a blob only to a reader who may read its owner (`blob_object.owner_id` in the reader's scope), so a row naming another owner's bytes serves them to nobody who cannot read that owner, while a row D23 moved to the commons keeps serving its `local/` bytes to `local` until the upload re-keys it |
 
 **A database from before 0010** has no `owner_id`, and holds one owner's
@@ -1076,7 +1076,7 @@ revision that mentions the column is the one that set it.
 
 `writeContent` in `src/content/write.ts` is the one authored write: one
 transaction that takes the revision locks, refuses when the writer's `base` is
-not the latest revision, sets `self_learn.revision_id`, upserts the row and any
+not the latest revision, sets `gnosia.revision_id`, upserts the row and any
 links given in a savepoint, reads the snapshot back and appends the revision.
 A write whose snapshot equals the latest revision's rolls the savepoint back,
 so it appends nothing and changes nothing, `updated_at` included. The id comes
@@ -1234,7 +1234,7 @@ and session logs are rendered from their rows too: a note from its columns
 and `body`, a log from its `session_log_entry` rows concatenated. Once every
 type is flipped nothing writes these files as a side effect of a write
 (D17 ended), so an export is something a person runs, or the nightly export
-(`scripts/nightly-export.mjs`, into `$SELF_LEARN_HOME/archive/<UTC time>/`).
+(`scripts/nightly-export.mjs`, into `$GNOSIA_HOME/archive/<UTC time>/`).
 
 `catalog parity <dir>` renders the export in memory and compares it with
 `<dir>` entity by entity: a topic, a tag, a course file, a note, a log, a
@@ -1255,12 +1255,12 @@ cannot point them elsewhere.
 | `content_revision_no_update`, `content_revision_no_delete` | `content_revision` | before, per row | on | Append-only, `catalog_append_only()` |
 | `session_log_entry_no_update`, `session_log_entry_no_delete` | `session_log_entry` | before, per row | on | Append-only, same function, its own hint |
 | `video_write_guard` | `video` | before, per row | on | The same guard, armed by 0015 itself: `video` has had no writer outside the seam, so there was nothing to wait for |
-| `<table>_write_guard` | the 18 tables in `WRITE_GUARDS` (`src/content/rules.ts`); `curriculum_item_asset`'s since 0022, created off like the rest, and armed on a database that already owns courses by `catalog flip courses --rearm` | before, per row | **off** | Refuses a write unless the transaction set `self_learn.revision_id` (D4). Armed per type by `catalog flip`; `asset`'s arms with `diagrams` (or `manimkc`), the last writers outside the seam being gone since Track D retired `assert-output` |
+| `<table>_write_guard` | the 18 tables in `WRITE_GUARDS` (`src/content/rules.ts`); `curriculum_item_asset`'s since 0022, created off like the rest, and armed on a database that already owns courses by `catalog flip courses --rearm` | before, per row | **off** | Refuses a write unless the transaction set `gnosia.revision_id` (D4). Armed per type by `catalog flip`; `asset`'s arms with `diagrams` (or `manimkc`), the last writers outside the seam being gone since Track D retired `assert-output` |
 | `collection_module_has_item`, `curriculum_item_module_has_item` | `collection`, `curriculum_item` | constraint, deferred | **off** | Rule `module-has-item` |
 | `curriculum_item_item_has_concept`, `concept_curriculum_item_item_has_concept` | `curriculum_item`, `concept_curriculum_item` | constraint, deferred | **off** | Rule `item-has-concept`; nine courses fail it today |
 | `concept_curriculum_item_concept_topic`, `concept_concept_topic`, `curriculum_item_concept_topic`, `collection_item_concept_topic` | the four tables that can move either side | constraint, deferred | **off** | Rule `item-concept-in-module-topic` |
 | `concept_prerequisite_course_order`, `concept_curriculum_item_course_order`, `curriculum_item_course_order`, `collection_course_order` | the four tables that can change a course's order or a `requires` edge (0021) | constraint, deferred | **off** | Rule `course-order-respects-requires`: a course teaches no concept before a concept it `requires`, judged by each concept's first appearance (module, item, position). `assumes` out of order is a doctor warning, never refused |
-| `<table>_copy_guard` | every table but `catalog_instance` | before, per statement, including `TRUNCATE` | on | Refuses a write when `catalog_instance.role = 'copy'`, naming `primary_host`, unless the connection set `self_learn.copy_ok = on` |
+| `<table>_copy_guard` | every table but `catalog_instance` | before, per statement, including `TRUNCATE` | on | Refuses a write when `catalog_instance.role = 'copy'`, naming `primary_host`, unless the connection set `gnosia.copy_ok = on` |
 
 Why each is shaped the way it is:
 
@@ -1282,7 +1282,7 @@ Why each is shaped the way it is:
   reason `event` is append-only by trigger: it binds the web app and psql too.
   `pg_dump` puts triggers in its post-data section, so a restore loads rows
   before any guard exists. `CATALOG_COPY_OK=1` makes `connect()` add `-c
-  self_learn.copy_ok=on`; `catalog migrate` always does, since a copy's schema
+  gnosia.copy_ok=on`; `catalog migrate` always does, since a copy's schema
   must still follow the primary's.
 
 ### The hand-written statements in 0010
@@ -1314,7 +1314,7 @@ expression cannot unnest an array. Near-duplicate search is `title % $1` and
 ## Working on it
 
 ```bash
-createdb self_learn                    # once, against the Homebrew Postgres 17
+createdb gnosia                    # once, against the Homebrew Postgres 17
 npm run catalog -- migrate             # apply every outstanding migration
 npm run catalog -- status --json       # row counts, migration head, source freshness, course coverage
 MANIMKC_ROOT=/nonexistent REMOTIONKC_ROOT=/nonexistent REVIDEOKC_ROOT=/nonexistent BLENDERKC_ROOT=/nonexistent npm run catalog -- import seed   # fill it from the seed (or: import <an export>)
@@ -1359,7 +1359,7 @@ and refuses it on 1 (D16 in `docs/TLDRAWKC-INTEGRATION.md`).
 After changing anything in `packages/schema/src/`:
 
 ```bash
-npm run generate -w @self-learn/catalog   # writes services/catalog/drizzle/
+npm run generate -w @gnosia/catalog   # writes services/catalog/drizzle/
 npm run catalog -- migrate
 npm test
 ```
@@ -1379,7 +1379,7 @@ forever everywhere it has already run, and one drizzle will not apply again.
   `diagram_svg` row must name a `blob_key` (a note, a log, a `.tldr` and a
   link are rows or URLs, and keep their path). `blob_object_key_check`
   tightens from 0010's `^[^/]+/[0-9a-f]{64}([.][a-z0-9]+)?$` to the key
-  `@self-learn/blob` makes: a lowercase owner of 1 to 64, a required extension
+  `@gnosia/blob` makes: a lowercase owner of 1 to 64, a required extension
   of 1 to 16 (`BLOB_KEY_PATTERN` in `packages/schema/src/content.ts`). A
   hand-written block first lists every stored-kind asset with no blob and every
   key the package would not make, and raises with them; `catalog doctor`

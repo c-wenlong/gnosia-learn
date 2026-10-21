@@ -1,4 +1,4 @@
-import { closeTutorSession } from "@self-learn/catalog/state";
+import { closeTutorSession } from "@gnosia/catalog/state";
 
 import { BadRequest, handler } from "@/lib/learner-api";
 import { isSessionToken } from "@/lib/session-core";

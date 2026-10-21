@@ -37,7 +37,7 @@ import { formatIndex, runImportCommand } from "./commands/index-command";
 import { formatParity, runParity } from "./commands/parity";
 import { capFailureFields } from "./content/blob";
 import { EXPORT_TYPES, type ExportType } from "./content/layout";
-import { CONTENT_TYPES, type ContentType } from "@self-learn/schema";
+import { CONTENT_TYPES, type ContentType } from "@gnosia/schema";
 import {
   formatJob,
   readBrief,
@@ -221,7 +221,7 @@ Commands:
                            orphans, marks broken rows pending, deletes
                            day-old pending rows nothing points at, and
                            sweeps day-old .tmp/*.part files. The store is
-                           $SELF_LEARN_HOME/blobs (else ~/.self-learn/blobs)
+                           $GNOSIA_HOME/blobs (else ~/.gnosia/blobs)
                            for both commands, as for the web app.
   topic <verb>             The topic vocabulary, written through the catalog
                            with a --reason (content/topics.yaml is rewritten
@@ -395,7 +395,7 @@ Exit codes:
      says how many are outstanding and to run migrate.
 
 Environment:
-  DATABASE_URL   Defaults to postgres://localhost:5432/self_learn.
+  DATABASE_URL   Defaults to postgres://localhost:5432/gnosia.
   MANIMKC_ROOT   The manimkc checkout. Defaults to <repo>/tools/manimkc.
                  Same variable and same meaning as manimkc's own CLI.
   REMOTIONKC_ROOT
@@ -1022,7 +1022,7 @@ function exportSubset(values: {
 
 /** `--blob-root` was removed; the flag is still parsed so its use gets this sentence rather than "unknown option". */
 const BLOB_ROOT_GONE =
-  "--blob-root is gone: it wrote rows pointing at a store the web app never reads. Set SELF_LEARN_HOME=<dir> " +
+  "--blob-root is gone: it wrote rows pointing at a store the web app never reads. Set GNOSIA_HOME=<dir> " +
   "for a scratch store instead; the catalog and the web app both read it, and blobs live under <dir>/blobs.";
 
 /**

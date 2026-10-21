@@ -3,7 +3,7 @@ import { act, createElement, useEffect, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { emptyLearnerState, type LearnerState } from "@self-learn/schema/shared";
+import { emptyLearnerState, type LearnerState } from "@gnosia/schema/shared";
 
 /**
  * A write queued behind another on the same key supersedes it: only the

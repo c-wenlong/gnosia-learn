@@ -1,6 +1,6 @@
 "use client";
 
-import { PROVIDER_KEY_LIMITS } from "@self-learn/schema/shared";
+import { PROVIDER_KEY_LIMITS } from "@gnosia/schema/shared";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 

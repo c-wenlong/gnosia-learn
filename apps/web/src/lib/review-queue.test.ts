@@ -1,4 +1,4 @@
-import type { ReviewQueueItem } from "@self-learn/catalog/state";
+import type { ReviewQueueItem } from "@gnosia/catalog/state";
 import { describe, expect, it } from "vitest";
 
 import type { ConceptCheck } from "./concept-note-core";

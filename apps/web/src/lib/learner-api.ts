@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import type { CatalogDatabase } from "@self-learn/catalog/state";
+import type { CatalogDatabase } from "@gnosia/catalog/state";
 
 import { enforceRateLimit, enforceSameOrigin, type RateLimitRule } from "@/lib/agent/guard";
 import { isBadRequest, withLearnerStore } from "@/lib/learner-store";

@@ -1,8 +1,8 @@
 import "server-only";
 
-import type { AssetBlob, AssetRef, CatalogDatabase } from "@self-learn/catalog/state";
-import type { BlobRead, BlobStore } from "@self-learn/blob";
-import type { AssetSeams } from "@self-learn/tutor/server/deps";
+import type { AssetBlob, AssetRef, CatalogDatabase } from "@gnosia/catalog/state";
+import type { BlobRead, BlobStore } from "@gnosia/blob";
+import type { AssetSeams } from "@gnosia/tutor/server/deps";
 import {
   openBlob as openBlobCore,
   posterSource as posterSourceCore,
@@ -16,7 +16,7 @@ import {
   type AssetFileProblem,
   type AssetSourceResult,
   type AssetStored,
-} from "@self-learn/tutor/server/asset-files";
+} from "@gnosia/tutor/server/asset-files";
 
 import { contentSource } from "@/data/source";
 import { assetBlobStore } from "@/lib/blob-store";
@@ -32,7 +32,7 @@ export {
   rowTypeFor,
   safeFilename,
   webStreamFrom,
-} from "@self-learn/tutor/server/asset-files";
+} from "@gnosia/tutor/server/asset-files";
 export type {
   AssetFileProblem,
   AssetRowText,
@@ -40,17 +40,17 @@ export type {
   AssetSourceResult,
   AssetStored,
   RangeRequest,
-} from "@self-learn/tutor/server/asset-files";
+} from "@gnosia/tutor/server/asset-files";
 
 /**
  * Turning an `asset` row into bytes a browser can play. The resolution itself
- * lives in `@self-learn/tutor/server/asset-files`, which the native sidecar
+ * lives in `@gnosia/tutor/server/asset-files`, which the native sidecar
  * calls with its own blob store; this file hands it this app's three seams:
  * the request's owner scope, the selected content source and the blob store.
  */
 /**
  * The store resolved on first use, not at seams() time: `assetBlobStore()`
- * refuses a bad `SELF_LEARN_HOME` by throwing, and a throw here would turn
+ * refuses a bad `GNOSIA_HOME` by throwing, and a throw here would turn
  * every catalog-only read (`resolveRowText`, `servedAssets`, …) into a
  * blob-store failure. Deferred, the refusal surfaces inside the core that
  * touched the store, where `blobStoreProblem` classifies it.

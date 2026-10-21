@@ -25,7 +25,7 @@ import {
   tag,
   topic,
   topicRelation,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -178,7 +178,7 @@ describe.skipIf(!reachable.ok)("content scoped by owner", () => {
     await db.update(concept).set({ body: "A note.\n" });
     await db.insert(tag).values({ id: "local-tag", label: "Local", description: "the owner's" });
     await db.insert(collectionTag).values({ collectionId: "fx", tagId: "local-tag", position: 0 });
-    await db.insert(asset).values({ id: LOCAL_VIA_B, kind: "note", path: "learn/concepts/fixtures/via-b.md", sourceRepo: "self-learn" });
+    await db.insert(asset).values({ id: LOCAL_VIA_B, kind: "note", path: "learn/concepts/fixtures/via-b.md", sourceRepo: "gnosia" });
     // One due card of the owner's, so the queue has something to compare.
     await ensureLearner(db, LOCAL_LEARNER_ID);
     await db.insert(review).values({ learnerId: LOCAL_LEARNER_ID, conceptSlug: "alpha", due: new Date("2026-09-27T00:00:00Z") });
@@ -223,18 +223,18 @@ describe.skipIf(!reachable.ok)("content scoped by owner", () => {
       { key: bPosterKey, ownerId: B, sha256: "f".repeat(64), bytes: 1, mime: "image/jpeg", provider: "fs", state: "present", confirmedAt: new Date() },
     ]);
     await db.insert(asset).values([
-      { id: B_ASSET, kind: "link", url: "https://example.com/b", title: "B's link", sourceRepo: "self-learn", ownerId: B },
+      { id: B_ASSET, kind: "link", url: "https://example.com/b", title: "B's link", sourceRepo: "gnosia", ownerId: B },
       { id: B_VIDEO, kind: "video", path: "out/tenant/b.mp4", sourceRepo: "manimkc", blobKey: bKey, ownerId: B },
-      { id: B_COURSE_LINK, kind: "link", url: "https://example.com/b-r1", title: "B's course link", sourceRepo: "self-learn", ownerId: B },
+      { id: B_COURSE_LINK, kind: "link", url: "https://example.com/b-r1", title: "B's course link", sourceRepo: "gnosia", ownerId: B },
       // B's poster of the owner's video: the owner must not be served it.
-      { id: B_POSTER, kind: "poster", sourceRepo: "self-learn", blobKey: bPosterKey, ownerId: B },
+      { id: B_POSTER, kind: "poster", sourceRepo: "gnosia", blobKey: bPosterKey, ownerId: B },
     ]);
     await db.insert(assetDerivation).values({ assetId: B_POSTER, sourceAssetId: ASSETS.video });
     const [localVideo] = await db.select({ key: asset.blobKey }).from(asset).where(eq(asset.id, ASSETS.video));
     const [localDiagram] = await db.select({ key: asset.blobKey }).from(asset).where(eq(asset.id, ASSETS.diagram));
     await db.insert(asset).values([
       { id: B_ON_LOCAL_BYTES, kind: "video", path: "out/tenant/on-local.mp4", sourceRepo: "manimkc", blobKey: localVideo?.key ?? null, ownerId: B },
-      { id: B_POSTER_ON_LOCAL_BYTES, kind: "poster", sourceRepo: "self-learn", blobKey: localDiagram?.key ?? null, ownerId: B },
+      { id: B_POSTER_ON_LOCAL_BYTES, kind: "poster", sourceRepo: "gnosia", blobKey: localDiagram?.key ?? null, ownerId: B },
     ]);
     await db.insert(assetDerivation).values({ assetId: B_POSTER_ON_LOCAL_BYTES, sourceAssetId: ASSETS.video });
     await db.insert(assetTopic).values([
@@ -431,7 +431,7 @@ describe.skipIf(!reachable.ok)("links that reach another owner's rows", () => {
     ]);
     await db.insert(asset).values([
       { id: VIDEO, kind: "video", path: "out/tenant/b.mp4", sourceRepo: "manimkc", blobKey: key(B, "a", "mp4"), ownerId: B },
-      { id: POSTER, kind: "poster", sourceRepo: "self-learn", blobKey: key("local", "b", "jpg") },
+      { id: POSTER, kind: "poster", sourceRepo: "gnosia", blobKey: key("local", "b", "jpg") },
     ]);
     await db.insert(assetDerivation).values({ assetId: POSTER, sourceAssetId: VIDEO });
     // The owner's poster, filed under B's topic as well as nothing else.
@@ -620,7 +620,7 @@ describe.skipIf(!reachable.ok)("the write seam and the owner", () => {
     const assetWrite = (blobKey: string, base: number | null) => ({
       type: "asset" as const,
       id: "fx:seam-svg",
-      next: { row: { id: "fx:seam-svg", kind: "diagram_svg", path: "learn/assets/seam.svg", sourceRepo: "self-learn", blobKey } },
+      next: { row: { id: "fx:seam-svg", kind: "diagram_svg", path: "learn/assets/seam.svg", sourceRepo: "gnosia", blobKey } },
       base,
       owner: LOCAL_LEARNER_ID,
       author: "a person",

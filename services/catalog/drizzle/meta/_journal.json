@@ -225,6 +225,13 @@
       "when": 1792487107023,
       "tag": "0031_brown_rictor",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1792518632407,
+      "tag": "0032_gnosia",
+      "breakpoints": true
     }
   ]
 }

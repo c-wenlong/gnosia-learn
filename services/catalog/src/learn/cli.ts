@@ -70,8 +70,8 @@ import {
   renderResult,
 } from "../../../../scripts/learn/lib/session-log.mjs";
 
-import { ContentError } from "@self-learn/content";
-import { LOCAL_LEARNER_ID, ownerScope, type OwnerScope } from "@self-learn/schema";
+import { ContentError } from "@gnosia/content";
+import { LOCAL_LEARNER_ID, ownerScope, type OwnerScope } from "@gnosia/schema";
 
 import { runDiagramCommand } from "../commands/diagram";
 import { classifyConnectionFailure, describeConnectionFailure, EXIT_UNREACHABLE } from "../connection-failure";
@@ -1913,7 +1913,7 @@ commands.help = async () => {
                                    unless --author-kind says otherwise. Draw in
                                    the path checkout prints, then commit --reason.
   vault pull [--out <dir>]       the notes and session logs as a folder for
-                                   Obsidian (default ~/.self-learn/vault), with
+                                   Obsidian (default ~/.gnosia/vault), with
                                    each diagram's SVG under assets/ (read-only);
                                    a file edited there is never overwritten,
                                    the database's version lands beside it as
@@ -1929,7 +1929,7 @@ Notes and session logs are rows in the catalog; the repository has held no
 files for them since the cut-over, and LEARN_ROOT names a tree of files for
 tests only. Every command that writes them needs the database. Mastery, the
 schedule and the event log are tables; DATABASE_URL points at them and
-defaults to postgres://localhost:5432/self_learn. --reason R names why, on
+defaults to postgres://localhost:5432/gnosia. --reason R names why, on
 any command that writes a note or a log.
 
 Add --json to any command for machine-readable output.`,

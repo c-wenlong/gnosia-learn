@@ -11,8 +11,8 @@ import {
   type AssetWithTopics,
   type CatalogDatabase,
   type TopicTitles,
-} from "@self-learn/catalog/state";
-import type { OwnerScope } from "@self-learn/schema/shared";
+} from "@gnosia/catalog/state";
+import type { OwnerScope } from "@gnosia/schema/shared";
 
 import { compareByKindThenId } from "../kind-order";
 import { openBlob, resolveAsset } from "./asset-files";

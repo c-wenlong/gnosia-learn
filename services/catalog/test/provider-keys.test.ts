@@ -3,7 +3,7 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { learner, LOCAL_LEARNER_ID, providerKey } from "@self-learn/schema";
+import { learner, LOCAL_LEARNER_ID, providerKey } from "@gnosia/schema";
 import { eq, sql } from "drizzle-orm";
 import ts from "typescript";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -156,7 +156,7 @@ describe.skipIf(!reachable.ok)("provider keys never leave through an export", ()
   const saved = {
     url: process.env["DATABASE_URL"],
     manimkc: process.env["MANIMKC_ROOT"],
-    home: process.env["SELF_LEARN_HOME"],
+    home: process.env["GNOSIA_HOME"],
   };
 
   beforeAll(async () => {
@@ -165,14 +165,14 @@ describe.skipIf(!reachable.ok)("provider keys never leave through an export", ()
     home = await mkdtemp(path.join(tmpdir(), "catalog-byok-home-"));
     process.env["DATABASE_URL"] = scratch.url;
     process.env["MANIMKC_ROOT"] = path.join(tmpdir(), "catalog-test-no-manimkc");
-    process.env["SELF_LEARN_HOME"] = home;
+    process.env["GNOSIA_HOME"] = home;
   }, 60_000);
 
   afterAll(async () => {
     for (const [key, value] of [
       ["DATABASE_URL", saved.url],
       ["MANIMKC_ROOT", saved.manimkc],
-      ["SELF_LEARN_HOME", saved.home],
+      ["GNOSIA_HOME", saved.home],
     ] as const) {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
@@ -256,11 +256,11 @@ describe("the one door to provider_key", () => {
     ].map((p) => path.join(REPO_ROOT, p)),
   );
   const ROOTS = ["apps", "services", "packages", "scripts"].map((p) => path.join(REPO_ROOT, p));
-  const SKIP = /(^|\/)(node_modules|\.next|dist|coverage|drizzle)(\/|$)/;
+  const SKIP = /(^|\/)(node_modules|\.next|dist|coverage|drizzle|drizzle-sqlite)(\/|$)/;
 
   it("finds a reference the way it is meant to", () => {
     expect(namesTable("// the provider_key table\nconst x = 1;")).toBe(false);
-    expect(namesTable("import { providerKey } from '@self-learn/schema';")).toBe(true);
+    expect(namesTable("import { providerKey } from '@gnosia/schema';")).toBe(true);
     expect(namesTable("db.execute(sql`select * from provider_key`)")).toBe(true);
     expect(namesTable("db.execute(sql`select ${a} from provider_key`)")).toBe(true);
     expect(namesTable('query("delete from provider_key")')).toBe(true);
@@ -301,11 +301,11 @@ describe("the one door to provider_key", () => {
    */
   const GENERIC_READERS: Record<string, string> = {
     "services/catalog/src/commands/status.ts": "counts each table's rows; no row leaves",
-    "services/catalog/src/content/link-owners.ts": "reads table names only, to skip a table a database lacks",
-    "scripts/lib/pg.mjs": "copies a whole database into another database (a scratch copy), which is a database dump in the threat model",
-    "scripts/flip-rehearsal.mjs": "takes the pg_dump backup before flip day, a database dump in the threat model",
-    "scripts/e2e.mjs": "checks pg_dump exists and copies a template database through scripts/lib/pg.mjs",
-    "services/catalog/src/content/rules.ts": "reads trigger names and states from pg_trigger joined to pg_class; no rows",
+    "services/catalog/src/content/link-owners.ts": "lists the table names to skip probes for tables a database behind the journal lacks; the probes themselves are doctor findings, shown to the owner",
+    "scripts/lib/sqlite.mjs": "copies a whole database file into another (a scratch copy, a backup) through the SQLite backup API, which is a database dump in the threat model",
+    "scripts/flip-rehearsal.mjs": "takes the backup copy before flip day and the precutover one before the cut-over, and reads a backup's table list to validate it — a database dump in the threat model",
+    "scripts/e2e.mjs": "copies the migrated template file into the database the run drives",
+    "services/catalog/scripts/pg-to-sqlite.mjs": "copies a Postgres database into the SQLite catalog wholesale; a database dump by design, keys included",
   };
   const GENERIC = [
     /\bObject\s*\.\s*(keys|values|entries)\s*\(\s*tables\s*\)/,
@@ -314,6 +314,13 @@ describe("the one door to provider_key", () => {
     /information_schema\s*\.\s*tables|\bpg_tables\b|\bpg_class\b/i,
     /\bpg_dump\b|\bpg_dumpall\b/,
     /\.query\s*\[/,
+    // The SQLite spellings of the same two doors: `type = 'table'` with no
+    // `name =`/`name like` restriction enumerates every table, `.backup(`
+    // is better-sqlite3's whole-file copy, and `copyDatabase(`/`tablesIn(`
+    // are the scripts' own names for both.
+    /sqlite_(?:master|schema)\s+where\s+type\s*=\s*'table'(?!\s+and\s+name\s*(?:=|like))/i,
+    /\.backup\s*\(/,
+    /\bcopyDatabase\s*\(|\btablesIn\s*\(/,
   ];
 
   /** The file's code with its comments removed. */
@@ -329,6 +336,9 @@ describe("the one door to provider_key", () => {
     expect(hit("for (const t of Object.values(tables)) rows.push(await db.select().from(t));")).toBe(true);
     expect(hit("db.execute(sql`select table_name from information_schema.tables`)")).toBe(true);
     expect(hit("spawn('pg_dump', [db])")).toBe(true);
+    expect(hit("const q = `select name from sqlite_master where type = 'table'`;")).toBe(true);
+    expect(hit("const q = `select name from sqlite_master where type = 'table' and name = 'event'`;")).toBe(false);
+    expect(hit("await db.backup('/tmp/copy.db')")).toBe(true);
   });
 
   it("is walked, all tables at once, only by readers someone has checked cannot carry a key out", async () => {

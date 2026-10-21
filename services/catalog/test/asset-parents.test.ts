@@ -12,7 +12,7 @@ import {
   ownerScope,
   session,
   topic,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -77,8 +77,8 @@ describe.skipIf(!reachable.ok)("asset parents", () => {
       ownerId: OTHER,
     });
     await db.insert(asset).values([
-      { id: LOG, kind: "session", path: "learn/sessions/fx.md", title: "Fixture log", sourceRepo: "self-learn" },
-      { id: THEIR_ASSET, kind: "note", path: "learn/concepts/other/x.md", sourceRepo: "self-learn", ownerId: OTHER },
+      { id: LOG, kind: "session", path: "learn/sessions/fx.md", title: "Fixture log", sourceRepo: "gnosia" },
+      { id: THEIR_ASSET, kind: "note", path: "learn/concepts/other/x.md", sourceRepo: "gnosia", ownerId: OTHER },
     ]);
     await db.insert(assetConcept).values([
       { assetId: ASSETS.video, conceptSlug: "other-concept" },

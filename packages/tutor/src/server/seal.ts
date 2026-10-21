@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from "node:crypto";
-import { MIN_SECRET_LENGTH, PROVIDER_KEY_LIMITS, type ProviderName } from "@self-learn/schema/shared";
+import { MIN_SECRET_LENGTH, PROVIDER_KEY_LIMITS, type ProviderName } from "@gnosia/schema/shared";
 
 /**
  * Sealing and opening an owner's provider key (docs/BYOK.md, decision 2).

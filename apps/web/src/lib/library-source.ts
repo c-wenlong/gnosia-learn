@@ -1,4 +1,4 @@
-import type { AssetConversation, AssetParents, AssetPlace } from "@self-learn/catalog/state";
+import type { AssetConversation, AssetParents, AssetPlace } from "@gnosia/catalog/state";
 
 import { assignLayers, type GraphEdge } from "@/lib/concept-graph";
 import { conversationTitle } from "@/lib/conversation-title";

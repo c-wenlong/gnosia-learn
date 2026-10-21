@@ -19,10 +19,10 @@ export type {
   KbEdge,
   KnowledgeBase,
   MasteryLabel,
-} from "@self-learn/catalog/state";
-export { EMPTY_KNOWLEDGE_BASE } from "@self-learn/catalog/state";
+} from "@gnosia/catalog/state";
+export { EMPTY_KNOWLEDGE_BASE } from "@gnosia/catalog/state";
 
-import type { MasteryLabel } from "@self-learn/catalog/state";
+import type { MasteryLabel } from "@gnosia/catalog/state";
 
 /** Weakest first, for anything that wants to order by how well it is held. */
 export const MASTERY_ORDER: MasteryLabel[] = ["gap", "weak", "shaky", "solid", "mastered"];
