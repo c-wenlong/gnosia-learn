@@ -105,7 +105,7 @@ struct VideoDetailView: View {
     private func save(position: Double, duration: Double) {
         let done = (learner?.watchEntry(for: asset.id)?.done ?? false)
             || position >= watchedFraction * duration
-        learner?.setWatch(asset.id, seconds: position, done: done)
+        learner?.setWatch(asset.id, seconds: position, done: done, mirror: .position(duration: duration))
         playhead = position
         store.refreshLearner()
     }
