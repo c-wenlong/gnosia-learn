@@ -117,6 +117,9 @@ struct WatchEntry: Hashable {
     var seconds: Double
     var done: Bool
     var updatedAt: Date
+    /// The file's length the last heartbeat knew — kept so a Recent row can
+    /// say "2:17 of 11:36" without asking the player.
+    var duration: Double? = nil
 }
 
 /// How much of a video has to have played before it counts as watched —
@@ -327,13 +330,67 @@ final class LearnerStore {
                 path: "/api/learner/watched",
                 body: ["assetId": assetID])
         }
+        // The duration travels in the position mirror already, so it is the
+        // write's own to keep; a `.marked` press names none and the stored
+        // one stays (COALESCE), as the player knew it last.
+        let duration: Double?
+        if case .position(let d) = mirror { duration = d } else { duration = nil }
         write(mirror: call) { db in
-            try db.run(
-                "INSERT OR REPLACE INTO watch (asset_id, seconds, done, updated_at) VALUES (?, ?, ?, ?)",
-                [.text(assetID), .real(seconds), .int(done ? 1 : 0), .real(now.timeIntervalSince1970)]
+            try db.run("""
+                INSERT INTO watch (asset_id, seconds, done, updated_at, duration)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT (asset_id) DO UPDATE SET
+                    seconds = excluded.seconds, done = excluded.done,
+                    updated_at = excluded.updated_at,
+                    duration = COALESCE(excluded.duration, watch.duration)
+                """,
+                [.text(assetID), .real(seconds), .int(done ? 1 : 0), .real(now.timeIntervalSince1970),
+                 duration.map(Bind.real) ?? .null]
             )
-            watches[assetID] = WatchEntry(seconds: seconds, done: done, updatedAt: now)
+            watches[assetID] = WatchEntry(
+                seconds: seconds, done: done, updatedAt: now,
+                duration: duration ?? watches[assetID]?.duration
+            )
         }
+    }
+
+    // MARK: - Visits
+
+    /// The web VisitTracker's `markVisited` as a local write: a `visit`
+    /// event — the row Recent's module rows and the Courses section's
+    /// resume lines fold from — beside the `lastVisited` preference write
+    /// the web page posts, queued as the mirror. Postgres's route turns
+    /// that same body into its own visit event plus `recentModules` update,
+    /// so the server and this file record the same thing. It is an append
+    /// mirror like `watched`: each visit owes its own send.
+    func recordVisit(courseSlug: String, moduleSlug: String?) {
+        let now = Date()
+        var value: [String: Any] = [
+            "courseSlug": courseSlug,
+            "at": Self.iso8601(now),
+        ]
+        var payload: [String: Any] = ["course": courseSlug]
+        if let moduleSlug, !moduleSlug.isEmpty {
+            value["moduleSlug"] = moduleSlug
+            payload["module"] = moduleSlug
+        }
+        write(mirror: MirrorCall(
+            path: "/api/learner/preference",
+            body: ["key": "lastVisited", "value": value]
+        )) { db in
+            try db.run(
+                "INSERT INTO event (at, learner_id, type, payload) VALUES (?, 'local', 'visit', ?)",
+                [.real(now.timeIntervalSince1970), .text(Self.json(payload))]
+            )
+        }
+    }
+
+    /// The `at` field the preference route expects — ISO 8601 with
+    /// fractional seconds, the shape it already reads back.
+    private static func iso8601(_ date: Date) -> String {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f.string(from: date)
     }
 
     // MARK: - Renames
@@ -1021,7 +1078,8 @@ final class LearnerStore {
               asset_id   TEXT PRIMARY KEY,
               seconds    REAL NOT NULL,
               done       INTEGER NOT NULL DEFAULT 0,
-              updated_at REAL NOT NULL
+              updated_at REAL NOT NULL,
+              duration   REAL
             );
             CREATE TABLE IF NOT EXISTS favorite (
               asset_id TEXT PRIMARY KEY
@@ -1101,6 +1159,14 @@ final class LearnerStore {
               last_error TEXT
             );
             """)
+        // A file written before `duration` joined `watch` takes the column
+        // here — the one schema change the app's own file has needed so far.
+        let cols = try db.query("PRAGMA table_info(watch)")
+        var hasDuration = false
+        while cols.next() { if cols.text(1) == "duration" { hasDuration = true } }
+        if !hasDuration {
+            try db.exec("ALTER TABLE watch ADD COLUMN duration REAL")
+        }
         self.db = db
     }
 
@@ -1114,13 +1180,14 @@ final class LearnerStore {
         }
 
         var watches: [String: WatchEntry] = [:]
-        let watchRows = try db.query("SELECT asset_id, seconds, done, updated_at FROM watch")
+        let watchRows = try db.query("SELECT asset_id, seconds, done, updated_at, duration FROM watch")
         while watchRows.next() {
             guard let id = watchRows.text(0) else { continue }
             watches[id] = WatchEntry(
                 seconds: watchRows.double(1) ?? 0,
                 done: (watchRows.int64(2) ?? 0) != 0,
-                updatedAt: Date(timeIntervalSince1970: watchRows.double(3) ?? 0)
+                updatedAt: Date(timeIntervalSince1970: watchRows.double(3) ?? 0),
+                duration: watchRows.double(4)
             )
         }
 
