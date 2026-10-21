@@ -71,6 +71,18 @@ struct ConceptDetailView: View {
                         .background(.green.opacity(0.15), in: Capsule())
                         .foregroundStyle(.green)
                 }
+                Spacer(minLength: 4)
+                // The web workspace's "Teach me" — starts the concept
+                // session (probe, teach, check) over the sidecar.
+                NavigationLink(value: AppDestination.session(concept: w.slug)) {
+                    Text("Teach me")
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(G.btnText)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 7)
+                        .background(G.btnFace, in: RoundedRectangle(cornerRadius: 8))
+                }
+                .buttonStyle(.plain)
             }
             HStack(spacing: 8) {
                 Text(masteryCaption(bucket: w.bucket, pL: w.pL))
