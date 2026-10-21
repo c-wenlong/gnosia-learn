@@ -16,8 +16,9 @@
 //
 //  The concept session's two modes: learn (Teach me — probe, teach, check,
 //  close) and check (`?mode=check`, the workspace's Quiz me — the note's
-//  checks in turn, then close). The module week check has no native
-//  surface yet.
+//  checks in turn, then close). The module check is a third thing —
+//  WeekCheckModel.swift, a different walk rather than a `?mode=` — that
+//  reuses this file's steps and writes.
 //
 
 import Foundation
@@ -164,6 +165,21 @@ struct SessionStep: Hashable {
     /// model is unavailable or answers in prose. Nil means there is nothing
     /// to fall back to, and the step says so and lets the learner continue.
     var fallback: SessionQuestion? = nil
+    /// Where a module check's step sits — the web's `step.place`: which of
+    /// the module's concepts it asks, and the how-manyth question for it.
+    /// A concept session's steps carry none.
+    var place: Place? = nil
+
+    /// `step.place` in session-core.ts.
+    struct Place: Hashable {
+        let slug: String
+        let title: String
+        /// 1-based, in the check's order — "Concept i of n".
+        let position: Int
+        let of: Int
+        /// 1-based — "Question k" for this concept.
+        let question: Int
+    }
 }
 
 /// The steps a session walks — buildSessionPlan.
@@ -478,6 +494,10 @@ struct SessionAnswerWrite {
     var sessionId: String
     var sessionTitle: String
     var sessionGoal: String
+    /// The module a check's answer names — the collection id the event's
+    /// `module` carries and the observe body sends, as the web's week
+    /// check payload does. Nil on a concept's own session.
+    var module: String? = nil
     var requestId: String
     var question: String?
     var answer: String?
@@ -654,9 +674,12 @@ func sessionWhatMoved(
     var order: [String] = []
     for a in answers {
         if let existing = rows[a.concept] {
-            rows[a.concept] = SessionMovedRow(slug: a.concept, title: existing.title,
+            // Answered, not propagated to: a concept a correct answer
+            // spread to and the check then asked itself is one answered —
+            // the web's `own.prerequisite = false`, not a guess kept.
+            rows[a.concept] = SessionMovedRow(slug: a.concept, title: titleOf(a.concept),
                                               before: existing.before, after: a.pLAfter,
-                                              prerequisite: existing.prerequisite)
+                                              prerequisite: false)
         } else {
             rows[a.concept] = SessionMovedRow(slug: a.concept, title: titleOf(a.concept),
                                               before: a.pLBefore, after: a.pLAfter, prerequisite: false)
@@ -696,17 +719,27 @@ struct SessionTotals {
 /// sessionTotals for a concept session: the session concept's own first
 /// prior and last posterior.
 func sessionTotals(slug: String, answers: [SessionAnswerOutcome]) -> SessionTotals {
-    var before: Double? = nil
-    var after: Double? = nil
-    for a in answers where a.concept == slug {
-        if before == nil { before = a.pLBefore }
-        after = a.pLAfter
+    sessionTotals(slugs: [slug], answers: answers)
+}
+
+/// sessionTotals for a module check: the mean move over the concepts
+/// answered — each one's first prior to its last posterior, averaged, so
+/// the tile reads the same for one concept and for twelve.
+func sessionTotals(slugs: [String], answers: [SessionAnswerOutcome]) -> SessionTotals {
+    let wanted = Set(slugs)
+    var ends: [String: (before: Double, after: Double)] = [:]
+    for a in answers where wanted.contains(a.concept) {
+        ends[a.concept] = ends[a.concept].map { (before: $0.before, after: a.pLAfter) }
+            ?? (before: a.pLBefore, after: a.pLAfter)
+    }
+    func mean(_ pick: ((before: Double, after: Double)) -> Double) -> Double? {
+        ends.isEmpty ? nil : ends.values.reduce(0) { $0 + pick($1) } / Double(ends.count)
     }
     return SessionTotals(
         answered: answers.count,
         right: answers.filter(\.correct).count,
-        before: before,
-        after: after,
+        before: mean { $0.before },
+        after: mean { $0.after },
         cards: Set(answers.map(\.concept)).count
     )
 }
