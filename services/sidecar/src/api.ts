@@ -15,6 +15,7 @@ import {
   playbackTurn,
   preferenceTurn,
   progressTurn,
+  reviewGradeTurn,
   sessionCloseTurn,
   watchedTurn,
 } from "@gnosia/tutor/server/learner-writes";
@@ -67,6 +68,7 @@ import { guard } from "./guard";
  *   POST   /api/learner/note                   → noteTurn
  *   POST   /api/learner/name                   → nameTurn
  *   POST   /api/learner/observe                → observeTurn
+ *   POST   /api/review/grade                   → reviewGradeTurn (the app's review cards)
  *   POST   /api/learner/session/close          → sessionCloseTurn
  *   GET    /api/learner/provider-key           → providerKeyStatusTurn (the card's rows; the web reads them server-side)
  *   POST   /api/learner/provider-key           → providerKeySaveTurn
@@ -108,6 +110,7 @@ const TURNS: Record<string, Record<string, Turn>> = {
   "/api/learner/note": { POST: noteTurn },
   "/api/learner/name": { POST: nameTurn },
   "/api/learner/observe": { POST: observeTurn },
+  "/api/review/grade": { POST: reviewGradeTurn },
   "/api/learner/session/close": { POST: sessionCloseTurn },
   "/api/learner/provider-key": {
     GET: providerKeyStatusTurn as Turn,

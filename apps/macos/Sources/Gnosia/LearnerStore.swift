@@ -179,6 +179,9 @@ private struct MirrorRow {
     let body: String
     let attempts: Int64
     let createdAt: Double
+    /// Backoff deadline: the pass must not send before it, and must not pass
+    /// it either — a row resting here blocks every newer one (head of line).
+    let nextAt: Double
 }
 
 /// The learner's own file: favorites, watch marks, renames and course ticks,
@@ -186,6 +189,9 @@ private struct MirrorRow {
 @MainActor @Observable
 final class LearnerStore {
     private(set) var favorites: Set<String> = []
+    /// Assets the app unstarred — kept so a snapshot `favorite:<id>` row
+    /// cannot resurrect a star the learner dropped between mirrors.
+    private(set) var unfavorites: Set<String> = []
     private(set) var watches: [String: WatchEntry] = [:]
     private(set) var names: [String: String] = [:]
     /// Ticks and notes by curriculum item id — this app's own writes, which
@@ -265,12 +271,19 @@ final class LearnerStore {
             dedupeKey: "favorite:\(assetID)",
             body: ["assetId": assetID, "favorite": favorited]
         )) { db in
+            // Both directions keep a row: an unstar is a tombstone that
+            // masks the snapshot's `favorite:<id>` preference — a delete
+            // would let the mirrored star show through again until the next
+            // snapshot arrives.
+            try db.run(
+                "INSERT OR REPLACE INTO favorite (asset_id, starred) VALUES (?, ?)",
+                [.text(assetID), .int(favorited ? 1 : 0)])
             if favorited {
-                try db.run("INSERT OR IGNORE INTO favorite (asset_id) VALUES (?)", [.text(assetID)])
                 favorites.insert(assetID)
+                unfavorites.remove(assetID)
             } else {
-                try db.run("DELETE FROM favorite WHERE asset_id = ?", [.text(assetID)])
                 favorites.remove(assetID)
+                unfavorites.insert(assetID)
             }
         }
     }
@@ -396,8 +409,11 @@ final class LearnerStore {
     // MARK: - Renames
 
     /// The learner's own name for an asset, or nil to draw the catalog's.
+    /// The empty string is clearName's tombstone — it masks the snapshot's
+    /// rename without being a name itself.
     func name(for assetID: String) -> String? {
-        names[assetID]
+        guard let name = names[assetID], !name.isEmpty else { return nil }
+        return name
     }
 
     /// A blank name is a cleared one: the row stores names, not intentions.
@@ -424,8 +440,11 @@ final class LearnerStore {
             dedupeKey: "asset-name:\(assetID)",
             body: ["assetId": assetID, "name": NSNull()]
         )) { db in
-            try db.run("DELETE FROM asset_name WHERE asset_id = ?", [.text(assetID)])
-            names.removeValue(forKey: assetID)
+            // A tombstone, not a delete: with no local row the snapshot's own
+            // rename shows through again and the cleared name comes back.
+            try db.run("INSERT OR REPLACE INTO asset_name (asset_id, name) VALUES (?, '')",
+                       [.text(assetID)])
+            names[assetID] = ""
         }
     }
 
@@ -470,15 +489,22 @@ final class LearnerStore {
                     """,
                     [.text(itemID), .real(now), .real(now), .real(now)])
             } else {
+                // An untick needs a row to land on even when progress so far
+                // lives only in the snapshot — the INSERT writes the
+                // tombstone that masks it; a bare UPDATE would touch nothing
+                // and the snapshot's tick would show through again.
                 try db.run("""
-                    UPDATE progress SET completed_at = NULL, updated_at = ?
-                    WHERE learner_id = 'local' AND curriculum_item_id = ?
+                    INSERT INTO progress
+                        (learner_id, curriculum_item_id, completed_at, created_at, updated_at)
+                    VALUES ('local', ?, NULL, ?, ?)
+                    ON CONFLICT (learner_id, curriculum_item_id)
+                    DO UPDATE SET completed_at = NULL,
+                                  updated_at = excluded.updated_at
                     """,
-                    [.real(now), .text(itemID)])
+                    [.text(itemID), .real(now), .real(now)])
             }
             // Memory mirrors the file, so the map reads the row back rather
-            // than assume: an untick keeps it (the tombstone above), an
-            // untick on an item never written lands nowhere at all.
+            // than assume: an untick keeps its row as a tombstone.
             let row = try db.query("""
                 SELECT completed_at, note, updated_at FROM progress
                 WHERE learner_id = 'local' AND curriculum_item_id = ?
@@ -980,9 +1006,13 @@ final class LearnerStore {
         guard Date() >= mirrorCooldownUntil else { return }
         let now = Date().timeIntervalSince1970
         var due: [MirrorRow] = []
+        // Every queued row, not just the due ones: a write still resting in
+        // backoff is the head of the line, and a newer row must never pass
+        // it — an answer's observe can fail and back off while the close
+        // that depends on it sails past and is refused for good.
         if let rows = try? db.query("""
-            SELECT id, route, body, attempts, created_at FROM mirror_queue
-            WHERE next_at <= unixepoch('now') ORDER BY id
+            SELECT id, route, body, attempts, created_at, next_at FROM mirror_queue
+            ORDER BY id
             """) {
             while rows.next() {
                 guard let id = rows.int64(0),
@@ -992,7 +1022,8 @@ final class LearnerStore {
                 due.append(MirrorRow(
                     id: id, route: route, body: body,
                     attempts: rows.int64(3) ?? 0,
-                    createdAt: rows.double(4) ?? now
+                    createdAt: rows.double(4) ?? now,
+                    nextAt: rows.double(5) ?? now
                 ))
             }
         }
@@ -1010,6 +1041,9 @@ final class LearnerStore {
         }
 
         for row in due {
+            // Not yet this row's wake — stop the pass here. The row is the
+            // oldest queued, so everything behind it stays behind it.
+            if row.nextAt > now { break }
             do {
                 try await client.replay(route: row.route, body: Data(row.body.utf8))
                 try? db.run("DELETE FROM mirror_queue WHERE id = ?", [.int(row.id)])
@@ -1082,7 +1116,8 @@ final class LearnerStore {
               duration   REAL
             );
             CREATE TABLE IF NOT EXISTS favorite (
-              asset_id TEXT PRIMARY KEY
+              asset_id TEXT PRIMARY KEY,
+              starred  INTEGER NOT NULL DEFAULT 1
             );
             CREATE TABLE IF NOT EXISTS asset_name (
               asset_id TEXT PRIMARY KEY,
@@ -1167,6 +1202,15 @@ final class LearnerStore {
         if !hasDuration {
             try db.exec("ALTER TABLE watch ADD COLUMN duration REAL")
         }
+        // `favorite.starred` came with the unstar-tombstone change; files
+        // from before it carry rows that are all stars (the only kind they
+        // could write), so the default keeps them true.
+        let fcols = try db.query("PRAGMA table_info(favorite)")
+        var hasStarred = false
+        while fcols.next() { if fcols.text(1) == "starred" { hasStarred = true } }
+        if !hasStarred {
+            try db.exec("ALTER TABLE favorite ADD COLUMN starred INTEGER NOT NULL DEFAULT 1")
+        }
         self.db = db
     }
 
@@ -1174,10 +1218,18 @@ final class LearnerStore {
         guard let db else { return }
 
         var favorites: Set<String> = []
-        let favoriteRows = try db.query("SELECT asset_id FROM favorite")
+        var unfavorites: Set<String> = []
+        let favoriteRows = try db.query("SELECT asset_id, starred FROM favorite")
         while favoriteRows.next() {
-            if let id = favoriteRows.text(0) { favorites.insert(id) }
+            guard let id = favoriteRows.text(0) else { continue }
+            if (favoriteRows.int64(1) ?? 1) != 0 {
+                favorites.insert(id)
+            } else {
+                unfavorites.insert(id)
+            }
         }
+        self.favorites = favorites
+        self.unfavorites = unfavorites
 
         var watches: [String: WatchEntry] = [:]
         let watchRows = try db.query("SELECT asset_id, seconds, done, updated_at, duration FROM watch")

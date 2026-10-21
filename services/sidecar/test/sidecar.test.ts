@@ -308,6 +308,10 @@ describe("the learner state writes, database down", () => {
       ["/api/learner/observe", { conceptSlug: "UPPER", correct: true, source: "probe", requestId: "r1" }],
       ["/api/learner/observe", { conceptSlug: "alpha", correct: true, source: "review", requestId: "r1" }],
       ["/api/learner/observe", { conceptSlug: "alpha", correct: true, source: "teach" }],
+      ["/api/review/grade", {}],
+      ["/api/review/grade", { conceptId: "alpha", grade: 5 }],
+      ["/api/review/grade", { conceptId: "alpha", grade: "good" }],
+      ["/api/review/grade", { conceptId: "alpha", grade: 2, requestId: "has spaces" }],
       ["/api/learner/session/close", { sessionId: "has spaces" }],
       ["/api/learner/preference", { key: "theme", value: "dark" }],
       ["/api/learner/preference", { key: "lastVisited", value: {} }],
@@ -331,6 +335,7 @@ describe("the learner state writes, database down", () => {
       ["/api/learner/note", { curriculumItemId: "fx-m1-t1", note: "x" }],
       ["/api/learner/name", { name: "Ada" }],
       ["/api/learner/observe", { conceptSlug: "alpha", correct: true, source: "teach", requestId: "r1" }],
+      ["/api/review/grade", { conceptId: "alpha", grade: 2, requestId: "r1" }],
       ["/api/learner/session/close", { sessionId: "s1" }],
       ["/api/learner/preference", { key: "lastVisited", value: { courseSlug: "cs4263", moduleSlug: "m1" } }],
     ];
@@ -763,6 +768,40 @@ describe.skipIf(!reachable.ok)("the learner write routes, against a scratch data
       const later = { courseSlug: "course-beta", at: "2026-10-21T11:00:00.000Z" };
       await call2("/api/learner/preference", "POST", { key: "lastVisited", value: later });
       expect(await readPreference(scratch.db, "recentModules", "local")).toEqual([later, visit]);
+    });
+
+    it("a review grade is the web's: the event, the card and an idempotent replay", async () => {
+      const response = await call2("/api/review/grade", "POST", {
+        conceptId: "alpha",
+        grade: 2,
+        requestId: "req-grade-1",
+      });
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body).toMatchObject({
+        ok: true,
+        result: { concept: "alpha", rating: 2, replayed: false },
+      });
+      expect(body.result.grade).toBe(4); // Good maps onto SM-2's 4.
+
+      const reviews = (await readEvents(scratch.db, "local")).filter((e) => e.type === "review");
+      expect(reviews).toHaveLength(1);
+      expect(reviews[0]).toMatchObject({ concept: "alpha", grade: 4 });
+
+      // A retry naming the same requestId records nothing and answers the
+      // first write's rating — a review event cannot be deleted.
+      const retry = await call2("/api/review/grade", "POST", {
+        conceptId: "alpha",
+        grade: 0,
+        requestId: "req-grade-1",
+      });
+      expect((await retry.json()).result).toMatchObject({ rating: 2, grade: 4, replayed: true });
+      expect((await readEvents(scratch.db, "local")).filter((e) => e.type === "review")).toHaveLength(1);
+
+      // A concept the catalog does not know is the web's 400, not a 503.
+      expect(
+        (await call2("/api/review/grade", "POST", { conceptId: "nope", grade: 2, requestId: "req-nope" })).status,
+      ).toBe(400);
     });
   });
 });

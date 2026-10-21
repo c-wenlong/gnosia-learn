@@ -1563,7 +1563,10 @@ extension CatalogStore {
     /// (learner.db) first, then the mirrored catalog asset_name — else the
     /// asset's own title. What rows and detail panes should all print.
     func displayTitle(for asset: CatalogAsset) -> String {
-        names[asset.id] ?? assetNames[asset.id] ?? asset.displayTitle
+        // A clearName tombstone ("") masks the snapshot's rename and means
+        // the asset's own title — nil would let assetNames show it again.
+        if let local = names[asset.id] { return local.isEmpty ? asset.displayTitle : local }
+        return assetNames[asset.id] ?? asset.displayTitle
     }
 
     /// The merged tick for one curriculum item, when either file has a row.
@@ -1586,6 +1589,7 @@ extension CatalogStore {
     fileprivate func loadLearner() {
         let path = location.learnerPath
         var starred = Set<String>()
+        var unstarred = Set<String>()
         var marks: [String: WatchMark] = [:]
         var renames: [String: String] = [:]
         var ticks: [String: CatalogProgress] = [:]
@@ -1601,9 +1605,19 @@ extension CatalogStore {
             FileManager.default.fileExists(atPath: path),
             let db = try? SQLiteDatabase(path: path)
         {
-            if let rows = try? db.query("SELECT asset_id FROM favorite") {
+            // `starred` joined `favorite` with the unstar-tombstone change;
+            // a file written before it holds only stars.
+            let hasStarred = ((try? db.columns(of: "favorite")) ?? []).contains("starred")
+            if let rows = try? db.query(hasStarred
+                ? "SELECT asset_id, starred FROM favorite"
+                : "SELECT asset_id, 1 FROM favorite") {
                 while rows.next() {
-                    if let id = rows.text(0) { starred.insert(id) }
+                    guard let id = rows.text(0) else { continue }
+                    if (rows.int64(1) ?? 1) != 0 {
+                        starred.insert(id)
+                    } else {
+                        unstarred.insert(id)
+                    }
                 }
             }
 
@@ -1729,7 +1743,15 @@ extension CatalogStore {
             }
         }
 
-        favorites = starred
+        // Stars merge like names do: the file's rows and the snapshot's
+        // `favorite:<id>` prefs both count, and an unstar tombstone masks
+        // the snapshot until the mirror lands and the pref row is gone.
+        var mergedFavorites = starred
+        for (key, _) in preferences where key.hasPrefix("favorite:") {
+            mergedFavorites.insert(String(key.dropFirst("favorite:".count)))
+        }
+        mergedFavorites.subtract(unstarred)
+        favorites = mergedFavorites
         watch = marks
         names = renames
         sessions = localSessions
