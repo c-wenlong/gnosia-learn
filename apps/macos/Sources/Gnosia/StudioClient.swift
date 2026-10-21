@@ -279,11 +279,16 @@ struct StudioClient {
     /// One job row, the union of the diagram and video `view()` envelopes.
     /// Nearly everything optional: video rows carry `slug`/`classes` where
     /// diagram rows carry `candidate`, and older runners omit fields.
+    ///
+    /// `state`, `phase`, `note` and `updated` are `var` so the events
+    /// stream can patch the polled row the moment an event carries them —
+    /// the web's "the stream moves the phase on screen, the record
+    /// reconciles it" rule. Nothing else mutates them.
     struct Job: Decodable, Identifiable {
         let jobId: String
         let kind: String?
-        let state: String
-        let phase: String?
+        var state: String
+        var phase: String?
         let title: String?
         let topic: String?
         let target: String?
@@ -305,8 +310,8 @@ struct StudioClient {
         let requested: String?
         let started: String?
         let finished: String?
-        let updated: String?
-        let note: String?
+        var updated: String?
+        var note: String?
         let indexed: Bool?
         let written: [String]?
         let files: [String]?
