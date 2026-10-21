@@ -32,8 +32,25 @@ struct LearnView: View {
     }
 
     var body: some View {
-        NavigationSplitView {
+        // A fixed-width rail, not a nested NavigationSplitView: a second
+        // split inside the detail column squeezes the window's columns and
+        // slides the app sidebar offscreen on narrower windows. The web's
+        // concept index is a fixed rail too — it does not collapse.
+        HStack(spacing: 0) {
             VStack(spacing: 0) {
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(G.text3)
+                    TextField("Search concepts", text: $search)
+                        .textFieldStyle(.plain)
+                }
+                .font(.callout)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 7)
+                .background(G.surface2, in: RoundedRectangle(cornerRadius: 9))
+                .padding(.horizontal, 10)
+                .padding(.top, 10)
+
                 controlsRow
                 countsLine
 
@@ -64,9 +81,12 @@ struct LearnView: View {
                     .listStyle(.sidebar)
                 }
             }
-            .navigationSplitViewColumnWidth(min: 340, ideal: 430)
-            .searchable(text: $search, placement: .sidebar, prompt: "Search concepts")
-        } detail: {
+            .frame(width: 300)
+            .frame(maxHeight: .infinity)
+            .background(G.surface)
+
+            Divider().overlay(G.border)
+
             NavigationStack {
                 Group {
                     if let slug = selection, let concept = store.concept(slug) {
@@ -82,6 +102,7 @@ struct LearnView: View {
                 }
                 .appDestinations()
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .onAppear {
             if selection == nil { selection = store.learn.defaultSelection() }
