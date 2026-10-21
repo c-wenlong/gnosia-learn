@@ -142,9 +142,8 @@ function expandHome(path) {
 }
 
 function dataHome() {
-  // GNOSIA_HOME wins; SELF_LEARN_HOME stays readable for envs from before the
-  // rename; ~/.gnosia is the default.
-  const raw = process.env.GNOSIA_HOME?.trim() || process.env.SELF_LEARN_HOME?.trim();
+  // GNOSIA_HOME wins; ~/.gnosia is the default.
+  const raw = process.env.GNOSIA_HOME?.trim();
   if (raw === undefined || raw === '') return join(homedir(), '.gnosia');
   const expanded = expandHome(raw);
   if (!isAbsolute(expanded)) {

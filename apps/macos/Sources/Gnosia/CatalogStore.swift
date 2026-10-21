@@ -374,8 +374,7 @@ struct TranscriptSegment: Hashable {
 /// @gnosia/blob resolves (defaultBlobRoot in packages/blob/src/fs.ts), so a
 /// blob_key `local/<sha256>.<ext>` joins the root straight into a path.
 ///
-/// The data home: GNOSIA_HOME, then SELF_LEARN_HOME for checkouts and envs
-/// from before the rename, then ~/.gnosia.
+/// The data home: GNOSIA_HOME, then ~/.gnosia.
 struct CatalogLocation {
     let catalogPath: String
     let blobRoot: URL
@@ -406,9 +405,6 @@ struct CatalogLocation {
     /// rather than a second copy of it.
     static func dataHome(env: [String: String]) -> URL {
         if let raw = env["GNOSIA_HOME"], !raw.trimmingCharacters(in: .whitespaces).isEmpty {
-            return URL(fileURLWithPath: expandHome(raw.trimmingCharacters(in: .whitespaces)))
-        }
-        if let raw = env["SELF_LEARN_HOME"], !raw.trimmingCharacters(in: .whitespaces).isEmpty {
             return URL(fileURLWithPath: expandHome(raw.trimmingCharacters(in: .whitespaces)))
         }
         return FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".gnosia")
