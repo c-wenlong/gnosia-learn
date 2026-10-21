@@ -441,12 +441,25 @@ struct StudioClient {
         let detail: [String]
     }
 
-    /// The canvas a `POST /api/mirrors` opened.
+    /// The canvas a `POST /api/mirrors` opened, or one a `GET` touched.
+    /// `idleMs` is the mirror's own survival window without a heartbeat
+    /// (the runner added it after the field shipped, so it stays optional).
     struct Mirror {
         let url: URL?
         let port: Int?
         let healthy: Bool?
+        let idleMs: Int?
         let note: String?
+
+        /// One mirror object off the wire: a POST's flat reply or an
+        /// entry of a GET's `mirrors` list. Same shape either way.
+        init(dict: [String: Any]) {
+            url = (dict["url"] as? String).flatMap(URL.init(string:))
+            port = dict["port"] as? Int
+            healthy = dict["healthy"] as? Bool
+            idleMs = dict["idleMs"] as? Int
+            note = dict["note"] as? String
+        }
     }
 
     /* ------------------------------------------------------------------ */
@@ -584,16 +597,33 @@ struct StudioClient {
         )
     }
 
-    /// `POST /api/mirrors { file }`, a `canvas serve` over the checkout, whose
-    /// URL the caller opens in the browser.
+    /// `POST /api/mirrors { file }`, a `canvas serve` over the checkout.
+    /// Idempotent: a second ask hands the mirror already running back.
     func openMirror(file: String) async throws -> Mirror {
         let reply = try await post("api/mirrors", body: ["file": file])
-        return Mirror(
-            url: (reply["url"] as? String).flatMap(URL.init(string:)),
-            port: reply["port"] as? Int,
-            healthy: reply["healthy"] as? Bool,
-            note: reply["note"] as? String
-        )
+        return Mirror(dict: reply)
+    }
+
+    /// `GET /api/mirrors?file=…`, the canvas's heartbeat: a look touches
+    /// the mirror's idle timer and answers its view, `nil` when none is
+    /// open (the sweep took it, or the runner restarted without it).
+    func touchMirror(file: String) async throws -> Mirror? {
+        let reply = try await get("api/mirrors", query: [URLQueryItem(name: "file", value: file)])
+        guard let entry = (reply["mirrors"] as? [[String: Any]])?.first else { return nil }
+        return Mirror(dict: entry)
+    }
+
+    /// `DELETE /api/mirrors?file=…`, the web's "Restart canvas" first half.
+    /// `gone` is the answer that matters: the serve process actually died
+    /// rather than a writer still holding the document.
+    @discardableResult
+    func closeMirror(file: String) async throws -> Bool {
+        var request = URLRequest(url: url("api/mirrors", query: [URLQueryItem(name: "file", value: file)]))
+        request.httpMethod = "DELETE"
+        let (data, response) = try await session.data(for: request)
+        try refuseIfNeeded(data, response: response)
+        let reply = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        return reply?["gone"] as? Bool ?? true
     }
 
     /// `POST /api/drafts`, a blank conversation (`source: null`), answered

@@ -45,6 +45,25 @@ struct GnosiaApp: App {
         }
         .windowToolbarStyle(.unified)
 
+        /// A canvas window per diagram, keyed by name: the studio's live
+        /// tldraw surface (a `canvas serve` page) in a WKWebView, opened by
+        /// the diagram detail's "Open canvas". The runner owns the mirror's
+        /// lifecycle; CanvasView sends the keep-alive while a window is up.
+        /// One window per value: reopening a diagram re-activates its window.
+        WindowGroup("Canvas", id: "canvas", for: String.self) { $name in
+            // The value is the diagram name; a window opened without one
+            // (restoration edge) gets the honest empty state.
+            if let name {
+                CanvasView(name: name)
+                    .frame(minWidth: 900, minHeight: 560)
+            } else {
+                ContentUnavailableView("No diagram", systemImage: "questionmark.circle", description: Text("This window was opened without a diagram name."))
+                    .frame(minWidth: 480, minHeight: 320)
+            }
+        }
+        .windowToolbarStyle(.unified)
+        .defaultSize(width: 1280, height: 860)
+
         Settings {
             SettingsView()
                 .environment(store)
