@@ -13,9 +13,9 @@ import {
   type InspectShape,
   type VerifyCheck,
   type VerifyReport,
-} from "./canvas";
-import { absolute } from "./paths";
-import type { GateResult, GateStep } from "./store";
+} from "../canvas/canvas";
+import { absolute } from "../paths";
+import type { GateResult, GateStep } from "../data/store";
 
 /**
  * The gate: the runner's own checks, after the agent exits.

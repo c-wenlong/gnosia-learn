@@ -16,7 +16,7 @@
 import { dayLabel, timeOfDay } from "@/lib/day-groups";
 import { dayKey } from "@/lib/days";
 
-/** Mirrors `services/studio/src/diagrams.ts`. Structural, not imported: the */
+/** Mirrors `services/studio/src/canvas/diagrams.ts`. Structural, not imported: the */
 /* two packages do not depend on each other and a shared type would need a third. */
 export type SvgState = "current" | "stale" | "missing";
 

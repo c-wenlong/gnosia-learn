@@ -3,8 +3,8 @@ import path from "node:path";
 
 import { isAgentModel } from "@self-learn/schema/shared";
 
-import { preferenceGet } from "../catalog";
-import { readThrough } from "../content-cache";
+import { preferenceGet } from "../data/catalog";
+import { readThrough } from "../data/content-cache";
 import type { AgentSetting } from "./types";
 
 /**

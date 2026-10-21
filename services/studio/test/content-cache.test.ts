@@ -5,18 +5,18 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { cachePath, readThrough } from "../src/content-cache";
+import { cachePath, readThrough } from "../src/data/content-cache";
 import { TOPICS, topicListAnswer, topicListDown } from "./vocabulary";
 
 // The catalog CLI is the vocabulary's only source; faked here so the tests read
 // no database and no file under content/.
 const catalogMock = vi.hoisted(() => ({ topicList: vi.fn() }));
-vi.mock("../src/catalog", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/catalog")>()),
+vi.mock("../src/data/catalog", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/data/catalog")>()),
   ...catalogMock,
 }));
 
-const { loadVocabulary } = await import("../src/brief");
+const { loadVocabulary } = await import("../src/diagram/brief");
 
 /**
  * The studio's last-read cache (D13): a read that throws is answered from the

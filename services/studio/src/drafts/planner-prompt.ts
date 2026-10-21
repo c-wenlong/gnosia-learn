@@ -1,8 +1,8 @@
 import type { TopicEntry } from "@self-learn/content";
 
 import { corpusBlock, EXTENDING_LINE_CAP, fence, vocabularyBlock, type CorpusEntry } from "./planner";
-import { briefTool, VIDEO_TOOL_CAPABILITIES, VIDEO_TOOL_ROUTES, VIDEO_TOOLS } from "./video/tools";
-import { VOICES } from "./video/voices";
+import { briefTool, VIDEO_TOOL_CAPABILITIES, VIDEO_TOOL_ROUTES, VIDEO_TOOLS } from "../video/tools";
+import { VOICES } from "../video/voices";
 
 /**
  * The planner's one prompt for every kind the build has (D59 of

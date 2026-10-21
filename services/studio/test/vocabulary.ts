@@ -1,5 +1,5 @@
-import type { CatalogResult } from "../src/catalog";
-import type { Vocabulary } from "../src/brief";
+import type { CatalogResult } from "../src/data/catalog";
+import type { Vocabulary } from "../src/diagram/brief";
 
 /**
  * The vocabulary the studio's tests draw against.

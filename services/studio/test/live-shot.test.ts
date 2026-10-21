@@ -5,7 +5,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { inside, matchesTag, MAX_BYTES, newestShot, openNewestShot } from "../src/live-shot";
+import { inside, matchesTag, MAX_BYTES, newestShot, openNewestShot } from "../src/diagram/live-shot";
 
 /**
  * The grid's live preview reads the newest picture the agent took of its own

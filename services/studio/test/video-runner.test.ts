@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { RecordStore } from "../src/store";
+import { RecordStore } from "../src/data/store";
 import type { ValidVideoBrief } from "../src/video/brief";
 import type { VideoDoctor, VideoDoctorReport } from "../src/video/doctor";
 import { VIDEO_TOOLS } from "../src/video/tools";
@@ -35,7 +35,7 @@ const catalogMock = vi.hoisted(() => ({
   videoPut: vi.fn(),
   preferenceGet: vi.fn(async () => ({ ok: true, json: { value: null }, error: null, offline: false })),
 }));
-vi.mock("../src/catalog", () => catalogMock);
+vi.mock("../src/data/catalog", () => catalogMock);
 
 const { VideoRunner, stillWorking, IN_FLIGHT_MAX_MS, videoAgentArgv } = await import("../src/video/runner");
 const { acceptVideo, discardVideo } = await import("../src/video/review");

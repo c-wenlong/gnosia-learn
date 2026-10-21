@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { guardHooks, hookProgram, writeHook } from "../bash-guard";
+import { guardHooks, hookProgram, writeHook } from "../agent/bash-guard";
 import type { VideoPaths } from "./paths";
 
 export { guardHooks };

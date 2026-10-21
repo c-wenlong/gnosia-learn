@@ -9,11 +9,11 @@ import {
   KILL_GRACE_MS,
   MAX_TURNS,
   type AgentAuth,
-} from "./config";
-import { diagramPathProblem, writeDiagramGuard } from "./diagram-guard";
-import { candidateDir, REPO_ROOT, scratchDir, settingsPath, studioHome, tmpDir } from "./paths";
-import { signalGroup, sweepByMarker } from "./proc";
-import { buildSettings, type SettingsInput } from "./settings";
+} from "../config";
+import { diagramPathProblem, writeDiagramGuard } from "../diagram/diagram-guard";
+import { candidateDir, REPO_ROOT, scratchDir, settingsPath, studioHome, tmpDir } from "../paths";
+import { signalGroup, sweepByMarker } from "../proc";
+import { buildSettings, type SettingsInput } from "../diagram/settings";
 
 /**
  * The agent: one headless `claude -p` session, constrained, watched and

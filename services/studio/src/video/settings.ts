@@ -1,9 +1,9 @@
 import { realpathSync } from "node:fs";
 import path from "node:path";
 
-import { cacheDir } from "../content-cache";
+import { cacheDir } from "../data/content-cache";
 import { REPO_ROOT, studioHome, workDir } from "../paths";
-import { BASH_DENY, claudeTempRules, rule, siblingJobRules, studioHomeRules, type AgentSettings } from "../settings";
+import { BASH_DENY, claudeTempRules, rule, siblingJobRules, studioHomeRules, type AgentSettings } from "../diagram/settings";
 import { guardHooks } from "./bash-guard";
 import type { VideoPaths } from "./paths";
 

@@ -18,7 +18,7 @@ vi.mock("../src/proc", async (importOriginal) => {
   return { ...actual, stopChild: procMock.stopChild };
 });
 
-const { MirrorRefused, Mirrors, readyObject } = await import("../src/mirrors");
+const { MirrorRefused, Mirrors, readyObject } = await import("../src/canvas/mirrors");
 
 beforeEach(() => {
   procMock.stopChild.mockReset();

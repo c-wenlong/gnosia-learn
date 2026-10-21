@@ -33,21 +33,21 @@ const catalogMock = vi.hoisted(() => ({
   topicAdd: vi.fn(),
   diagramList: vi.fn(),
 }));
-vi.mock("../src/catalog", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/catalog")>()),
+vi.mock("../src/data/catalog", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/data/catalog")>()),
   ...catalogMock,
 }));
 const canvasMock = vi.hoisted(() => ({ doctor: vi.fn() }));
-vi.mock("../src/canvas", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../src/canvas")>()),
+vi.mock("../src/canvas/canvas", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/canvas/canvas")>()),
   doctor: canvasMock.doctor,
 }));
 
-const { Drafts, emptySlot } = await import("../src/drafts");
-const { JobStore } = await import("../src/store");
-const { JobRefused } = await import("../src/runner");
+const { Drafts, emptySlot } = await import("../src/drafts/drafts");
+const { JobStore } = await import("../src/data/store");
+const { JobRefused } = await import("../src/diagram/runner");
 const { spendWindow, costFromLog } = await import("../src/cost");
-const { cacheDir, cachePath } = await import("../src/content-cache");
+const { cacheDir, cachePath } = await import("../src/data/content-cache");
 const { studioOwner } = await import("../src/config");
 const { draftDir, draftJsonPath, draftSessionLogPath, draftTranscriptPath } = await import("../src/paths");
 
@@ -927,7 +927,7 @@ describe("C11: the extend target changed after the conversation started", () => 
   async function extendDraft(document: unknown, revision: number): Promise<{ id: string; drafts: DraftsT }> {
     const { record } = await drafts.create({ idempotencyKey: "c11" });
     const { workDir, workPath } = await import("../src/paths");
-    const { documentHashOf } = await import("../src/diagrams");
+    const { documentHashOf } = await import("../src/canvas/diagrams");
     await mkdir(workDir(), { recursive: true });
     await writeFile(workPath("dot-product"), JSON.stringify(document), "utf8");
     await writeFile(path.join(workDir(), "dot-product.checkout.json"), JSON.stringify({ revision }), "utf8");
@@ -1101,8 +1101,8 @@ describe("C4: the vocabulary changes during a conversation", () => {
 
 describe("vocabularyChangeNote", () => {
   it("lists a changed topic as it is now, and keeps the removals when the note is capped", async () => {
-    const { vocabularyChangeNote } = await import("../src/drafts");
-    const { vocabularyBlock } = await import("../src/planner");
+    const { vocabularyChangeNote } = await import("../src/drafts/drafts");
+    const { vocabularyBlock } = await import("../src/drafts/planner");
     const entry = (slug: string, concepts: string[] = []) => ({
       slug,
       title: slug,
@@ -1127,7 +1127,7 @@ describe("vocabularyChangeNote", () => {
 
 describe("describeBriefEdit", () => {
   it("reads a rename as one line, not as every arrow it touches added and removed", async () => {
-    const { describeBriefEdit } = await import("../src/drafts");
+    const { describeBriefEdit } = await import("../src/drafts/drafts");
     const before = { ...good, model: "sonnet" } as never;
     const after = {
       ...good,
@@ -1143,7 +1143,7 @@ describe("describeBriefEdit", () => {
   });
 
   it("reads an insert as one added element, and a rename beside it as one line", async () => {
-    const { describeBriefEdit } = await import("../src/drafts");
+    const { describeBriefEdit } = await import("../src/drafts/drafts");
     const brief = (labels: string[], relations: [string, string, string][]) =>
       ({
         ...good,
@@ -1260,8 +1260,8 @@ describe("the vocabulary a turn reads", () => {
 
 describe("vocabularyChange", () => {
   it("advances the baseline only past what the note told, so the next note tells the rest", async () => {
-    const { vocabularyChange } = await import("../src/drafts");
-    const { vocabularyBlock } = await import("../src/planner");
+    const { vocabularyChange } = await import("../src/drafts/drafts");
+    const { vocabularyBlock } = await import("../src/drafts/planner");
     const entry = (slug: string) => ({
       slug,
       title: slug,

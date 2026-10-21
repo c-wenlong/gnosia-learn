@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 
 import { ownerRefusal } from "../src/api";
 import { studioOwner } from "../src/config";
-import { cachePath } from "../src/content-cache";
+import { cachePath } from "../src/data/content-cache";
 
 /**
  * The studio and owners (phase 4 of docs/CONTENT-MIGRATION.md).
@@ -32,7 +32,7 @@ import { cachePath } from "../src/content-cache";
  */
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const CATALOG = path.resolve(HERE, "..", "src", "catalog.ts");
+const CATALOG = path.resolve(HERE, "..", "src", "data", "catalog.ts");
 
 interface CliCall {
   fn: string;
