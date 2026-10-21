@@ -1,4 +1,4 @@
-import { LOCAL_LEARNER_ID } from "@self-learn/schema/shared";
+import { LOCAL_LEARNER_ID } from "@gnosia/schema/shared";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 /**

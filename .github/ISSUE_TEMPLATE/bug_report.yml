@@ -9,7 +9,7 @@ body:
         Thanks for taking the time to report a bug. Please fill in as much detail as you can.
 
         Learner progress (checkboxes, notes, recaps) lives in your browser's
-        localStorage under `self-learn:v1`, so a bug that only reproduces for
+        localStorage under `gnosia:v1`, so a bug that only reproduces for
         you may depend on what is stored there.
 
   - type: input

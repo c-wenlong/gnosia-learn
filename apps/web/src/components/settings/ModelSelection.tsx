@@ -1,6 +1,6 @@
 "use client";
 
-import { PREFERENCE_KEYS } from "@self-learn/schema/shared";
+import { PREFERENCE_KEYS } from "@gnosia/schema/shared";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 

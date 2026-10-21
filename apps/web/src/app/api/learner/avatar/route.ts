@@ -1,5 +1,5 @@
-import { AVATARS, isAvatar } from "@self-learn/schema/shared";
-import { writeAvatar } from "@self-learn/catalog/state";
+import { AVATARS, isAvatar } from "@gnosia/schema/shared";
+import { writeAvatar } from "@gnosia/catalog/state";
 
 import { BadRequest, handler } from "@/lib/learner-api";
 

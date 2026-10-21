@@ -1,12 +1,13 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  clearTables,
   migratedScratchDatabase,
   probe,
   type Scratch,
 } from "../../../../../../../services/catalog/test/scratch-database";
 import { seedContent } from "../../../../../../../services/catalog/test/state-fixture";
-import { collection, learner } from "@self-learn/schema";
+import { collection, learner } from "@gnosia/schema";
 
 /**
  * Beside the fixture's live module `fx-m1`: one the course file stopped
@@ -62,7 +63,7 @@ describe.skipIf(!reachable.ok)("the session's learner routes", () => {
   let scratch: Scratch;
   let observe: (req: Request) => Promise<Response>;
   let close: (req: Request) => Promise<Response>;
-  let state: typeof import("@self-learn/catalog/state");
+  let state: typeof import("@gnosia/catalog/state");
 
   beforeAll(async () => {
     scratch = await migratedScratchDatabase();
@@ -72,7 +73,7 @@ describe.skipIf(!reachable.ok)("the session's learner routes", () => {
     const [observeRoute, closeRoute, store] = await Promise.all([
       import("./route"),
       import("../session/close/route"),
-      import("@self-learn/catalog/state"),
+      import("@gnosia/catalog/state"),
     ]);
     observe = observeRoute.POST;
     close = closeRoute.POST;
@@ -84,13 +85,7 @@ describe.skipIf(!reachable.ok)("the session's learner routes", () => {
   });
 
   beforeEach(async () => {
-    await scratch.db.execute(
-      "alter table event disable trigger event_no_update; " +
-        "alter table event disable trigger event_no_delete; " +
-        "truncate event, mastery, review, session cascade; " +
-        "alter table event enable trigger event_no_update; " +
-        "alter table event enable trigger event_no_delete;",
-    );
+    await clearTables(scratch.db, ["event", "mastery", "review", "session"]);
   });
 
   const answer = {

@@ -17,7 +17,7 @@ import {
   type ReviewCard,
 } from "../src/state";
 import { replayReviews } from "../src/learn/replay";
-import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { clearTables, migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { seedContent } from "./state-fixture";
 
 /**
@@ -117,13 +117,7 @@ describe.skipIf(!reachable.ok)("gradeReview and reviewQueue", () => {
   });
 
   beforeEach(async () => {
-    await scratch.db.execute(
-      "alter table event disable trigger event_no_update; " +
-        "alter table event disable trigger event_no_delete; " +
-        "truncate event, mastery, review; " +
-        "alter table event enable trigger event_no_update; " +
-        "alter table event enable trigger event_no_delete;",
-    );
+    await clearTables(scratch.db, ["event", "mastery", "review"]);
   });
 
   it("appends the review event, upserts the card and moves p(L), on one clock", async () => {
@@ -238,7 +232,7 @@ describe.skipIf(!reachable.ok)("gradeReview and reviewQueue", () => {
     });
 
     it("gives a never-scheduled focus a null card, and drops a focus the catalog lacks", async () => {
-      await scratch.db.execute("truncate review");
+      await scratch.db.execute("delete from review");
       const fresh = await reviewQueue(scratch.db, { now: NOW, focus: "gamma" });
       expect(fresh.items).toHaveLength(1);
       expect(fresh.items[0]).toMatchObject({ conceptId: "gamma", card: null, intervals: [1, 1, 1, 1] });

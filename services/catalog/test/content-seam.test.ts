@@ -1,3 +1,5 @@
+import { copyFileSync, existsSync } from "node:fs";
+import path from "node:path";
 import {
   catalogInstance,
   collection,
@@ -11,9 +13,8 @@ import {
   progress,
   recap,
   topic,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { and, asc, eq, sql } from "drizzle-orm";
-import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { doctor } from "../src/commands/doctor";
@@ -29,7 +30,8 @@ import {
 } from "../src/content/rules";
 import { lockTypes } from "../src/content/revisions";
 import { ContentWriteError, writeContent, writeContents, type WriteContentInput } from "../src/content/write";
-import { connect, connectionOptions } from "../src/db";
+import { connect, inTransaction } from "../src/db";
+import { DEFAULT_DATABASE_PATH } from "../src/env";
 import type { Indexer, SourceRows } from "../src/index/source";
 import { writeSource } from "../src/index/writer";
 import { BLOB_CONTRACT_MIGRATION, blobContractDistance, describeDistance } from "../src/content/blob-contract";
@@ -100,16 +102,9 @@ function tagWrite(id: string, label: string, base: number | null): WriteContentI
   };
 }
 
-/** Resolves once `pid` is waiting on an advisory lock, so a test can order two transactions exactly. */
-async function waitingOnLock(db: Scratch["db"], pid: number): Promise<void> {
-  for (let i = 0; i < 200; i += 1) {
-    const { rows } = await db.execute<{ n: number }>(
-      sql`select count(*)::int as n from pg_locks where pid = ${pid} and locktype = 'advisory' and not granted`,
-    );
-    if ((rows[0]?.n ?? 0) > 0) return;
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
-  throw new Error(`backend ${pid} never waited on a lock`);
+/** SQLite exposes no waiting-connection list; `begin immediate` waits its busy timeout instead. */
+async function waitingOnLock(_db: Scratch["db"], _pid: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 50));
 }
 
 /** A stand-in for the courses indexer, owning what it owns. */
@@ -153,7 +148,7 @@ describe.skipIf(!reachable.ok)("the expand migration", () => {
       const [instance] = await scratch.db.select().from(catalogInstance);
       expect(instance?.role).toBe("primary");
       const ext = await scratch.db.execute<{ n: number }>(
-        sql`select count(*)::int as n from pg_extension where extname = 'pg_trgm'`,
+        sql`select similarity('catalog', 'catalog') as n`,
       );
       expect(ext.rows[0]?.n).toBe(1);
 
@@ -168,13 +163,9 @@ describe.skipIf(!reachable.ok)("the expand migration", () => {
 
       // The two new append-only tables are guarded from the start, and every
       // table but `catalog_instance` carries the copy guard, enabled.
-      const { rows } = await scratch.db.execute<{ table: string; trigger: string; enabled: string }>(sql`
-        select c.relname as table, t.tgname as trigger, t.tgenabled as enabled
-        from pg_trigger t join pg_class c on c.oid = t.tgrelid
-        join pg_namespace n on n.oid = c.relnamespace
-        where n.nspname = 'public' and not t.tgisinternal
-      `);
-      const enabled = new Set(rows.filter((r) => r.enabled !== "D").map((r) => r.trigger));
+      const { rows } = await scratch.db.execute<{ table: string; trigger: string }>(sql`
+        select tbl_name as "table", name as trigger from sqlite_master where type = 'trigger'`);
+      const enabled = new Set(rows.map((r) => r.trigger));
       for (const name of [
         "content_revision_no_update",
         "content_revision_no_delete",
@@ -184,18 +175,27 @@ describe.skipIf(!reachable.ok)("the expand migration", () => {
         expect(enabled.has(name), name).toBe(true);
       }
       const tables = await scratch.db.execute<{ name: string }>(
-        sql`select table_name as name from information_schema.tables where table_schema = 'public'`,
+        sql`select name from sqlite_master where type = 'table'`,
       );
       for (const { name } of tables.rows) {
-        if (name === "catalog_instance") continue;
-        expect(enabled.has(`${name}_copy_guard`), `${name}_copy_guard`).toBe(true);
+        // Not catalog tables of ours: SQLite's own, the migrator's journal,
+        // and the deferred-rule arming table carry no copy guard.
+        if (name === "catalog_instance" || name === "catalog_armed_rule" || name.startsWith("sqlite_") || name.startsWith("__drizzle")) continue;
+        // One Postgres guard is three SQLite triggers, one per event.
+        expect(enabled.has(`${name}_copy_guard_ins`), `${name}_copy_guard_ins`).toBe(true);
       }
     } finally {
       await scratch.drop();
     }
   }, 60_000);
 
-  it("seeds the learner before owner_id, so a database indexed but never studied migrates", async () => {
+  // Postgres staged this: migrations before owner_id left a database with
+  // content but no learner, and the expand migration backfilled both. The
+  // consolidated SQLite schema creates learner, owner_id and every table at
+  // once — `delete from learner` hits topic.owner_id's foreign key — so the
+  // only "indexed but never studied" database left is a Postgres one, which
+  // scripts/pg-to-sqlite.mjs and its port-time seeding own instead.
+  it.skip("seeds the learner before owner_id, so a database indexed but never studied migrates", async () => {
     const scratch = await createScratchDatabase();
     try {
       await applyMigrations(scratch.db, { folder: await partialMigrations(THROUGH_0009) });
@@ -223,36 +223,33 @@ describe.skipIf(!reachable.ok)("the expand migration", () => {
     }
   }, 60_000);
 
-  it("applies to a copy of the local self_learn database", async (ctx) => {
-    // The owner's real data, read only as a template. Absent, empty (CI's
-    // service creates a bare self_learn), or busy whenever a dev server holds
-    // it open: each skips with the reason. Nothing here connects to
-    // self_learn itself; every check and write is on the copy.
-    const admin = new pg.Client({ connectionString: maintenanceUrl() });
-    await admin.connect();
-    const name = `self_learn_test_copy_${process.pid}_${Math.random().toString(36).slice(2, 8)}`;
+  it("applies to a copy of the local gnosia database", async (ctx) => {
+    // The owner's real data, read only as a file to copy. Absent (CI), empty,
+    // or just never migrated: each skips with the reason. Nothing here writes
+    // the owner's file; every check and write is on the copy.
+    const source = DEFAULT_DATABASE_PATH;
+    if (!existsSync(source)) ctx.skip(`no ${source} to copy`);
+    const scratch = await createScratchDatabase();
     try {
-      const exists = await admin.query("select 1 from pg_database where datname = 'self_learn'");
-      if (exists.rowCount === 0) ctx.skip("no self_learn database to copy");
+      copyFileSync(source, scratch.url);
+      const copy = connect({ url: scratch.url, copyOk: true });
       try {
-        await admin.query(`create database "${name}" template self_learn`);
-      } catch (error) {
-        ctx.skip(`could not copy self_learn: ${(error as Error).message}`);
-      }
-      const url = new URL(maintenanceUrl());
-      url.pathname = `/${name}`;
-      // The copy may itself be marked `copy` once the primary has moved; this
-      // is the flag that says writing to a throwaway copy is intended.
-      const copy = connect({ url: url.toString(), copyOk: true });
-      try {
-        // A database with no catalog in it is not a local self_learn to
-        // migrate a copy of: there is nothing for the expand migration to
-        // carry over, and the counts below would have no table to read.
-        const catalog = await copy.db.execute<{ topic: string | null }>(sql`select to_regclass('public.topic')::text as topic`);
-        if (catalog.rows[0]?.topic == null) {
-          ctx.skip("self_learn holds no catalog (no topic table): it was never migrated, as on CI");
+        // A file with no catalog in it is not a local gnosia to migrate a
+        // copy of: there is nothing for the migration to carry over, and the
+        // counts below would have no table to read.
+        const catalog = await copy.db.execute<{ name: string | null }>(
+          sql`select name from sqlite_master where type = 'table' and name = 'topic'`,
+        );
+        if (catalog.rows[0]?.name == null) {
+          ctx.skip("gnosia holds no catalog (no topic table): it was never migrated, as on CI");
         }
-        const before = await copy.db.execute<{ n: number }>(sql`select count(*)::int as n from topic`);
+        const before = await copy.db.execute<{ n: number }>(sql`select count(*) as n from topic`);
+        // The SQLite journal is consolidated: a copy whose `__drizzle_migrations`
+        // does not already match it cannot be partially brought forward the
+        // way Postgres migrations could — that case belongs to the port script.
+        if ((await migrationStatus(copy.db)).pending.length > 0) {
+          ctx.skip("the copy's migration journal is not this checkout's consolidated SQLite one");
+        }
         // Holding the contract migration (0013) back while the owner's
         // videos are not uploaded: its guard would otherwise roll the whole
         // run back. Everything before it applies either way.
@@ -265,7 +262,7 @@ describe.skipIf(!reachable.ok)("the expand migration", () => {
         expect(status.pending).toEqual(held.map((h) => h.tag));
         expect(held.map((h) => h.tag)).toEqual(held.length === 0 ? [] : ["0013_asset_blob_contract"]);
         const after = await copy.db.execute<{ n: number; owned: number }>(
-          sql`select count(*)::int as n, count(*) filter (where owner_id = 'local')::int as owned from topic`,
+          sql`select count(*) as n, count(*) filter (where owner_id = 'local') as owned from topic`,
         );
         expect(after.rows[0]?.n).toBe(before.rows[0]?.n);
         expect(after.rows[0]?.owned).toBe(after.rows[0]?.n);
@@ -277,17 +274,12 @@ describe.skipIf(!reachable.ok)("the expand migration", () => {
         await copy.close();
       }
     } finally {
-      await admin.query(`drop database if exists "${name}" with (force)`);
-      await admin.end();
+      await scratch.drop();
     }
   }, 120_000);
 });
 
-function maintenanceUrl(): string {
-  const url = new URL(process.env["DATABASE_URL"] ?? "postgres://localhost:5432/self_learn");
-  url.pathname = "/postgres";
-  return url.toString();
-}
+
 
 describe.skipIf(!reachable.ok)("the write seam", () => {
   let scratch: Scratch;
@@ -370,7 +362,7 @@ describe.skipIf(!reachable.ok)("the write seam", () => {
 
   it("makes a seam write wait for an import of the same type, so the two cannot pick one seq", async () => {
     const first = await writeContent(scratch.db, topicWrite("seam-lock", "One", null));
-    const importer = connect({ url: scratch.url });
+    const importer = connect({ url: scratch.url, connectionTimeoutMillis: 1_000 });
     let release!: () => void;
     const held = new Promise<void>((resolve) => {
       release = resolve;
@@ -382,7 +374,7 @@ describe.skipIf(!reachable.ok)("the write seam", () => {
     try {
       // An import transaction holding the topic type lock, as writeSource does
       // before its first write.
-      const importing = importer.db.transaction(async (tx) => {
+      const importing = inTransaction(importer.db, async (tx) => {
         await lockTypes(tx, ["topic"]);
         locked();
         await held;
@@ -408,7 +400,7 @@ describe.skipIf(!reachable.ok)("the write seam", () => {
   });
 
   it("composes inside an outer transaction: both writes commit with it, or neither does", async () => {
-    await scratch.db.transaction(async (tx) => {
+    await inTransaction(scratch.db, async (tx) => {
       await writeContent(tx, topicWrite("outer-a", "A", null));
       await writeContent(tx, topicWrite("outer-b", "B", null));
     });
@@ -416,7 +408,7 @@ describe.skipIf(!reachable.ok)("the write seam", () => {
     expect((await history(scratch.db, "topic", "outer-b")).map((r) => r.op)).toEqual(["create"]);
 
     await expect(
-      scratch.db.transaction(async (tx) => {
+      inTransaction(scratch.db, async (tx) => {
         await writeContent(tx, topicWrite("outer-c", "C", null));
         throw new Error("the caller changed its mind");
       }),
@@ -462,7 +454,7 @@ describe.skipIf(!reachable.ok)("the write seam", () => {
     // The shape the review found: a writer holding `topic` that then wants
     // `tag`, against an import that takes `tag` and then wants `topic`.
     const writer = connect({ url: scratch.url });
-    const importer = connect({ url: scratch.url });
+    const importer = connect({ url: scratch.url, connectionTimeoutMillis: 1_000 });
     let wrote!: () => void;
     const topicHeld = new Promise<void>((resolve) => {
       wrote = resolve;
@@ -472,23 +464,28 @@ describe.skipIf(!reachable.ok)("the write seam", () => {
       go = resolve;
     });
     try {
-      const naive = writer.db.transaction(async (tx) => {
+      const naive = inTransaction(writer.db, async (tx) => {
         await writeContent(tx, topicWrite("dl-topic", "T", null));
         wrote();
         await importWaiting;
         await writeContent(tx, tagWrite("dl-tag", "T", null));
       });
       await topicHeld;
-      const importing = importer.db.transaction(async (tx) => {
-        const { rows } = await tx.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`);
+      const importing = inTransaction(importer.db, async (tx) => {
+        const { rows } = await tx.execute<{ pid: number }>(sql`select 0 as pid`);
         const pid = rows[0]!.pid;
         const locking = lockTypes(tx, ["tag", "topic"]);
         await waitingOnLock(scratch.db, pid);
-        go();
         await locking;
       });
+      // SQLite takes the file lock at `begin immediate`, so the importer's
+      // body may never run; the naive writer's release cannot wait on it.
+      void importing.catch(() => {}).finally(() => go());
       const outcomes = await Promise.allSettled([naive, importing]);
-      const deadlocked = outcomes.filter((o) => o.status === "rejected" && sqlstate(o.reason) === "40P01");
+      // Postgres detected the row-lock cycle (40P01); SQLite serialises the
+      // whole file, so the second `begin immediate` waits out its timeout and
+      // the answer is SQLITE_BUSY, mapped to pg's lock_not_available.
+      const deadlocked = outcomes.filter((o) => o.status === "rejected" && sqlstate(o.reason) === "55P03");
       expect(deadlocked).toHaveLength(1);
       expect(outcomes.filter((o) => o.status === "fulfilled")).toHaveLength(1);
     } finally {
@@ -527,7 +524,7 @@ describe.skipIf(!reachable.ok)("the write seam", () => {
         const results = await Promise.all([
           write(a!.db, ["topic:mix-1", "tag:mix-1", "topic:mix-2"], round),
           write(b!.db, ["tag:mix-1", "topic:mix-2", "topic:mix-1"], round),
-          c!.db.transaction(async (tx) => {
+          inTransaction(c!.db, async (tx) => {
             await lockTypes(tx, ["topic", "tag"]);
             await new Promise((resolve) => setTimeout(resolve, 20));
           }),
@@ -872,7 +869,7 @@ describe.skipIf(!reachable.ok)("the completeness rules, armed", () => {
   });
 
   it("refuses a module with no items, at commit rather than at the insert", async () => {
-    const tx = scratch.db.transaction(async (t) => {
+    const tx = inTransaction(scratch.db, async (t) => {
       await t.insert(collection).values({
         id: "zz1000-m9",
         kind: "module",
@@ -891,7 +888,7 @@ describe.skipIf(!reachable.ok)("the completeness rules, armed", () => {
   });
 
   it("accepts a module whose item and concept arrive in the same transaction", async () => {
-    await scratch.db.transaction(async (t) => {
+    await inTransaction(scratch.db, async (t) => {
       await t.insert(collection).values({ id: "zz1000-m8", kind: "module", slug: "m8", title: "Ok", parentId: "zz1000" });
       await t.execute(sql`insert into collection_item (collection_id, topic_slug) values ('zz1000-m8', 'alpha')`);
       await t.insert(curriculumItem).values({ id: "zz1000-m8-t1", collectionId: "zz1000-m8", title: "t" });
@@ -901,9 +898,11 @@ describe.skipIf(!reachable.ok)("the completeness rules, armed", () => {
   });
 
   it("refuses deleting an item's last concept link", async () => {
-    const remove = scratch.db
-      .delete(conceptCurriculumItem)
-      .where(eq(conceptCurriculumItem.curriculumItemId, "zz1000-m1-t1"));
+    // An armed rule is checked at commit: a bare write is its own commit, so
+    // the check lives where Postgres's deferred trigger did — inTransaction.
+    const remove = inTransaction(scratch.db, (t) =>
+      t.delete(conceptCurriculumItem).where(eq(conceptCurriculumItem.curriculumItemId, "zz1000-m1-t1")),
+    );
     await expect(remove).rejects.toSatisfy(
       (e) => sqlstate(e) === SQLSTATE.checkViolation && /"zz1000-m1-t1" names no concept/.test(sqlMessage(e)),
     );
@@ -913,12 +912,14 @@ describe.skipIf(!reachable.ok)("the completeness rules, armed", () => {
   });
 
   it("refuses a concept filed under a different topic from the item's module", async () => {
-    const link = scratch.db.insert(conceptCurriculumItem).values({ conceptSlug: "c-other", curriculumItemId: "zz1000-m1-t1" });
+    const link = inTransaction(scratch.db, (t) =>
+      t.insert(conceptCurriculumItem).values({ conceptSlug: "c-other", curriculumItemId: "zz1000-m1-t1" }),
+    );
     await expect(link).rejects.toSatisfy(
       (e) => sqlstate(e) === SQLSTATE.checkViolation && /not filed under its module's topic/.test(sqlMessage(e)),
     );
     // And moving a linked concept to another topic, from the concept's side.
-    const move = scratch.db.update(concept).set({ topicSlug: "beta" }).where(eq(concept.slug, "c-one"));
+    const move = inTransaction(scratch.db, (t) => t.update(concept).set({ topicSlug: "beta" }).where(eq(concept.slug, "c-one")));
     await expect(move).rejects.toSatisfy((e) => sqlstate(e) === SQLSTATE.checkViolation);
   });
 
@@ -977,14 +978,6 @@ describe.skipIf(!reachable.ok)("the copy guard", () => {
     await scratch.db.insert(preference).values({ learnerId: LOCAL_LEARNER_ID, key: "k2", value: 2 });
   });
 
-  it("builds the connection options without losing the URL's own", () => {
-    expect(connectionOptions("postgres://h/db", { copyOk: false })).toBeUndefined();
-    expect(connectionOptions("postgres://h/db", { copyOk: true })).toBe("-c self_learn.copy_ok=on");
-    expect(
-      connectionOptions("postgres://h/db?options=-c%20search_path%3Dx", { copyOk: true }),
-    ).toBe("-c search_path=x -c self_learn.copy_ok=on");
-    expect(connectionOptions("postgres://h/db", { options: "-c a=b", copyOk: false })).toBe("-c a=b");
-  });
 });
 
 describe("catalog history's byline", () => {

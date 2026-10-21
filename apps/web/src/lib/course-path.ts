@@ -1,4 +1,4 @@
-import type { MasteryLabel } from "@self-learn/catalog/state";
+import type { MasteryLabel } from "@gnosia/catalog/state";
 
 import { bucketOf, MASTERY_BUCKET_LABEL, type MasteryBucket } from "@/lib/mastery-bucket";
 

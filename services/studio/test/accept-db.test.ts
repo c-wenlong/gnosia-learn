@@ -3,10 +3,11 @@ import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { assetJob, blobObject, diagram, job } from "@self-learn/schema";
+import { assetJob, blobObject, diagram, job } from "@gnosia/schema";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
+import { DEFAULT_DATABASE_PATH } from "../../catalog/src/env";
 import { makeFixture, note, tagsYaml, topicsYaml, type Fixture } from "../../catalog/test/fixture-tree";
 import { migratedScratchDatabase, probe, type Scratch } from "../../catalog/test/scratch-database";
 import {
@@ -36,7 +37,7 @@ import type { JobRecord } from "../src/store";
  *
  * The CLI subprocesses inherit `DATABASE_URL`, which is set to the scratch
  * database before anything runs and checked, so nothing here can reach the
- * owner's `self_learn`.
+ * owner's `gnosia`.
  */
 
 const canvasMock = vi.hoisted(() => ({ canvas: vi.fn() }));
@@ -88,14 +89,14 @@ describe.skipIf(!reachable.ok)("Accept through the real catalog on a database th
   const saved: Record<string, string | undefined> = {};
 
   beforeAll(async () => {
-    for (const key of ["DATABASE_URL", "SELF_LEARN_HOME", "STUDIO_HOME", "MANIMKC_ROOT"]) saved[key] = process.env[key];
+    for (const key of ["DATABASE_URL", "GNOSIA_HOME", "STUDIO_HOME", "MANIMKC_ROOT"]) saved[key] = process.env[key];
     scratch = await migratedScratchDatabase();
     process.env.DATABASE_URL = scratch.url;
-    expect(new URL(scratch.url).pathname).not.toBe("/self_learn");
+    expect(path.resolve(scratch.url)).not.toBe(DEFAULT_DATABASE_PATH);
     home = await mkdtemp(path.join(tmpdir(), "studio-accept-db-"));
     blobs = await mkdtemp(path.join(tmpdir(), "studio-accept-db-blobs-"));
     process.env.STUDIO_HOME = home;
-    process.env.SELF_LEARN_HOME = blobs;
+    process.env.GNOSIA_HOME = blobs;
     process.env.MANIMKC_ROOT = path.join(tmpdir(), "studio-accept-db-no-manimkc");
 
     fixture = await makeFixture();

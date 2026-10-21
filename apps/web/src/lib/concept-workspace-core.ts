@@ -1,4 +1,4 @@
-import type { AssetRef, KbConcept, KnowledgeBase, MasteryLabel, ReviewCard } from "@self-learn/catalog/state";
+import type { AssetRef, KbConcept, KnowledgeBase, MasteryLabel, ReviewCard } from "@gnosia/catalog/state";
 
 import type { ConceptPromptInput, ConceptPromptNeighbour } from "@/lib/agent/prompt";
 import { backlinksOf, dependantsOf, neighbourhood, type GraphNode, type GraphSelection } from "@/lib/concept-graph";

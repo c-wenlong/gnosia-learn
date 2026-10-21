@@ -5,7 +5,7 @@
  *
  * Pure and React-free, so the Settings form (a client component) and the
  * route handler read the same vocabulary. The storage keys are
- * `PREFERENCE_KEYS` in `@self-learn/schema/shared`.
+ * `PREFERENCE_KEYS` in `@gnosia/schema/shared`.
  *
  * The daily target and the streak leeway were settings until the habit layer
  * was removed (H1 of docs/proposals/home-page.md). Their rows stay in the

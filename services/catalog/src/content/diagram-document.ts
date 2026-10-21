@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { DIAGRAMS_DIR } from "@self-learn/content";
+import { DIAGRAMS_DIR } from "@gnosia/content";
 
 import { canonicalJson } from "./snapshot";
 

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { key as blobKey, type BlobStore } from "@self-learn/blob";
+import { key as blobKey, type BlobStore } from "@gnosia/blob";
 import {
   assetJob,
   blobObject,
@@ -14,7 +14,7 @@ import {
   readableOwners,
   topic,
   type AuthorKind,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { and, eq, isNull, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
@@ -32,6 +32,7 @@ import { latestRevisions, lockEntity } from "./revisions";
 import { writeContents, type WriteContentInput, type WriteContentResult } from "./write";
 import { writeThrough, WriteThroughError } from "./write-through";
 
+import { inTransaction } from "../db";
 /**
  * Diagrams in the database (docs/CONTENT-MIGRATION.md, Track D; D6, D11).
  *
@@ -375,7 +376,7 @@ export async function putDiagram(
           contentHash: docHash,
           bytes: bytes.length,
           title,
-          sourceRepo: "self-learn",
+          sourceRepo: "gnosia",
           blobKey: null,
           resourceType: null,
           ownerId,
@@ -400,7 +401,7 @@ export async function putDiagram(
           contentHash: svg.sha256,
           bytes: svg.bytes,
           title,
-          sourceRepo: "self-learn",
+          sourceRepo: "gnosia",
           blobKey: svg.key,
           resourceType: null,
           ownerId,
@@ -561,7 +562,7 @@ export async function putSvgOnly(db: CatalogDatabase, store: BlobStore, input: P
             contentHash: uploaded.sha256,
             bytes: uploaded.bytes,
             title: slug,
-            sourceRepo: "self-learn",
+            sourceRepo: "gnosia",
             blobKey: uploaded.key,
             resourceType: null,
             ownerId,
@@ -623,7 +624,7 @@ async function withFiles<T>(
   inputs: readonly (string | null)[],
   write: (tx: CatalogDatabase) => Promise<T>,
 ): Promise<{ value: T; files: string[] }> {
-  if (!(await filesOwnDiagrams(db))) return { value: await db.transaction(write), files: [] };
+  if (!(await filesOwnDiagrams(db))) return { value: await inTransaction(db, write), files: [] };
   let done;
   try {
     // The files the put was handed may be the tree's own, edited in place
@@ -685,7 +686,7 @@ async function recordJobOutputs(
             contentHash: sql`excluded."content_hash"`,
             bytes: sql`excluded."bytes"`,
             writtenAt: sql`excluded."written_at"`,
-            updatedAt: sql`now()`,
+            updatedAt: sql`cast(unixepoch('subsec') * 1000 as integer)`,
           },
         }));
   }
@@ -771,10 +772,10 @@ const iso = (value: Date | string | null): string | null =>
 export async function listDiagrams(db: CatalogDatabase, scope: OwnerScope, only?: string): Promise<DiagramSummary[]> {
   const { rows } = await db.execute<SummaryRow>(sql`
     select d.slug, d.title, d.topic_slug, d.document_hash, d.svg_blob_key, d.svg_document_hash, d.updated_at,
-      (select count(*) from jsonb_array_elements(d.document -> 'records') r
-        where r ->> 'typeName' = 'shape') as shapes,
-      (select r -> 'meta' -> 'tldrawkc' from jsonb_array_elements(d.document -> 'records') r
-        where r ->> 'typeName' = 'document' limit 1) as meta,
+      (select count(*) from json_each(d.document -> 'records') r
+        where r.value ->> 'typeName' = 'shape') as shapes,
+      (select r.value -> 'meta' -> 'tldrawkc' from json_each(d.document -> 'records') r
+        where r.value ->> 'typeName' = 'document' limit 1) as meta,
       a.bytes as document_bytes,
       b.bytes as svg_bytes, b.sha256 as svg_sha256, s.updated_at as svg_updated_at,
       rev.id as revision, rev.job_id as revision_job
@@ -782,13 +783,12 @@ export async function listDiagrams(db: CatalogDatabase, scope: OwnerScope, only?
     left join asset a on a.id = ${ASSET_PREFIX.diagrams} || ${`${ASSETS_DIR}/`} || d.slug || '.tldr'
     left join asset s on s.id = ${ASSET_PREFIX.diagrams} || ${`${ASSETS_DIR}/`} || d.slug || '.svg'
     left join blob_object b on b.key = d.svg_blob_key
-    left join lateral (
-      select id, job_id from content_revision
-      where entity_type = 'diagram' and entity_id = d.slug
-      order by seq desc limit 1
-    ) rev on true
+    -- Was left join lateral; rev.id is the latest revision's id.
+    left join content_revision rev
+      on rev.id = (select max(r.id) from content_revision r
+        where r.entity_type = 'diagram' and r.entity_id = d.slug)
     where d.archived_at is null ${only === undefined ? sql`` : sql`and d.slug = ${only}`}${andOwnedBy(sql`d.owner_id`, scope.readable)}
-    order by d.slug collate "C"
+    order by d.slug collate binary
   `);
   return rows.map((row) => {
     const meta = (typeof row.meta === "object" && row.meta !== null ? row.meta : {}) as Record<string, unknown>;

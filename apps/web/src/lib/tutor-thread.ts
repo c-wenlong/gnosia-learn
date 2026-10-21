@@ -137,7 +137,7 @@ export function requestTurns(items: readonly ThreadItem[]): TutorTurn[] {
 
 /** Where a thread's session id lives in `sessionStorage` (R6): beside the thread, gone with the tab. */
 export function sessionKey(slug: string): string {
-  return `self-learn:tutor-session:${slug}`;
+  return `gnosia:tutor-session:${slug}`;
 }
 
 /**
@@ -148,7 +148,7 @@ export function sessionKey(slug: string): string {
  * the words stay here.
  */
 export function threadKey(slug: string): string {
-  return `self-learn:tutor:${slug}`;
+  return `gnosia:tutor:${slug}`;
 }
 
 /**

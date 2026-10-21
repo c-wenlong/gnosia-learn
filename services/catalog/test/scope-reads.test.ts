@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { fsStore } from "@self-learn/blob";
+import { fsStore } from "@gnosia/blob";
 import {
   asset,
   COMMONS_OWNER,
@@ -19,7 +19,7 @@ import {
   session,
   sessionLogEntry,
   topic,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 

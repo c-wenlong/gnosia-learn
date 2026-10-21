@@ -2,11 +2,11 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { asset, collection, collectionItem, contentRevision, curriculumItem, curriculumItemAsset, learner } from "@self-learn/schema";
+import { asset, collection, collectionItem, contentRevision, curriculumItem, curriculumItemAsset, learner } from "@gnosia/schema";
 import { and, eq, gt, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { parseCourse, VIDEO_ASSET_PREFIXES } from "@self-learn/content";
+import { parseCourse, VIDEO_ASSET_PREFIXES } from "@gnosia/content";
 
 import { doctor, formatDoctor } from "../src/commands/doctor";
 import { runExport } from "../src/commands/export";
@@ -108,9 +108,7 @@ const COURSE = [
 
 function pointAt(name: string): () => void {
   const saved = { url: process.env["DATABASE_URL"], manimkc: process.env["MANIMKC_ROOT"] };
-  const url = new URL(process.env["DATABASE_URL"] ?? "postgres://localhost:5432/self_learn");
-  url.pathname = `/${name}`;
-  process.env["DATABASE_URL"] = url.toString();
+  process.env["DATABASE_URL"] = name;
   process.env["MANIMKC_ROOT"] = path.join(tmpdir(), "catalog-test-no-manimkc");
   return () => {
     for (const [key, value] of [["DATABASE_URL", saved.url], ["MANIMKC_ROOT", saved.manimkc]] as const) {
@@ -150,7 +148,7 @@ describe.skipIf(!reachable.ok)("readings on lessons and listed videos", () => {
         .where(gt(contentRevision.id, id))
     ).map((r) => `${r.type} ${r.id}`);
   const lastRevision = async () =>
-    (await scratch.db.select({ n: sql<number>`coalesce(max(id), 0)::int` }).from(contentRevision))[0]?.n ?? 0;
+    (await scratch.db.select({ n: sql<number>`coalesce(max(id), 0)` }).from(contentRevision))[0]?.n ?? 0;
 
   beforeAll(async () => {
     scratch = await migratedScratchDatabase();
@@ -168,7 +166,7 @@ describe.skipIf(!reachable.ok)("readings on lessons and listed videos", () => {
       await fixture.write(`learn/concepts/testing/${id}.md`, note({ id }));
     }
     edits = await mkdtemp(path.join(tmpdir(), "catalog-lesson-edits-"));
-    restore = pointAt(scratch.name);
+    restore = pointAt(scratch.url);
     // No manimkc checkout at all: the listed video is a reference, not a row.
     await runImportCommand({ dir: fixture.root });
     await runExport({ out: fixture.root, only: ["topics", "tags", "courses"] });

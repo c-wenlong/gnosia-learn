@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { Figtree, Geist_Mono } from "next/font/google";
 import { cx } from "@/components/ui/classes";
-import { asMotionMode, MOTION_COOKIE, motionAttribute } from "@/lib/motion";
+import { asMotionMode, LEGACY_MOTION_COOKIE, MOTION_COOKIE, motionAttribute } from "@/lib/motion";
 import { resolveSiteUrl } from "@/lib/site-url";
-import { asThemeMode, SYSTEM_THEME_SCRIPT, THEME_COOKIE, themeClass } from "@/lib/theme-cookie";
+import { asThemeMode, LEGACY_THEME_COOKIE, SYSTEM_THEME_SCRIPT, THEME_COOKIE, themeClass } from "@/lib/theme-cookie";
 import "./globals.css";
 
 // The interface face. Brilliant's own is CoFo Brilliant, and Figtree is the
@@ -77,9 +77,11 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const cookieStore = await cookies();
-  const theme = asThemeMode(cookieStore.get(THEME_COOKIE)?.value) ?? "light";
+  const theme = asThemeMode(cookieStore.get(THEME_COOKIE)?.value ?? cookieStore.get(LEGACY_THEME_COOKIE)?.value) ?? "light";
   const classes = themeClass(theme, false);
-  const motion = motionAttribute(asMotionMode(cookieStore.get(MOTION_COOKIE)?.value));
+  const motion = motionAttribute(
+    asMotionMode(cookieStore.get(MOTION_COOKIE)?.value ?? cookieStore.get(LEGACY_MOTION_COOKIE)?.value),
+  );
 
   return (
     <html

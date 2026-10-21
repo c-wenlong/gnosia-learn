@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { parseEnv } from "node:util";
 
-import { defaultBlobRoot, fsStore, type BlobStore } from "@self-learn/blob";
+import { defaultBlobRoot, fsStore, type BlobStore } from "@gnosia/blob";
 
 import { REPO_ROOT } from "./paths";
 
@@ -15,7 +15,7 @@ import { REPO_ROOT } from "./paths";
  * be a `tsx` start per tile, so the bytes are read here, from the same root
  * the catalog uses.
  *
- * "The same root" is the one rule: the catalog resolves `SELF_LEARN_HOME`
+ * "The same root" is the one rule: the catalog resolves `GNOSIA_HOME`
  * after loading `services/catalog/.env`, with the shell winning
  * (`blobRoot()` in `services/catalog/src/env.ts`), so this reads that file the
  * same way rather than trusting its own environment alone, which would name a

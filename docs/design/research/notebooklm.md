@@ -1,6 +1,6 @@
 # NotebookLM UI research (2025-2026)
 
-Research for reimagining self-learn's UI around a "digital notebook" model,
+Research for reimagining gnosia's UI around a "digital notebook" model,
 using Google NotebookLM as the base interaction pattern.
 
 ## What it is good at
@@ -34,7 +34,7 @@ using Google NotebookLM as the base interaction pattern.
   Documented in the official help pages below; no single screenshot
   captures the loop.
 - **Inline citations with source-passage grounding.** Every chat claim links
-  to the exact passage it came from, the piece self-learn's mastery model
+  to the exact passage it came from, the piece gnosia's mastery model
   needs to justify a concept note. `notebooklm-sources-chat-studio-panel.png`.
 - **One Studio panel, many output formats.** Audio, video, mind map,
   flashcards, quiz and report sit as tiles in one panel, all generated from
@@ -46,7 +46,7 @@ using Google NotebookLM as the base interaction pattern.
   self-report loop, the natural hook for spaced repetition.
   `flashcard-front.png`, `quiz-results.png`.
 - **Cinematic video overview as a generated teaching asset.** A narrated
-  walkthrough generated straight from sources, mapping onto self-learn's own
+  walkthrough generated straight from sources, mapping onto gnosia's own
   manimkc pipeline. `video-overview-techcrunch.png`, `video-overview-cnet.png`.
 - **A single "configure the assistant" dialog** (conversational goal:
   Default / Learning Guide / Custom, plus response length) instead of
@@ -67,7 +67,7 @@ using Google NotebookLM as the base interaction pattern.
   use chat versus a Studio tool.
 - **No durable chat history.** Reddit threads ("Saving/archiving answers in
   notebooks?", "NoteBookLM chat history") describe losing conversations
-  because nothing autosaved unless the user hit "save to note"; self-learn
+  because nothing autosaved unless the user hit "save to note"; gnosia
   should default to persisting everything from the start.
 - **Mobile app treated as an afterthought.** A Reddit thread calls the
   mobile app "an embarrassment" next to the desktop web app.

@@ -1,4 +1,4 @@
-import type { TopicEntry } from "@self-learn/content";
+import type { TopicEntry } from "@gnosia/content";
 
 import { corpusBlock, EXTENDING_LINE_CAP, fence, vocabularyBlock, type CorpusEntry } from "./planner";
 import { briefTool, VIDEO_TOOL_CAPABILITIES, VIDEO_TOOL_ROUTES, VIDEO_TOOLS } from "./video/tools";

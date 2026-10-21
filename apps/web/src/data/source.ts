@@ -7,7 +7,7 @@ import {
   type ContentType,
   type Resolutions,
   type SelectedSource,
-} from "@self-learn/content";
+} from "@gnosia/content";
 import { unstable_rethrow } from "next/navigation";
 import { connection } from "next/server";
 import { cache } from "react";
@@ -120,7 +120,7 @@ export const contentSource = cache((): SelectedSource => {
     files: refusingFiles(() => selected.resolution()),
     ownership: async () => {
       await connection();
-      const { contentOwnership } = await import("@self-learn/catalog/state");
+      const { contentOwnership } = await import("@gnosia/catalog/state");
       const rows = await contentOwnership(await catalogDatabase());
       warnedCause = null;
       return rows;
@@ -145,7 +145,7 @@ export const contentSource = cache((): SelectedSource => {
     },
     db: async () => {
       await connection();
-      const { dbSource } = await import("@self-learn/catalog/state");
+      const { dbSource } = await import("@gnosia/catalog/state");
       // The requesting owner's rows and the commons' only (phase 4).
       return dbSource(await catalogDatabase(), await currentScope());
     },

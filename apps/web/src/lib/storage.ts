@@ -2,7 +2,7 @@ import {
   clampKnowledgeList,
   clampSummary,
   KNOWLEDGE_LIMITS,
-} from "@self-learn/schema/shared";
+} from "@gnosia/schema/shared";
 import {
   emptyLearnerState,
   type KnowledgeInput,
@@ -24,7 +24,7 @@ import {
  * optimistic half of every mutation still has to happen somewhere, and a UI
  * that waited for a round trip before ticking a checkbox would feel broken.
  *
- * The clamps come from `@self-learn/schema/shared`, which is the same
+ * The clamps come from `@gnosia/schema/shared`, which is the same
  * definition the `recap` table's CHECK constraints are generated from. Two
  * copies of `summaryChars` would eventually disagree, and the way that shows
  * up is a save the learner watches succeed and then fail.

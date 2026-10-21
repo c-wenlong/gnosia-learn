@@ -1,4 +1,4 @@
-import { asset, assetConcept, COMMONS_OWNER, concept, LOCAL_LEARNER_ID, ownerScope, topic } from "@self-learn/schema";
+import { asset, assetConcept, COMMONS_OWNER, concept, LOCAL_LEARNER_ID, ownerScope, topic } from "@gnosia/schema";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 

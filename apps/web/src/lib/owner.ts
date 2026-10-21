@@ -6,7 +6,7 @@ import {
   ownerScope,
   readableOwners,
   type OwnerScope,
-} from "@self-learn/schema/shared";
+} from "@gnosia/schema/shared";
 import { cache } from "react";
 
 import { isSignedIn } from "@/lib/auth/session";

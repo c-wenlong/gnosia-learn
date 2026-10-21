@@ -1,4 +1,4 @@
-import type { AssetConversation, AssetPlace } from "@self-learn/catalog/state";
+import type { AssetConversation, AssetPlace } from "@gnosia/catalog/state";
 
 import type { GraphEdge } from "@/lib/concept-graph";
 import { dayLabel } from "@/lib/day-groups";

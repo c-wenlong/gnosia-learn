@@ -5,7 +5,7 @@ Status: lo-fi agreed in an interview on 2026-09-23; hi-fi v1 drawn on
 Implementation is phased; the plan, the shipped token and component contract
 and the status of each phase are in [IMPLEMENTATION.md](IMPLEMENTATION.md).
 This document is the written half of the design. The drawn half is
-[self-learn-lofi.fig](self-learn-lofi.fig), an OpenPencil document with a
+[gnosia-lofi.fig](gnosia-lofi.fig), an OpenPencil document with a
 lo-fi page and a hi-fi page, and the SVG exports of every screen under
 [lofi/](lofi/) and [hifi/](hifi/). The research the design draws on is under
 [research/](research/); the three captured design systems it takes real
@@ -315,7 +315,7 @@ the habit layer.
 ### Hi-fi tokens
 
 `TOKENS` in [kit/hifi.py](kit/hifi.py) is the source; the same values are in
-the `.fig` as two variable collections, "self-learn light" and "self-learn
+the `.fig` as two variable collections, "gnosia light" and "gnosia
 dark". "derived" means a value we made from a reference one.
 
 | Token | Light | Dark | From |

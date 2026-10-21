@@ -1,7 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 
-import { draft, job, learner, LOCAL_LEARNER_ID, topic } from "@self-learn/schema";
+import { draft, job, learner, LOCAL_LEARNER_ID, topic } from "@gnosia/schema";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
@@ -10,6 +10,7 @@ import { runEnqueue, runShow } from "../src/commands/job";
 import { makeFixture, type Fixture } from "./fixture-tree";
 import { migratedScratchDatabase, probe, type Scratch, sqlstate } from "./scratch-database";
 
+import { inTransaction } from "../src/db";
 /**
  * `catalog draft` and `job.draft_id` (docs/STUDIO-CHAT-FIRST.md, phase 1).
  *
@@ -194,7 +195,7 @@ describe.skipIf(!reachable.ok)("catalog draft", () => {
     const insertedYet = new Promise<void>((resolve) => (inserted = resolve));
     const committing = new Promise<void>((resolve) => (commit = resolve));
     // A job insert holds the draft row's key-share lock until it commits.
-    const insert = scratch.db.transaction(async (tx) => {
+    const insert = inTransaction(scratch.db, async (tx) => {
       await tx.insert(job).values({
         id: "j-racing",
         kind: "diagram",

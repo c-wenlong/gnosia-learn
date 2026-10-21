@@ -1,4 +1,4 @@
-import { assetsByIds, clearPreference, StateError, writePreference } from "@self-learn/catalog/state";
+import { assetsByIds, clearPreference, StateError, writePreference } from "@gnosia/catalog/state";
 
 import { MAX_ASSET_ID_CHARS } from "@/app/api/learner/watched/route";
 import { favoriteKey } from "@/lib/favorite";

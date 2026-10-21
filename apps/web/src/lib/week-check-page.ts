@@ -1,6 +1,6 @@
 import "server-only";
 
-import { readEvents } from "@self-learn/catalog/state";
+import { readEvents } from "@gnosia/catalog/state";
 import { connection } from "next/server";
 
 import { readConceptNote } from "@/lib/concept-note";

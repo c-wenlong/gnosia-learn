@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Hi-fi kit for the self-learn redesign, rendered into OpenPencil via its MCP.
+"""Hi-fi kit for the gnosia redesign, rendered into OpenPencil via its MCP.
 
 Usage: hifi.py [--theme light|dark] [--variables] [slug ...]
 Draws every screen in both themes onto the "Hi-fi v1" page of the open
-self-learn document, exports each as docs/design/hifi/<slug>-<theme>.svg
+gnosia document, exports each as docs/design/hifi/<slug>-<theme>.svg
 and saves the .fig. A full run (no slugs) also rewrites the token set
 into the document as two OpenPencil variable collections (one per theme);
 --variables forces that on a partial run.
@@ -258,7 +258,7 @@ def TopBar(t, active):
         on = n == active
         items.append(F(T(n, size=15, weight="semibold" if on else "medium", color=t.text if on else t.text2),
                        R(28, 2, t.text if on else t.surface, rounded=1), flex="col", gap=8, items="center"))
-    return F(T("self-learn", size=20, weight="bold", color=t.text, font=DISPLAY),
+    return F(T("gnosia", size=20, weight="bold", color=t.text, font=DISPLAY),
              F(*items, flex="row", gap=28, items="end"), Spacer(),
              Pill(t, "14 day streak", dot=t.streak), Pill(t, "Target 1 / 2", dot=t.accent), Dot(34, t.border),
              flex="row", w="fill", h=64, px=28, gap=32, items="center", bg=t.surface, stroke=t.hair)
@@ -496,7 +496,7 @@ def write_variables():
     """Two collections, one per theme, so the file documents the token set."""
     existing = {c["name"]: c["id"] for c in call("list_collections", {}).get("collections", [])}
     for th in ("light", "dark"):
-        name = f"self-learn {th}"
+        name = f"gnosia {th}"
         if name in existing: call("delete_collection", {"id": existing[name]})
         cid = call("create_collection", {"name": name})["id"]
         for k, v in TOKENS.items():
@@ -541,7 +541,7 @@ def main():
             open(os.path.join(OUT, f"{slug[1:]}.svg"), "w").write(svg)
             print(f"{slug}: id={res['id']} svg={len(svg)}B warnings={len(warn)}", ("; ".join(warn[:3]) if warn else ""))
     if do_vars: write_variables()
-    saved = call("save_file", {"path": os.path.join(REPO, "docs/design/self-learn-lofi.fig")})
+    saved = call("save_file", {"path": os.path.join(REPO, "docs/design/gnosia-lofi.fig")})
     if not saved.get("saved"): failures.append(f"save_file failed: {json.dumps(saved)[:300]}")
     print("saved:", bool(saved.get("saved")))
     if failures:

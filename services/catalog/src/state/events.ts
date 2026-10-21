@@ -3,7 +3,7 @@ import {
   EVENT_TYPES,
   LOCAL_LEARNER_ID,
   type EventType,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { asc, eq } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";

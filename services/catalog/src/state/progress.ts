@@ -1,7 +1,7 @@
-import { curriculumItem, LOCAL_LEARNER_ID, progress } from "@self-learn/schema";
+import { curriculumItem, LOCAL_LEARNER_ID, progress } from "@gnosia/schema";
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 
-import { PREFERENCE_KEYS } from "@self-learn/schema";
+import { PREFERENCE_KEYS } from "@gnosia/schema";
 
 import { ownedBy, type Owners, readableFor } from "../content/scope";
 import type { CatalogDatabase } from "../db";
@@ -157,7 +157,7 @@ export async function setProgress(
     .values({ learnerId, curriculumItemId, completedAt })
     .onConflictDoUpdate({
       target: [progress.learnerId, progress.curriculumItemId],
-      set: { completedAt: sql`excluded.completed_at`, updatedAt: sql`now()` },
+      set: { completedAt: sql`excluded.completed_at`, updatedAt: sql`cast(unixepoch('subsec') * 1000 as integer)` },
     });
   if (!completed) await pruneEmpty(db, learnerId, curriculumItemId);
 }
@@ -178,7 +178,7 @@ export async function setNote(
     .values({ learnerId, curriculumItemId, note: value })
     .onConflictDoUpdate({
       target: [progress.learnerId, progress.curriculumItemId],
-      set: { note: sql`excluded.note`, updatedAt: sql`now()` },
+      set: { note: sql`excluded.note`, updatedAt: sql`cast(unixepoch('subsec') * 1000 as integer)` },
     });
   if (value === null) await pruneEmpty(db, learnerId, curriculumItemId);
 }
@@ -217,7 +217,7 @@ export async function resetProgress(
         readable,
       ),
     );
-  return result.rowCount ?? 0;
+  return result.changes;
 }
 
 /**
@@ -246,7 +246,7 @@ export async function countCompleted(
   learnerId: string = LOCAL_LEARNER_ID,
 ): Promise<number> {
   const rows = await db
-    .select({ total: sql<number>`count(*)::int` })
+    .select({ total: sql<number>`count(*)` })
     .from(progress)
     .where(and(eq(progress.learnerId, learnerId), isNotNull(progress.completedAt)));
   return rows[0]?.total ?? 0;

@@ -1,4 +1,4 @@
-import { loadTopics, TOPICS_FILE, type TopicEntry } from "@self-learn/content";
+import { loadTopics, TOPICS_FILE, type TopicEntry } from "@gnosia/content";
 
 import { IndexError } from "./errors";
 import { asIndexError } from "./content-errors";
@@ -7,7 +7,7 @@ import { asIndexError } from "./content-errors";
  * `content/topics.yaml`: the shared topic vocabulary, and the three lookup
  * tables every other indexer resolves against.
  *
- * Reading and shape-checking the file is `@self-learn/content`'s job, because
+ * Reading and shape-checking the file is `@gnosia/content`'s job, because
  * the web app reads the same file and two parsers of one file is how two
  * consumers come to disagree about it. What stays here is the part only the
  * catalog needs: the reverse indexes, and the rule that each source id belongs

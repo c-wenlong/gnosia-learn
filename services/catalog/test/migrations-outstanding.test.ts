@@ -54,10 +54,10 @@ describe.skipIf(!reachable.ok)("a database behind the journal", () => {
 
   beforeAll(async () => {
     scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db, { folder: await partialMigrations(THROUGH_0009) });
+    await applyMigrations(scratch.db, { folder: await partialMigrations(1) });
     dir = await mkdtemp(path.join(tmpdir(), "catalog-behind-"));
     await mkdir(path.join(dir, "learn", "concepts"), { recursive: true });
-    outstanding = (await journalTags()).length - THROUGH_0009;
+    outstanding = (await journalTags()).length - 1;
   }, 60_000);
 
   afterAll(async () => {
@@ -104,7 +104,7 @@ describe.skipIf(!reachable.ok)("a database behind the journal", () => {
     const body = JSON.parse(ran.stdout) as { ok: boolean; pending: string[] };
     expect(body.ok).toBe(false);
     expect(body.pending).toHaveLength(outstanding);
-    expect(body.pending[0]).toMatch(/^0010_/);
+    expect(body.pending[0]).toMatch(/^0001_/);
   }, 30_000);
 
   it("leaves status and doctor to say it themselves", async () => {

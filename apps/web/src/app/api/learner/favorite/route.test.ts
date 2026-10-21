@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  clearTables,
   migratedScratchDatabase,
   probe,
   type Scratch,
@@ -40,7 +41,7 @@ function request(body: unknown, origin: string | null = ORIGIN): Request {
 describe.skipIf(!reachable.ok)("POST /api/learner/favorite", () => {
   let scratch: Scratch;
   let POST: (req: Request) => Promise<Response>;
-  let state: typeof import("@self-learn/catalog/state");
+  let state: typeof import("@gnosia/catalog/state");
   let favorite: typeof import("@/lib/favorite");
 
   beforeAll(async () => {
@@ -50,7 +51,7 @@ describe.skipIf(!reachable.ok)("POST /api/learner/favorite", () => {
     process.env.DATABASE_URL = scratch.url;
     const [route, loaded, lib] = await Promise.all([
       import("./route"),
-      import("@self-learn/catalog/state"),
+      import("@gnosia/catalog/state"),
       import("@/lib/favorite"),
     ]);
     POST = route.POST;
@@ -63,7 +64,7 @@ describe.skipIf(!reachable.ok)("POST /api/learner/favorite", () => {
   });
 
   beforeEach(async () => {
-    await scratch.db.execute("truncate preference");
+    await clearTables(scratch.db, ["preference"]);
   });
 
   const call = async (body: unknown, origin?: string | null) => {

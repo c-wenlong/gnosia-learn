@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
   currentOwner: vi.fn(async () => "kai"),
 }));
 vi.mock("@/lib/studio", () => ({ studioApi: mocks.studioApi, requireStudio: mocks.requireStudio }));
-vi.mock("@self-learn/catalog/state", () => ({ readPreference: vi.fn(), writePreference: vi.fn() }));
+vi.mock("@gnosia/catalog/state", () => ({ readPreference: vi.fn(), writePreference: vi.fn() }));
 vi.mock("@/lib/learner-store", () => ({ withLearnerStore: vi.fn() }));
 vi.mock("@/lib/owner", () => ({ currentOwner: mocks.currentOwner }));
 vi.mock("@/lib/concept-workspace", () => ({ readConceptWorkspace: mocks.readConceptWorkspace }));

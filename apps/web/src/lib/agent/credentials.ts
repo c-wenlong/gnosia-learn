@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { ProviderName } from "@self-learn/schema/shared";
+import type { ProviderName } from "@gnosia/schema/shared";
 
 import {
   type ChainEntry,

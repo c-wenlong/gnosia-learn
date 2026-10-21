@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { JOB_KINDS, JOB_STATES } from "@self-learn/schema/shared";
+import { JOB_KINDS, JOB_STATES } from "@gnosia/schema/shared";
 import { describe, expect, it } from "vitest";
 
 import { JOB_STATE_LABEL, jobCardSentence, jobPredicate, jobStateInline, jobStateLabel } from "@/lib/studio-job-state";

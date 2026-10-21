@@ -35,8 +35,8 @@ acceptable to leave visible, or scrub all of them in one pass.
 The scrub, run on a fresh mirror clone, never the working copy:
 
 ```bash
-git clone --mirror https://github.com/c-wenlong/self-learn self-learn-scrub.git
-cd self-learn-scrub.git
+git clone --mirror https://github.com/c-wenlong/gnosia gnosia-scrub.git
+cd gnosia-scrub.git
 
 git filter-repo --invert-paths --path roadmap/
 

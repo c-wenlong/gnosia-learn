@@ -2,7 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 
-import type { StudioAgentPreference } from "@self-learn/schema/shared";
+import type { StudioAgentPreference } from "@gnosia/schema/shared";
 
 import { saveStudioAgent } from "@/app/(app)/studio/actions";
 import { PanelLink } from "@/components/studio/PanelLink";
@@ -19,7 +19,7 @@ import type { AgentKind } from "@/lib/studio-agent-settings";
 /**
  * One row as the page builds it on the server: its stored value, the value
  * it has when nothing is stored, and its two menus. Built there so this
- * client module imports no runtime from `@self-learn/schema/shared`, whose
+ * client module imports no runtime from `@gnosia/schema/shared`, whose
  * exports, once used on the client, ship with every route that loads it.
  */
 export interface AgentRow {

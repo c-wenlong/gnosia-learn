@@ -1,10 +1,10 @@
 # Proposal: the Learn map is grouped by domain
 
 Status: built, 2026-10-04, all four phases: 1 the tree and the layout
-([#354](https://github.com/c-wenlong/self-learn/pull/354)), 2 the views and
-the island map removed ([#358](https://github.com/c-wenlong/self-learn/pull/358)),
-3 hover and drag ([#365](https://github.com/c-wenlong/self-learn/pull/365)),
-4 these docs ([#366](https://github.com/c-wenlong/self-learn/pull/366)); the
+([#354](https://github.com/c-wenlong/gnosia/pull/354)), 2 the views and
+the island map removed ([#358](https://github.com/c-wenlong/gnosia/pull/358)),
+3 hover and drag ([#365](https://github.com/c-wenlong/gnosia/pull/365)),
+4 these docs ([#366](https://github.com/c-wenlong/gnosia/pull/366)); the
 axes layout (D11) followed on 2026-10-05. It replaces the island map
 of [knowledge-map.md](knowledge-map.md), decisions G2 to G8; G1 (the graph
 is what `/learn` opens on, the table at `?view=table`) stands.
@@ -26,7 +26,7 @@ graph that hovers in step with it.
 
 ## What the data looks like
 
-Measured on `self_learn` on 2026-10-04:
+Measured on `gnosia` on 2026-10-04:
 
 | Fact | Value | What it means |
 | --- | --- | --- |
@@ -122,7 +122,7 @@ as they come and go. With the text no longer the limit, the picture is
 drawn down to 0.35 of its layout size before it scrolls in its card. That
 is the scale where a two-line 11px label still fits between one layer and
 the next, and the owner's widest domains fit a 390px phone. Measured on
-`self_learn` on 2026-10-05: at 1440 by 900 every domain draws every label;
+`gnosia` on 2026-10-05: at 1440 by 900 every domain draws every label;
 at 390 wide, 36 of the 56 in algorithms, 29 of 43 in computer architecture
 and 16 of 27 in machine learning, with no domain scrolling sideways but
 computer architecture (6px). A label's width is the sum of Figtree's
@@ -136,7 +136,7 @@ it stops, since the picture is never drawn smaller. The server packs every
 group with the 45-unit band, so a title at its largest never reaches the
 row above. A picture drawn larger draws the smaller band and the room left
 goes between the rows, so the groups themselves look as they did. That
-costs 23 units a row: on `self_learn`'s algorithms (six rows) the picture
+costs 23 units a row: on `gnosia`'s algorithms (six rows) the picture
 grew from 2108 to 2223 units tall, 101px more page at 1440 by 900, and
 computer architecture from 1789 to 1882. A group stays as wide as its title
 at 12.5 units (the old 7.4 units a letter, or the glyph widths when those
@@ -192,7 +192,7 @@ the axes, where a place means something: the groups' dragged places are not
 applied there, the "Positions moved" pill is hidden, and both come back
 with Groups.
 
-Measured on `self_learn` in the built app: algorithms is 873 by 714 units
+Measured on `gnosia` in the built app: algorithms is 873 by 714 units
 on axes (865 by 2230 in groups), so the whole domain fits a 1440 by 900
 screen without scrolling; its most needed concept (30 dependants) is in
 the top left of the zone. At 1440 wide 23 of its 56 labels are drawn and
@@ -204,19 +204,19 @@ every frame at 16.7 ms.
 
 | Phase | What ships | Done when |
 | --- | --- | --- |
-| 1. Tree and layout | `topic` on the knowledge base read; `domain-map.ts` (`domainTree`, `domainLayout`, cached); `domain-view.ts` (titles, `groupBox`) | Tests pass; every domain of `self_learn` lays out with no two groups overlapping |
+| 1. Tree and layout | `topic` on the knowledge base read; `domain-map.ts` (`domainTree`, `domainLayout`, cached); `domain-view.ts` (titles, `groupBox`) | Tests pass; every domain of `gnosia` lays out with no two groups overlapping |
 | 2. The views | Domain cards, the domain and topic views, the breadcrumb, the list, the panel, search and filters, the URL; the island map and its viewport code removed, since nothing uses them | e2e walks overview, domain, topic and back |
 | 3. Interaction | Hover (D5), drag and Reset (D6), the list in step, keyboard (D7) | e2e hovers, drags and resets; frames under 16 ms |
 | 4. Clean-up | DESIGN.md and knowledge-map.md updated, measured on the owner's database, what phases 1 to 3 turned up | The docs describe what ships |
 
 ## Measured
 
-Phase 1, on `self_learn`: all 11 domains lay out in 61 ms together, the
+Phase 1, on `gnosia`: all 11 domains lay out in 61 ms together, the
 largest (algorithms) in 18 ms, with no two topic groups overlapping. The
 algorithms domain is 976 by 1,870 px; the others are at most 1,084 px wide
 and 1,184 px tall.
 
-Phase 2, on `self_learn`: `/learn` and a domain open in about 900 ms with
+Phase 2, on `gnosia`: `/learn` and a domain open in about 900 ms with
 the built app (the pictures for all 11 domains travel with the page, so
 moving between domains is no round trip). Looking at it turned up three
 things, fixed in this phase:
@@ -230,7 +230,7 @@ things, fixed in this phase:
 - Labels were about 9 px at a 1,100 px row. Rows are 900 px, so a domain is
   drawn near full size and grows down the page.
 
-Phase 3, on `self_learn`, in the built app at 1440 by 900: hovering a
+Phase 3, on `gnosia`, in the built app at 1440 by 900: hovering a
 concept in algorithms lights it, its neighbours and its 6 edges and fades
 the other 49 concepts within 6 ms of the pointer arriving; a 30-step drag
 held every frame at 16.7 ms; the moved position was in `sessionStorage`,

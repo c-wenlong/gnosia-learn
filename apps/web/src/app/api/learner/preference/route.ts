@@ -1,14 +1,15 @@
-import { asThemeMode, PREFERENCE_KEYS, THEME_MODES, type ThemeMode } from "@self-learn/schema/shared";
+import { asThemeMode, PREFERENCE_KEYS, THEME_MODES, type ThemeMode } from "@gnosia/schema/shared";
 import {
   appendEvent,
   asLastVisited,
   asRecentModules,
   readPreference,
   withLearnerLock,
+  inTransaction,
   withRecentModule,
   writePreference,
   type CatalogDatabase,
-} from "@self-learn/catalog/state";
+} from "@gnosia/catalog/state";
 
 import { BadRequest, handler, MAX_ID_CHARS } from "@/lib/learner-api";
 import {
@@ -129,7 +130,7 @@ async function rememberVisit(db: CatalogDatabase, value: unknown, owner: string)
       // has not yet taken migration 0025 (which allows the type) loses the
       // event and still keeps the preferences, which Recent reads as well.
       try {
-        await tx.transaction((savepoint) =>
+        await inTransaction(tx, async (savepoint) =>
           appendEvent(
             savepoint,
             { type: "visit", course: visit.courseSlug, ...(visit.moduleSlug === undefined ? {} : { module: visit.moduleSlug }) },

@@ -8,8 +8,8 @@ import {
   readTutorModels,
   removeTutorModel,
   setTutorModel,
-} from "@self-learn/catalog/state";
-import { groupByProvider } from "@self-learn/schema/shared";
+} from "@gnosia/catalog/state";
+import { groupByProvider } from "@gnosia/schema/shared";
 
 import type { ChainEntry } from "@/lib/agent/providers";
 import { catalogDatabase } from "@/lib/learner-store";

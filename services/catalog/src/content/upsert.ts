@@ -1,5 +1,5 @@
 import { getTableColumns, sql, type SQL } from "drizzle-orm";
-import type { PgTable } from "drizzle-orm/pg-core";
+import type { SQLiteTable } from "drizzle-orm/sqlite-core";
 
 /**
  * `created_at` is when the catalog first saw a row, and re-indexing is not a
@@ -28,17 +28,17 @@ const NEVER_UPDATED = new Set(["created_at", "updated_at", "owner_id"]);
  *
  * `created_at` is one exception: it is when the catalog first saw the row,
  * and re-indexing is not a new sighting. `owner_id` is the other: a row keeps
- * its owner through every upsert (see `NEVER_UPDATED`). `updated_at` is set to now() rather
+ * its owner through every upsert (see `NEVER_UPDATED`). `updated_at` is set to cast(unixepoch('subsec') * 1000 as integer) rather
  * than to the insert's default for the same reason in reverse: it is a fact
  * about this write.
  */
-export function updateSet(table: PgTable): Record<string, SQL> {
+export function updateSet(table: SQLiteTable): Record<string, SQL> {
   const set: Record<string, SQL> = {};
   for (const [key, column] of Object.entries(getTableColumns(table))) {
     if (NEVER_UPDATED.has(column.name)) continue;
     set[key] = sql.raw(`excluded.${quote(column.name)}`);
   }
-  set["updatedAt"] = sql`now()`;
+  set["updatedAt"] = sql`cast(unixepoch('subsec') * 1000 as integer)`;
   return set;
 }
 

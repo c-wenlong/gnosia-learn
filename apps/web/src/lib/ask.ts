@@ -1,6 +1,6 @@
 import "server-only";
 
-import { conceptSummaries, listAssets } from "@self-learn/catalog/state";
+import { conceptSummaries, listAssets } from "@gnosia/catalog/state";
 
 import { getCourses } from "@/data/courses";
 import type { AskEntry } from "@/lib/ask-core";

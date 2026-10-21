@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
-import { concept, contentRevision, sessionLogEntry } from "@self-learn/schema";
+import { concept, contentRevision, sessionLogEntry } from "@gnosia/schema";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -158,7 +158,7 @@ describe.skipIf(!reachable.ok)("learn CLI on rows", () => {
     const course = path.join(fixture.root, "content/courses/xx1000.yaml");
     const original = await readFile(course, "utf8");
     const revisions = async () =>
-      (await scratch.db.execute<{ n: number }>(sql`select count(*)::int as n from content_revision`)).rows[0]?.n;
+      (await scratch.db.execute<{ n: number }>(sql`select count(*) as n from content_revision`)).rows[0]?.n;
     const before = await revisions();
     await writeFile(course, original.replace("title: First item", "title: An edited item"));
     try {

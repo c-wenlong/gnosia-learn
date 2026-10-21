@@ -2,7 +2,7 @@ import { EventEmitter } from "node:events";
 import { appendFile, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import type { JobState } from "@self-learn/schema";
+import type { JobState } from "@gnosia/schema";
 
 import type { ValidBrief } from "./brief";
 import type { CanvasLint, VerifyCheck } from "./canvas";

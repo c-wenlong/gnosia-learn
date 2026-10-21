@@ -1,5 +1,5 @@
-import { asset, assetName, ownerScope } from "@self-learn/schema";
-import { ASSET_NAME_MAX, cleanAssetName } from "@self-learn/schema/shared";
+import { asset, assetName, ownerScope } from "@gnosia/schema";
+import { ASSET_NAME_MAX, cleanAssetName } from "@gnosia/schema/shared";
 import { and, eq, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
@@ -85,7 +85,7 @@ export async function writeAssetName(
       // The database's clock, as the insert's default and every revision's
       // `created_at` use: `listAssets` orders a rename against revisions by
       // time to find the last change, so the two must share one clock.
-      set: { title: cleaned, updatedAt: sql`now()` },
+      set: { title: cleaned, updatedAt: sql`cast(unixepoch('subsec') * 1000 as integer)` },
     });
   return { title: cleaned, name: cleaned, original: before.original };
 }

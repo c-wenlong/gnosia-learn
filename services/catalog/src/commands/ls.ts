@@ -8,7 +8,7 @@ import {
   curriculumItem,
   curriculumItemTopic,
   topic,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { and, asc, count, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 
 import { withDatabase } from "../db";
