@@ -6,7 +6,7 @@
 //  mirror is a read-only file that a snapshot run replaces wholesale, so
 //  anything the learner writes — resume points, stars, renames — would be
 //  lost with it. learner.db sits beside it under the same data home
-//  (GNOSIA_HOME, then SELF_LEARN_HOME, then ~/.gnosia — the rule
+//  (GNOSIA_HOME, then ~/.gnosia — the rule
 //  CatalogLocation.dataHome already resolves, shared rather than repeated).
 //
 //  Two groups of tables. The small marks: `watch` (where playback stopped

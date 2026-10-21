@@ -1,7 +1,6 @@
 # Architecture
 
-Gnosia (renamed from self-learn — `SELF_LEARN_HOME` remains readable as a
-fallback next to `GNOSIA_HOME` where a stale environment may still set it) is
+Gnosia (renamed from self-learn) is
 a learning environment sharing one catalog. A
 Next.js app renders course roadmaps and progress; a CLI runs a Probe → Plan →
 Teach → Close tutoring loop over concept notes, which are rows in the catalog;
@@ -594,7 +593,7 @@ native pane lets the runner apply its own defaults.
 then `DATABASE_URL`, `services/catalog/.env` filling the gaps, the shell
 winning, then the live file under the data home — and writes
 `<data home>/app-catalog.db`, where the data home is `GNOSIA_HOME`, then
-`SELF_LEARN_HOME`, then `~/.gnosia`; `GNOSIA_CATALOG` or `--out` overrides
+`~/.gnosia`; `GNOSIA_CATALOG` or `--out` overrides
 the file itself. `app-catalog.db`, not `catalog.db`: the live database owns
 that name now, and the script refuses when source and target would be one
 file. The write is a `.partial` file renamed into place, so a reader never
@@ -993,9 +992,8 @@ anywhere; `--manimkc-root`, `--remotionkc-root`, `--revideokc-root` and
 All six are in
 [services/catalog/.env.example](services/catalog/.env.example). The data
 root is a second family of variables: the snapshot script, the app and the
-blob store's resolver all read `GNOSIA_HOME` then default to `~/.gnosia`,
-with `SELF_LEARN_HOME` still readable in the app as a fallback for stale
-environments. `GNOSIA_CATALOG`, `GNOSIA_BLOBS` and `GNOSIA_REPO` (the repo
+blob store's resolver all read `GNOSIA_HOME` then default to `~/.gnosia`.
+`GNOSIA_CATALOG`, `GNOSIA_BLOBS` and `GNOSIA_REPO` (the repo
 path the app spawns the sidecar from) name the pieces directly.
 
 ### How agents read it
