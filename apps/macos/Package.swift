@@ -24,6 +24,9 @@ let package = Package(
             name: "Gnosia",
             dependencies: ["CSQLite3"],
             path: "Sources/Gnosia",
+            // AppIcon.png feeds only Scripts/bundle-app.sh's iconset — it is
+            // the icon source, not a bundle resource.
+            exclude: ["AppIcon.png"],
             resources: [.process("Resources"), .copy("katex"), .copy("note.html"), .copy("chat.html"), .copy("mdcore.js")]
         ),
     ]
