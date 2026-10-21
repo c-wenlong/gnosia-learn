@@ -134,24 +134,20 @@ struct AssetAskPanel: View {
     }
 
     /// User turns sit right in an ink bubble, tutor turns left on a
-    /// surface card — AskView's split, narrowed for the column.
+    /// surface card — AskView's split, narrowed for the column. The
+    /// bubble and its contents are one webview (ChatMarkdownView) at the
+    /// panel's smaller size; text selection comes free inside the page.
     private func bubble(_ turn: SidecarClient.ChatMessage) -> some View {
         HStack {
             if turn.role == "user" { Spacer(minLength: 40) }
-            MathText(text: turn.content, font: .callout)
-                .foregroundStyle(turn.role == "user" ? G.btnText : G.text)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(
-                    turn.role == "user" ? G.btnFace : G.surface,
-                    in: RoundedRectangle(cornerRadius: 12)
-                )
-                .overlay {
-                    if turn.role != "user" {
-                        RoundedRectangle(cornerRadius: 12).stroke(G.border)
-                    }
-                }
-                .textSelection(.enabled)
+            ChatMarkdownView(
+                text: turn.content,
+                role: turn.role == "user" ? .user : .assistant,
+                fontSize: 12,
+                cornerRadius: 12,
+                horizontalPadding: 12,
+                verticalPadding: 8
+            )
             if turn.role != "user" { Spacer(minLength: 40) }
         }
     }
