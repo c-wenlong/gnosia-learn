@@ -491,6 +491,9 @@ final class CatalogStore {
     private(set) var favorites: Set<String> = []
     private(set) var watch: [String: WatchMark] = [:]
     private(set) var names: [String: String] = [:]
+    /// The tutor sessions learner.db holds — its `session` table, which the
+    /// snapshot does not ship. Newest `updated_at` first.
+    private(set) var sessions: [CatalogSession] = []
 
     /// slug → markdown, for the note detail pane. A note asset's body is
     /// its one linked concept's `body` — the same row the web's file route
@@ -1520,6 +1523,22 @@ func filesNoun(_ count: Int) -> String { count == 1 ? "file" : "files" }
 struct WatchMark: Hashable {
     let seconds: Double
     let done: Bool
+    /// The file's length the last heartbeat knew — NULL on rows written
+    /// before the column existed.
+    var duration: Double? = nil
+    /// When the row was written — the merge clock against the mirrored
+    /// `playback:` preference's own `updatedAt`.
+    var updatedAt: Date? = nil
+}
+
+/// One `session` row a tutor session opened in learner.db — the fields the
+/// web's RecentSession resolves by: the log asset id it derives (`session:
+/// learn/sessions/<id>.md`), the goal concept, and `updatedAt` for order.
+struct CatalogSession: Hashable {
+    let id: String
+    let title: String?
+    let goal: String?
+    let updatedAt: Date?
 }
 
 extension CatalogStore {
@@ -1572,6 +1591,7 @@ extension CatalogStore {
         var localMastery: [String: (row: CatalogMastery, stamp: Double)] = [:]
         var localReviews: [String: (row: CatalogReview, stamp: Double)] = [:]
         var localEvents: [CatalogEvent] = []
+        var localSessions: [CatalogSession] = []
 
         if
             FileManager.default.fileExists(atPath: path),
@@ -1583,10 +1603,20 @@ extension CatalogStore {
                 }
             }
 
-            if let rows = try? db.query("SELECT asset_id, seconds, done FROM watch") {
+            // `duration` joined `watch` after the first files went out; a
+            // file LearnerStore has not opened yet is read without it.
+            let hasDuration = ((try? db.columns(of: "watch")) ?? []).contains("duration")
+            if let rows = try? db.query(hasDuration
+                ? "SELECT asset_id, seconds, done, updated_at, duration FROM watch"
+                : "SELECT asset_id, seconds, done, updated_at FROM watch") {
                 while rows.next() {
                     guard let id = rows.text(0), let seconds = rows.double(1) else { continue }
-                    marks[id] = WatchMark(seconds: seconds, done: (rows.int64(2) ?? 0) != 0)
+                    marks[id] = WatchMark(
+                        seconds: seconds,
+                        done: (rows.int64(2) ?? 0) != 0,
+                        duration: hasDuration ? rows.double(4) : nil,
+                        updatedAt: rows.double(3).map { Date(timeIntervalSince1970: $0) }
+                    )
                 }
             }
 
@@ -1674,11 +1704,31 @@ extension CatalogStore {
                     ))
                 }
             }
+
+            // The sessions recordSessionAnswer opened — the snapshot has no
+            // session table, so this file is the only read.
+            if (try? db.hasTable("session")) == true,
+               let rows = try? db.query("""
+                   SELECT id, title, goal, updated_at FROM session
+                   WHERE learner_id = 'local' ORDER BY updated_at DESC
+                   """)
+            {
+                while rows.next() {
+                    guard let id = rows.text(0) else { continue }
+                    localSessions.append(CatalogSession(
+                        id: id,
+                        title: rows.text(1).flatMap { $0.isEmpty ? nil : $0 },
+                        goal: rows.text(2).flatMap { $0.isEmpty ? nil : $0 },
+                        updatedAt: rows.double(3).map { Date(timeIntervalSince1970: $0) }
+                    ))
+                }
+            }
         }
 
         favorites = starred
         watch = marks
         names = renames
+        sessions = localSessions
 
         // Mastery and review merge the way progress does: per concept, the
         // row with the newer `updated_at` is the truth whichever file it

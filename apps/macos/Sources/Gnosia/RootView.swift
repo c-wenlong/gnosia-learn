@@ -32,6 +32,19 @@ enum AppDestination: Hashable {
     case check(course: String, module: String)
 }
 
+extension AppDestination {
+    /// The surface a destination belongs to — which nav row its page is
+    /// part of. A module is a Courses page, a concept (and its sessions
+    /// and checks) a Learn page, an asset a Library page.
+    fileprivate var surface: Section {
+        switch self {
+        case .concept, .session: return .learn
+        case .course, .module, .check: return .courses
+        case .asset: return .library
+        }
+    }
+}
+
 extension View {
     /// Resolve the shared destinations inside a NavigationStack: each id
     /// looked up live so a row that left the catalog reads as missing
@@ -183,6 +196,13 @@ struct RootView: View {
     @Environment(CatalogStore.self) private var store
     @Environment(\.colorScheme) private var colorScheme
     @State private var section: Section = .home
+    /// The detail column's own stack: the sidebar's Courses, Pinned and
+    /// Recent rows push their destination here, over the surface they
+    /// belong to, the way the web's links land on its routes.
+    @State private var detailPath = NavigationPath()
+    /// What a sidebar push is showing — the current row's fill, cleared
+    /// when the detail column pops back to its surface.
+    @State private var pushed: AppDestination?
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     var body: some View {
@@ -190,27 +210,66 @@ struct RootView: View {
             sidebar
                 .navigationSplitViewColumnWidth(min: 210, ideal: 230, max: 260)
         } detail: {
-            surface
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(G.page)
+            NavigationStack(path: $detailPath) {
+                surface
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(G.page)
+                    .appDestinations()
+                    // A pushed course or module page can link onward by
+                    // the values its own views push: another course, and
+                    // a module's videos by asset id.
+                    .navigationDestination(for: CatalogCourse.self) { course in
+                        CourseDestination(slug: course.slug)
+                    }
+                    .navigationDestination(for: CatalogAsset.self) { asset in
+                        VideoDetailView(asset: asset)
+                    }
+            }
         }
         .onAppear { store.refreshLearner() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             store.refreshLearner()
         }
-        // ⌘1…⌘5 walk the primary nav in sidebar order.
+        .onChange(of: detailPath) { _, now in
+            if now.isEmpty { pushed = nil }
+        }
+        // ⌘1…⌘6 walk the sidebar's rows in order, utility rows included.
         .background {
-            ForEach(Array(primaryNav.enumerated()), id: \.element.id) { index, s in
-                Button(s.rawValue) { section = s }
+            ForEach(Array(shortcuts.enumerated()), id: \.element.id) { index, s in
+                Button(s.rawValue) { go(s) }
                     .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
                     .hidden()
             }
         }
     }
 
-    /// The rows that take a shortcut and draw in the sidebar's main group,
-    /// in the web sidebar's order.
-    private var primaryNav: [Section] { [.home, .courses, .learn, .review, .library] }
+    /// The web sidebar's destinations, in its order — the learning nav.
+    private var primaryNav: [Section] { [.home, .courses, .learn, .library] }
+
+    /// The native-only rows: below the sections, so the nav group stays
+    /// the web's four. The Review badge keeps its row.
+    private var utilityNav: [Section] { [.review, .studio] }
+
+    /// Every shortcut row in sidebar order — the old ⌘1…⌘5 kept.
+    private var shortcuts: [Section] { primaryNav + utilityNav }
+
+    /// A nav row's press: the surface itself, a pushed page popped.
+    private func go(_ s: Section) {
+        section = s
+        if !detailPath.isEmpty { detailPath = NavigationPath() }
+        pushed = nil
+    }
+
+    /// A section row's link: its destination pushed over the surface it
+    /// belongs to — a module under Courses, a concept under Learn, an
+    /// asset under Library — so the row's own nav stays lit as the web's
+    /// nav does under its routes.
+    private func open(_ destination: AppDestination) {
+        section = destination.surface
+        detailPath = NavigationPath()
+        detailPath.append(destination)
+        pushed = destination
+    }
 
     @ViewBuilder
     private var surface: some View {
@@ -228,10 +287,12 @@ struct RootView: View {
     // MARK: - Sidebar
 
     /// The web AppSidebar, drawn natively: the wordmark, New chat, the
-    /// search field, the nav rows on a surface2 pill, then Settings at the
-    /// foot. A plain stack rather than a List, so the selection pill,
-    /// spacing and padding match the web's numbers instead of the
-    /// platform list's.
+    /// search field, the four learning destinations, then the sections
+    /// the web scrolls — Courses, Pinned, Recent — then the native-only
+    /// utility rows (Review with its badge, Studio, Settings) and the
+    /// account row at the foot. A plain stack rather than a List, so the
+    /// selection pill, spacing and padding match the web's numbers
+    /// instead of the platform list's.
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
             brand
@@ -250,23 +311,40 @@ struct RootView: View {
             }
             .padding(.top, 8)
 
-            Divider().overlay(G.border).padding(.vertical, 10)
-
-            navRow(.studio)
-
-            Spacer(minLength: 0)
-
-            Divider().overlay(G.border).padding(.bottom, 6)
-            SettingsLink {
-                Label("Settings", systemImage: "gear")
-                    .font(.callout)
-                    .foregroundStyle(G.text2)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 5)
+            ScrollView {
+                SidebarSections(
+                    model: store.sidebarRecent(),
+                    current: pushed,
+                    open: open,
+                    openStudio: { go(.studio) },
+                    browseCourses: { go(.courses) }
+                )
             }
-            .buttonStyle(.plain)
-            .padding(.bottom, 10)
+            .frame(maxHeight: .infinity)
+            .padding(.top, 10)
+
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(utilityNav) { s in
+                    navRow(s)
+                }
+                SettingsLink {
+                    Label("Settings", systemImage: "gear")
+                        .font(.callout)
+                        .foregroundStyle(G.text2)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.top, 6)
+
+            Divider().overlay(G.hair)
+                .padding(.top, 6)
+
+            SidebarAccountRow()
+                .padding(.top, 4)
+                .padding(.bottom, 8)
         }
         .padding(.horizontal, 10)
         .background(G.page)
@@ -299,7 +377,7 @@ struct RootView: View {
     /// rounded field that reads as a box, not a text cursor. Selecting it
     /// jumps to the library, where the toolbar search does the work.
     private var searchRow: some View {
-        Button { section = .library } label: {
+        Button { go(.library) } label: {
             Label("Search", systemImage: "magnifyingglass")
                 .font(.callout)
                 .foregroundStyle(G.text3)
@@ -314,7 +392,7 @@ struct RootView: View {
     /// One sidebar row. `label`/`symbol` overridable so New chat draws in
     /// the same face as the section rows without carrying a section.
     private func navRow(_ s: Section, label: String? = nil, symbol: String? = nil) -> some View {
-        Button { section = s } label: {
+        Button { go(s) } label: {
             HStack(spacing: 9) {
                 Image(systemName: symbol ?? s.symbol)
                     .font(.callout)
