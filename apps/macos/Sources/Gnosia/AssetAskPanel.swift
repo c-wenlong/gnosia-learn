@@ -67,6 +67,7 @@ struct AssetAskButton: View {
 /// bubble and composer shapes AskView draws for the open tutor.
 struct AssetAskPanel: View {
     @Environment(SidecarManager.self) private var sidecar
+    @Environment(CatalogStore.self) private var store
 
     let assetId: String
     /// What the composer names: "video", "note", "diagram".
@@ -169,15 +170,19 @@ struct AssetAskPanel: View {
 
     private var composer: some View {
         HStack(spacing: 8) {
-            TextField("Ask about this \(subject)", text: $model.draft, axis: .vertical)
-                .textFieldStyle(.plain)
-                .lineLimit(1 ... 5)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .background(G.surface, in: RoundedRectangle(cornerRadius: 10))
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(G.border))
-                .focused($focused)
-                .onSubmit { ask(model.draft) }
+            // The @ menu rides the field (MentionPicker.swift): `@` opens
+            // the catalog's concepts and standalone assets, a pick writes
+            // `@<slug>` / `@<asset id>` into the draft.
+            MentionField(
+                text: $model.draft,
+                focused: $focused,
+                prompt: "Ask about this \(subject)",
+                lineLimit: 1 ... 5,
+                horizontalPadding: 10,
+                verticalPadding: 8,
+                options: { store.mentionOptions },
+                onSubmit: { ask(model.draft) }
+            )
             Button {
                 ask(model.draft)
             } label: {
