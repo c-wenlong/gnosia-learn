@@ -203,6 +203,48 @@ describe("the learner write routes, database down", () => {
     expect(await response.json()).toMatchObject({ ok: false, code: "STORE_UNAVAILABLE" });
   });
 
+  it("refuses a custom-provider write the way the web route does", async () => {
+    // A non-object body, then a key of the wrong shape: both 400s before any read.
+    expect((await call("/api/learner/custom-provider", "POST", "nope")).status).toBe(400);
+    const short = await call("/api/learner/custom-provider", "POST", {
+      label: "Mine",
+      baseUrl: "https://api.example.com/v1",
+      key: "short",
+    });
+    expect(short.status).toBe(400);
+    expect(await short.json()).toMatchObject({ ok: false, code: "BAD_REQUEST" });
+
+    // PATCH wants a custom-… id, then at least one of name, URL or key.
+    const wrong = await call("/api/learner/custom-provider", "PATCH", { provider: "nvidia", label: "x" });
+    expect(wrong.status).toBe(400);
+    const nothing = await call("/api/learner/custom-provider", "PATCH", { provider: "custom-mine" });
+    expect(nothing.status).toBe(400);
+    expect(await nothing.json()).toMatchObject({ ok: false, code: "BAD_REQUEST" });
+  });
+
+  it("answers a custom-provider add NO_SECRET without AUTH_SECRET, then STORE_UNAVAILABLE with one", async () => {
+    const kept = process.env.AUTH_SECRET;
+    const body = { label: "My gateway", baseUrl: "https://api.example.com/v1", key: KEY };
+    try {
+      delete process.env.AUTH_SECRET;
+      const secretless = await call("/api/learner/custom-provider", "POST", body);
+      expect(secretless.status).toBe(503);
+      expect(await secretless.json()).toMatchObject({ ok: false, code: "NO_SECRET" });
+
+      process.env.AUTH_SECRET = "sidecar-test-secret-at-least-thirty-two-chars";
+      const down = await call("/api/learner/custom-provider", "POST", body);
+      expect(down.status).toBe(503);
+      expect(await down.json()).toMatchObject({ ok: false, code: "STORE_UNAVAILABLE" });
+      // A rename with no key needs no secret either: the dead store answers.
+      const renamed = await call("/api/learner/custom-provider", "PATCH", { provider: "custom-mine", label: "New" });
+      expect(renamed.status).toBe(503);
+      expect(await renamed.json()).toMatchObject({ ok: false, code: "STORE_UNAVAILABLE" });
+    } finally {
+      if (kept === undefined) delete process.env.AUTH_SECRET;
+      else process.env.AUTH_SECRET = kept;
+    }
+  });
+
   it("503s a chain add STORE_UNAVAILABLE when the saved keys cannot be read", async () => {
     const response = await call("/api/learner/tutor-model", "POST", { provider: "nvidia", model: "google/gemma-4-31b-it" });
     expect(response.status).toBe(503);
@@ -454,6 +496,73 @@ describe.skipIf(!reachable.ok)("the learner write routes, against a scratch data
     // openai's key went with the provider; nvidia's and glm's stay.
     const keys = await readProviderKeys(scratch.db, "local");
     expect(keys.map((row) => row.provider)).toEqual(["glm", "nvidia"]);
+  });
+
+  it("adds, edits and deletes a provider the owner added", async () => {
+    const CUSTOM_KEY = "custom-key-0123456789abcdef";
+    const added = await call2("/api/learner/custom-provider", "POST", {
+      label: "My gateway",
+      baseUrl: "https://gateway.example.com/v1/",
+      key: CUSTOM_KEY,
+    });
+    expect(added.status).toBe(200);
+    const created = (await added.json()) as {
+      ok: boolean;
+      provider: { id: string; label: string; baseUrl: string };
+      key: { provider: string; last4: string; readable: boolean };
+    };
+    expect(created.ok).toBe(true);
+    // The id is made from the name; the base URL keeps none of its trailing slash.
+    expect(created.provider).toEqual({
+      id: "custom-my-gateway",
+      label: "My gateway",
+      baseUrl: "https://gateway.example.com/v1",
+    });
+    expect(created.key).toMatchObject({ provider: "custom-my-gateway", last4: CUSTOM_KEY.slice(-4), readable: true });
+
+    // The sealed row is the web's own: it opens under the saved-keys read.
+    expect(await openSavedKeys(scratch.db, "local", process.env)).toMatchObject({ "custom-my-gateway": CUSTOM_KEY });
+
+    // The status read lists it with its base URL, keyed.
+    const status = await call2("/api/learner/provider-key", "GET");
+    const view = (await status.json()) as {
+      rows: { id: string; custom?: { baseUrl: string }; inUse: string | null }[];
+    };
+    expect(view.rows.find((row) => row.id === "custom-my-gateway")).toMatchObject({
+      custom: { baseUrl: "https://gateway.example.com/v1" },
+      inUse: "saved",
+    });
+
+    // Its model joins the chain on the saved key alone — a custom provider
+    // has no server key to stand in.
+    const chained = await call2("/api/learner/tutor-model", "POST", { provider: "custom-my-gateway", model: "my-model-1" });
+    expect(await chained.json()).toMatchObject({ ok: true });
+
+    // The PATCH renames it and moves it; the id and the models stay.
+    const renamed = await call2("/api/learner/custom-provider", "PATCH", {
+      provider: "custom-my-gateway",
+      label: "Renamed gateway",
+      baseUrl: "https://gateway2.example.com/v1",
+    });
+    expect(await renamed.json()).toMatchObject({
+      ok: true,
+      provider: { id: "custom-my-gateway", label: "Renamed gateway", baseUrl: "https://gateway2.example.com/v1" },
+    });
+
+    // A base URL that is neither https nor a local http is refused.
+    const bad = await call2("/api/learner/custom-provider", "PATCH", {
+      provider: "custom-my-gateway",
+      baseUrl: "http://gateway.example.com",
+    });
+    expect(bad.status).toBe(400);
+
+    // The provider's delete removes it whole: its models and its key too.
+    const gone = await call2("/api/learner/tutor-model/provider", "DELETE", { provider: "custom-my-gateway" });
+    expect(await gone.json()).toMatchObject({ ok: true, keyRemoved: true });
+    const after = await call2("/api/learner/provider-key", "GET");
+    const rows = ((await after.json()) as { rows: { id: string }[] }).rows;
+    expect(rows.some((row) => row.id === "custom-my-gateway")).toBe(false);
+    expect((await readProviderKeys(scratch.db, "local")).some((row) => row.provider === "custom-my-gateway")).toBe(false);
   });
 
   /**

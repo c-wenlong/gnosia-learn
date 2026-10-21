@@ -211,6 +211,23 @@ struct SidecarClient {
         try await object("POST", "/api/learner/tutor-model/models", body: ["provider": provider])
     }
 
+    /// `POST /api/learner/custom-provider`: `{ label, baseUrl, key }` →
+    /// `{ ok, provider, key }`. A provider the owner adds (T14) goes in whole
+    /// or not at all: the row and its sealed key are one write.
+    func addCustomProvider(label: String, baseUrl: String, key: String) async throws -> [String: Any] {
+        try await object("POST", "/api/learner/custom-provider", body: ["label": label, "baseUrl": baseUrl, "key": key])
+    }
+
+    /// `PATCH /api/learner/custom-provider`: `{ provider, label, baseUrl,
+    /// key? }` → `{ ok, provider, key }`. The name and the URL always travel
+    /// together; a nil `key` leaves the saved one alone, a refused one leaves
+    /// the name and the URL as they were.
+    func changeCustomProvider(_ provider: String, label: String, baseUrl: String, key: String?) async throws -> [String: Any] {
+        var body: [String: Any] = ["provider": provider, "label": label, "baseUrl": baseUrl]
+        if let key { body["key"] = key }
+        return try await object("PATCH", "/api/learner/custom-provider", body: body)
+    }
+
     // MARK: - learner state writes
 
     // The native app's Postgres half: the same `/api/learner/*` bodies the

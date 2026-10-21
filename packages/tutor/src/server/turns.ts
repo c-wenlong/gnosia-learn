@@ -1,5 +1,6 @@
 import { CustomProviderError, TutorModelError } from "@self-learn/catalog/state";
 import {
+  isCustomProviderId,
   isProviderName,
   PROVIDER_IDS,
   type ProviderName,
@@ -59,7 +60,12 @@ import { MAX_ASSET_ID_CHARS, readAssetDetail, readAssetText } from "./asset-deta
 import { ContentUnavailableError } from "./content-source";
 import { readConceptWorkspace } from "./concept-workspace";
 import { entryCredential, keyTestCredential, tutorCredentials } from "./credentials";
-import { readOwnerCustomProviders, type CustomProvider } from "./custom-providers";
+import {
+  changeCustomProvider,
+  createCustomProvider,
+  readOwnerCustomProviders,
+  type CustomProvider,
+} from "./custom-providers";
 import type { Env, TutorDeps } from "./deps";
 import { cachedModelList } from "./model-list";
 import {
@@ -923,8 +929,9 @@ export async function modelListTurn(deps: TutorDeps, body: unknown): Promise<Tur
 /* -------------------------------------------------------------------------- */
 
 /**
- * The request-independent core of the `/api/learner/provider-key` and
- * `/api/learner/tutor-model` write routes (docs/BYOK.md,
+ * The request-independent core of the `/api/learner/provider-key`,
+ * `/api/learner/custom-provider` and `/api/learner/tutor-model` write
+ * routes (docs/BYOK.md,
  * docs/TUTOR-MODELS.md): the same bodies, the same `{ ok, error, code }`
  * answers and statuses the Next routes give. What is not ported is what a
  * loopback single-owner service does not have — the session, origin and
@@ -1278,5 +1285,95 @@ export async function tutorModelChainTurn(deps: TutorDeps): Promise<TurnReply> {
   } catch (error) {
     console.warn(`settings: model chain unavailable (${failureCode(error)})`);
     return writeAnswer({ ok: true, reachable: false, chain: [] });
+  }
+}
+
+/** `failed` in the web's `/api/learner/custom-provider` route: its own refusal, or a dead store. */
+function customProviderFailed(what: string, error: unknown): TurnReply {
+  if (error instanceof CustomProviderError) {
+    return writeRefuse(error.message, error.code, error.code === "NOT_FOUND" ? 404 : error.code === "FULL" ? 409 : 400);
+  }
+  if (error instanceof NoKeySecretError) {
+    return writeRefuse("This server has no AUTH_SECRET, so it cannot store a key.", "NO_SECRET", 503);
+  }
+  console.warn(`custom provider ${what} failed (${failureCode(error)})`);
+  return writeRefuse("Not saved: the database is unreachable.", "STORE_UNAVAILABLE", 503);
+}
+
+/**
+ * `POST /api/learner/custom-provider` with `{ label, baseUrl, key }`: a
+ * provider the owner adds themselves (docs/TUTOR-MODELS.md, T14) — a name
+ * and an OpenAI-compatible base URL, stored with its sealed key in one
+ * transaction, so a provider never exists without its key. The id is made
+ * from the name (`custom-<slug>`); the answer names it, never the key.
+ * 200 `{ ok, provider, key }`; 409 `FULL` past the owner's limit, 503
+ * `NO_SECRET` with no `AUTH_SECRET` to seal under.
+ */
+export async function customProviderAddTurn(deps: TutorDeps, body: unknown): Promise<TurnReply> {
+  const read = writeRecord(body);
+  if ("refused" in read) return read.refused;
+  const shape = checkKeyShape(read.record.key);
+  if (!shape.ok) return writeRefuse(shape.reason);
+  // As `providerKeySaveTurn`: on the web's path the sealer runs before the
+  // database is awaited, so a missing secret is NO_SECRET even when the
+  // store is down.
+  if (keySecret(process.env) === null) {
+    return writeRefuse("This server has no AUTH_SECRET, so it cannot store a key.", "NO_SECRET", 503);
+  }
+  try {
+    const created = await createCustomProvider(
+      await deps.db,
+      deps.owner,
+      { label: read.record.label, baseUrl: read.record.baseUrl },
+      shape.key,
+      process.env,
+    );
+    return writeAnswer({ ok: true, ...created });
+  } catch (error) {
+    return customProviderFailed("add", error);
+  }
+}
+
+/**
+ * `PATCH /api/learner/custom-provider` with `{ provider, label?, baseUrl?,
+ * key? }`: rename the provider, move it, and replace its key, all in one
+ * transaction — a key that cannot be stored leaves the name and the URL as
+ * they were. Its id and its models stay. Delete is the provider route's
+ * (`tutorProviderRemoveTurn`), which removes it whole. 200 `{ ok, provider,
+ * key }`, `key` null when none was sent.
+ */
+export async function customProviderChangeTurn(deps: TutorDeps, body: unknown): Promise<TurnReply> {
+  const read = writeRecord(body);
+  if ("refused" in read) return read.refused;
+  if (!isCustomProviderId(read.record.provider)) {
+    return writeRefuse(`"provider" must be the id of one of your providers (custom-…).`);
+  }
+  const { label, baseUrl, key } = read.record;
+  if (label === undefined && baseUrl === undefined && key === undefined) {
+    return writeRefuse("Send a new name, a new base URL, a new key, or any of them.");
+  }
+  let checked: string | undefined;
+  if (key !== undefined) {
+    const shape = checkKeyShape(key);
+    if (!shape.ok) return writeRefuse(shape.reason);
+    checked = shape.key;
+  }
+  // Same ordering as the add: a replacement key with no secret to seal
+  // under is NO_SECRET, and it is checked before the store is reached.
+  if (checked !== undefined && keySecret(process.env) === null) {
+    return writeRefuse("This server has no AUTH_SECRET, so it cannot store a key.", "NO_SECRET", 503);
+  }
+  try {
+    const changed = await changeCustomProvider(
+      await deps.db,
+      deps.owner,
+      read.record.provider,
+      { label, baseUrl },
+      checked,
+      process.env,
+    );
+    return writeAnswer({ ok: true, ...changed });
+  } catch (error) {
+    return customProviderFailed("change", error);
   }
 }
