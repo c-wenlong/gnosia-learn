@@ -19,6 +19,8 @@ import {
 } from "@self-learn/tutor/server/learner-writes";
 import {
   chatTurn,
+  customProviderAddTurn,
+  customProviderChangeTurn,
   judgeTurn,
   modelListTurn,
   providerKeyRemoveTurn,
@@ -68,6 +70,8 @@ import { guard } from "./guard";
  *   POST   /api/learner/provider-key           → providerKeySaveTurn
  *   DELETE /api/learner/provider-key           → providerKeyRemoveTurn
  *   POST   /api/learner/provider-key/test      → providerKeyTestTurn
+ *   POST   /api/learner/custom-provider        → customProviderAddTurn
+ *   PATCH  /api/learner/custom-provider        → customProviderChangeTurn
  *   GET    /api/learner/tutor-model            → tutorModelChainTurn (the chain; the web reads it server-side)
  *   POST   /api/learner/tutor-model            → tutorModelAddTurn
  *   PUT    /api/learner/tutor-model            → tutorModelSetTurn
@@ -108,6 +112,10 @@ const TURNS: Record<string, Record<string, Turn>> = {
     DELETE: providerKeyRemoveTurn,
   },
   "/api/learner/provider-key/test": { POST: providerKeyTestTurn },
+  "/api/learner/custom-provider": {
+    POST: customProviderAddTurn,
+    PATCH: customProviderChangeTurn,
+  },
   "/api/learner/tutor-model": {
     GET: tutorModelChainTurn as Turn,
     POST: tutorModelAddTurn,

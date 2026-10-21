@@ -62,8 +62,9 @@ import type { TurnReply } from "./turns";
  * web's own — theme, lastVisited, resources, Settings choices; nothing native
  * writes them), `recent` (pins are the web sidebar's), `avatar`, `export`,
  * `import`, `reset`, `recap`, `home` and `ask` (reads, destructive resets or
- * surfaces the app has no equivalent of), and `custom-provider` (a web
- * Settings surface).
+ * surfaces the app has no equivalent of). `custom-provider` is a Settings
+ * write rather than a learner-state one, so it lives in `turns.ts` with the
+ * provider-key and tutor-model routes.
  */
 
 function reply(status: number, body: unknown): TurnReply {
