@@ -283,7 +283,9 @@ export async function unhookDerivations(
     videoIds.map((id) => sql`${id}`),
     sql`, `,
   );
-  const { posters, bases } = await inTransaction(db, async (tx) => {
+  const { posters, bases } = await inTransaction(
+    db,
+    async (tx) => {
       const { rows: derived } = await tx.execute<{ poster: string }>(sql`
         select d.asset_id as poster
         from asset_derivation d
@@ -329,7 +331,12 @@ export async function unhookDerivations(
         posters: await tx.select().from(asset).where(inArray(asset.id, stale)),
         bases: new Map(stale.map((id) => [id, latest.get(id)?.id ?? null] as const)),
       };
-    });
+    },
+    // One snapshot is all this asks, so a deferred begin beside a writer —
+    // not `begin immediate`, which would serialise the read behind an
+    // upload's relink and report `moved` on nothing.
+    { readOnly: true },
+  );
   const unhooked: string[] = [];
   const moved: string[] = [];
   // One write per poster, since a composite write refused on one stale base

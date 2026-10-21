@@ -11,11 +11,11 @@ import { asset, blobObject, indexRun } from "@self-learn/schema";
 import type { RouteProblemCode } from "@/lib/asset-problems";
 
 import { applyMigrations } from "../../../../../../services/catalog/src/migrations";
-import { BEFORE_BLOB_CONTRACT, partialMigrations } from "../../../../../../services/catalog/test/partial-migrations";
 import {
   createScratchDatabase,
   probe,
   type Scratch,
+  withoutConstraint,
 } from "../../../../../../services/catalog/test/scratch-database";
 
 // A signed-in request, so the owner seam (`@/lib/owner`) resolves `local`.
@@ -37,10 +37,11 @@ vi.mock("@/lib/auth/session", async (importOriginal) => ({
  * value that used to switch that branch on. If the branch ever comes back,
  * this is the test that says so.
  *
- * The scratch database stops at 0012 on purpose. A video row with no
- * `blob_key` is the state the legacy branch served, and the phase 2 contract
- * migration forbids it; before that migration such rows are exactly what an
- * unflipped database holds, so this is the schema the property has to be
+ * The scratch database has the blob contract's CHECK taken off on purpose.
+ * A video row with no `blob_key` is the state the legacy branch served, and
+ * the contract — a held migration under Postgres, a constraint in SQLite's
+ * foundation migration — forbids it; without it such rows are exactly what
+ * an unflipped database holds, so this is the schema the property has to be
  * proved on.
  */
 
@@ -143,7 +144,8 @@ describe.skipIf(!reachable.ok)("asset file route", () => {
     await writeFile(path.join(dataRoot, "out", "algorithms", "demo", "demo.mp4"), VIDEO);
 
     scratch = await createScratchDatabase();
-    await applyMigrations(scratch.db, { folder: await partialMigrations(BEFORE_BLOB_CONTRACT) });
+    await applyMigrations(scratch.db);
+    await withoutConstraint(scratch.db, "asset", "asset_stored_blob_check");
     process.env.DATABASE_URL = scratch.url;
     process.env.SELF_LEARN_HOME = path.join(base, "home");
     // The value that used to turn the legacy branch on. Nothing reads it now.

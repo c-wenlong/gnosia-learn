@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  clearTables,
   migratedScratchDatabase,
   probe,
   type Scratch,
@@ -61,13 +62,7 @@ describe.skipIf(!reachable.ok)("review API routes", () => {
   });
 
   beforeEach(async () => {
-    await scratch.db.execute(
-      "alter table event disable trigger event_no_update; " +
-        "alter table event disable trigger event_no_delete; " +
-        "truncate event, mastery, review; " +
-        "alter table event enable trigger event_no_update; " +
-        "alter table event enable trigger event_no_delete;",
-    );
+    await clearTables(scratch.db, ["event", "mastery", "review"]);
   });
 
   const send = async (body: unknown, origin?: string | null) => {

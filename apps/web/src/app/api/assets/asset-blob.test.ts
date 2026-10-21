@@ -10,11 +10,11 @@ import { asset, assetDerivation, blobObject } from "@self-learn/schema";
 import { eq } from "drizzle-orm";
 
 import { applyMigrations } from "../../../../../../services/catalog/src/migrations";
-import { BEFORE_BLOB_CONTRACT, partialMigrations } from "../../../../../../services/catalog/test/partial-migrations";
 import {
   createScratchDatabase,
   probe,
   type Scratch,
+  withoutConstraint,
 } from "../../../../../../services/catalog/test/scratch-database";
 
 // A signed-in request, so the owner seam (`@/lib/owner`) resolves `local`.
@@ -97,10 +97,13 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
 
   beforeAll(async () => {
     scratch = await createScratchDatabase();
-    // At 0012: the diagram SVG with no blob, whose not-uploaded hint this
-    // checks, is a row the contract (0013) forbids. Every other row here
-    // carries a blob and would pass it.
-    await applyMigrations(scratch.db, { folder: await partialMigrations(BEFORE_BLOB_CONTRACT) });
+    // The diagram SVG with no blob, whose not-uploaded hint this checks, is
+    // a row the contract forbids — in the SQLite schema a CHECK constraint
+    // from 0000 on, so the table is rebuilt without it rather than the
+    // migrations stopped before it. Every other row here carries a blob and
+    // would pass it.
+    await applyMigrations(scratch.db);
+    await withoutConstraint(scratch.db, "asset", "asset_stored_blob_check");
     home = await mkdtemp(path.join(tmpdir(), "asset-blob-"));
     process.env.DATABASE_URL = scratch.url;
     process.env.SELF_LEARN_HOME = home;

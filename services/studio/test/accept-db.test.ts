@@ -7,6 +7,7 @@ import { assetJob, blobObject, diagram, job } from "@self-learn/schema";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
+import { DEFAULT_DATABASE_PATH } from "../../catalog/src/env";
 import { makeFixture, note, tagsYaml, topicsYaml, type Fixture } from "../../catalog/test/fixture-tree";
 import { migratedScratchDatabase, probe, type Scratch } from "../../catalog/test/scratch-database";
 import {
@@ -91,7 +92,7 @@ describe.skipIf(!reachable.ok)("Accept through the real catalog on a database th
     for (const key of ["DATABASE_URL", "SELF_LEARN_HOME", "STUDIO_HOME", "MANIMKC_ROOT"]) saved[key] = process.env[key];
     scratch = await migratedScratchDatabase();
     process.env.DATABASE_URL = scratch.url;
-    expect(new URL(scratch.url).pathname).not.toBe("/self_learn");
+    expect(path.resolve(scratch.url)).not.toBe(DEFAULT_DATABASE_PATH);
     home = await mkdtemp(path.join(tmpdir(), "studio-accept-db-"));
     blobs = await mkdtemp(path.join(tmpdir(), "studio-accept-db-blobs-"));
     process.env.STUDIO_HOME = home;

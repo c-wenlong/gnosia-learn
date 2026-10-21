@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  clearTables,
   migratedScratchDatabase,
   probe,
   type Scratch,
@@ -63,7 +64,7 @@ describe.skipIf(!reachable.ok)("POST /api/learner/favorite", () => {
   });
 
   beforeEach(async () => {
-    await scratch.db.execute("truncate preference");
+    await clearTables(scratch.db, ["preference"]);
   });
 
   const call = async (body: unknown, origin?: string | null) => {
