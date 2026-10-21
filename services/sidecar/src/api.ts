@@ -10,10 +10,20 @@ import {
   chatTurn,
   judgeTurn,
   modelListTurn,
+  providerKeyRemoveTurn,
+  providerKeySaveTurn,
+  providerKeyStatusTurn,
   providerKeyTestTurn,
   sessionQuestionTurn,
   summarizeTurn,
+  tutorModelAddTurn,
+  tutorModelChainTurn,
+  tutorModelMoveTurn,
+  tutorModelRemoveTurn,
+  tutorModelSetTurn,
   tutorModelTestTurn,
+  tutorProviderMoveTurn,
+  tutorProviderRemoveTurn,
   type TurnReply,
 } from "@self-learn/tutor/server/turns";
 
@@ -30,14 +40,24 @@ import { guard } from "./guard";
  *
  * The mapping keeps the web paths so the contract documents itself:
  *
- *   POST /api/agent/chat                    → chatTurn
- *   POST /api/agent/judge                   → judgeTurn
- *   POST /api/agent/session                 → sessionQuestionTurn
- *   POST /api/agent/summarize               → summarizeTurn
- *   POST /api/learner/provider-key/test     → providerKeyTestTurn
- *   POST /api/learner/tutor-model/test      → tutorModelTestTurn
- *   POST /api/learner/tutor-model/models    → modelListTurn
- *   GET  /api/health                        → { ok, service, owner }
+ *   POST   /api/agent/chat                     → chatTurn
+ *   POST   /api/agent/judge                    → judgeTurn
+ *   POST   /api/agent/session                  → sessionQuestionTurn
+ *   POST   /api/agent/summarize                → summarizeTurn
+ *   GET    /api/learner/provider-key           → providerKeyStatusTurn (the card's rows; the web reads them server-side)
+ *   POST   /api/learner/provider-key           → providerKeySaveTurn
+ *   DELETE /api/learner/provider-key           → providerKeyRemoveTurn
+ *   POST   /api/learner/provider-key/test      → providerKeyTestTurn
+ *   GET    /api/learner/tutor-model            → tutorModelChainTurn (the chain; the web reads it server-side)
+ *   POST   /api/learner/tutor-model            → tutorModelAddTurn
+ *   PUT    /api/learner/tutor-model            → tutorModelSetTurn
+ *   PATCH  /api/learner/tutor-model            → tutorModelMoveTurn
+ *   DELETE /api/learner/tutor-model            → tutorModelRemoveTurn
+ *   PATCH  /api/learner/tutor-model/provider   → tutorProviderMoveTurn
+ *   DELETE /api/learner/tutor-model/provider   → tutorProviderRemoveTurn
+ *   POST   /api/learner/tutor-model/test       → tutorModelTestTurn
+ *   POST   /api/learner/tutor-model/models     → modelListTurn
+ *   GET    /api/health                         → { ok, service, owner }
  */
 
 /** The largest body a turn accepts: the chat guard's 24k of text, padded for the envelope. */
@@ -47,15 +67,31 @@ const JSON_HEADERS = { "content-type": "application/json; charset=utf-8" };
 
 type Turn = (deps: TutorDeps, body: unknown) => Promise<TurnReply>;
 
-/** The routes, in one table so the surface is one list a reader can audit. */
-const TURNS: Record<string, Turn> = {
-  "/api/agent/chat": chatTurn as Turn,
-  "/api/agent/judge": judgeTurn,
-  "/api/agent/session": sessionQuestionTurn,
-  "/api/agent/summarize": summarizeTurn as Turn,
-  "/api/learner/provider-key/test": providerKeyTestTurn,
-  "/api/learner/tutor-model/test": tutorModelTestTurn,
-  "/api/learner/tutor-model/models": modelListTurn,
+/** The routes, in one table so the surface is one list a reader can audit: path, then method. */
+const TURNS: Record<string, Record<string, Turn>> = {
+  "/api/agent/chat": { POST: chatTurn as Turn },
+  "/api/agent/judge": { POST: judgeTurn },
+  "/api/agent/session": { POST: sessionQuestionTurn },
+  "/api/agent/summarize": { POST: summarizeTurn as Turn },
+  "/api/learner/provider-key": {
+    GET: providerKeyStatusTurn as Turn,
+    POST: providerKeySaveTurn,
+    DELETE: providerKeyRemoveTurn,
+  },
+  "/api/learner/provider-key/test": { POST: providerKeyTestTurn },
+  "/api/learner/tutor-model": {
+    GET: tutorModelChainTurn as Turn,
+    POST: tutorModelAddTurn,
+    PUT: tutorModelSetTurn,
+    PATCH: tutorModelMoveTurn,
+    DELETE: tutorModelRemoveTurn,
+  },
+  "/api/learner/tutor-model/provider": {
+    PATCH: tutorProviderMoveTurn,
+    DELETE: tutorProviderRemoveTurn,
+  },
+  "/api/learner/tutor-model/test": { POST: tutorModelTestTurn },
+  "/api/learner/tutor-model/models": { POST: modelListTurn },
 };
 
 /** Read the body, refusing over the cap. The first byte past it is the refusal. */
@@ -118,27 +154,31 @@ export function createApi(deps: TutorDeps): Server {
       return;
     }
 
-    if (request.method !== "POST") {
+    const methods = TURNS[path];
+    if (methods === undefined) {
+      write(response, { status: 404, body: { error: "No such endpoint", code: "NOT_FOUND" } });
+      return;
+    }
+    const method = request.method ?? "GET";
+    const turn = methods[method];
+    if (turn === undefined) {
       write(response, { status: 405, body: { error: "Method not allowed", code: "METHOD_NOT_ALLOWED" } });
       return;
     }
 
-    const turn = TURNS[path];
-    if (turn === undefined) {
-      write(response, { status: 404, body: { error: "No such endpoint", code: "NOT_FOUND" } });
-      return;
-    }
-
-    let body: unknown;
-    try {
-      body = await readBody(request);
-    } catch (error) {
-      if (error instanceof BodyTooLarge) {
-        write(response, { status: 413, body: { error: "Request body too large", code: "PAYLOAD_TOO_LARGE" } });
-      } else {
-        write(response, { status: 400, body: { error: "Invalid JSON body", code: "BAD_REQUEST" } });
+    // A GET carries no body; its turn takes the deps alone.
+    let body: unknown = null;
+    if (method !== "GET" && method !== "HEAD") {
+      try {
+        body = await readBody(request);
+      } catch (error) {
+        if (error instanceof BodyTooLarge) {
+          write(response, { status: 413, body: { error: "Request body too large", code: "PAYLOAD_TOO_LARGE" } });
+        } else {
+          write(response, { status: 400, body: { error: "Invalid JSON body", code: "BAD_REQUEST" } });
+        }
+        return;
       }
-      return;
     }
 
     write(response, await turn(deps, body));

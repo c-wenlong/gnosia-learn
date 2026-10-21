@@ -46,6 +46,7 @@ struct GnosiaApp: App {
             SettingsView()
                 .environment(store)
                 .environment(learner)
+                .environment(sidecar)
         }
     }
 }
