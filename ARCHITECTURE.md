@@ -1,8 +1,8 @@
 # Architecture
 
-Gnosia (the repository is still named self-learn — the rename is mid-flight,
-with `@self-learn/*` package names and a `SELF_LEARN_HOME` fallback alongside
-the `GNOSIA_*` spellings) is a learning environment sharing one catalog. A
+Gnosia (renamed from self-learn — `SELF_LEARN_HOME` remains readable as a
+fallback next to `GNOSIA_HOME` where a stale environment may still set it) is
+a learning environment sharing one catalog. A
 Next.js app renders course roadmaps and progress; a CLI runs a Probe → Plan →
 Teach → Close tutoring loop over concept notes, which are rows in the catalog;
 a native macOS app reads the same catalog through a SQLite snapshot and keeps
@@ -74,7 +74,7 @@ another repo.
 
 | Directory | What lives there | npm workspace |
 | --- | --- | --- |
-| `apps/web/` | The Next.js app, its `public/`, `next.config.ts`, `vercel.json` | `@self-learn/web` |
+| `apps/web/` | The Next.js app, its `public/`, `next.config.ts`, `vercel.json` | `@gnosia/web` |
 | `apps/macos/` | The SwiftUI app: a SwiftPM package under `Sources/Gnosia/`, the snapshot script, the `.app` bundler | `@gnosia/macos` (an npm shell for the snapshot script's two dependencies; the app itself is SwiftPM) |
 | `packages/content/`, `packages/schema/`, `packages/blob/`, `packages/tutor/` | The content reader, the table shapes, the blob store and the tutor core | yes |
 | `services/catalog/` | The connection, the migrations, the indexers, the `catalog` and `learn` CLIs | yes |
@@ -95,7 +95,7 @@ another repo.
 | `apps/web/src/proxy.ts` | The front door: the owner-cookie check that runs before every route the matcher lets through, including every `/api/` path |
 | `apps/web/src/components/` | Every React component: the shell (`AppShell` and `shell/`), the redesign's primitives (`ui/`), and one folder per surface (`home`, `courses`/`course-home`, `learn`/`workspace`, `library`, `session`, `review`, `ask`, `settings`, `studio`) |
 | `apps/web/src/lib/` | `learner-context.tsx` (the provider), `learner-store.ts` (the pool and the reads), `learner-api.ts` (`handler`, the shared route guard), `asset-files.ts` (an asset row to its bytes: the blob store, or the row for a note, a log or a `.tldr`, and a stored poster; nothing off the disk), `blob-store.ts` (the store the routes read), `asset-library.ts` (the library's reads of the content half), `library.ts` (what the library shows and how it links), `transcript.ts` (a sidecar to cues, defensively), `storage.ts` (the pure reducers), the surfaces' read models (`home`, `recent`, `ask`, `review-*`, `learn-index`, `domain-map`, `course-path`, `module-path`, `week-check`), the studio client and corpus reads (`studio*.ts`, `conversation-*.ts`), the settings seams (`settings.ts`, `provider-keys/`, `tutor-models/`, `custom-providers/`, `providers/`, `byok-*.ts`), `progress.ts`, `curriculum.ts`, `types.ts`, `theme-cookie.ts` |
-| `apps/web/src/lib/agent/` | The request side of the tutor. Most files are `export * from "@self-learn/tutor/…"` shims keeping the `@/lib/agent/*` paths working — the prompts, the providers cascade, the judge and session-question parsing moved to `packages/tutor` so the sidecar imports the same code. The web-only glue stays here: `guard.ts` (same-origin, rate limit), `courses.ts` (the route's course list), `credentials.ts` (BYOK against the app's pool), `env.ts` (`tutorDeps`, the `TutorDeps` builder) |
+| `apps/web/src/lib/agent/` | The request side of the tutor. Most files are `export * from "@gnosia/tutor/…"` shims keeping the `@/lib/agent/*` paths working — the prompts, the providers cascade, the judge and session-question parsing moved to `packages/tutor` so the sidecar imports the same code. The web-only glue stays here: `guard.ts` (same-origin, rate limit), `courses.ts` (the route's course list), `credentials.ts` (BYOK against the app's pool), `env.ts` (`tutorDeps`, the `TutorDeps` builder) |
 | `apps/web/src/lib/kb/` | `load.ts` and `types.ts`: the concept graph as the hub reads it, straight from the catalog |
 | `apps/web/src/lib/auth/` | `core.ts` (the session cookie, `OWNER_PASSWORD`/`AUTH_SECRET` config) and `session.ts` (the server read) |
 | `apps/web/src/data/source.ts` | The content seam's composition root: `contentSource()`, one selected source per request, from the database only; a type not flipped is refused by name |
@@ -165,7 +165,7 @@ the seam and state through the store, never the database directly.
 | --- | --- |
 | `packages/content/` | `loadCourses`, `loadTopics`, `loadTags`, and the content types; `ContentSource`, the async interface every reader holds, with `fileSource(root)` over those parsers and `selectSource` choosing files or the database per type. Reads files, connects to nothing: the database implementation, `dbSource`, is the catalog's. |
 | `packages/schema/` | The Drizzle table definitions and the row types inferred from them. Connects to nothing. |
-| `packages/blob/` | `BlobStore`, `key()` and `fsStore()`: bytes under the data root's `blobs/`, outside the repo — still resolved as `$SELF_LEARN_HOME` there, the rename's seam showing. Imports nothing but Node. `catalog asset upload` writes it; the web's asset routes, the catalog commands and the sidecar all read through it. |
+| `packages/blob/` | `BlobStore`, `key()` and `fsStore()`: bytes under `$GNOSIA_HOME/blobs`, outside the repo. Imports nothing but Node. `catalog asset upload` writes it; the web's asset routes, the catalog commands and the sidecar all read through it. |
 | `services/catalog/` | `db.ts` (the pool), `migrations.ts`, `drizzle/` (generated SQL), `cli.ts`, `src/state/` (the learner store) and `src/learn/` (the `learn` CLI) |
 | `packages/tutor/` | Everything the tutor endpoints share, grown out of `apps/web/src/lib/` so the sidecar imports the same code: `src/` is the pure half (`providers.ts` with the provider configs, `keyFor`, `completeWithFallback`; `prompt.ts` and the per-shape builders; `session-core`, `judge`, `review-core`, `concept-graph`, the markdown and media helpers), `src/server/` is the half that touches things — `deps.ts` (`TutorDeps`/`TurnSeams`), `turns.ts` (the `*Turn` functions: four agent turns, then provider-key save/remove/status/test, the model-chain add/set/remove/move/provider moves/chain/test and `modelList`), `credentials.ts`, `provider-keys.ts`, `tutor-models.ts`, `model-list.ts`, `asset-detail.ts` and friends. The pure half imports no I/O; the server half takes the database as a promise so a dead pool degrades per read |
 | `services/sidecar/` | `src/index.ts` (the process: bind, `listening <port>`, signal close), `src/api.ts` (path → `*Turn` table, JSON in/out), `src/guard.ts` (loopback host/origin checks), `src/deps.ts` (`TutorDeps` over the catalog pool and blob store), `src/config.ts` (`HOST`, `GNOSIA_SIDECAR_PORT`) |
@@ -427,7 +427,7 @@ through `reviewQueue` in the same module, which also returns the interval each
 button would give, computed by the scheduler a grade runs.
 
 Recaps are clamped by `KNOWLEDGE_LIMITS`, twice and from one definition in
-`@self-learn/schema/shared`: as CHECK constraints, so nothing can put an
+`@gnosia/schema/shared`: as CHECK constraints, so nothing can put an
 unbounded summary in the column whatever wrote it, and in application code, so
 a long recap is trimmed and saved rather than refused with a 23514 the learner
 reads as "save failed".
@@ -449,7 +449,7 @@ a note should not watch them vanish, and the text is still there to copy.
 reads while composing the document, because it has to be known before the first
 byte or a dark-mode reload flashes white; the `preference` row is the durable
 copy and the fallback when the cookie is missing. And on first mount the
-provider checks for the old `self-learn:v1` localStorage key, posts it to
+provider checks for the old `gnosia:v1` localStorage key, posts it to
 `/api/learner/import`, and removes it on success. The merge rules are in the
 store rather than the route: the database wins, and a curriculum item id the
 catalog no longer has is skipped and counted rather than costing the learner
@@ -778,7 +778,7 @@ One direction for content, one door for state.
                                                         event · mastery · review
                                                         progress · recap · preference
                                                                       ▲
-   apps/web/src/app  ──► apps/web/src/lib/learner-store.ts ──► @self-learn/catalog/state ┘
+   apps/web/src/app  ──► apps/web/src/lib/learner-store.ts ──► @gnosia/catalog/state ┘
        │              (the pool, the degradation)
        └──► /api/learner/* ──► apps/web/src/lib/learner-api.ts ──► the same store
 
@@ -855,7 +855,7 @@ workspace, so `npm test` from the repo root is the whole suite.
 | `services/catalog/test/learn-cli.test.ts` | The CLI end to end, with the five `--json` shapes pinned |
 | `services/catalog/test/backfill.test.ts` | The backfill's assertion, its idempotency, and the synthesis it does and does not do |
 | `services/catalog/test/after-cutover.test.ts` | The repository after the cut-over: a database owning every type, no `LEARN_ROOT`, a learn session, `concept add --item`, a topic write and a bare import, none of which recreates `content/` or `learn/` |
-| `services/catalog/test/nightly-export.test.ts` | `scripts/nightly-export.mjs`: an export into a dated folder, the `latest` link, pruning to `--keep`, and its refusals (a relative `SELF_LEARN_HOME`, an archive inside the checkout) |
+| `services/catalog/test/nightly-export.test.ts` | `scripts/nightly-export.mjs`: an export into a dated folder, the `latest` link, pruning to `--keep`, and its refusals (a relative `GNOSIA_HOME`, an archive inside the checkout) |
 | `services/catalog/test/*.test.ts` | The schema's constraints, the indexers, the writer, the read commands |
 | `scripts/learn/lib/*.test.mjs` | BKT, the concept DAG, SM-2 conformance, frontmatter round-trips |
 
@@ -895,7 +895,7 @@ tables are the truth, written only through the write seam with an author and a
 reason, and `catalog history` shows every revision. `catalog export --out
 <dir>` writes them out as files, and the nightly export
 (`npm run export:nightly`) keeps a dated copy under
-`$SELF_LEARN_HOME/archive/`; importing one into an empty database restores it.
+`$GNOSIA_HOME/archive/`; importing one into an empty database restores it.
 The rows an indexer still owns are the ones read from outside, manimkc's,
 remotionkc's, revideokc's and blenderkc's renders and the mirror ledger, and there the indexer may delete: a row the
 source no longer produces is a stale row, and the whole point of the catalog is
@@ -903,7 +903,7 @@ that a rendered video cannot outlive its source without anything saying so.
 
 **Bytes live in the blob store, never in a row.** An `asset` row holds a key, a
 size and a hash; a 13 MB video and a 450 kB SVG are objects under
-`$SELF_LEARN_HOME/blobs`, and a note's words are its `concept.body`. What the
+`$GNOSIA_HOME/blobs`, and a note's words are its `concept.body`. What the
 catalog adds is the joins those files cannot carry: which topic an asset is
 about, which `.tldr` an SVG came out of, and, through `mirror`, whether the copy on Google Drive or Seafile is the same
 file as the one here. A `.tldr` says which topic it is about in its own
@@ -988,13 +988,11 @@ anywhere; `--manimkc-root`, `--remotionkc-root`, `--revideokc-root` and
 `--blenderkc-root` are typed at a prompt and still resolve against the cwd.
 All six are in
 [services/catalog/.env.example](services/catalog/.env.example). The data
-root is a second family of variables, still half-renamed: the snapshot
-script and the app read `GNOSIA_HOME` then `SELF_LEARN_HOME` then
-`~/.gnosia`, while the blob store's resolver still reads `SELF_LEARN_HOME`
-alone with `~/.self-learn` the default — the owner's machine papers over
-the difference with a `~/.self-learn` → `~/.gnosia` symlink, and
-`GNOSIA_CATALOG`, `GNOSIA_BLOBS` and `GNOSIA_REPO` (the repo path the app
-spawns the sidecar from) name the pieces directly.
+root is a second family of variables: the snapshot script, the app and the
+blob store's resolver all read `GNOSIA_HOME` then default to `~/.gnosia`,
+with `SELF_LEARN_HOME` still readable in the app as a fallback for stale
+environments. `GNOSIA_CATALOG`, `GNOSIA_BLOBS` and `GNOSIA_REPO` (the repo
+path the app spawns the sidecar from) name the pieces directly.
 
 ### How agents read it
 
@@ -1007,7 +1005,7 @@ with the command made for it (`learn concept show`, `catalog course export`).
 ## Layering rules
 
 1. **`apps/web/` imports the pipeline's *store*, and nothing else of it.** The web
-   app reaches learner state through `@self-learn/catalog/state`, the single
+   app reaches learner state through `@gnosia/catalog/state`, the single
    export that workspace publishes. It does not import the `learn` CLI, the
    indexers or the migrations, and it never imports from `scripts/`. Before
    bundle 5 the two halves met at one JSON file; they now meet at one module,
@@ -1056,7 +1054,7 @@ with the command made for it (`learn concept show`, `catalog course export`).
    learner-state types safe in a `"use client"` module without dragging a
    Postgres driver into the browser bundle.
 10. **The schema is the source of the SQL, never the other way round.** Change
-    `packages/schema/src/`, then `npm run generate -w @self-learn/catalog`. A
+    `packages/schema/src/`, then `npm run generate -w @gnosia/catalog`. A
     migration that has been applied is never edited: drizzle keys them by file
     hash.
 11. **The web app never writes the *content* half.** It reads the content

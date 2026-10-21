@@ -1,4 +1,4 @@
-import { JOB_STATES, type JobKind, type JobState } from "@self-learn/schema/shared";
+import { JOB_STATES, type JobKind, type JobState } from "@gnosia/schema/shared";
 
 /**
  * What a job's state is called, and what a card says about it.

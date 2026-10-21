@@ -76,7 +76,7 @@ function farm(from: string, into: string, rebuilt: readonly string[] = []): void
 }
 
 function studioRepoRoot(): string {
-  const root = mkdtempSync(path.join(realpathSync(tmpdir()), "self-learn-studio-"));
+  const root = mkdtempSync(path.join(realpathSync(tmpdir()), "gnosia-studio-"));
   // `.studio` is rebuilt as nothing at all: it is the runner's real state
   // (job workspaces, the content cache), and a suite that does not set
   // STUDIO_HOME would otherwise write through the link into it. `learn` and
@@ -127,15 +127,20 @@ if (studio.REPO_ROOT !== root) {
 
 // The blob store's root. Importing the repository now stores its diagram
 // SVGs, and without this every suite that indexes the tree would write them
-// into the owner's real `~/.self-learn/blobs`. Its own temp directory, not one
+// into the owner's real `~/.gnosia/blobs`. Its own temp directory, not one
 // inside the farm above: the fs store refuses a root under anything that looks
-// like a self-learn checkout, and the farm links the checkout's package.json.
+// like a gnosia checkout, and the farm links the checkout's package.json.
 // A suite that wants its own root still sets one.
 let blobHome: string | null = null;
-if (!process.env.SELF_LEARN_HOME?.trim()) {
-  blobHome = mkdtempSync(path.join(temp, "self-learn-home-"));
-  process.env.SELF_LEARN_HOME = blobHome;
+if (!process.env.GNOSIA_HOME?.trim()) {
+  blobHome = mkdtempSync(path.join(temp, "gnosia-home-"));
+  process.env.GNOSIA_HOME = blobHome;
 }
+
+// Concurrency tests hold a write lock while a contender waits: Postgres's
+// lock queue waited for ever, and this is the whole queue SQLite has. The CLI
+// keeps the 5 s default; the suites give a holder room for its own asserts.
+process.env.CATALOG_DB_TIMEOUT_MS ??= "30000";
 
 // The remotionkc checkout, pointed at a directory that does not exist. A bare
 // `catalog import` runs every video tool whose CLI it finds, and the ones the
@@ -146,12 +151,12 @@ if (!process.env.SELF_LEARN_HOME?.trim()) {
 // once for remotionkc, unconditionally, since a value from the developer's
 // shell is exactly the real checkout. A suite that wants a stand-in sets its
 // own, and a child it spawns inherits whichever is set.
-process.env.REMOTIONKC_ROOT = path.join(temp, "self-learn-test-no-remotionkc");
+process.env.REMOTIONKC_ROOT = path.join(temp, "gnosia-test-no-remotionkc");
 // revideokc, the third video tool, for the same reason and the same way.
-process.env.REVIDEOKC_ROOT = path.join(temp, "self-learn-test-no-revideokc");
+process.env.REVIDEOKC_ROOT = path.join(temp, "gnosia-test-no-revideokc");
 // blenderkc, the fourth, for the same reason and the same way: its topic.yml
 // files name gpu-architecture, which the seed does not hold.
-process.env.BLENDERKC_ROOT = path.join(temp, "self-learn-test-no-blenderkc");
+process.env.BLENDERKC_ROOT = path.join(temp, "gnosia-test-no-blenderkc");
 
 // ffmpeg, as a stand-in. `catalog import` cuts a poster and makes a PDF for
 // every rendered video it stores (2026-10-05 and 2026-10-20) and fails when
@@ -165,7 +170,7 @@ process.env.BLENDERKC_ROOT = path.join(temp, "self-learn-test-no-blenderkc");
 // suite that wants the real binary passes its path explicitly
 // (test/poster-import.test.ts does, with a real mp4), and one that wants
 // none sets FFMPEG_PATH itself.
-const ffmpegHome = mkdtempSync(path.join(temp, "self-learn-ffmpeg-"));
+const ffmpegHome = mkdtempSync(path.join(temp, "gnosia-ffmpeg-"));
 const ffmpegStandIn = path.join(ffmpegHome, "ffmpeg");
 writeFileSync(
   ffmpegStandIn,

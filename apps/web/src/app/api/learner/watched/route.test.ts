@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  clearTables,
   migratedScratchDatabase,
   probe,
   type Scratch,
@@ -43,14 +44,14 @@ function request(body: unknown, origin: string | null = ORIGIN): Request {
 describe.skipIf(!reachable.ok)("POST /api/learner/watched", () => {
   let scratch: Scratch;
   let POST: (req: Request) => Promise<Response>;
-  let readEvents: typeof import("@self-learn/catalog/state").readEvents;
+  let readEvents: typeof import("@gnosia/catalog/state").readEvents;
 
   beforeAll(async () => {
     scratch = await migratedScratchDatabase();
     await seedContent(scratch.db);
     await seedAssets(scratch.db);
     process.env.DATABASE_URL = scratch.url;
-    const [route, state] = await Promise.all([import("./route"), import("@self-learn/catalog/state")]);
+    const [route, state] = await Promise.all([import("./route"), import("@gnosia/catalog/state")]);
     POST = route.POST;
     readEvents = state.readEvents;
   }, 60_000);
@@ -60,13 +61,7 @@ describe.skipIf(!reachable.ok)("POST /api/learner/watched", () => {
   });
 
   beforeEach(async () => {
-    await scratch.db.execute(
-      "alter table event disable trigger event_no_update; " +
-        "alter table event disable trigger event_no_delete; " +
-        "truncate event; " +
-        "alter table event enable trigger event_no_update; " +
-        "alter table event enable trigger event_no_delete;",
-    );
+    await clearTables(scratch.db, ["event"]);
   });
 
   const call = async (body: unknown, origin?: string | null) => {

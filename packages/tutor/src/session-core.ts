@@ -1,4 +1,4 @@
-import type { ConceptSummary } from "@self-learn/catalog/state";
+import type { ConceptSummary } from "@gnosia/catalog/state";
 
 import type { ConceptCheck } from "./concept-note-core";
 import type { ConceptWorkspace } from "./concept-workspace-core";

@@ -13,7 +13,7 @@ import {
   type RecentDraft,
   type RecentSession,
   type KbConcept,
-} from "@self-learn/catalog/state";
+} from "@gnosia/catalog/state";
 
 import { getCourses } from "@/data/courses";
 import { getTopics } from "@/data/topics";

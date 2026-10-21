@@ -57,7 +57,7 @@ describe("the (app) layout's motion seed", () => {
     expect(html).not.toContain("<script");
     expect(html).toContain('data-seed="system"');
 
-    env.cookies.set("self-learn-motion", "always");
+    env.cookies.set("gnosia-motion", "always");
     html = await render();
     expect(env.asked).toBe(1);
     expect(html).not.toContain("<script");

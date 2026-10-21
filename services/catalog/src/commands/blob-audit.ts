@@ -9,11 +9,11 @@ import { databaseUrl, redactUrl } from "../env";
  * and what `--fix` does about each are in `../content/blob-audit.ts`. Exits 1
  * while a disagreement is left standing.
  *
- * The store is the one `SELF_LEARN_HOME` names, the same one the web app
+ * The store is the one `GNOSIA_HOME` names, the same one the web app
  * serves and every upload writes. Also exits 1 while a per-owner cap cannot
  * be read, since every new upload is refused until it can. There is no flag
  * for another root: a
- * scratch audit sets `SELF_LEARN_HOME` for the whole run, so the rows it
+ * scratch audit sets `GNOSIA_HOME` for the whole run, so the rows it
  * reads and the store it compares them with cannot come from two places.
  */
 

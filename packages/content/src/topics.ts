@@ -30,7 +30,7 @@ export const TOPICS_FILE = "content/topics.yaml";
 
 /**
  * The relation kinds, as `topic_relation.kind`'s CHECK has them
- * (`TOPIC_RELATION_KINDS` in `@self-learn/schema`, which this package does not
+ * (`TOPIC_RELATION_KINDS` in `@gnosia/schema`, which this package does not
  * depend on). A test holds the two lists equal.
  */
 export const TOPIC_RELATION_KINDS: readonly TopicRelationKind[] = ["broader", "related", "precedes"];

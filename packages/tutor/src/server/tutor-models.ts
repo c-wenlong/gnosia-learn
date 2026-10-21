@@ -7,8 +7,8 @@ import {
   removeTutorModel,
   setTutorModel,
   type CatalogDatabase,
-} from "@self-learn/catalog/state";
-import { groupByProvider } from "@self-learn/schema/shared";
+} from "@gnosia/catalog/state";
+import { groupByProvider } from "@gnosia/schema/shared";
 
 import type { ChainEntry } from "../providers";
 

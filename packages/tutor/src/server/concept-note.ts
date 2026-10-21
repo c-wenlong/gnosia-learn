@@ -1,4 +1,4 @@
-import type { ContentSource } from "@self-learn/content";
+import type { ContentSource } from "@gnosia/content";
 
 import { parseConceptNote, type ConceptCheck, type ConceptFrontmatter } from "../concept-note-core";
 import { ContentUnavailableError } from "./content-source";

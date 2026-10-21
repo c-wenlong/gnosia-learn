@@ -359,7 +359,7 @@ serves `STUDIO_OWNER`, `local` unless set, and passes it as `--owner` to every
 lists, shows, checks out and writes only what that owner may (their diagrams
 and topics and the commons'), files a topic the planner proposed as theirs,
 and enqueues, claims and finishes only that owner's jobs. The app's server names
-the signed-in owner in `x-self-learn-owner` on every call, the proxy dropping
+the signed-in owner in `x-gnosia-owner` on every call, the proxy dropping
 any value a page sent first, and the runner answers 403 to a request naming
 anyone else. It refuses rather than scopes because nothing the runner holds is
 per owner: one queue, one checkout directory, one cached list, one agent

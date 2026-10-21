@@ -4,7 +4,7 @@
  *
  * This file deliberately pulls in nothing — not drizzle, not node. That is
  * what makes it importable from a `"use client"` component in `src/` through
- * the `@self-learn/schema/shared` subpath without dragging a Postgres driver
+ * the `@gnosia/schema/shared` subpath without dragging a Postgres driver
  * into the browser bundle (layering rule 8 in ARCHITECTURE.md), while
  * `state.ts` re-exports the same values for the service and the migrations.
  *
@@ -104,7 +104,7 @@ export function ownerScope(owner: string): OwnerScope {
  * own. The runner serves the one owner it was started for (`STUDIO_OWNER`)
  * and refuses a request naming another.
  */
-export const STUDIO_OWNER_HEADER = "x-self-learn-owner";
+export const STUDIO_OWNER_HEADER = "x-gnosia-owner";
 
 /**
  * Event types in the log. The `learn` CLI writes the first five; the web app
@@ -551,6 +551,11 @@ export type ThemeAppearance = (typeof THEME_APPEARANCES)[number];
 
 /** The mode a stored or posted value names, or null for anything else. */
 export function asThemeMode(value: unknown): ThemeMode | null {
+  // The palette predates the rename: cookies and preference rows written
+  // before it still say `self-learn*`, which are the gnosia modes renamed.
+  if (typeof value === "string" && value.startsWith("self-learn")) {
+    value = `gnosia${value.slice("self-learn".length)}`;
+  }
   return typeof value === "string" && (THEME_MODES as readonly string[]).includes(value) ? (value as ThemeMode) : null;
 }
 

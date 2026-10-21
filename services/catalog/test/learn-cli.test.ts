@@ -8,7 +8,7 @@ import { promisify } from "node:util";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { readReviews, upsertReview } from "../src/state";
-import { markImported, migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
+import { clearTables, markImported, migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { seedContent, TOPIC_SLUG } from "./state-fixture";
 
 /**
@@ -19,7 +19,7 @@ import { seedContent, TOPIC_SLUG } from "./state-fixture";
  * temp directory to get a temp `learn/` for free — a trick that stops working
  * when the state is a database rather than files beside the code. The CLI takes
  * `LEARN_ROOT` for the files and `DATABASE_URL` for the rest, so a run here can
- * touch neither the real `learn/` nor the real `self_learn`.
+ * touch neither the real `learn/` nor the real `gnosia`.
  *
  * **The `--json` shapes are a contract.** The `/learn` and `/review` skills
  * live in a plugin outside this repo and parse them, and `learn/README.md`
@@ -85,13 +85,7 @@ describe.skipIf(!reachable.ok)("learn CLI", () => {
   });
 
   beforeEach(async () => {
-    await scratch.db.execute(
-      "alter table event disable trigger event_no_update; " +
-        "alter table event disable trigger event_no_delete; " +
-        "truncate event, mastery, review, progress, recap, preference; " +
-        "alter table event enable trigger event_no_update; " +
-        "alter table event enable trigger event_no_delete;",
-    );
+    await clearTables(scratch.db, ["event", "mastery", "review", "progress", "recap", "preference"]);
   });
 
   describe("the pinned --json shapes", () => {
@@ -222,7 +216,7 @@ describe.skipIf(!reachable.ok)("learn CLI", () => {
 
       // The observations are retained for audit, alongside the void marker.
       const { rows } = await scratch.db.execute<{ type: string; n: number }>(
-        "select type, count(*)::int as n from event group by type order by type",
+        "select type, count(*) as n from event group by type order by type",
       );
       expect(rows).toEqual([
         { type: "observation", n: 3 },
@@ -328,8 +322,8 @@ describe.skipIf(!reachable.ok)("learn CLI", () => {
   describe("diagram", () => {
     // `learn diagram` is `catalog diagram` under the plugin's name, attributed
     // to the agent that runs it. The checkouts go under a temp STUDIO_HOME and
-    // the blobs under the temp SELF_LEARN_HOME vitest.setup.ts points at, so
-    // neither the real studio's work directory nor ~/.self-learn is touched.
+    // the blobs under the temp GNOSIA_HOME vitest.setup.ts points at, so
+    // neither the real studio's work directory nor ~/.gnosia is touched.
     let studioHome: string;
 
     beforeAll(async () => {
@@ -517,10 +511,8 @@ describe.skipIf(!reachable.ok)("learn CLI", () => {
     });
   });
 
-  /** A port nothing is listening on, for the "database is down" paths. */
+  /** A file used as a directory: opening it fails, for the "database is down" paths. */
   function unreachableUrl(): string {
-    const url = new URL(scratch.url);
-    url.port = "59999";
-    return url.toString();
+    return `${scratch.url}/child.db`;
   }
 });

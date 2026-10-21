@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { AssetRef } from "@self-learn/catalog/state";
+import type { AssetRef } from "@gnosia/catalog/state";
 
 import type { VideoChapter } from "@/components/media";
 import { readAssetText, readFileProblems, withCatalog } from "@/lib/asset-library";

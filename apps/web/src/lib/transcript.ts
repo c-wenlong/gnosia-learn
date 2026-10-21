@@ -1,4 +1,4 @@
 /**
- * Sidecar transcript parsing. The implementation lives in `@self-learn/tutor/transcript`; this file only keeps the `@/lib/transcript` path working.
+ * Sidecar transcript parsing. The implementation lives in `@gnosia/tutor/transcript`; this file only keeps the `@/lib/transcript` path working.
  */
-export * from "@self-learn/tutor/transcript";
+export * from "@gnosia/tutor/transcript";

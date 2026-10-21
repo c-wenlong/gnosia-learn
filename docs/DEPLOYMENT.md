@@ -9,8 +9,8 @@ pull request gets no preview and a merge to `main` changes nothing that is
 live. Every PR and every merge used to build a deployment, and on the free
 plan's 100 deployments a day the busy days ran out (2026-10-04).
 
-- **Production alias:** https://self-learn-one.vercel.app
-- **Project:** `kaichen/self-learn`, linked to `https://github.com/c-wenlong/self-learn`
+- **Production alias:** https://gnosia-one.vercel.app
+- **Project:** `kaichen/gnosia`, linked to `https://github.com/c-wenlong/gnosia`
 - **Root Directory:** `apps/web`, with **Include source files outside of the
   Root Directory in the Build Step** on
 
@@ -77,7 +77,7 @@ works and builds nothing.
 To see what is live and what produced it:
 
 ```bash
-vercel ls self-learn --prod            # recent production deployments
+vercel ls gnosia --prod            # recent production deployments
 vercel inspect <deployment-url>        # target, aliases, build output
 ```
 
@@ -195,7 +195,7 @@ Badges & Graphs.
 ## The database
 
 `DATABASE_URL` points at the Postgres holding the catalog. It defaults to
-`postgres://localhost:5432/self_learn`, which is the Homebrew install a laptop
+`postgres://localhost:5432/gnosia`, which is the Homebrew install a laptop
 uses and needs no configuration; CI sets it to its `postgres:17` service.
 
 **Production has no database yet.** That is a deliberate state and not a
@@ -240,8 +240,8 @@ When the cloud database arrives (Neon or Supabase from Vercel, or Postgres on
 the homeserver over Tailscale — the plan has not chosen):
 
 ```bash
-pg_dump self_learn > self_learn.sql          # the local database, both halves
-psql "$CLOUD_URL" < self_learn.sql
+pg_dump gnosia > gnosia.sql          # the local database, both halves
+psql "$CLOUD_URL" < gnosia.sql
 vercel env add DATABASE_URL production       # then redeploy
 npm run catalog -- migrate                   # against the cloud URL
 ```
@@ -276,17 +276,17 @@ Videos, their posters and sidecars, diagram SVGs and course cover photos have
 moved out of the repository and the manimkc data root into a content-addressed
 blob store
 (docs/CONTENT-MIGRATION.md 0.4, D5). Until go-live it is local only: the `fs`
-adapter in `packages/blob`, keeping objects under `$SELF_LEARN_HOME/blobs`, or
-`~/.self-learn/blobs` when the variable is unset.
+adapter in `packages/blob`, keeping objects under `$GNOSIA_HOME/blobs`, or
+`~/.gnosia/blobs` when the variable is unset.
 
-- **Set `SELF_LEARN_HOME` in `services/catalog/.env`**, if at all, not in
+- **Set `GNOSIA_HOME` in `services/catalog/.env`**, if at all, not in
   `apps/web/.env.local`. Both the catalog CLI (which uploads) and the web app
   (which serves) resolve the root through `blobRoot()` in
   `services/catalog/src/env.ts`, which reads that file the way `DATABASE_URL`
   is read, so one setting reaches both. A value only the app can see would
   have it serve from one store while the CLI uploads to another.
 - **Absolute, or starting with `~/`.** A relative value is refused rather than
-  resolved against wherever a command runs, and a root inside a self-learn
+  resolved against wherever a command runs, and a root inside a gnosia
   checkout is refused outright, since a git operation can delete it. Moving the
   manimkc submodule once deleted 25 rendered videos that way.
 - **Vercel reads no blob store today.** The `fs` store is on the laptop and a
@@ -315,10 +315,7 @@ npm run catalog -- course cover cs2111 --clear --reason "why"
 The image must be a WebP, JPEG or PNG by its first bytes and at most 2 MiB (a
 card shows it at 960x540). It is stored first (`pending` row, put, `head`,
 `present`), then the course row is pointed at its key and given the credit in
-one revision. The same image and credit again changes nothing. The ten photos
-that were `apps/web/public/course-covers/` moved with
-`node scripts/move-course-covers.mjs --from <dir of the ten .webp files>
-[--dry-run]`, whose credits are `scripts/course-covers.json`.
+one revision. The same image and credit again changes nothing.
 
 ### Filling it
 
@@ -344,7 +341,7 @@ database: 36 videos, 87 sidecars and 36 posters, 433.6 MB, in about ten
 seconds. A rerun skips everything already `present` without reading a file,
 so an interrupted run is finished by running it again. With no ffmpeg on the
 machine the posters are skipped and the output says so; `FFMPEG_PATH` points
-at one elsewhere. A scratch run sets `SELF_LEARN_HOME` to a temporary folder
+at one elsewhere. A scratch run sets `GNOSIA_HOME` to a temporary folder
 for the whole run; there is no flag for another root, because the web app
 reads its root from that variable alone and a flag would write rows pointing
 at bytes it never serves.
@@ -352,7 +349,7 @@ at bytes it never serves.
 Each root names the database that writes it, in `<root>/.owner`, written by
 the first upload or the first `catalog blob audit --fix`. `--fix` deletes
 objects no row names, so it refuses a root whose marker names another
-database: a `createdb -T` copy sharing `~/.self-learn/blobs` would otherwise
+database: a `createdb -T` copy sharing `~/.gnosia/blobs` would otherwise
 delete the primary's objects as orphans. An upload refuses such a root too,
 since the owner's `--fix` would delete what it wrote. `--fix` also sweeps `.tmp/*.part`
 files a crashed upload left, once they are a day old.
@@ -403,10 +400,10 @@ prefix) and the per-owner caps in force.
 ### Per-owner caps
 
 Two variables set them, both unset by default, which is no cap:
-`SELF_LEARN_OWNER_BYTES_CAP` (bytes one owner may store) and
-`SELF_LEARN_OWNER_UPLOADS_PER_DAY` (new objects one owner may upload in a
+`GNOSIA_OWNER_BYTES_CAP` (bytes one owner may store) and
+`GNOSIA_OWNER_UPLOADS_PER_DAY` (new objects one owner may upload in a
 rolling 24 hours, measured on the database's clock). Set them in
-`services/catalog/.env` beside `SELF_LEARN_HOME`, since the catalog CLI is
+`services/catalog/.env` beside `GNOSIA_HOME`, since the catalog CLI is
 what uploads.
 
 - **What is measured.** Only a new object: one whose key has no
@@ -454,15 +451,15 @@ npm run export:nightly                     # node scripts/nightly-export.mjs
 node scripts/nightly-export.mjs --keep 60 --json
 ```
 
-It runs `catalog export --out` into `$SELF_LEARN_HOME/archive/<UTC time>/`
-(`~/.self-learn/archive/` when the variable is unset), a whole tree in the
+It runs `catalog export --out` into `$GNOSIA_HOME/archive/<UTC time>/`
+(`~/.gnosia/archive/` when the variable is unset), a whole tree in the
 export layout that `catalog import <dir>` reads back and anyone can read
 without a database. It writes into a hidden `.<UTC time>.partial` first and
 renames it into place only when the export finished, so every dated folder is
 a whole export. It then points `archive/latest` at the new one by renaming a
 fresh link over the old, so the link is never missing, deletes all but the
 newest 30 exports (`--keep N`), and removes a failed run's partial once it is
-more than a day old. It refuses an archive inside the self-learn checkout, for
+more than a day old. It refuses an archive inside the gnosia checkout, for
 the reason the blob store does: a `git clean` or a relayout can delete it. It
 records nothing on the database, since an export records its hash only into a
 tree a type was imported from. Exit 0 is exported, 1 is an export or a prune
@@ -473,7 +470,7 @@ It is a copy of the content only. The learner state (`event`, `mastery`,
 so it does not replace the `pg_dump` under [The database](#the-database).
 
 **Scheduling it on the laptop** is a launchd agent. Save this as
-`~/Library/LaunchAgents/com.self-learn.nightly-export.plist`, with every
+`~/Library/LaunchAgents/com.gnosia.nightly-export.plist`, with every
 path made absolute for your machine (launchd expands neither `~` nor
 `$HOME`), `which node` for the first argument, and your own connection
 string in place of the placeholder:
@@ -484,14 +481,14 @@ string in place of the placeholder:
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.self-learn.nightly-export</string>
+  <string>com.gnosia.nightly-export</string>
   <key>ProgramArguments</key>
   <array>
     <string>/opt/homebrew/bin/node</string>
-    <string>/Users/YOU/path/to/self-learn/scripts/nightly-export.mjs</string>
+    <string>/Users/YOU/path/to/gnosia/scripts/nightly-export.mjs</string>
   </array>
   <key>WorkingDirectory</key>
-  <string>/Users/YOU/path/to/self-learn</string>
+  <string>/Users/YOU/path/to/gnosia</string>
   <key>StartCalendarInterval</key>
   <dict>
     <key>Hour</key>
@@ -502,23 +499,23 @@ string in place of the placeholder:
   <key>EnvironmentVariables</key>
   <dict>
     <key>DATABASE_URL</key>
-    <string>postgres://USER@localhost:5432/self_learn</string>
-    <key>SELF_LEARN_HOME</key>
-    <string>/Users/YOU/.self-learn</string>
+    <string>postgres://USER@localhost:5432/gnosia</string>
+    <key>GNOSIA_HOME</key>
+    <string>/Users/YOU/.gnosia</string>
   </dict>
   <key>StandardOutPath</key>
-  <string>/Users/YOU/Library/Logs/self-learn-nightly-export.log</string>
+  <string>/Users/YOU/Library/Logs/gnosia-nightly-export.log</string>
   <key>StandardErrorPath</key>
-  <string>/Users/YOU/Library/Logs/self-learn-nightly-export.log</string>
+  <string>/Users/YOU/Library/Logs/gnosia-nightly-export.log</string>
 </dict>
 </plist>
 ```
 
 ```bash
-plutil -lint ~/Library/LaunchAgents/com.self-learn.nightly-export.plist
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.self-learn.nightly-export.plist
-launchctl kickstart gui/$(id -u)/com.self-learn.nightly-export    # one run now, to check
-launchctl bootout gui/$(id -u)/com.self-learn.nightly-export      # to stop it
+plutil -lint ~/Library/LaunchAgents/com.gnosia.nightly-export.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.gnosia.nightly-export.plist
+launchctl kickstart gui/$(id -u)/com.gnosia.nightly-export    # one run now, to check
+launchctl bootout gui/$(id -u)/com.gnosia.nightly-export      # to stop it
 ```
 
 **A checkout under `~/Desktop`, `~/Documents` or `~/Downloads` cannot be
@@ -530,16 +527,16 @@ it. The first run from such a checkout fails before the script loads, with
 the log and `last exit code = 1` in `launchctl print`. Granting the node
 binary Full Disk Access would work, and is a security setting only the owner
 should change. The route that needs no grant is a second clone outside those
-folders, made for this job alone (`mkdir -p ~/.self-learn && git clone <repo>
-~/.self-learn/checkout && cd ~/.self-learn/checkout && npm ci`, no submodules
+folders, made for this job alone (`mkdir -p ~/.gnosia && git clone <repo>
+~/.gnosia/checkout && cd ~/.gnosia/checkout && npm ci`, no submodules
 needed), with both paths in the plist pointing at it. That clone reads the
 same database and the same blob store, so the export is the same. It does
 drift: `catalog migrate`'s status walks the migration files in the clone it
 runs from, so a database the main checkout has since migrated is not
 refused, and an old clone keeps exporting with old code and says nothing.
 So the job should refresh the clone first. A wrapper the plist runs in place
-of node: `mkdir -p ~/.self-learn/bin`, save this as
-`~/.self-learn/bin/nightly-export.sh`, `chmod +x` it, and put the `node`
+of node: `mkdir -p ~/.gnosia/bin`, save this as
+`~/.gnosia/bin/nightly-export.sh`, `chmod +x` it, and put the `node`
 from `which node` on its `NODE=` line, since launchd hands the script no
 `PATH` worth trusting (npm is taken from the same directory):
 
@@ -548,7 +545,7 @@ from `which node` on its `NODE=` line, since launchd hands the script no
 set -u
 NODE=/opt/homebrew/bin/node
 NPM="$(dirname "$NODE")/npm"
-cd "$HOME/.self-learn/checkout" || exit 2
+cd "$HOME/.gnosia/checkout" || exit 2
 before=$(git rev-parse HEAD)
 if git pull -q --ff-only; then
   if [ "$before" != "$(git rev-parse HEAD)" ]; then
@@ -567,7 +564,7 @@ puts the clone back on the commit it was installed at, so the code and its
 `node_modules` stay a pair and the next run pulls and retries, instead of
 exporting from a half-installed tree every night until someone looks.
 
-Set `SELF_LEARN_HOME` in the plist even when `services/catalog/.env` names
+Set `GNOSIA_HOME` in the plist even when `services/catalog/.env` names
 it: the catalog reads that file, so the export would find the diagram SVGs in
 the right blob store, but the script itself takes the archive's location from
 its own environment only. A run the laptop sleeps through starts when it
@@ -575,7 +572,7 @@ wakes, since that is how launchd treats a missed `StartCalendarInterval`.
 
 **The archive is local, and pushing it anywhere is the owner's decision.**
 Nothing here creates a remote copy. One shape that would work later: make
-`$SELF_LEARN_HOME/archive` a private git repository and add a second job
+`$GNOSIA_HOME/archive` a private git repository and add a second job
 after this one that commits and pushes it, which would also keep the exports
 the 30-deep prune has deleted. Until someone decides that, the archive lives
 on one disk beside the database it copies.

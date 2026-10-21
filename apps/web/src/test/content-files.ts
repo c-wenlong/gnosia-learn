@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { fileSource, selectSource, type SelectedSource } from "@self-learn/content";
+import { fileSource, selectSource, type SelectedSource } from "@gnosia/content";
 
 /**
  * Course data for the tests of pure logic that want real courses: the

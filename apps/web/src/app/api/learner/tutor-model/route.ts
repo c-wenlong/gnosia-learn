@@ -1,4 +1,4 @@
-import { PROVIDER_IDS, providerLabel, type ProviderName } from "@self-learn/schema/shared";
+import { PROVIDER_IDS, providerLabel, type ProviderName } from "@gnosia/schema/shared";
 import { NextResponse } from "next/server";
 
 import { keyFor } from "@/lib/agent/providers";

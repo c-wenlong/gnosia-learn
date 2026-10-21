@@ -1,6 +1,6 @@
-import { LOCAL_LEARNER_ID, ownerScope, readableOwners, type OwnerScope } from "@self-learn/schema";
+import { LOCAL_LEARNER_ID, ownerScope, readableOwners, type OwnerScope } from "@gnosia/schema";
 import { inArray, sql, type SQL } from "drizzle-orm";
-import type { PgColumn } from "drizzle-orm/pg-core";
+import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 
 import type { CatalogDatabase } from "../db";
 import { sqlstate } from "../state/errors";
@@ -11,7 +11,7 @@ import { sqlstate } from "../state/errors";
  * Every content row carries `owner_id` since 0010, and ids stay global (D3,
  * D23), so what keeps one owner's notes off another's pages is a filter on
  * every read: `owner_id in readable`, where `readable` is the owner and the
- * commons (`readableOwners` in `@self-learn/schema`). Row-level security
+ * commons (`readableOwners` in `@gnosia/schema`). Row-level security
  * comes later, once a second service reads the database.
  *
  * Two kinds of caller, and the difference is deliberate:
@@ -25,10 +25,10 @@ import { sqlstate } from "../state/errors";
  *   omitted, which reads every owner: they run on the owner's machine against
  *   the owner's database, and an export that silently dropped rows would be a
  *   lossy backup. `owners` is optional only on those internal functions,
- *   never on anything exported through `@self-learn/catalog/state`.
+ *   never on anything exported through `@gnosia/catalog/state`.
  */
 
-export type { OwnerScope } from "@self-learn/schema";
+export type { OwnerScope } from "@gnosia/schema";
 
 /**
  * The owner the catalog and `learn` CLIs write and read as. They run on the
@@ -51,7 +51,7 @@ export type Owners = readonly string[] | undefined;
  * owner is read, so it drops out of an `and(...)`. An empty list reads
  * nothing, rather than turning into `in ()`, which Postgres refuses.
  */
-export function ownedBy(column: PgColumn, owners: Owners): SQL | undefined {
+export function ownedBy(column: SQLiteColumn, owners: Owners): SQL | undefined {
   if (owners === undefined) return undefined;
   if (owners.length === 0) return sql`false`;
   return inArray(column, [...owners]);
@@ -98,12 +98,11 @@ export function cacheKey(db: CatalogDatabase): object {
 export async function ownersExist(db: CatalogDatabase): Promise<boolean> {
   const key = cacheKey(db);
   if (hasOwners.has(key)) return true;
-  const { rows } = await db.execute<{ present: boolean }>(sql`
+  const { rows } = await db.execute<{ present: number }>(sql`
     select exists (
-      select 1 from information_schema.columns
-      where table_schema = current_schema() and table_name = 'asset' and column_name = 'owner_id'
+      select 1 from pragma_table_info('asset') where name = 'owner_id'
     ) as present`);
-  const present = rows[0]?.present === true;
+  const present = rows[0]?.present === 1;
   if (present) hasOwners.set(key, true);
   return present;
 }

@@ -5,7 +5,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
-import type { JobState } from "@self-learn/schema";
+import type { JobState } from "@gnosia/schema";
 
 import { type ValidBrief } from "./brief";
 import { AgentRun, startAgent, sweepOrphans, type AgentInit } from "../agent/agent";

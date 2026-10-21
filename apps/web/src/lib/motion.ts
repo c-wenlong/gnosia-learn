@@ -22,7 +22,10 @@ import { parseMotionMode } from "@/lib/preferences";
  * preference, not anything that authenticates.
  */
 
-export const MOTION_COOKIE = "self-learn-motion";
+export const MOTION_COOKIE = "gnosia-motion";
+
+/** The same cookie as browsers named it before the rename; read as a fallback only. */
+export const LEGACY_MOTION_COOKIE = "self-learn-motion";
 
 /** A year, as the theme cookie. */
 export const MOTION_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
@@ -62,7 +65,7 @@ export function writeMotionCookie(mode: MotionMode): void {
 
 /** The mode the browser's cookie holds, or null when it has none. */
 export function readMotionCookie(cookie?: string): MotionMode | null {
-  return asMotionMode(readCookie(MOTION_COOKIE, cookie));
+  return asMotionMode(readCookie(MOTION_COOKIE, cookie) ?? readCookie(LEGACY_MOTION_COOKIE, cookie));
 }
 
 /** The corner of `window` and `document` this reads, so a test can hand in fakes. */

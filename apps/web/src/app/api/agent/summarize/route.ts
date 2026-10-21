@@ -8,7 +8,7 @@ import {
   SUMMARIZE_RATE_LIMIT,
 } from "@/lib/agent/guard";
 import { requestOwner } from "@/lib/learner-api";
-import { summarizeTurn, type SummarizeBody } from "@self-learn/tutor/server/turns";
+import { summarizeTurn, type SummarizeBody } from "@gnosia/tutor/server/turns";
 
 export const runtime = "nodejs";
 
@@ -19,7 +19,7 @@ export const runtime = "nodejs";
  * the page saves what it returns through `POST /api/learner/recap`.
  *
  * The turn itself — the topic read, the recap prompt, the model chain and the
- * parsed knowledge — is `summarizeTurn` in `@self-learn/tutor/server`. This
+ * parsed knowledge — is `summarizeTurn` in `@gnosia/tutor/server`. This
  * file keeps the request-side guards (origin, payload bounds, the tighter
  * rate limit) and the validation that must answer before the limiter is
  * touched.

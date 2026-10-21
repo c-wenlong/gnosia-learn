@@ -4,12 +4,15 @@
 # the same database with a different password.
 #
 #   docker compose -f services/catalog/compose.yaml up -d
-#   DATABASE_URL=postgres://catalog:catalog@localhost:5432/self_learn \
+#   DATABASE_URL=postgres://catalog:catalog@localhost:5432/gnosia \
 #     npm run catalog -- migrate
 #
 # The image tag is pinned to the same major the Homebrew install runs, so a
 # migration cannot pass here and fail there on a version difference.
 
+# The project name stays self-learn-catalog: compose namespaces the volume
+# below with it (self-learn-catalog_catalog-data), and renaming the project
+# would point a deployment that already has data at a fresh, empty volume.
 name: self-learn-catalog
 
 services:
@@ -22,7 +25,7 @@ services:
       # from the internet, and the cloud database of the eventual move gets its
       # credentials from the host, not from this file.
       POSTGRES_PASSWORD: catalog
-      POSTGRES_DB: self_learn
+      POSTGRES_DB: gnosia
     ports:
       # Loopback only. Docker publishes a port past ufw, so "5432:5432" would
       # open the catalog:catalog database to every interface the host has,
@@ -35,7 +38,7 @@ services:
       # The migrator connects immediately, and an unhealthy start is a confusing
       # "connection refused" three layers up. `pg_isready` with the real user and
       # database catches a container that is up but not yet accepting queries.
-      test: ["CMD-SHELL", "pg_isready -U catalog -d self_learn"]
+      test: ["CMD-SHELL", "pg_isready -U catalog -d gnosia"]
       interval: 5s
       timeout: 5s
       retries: 10

@@ -4,13 +4,13 @@ import {
   saveCustomProviderKey,
   writeProviderKey,
   type CatalogDatabase,
-} from "@self-learn/catalog/state";
+} from "@gnosia/catalog/state";
 import {
   AUTH_SECRET_VAR,
   isCustomProviderId,
   MIN_SECRET_LENGTH,
   type ProviderName,
-} from "@self-learn/schema/shared";
+} from "@gnosia/schema/shared";
 
 import type { Env } from "./deps";
 import { openKey, sealKey } from "./seal";

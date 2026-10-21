@@ -4,8 +4,8 @@ import {
   type CatalogDatabase,
   type StoredCustomProvider,
   updateCustomProvider,
-} from "@self-learn/catalog/state";
-import { isCustomProviderId } from "@self-learn/schema/shared";
+} from "@gnosia/catalog/state";
+import { isCustomProviderId } from "@gnosia/schema/shared";
 
 import type { Env } from "./deps";
 import { keySealer, type SavedKeyStatus, savedStatus } from "./provider-keys";

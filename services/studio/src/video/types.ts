@@ -1,4 +1,4 @@
-import type { JobState } from "@self-learn/schema";
+import type { JobState } from "@gnosia/schema";
 
 import type { AgentAuth } from "../config";
 import type { CostSource } from "../cost";

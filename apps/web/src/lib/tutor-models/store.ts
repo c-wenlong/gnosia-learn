@@ -8,14 +8,14 @@ import {
   readChain as readChainCore,
   removeChainEntry as removeChainEntryCore,
   setChainEntry as setChainEntryCore,
-} from "@self-learn/tutor/server/tutor-models";
-import type { ChainEntry } from "@self-learn/tutor/providers";
+} from "@gnosia/tutor/server/tutor-models";
+import type { ChainEntry } from "@gnosia/tutor/providers";
 
 import { catalogDatabase } from "@/lib/learner-store";
 
 /**
  * The owner's model chain (docs/TUTOR-MODELS.md). The reads and writes live
- * in `@self-learn/tutor/server/tutor-models`; this file hands them this
+ * in `@gnosia/tutor/server/tutor-models`; this file hands them this
  * app's pool.
  */
 

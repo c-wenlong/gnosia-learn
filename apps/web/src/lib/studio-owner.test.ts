@@ -1,4 +1,4 @@
-import { STUDIO_OWNER_HEADER } from "@self-learn/schema/shared";
+import { STUDIO_OWNER_HEADER } from "@gnosia/schema/shared";
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 

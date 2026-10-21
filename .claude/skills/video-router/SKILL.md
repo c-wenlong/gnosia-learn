@@ -1,6 +1,6 @@
 ---
 name: video-router
-description: Choose which video tool makes a narrated video in self-learn (manimkc, remotionkc, revideokc or blenderkc) before any tool-specific skill runs. Use FIRST whenever the user asks for a video, an explainer, an animation or a lecture video on a topic in this repository, unless they have already named the tool ("use manimkc", "use Remotion", "use Revideo", "use Motion Canvas" or "use Blender"), then hand over to that tool's skill.
+description: Choose which video tool makes a narrated video in gnosia (manimkc, remotionkc, revideokc or blenderkc) before any tool-specific skill runs. Use FIRST whenever the user asks for a video, an explainer, an animation or a lecture video on a topic in this repository, unless they have already named the tool ("use manimkc", "use Remotion", "use Revideo", "use Motion Canvas" or "use Blender"), then hand over to that tool's skill.
 ---
 
 # video-router

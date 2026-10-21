@@ -5,16 +5,16 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { fsStore, key as blobKey } from "@self-learn/blob";
-import { asset, assetDerivation, blobObject } from "@self-learn/schema";
+import { fsStore, key as blobKey } from "@gnosia/blob";
+import { asset, assetDerivation, blobObject } from "@gnosia/schema";
 import { eq } from "drizzle-orm";
 
 import { applyMigrations } from "../../../../../../services/catalog/src/migrations";
-import { assetBefore0031, BEFORE_BLOB_CONTRACT, partialMigrations } from "../../../../../../services/catalog/test/partial-migrations";
 import {
   createScratchDatabase,
   probe,
   type Scratch,
+  withoutConstraint,
 } from "../../../../../../services/catalog/test/scratch-database";
 
 // A signed-in request, so the owner seam (`@/lib/owner`) resolves `local`.
@@ -97,15 +97,16 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
 
   beforeAll(async () => {
     scratch = await createScratchDatabase();
-    // At 0012: the diagram SVG with no blob, whose not-uploaded hint this
-    // checks, is a row the contract (0013) forbids. Every other row here
-    // carries a blob and would pass it. Rows go in through `assetBefore0031`,
-    // since `insert(asset)` names `inputs_hash`, a column this schema has not
-    // grown (0031).
-    await applyMigrations(scratch.db, { folder: await partialMigrations(BEFORE_BLOB_CONTRACT) });
+    // The diagram SVG with no blob, whose not-uploaded hint this checks, is
+    // a row the contract forbids — in the SQLite schema a CHECK constraint
+    // from 0000 on, so the table is rebuilt without it rather than the
+    // migrations stopped before it. Every other row here carries a blob and
+    // would pass it.
+    await applyMigrations(scratch.db);
+    await withoutConstraint(scratch.db, "asset", "asset_stored_blob_check");
     home = await mkdtemp(path.join(tmpdir(), "asset-blob-"));
     process.env.DATABASE_URL = scratch.url;
-    process.env.SELF_LEARN_HOME = home;
+    process.env.GNOSIA_HOME = home;
     ({ GET: FILE } = (await import("./[id]/file/route")) as { GET: Handler });
     ({ GET: POSTER } = (await import("./[id]/poster/route")) as { GET: Handler });
     ({ GET: STATUS } = (await import("./[id]/status/route")) as { GET: Handler });
@@ -128,7 +129,7 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
       sourceRepo: "manimkc",
       blobKey: key,
     });
-    await scratch.db.insert(assetBefore0031).values([
+    await scratch.db.insert(asset).values([
       video(VIDEO_ID, "out/algorithms/demo/demo.mp4", videoKey, VIDEO),
       video(PENDING_ID, "out/algorithms/demo/pending.mp4", pendingKey, pendingBytes),
       video(LOST_ID, "out/algorithms/demo/lost.mp4", lostKey, lostBytes),
@@ -140,7 +141,7 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
         contentHash: sha256(Buffer.from("<svg/>")),
         bytes: 6,
         title: "Demo diagram",
-        sourceRepo: "self-learn",
+        sourceRepo: "gnosia",
         blobKey: null,
       },
       {
@@ -151,7 +152,7 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
         contentHash: sha256(JPEG),
         bytes: JPEG.length,
         title: "Demo (poster)",
-        sourceRepo: "self-learn",
+        sourceRepo: "gnosia",
         blobKey: posterKey,
       },
     ]);
@@ -161,7 +162,7 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
   afterAll(async () => {
     await scratch?.drop();
     if (home !== undefined) await rm(home, { recursive: true, force: true });
-    delete process.env.SELF_LEARN_HOME;
+    delete process.env.GNOSIA_HOME;
   });
 
   it("streams a stored video whole, with the player's headers", async () => {
@@ -309,22 +310,22 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
     expect(await codeOf(none)).toBe("not-in-catalog");
   });
 
-  it("answers blob-store-unavailable when SELF_LEARN_HOME cannot be a store", async () => {
-    const previous = process.env.SELF_LEARN_HOME;
-    process.env.SELF_LEARN_HOME = "relative/path";
+  it("answers blob-store-unavailable when GNOSIA_HOME cannot be a store", async () => {
+    const previous = process.env.GNOSIA_HOME;
+    process.env.GNOSIA_HOME = "relative/path";
     try {
       const response = await call(FILE, "file", VIDEO_ID);
       expect(response.status).toBe(503);
       expect(await codeOf(response)).toBe("blob-store-unavailable");
     } finally {
-      process.env.SELF_LEARN_HOME = previous;
+      process.env.GNOSIA_HOME = previous;
     }
   });
 
   it("reads a stored transcript's text for the page", async () => {
     const text = Buffer.from('{"cues":[{"text":"hello"}]}');
     const key = await stored(text, "json");
-    await scratch.db.insert(assetBefore0031).values({
+    await scratch.db.insert(asset).values({
       id: "manimkc:out/algorithms/demo/demo.transcript.json",
       kind: "transcript",
       path: "out/algorithms/demo/demo.transcript.json",

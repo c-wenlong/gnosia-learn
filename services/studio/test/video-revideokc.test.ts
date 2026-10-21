@@ -55,7 +55,7 @@ afterEach(async () => {
   }
 });
 
-const REVIDEOKC = "/Users/me/self-learn/tools/revideokc";
+const REVIDEOKC = "/Users/me/gnosia/tools/revideokc";
 
 /** A toolchain that names programs without running any. */
 function fixedTools(): RevideokcToolchain {
@@ -64,18 +64,18 @@ function fixedTools(): RevideokcToolchain {
     sandboxKind: "seatbelt",
     sandboxExec: "/usr/bin/sandbox-exec",
     libs: [],
-    manimkcRoot: "/Users/me/self-learn/tools/manimkc",
-    manimkcDirs: { manim: "/m/manim", venv: "/m/.venv", venvTts: "/Users/me/self-learn/tools/manimkc/.venv-tts", tools: "/m/tools" },
+    manimkcRoot: "/Users/me/gnosia/tools/manimkc",
+    manimkcDirs: { manim: "/m/manim", venv: "/m/.venv", venvTts: "/Users/me/gnosia/tools/manimkc/.venv-tts", tools: "/m/tools" },
     ffmpeg: { link: "/opt/homebrew/bin/ffmpeg", real: "/opt/homebrew/Cellar/ffmpeg/9/bin/ffmpeg", home: "/opt/homebrew/Cellar/ffmpeg/9" },
     ffprobe: { link: "/opt/homebrew/bin/ffprobe", real: "/opt/homebrew/Cellar/ffmpeg/9/bin/ffprobe", home: "/opt/homebrew/Cellar/ffmpeg/9" },
     python3: null,
     venvPython: null,
-    ttsPython: { link: "/Users/me/self-learn/tools/manimkc/.venv-tts/bin/python", real: "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3.12", home: "/Library/Frameworks/Python.framework" },
+    ttsPython: { link: "/Users/me/gnosia/tools/manimkc/.venv-tts/bin/python", real: "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3.12", home: "/Library/Frameworks/Python.framework" },
     node: "/usr/local/bin/node",
     hfHubCache: "/Users/me/.cache/huggingface/hub",
     kokoroModel: "/Users/me/.cache/huggingface/hub/models--hexgrad--Kokoro-82M",
     voicesInstalled: ["af_heart"],
-    sharedAudioCache: "/Users/me/.self-learn/manimkc/cache/audio",
+    sharedAudioCache: "/Users/me/.gnosia/manimkc/cache/audio",
     revideokc: {
       root: REVIDEOKC,
       nodeModules: `${REVIDEOKC}/node_modules`,
@@ -89,7 +89,7 @@ function fixedTools(): RevideokcToolchain {
       revideo: "0.11.0",
       splitBuild: true,
       nodeVersion: "22.23.1",
-      ownerHome: "/Users/me/.self-learn/revideokc",
+      ownerHome: "/Users/me/.gnosia/revideokc",
       libs: [],
     },
   };
@@ -208,7 +208,7 @@ describe("the revideokc profiles", () => {
     const exec = block(text, "allow process-exec").join(" ");
     expect(exec).toContain(`(literal "${REVIDEOKC}/.venv/bin/gnosia-audio")`);
     expect(exec).toContain(`(literal "${REVIDEOKC}/.venv/bin/python")`);
-    expect(exec).toContain('(literal "/Users/me/self-learn/tools/manimkc/.venv-tts/bin/python")');
+    expect(exec).toContain('(literal "/Users/me/gnosia/tools/manimkc/.venv-tts/bin/python")');
     expect(exec).not.toContain("Google Chrome");
     expect(text).not.toMatch(/network|mach-lookup|mach-register/);
     expect(block(text, "allow file-read*").join(" ")).toContain("models--hexgrad--Kokoro-82M");
@@ -388,9 +388,9 @@ describe("the permission file", () => {
       jobId: "j",
       paths,
       revideokcRoot: REVIDEOKC,
-      revideokcHome: "/Users/me/.self-learn/revideokc",
-      manimkcRoot: "/Users/me/self-learn/tools/manimkc",
-      manimkcHome: "/Users/me/.self-learn/manimkc",
+      revideokcHome: "/Users/me/.gnosia/revideokc",
+      manimkcRoot: "/Users/me/gnosia/tools/manimkc",
+      manimkcHome: "/Users/me/.gnosia/manimkc",
       guard: "/usr/local/bin/node /jobs/j/bin/bash-guard.cjs",
     });
     const { allow, deny } = settings.permissions;
@@ -411,8 +411,8 @@ describe("the permission file", () => {
       `Edit(/${paths.lib}/**)`,
       `Edit(/${paths.render}/**)`,
       `Read(/${REVIDEOKC}/topics/**)`,
-      "Read(//Users/me/.self-learn/revideokc/**)",
-      "Read(//Users/me/self-learn/tools/manimkc/topics/**)",
+      "Read(//Users/me/.gnosia/revideokc/**)",
+      "Read(//Users/me/gnosia/tools/manimkc/topics/**)",
       `Read(/${path.join(paths.job, "ports.json")})`,
       "WebFetch",
     ]) {

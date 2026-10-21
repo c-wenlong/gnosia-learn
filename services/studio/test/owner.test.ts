@@ -3,7 +3,7 @@ import type { IncomingMessage } from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { LOCAL_LEARNER_ID, STUDIO_OWNER_HEADER } from "@self-learn/schema/shared";
+import { LOCAL_LEARNER_ID, STUDIO_OWNER_HEADER } from "@gnosia/schema/shared";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 

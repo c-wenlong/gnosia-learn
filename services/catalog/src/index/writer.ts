@@ -25,9 +25,9 @@ import {
   tag,
   topic,
   topicRelation,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { and, eq, getTableName, inArray, isNull, notInArray, sql, type SQL } from "drizzle-orm";
-import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
+import type { SQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core";
 
 import {
   appendRevisions,
@@ -53,6 +53,7 @@ import { IndexError, IndexErrors } from "./errors";
 import type { CoverRead, Indexer, ReplaceScope, SourceRows } from "./source";
 import { bytewise } from "../sql-order";
 
+import { inTransaction } from "../db";
 /** Postgres SQLSTATE for a foreign key violation. */
 const FOREIGN_KEY_VIOLATION = "23503";
 
@@ -209,7 +210,7 @@ const TABLES = {
   manimkcTopic,
   collectionTag,
   mirror,
-} as const satisfies Record<keyof SourceRows, PgTable>;
+} as const satisfies Record<keyof SourceRows, SQLiteTable>;
 
 /** Conflict targets for the entity upserts, matching each table's primary key. */
 const CONFLICT_TARGET = {
@@ -316,7 +317,7 @@ interface ImportOwner {
 }
 
 /** `column` points at a row of `entity` that `owners` hold (a null end holds nothing, so passes). */
-function endHeldBy(link: PgTable, end: LinkEnd, owners: readonly string[], nullPasses: boolean): SQL {
+function endHeldBy(link: SQLiteTable, end: LinkEnd, owners: readonly string[], nullPasses: boolean): SQL {
   const target = TABLES[end.entity];
   const column = columnOf(link, end.column);
   const held = sql`exists (select 1 from ${target} where ${columnOf(target, ENTITY_KEY[end.entity])} = ${column} and ${columnOf(target, "ownerId")} in (${sql.join(
@@ -361,8 +362,8 @@ function rowsFor(rows: AnyRow[]): never {
 }
 
 /** One column off a table chosen at runtime. Throws rather than passing undefined on. */
-function columnOf(table: PgTable, name: string): PgColumn {
-  const column = (table as unknown as Record<string, PgColumn | undefined>)[name];
+function columnOf(table: SQLiteTable, name: string): SQLiteColumn {
+  const column = (table as unknown as Record<string, SQLiteColumn | undefined>)[name];
   if (column === undefined) {
     throw new IndexError(`table ${getTableName(table)} has no column "${name}"`);
   }
@@ -371,7 +372,9 @@ function columnOf(table: PgTable, name: string): PgColumn {
 
 /** The scope of everything one source owns in a table keyed by asset id. */
 function inNamespace(column: unknown, prefix: string): SQL {
-  return sql`starts_with(${column as SQL}, ${prefix})`;
+  // `starts_with` was a Postgres function and case-sensitive; `instr` answers
+  // the same with no wildcard and no case folding.
+  return sql`instr(${column as SQL}, ${prefix}) = 1`;
 }
 
 /**
@@ -442,11 +445,11 @@ export async function writeSource(
   const revisions: Record<string, number> = {};
   let deferred: string[] = [];
 
-  const record = (table: PgTable, into: Record<string, number>, count: number) => {
+  const record = (table: SQLiteTable, into: Record<string, number>, count: number) => {
     if (count > 0) into[getTableName(table)] = (into[getTableName(table)] ?? 0) + count;
   };
 
-  await db.transaction(async (tx) => {
+  await inTransaction(db, async (tx) => {
     // 0. Take the revision locks for every entity type this source may touch,
     //    before any row lock, so a seam write in flight finishes first and
     //    none starts until this commits (see `lockTypes`). Then say these
@@ -515,7 +518,7 @@ export async function writeSource(
       // topic's to record).
       const where = held.size === 0 ? scope : and(scope, heldLinksKept(name, held, rows));
       const result = await tx.delete(TABLES[name]).where(where);
-      clearedLinks[name] = result.rowCount ?? 0;
+      clearedLinks[name] = result.changes;
     }
     // What the clear left is out of this owner's reach; a tree row on the
     // same key would fail on the constraint, so it is refused by name.
@@ -639,7 +642,7 @@ export async function writeSource(
       .values({ source: indexer.source, ...run })
       .onConflictDoUpdate({
         target: indexRun.source,
-        set: { ...run, updatedAt: sql`now()` },
+        set: { ...run, updatedAt: sql`cast(unixepoch('subsec') * 1000 as integer)` },
       });
   });
 
@@ -825,7 +828,7 @@ async function entitiesWithRevisions(
   if (unique.length === 0) return new Set();
   const { rows } = await tx.execute<{ entity_id: string }>(sql`
     select distinct entity_id from content_revision
-    where entity_type = ${type} and entity_id = any(${sql.param(unique)}::text[])
+    where entity_type = ${type} and entity_id in (select value from json_each(${JSON.stringify(unique)}))
   `);
   return new Set(rows.map((row) => row.entity_id));
 }
@@ -1339,7 +1342,7 @@ async function archiveEntity(
   const notProduced = produced.length === 0 ? sql`true` : notInArray(keyColumn, produced);
   const updated = (await tx
     .update(table)
-    .set({ archivedAt: sql`now()` } as never)
+    .set({ archivedAt: sql`cast(unixepoch('subsec') * 1000 as integer)` } as never)
     .where(and(eq(columnOf(table, "ownerId"), owner), notProduced, isNull(archivedColumn)))
     .returning({ key: keyColumn })) as { key: string }[];
   return updated.map((row) => row.key).sort();
@@ -1366,7 +1369,7 @@ async function assertNoEvidence(tx: CatalogDatabase, slugs: string[]): Promise<v
   // takes a FOR KEY SHARE lock on the concept it references, which conflicts
   // with FOR UPDATE, so this either waits for that insert to commit — and then
   // sees its event — or holds the row until this transaction ends.
-  await tx.select({ slug: concept.slug }).from(concept).where(inArray(concept.slug, slugs)).for("update");
+  await tx.select({ slug: concept.slug }).from(concept).where(inArray(concept.slug, slugs));
 
   const observed = await tx
     .selectDistinct({ slug: event.conceptSlug })
@@ -1437,7 +1440,7 @@ export async function pruneHeldTopics(
   owner: string = CLI_OWNER,
 ): Promise<{ deleted: string[]; revisions: number }> {
   if (topics.length === 0) return { deleted: [], revisions: 0 };
-  return db.transaction(async (tx) => {
+  return inTransaction(db, async (tx) => {
     await lockTypes(tx, ["topic"]);
     await markSeam(tx, "import:topics");
     const filed = await filedTopics(tx, [...topics]);
@@ -1454,7 +1457,7 @@ export async function pruneHeldTopics(
     const revisions = await recordDeletes(tx, "topic", reads, by);
     await tx
       .update(indexRun)
-      .set({ deleted: sql`${indexRun.deleted} + ${keys.length}`, updatedAt: sql`now()` })
+      .set({ deleted: sql`${indexRun.deleted} + ${keys.length}`, updatedAt: sql`cast(unixepoch('subsec') * 1000 as integer)` })
       .where(eq(indexRun.source, "topics"));
     return { deleted: keys, revisions };
   });

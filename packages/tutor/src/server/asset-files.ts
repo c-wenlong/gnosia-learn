@@ -1,7 +1,7 @@
 import path from "node:path";
 import type { Readable } from "node:stream";
 
-import { BlobError, BlobNotFoundError, BlobRangeError, type BlobRead } from "@self-learn/blob";
+import { BlobError, BlobNotFoundError, BlobRangeError, type BlobRead } from "@gnosia/blob";
 import {
   assetBlobs,
   assetsByIds,
@@ -14,8 +14,8 @@ import {
   type AssetBlob,
   type AssetRef,
   type CatalogDatabase,
-} from "@self-learn/catalog/state";
-import type { ContentType } from "@self-learn/content";
+} from "@gnosia/catalog/state";
+import type { ContentType } from "@gnosia/content";
 
 import { isRenderSource, uploadCommand, type RouteProblemCode } from "../asset-problems";
 import { ContentUnavailableError } from "./content-source";
@@ -367,10 +367,18 @@ export async function resolveAsset(seams: AssetSeams, db: CatalogDatabase, id: s
   if (row === undefined) return missing("not-in-catalog", `No asset ${JSON.stringify(id)} in the catalog.`);
   const titled = (found: AssetSourceResult): AssetSourceResult => (found.ok ? { ...found, title: row.title } : found);
   const blob = (await assetBlobs(db, [row.id], scope)).get(row.id);
-  if (blob !== undefined) return titled(await resolveBlob(seams, blob, row.path ?? row.id));
-  const text = await resolveRowText(seams, db, row);
-  if (text !== undefined) return titled(text);
-  return noStoredCopy(row);
+  try {
+    if (blob !== undefined) return titled(await resolveBlob(seams, blob, row.path ?? row.id));
+    const text = await resolveRowText(seams, db, row);
+    if (text !== undefined) return titled(text);
+    return noStoredCopy(row);
+  } catch (error) {
+    // A store that will not open or answer is the store's failure, not the
+    // catalog's: it classifies as `blob-store-unavailable`, and only a
+    // catalog read propagates to the route's `catalog-unreachable`.
+    if (error instanceof BlobError) return blobStoreProblem(error);
+    throw error;
+  }
 }
 
 /**

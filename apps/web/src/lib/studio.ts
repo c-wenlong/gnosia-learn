@@ -1,6 +1,6 @@
 import "server-only";
 
-import { STUDIO_OWNER_HEADER } from "@self-learn/schema/shared";
+import { STUDIO_OWNER_HEADER } from "@gnosia/schema/shared";
 import { notFound } from "next/navigation";
 
 import { currentOwner } from "@/lib/owner";

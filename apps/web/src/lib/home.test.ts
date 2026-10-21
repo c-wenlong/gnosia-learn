@@ -20,7 +20,7 @@ vi.mock("@/lib/auth/session", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth/session")>()),
   isSignedIn: async () => true,
 }));
-vi.mock("@self-learn/catalog/state", () => ({
+vi.mock("@gnosia/catalog/state", () => ({
   asLastVisited: vi.fn(() => undefined),
   asRecentModules: vi.fn(() => undefined),
   assetsByIds: vi.fn(async () => []),
@@ -85,7 +85,7 @@ describe("readHome", () => {
   });
 
   it("lists a course opened with no topic done on the courses card, as the sidebar lists it", async () => {
-    const state = await import("@self-learn/catalog/state");
+    const state = await import("@gnosia/catalog/state");
     vi.mocked(state.recentActivity).mockResolvedValueOnce([
       { type: "visit", course: "cs3230", module: "m1", at: new Date().toISOString() },
     ] as never);
@@ -112,7 +112,7 @@ describe("readHome", () => {
 
   it("reads the event log folded per module and concept, bounded by the threads it lists", async () => {
     getCourses.mockResolvedValueOnce([]);
-    const state = await import("@self-learn/catalog/state");
+    const state = await import("@gnosia/catalog/state");
     const { readHome } = await import("./home");
     await readHome();
     expect(state.recentActivity).toHaveBeenCalledWith(expect.anything(), "local", { limit: 5 });

@@ -1,4 +1,4 @@
-import { concept, conceptPrerequisite } from "@self-learn/schema";
+import { concept, conceptPrerequisite } from "@gnosia/schema";
 import { asc } from "drizzle-orm";
 
 import { withDatabase } from "../db";

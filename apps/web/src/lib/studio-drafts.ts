@@ -529,7 +529,7 @@ export interface ByokProviderStatus {
 }
 
 /** Window event a successful BYOK write fires, so open composers and panes re-read the tiers (D94). */
-export const BYOK_SETTINGS_CHANGED = "self-learn:byok-settings";
+export const BYOK_SETTINGS_CHANGED = "gnosia:byok-settings";
 
 function announceByokWrite<T>(result: Promise<T>): Promise<T> {
   void result.then((outcome) => {

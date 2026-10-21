@@ -1,5 +1,5 @@
 {
-  "//": "Its own tsconfig, like every other workspace. It compiles the `@self-learn/tutor` sources it imports, so its strictness is the package's, not the catalog's: no `noUncheckedIndexedAccess`, and the DOM libs the provider code's `Request`/`fetch` types come from.",
+  "//": "Its own tsconfig, like every other workspace. It compiles the `@gnosia/tutor` sources it imports, so its strictness is the package's, not the catalog's: no `noUncheckedIndexedAccess`, and the DOM libs the provider code's `Request`/`fetch` types come from.",
   "compilerOptions": {
     "target": "ES2023",
     "lib": ["ES2023", "DOM", "DOM.Iterable"],

@@ -1,5 +1,5 @@
-import { loadTags, TAGS_FILE } from "@self-learn/content";
-import type { NewTag } from "@self-learn/schema";
+import { loadTags, TAGS_FILE } from "@gnosia/content";
+import type { NewTag } from "@gnosia/schema";
 
 import { asIndexError } from "./content-errors";
 import type { Indexer } from "./source";

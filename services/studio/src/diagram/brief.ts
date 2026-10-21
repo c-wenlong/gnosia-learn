@@ -1,6 +1,6 @@
-import type { TopicEntry } from "@self-learn/content";
+import type { TopicEntry } from "@gnosia/content";
 
-import { isAgentModel } from "@self-learn/schema/shared";
+import { isAgentModel } from "@gnosia/schema/shared";
 
 import { topicList } from "../data/catalog";
 import { MERMAID_LIMIT, studioOwner, TEXT_LIMIT, VOCABULARY_STATUS_MS } from "../config";

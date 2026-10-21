@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { ASSET_NAME_MAX, cleanAssetName } from "@self-learn/schema/shared";
+import { ASSET_NAME_MAX, cleanAssetName } from "@gnosia/schema/shared";
 
 import { AskPanel } from "@/components/library/AskPanel";
 import { Button } from "@/components/ui/Button";

@@ -5,14 +5,14 @@ import {
   createCustomProvider as createCustomProviderCore,
   readOwnerCustomProviders as readOwnerCustomProvidersCore,
   type CustomProvider,
-} from "@self-learn/tutor/server/custom-providers";
-import type { SavedKeyStatus } from "@self-learn/tutor/server/provider-keys";
+} from "@gnosia/tutor/server/custom-providers";
+import type { SavedKeyStatus } from "@gnosia/tutor/server/provider-keys";
 
 import { catalogDatabase } from "@/lib/learner-store";
 
 /**
  * The providers the owner adds themselves (docs/TUTOR-MODELS.md, T14). The
- * reads and writes live in `@self-learn/tutor/server/custom-providers`; this
+ * reads and writes live in `@gnosia/tutor/server/custom-providers`; this
  * file hands them this app's pool.
  */
 

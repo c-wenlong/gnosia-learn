@@ -4,19 +4,20 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { sql } from "drizzle-orm";
-import { migrate } from "drizzle-orm/node-postgres/migrator";
+import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 
 import type { CatalogDatabase } from "./db";
 import { SERVICE_ROOT } from "./env";
 
-export const MIGRATIONS_FOLDER = path.join(SERVICE_ROOT, "drizzle");
+export const MIGRATIONS_FOLDER = path.join(SERVICE_ROOT, "drizzle-sqlite");
 
 /**
- * Where drizzle records what it has applied. Kept configurable because the
- * tests run migrations inside a throwaway schema and must not touch, or be
- * confused by, the journal of the real database.
+ * The Postgres migrator's journal lived in a named schema, and this option
+ * survived as part of `MigrationOptions` so callers keep compiling; SQLite
+ * has no schemas, so `__drizzle_migrations` always sits in `main` and the
+ * value is only carried, never read.
  */
-export const DEFAULT_MIGRATIONS_SCHEMA = "drizzle";
+export const DEFAULT_MIGRATIONS_SCHEMA = "main";
 const MIGRATIONS_TABLE = "__drizzle_migrations";
 
 interface JournalEntry {
@@ -71,19 +72,20 @@ export async function migrationStatus(
   options: { folder?: string; migrationsSchema?: string } = {},
 ): Promise<MigrationStatus> {
   const folder = options.folder ?? MIGRATIONS_FOLDER;
-  const schema = options.migrationsSchema ?? DEFAULT_MIGRATIONS_SCHEMA;
   const tags = await journalTags(folder);
   const byHash = await hashesByTag(folder, tags);
 
   const appliedHashes = new Set<string>();
-  const exists = await db.execute<{ present: boolean }>(
-    sql`select to_regclass(${`${schema}.${MIGRATIONS_TABLE}`}) is not null as present`,
+  // `to_regclass` was the Postgres spelling of "is this table there";
+  // sqlite_master answers the same question.
+  const exists = db.get<{ present: number }>(
+    sql`select exists(select 1 from sqlite_master where type = 'table' and name = ${MIGRATIONS_TABLE}) as present`,
   );
-  if (exists.rows[0]?.present) {
-    const rows = await db.execute<{ hash: string }>(
-      sql`select hash from ${sql.identifier(schema)}.${sql.identifier(MIGRATIONS_TABLE)} order by created_at`,
+  if (exists?.present) {
+    const rows = db.all<{ hash: string }>(
+      sql`select hash from __drizzle_migrations order by created_at`,
     );
-    for (const row of rows.rows) appliedHashes.add(row.hash);
+    for (const row of rows) appliedHashes.add(row.hash);
   }
 
   const applied: string[] = [];
@@ -112,9 +114,10 @@ export async function applyMigrations(
   db: CatalogDatabase,
   options: { folder?: string; migrationsSchema?: string } = {},
 ): Promise<void> {
+  // The better-sqlite3 migrator takes only the folder: SQLite has no schema
+  // to hang `__drizzle_migrations` on.
   await migrate(db, {
     migrationsFolder: options.folder ?? MIGRATIONS_FOLDER,
-    migrationsSchema: options.migrationsSchema ?? DEFAULT_MIGRATIONS_SCHEMA,
   });
 }
 

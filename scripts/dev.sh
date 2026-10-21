@@ -20,7 +20,7 @@ Options for start:
   --no-checks   skip the checks
   -h, --help    show this help
 
-The panes get PATH, DATABASE_URL, PORT, SELF_LEARN_HOME and STUDIO_* from the
+The panes get PATH, DATABASE_URL, PORT, GNOSIA_HOME and STUDIO_* from the
 shell that ran this (a variable it does not have is unset for them), because
 a tmux server that was already running would otherwise hand them its own
 environment. They are passed in a private file the pane reads and deletes, so
@@ -30,7 +30,7 @@ read themselves. STUDIO_ENABLED is set for the web pane here, to 1 or (with
 --no-studio) 0, whatever that file says: a runner with nothing proxying to it
 is no use, and Studio with no runner behind it only errors.
 
-Environment: DEV_SESSION (tmux session name, default self-learn). Detach with
+Environment: DEV_SESSION (tmux session name, default gnosia). Detach with
 Ctrl-b d; the session keeps running until `stop`.
 EOF
 }
@@ -46,7 +46,7 @@ root="${DEV_ROOT:-$script_root}"
 cd "$root"
 DEV_ENV="$script_root/scripts/lib/dev-env.mjs"
 
-SESSION="${DEV_SESSION:-self-learn}"
+SESSION="${DEV_SESSION:-gnosia}"
 WEB_PORT="${PORT:-3000}"
 STUDIO_PORT="${STUDIO_PORT:-7250}"
 
@@ -129,7 +129,7 @@ preflight() {
   load_env
 
   url="$(env_value DATABASE_URL)"
-  url="${url:-postgres://localhost:5432/self_learn}"
+  url="${url:-postgres://localhost:5432/gnosia}"
   shown="$(printf '%s' "$url" | sed -E 's#://[^@/]*@#://***@#')"
   # The URL goes to pg_isready and psql with its password taken out; libpq
   # reads that from PGPASSWORD, so the secret is never an argument that `ps`
@@ -147,7 +147,7 @@ preflight() {
       warn "Postgres is not accepting connections at $shown (brew services start postgresql@17)"
       errors=1
     elif psql_bin="$(pg_tool psql)" && ! env ${pgenv[@]+"${pgenv[@]}"} "$psql_bin" -d "$safe_url" -Atqc 'select 1' >/dev/null 2>&1; then
-      warn "cannot open the database at $shown: createdb self_learn, then npm run catalog -- migrate (README, Install)"
+      warn "cannot open the database at $shown: createdb gnosia, then npm run catalog -- migrate (README, Install)"
       errors=1
     fi
   else
@@ -197,7 +197,7 @@ trap cleanup_failed_start EXIT
 pane_command() { # pane_command <process command...>
   local file name line
   local -a held=()
-  file="$(mktemp "${TMPDIR:-/tmp}/self-learn-dev.XXXXXX")" || die "could not create a temporary file"
+  file="$(mktemp "${TMPDIR:-/tmp}/gnosia-dev.XXXXXX")" || die "could not create a temporary file"
   PANE_FILES+=("$file")
 
   # Names a running tmux server holds that this shell may have since dropped.
@@ -207,7 +207,7 @@ pane_command() { # pane_command <process command...>
 
   {
     printf 'export PATH=%q\n' "$PATH"
-    for name in DATABASE_URL PORT SELF_LEARN_HOME ${held[@]+"${held[@]}"}; do
+    for name in DATABASE_URL PORT GNOSIA_HOME ${held[@]+"${held[@]}"}; do
       case "$name" in STUDIO_ENABLED) continue ;; esac
       if [ -n "${!name+x}" ]; then printf 'export %s=%q\n' "$name" "${!name}"; else printf 'unset %s\n' "$name"; fi
     done

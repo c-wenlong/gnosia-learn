@@ -10,9 +10,9 @@ import {
   contentRevision,
   type OwnerScope,
   topic,
-} from "@self-learn/schema";
+} from "@gnosia/schema";
 import { and, asc, count, eq, inArray, sql, type SQL } from "drizzle-orm";
-import { alias } from "drizzle-orm/pg-core";
+import { alias } from "drizzle-orm/sqlite-core";
 
 import { andOwnedBy, cacheKey, ownedBy, type Owners, scopedRead } from "../content/scope";
 import type { CatalogDatabase } from "../db";
@@ -24,7 +24,7 @@ import { bytewise } from "../sql-order";
  * These queries used to be private functions inside
  * `../commands/show.ts`, which made them reachable from the CLI and from
  * nowhere else. The web app may import exactly one module of this package
- * (`@self-learn/catalog/state`, ARCHITECTURE.md layering rule 1), so an asset
+ * (`@gnosia/catalog/state`, ARCHITECTURE.md layering rule 1), so an asset
  * the catalog knows about could not be put on a page at all: the indexers
  * recorded 200-odd of them and the app could not name one. That is the reason
  * this file exists, and the reason it is here rather than under `commands/`.
@@ -113,10 +113,10 @@ let warnedUnnamed = false;
 export async function assetNamesExist(db: CatalogDatabase): Promise<boolean> {
   const key = cacheKey(db);
   if (hasNames.has(key)) return true;
-  const { rows } = await db.execute<{ present: boolean }>(
-    sql`select to_regclass(current_schema() || '.asset_name') is not null as present`,
+  const { rows } = await db.execute<{ present: number }>(
+    sql`select exists(select 1 from sqlite_master where type = 'table' and name = 'asset_name') as present`,
   );
-  const present = rows[0]?.present === true;
+  const present = rows[0]?.present === 1;
   if (present) hasNames.set(key, true);
   else if (!warnedUnnamed) {
     warnedUnnamed = true;
@@ -136,10 +136,10 @@ const hasRevisions = new WeakMap<object, true>();
 export async function revisionsExist(db: CatalogDatabase): Promise<boolean> {
   const key = cacheKey(db);
   if (hasRevisions.has(key)) return true;
-  const { rows } = await db.execute<{ present: boolean }>(
-    sql`select to_regclass(current_schema() || '.content_revision') is not null as present`,
+  const { rows } = await db.execute<{ present: number }>(
+    sql`select exists(select 1 from sqlite_master where type = 'table' and name = 'content_revision') as present`,
   );
-  const present = rows[0]?.present === true;
+  const present = rows[0]?.present === 1;
   if (present) hasRevisions.set(key, true);
   return present;
 }
@@ -180,18 +180,18 @@ export async function revisionsExist(db: CatalogDatabase): Promise<boolean> {
  * asset the reader may read reaches this, so it widens nothing.
  */
 function editedAtColumn(learnerId: string, names: boolean): SQL<Date | string | null> {
-  const stripped = (alias: string) => sql.raw(`(${alias}.snapshot #- '{entity,blob_key}' #- '{links,asset_derivation}')`);
+  const stripped = (alias: string) => sql.raw(`json_remove(${alias}.snapshot, '$.entity.blob_key', '$.links.asset_derivation')`);
   const renamed = names
-    ? sql`union all (select n.updated_at, true from ${assetName} n where n.learner_id = ${learnerId} and n.asset_id = "asset"."id")`
+    ? sql`union all select n.updated_at, true from ${assetName} n where n.learner_id = ${learnerId} and n.asset_id = "asset"."id"`
     : sql``;
   return sql<Date | string | null>`(
     select case when x.person then x.at end
     from (
-      (select c.created_at as at, (c.author_kind = 'person' and c.op <> 'delete' and "asset"."kind" <> 'poster') as person
+      select * from (select c.created_at as at, (c.author_kind = 'person' and c.op <> 'delete' and "asset"."kind" <> 'poster') as person
        from ${contentRevision} c
        left join ${contentRevision} p on p.id = c.previous_id
        where c.entity_type = 'asset' and c.entity_id = "asset"."id"
-         and (c.author_kind = 'import' or p.id is null or ${stripped("c")} is distinct from ${stripped("p")})
+         and (c.author_kind = 'import' or p.id is null or ${stripped("c")} is not ${stripped("p")})
        order by c.seq desc
        limit 1)
       ${renamed}
@@ -689,7 +689,7 @@ async function listScoped(
       editedAt: revisions ? editedAtColumn(learnerId, names) : sql<null>`null`,
       // Only chips for topics the reader may read (phase 4).
       topics: sql<string[]>`(
-        select coalesce(array_agg(${assetTopic.topicSlug} order by ${assetTopic.topicSlug} collate "C"), '{}')
+        select coalesce(json_group_array(${assetTopic.topicSlug} order by ${assetTopic.topicSlug} collate binary), '[]')
         from ${assetTopic}
         where ${assetTopic.assetId} = ${asset.id}${
           owners === undefined
@@ -715,7 +715,10 @@ async function listScoped(
   // remember that every caller assumed the shape it produced today.
   return rows.map((row) => ({
     ...row,
-    topics: row.topics ?? [],
+    // better-sqlite3 hands a raw `sql` column back as its text, so the
+    // `json_group_array` subquery above arrives as a JSON string where pg's
+    // driver parsed its text[] itself.
+    topics: Array.isArray(row.topics) ? row.topics : JSON.parse(String(row.topics ?? "[]")),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     // A timestamp out of raw SQL is parsed by the driver, not by drizzle's

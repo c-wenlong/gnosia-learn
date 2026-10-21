@@ -1,5 +1,5 @@
-import { RECAP_SOURCES, type KnowledgeSource } from "@self-learn/schema/shared";
-import { upsertRecap } from "@self-learn/catalog/state";
+import { RECAP_SOURCES, type KnowledgeSource } from "@gnosia/schema/shared";
+import { upsertRecap } from "@gnosia/catalog/state";
 
 import {
   BadRequest,

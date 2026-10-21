@@ -4,7 +4,7 @@ import { tutorDeps, turnResponse } from "@/lib/agent/env";
 import { CHAT_RATE_LIMIT, enforceRateLimit, enforceSameOrigin } from "@/lib/agent/guard";
 import { isConceptSlug } from "@/lib/concept-workspace-core";
 import { requestOwner } from "@/lib/learner-api";
-import { sessionQuestionTurn } from "@self-learn/tutor/server/turns";
+import { sessionQuestionTurn } from "@gnosia/tutor/server/turns";
 
 export const runtime = "nodejs";
 
@@ -18,7 +18,7 @@ const MAX_AVOID = 12;
  * workspace's own notes and checks shape it.
  *
  * The turn itself — the workspace read, the prompt, the model chain and the
- * parsed question — is `sessionQuestionTurn` in `@self-learn/tutor/server`.
+ * parsed question — is `sessionQuestionTurn` in `@gnosia/tutor/server`.
  * This file keeps the request-side guards and the validation that must
  * answer before the limiter is touched.
  */

@@ -4,7 +4,7 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { STUDIO_OWNER_HEADER } from "@self-learn/schema/shared";
+import { STUDIO_OWNER_HEADER } from "@gnosia/schema/shared";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {

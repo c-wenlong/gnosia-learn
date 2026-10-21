@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Lo-fi kit for the self-learn redesign, rendered into OpenPencil via its MCP.
+"""Lo-fi kit for the gnosia redesign, rendered into OpenPencil via its MCP.
 
 Usage: lofi.py [slug ...]   (no args = all screens)
 Renders each screen frame, exports SVG to docs/design/lofi/<slug>.svg and saves the .fig.
@@ -123,7 +123,7 @@ def TopBar(active):
             items.append(F(T(n, size=13, weight="semibold"), R(28, 2, bg=INK, rounded=1), flex="col", gap=6, items="center"))
         else:
             items.append(F(T(n, size=13, color=MUTED), R(28, 2, bg=CANVAS, rounded=1), flex="col", gap=6, items="center"))
-    return F(T("self-learn", size=15, weight="bold"),
+    return F(T("gnosia", size=15, weight="bold"),
              F(*items, flex="row", gap=28, items="end"),
              Spacer(),
              Pill("Streak 14"), Pill("Target 1 / 2"), Dot(30, BOX2),
@@ -437,7 +437,7 @@ def main():
                 failures.append(f"{slug}: could not delete the previous frame {old_id}; the document now holds a duplicate"); print(failures[-1])
         path = os.path.join(OUT, f"{slug}.svg"); open(path, "w").write(svg)
         print(f"{slug}: id={res['id']} svg={len(svg)}B warnings={len(warn)}", ("; ".join(warn[:3]) if warn else ""))
-    saved = call("save_file", {"path": os.path.join(REPO, "docs/design/self-learn-lofi.fig")})
+    saved = call("save_file", {"path": os.path.join(REPO, "docs/design/gnosia-lofi.fig")})
     if not saved.get("saved"):
         failures.append(f"save_file failed: {json.dumps(saved)[:300]}")
     print("saved:", bool(saved.get("saved")))

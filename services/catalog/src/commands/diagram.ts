@@ -1,7 +1,7 @@
 import path from "node:path";
 import { parseArgs } from "node:util";
 
-import { AUTHOR_KINDS, type AuthorKind, LOCAL_LEARNER_ID, ownerScope } from "@self-learn/schema";
+import { AUTHOR_KINDS, type AuthorKind, LOCAL_LEARNER_ID, ownerScope } from "@gnosia/schema";
 
 import { openBlobStore } from "../content/blob";
 import {

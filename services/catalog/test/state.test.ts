@@ -1,4 +1,4 @@
-import { KNOWLEDGE_LIMITS, PREFERENCE_KEYS } from "@self-learn/schema";
+import { KNOWLEDGE_LIMITS, PREFERENCE_KEYS } from "@gnosia/schema";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
@@ -41,7 +41,7 @@ import { conceptsIndexer } from "../src/index/concepts";
 import { replayReviews } from "../src/learn/replay";
 import { writeSource } from "../src/index/writer";
 import { readKnowledgeBase } from "../src/state/knowledge-base";
-import { migratedScratchDatabase, probe, type Scratch, SQLSTATE, sqlstate } from "./scratch-database";
+import { clearTables, migratedScratchDatabase, probe, type Scratch, SQLSTATE, sqlstate } from "./scratch-database";
 import {
   ASSETS,
   CONCEPTS,
@@ -53,7 +53,7 @@ import {
   seedContent,
   TOPIC_SLUG,
 } from "./state-fixture";
-import { LOCAL_LEARNER_ID, ownerScope } from "@self-learn/schema";
+import { LOCAL_LEARNER_ID, ownerScope } from "@gnosia/schema";
 
 /** Who these reads are for: the one owner there is today (phase 4 scoping). */
 const LOCAL = ownerScope(LOCAL_LEARNER_ID);
@@ -86,17 +86,7 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
 
   /** Every test starts from an empty state half, and the content half stays. */
   beforeEach(async () => {
-    await scratch.db.execute(
-      // `event` cannot be deleted through SQL the trigger can see, so the
-      // trigger comes off for the length of the truncate and goes straight
-      // back on. This is the one place in the codebase that does that, and it
-      // is a test fixture rather than anything the application can reach.
-      "alter table event disable trigger event_no_update; " +
-        "alter table event disable trigger event_no_delete; " +
-        "truncate event, mastery, review, progress, recap, preference; " +
-        "alter table event enable trigger event_no_update; " +
-        "alter table event enable trigger event_no_delete;",
-    );
+    await clearTables(scratch.db, ["event", "mastery", "review", "progress", "recap", "preference"]);
   });
 
   describe("progress", () => {
@@ -136,7 +126,7 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
 
     it("refuses a tick, a note or a recap on an archived item, and keeps what was recorded on it", async () => {
       await setProgress(scratch.db, ITEMS[1], true);
-      await scratch.db.execute(sql`update curriculum_item set archived_at = now() where id = ${ITEMS[1]}`);
+      await scratch.db.execute(sql`update curriculum_item set archived_at = cast(unixepoch('subsec') * 1000 as integer) where id = ${ITEMS[1]}`);
       try {
         for (const write of [
           () => setProgress(scratch.db, ITEMS[1], true),
@@ -505,7 +495,7 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
 
       // And nothing was half-applied: the transaction rolled back.
       const { rows } = await scratch.db.execute<{ n: number }>(
-        "select count(*)::int as n from concept",
+        "select count(*) as n from concept",
       );
       expect(rows[0]?.n).toBe(CONCEPTS.length);
     });
@@ -939,7 +929,7 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
     it("carries what the learner recorded on an item the course has since archived", async () => {
       // An export includes ticks, notes and recaps on archived items (D12), so
       // importing one back must not stop at the first of them.
-      await scratch.db.execute(sql`update curriculum_item set archived_at = now() where id in (${ITEMS[0]}, ${ITEMS[1]})`);
+      await scratch.db.execute(sql`update curriculum_item set archived_at = cast(unixepoch('subsec') * 1000 as integer) where id in (${ITEMS[0]}, ${ITEMS[1]})`);
       try {
         const result = await importLegacyState(scratch.db, payload);
         expect(result).toMatchObject({ progress: 1, notes: 1, recaps: 1, unknownItems: ["gone-m9-t9"] });

@@ -11,7 +11,7 @@ import {
   type ReactNode,
 } from "react";
 
-import type { StudioAgentPreference } from "@self-learn/schema/shared";
+import type { StudioAgentPreference } from "@gnosia/schema/shared";
 
 import { loadStudioSettings, type StudioSettingsData } from "@/app/(app)/studio/actions";
 import { usePublishStudioChats } from "@/components/shell/shell-context";

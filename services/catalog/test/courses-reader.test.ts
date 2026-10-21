@@ -1,10 +1,9 @@
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { fileSource } from "@self-learn/content";
-import { collection, curriculumItem } from "@self-learn/schema";
+import { fileSource } from "@gnosia/content";
+import { collection, curriculumItem } from "@gnosia/schema";
 import { eq, sql } from "drizzle-orm";
-import type { PgTransactionConfig } from "drizzle-orm/pg-core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { DB_READERS } from "../src/content/flip";
@@ -13,9 +12,10 @@ import { dbSource } from "../src/content/source";
 import { runIndex } from "../src/index/run";
 import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { SEED } from "./seed";
-import { LOCAL_LEARNER_ID, ownerScope, type OwnerScope } from "@self-learn/schema";
+import { LOCAL_LEARNER_ID, ownerScope, type OwnerScope } from "@gnosia/schema";
 import { writeAssetName } from "../src/state";
 
+import { inTransaction } from "../src/db";
 /** Who these reads are for: the one owner there is today (phase 4 scoping). */
 const LOCAL = ownerScope(LOCAL_LEARNER_ID);
 
@@ -86,16 +86,21 @@ describe.skipIf(!reachable.ok)("the courses reader", () => {
   it("reads the whole tree from one snapshot", async () => {
     const statements: string[] = [];
     const logged = new Proxy(scratch.db, {
+      // `inTransaction` opens and closes through `db.run`; watching it is how
+      // the test sees the whole tree read inside one transaction, now that
+      // Postgres's `repeatable read, read only` is a SQLite `begin immediate`.
       get(target, key, receiver) {
-        if (key !== "transaction") return Reflect.get(target, key, receiver);
-        return (fn: never, config: PgTransactionConfig) => {
-          statements.push(`${config.isolationLevel ?? ""} ${config.accessMode ?? ""}`);
-          return target.transaction(fn, config);
+        if (key !== "run") return Reflect.get(target, key, receiver);
+        return (query: never) => {
+          const chunks = (query as { queryChunks?: { value?: string[] }[] }).queryChunks ?? [];
+          statements.push(chunks.map((chunk) => (chunk.value ?? []).join("")).join(""));
+          return Reflect.get(target, key, receiver).call(target, query);
         };
       },
     });
     await readCourses(logged);
-    expect(statements).toEqual(["repeatable read read only"]);
+    expect(statements[0]).toBe("begin immediate");
+    expect(statements[statements.length - 1]).toBe("commit");
   });
 
   it("leaves out archived items, modules and courses", async () => {
@@ -106,14 +111,14 @@ describe.skipIf(!reachable.ok)("the courses reader", () => {
     if (first === undefined || mod === undefined || item === undefined || other === undefined) {
       throw new Error("the seed has no course with two modules");
     }
-    await scratch.db.update(curriculumItem).set({ archivedAt: sql`now()` }).where(eq(curriculumItem.id, item.id));
-    await scratch.db.update(collection).set({ archivedAt: sql`now()` }).where(eq(collection.id, other.id));
+    await scratch.db.update(curriculumItem).set({ archivedAt: sql`cast(unixepoch('subsec') * 1000 as integer)` }).where(eq(curriculumItem.id, item.id));
+    await scratch.db.update(collection).set({ archivedAt: sql`cast(unixepoch('subsec') * 1000 as integer)` }).where(eq(collection.id, other.id));
     try {
       const [again] = await readCourses(scratch.db);
       expect(again?.modules.map((m) => m.id)).not.toContain(other.id);
       expect(again?.modules[0]?.topics.map((t) => t.id)).not.toContain(item.id);
 
-      await scratch.db.update(collection).set({ archivedAt: sql`now()` }).where(eq(collection.id, first.id));
+      await scratch.db.update(collection).set({ archivedAt: sql`cast(unixepoch('subsec') * 1000 as integer)` }).where(eq(collection.id, first.id));
       expect((await readCourses(scratch.db)).map((c) => c.id)).not.toContain(first.id);
     } finally {
       await scratch.db.update(curriculumItem).set({ archivedAt: null }).where(eq(curriculumItem.id, item.id));

@@ -10,7 +10,7 @@
 // Desktop is 1440x900 and phone 390x844, the hi-fi frame sizes. Each shot is
 // the full page, so content below the fold is in the picture too.
 //
-// A theme is the `self-learn-theme` cookie the root layout reads, set before
+// A theme is the `gnosia-theme` cookie the root layout reads, set before
 // the page loads, so there is no light flash in the capture. Light sets the
 // cookie to `light`, so a dark preference row in the database cannot leak in.
 // The browser's colour scheme is dark for `dark` and `gnosia-dark`, so the
@@ -89,7 +89,7 @@ try {
         hasTouch: isMobile,
         colorScheme: schemeFor(theme),
       });
-      await context.addCookies([{ name: 'self-learn-theme', value: theme, domain: origin.hostname, path: '/' }]);
+      await context.addCookies([{ name: 'gnosia-theme', value: theme, domain: origin.hostname, path: '/' }]);
       const page = await context.newPage();
       for (const route of routes) {
         const slug = route.replace(/^\/+|\/+$/g, '').replace(/[/?&=#]+/g, '-') || 'root';

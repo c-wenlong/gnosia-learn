@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { ContentError, COURSES_DIR, loadCourses } from "@self-learn/content";
+import { ContentError, COURSES_DIR, loadCourses } from "@gnosia/content";
 
 import { withFileLock, writeAtomically } from "./file-lock";
 

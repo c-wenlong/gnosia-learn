@@ -226,7 +226,7 @@ visit) so a visit older than five survives. That is a new event type, which
 is a migration and not only an edit to `EVENT_TYPES`
 ([shared.ts:108](../../packages/schema/src/shared.ts)): the table's
 `event_type_check` constraint is rewritten the way `0008_watched_event.sql`
-did for `watched`, generated with `npm run generate -w @self-learn/catalog`,
+did for `watched`, generated with `npm run generate -w @gnosia/catalog`,
 and `visit` is not a study event. Until the first visit event exists, the
 query also reads the `recentModules` preference and merges the two by course
 and module, newest first, so the five modules Home shows today do not vanish

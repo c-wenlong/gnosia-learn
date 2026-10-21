@@ -3,8 +3,8 @@ import { cp, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promi
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { fsStore } from "@self-learn/blob";
-import { blobObject, collection, contentRevision, COURSE_COVER_MAX_BYTES, learner } from "@self-learn/schema";
+import { fsStore } from "@gnosia/blob";
+import { blobObject, collection, contentRevision, COURSE_COVER_MAX_BYTES, learner } from "@gnosia/schema";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -16,7 +16,7 @@ import { renderType } from "../src/content/export";
 import { parity } from "../src/content/parity";
 import { readSnapshots } from "../src/content/snapshot";
 import { runIndex } from "../src/index/run";
-import { migratedScratchDatabase, probe, type Scratch, SQLSTATE, sqlstate } from "./scratch-database";
+import { migratedScratchDatabase, probe, type Scratch, sqlMessage, SQLSTATE, sqlstate } from "./scratch-database";
 import { SEED } from "./seed";
 import { storedBlob } from "./stored-blob";
 
@@ -54,14 +54,14 @@ const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a
 
 /** Point the blob store at a directory of this database's own, until the returned function puts it back. */
 function ownStore(name: string): { root: string; restore: () => void } {
-  const saved = process.env["SELF_LEARN_HOME"];
-  const home = path.join(tmpdir(), `self-learn-home-${name}`);
-  process.env["SELF_LEARN_HOME"] = home;
+  const saved = process.env["GNOSIA_HOME"];
+  const home = path.join(tmpdir(), `gnosia-home-${name}`);
+  process.env["GNOSIA_HOME"] = home;
   return {
     root: path.join(home, "blobs"),
     restore: () => {
-      if (saved === undefined) delete process.env["SELF_LEARN_HOME"];
-      else process.env["SELF_LEARN_HOME"] = saved;
+      if (saved === undefined) delete process.env["GNOSIA_HOME"];
+      else process.env["GNOSIA_HOME"] = saved;
       void rm(home, { recursive: true, force: true });
     },
   };
@@ -86,7 +86,7 @@ describe.skipIf(!reachable.ok)("catalog course cover", () => {
   const webp = async () => readFile(COVER);
 
   const revisions = async () =>
-    (await scratch.db.execute<{ n: number }>(sql`select count(*)::int as n from content_revision`)).rows[0]?.n ?? 0;
+    (await scratch.db.execute<{ n: number }>(sql`select count(*) as n from content_revision`)).rows[0]?.n ?? 0;
   const blobs = async () => (await scratch.db.select({ key: blobObject.key }).from(blobObject)).map((r) => r.key).sort();
   const course = async (id = "cp4284") => {
     const [row] = await scratch.db.select().from(collection).where(eq(collection.id, id));
@@ -96,7 +96,7 @@ describe.skipIf(!reachable.ok)("catalog course cover", () => {
 
   beforeAll(async () => {
     scratch = await migratedScratchDatabase();
-    store = ownStore(scratch.name);
+    store = ownStore(scratch.url);
     tree = await seedWithoutCover();
     files = await mkdtemp(path.join(tmpdir(), "course-cover-files-"));
     await runIndex(scratch.db, { repoRoot: tree, only: [...SOURCES], manimkcRoot: NO_MANIMKC });
@@ -118,14 +118,21 @@ describe.skipIf(!reachable.ok)("catalog course cover", () => {
         error = caught;
       }
       expect(sqlstate(error)).toBe(code);
-      expect(String((error as { cause?: { constraint?: unknown } })?.cause?.constraint)).toBe(constraint);
+      // SQLite names a failed CHECK in its message but reports a foreign key
+      // nameless ("FOREIGN KEY constraint failed"), so the name assertion
+      // only applies where the engine kept one.
+      if (code === SQLSTATE.foreignKeyViolation) {
+        expect(sqlMessage(error)).toContain("FOREIGN KEY constraint failed");
+      } else {
+        expect(sqlMessage(error)).toContain(constraint);
+      }
     };
-    const credit = sql`jsonb_build_object('coverCredit', jsonb_build_object('photographer', 'p', 'source', 'https://x.test', 'licence', 'l'))`;
+    const credit = sql`json_object('coverCredit', json_object('photographer', 'p', 'source', 'https://x.test', 'licence', 'l'))`;
 
     it("lets only a course carry a cover", async () => {
       const key = await storedBlob(scratch.db, "a module's photo", "webp");
       await refused(
-        sql`update collection set cover_blob_key = ${key}, metadata = metadata || ${credit} where id = 'cp4284-m1'`,
+        sql`update collection set cover_blob_key = ${key}, metadata = json_patch(metadata, ${credit}) where id = 'cp4284-m1'`,
         SQLSTATE.checkViolation,
         "collection_cover_course_check",
       );
@@ -135,7 +142,7 @@ describe.skipIf(!reachable.ok)("catalog course cover", () => {
       const key = await storedBlob(scratch.db, "a photo with no credit", "webp");
       await refused(sql`update collection set cover_blob_key = ${key} where id = 'cp4284'`, SQLSTATE.checkViolation, "collection_cover_credit_check");
       await refused(
-        sql`update collection set metadata = metadata || ${credit} where id = 'cp4284'`,
+        sql`update collection set metadata = json_patch(metadata, ${credit}) where id = 'cp4284'`,
         SQLSTATE.checkViolation,
         "collection_cover_credit_check",
       );
@@ -143,15 +150,15 @@ describe.skipIf(!reachable.ok)("catalog course cover", () => {
 
     it("names only a stored object, and keeps that object while it does", async () => {
       await refused(
-        sql`update collection set cover_blob_key = ${`local/${"0".repeat(64)}.webp`}, metadata = metadata || ${credit} where id = 'cp4284'`,
+        sql`update collection set cover_blob_key = ${`local/${"0".repeat(64)}.webp`}, metadata = json_patch(metadata, ${credit}) where id = 'cp4284'`,
         SQLSTATE.foreignKeyViolation,
         "collection_cover_blob_key_blob_object_key_fk",
       );
       const key = await storedBlob(scratch.db, "a photo held on to", "webp");
-      await scratch.db.execute(sql`update collection set cover_blob_key = ${key}, metadata = metadata || ${credit} where id = 'cp4284'`);
+      await scratch.db.execute(sql`update collection set cover_blob_key = ${key}, metadata = json_patch(metadata, ${credit}) where id = 'cp4284'`);
       await refused(sql`delete from blob_object where key = ${key}`, SQLSTATE.foreignKeyViolation, "collection_cover_blob_key_blob_object_key_fk");
       await scratch.db.execute(
-        sql`update collection set cover_blob_key = null, metadata = metadata - 'coverCredit' where id = 'cp4284'`,
+        sql`update collection set cover_blob_key = null, metadata = json_remove(metadata, '$.coverCredit') where id = 'cp4284'`,
       );
     });
 
@@ -373,7 +380,7 @@ describe.skipIf(!reachable.ok)("course covers through export and import", () => 
   });
 
   it("imports the seed's cover as a blob, exports it back byte for byte, and imports that under the same key", async () => {
-    const one = ownStore(first.name);
+    const one = ownStore(first.url);
     restore = one.restore;
     await runIndex(first.db, { repoRoot: SEED, only: [...SOURCES], manimkcRoot: NO_MANIMKC });
     expect(await coverOf(first)).toEqual({ key: await key(), metadata: expect.objectContaining({ coverCredit: CREDIT }) });
@@ -394,7 +401,7 @@ describe.skipIf(!reachable.ok)("course covers through export and import", () => 
     expect((await parity(first.db, SEED, ["courses"])).clean).toBe(true);
     one.restore();
 
-    const two = ownStore(second.name);
+    const two = ownStore(second.url);
     restore = two.restore;
     await runIndex(second.db, { repoRoot: out, only: [...SOURCES], manimkcRoot: NO_MANIMKC });
     expect(await coverOf(second)).toEqual(await coverOf(first));
@@ -406,7 +413,7 @@ describe.skipIf(!reachable.ok)("course covers through export and import", () => 
   const courseRevisions = async (db: Scratch) =>
     (
       await db.db.execute<{ n: number }>(
-        sql`select count(*)::int as n from content_revision where entity_type = 'collection' and entity_id = 'cp4284'`,
+        sql`select count(*) as n from content_revision where entity_type = 'collection' and entity_id = 'cp4284'`,
       )
     ).rows[0]?.n ?? 0;
   /** A copy of the export in `bad`, with `edit` applied to its course file. */
@@ -440,7 +447,7 @@ describe.skipIf(!reachable.ok)("course covers through export and import", () => 
   });
 
   it("refuses by name a cover: that differs from the stored one, or an image that is not the stored image, writing nothing", async () => {
-    const revisions = await second.db.execute(sql`select count(*)::int as n from content_revision`);
+    const revisions = await second.db.execute(sql`select count(*) as n from content_revision`);
     const refused = async (pattern: RegExp) => {
       await expect(importBad(second)).rejects.toThrow(pattern);
     };
@@ -454,7 +461,7 @@ describe.skipIf(!reachable.ok)("course covers through export and import", () => 
     await writeFile(await variant((yaml) => yaml), PNG);
     await refused(/holds a PNG image; name it cp4284\.cover\.png/);
 
-    expect((await second.db.execute(sql`select count(*)::int as n from content_revision`)).rows).toEqual(revisions.rows);
+    expect((await second.db.execute(sql`select count(*) as n from content_revision`)).rows).toEqual(revisions.rows);
     expect((await coverOf(second))?.key).toBe(await key());
   });
 
@@ -474,7 +481,7 @@ describe.skipIf(!reachable.ok)("course covers through export and import", () => 
     await rm(await variant(noCoverBlock));
     const moved = await storedBlob(second.db, "a cover set while the import ran", "png");
     const credit = { photographer: "Someone Else", source: "https://example.com/new", licence: "CC0" };
-    const revisions = async () => (await second.db.execute<{ n: number }>(sql`select count(*)::int as n from content_revision`)).rows[0]?.n;
+    const revisions = async () => (await second.db.execute<{ n: number }>(sql`select count(*) as n from content_revision`)).rows[0]?.n;
     const rowOf = async () => (await second.db.select().from(collection).where(eq(collection.id, "cp4284")))[0];
 
     let landed: Awaited<ReturnType<typeof rowOf>>;
@@ -486,7 +493,7 @@ describe.skipIf(!reachable.ok)("course covers through export and import", () => 
       before = (await revisions()) ?? 0;
       await second.db.execute(
         sql`update collection set cover_blob_key = ${moved},
-              metadata = jsonb_set(metadata, '{coverCredit}', ${JSON.stringify(credit)}::jsonb)
+              metadata = json_set(metadata, '$.coverCredit', json(${JSON.stringify(credit)}))
             where id = 'cp4284'`,
       );
       landed = await rowOf();

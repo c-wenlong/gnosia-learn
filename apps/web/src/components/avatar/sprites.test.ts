@@ -1,4 +1,4 @@
-import { AVATARS } from "@self-learn/schema/shared";
+import { AVATARS } from "@gnosia/schema/shared";
 import { describe, expect, it } from "vitest";
 
 import { PALETTE, SPRITES, spriteRuns } from "./sprites";

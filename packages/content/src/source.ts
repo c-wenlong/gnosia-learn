@@ -6,7 +6,7 @@ import type { Course, TagMeta, TopicEntry } from "./types";
  * Today every type is a file under `content/` or `learn/`. The migration in
  * docs/CONTENT-MIGRATION.md moves them into Postgres one type at a time, and
  * this interface is the seam that lets it: `fileSource` reads the files,
- * `dbSource` in `@self-learn/catalog` reads the rows, and `selectSource` picks
+ * `dbSource` in `@gnosia/catalog` reads the rows, and `selectSource` picks
  * one per type. A caller holds a `ContentSource` and never learns which.
  *
  * Every method is async because a database read is, and a synchronous
