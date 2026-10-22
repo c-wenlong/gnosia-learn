@@ -91,7 +91,7 @@ final class WebServer {
     private func spawn(port: Int) -> Bool {
         exited = false
         stderrTail = ""
-        guard let root = Self.repoRoot() else {
+        guard let root = Checkout.repoRoot() else {
             status = .failed("No checkout found — set GNOSIA_REPO to the repository root.")
             return false
         }
@@ -109,20 +109,14 @@ final class WebServer {
             "exec node '\(next.path)' \(Self.mode(web: web)) '\(web.path)' -p \(port) -H 127.0.0.1"
         ]
         proc.currentDirectoryURL = root
-        // ~/.gnosia/.env is the local instance's settings (the owner's
-        // password lives there); the shell merges it under the real
-        // environment so exports still win. GNOSIA_LOCAL_TOKEN is the
-        // per-launch secret /api/auth/local redeems for a session cookie.
-        // CATALOG_DB pins the SQLite catalog when nothing else names it:
-        // apps/web/.env.local may still carry a legacy postgres
-        // DATABASE_URL, which the store refuses. An existing CATALOG_DB is
-        // left alone, and GNOSIA_CATALOG is deliberately not consulted —
-        // it names the native app's read snapshot, not the live database.
-        var env = Self.dataHomeEnv().merging(ProcessInfo.processInfo.environment) { _, own in own }
+        // The shared child environment: ~/.gnosia/.env merged under the real
+        // one and the SQLite catalog pinned (Checkout.childEnv). An existing
+        // CATALOG_DB is left alone, and GNOSIA_CATALOG is deliberately not
+        // consulted — it names the native app's read snapshot, not the live
+        // database. GNOSIA_LOCAL_TOKEN is the per-launch secret
+        // /api/auth/local redeems for a session cookie.
+        var env = Checkout.childEnv()
         env["GNOSIA_LOCAL_TOKEN"] = localToken
-        if env["CATALOG_DB"]?.isEmpty != false {
-            env["CATALOG_DB"] = Self.dataHome().appending(path: "catalog.db").path
-        }
         proc.environment = env
         let err = Pipe()
         proc.standardError = err
@@ -155,41 +149,6 @@ final class WebServer {
             .trimmingCharacters(in: .whitespaces)
         if env == "dev" || env == "start" { return env! }
         return "dev"
-    }
-
-    /// The data-home directory: `$GNOSIA_HOME` or `~/.gnosia`.
-    private static func dataHome() -> URL {
-        if let home = ProcessInfo.processInfo.environment["GNOSIA_HOME"], !home.isEmpty {
-            return URL(fileURLWithPath: home)
-        }
-        return FileManager.default.homeDirectoryForCurrentUser.appending(path: ".gnosia")
-    }
-
-    /// KEY=VALUE pairs from `$GNOSIA_HOME/.env` (default `~/.gnosia/.env`):
-    /// the local instance's own env file, which Next never reads because it
-    /// only loads files from apps/web. Blanks and `#` comments skipped;
-    /// quotes around a value are stripped.
-    private static func dataHomeEnv() -> [String: String] {
-        guard let text = try? String(contentsOfFile: dataHome().appending(path: ".env").path, encoding: .utf8) else { return [:] }
-        var env: [String: String] = [:]
-        for line in text.split(separator: "\n") {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            guard !trimmed.isEmpty, !trimmed.hasPrefix("#"),
-                  let eq = trimmed.firstIndex(of: "=") else { continue }
-            let key = String(trimmed[..<eq]).trimmingCharacters(in: .whitespaces)
-            var value = String(trimmed[trimmed.index(after: eq)...]).trimmingCharacters(in: .whitespaces)
-            // dotenv rules: matching single or double quotes come off
-            // wholesale; an unquoted value ends at ` #`.
-            if value.count >= 2,
-               (value.hasPrefix("\"") && value.hasSuffix("\"")) ||
-               (value.hasPrefix("'") && value.hasSuffix("'")) {
-                value = String(value.dropFirst().dropLast())
-            } else if let hash = value.range(of: " #") {
-                value = String(value[..<hash.lowerBound]).trimmingCharacters(in: .whitespaces)
-            }
-            if !key.isEmpty { env[key] = value }
-        }
-        return env
     }
 
     /// Probes `/api/auth/local` *without* the token: our server refuses
@@ -241,20 +200,5 @@ final class WebServer {
 
     private func keepStderr(_ text: String) {
         stderrTail = String((stderrTail + text).suffix(4000))
-    }
-
-    /// The same discovery the other apps use: GNOSIA_REPO wins, then the
-    /// walk up from this file's compile-time path.
-    private static func repoRoot() -> URL? {
-        if let env = ProcessInfo.processInfo.environment["GNOSIA_REPO"], !env.isEmpty {
-            return URL(fileURLWithPath: env)
-        }
-        // #filePath: <root>/apps/desktop/Sources/GnosiaWeb/WebServer.swift
-        var here = URL(fileURLWithPath: #filePath)
-        for _ in 0 ..< 5 { here.deleteLastPathComponent() }
-        if FileManager.default.fileExists(atPath: here.appending(path: "apps/web").path) {
-            return here
-        }
-        return nil
     }
 }
