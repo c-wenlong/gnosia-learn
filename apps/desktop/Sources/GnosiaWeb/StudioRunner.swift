@@ -76,8 +76,9 @@ final class StudioRunner {
     }
 
     /// Bring a runner up for the window: adopt whatever answers, else spawn
-    /// one. Idempotent — a running or already-starting runner is reused, and
-    /// a failed start may be asked again.
+    /// one. Idempotent — a running or already-starting runner is reused, a
+    /// child still trying keeps its spawn rather than getting a sibling
+    /// racing it for the port, and a failed start may be asked again.
     func start() async {
         if case .running = status { return }
         guard status != .starting else { return }
@@ -85,10 +86,17 @@ final class StudioRunner {
         stopping = false
         port = Self.port()
         if await healthAnswers() {
-            status = .running(owned: false)
+            // A live child answering means ours bound; none means adopted.
+            status = .running(owned: process != nil)
             return
         }
-        guard spawn() else { return }
+        // A child already spawned and not yet exited keeps its spawn: a
+        // second node would only lose the same port, and overwriting
+        // `process` would orphan the first on quit.
+        if process == nil {
+            guard spawn() else { return }
+        }
+        watch?.cancel()
         watch = Task { [weak self] in await self?.watchHealth() }
     }
 
