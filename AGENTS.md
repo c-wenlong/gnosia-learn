@@ -783,6 +783,16 @@ On a billing block, merge when all three hold:
 
 Say in the merge report that CI did not run and why.
 
+### After a merge: reinstall the desktop shell
+
+`/Applications/Gnosia Web.app` is a frozen copy of the checkout's
+`apps/desktop` build: a `git pull` that lands a merged PR does not touch it,
+while everything the shell spawns (`next dev`, the studio runner) runs from
+the pulled tree. After every merge to `main`, run
+`apps/desktop/scripts/install-app.sh`: it quits the running copy — a
+graceful quit, which also stops the web server and any studio runner the
+shell owns — rebuilds, and replaces the installed bundle.
+
 ### Where a submodule's commit lives
 
 | Where | What it holds | How to read it |
