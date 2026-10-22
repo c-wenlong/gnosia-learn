@@ -31,7 +31,7 @@ export const HOME_PATH = "/home";
  * `@gnosia/schema/shared` so the BYOK seal in `@gnosia/tutor` reads
  * the same variable this session cookie is signed with.
  */
-export { OWNER_PASSWORD_VAR, AUTH_SECRET_VAR, MIN_SECRET_LENGTH } from "@gnosia/schema/shared";
+export { OWNER_PASSWORD_VAR, AUTH_SECRET_VAR, LOCAL_TOKEN_VAR, MIN_SECRET_LENGTH } from "@gnosia/schema/shared";
 import { AUTH_SECRET_VAR, MIN_SECRET_LENGTH, OWNER_PASSWORD_VAR } from "@gnosia/schema/shared";
 
 export interface AuthConfig {
@@ -190,3 +190,4 @@ export function isPublicPath(pathname: string): boolean {
 export function isApiPath(pathname: string): boolean {
   return pathname.startsWith("/api/") || pathname.startsWith("/studio/api/");
 }
+

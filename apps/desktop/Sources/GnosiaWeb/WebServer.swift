@@ -2,15 +2,19 @@
 //  WebServer.swift
 //  GnosiaWeb
 //
-//  Owns the local Next server the window loads. `next dev` is spawned when
-//  no build exists (a fresh checkout still opens the app), `next start`
-//  once `apps/web/.next/BUILD_ID` is there — GNOSIA_WEB_MODE=dev|start
-//  overrides the pick. The process is exec'd inside a login shell so the
-//  owner's nvm/volta PATH reaches node and the PID we hold *is* the server
-//  (terminate() hits node, not a wrapper). Readiness is polled on the
-//  socket itself rather than parsed from stdout, so dev-mode's slow first
-//  compiles do not matter — any HTTP response, even a redirect to
-//  sign-in, means the server is up.
+//  Owns the local Next server the window loads. `next dev` is the default
+//  so the app always serves the checkout's current code; `next start` is
+//  faster but silently serves whatever build happens to exist, so it is
+//  opt-in through GNOSIA_WEB_MODE=start. The process is exec'd inside a
+//  login shell so the owner's nvm/volta PATH reaches node and the PID we
+//  hold *is* the server (terminate() hits node, not a wrapper). Readiness
+//  is polled on the socket itself rather than parsed from stdout, so
+//  dev-mode's slow first compiles do not matter — any HTTP response, even
+//  a redirect to sign-in, means the server is up.
+//
+//  Next 16 refuses a second dev server for one directory and prints the
+//  running one's URL; when that happens the shell adopts it rather than
+//  failing — the window just connects to what is already up.
 //
 
 import AppKit
@@ -27,6 +31,12 @@ final class WebServer {
     }
 
     private(set) var status: Status = .off
+
+    /// Minted per launch and handed to the spawned server as
+    /// GNOSIA_LOCAL_TOKEN; the window's first URL redeems it at
+    /// /api/auth/local for a real session cookie. Never written to disk —
+    /// only the child process's environment carries it.
+    private let localToken = UUID().uuidString + UUID().uuidString
 
     private var process: Process?
     private var exited = true
@@ -49,11 +59,21 @@ final class WebServer {
             let port = Int.random(in: 49200 ... 59800)
             guard spawn(port: port) else { return }  // no repo/node — status is failed
             if let url = await waitReady(port: port) {
-                status = .running(url)
+                // The window's first load: redeem the launch token for the
+                // session cookie, which 303s onward to /home.
+                status = .running(URL(string: "\(url.absoluteString)api/auth/local?token=\(localToken)") ?? url)
                 return
             }
             process?.terminate()
             process = nil
+            // The dev-singleton case: Next refused the port because the app
+            // dir already has a server, and named where it lives. That
+            // server has no GNOSIA_LOCAL_TOKEN of ours, so the window opens
+            // on the bare URL and the owner signs in once as usual.
+            if let existing = existingServer() {
+                status = .running(existing)
+                return
+            }
             if attempt == 3 {
                 status = .failed(stderrTail.isEmpty
                     ? "The web server did not come up after three ports."
@@ -86,6 +106,13 @@ final class WebServer {
             "exec node '\(next.path)' \(Self.mode(web: web)) '\(web.path)' -p \(port) -H 127.0.0.1"
         ]
         proc.currentDirectoryURL = root
+        // ~/.gnosia/.env is the local instance's settings (the owner's
+        // password lives there); the shell merges it under the real
+        // environment so exports still win. GNOSIA_LOCAL_TOKEN is the
+        // per-launch secret /api/auth/local redeems for a session cookie.
+        var env = Self.dataHomeEnv().merging(ProcessInfo.processInfo.environment) { _, own in own }
+        env["GNOSIA_LOCAL_TOKEN"] = localToken
+        proc.environment = env
         let err = Pipe()
         proc.standardError = err
         proc.standardOutput = FileHandle.nullDevice
@@ -107,14 +134,51 @@ final class WebServer {
         }
     }
 
-    /// `start` when a production build exists, `dev` otherwise — a fresh
-    /// checkout with no `.next` still opens the app.
+    /// `dev` by default: it is slower on the first hit of each route but it
+    /// always serves the checkout's current code — `start` would silently
+    /// run whatever `.next` build happens to be lying around, which is how
+    /// a day-old build ships to the window with no hint anything is off.
+    /// GNOSIA_WEB_MODE=start opts into the fast path deliberately.
     private static func mode(web: URL) -> String {
         let env = ProcessInfo.processInfo.environment["GNOSIA_WEB_MODE"]?
             .trimmingCharacters(in: .whitespaces)
         if env == "dev" || env == "start" { return env! }
-        return FileManager.default
-            .fileExists(atPath: web.appending(path: ".next/BUILD_ID").path) ? "start" : "dev"
+        return "dev"
+    }
+
+    /// KEY=VALUE pairs from `$GNOSIA_HOME/.env` (default `~/.gnosia/.env`):
+    /// the local instance's own env file, which Next never reads because it
+    /// only loads files from apps/web. Blanks and `#` comments skipped;
+    /// quotes around a value are stripped.
+    private static func dataHomeEnv() -> [String: String] {
+        let home = ProcessInfo.processInfo.environment["GNOSIA_HOME"]
+            ?? FileManager.default.homeDirectoryForCurrentUser.appending(path: ".gnosia").path
+        guard let text = try? String(contentsOfFile: "\(home)/.env", encoding: .utf8) else { return [:] }
+        var env: [String: String] = [:]
+        for line in text.split(separator: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty, !trimmed.hasPrefix("#"),
+                  let eq = trimmed.firstIndex(of: "=") else { continue }
+            let key = String(trimmed[..<eq]).trimmingCharacters(in: .whitespaces)
+            var value = String(trimmed[trimmed.index(after: eq)...]).trimmingCharacters(in: .whitespaces)
+            if value.count >= 2, value.hasPrefix("\""), value.hasSuffix("\"") {
+                value = String(value.dropFirst().dropLast())
+            }
+            if !key.isEmpty { env[key] = value }
+        }
+        return env
+    }
+
+    /// "Another next dev server is already running … You can access the
+    /// existing server at <url>" — the URL from the refusal, when there is
+    /// one, so the window can adopt it instead of dying.
+    private func existingServer() -> URL? {
+        guard let range = stderrTail.range(of: "access the existing server at ") else { return nil }
+        let rest = stderrTail[range.upperBound...]
+        guard let end = rest.firstIndex(where: { $0 == " " || $0 == "\n" || $0 == "," || $0 == "\u{1B}" }) else {
+            return URL(string: String(rest))
+        }
+        return URL(string: String(rest[..<end]))
     }
 
     /// Polls the socket until any response arrives — a redirect to
