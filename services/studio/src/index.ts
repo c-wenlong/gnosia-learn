@@ -166,6 +166,9 @@ async function main(): Promise<void> {
   if (asked === null) {
     void (async () => {
       for (const [tool, doctor] of [[DEFAULT_VIDEO_TOOL, videoDoctor] as const, ...(Object.entries(otherDoctors) as [VideoToolName, VideoDoctor][])]) {
+        // Rechecked per doctor: a stop that lands while one check runs must
+        // not let the loop open the next tool's check past the drain.
+        if (asked !== null) break;
         const report = await doctor.report(true);
         const name = tool === DEFAULT_VIDEO_TOOL ? "video doctor" : `${tool} video doctor`;
         process.stdout.write(report.ok ? `${name}: every check passed\n` : `${name}: ${report.checks.filter((check) => !check.ok).map((check) => `${check.name}: ${check.detail}`).join("; ")}\n`);
