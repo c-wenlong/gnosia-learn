@@ -110,8 +110,12 @@ final class WebServer {
         // password lives there); the shell merges it under the real
         // environment so exports still win. GNOSIA_LOCAL_TOKEN is the
         // per-launch secret /api/auth/local redeems for a session cookie.
+        // CATALOG_DB pins the SQLite catalog: apps/web/.env.local may still
+        // carry a legacy postgres DATABASE_URL, which the store refuses.
         var env = Self.dataHomeEnv().merging(ProcessInfo.processInfo.environment) { _, own in own }
         env["GNOSIA_LOCAL_TOKEN"] = localToken
+        env["CATALOG_DB"] = env["GNOSIA_CATALOG"]
+            ?? Self.dataHome().appending(path: "catalog.db").path
         proc.environment = env
         let err = Pipe()
         proc.standardError = err
@@ -146,14 +150,20 @@ final class WebServer {
         return "dev"
     }
 
+    /// The data-home directory: `$GNOSIA_HOME` or `~/.gnosia`.
+    private static func dataHome() -> URL {
+        if let home = ProcessInfo.processInfo.environment["GNOSIA_HOME"], !home.isEmpty {
+            return URL(fileURLWithPath: home)
+        }
+        return FileManager.default.homeDirectoryForCurrentUser.appending(path: ".gnosia")
+    }
+
     /// KEY=VALUE pairs from `$GNOSIA_HOME/.env` (default `~/.gnosia/.env`):
     /// the local instance's own env file, which Next never reads because it
     /// only loads files from apps/web. Blanks and `#` comments skipped;
     /// quotes around a value are stripped.
     private static func dataHomeEnv() -> [String: String] {
-        let home = ProcessInfo.processInfo.environment["GNOSIA_HOME"]
-            ?? FileManager.default.homeDirectoryForCurrentUser.appending(path: ".gnosia").path
-        guard let text = try? String(contentsOfFile: "\(home)/.env", encoding: .utf8) else { return [:] }
+        guard let text = try? String(contentsOfFile: dataHome().appending(path: ".env").path, encoding: .utf8) else { return [:] }
         var env: [String: String] = [:]
         for line in text.split(separator: "\n") {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
