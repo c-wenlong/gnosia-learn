@@ -14,6 +14,7 @@ import SwiftUI
 @main
 struct GnosiaWebApp: App {
     @State private var server = WebServer()
+    @State private var studio = StudioRunner()
 
     init() {
         NSApplication.shared.setActivationPolicy(.regular)
@@ -25,7 +26,11 @@ struct GnosiaWebApp: App {
             ContentView()
                 .environment(server)
                 .frame(minWidth: 1240, minHeight: 720)
+                // Two .task modifiers, not one awaited pair: the runner's
+                // first minute is heavy and the window should not hold its
+                // own server start behind it, nor vice versa.
                 .task { await server.start() }
+                .task { await studio.start() }
         }
         .windowToolbarStyle(.unified)
         .commands { AppCommands() }
