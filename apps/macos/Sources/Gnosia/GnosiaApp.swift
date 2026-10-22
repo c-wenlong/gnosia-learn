@@ -41,6 +41,12 @@ struct GnosiaApp: App {
                 .task {
                     store.loadIfNeeded()
                     learner.loadIfNeeded()
+                    // The mirror refreshes itself: the launch starts on the
+                    // snapshot already there, and a stale or missing one is
+                    // rebuilt in the background and swapped in on success.
+                    if await CatalogSnapshot.refreshIfNeeded(location: store.location) {
+                        store.reload()
+                    }
                 }
         }
         .windowToolbarStyle(.unified)
