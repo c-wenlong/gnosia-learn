@@ -52,6 +52,26 @@ mkdirSync(path.dirname(target), { recursive: true });
 const sqlite = new Database(target);
 sqlite.pragma("journal_mode = WAL");
 sqlite.pragma("foreign_keys = OFF");
+// The write-guard triggers and CHECK rewrites call functions `connect`
+// registers per connection; this raw handle has to register its own or
+// every insert raises "no such function". The port writes a fresh
+// primary, so copy is allowed and there is no write-seam revision to
+// match. The bodies mirror `connect`'s in src/db.ts.
+sqlite.function("catalog_copy_ok", () => 1);
+sqlite.function("catalog_revision_id", () => "pg-to-sqlite");
+sqlite.function("regexp", (pattern, value) => {
+  if (pattern === null || value === null) return null;
+  if (typeof pattern !== "string" || typeof value !== "string") return 0;
+  return new RegExp(pattern).test(value) ? 1 : 0;
+});
+sqlite.function("regexp_replace", { varargs: true }, (value, pattern, replacement) => {
+  if (value === null || pattern === null || replacement === null) return null;
+  return String(value).replace(new RegExp(String(pattern), "g"), String(replacement));
+});
+sqlite.function("starts_with", (a, b) => {
+  if (a === null || b === null) return null;
+  return String(a).startsWith(String(b)) ? 1 : 0;
+});
 
 // Migrate to head with the service's own migration runner so the target is
 // exactly the schema the code expects, journal rows included.
