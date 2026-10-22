@@ -793,6 +793,25 @@ the pulled tree. After every merge to `main`, run
 graceful quit, which also stops the web server and any studio runner the
 shell owns — rebuilds, and replaces the installed bundle.
 
+Between merges the finer question is what a given change needs to reach the
+window. The shell serves this checkout (`GNOSIA_REPO` is baked into the
+bundle), whichever branch is checked out, so the answer turns on which
+process holds the changed code:
+
+| What changed | What it takes to reach the window |
+| --- | --- |
+| `apps/web`, or `packages/` code it imports | Nothing: the spawned server is `next dev`, which hot-reloads the checkout; reload the page |
+| `services/studio` | Restart the runner, however it runs: relaunch the app when the shell owns it, but a runner started by hand (`npm run studio`) is adopted and survives the quit — restart that one where it runs, and the "not answering" card clears on the next page load |
+| `~/.gnosia/.env`, `STUDIO_*`, `next.config` | Relaunch the app: a child's environment and the server's config are read once at launch — and for `STUDIO_*` an external runner keeps the environment it was started with, so restart it like the studio row |
+| a new dependency | `npm install`, then relaunch the app — a running child cannot see a package installed after it spawned |
+| `apps/desktop` | `apps/desktop/scripts/install-app.sh`: the bundle is a frozen binary |
+
+Killing the runner by hand is not a shortcut for the owned case: the shell
+probes once at launch and does not respawn, so the app would sit on the
+card until a relaunch. To tell which case a running runner is, quit the
+app — a runner the shell owns dies with it, while one still answering on
+7250 afterward is external.
+
 ### Where a submodule's commit lives
 
 | Where | What it holds | How to read it |
