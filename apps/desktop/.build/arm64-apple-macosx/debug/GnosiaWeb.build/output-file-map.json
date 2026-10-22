@@ -1,0 +1,26 @@
+{
+  "": {
+    "swift-dependencies": "/Users/kaichen/Desktop/Personal/Internal/Projects/gnosia-learn/apps/desktop/.build/arm64-apple-macosx/debug/GnosiaWeb.build/master.swiftdeps"
+  },
+  "/Users/kaichen/Desktop/Personal/Internal/Projects/gnosia-learn/apps/desktop/Sources/GnosiaWeb/GnosiaWebApp.swift": {
+    "dependencies": "/Users/kaichen/Desktop/Personal/Internal/Projects/gnosia-learn/apps/desktop/.build/arm64-apple-macosx/debug/GnosiaWeb.build/GnosiaWebApp.d",
+    "object": "/Users/kaichen/Desktop/Personal/Internal/Projects/gnosia-learn/apps/desktop/.build/arm64-apple-macosx/debug/GnosiaWeb.build/GnosiaWebApp.swift.o",
+    "swiftmodule": "/Users/kaichen/Desktop/Personal/Internal/Projects/gnosia-learn/apps/desktop/.build/arm64-apple-macosx/debug/GnosiaWeb.build/GnosiaWebApp~partial.swiftmodule",
+    "swift-dependencies": "/Users/kaichen/Desktop/Personal/Internal/Projects/gnosia-learn/apps/desktop/.build/arm64-apple-macosx/debug/GnosiaWeb.build/GnosiaWebApp.swiftdeps",
+    "diagnostics": "/Users/kaichen/Desktop/Personal/Internal/Projects/gnosia-learn/apps/desktop/.build/arm64-apple-macosx/debug/GnosiaWeb.build/GnosiaWebApp.dia"
+  },
+  "/Users/kaichen/Desktop/Personal/Internal/Projects/gnosia-learn/apps/desktop/Sources/GnosiaWeb/WebServer.swift": {
+    "dependencies": "/Users/kaichen/Desktop/Personal/Internal/Projects/gnosia-learn/apps/desktop/.build/arm64-apple-macosx/debug/GnosiaWeb.build/WebServer.d",
+    "object": "/Users/kaichen/Desktop/Personal/Internal/Projects/gnosia-learn/apps/desktop/.build/arm64-apple-macosx/debug/GnosiaWeb.build/WebServer.swift.o",
+    "swiftmodule": "/Users/kaichen/Desktop/Personal/Internal/Projects/gnosia-learn/apps/desktop/.build/arm64-apple-macosx/debug/GnosiaWeb.build/WebServer~partial.swiftmodule",
+    "swift-dependencies": "/Users/kaichen/Desktop/Personal/Internal/Projects/gnosia-learn/apps/desktop/.build/arm64-apple-macosx/debug/GnosiaWeb.build/WebServer.swiftdeps",
+    "diagnostics": "/Users/kaichen/Desktop/Personal/Internal/Projects/gnosia-learn/apps/desktop/.build/arm64-apple-macosx/debug/GnosiaWeb.build/WebServer.dia"
+  },
+  "/Users/kaichen/Desktop/Personal/Internal/Projects/gnosia-learn/apps/desktop/Sources/GnosiaWeb/WebView.swift": {
+    "dependencies": "/Users/kaichen/Desktop/Personal/Internal/Projects/gnosia-learn/apps/desktop/.build/arm64-apple-macosx/debug/GnosiaWeb.build/WebView.d",
+    "object": "/Users/kaichen/Desktop/Personal/Internal/Projects/gnosia-learn/apps/desktop/.build/arm64-apple-macosx/debug/GnosiaWeb.build/WebView.swift.o",
+    "swiftmodule": "/Users/kaichen/Desktop/Personal/Internal/Projects/gnosia-learn/apps/desktop/.build/arm64-apple-macosx/debug/GnosiaWeb.build/WebView~partial.swiftmodule",
+    "swift-dependencies": "/Users/kaichen/Desktop/Personal/Internal/Projects/gnosia-learn/apps/desktop/.build/arm64-apple-macosx/debug/GnosiaWeb.build/WebView.swiftdeps",
+    "diagnostics": "/Users/kaichen/Desktop/Personal/Internal/Projects/gnosia-learn/apps/desktop/.build/arm64-apple-macosx/debug/GnosiaWeb.build/WebView.dia"
+  }
+}
