@@ -113,12 +113,16 @@ final class WebServer {
         // password lives there); the shell merges it under the real
         // environment so exports still win. GNOSIA_LOCAL_TOKEN is the
         // per-launch secret /api/auth/local redeems for a session cookie.
-        // CATALOG_DB pins the SQLite catalog: apps/web/.env.local may still
-        // carry a legacy postgres DATABASE_URL, which the store refuses.
+        // CATALOG_DB pins the SQLite catalog when nothing else names it:
+        // apps/web/.env.local may still carry a legacy postgres
+        // DATABASE_URL, which the store refuses. An existing CATALOG_DB is
+        // left alone, and GNOSIA_CATALOG is deliberately not consulted —
+        // it names the native app's read snapshot, not the live database.
         var env = Self.dataHomeEnv().merging(ProcessInfo.processInfo.environment) { _, own in own }
         env["GNOSIA_LOCAL_TOKEN"] = localToken
-        env["CATALOG_DB"] = env["GNOSIA_CATALOG"]
-            ?? Self.dataHome().appending(path: "catalog.db").path
+        if env["CATALOG_DB"]?.isEmpty != false {
+            env["CATALOG_DB"] = Self.dataHome().appending(path: "catalog.db").path
+        }
         proc.environment = env
         let err = Pipe()
         proc.standardError = err
