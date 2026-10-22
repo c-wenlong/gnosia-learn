@@ -326,4 +326,15 @@ export class VideoDoctor {
     if (this.timer !== null) clearInterval(this.timer);
     this.timer = null;
   }
+
+  /**
+   * For shutdown: clears the timer the way `stop()` does, then waits for a
+   * check already in flight to finish. The check itself is not cancelled —
+   * its sandboxed steps carry their own timeouts — so a caller bounds the
+   * wait (`within` in index.ts) rather than trusting it.
+   */
+  async drain(): Promise<void> {
+    this.stop();
+    await this.running?.catch(() => undefined);
+  }
 }

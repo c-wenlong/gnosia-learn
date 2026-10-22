@@ -35,6 +35,14 @@ import type { VideoJobRecord } from "./video/types";
 const DRAFTS_DRAIN_MS = 10_000;
 
 /**
+ * How long shutdown waits for a video doctor check already in flight. Its
+ * sandboxed steps carry timeouts of their own, so a run past this is left to
+ * the process exit rather than held: the check spawns real renders, and the
+ * orphan risk it bounds is the same one a plain stop always carried.
+ */
+const DOCTOR_DRAIN_MS = 30_000;
+
+/**
  * `work`, or a note on stderr once `ms` has passed without it. The timer is
  * unref'd and cleared, so it neither holds the process open nor fires late.
  */
@@ -153,16 +161,20 @@ async function main(): Promise<void> {
   await drafts.syncFromJobs();
   runner.extraSpend = () => drafts.spendEntries();
   // One after the other, so two fixture renders never compete for the cores.
-  void (async () => {
-    for (const [tool, doctor] of [[DEFAULT_VIDEO_TOOL, videoDoctor] as const, ...(Object.entries(otherDoctors) as [VideoToolName, VideoDoctor][])]) {
-      const report = await doctor.report(true);
-      const name = tool === DEFAULT_VIDEO_TOOL ? "video doctor" : `${tool} video doctor`;
-      process.stdout.write(report.ok ? `${name}: every check passed\n` : `${name}: ${report.checks.filter((check) => !check.ok).map((check) => `${check.name}: ${check.detail}`).join("; ")}\n`);
-      void videoRunner.kick();
-    }
-  })();
-  videoDoctor.start();
-  for (const doctor of Object.values(otherDoctors)) doctor?.start();
+  // Skipped when a stop was already asked for: a doctor check spawns real
+  // renders, and one launched now would only race the drain it never sees.
+  if (asked === null) {
+    void (async () => {
+      for (const [tool, doctor] of [[DEFAULT_VIDEO_TOOL, videoDoctor] as const, ...(Object.entries(otherDoctors) as [VideoToolName, VideoDoctor][])]) {
+        const report = await doctor.report(true);
+        const name = tool === DEFAULT_VIDEO_TOOL ? "video doctor" : `${tool} video doctor`;
+        process.stdout.write(report.ok ? `${name}: every check passed\n` : `${name}: ${report.checks.filter((check) => !check.ok).map((check) => `${check.name}: ${check.detail}`).join("; ")}\n`);
+        void videoRunner.kick();
+      }
+    })();
+    videoDoctor.start();
+    for (const doctor of Object.values(otherDoctors)) doctor?.start();
+  }
 
   // D40: a draft untouched for seven days goes, row and workspace, unless a
   // job names it. After the job records are loaded and every draft follows
@@ -216,11 +228,16 @@ async function main(): Promise<void> {
       // once every drain has returned.
       .then(() => within(drafts.drain(), DRAFTS_DRAIN_MS, "the drafts' last writes"))
       .then(() => runner.drain())
-      .then(() => {
-        videoDoctor.stop();
-        for (const doctor of Object.values(otherDoctors)) doctor?.stop();
-        return videoRunner.drain();
-      })
+      // The doctors' drains, not just their timers: `stop()` alone leaves a
+      // check already in flight spawning renders past the process's exit.
+      .then(() =>
+        within(
+          Promise.all([videoDoctor, ...Object.values(otherDoctors)].map((doctor) => doctor?.drain() ?? Promise.resolve())).then(() => undefined),
+          DOCTOR_DRAIN_MS,
+          "the video doctors' checks",
+        ),
+      )
+      .then(() => videoRunner.drain())
       .finally(() => {
         server.close(() => process.exit(0));
         // A stream that is still open would hold the process forever, and the
