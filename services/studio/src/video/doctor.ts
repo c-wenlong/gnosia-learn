@@ -263,6 +263,7 @@ export class VideoDoctor {
   private last: VideoDoctorReport | null = null;
   private running: Promise<VideoDoctorReport> | null = null;
   private timer: NodeJS.Timeout | null = null;
+  private drained = false;
   private readonly check: () => Promise<VideoDoctorReport>;
 
   constructor(check: () => Promise<VideoDoctorReport> = runVideoDoctor) {
@@ -297,6 +298,15 @@ export class VideoDoctor {
   async report(force = false): Promise<VideoDoctorReport> {
     const fresh = this.last !== null && Date.now() - Date.parse(this.last.checkedAt) < VIDEO_DOCTOR_TTL_MS;
     if (fresh && !force) return this.withStop(this.last!);
+    // Once drained (shutdown) a report may be asked for anyway — by the
+    // startup loop's next iteration or by a toolchain stop landing late —
+    // and it gets the cached answer rather than a check that would spawn
+    // past the drain that already waited.
+    if (this.drained) {
+      return this.last !== null
+        ? this.withStop(this.last)
+        : { ok: false, sandbox: false, metal: false, kokoro: false, voices: [], checks: [{ name: "doctor", ok: false, detail: "the studio is shutting down" }], checkedAt: new Date().toISOString() };
+    }
     this.running ??= this.check()
       .catch((error: unknown): VideoDoctorReport => ({
         ok: false,
@@ -325,5 +335,17 @@ export class VideoDoctor {
   stop(): void {
     if (this.timer !== null) clearInterval(this.timer);
     this.timer = null;
+  }
+
+  /**
+   * For shutdown: clears the timer the way `stop()` does, then waits for a
+   * check already in flight to finish. The check itself is not cancelled —
+   * its sandboxed steps carry their own timeouts — so a caller bounds the
+   * wait (`within` in index.ts) rather than trusting it.
+   */
+  async drain(): Promise<void> {
+    this.drained = true;
+    this.stop();
+    await this.running?.catch(() => undefined);
   }
 }
