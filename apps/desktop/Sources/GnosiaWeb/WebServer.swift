@@ -58,9 +58,12 @@ final class WebServer {
         for attempt in 1 ... 3 {
             let port = Int.random(in: 49200 ... 59800)
             guard spawn(port: port) else { return }  // no repo/node — status is failed
-            if let url = await waitReady(port: port) {
+            if let url = await waitReady(port: port), await proveOwned(url) {
                 // The window's first load: redeem the launch token for the
-                // session cookie, which 303s onward to /home.
+                // session cookie, which 303s onward to /home. The token is
+                // only ever sent after the server proves it hosts our
+                // /api/auth/local route — anything else answering on the
+                // port never sees the secret.
                 status = .running(URL(string: "\(url.absoluteString)api/auth/local?token=\(localToken)") ?? url)
                 return
             }
@@ -171,12 +174,33 @@ final class WebServer {
                   let eq = trimmed.firstIndex(of: "=") else { continue }
             let key = String(trimmed[..<eq]).trimmingCharacters(in: .whitespaces)
             var value = String(trimmed[trimmed.index(after: eq)...]).trimmingCharacters(in: .whitespaces)
-            if value.count >= 2, value.hasPrefix("\""), value.hasSuffix("\"") {
+            // dotenv rules: matching single or double quotes come off
+            // wholesale; an unquoted value ends at ` #`.
+            if value.count >= 2,
+               (value.hasPrefix("\"") && value.hasSuffix("\"")) ||
+               (value.hasPrefix("'") && value.hasSuffix("'")) {
                 value = String(value.dropFirst().dropLast())
+            } else if let hash = value.range(of: " #") {
+                value = String(value[..<hash.lowerBound]).trimmingCharacters(in: .whitespaces)
             }
             if !key.isEmpty { env[key] = value }
         }
         return env
+    }
+
+    /// Probes `/api/auth/local` *without* the token: our server refuses
+    /// with 403 and {"error":"FORBIDDEN"}, while a foreign service holding
+    /// the port answers anything else — so the launch token is only sent
+    /// once the listener proves it is the spawned Next server.
+    private func proveOwned(_ url: URL) async -> Bool {
+        guard let probe = URL(string: "\(url.absoluteString)api/auth/local") else { return false }
+        var request = URLRequest(url: probe)
+        request.timeoutInterval = 30
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, http.statusCode == 403 else { return false }
+            return String(data: data, encoding: .utf8)?.contains("FORBIDDEN") == true
+        } catch { return false }
     }
 
     /// "Another next dev server is already running … You can access the

@@ -31,6 +31,8 @@ rm -rf "$(dirname "$ICONSET")"
 # The repo this bundle serves: baked in so the installed app finds the
 # checkout without GNOSIA_REPO being set in the environment.
 REPO_ROOT=$(cd ../.. && pwd)
+# XML-escape: a path containing & or < would corrupt the plist.
+REPO_ROOT_XML=$(printf '%s' "$REPO_ROOT" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g' -e "s/'/\&apos;/g")
 
 cat > "$CONTENTS/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -50,7 +52,7 @@ cat > "$CONTENTS/Info.plist" <<PLIST
     <key>NSPrincipalClass</key><string>NSApplication</string>
     <key>LSEnvironment</key>
     <dict>
-        <key>GNOSIA_REPO</key><string>$REPO_ROOT</string>
+        <key>GNOSIA_REPO</key><string>$REPO_ROOT_XML</string>
     </dict>
 </dict>
 </plist>
