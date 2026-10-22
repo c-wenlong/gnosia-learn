@@ -55,6 +55,28 @@ async function within(work: Promise<void>, ms: number, what: string): Promise<vo
 }
 
 async function main(): Promise<void> {
+  // A SIGINT or SIGTERM can land before the components `shutdown` drains
+  // exist: the handler is registered at the end of startup today, and a
+  // signal arriving earlier kills the process mid-refresh — no drain, and
+  // a doctor or manual-check Chromium orphaned on the machine. Until `stop`
+  // points at the real drain the handler only records the signal, so the
+  // phase in flight finishes its bounded work first; a second signal is
+  // the impatient quit and exits outright. The replay runs below where
+  // every component exists.
+  let asked: string | null = null;
+  let stop: ((signal: string) => void) | null = null;
+  const onSignal = (signal: string): void => {
+    if (stop !== null) {
+      stop(signal);
+      return;
+    }
+    if (asked !== null) process.exit(1);
+    asked = signal;
+    process.stdout.write(`\n${signal}: finishing the startup phase in flight, then draining\n`);
+  };
+  process.on("SIGINT", () => onSignal("SIGINT"));
+  process.on("SIGTERM", () => onSignal("SIGTERM"));
+
   await mkdir(path.join(studioHome(), "jobs"), { recursive: true });
 
   const store = new JobStore();
@@ -159,6 +181,9 @@ async function main(): Promise<void> {
   listings.warm();
   const server = createApi({ store, runner, mirrors, drafts, video: { store: videoStore, runner: videoRunner, doctor: videoDoctor }, probes, listings });
   server.listen(PORT, HOST, () => {
+    // The bind callback can fire after a replayed stop has already begun
+    // closing things: a "studio on" line inside the shutdown is a lie.
+    if (asked !== null) return;
     process.stdout.write(
       `studio on http://${HOST}:${PORT}\n` +
         `  repo      ${REPO_ROOT}\n` +
@@ -170,9 +195,12 @@ async function main(): Promise<void> {
 
   // Pick up anything that was queued when the previous process stopped. A
   // queued job survives a restart by design; it is only in-flight work that
-  // does not.
-  void runner.kick();
-  pruner.start();
+  // does not. Skipped when a stop was already asked for: a runner told to
+  // die during startup does not kick work it would only drain again.
+  if (asked === null) {
+    void runner.kick();
+    pruner.start();
+  }
 
   const shutdown = (signal: string): void => {
     process.stdout.write(`\n${signal}: stopping the running job and closing the browser\n`);
@@ -200,8 +228,11 @@ async function main(): Promise<void> {
         setTimeout(() => process.exit(0), 10_000).unref();
       });
   };
-  process.on("SIGINT", () => shutdown("SIGINT"));
-  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  // Every drainable component exists now: the handler installed at the top
+  // hands signals here, and a signal it recorded during startup is replayed
+  // through the real drain rather than having killed the process outright.
+  stop = shutdown;
+  if (asked !== null) shutdown(asked);
 }
 
 void main().catch((error: unknown) => {
