@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/core";
 
+import { GET as localAuth } from "./local/route";
 import { POST as signIn } from "./sign-in/route";
 import { POST as signOut } from "./sign-out/route";
 
@@ -116,6 +117,61 @@ describe("POST /api/auth/sign-in", () => {
       }),
     );
     expect(byOrigin.status).toBe(403);
+  });
+});
+
+describe("GET /api/auth/local", () => {
+  const saved = {
+    secret: process.env.AUTH_SECRET,
+    password: process.env.OWNER_PASSWORD,
+    local: process.env.GNOSIA_LOCAL_TOKEN,
+  };
+  beforeEach(() => {
+    process.env.AUTH_SECRET = SECRET;
+    process.env.OWNER_PASSWORD = "correct horse battery staple";
+    process.env.GNOSIA_LOCAL_TOKEN = "launch-secret";
+  });
+  afterEach(() => {
+    process.env.AUTH_SECRET = saved.secret;
+    process.env.OWNER_PASSWORD = saved.password;
+    process.env.GNOSIA_LOCAL_TOKEN = saved.local;
+  });
+
+  function get(path: string): Request {
+    return new Request(`${ORIGIN}${path}`);
+  }
+
+  it("redeems the launch token for a real session cookie and lands on /home", async () => {
+    const response = await localAuth(get("/api/auth/local?token=launch-secret"));
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/home");
+    const cookie = cookieOf(response);
+    expect(cookie).toMatch(new RegExp(`^${SESSION_COOKIE}=`));
+    expect(cookie).toContain("HttpOnly");
+    const token = decodeURIComponent(cookie.split(";")[0].slice(SESSION_COOKIE.length + 1));
+    await expect(verifySession(SECRET, token, Math.floor(Date.now() / 1000))).resolves.toBe(true);
+  });
+
+  it("refuses a wrong, absent or extra-character token", async () => {
+    for (const path of ["/api/auth/local?token=wrong", "/api/auth/local", "/api/auth/local?token=launch-secret-x"]) {
+      const response = await localAuth(get(path));
+      expect(response.status, path).toBe(403);
+      expect(cookieOf(response), path).toBe("");
+    }
+  });
+
+  it("refuses everyone when the variable was never set — the deployed case", async () => {
+    delete process.env.GNOSIA_LOCAL_TOKEN;
+    const response = await localAuth(get("/api/auth/local?token=launch-secret"));
+    expect(response.status).toBe(403);
+  });
+
+  it("names the missing configuration instead of minting nothing silently", async () => {
+    delete process.env.AUTH_SECRET;
+    const response = await localAuth(get("/api/auth/local?token=launch-secret"));
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/sign-in?error=unconfigured");
+    expect(cookieOf(response)).toBe("");
   });
 });
 
