@@ -103,11 +103,10 @@ describe("a locked database", () => {
 });
 
 describe("catalog index, the old name of catalog import", () => {
-  let url: string;
   // An unopenable path: import reaches its first query and cannot open it.
   const held = `${tmpdir()}/catalog-index-file-${process.pid}`;
   writeFileSync(held, "x");
-  url = `${held}/child.db`;
+  const url = `${held}/child.db`;
 
   it("says the new name once, on stderr, and then runs import", async () => {
     // A dead port, so the import itself fails at its first query: what is
