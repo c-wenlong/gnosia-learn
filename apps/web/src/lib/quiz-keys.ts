@@ -7,7 +7,9 @@
  * a field, where 1 to 4, Space and Enter are typing. Otherwise `number` is the
  * option 1 to 4 pressed, zero-based, or null, and `enter` and `space` say
  * whether that key was pressed with no focused link or button to take it:
- * Enter on a focused Exit leaves, it does not answer.
+ * Enter on a focused Exit leaves, it does not answer. A radio (a segment of
+ * the session page's "How sure are you?") takes Space but not Enter, which a
+ * radio group gives no meaning, so Enter there still checks the answer.
  *
  * React-free, so it can be tested with a plain object for the event.
  */
@@ -35,11 +37,12 @@ export function quizKey(event: QuizKeyEvent, pending: boolean): QuizKey | null {
   const target = event.target as HTMLElement | null;
   if (target !== null && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return null;
   // Space and Enter on a focused link or button belong to that control.
-  const onControl = target !== null && target.closest("a[href], button:not(:disabled)") !== null;
+  const control = target === null ? null : target.closest("a[href], button:not(:disabled)");
+  const onControl = control !== null;
   const n = Number(event.key);
   return {
     number: Number.isInteger(n) && n >= 1 && n <= 4 ? n - 1 : null,
-    enter: event.key === "Enter" && !onControl,
+    enter: event.key === "Enter" && (!onControl || control.getAttribute?.("role") === "radio"),
     space: event.key === " " && !onControl,
   };
 }

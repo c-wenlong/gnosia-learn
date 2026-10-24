@@ -318,7 +318,9 @@ written here in this repository's words.
   this proposal.
 - BKT and its guess and slip rates.
 - The Teach session page and the week check, which already ask choice
-  questions. Giving them the confidence stops is phase 3.
+  questions. Phase 3 gave them the confidence stops and the reasoning box,
+  asked once an option is picked; "I don't know" still records at once,
+  with no confidence.
 - The open tutor at `/ask`, which records nothing.
 
 ## Edge cases
@@ -353,7 +355,7 @@ written here in this repository's words.
 | --- | --- | --- |
 | 1 (built) | K1, K2, K4, K5, K6, K7 for choice checks on the concept tutor: `check-block.ts` and its tests, the route's split, the choice card, `confidence` and `thinking` through the observe route and into the payload, the grade rule, the prompt's option rules | A tutor turn with a valid choice block shows the card; submit writes one observation whose payload holds the confidence and the reasoning and whose `grade` follows the table; a broken block or a `CHECK:` line takes today's judge path; `observe --json` and a terminal observation's payload are byte for byte what they were; the owner's database holds its first observation from a chat check |
 | 2 | Recall checks: the recall card, the commitment as the judge's first reference, the commitment shown on submit, the asking turn rebuilt with its block in the request | A recall answer is judged against the tutor's commitment, and the tutor's next turn can quote it |
-| 3 | The course topic tutor's blocks with `concept`, and the confidence stops on the Teach session page and the week check | A topic check records against the concept it names; a session page answer carries a confidence |
+| 3 (half built) | The course topic tutor's blocks with `concept`, and the confidence stops on the Teach session page and the week check. Built: the stops and the reasoning box on the session page and the week check (one component, `SessionFocus`), shown under the options once one is picked (the owner's choice, 2026-10-25), sent with Check; Enter on a focused stop still checks (`quizKey`). Waiting on phase 2: the topic tutor's blocks | A topic check records against the concept it names; a session page answer carries a confidence |
 
 Each phase is its own PR. A `--confidence` flag for the terminal's
 `learn observe`, so the `learning` plugin can send one, would be a fourth,
