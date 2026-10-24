@@ -68,10 +68,10 @@ describe("readCheckBlock", () => {
 
   it("takes a recall check with its committed answer, and refuses one with no answer or too long a one", () => {
     expect(readCheckBlock(recall)).toEqual({ ok: true, check: recall });
-    expect(readCheckBlock({ ...recall, answer: "  Because\n it  is. " })).toEqual({
-      ok: true,
-      check: { ...recall, answer: "Because it is." },
-    });
+    // Trimmed, never collapsed: inner spacing can be the point of the answer.
+    const spaced = 's.split("  ") splits on two spaces,\nnot one.';
+    expect(readCheckBlock({ ...recall, answer: `  ${spaced} ` })).toEqual({ ok: true, check: { ...recall, answer: spaced } });
+    expect(splitTurnCheck(`Q.\n\n${checkBlockText({ ...recall, answer: spaced } as never)}`).check).toEqual({ ...recall, answer: spaced });
     for (const answer of [undefined, "", "   ", 42, "x".repeat(801)]) {
       expect(readCheckBlock({ ...recall, answer })).toMatchObject({ ok: false, fallback: { question: recall.question } });
     }

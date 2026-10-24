@@ -122,7 +122,8 @@ export function readCheckBlock(data: unknown): BlockOutcome {
   if (fallback === null) return refuse(`The question must be 1 to ${CHECK_QUESTION_LIMIT} characters.`);
   const concept = line(record.concept);
   if (record.kind === "recall") {
-    const answer = line(record.answer);
+    // Trimmed only: spacing inside an answer can carry meaning (code, a formula), and it is the grading reference.
+    const answer = typeof record.answer === "string" ? record.answer.trim() : null;
     if (answer === null || answer === "" || answer.length > RECALL_ANSWER_LIMIT) {
       return refuse(`A recall check's "answer" must be 1 to ${RECALL_ANSWER_LIMIT} characters.`);
     }

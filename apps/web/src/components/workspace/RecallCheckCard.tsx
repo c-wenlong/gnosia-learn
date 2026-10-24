@@ -165,7 +165,7 @@ export function RecallCheckCard({
           </dl>
           <div className="flex flex-col gap-0.5 text-[14px] leading-6">
             <p className="text-[13px] text-text3">The tutor&apos;s answer</p>
-            <p className="text-text">
+            <p className="whitespace-pre-wrap text-text">
               <MathText text={check.answer} />
             </p>
           </div>
