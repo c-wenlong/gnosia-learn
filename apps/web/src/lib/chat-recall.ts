@@ -99,17 +99,25 @@ export function closeChatSession(scope: string): void {
 /**
  * The judge's verdict on an answer (`POST /api/agent/judge`), or null when
  * it could not give one: the row then offers both buttons with neither chosen.
+ * `commitment` is a recall check's committed answer, which the judge reads
+ * first (docs/proposals/structured-checks.md, phase 2).
  */
 export async function judgeAnswer(
   conceptSlug: string,
   question: string,
   answer: string,
+  commitment: string | null = null,
 ): Promise<{ correct: boolean; feedback: string | null } | null> {
   try {
     const res = await fetch("/api/agent/judge", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ conceptSlug, question, answer: answer.slice(0, CHAT_ANSWER_LIMIT) }),
+      body: JSON.stringify({
+        conceptSlug,
+        question,
+        answer: answer.slice(0, CHAT_ANSWER_LIMIT),
+        ...(commitment !== null ? { commitment } : {}),
+      }),
     });
     const data = (await res.json().catch(() => ({}))) as { verdict?: { correct?: unknown; feedback?: unknown } };
     if (res.ok && typeof data.verdict?.correct === "boolean") {
@@ -143,12 +151,14 @@ export interface RecordInput {
   /** The learner's answer; the observation stores its first `SESSION_TEXT_LIMIT` characters as `chosen`. */
   answer: string;
   /**
-   * A choice card's answer (docs/proposals/structured-checks.md): the key the
-   * tutor committed to, the option picked (null for "I don't know"), the
-   * confidence and the reasoning. With it, `chosen` is the pick and `answer`
-   * the key, as the session page sends them; `answer` above is ignored.
+   * A check card's answer (docs/proposals/structured-checks.md): the answer
+   * the tutor committed to (a choice check's key, a recall check's full
+   * answer), what the learner gave (the option picked, null for "I don't
+   * know", or their words), the confidence and the reasoning. With it,
+   * `chosen` is what they gave and `answer` the commitment, as the session
+   * page sends them; `answer` above is ignored.
    */
-  choice?: { key: string; chosen: string | null; confidence: number | null; thinking: string | null };
+  card?: { key: string; chosen: string | null; confidence: number | null; thinking: string | null };
   /** What the session is called and aims at when this answer opens it; the concept's when absent. */
   sessionTitle?: string;
   sessionGoal?: string;
@@ -177,13 +187,13 @@ export async function recordAnswer(input: RecordInput): Promise<RecordedResult> 
       requestId: input.requestId,
       sessionId,
       question: input.question,
-      // `chosen` is what the learner gave; `answer` is the right one, which only a choice check has.
-      ...(input.choice
+      // `chosen` is what the learner gave; `answer` is the committed one, which only a check card has.
+      ...(input.card
         ? {
-            answer: input.choice.key.slice(0, SESSION_TEXT_LIMIT),
-            chosen: input.choice.chosen === null ? null : input.choice.chosen.slice(0, SESSION_TEXT_LIMIT),
-            ...(input.choice.confidence !== null ? { confidence: input.choice.confidence } : {}),
-            ...(input.choice.thinking !== null ? { thinking: input.choice.thinking.slice(0, SESSION_TEXT_LIMIT) } : {}),
+            answer: input.card.key.slice(0, SESSION_TEXT_LIMIT),
+            chosen: input.card.chosen === null ? null : input.card.chosen.slice(0, SESSION_TEXT_LIMIT),
+            ...(input.card.confidence !== null ? { confidence: input.card.confidence } : {}),
+            ...(input.card.thinking !== null ? { thinking: input.card.thinking.slice(0, SESSION_TEXT_LIMIT) } : {}),
           }
         : { chosen: input.answer.slice(0, SESSION_TEXT_LIMIT) }),
       ...(input.sessionTitle ? { sessionTitle: input.sessionTitle } : {}),
