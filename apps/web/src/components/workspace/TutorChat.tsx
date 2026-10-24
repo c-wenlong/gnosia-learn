@@ -37,11 +37,15 @@ import {
   choiceAnswerText,
   choiceOrder,
   gradeChoice,
+  isCardCheck,
   isChoiceCheck,
-  restoreChoiceCheck,
+  isRecallCheck,
+  recallAnswerText,
+  restoreCardCheck,
   settleChoice,
   type ChoiceAnswer,
   type ChoicePick,
+  type RecallPick,
 } from "@/lib/check-block";
 import {
   CHAT_ANSWER_LIMIT,
@@ -55,6 +59,7 @@ import {
 } from "@/lib/tutor-check";
 
 import { ChoiceCheckCard } from "./ChoiceCheckCard";
+import { RecallCheckCard } from "./RecallCheckCard";
 import { VerdictRow } from "./VerdictRow";
 import { NOTE_HASH } from "./WorkspacePanels";
 
@@ -104,6 +109,15 @@ import { NOTE_HASH } from "./WorkspacePanels";
  * reasoning (K4, K5), and sends the tutor a `<check_answer>` block as the
  * learner's turn, which the thread keeps but does not draw: the card shows
  * the answer. A message typed instead folds the card to "Not answered".
+ *
+ * **A recall check is judged against the tutor's own answer** (phase 2). A
+ * turn that ended with a recall block gets a card with a box for the
+ * learner's words. Submit shows the answer the tutor committed to under
+ * theirs, asks the judge with that answer as its first reference, and sends
+ * the tutor a `<check_answer>` block with the words, the confidence and the
+ * reasoning; the request puts the asking turn's block back (`requestTurns`),
+ * so the tutor grades against what it committed to. The verdict row under
+ * the card records with one tap, as for a `CHECK:` line (R2).
  *
  * **Recall first, and the thread is a session** (phase 2). With `recall`
  * (the server's word that this concept's review card is due), an empty
@@ -344,8 +358,8 @@ export function TutorChat({
     );
   }
 
-  async function judge(verdict: Verdict, answer: string) {
-    const verdictNow = await judgeAnswer(slug, verdict.question, answer);
+  async function judge(verdict: Verdict, answer: string, commitment: string | null = null) {
+    const verdictNow = await judgeAnswer(slug, verdict.question, answer, commitment);
     patchVerdict(
       verdict.requestId,
       verdictNow === null
@@ -359,10 +373,13 @@ export function TutorChat({
 
   /** The learner's tap: one observation, replayed rather than doubled on a retry by its request id. */
   async function record(requestId: string, tappedNow: boolean) {
-    const turn = current().find(
-      (item): item is TutorTurn => item.role === "user" && item.verdict?.requestId === requestId,
-    );
+    const items = current();
+    const at = items.findIndex((item) => item.role === "user" && item.verdict?.requestId === requestId);
+    const turn = items[at] as TutorTurn | undefined;
     const verdict = turn?.verdict;
+    // A recall card's answer records its words against the tutor's commitment, with its confidence and reasoning.
+    const asked = items.slice(0, Math.max(at, 0)).findLast((item): item is TutorTurn => item.role === "assistant");
+    const recall = turn?.recall && isRecallCheck(asked?.check) ? { pick: turn.recall, check: asked.check } : null;
     if (!turn || !verdict || verdict.state === "saving" || verdict.state === "recorded") return;
     if (recording.current.has(requestId)) return;
     // Once tapped, the verdict is fixed: a retry resends the same one (see `Verdict.tapped`).
@@ -379,6 +396,16 @@ export function TutorChat({
         requestId,
         question: verdict.question,
         answer: turn.content,
+        ...(recall !== null
+          ? {
+              card: {
+                key: recall.check.answer,
+                chosen: recall.pick.answer,
+                confidence: recall.pick.confidence,
+                thinking: recall.pick.thinking,
+              },
+            }
+          : {}),
       });
       patchVerdict(requestId, { state: "recorded", error: null, recorded });
       // The page's mastery dot, Recent answers and checks read the new state.
@@ -423,7 +450,7 @@ export function TutorChat({
         requestId,
         question: check.question,
         answer: turn.content,
-        choice: {
+        card: {
           key: check.answer,
           chosen: choice.picked === null ? null : (check.options[choice.picked] ?? null),
           confidence: choice.confidence,
@@ -458,6 +485,19 @@ export function TutorChat({
     // `ask` stores the turn before it awaits anything, so the write below finds it.
     void ask(answerTurn.content, items, { carried: answerTurn });
     void recordChoice(choice.requestId);
+  }
+
+  /** Submit on a recall card: judged against the commitment, sent to the tutor, and recorded on the learner's tap. */
+  function submitRecall(askedAt: number, pick: RecallPick) {
+    const items = current();
+    const asked = items[askedAt];
+    if (busy || opening || asked?.role !== "assistant" || !isRecallCheck(asked.check)) return;
+    if (pendingCheck(items) !== askedAt) return;
+    const verdict = newVerdict(asked.check.question, chatRequestId(), checkSource(items, askedAt));
+    const answerTurn: TutorTurn = { role: "user", content: recallAnswerText(pick), recall: pick, verdict };
+    // `ask` stores the turn before it awaits anything, so the judge's verdict finds it.
+    void ask(answerTurn.content, items, { carried: answerTurn });
+    void judge(verdict, pick.answer, asked.check.answer);
   }
 
   // Once per mount: whatever a reload cut off (a judge still pending, a write
@@ -521,7 +561,7 @@ export function TutorChat({
       // Only a reply that asked a check opens the thread, and only an empty one.
       if (res.ok && content && data.check?.question) {
         if (parseThread(readRaw(key)).length === 0) {
-          writeTurns(key, [{ role: "assistant", content, check: restoreChoiceCheck(data.check) ?? { question: data.check.question } }]);
+          writeTurns(key, [{ role: "assistant", content, check: restoreCardCheck(data.check) ?? { question: data.check.question } }]);
         }
         return;
       }
@@ -575,8 +615,8 @@ export function TutorChat({
     const askedTurn = asked === null ? null : (history[asked] as TutorTurn);
     const userTurn: TutorTurn =
       carried ??
-      // A choice check is answered on its card; a message typed instead is a message.
-      (askedTurn?.check && !isChoiceCheck(askedTurn.check)
+      // A card check is answered on its card; a message typed instead is a message.
+      (askedTurn?.check && !isCardCheck(askedTurn.check)
         ? {
             role: "user",
             content: text,
@@ -585,7 +625,8 @@ export function TutorChat({
         : { role: "user", content: text });
     const next: ThreadItem[] = [...history, userTurn];
     setTurns(next);
-    if (userTurn.verdict && userTurn.verdict.judged === "pending") void judge(userTurn.verdict, text);
+    // A recall card's answer is judged by `submitRecall`, on the learner's words and the commitment, not on this block.
+    if (userTurn.verdict && userTurn.verdict.judged === "pending" && !userTurn.recall) void judge(userTurn.verdict, text);
     setValue(EMPTY);
     setRefusal(null);
     dropAsk();
@@ -607,7 +648,7 @@ export function TutorChat({
       if (Array.isArray(data.sources) && data.sources.length > 0) setSources(data.sources);
       // Onto the stored thread, not `next`: the judge may have written the verdict meanwhile.
       const reply: TutorTurn = { role: "assistant", content };
-      if (data.check?.question) reply.check = restoreChoiceCheck(data.check) ?? { question: data.check.question };
+      if (data.check?.question) reply.check = restoreCardCheck(data.check) ?? { question: data.check.question };
       setTurns([...current(), reply]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "The request failed.");
@@ -675,7 +716,8 @@ export function TutorChat({
   const lastVerdict = turns.findLastIndex((t) => t.role === "user" && t.verdict);
   const rowsAfter = new Map<number, { at: number; verdict: Verdict }>();
   turns.forEach((t, i) => {
-    if (t.role !== "user" || !t.verdict) return;
+    // A recall card draws its own answer's row.
+    if (t.role !== "user" || !t.verdict || t.recall) return;
     rowsAfter.set(turns[i + 1]?.role === "assistant" ? i + 1 : i, { at: i, verdict: t.verdict });
   });
   const rowAfter = (i: number) => {
@@ -691,12 +733,30 @@ export function TutorChat({
     ) : null;
   };
 
-  /** The card under a tutor turn that asked a choice check, with the answer the next learner turn gave, if any. */
+  /** The card under a tutor turn that asked a card check, with the answer the next learner turn gave, if any. */
   const pendingAt = pendingCheck(turns);
-  const choiceCardAfter = (i: number) => {
+  const cardAfter = (i: number) => {
     const turn = turns[i];
-    if (turn?.role !== "assistant" || !isChoiceCheck(turn.check)) return null;
-    const next = turns.slice(i + 1).find((t): t is TutorTurn => t.role !== "studio");
+    if (turn?.role !== "assistant" || !isCardCheck(turn.check)) return null;
+    const nextAt = turns.findIndex((t, j) => j > i && t.role !== "studio");
+    const next = nextAt === -1 ? undefined : (turns[nextAt] as TutorTurn);
+    if (isRecallCheck(turn.check)) {
+      const answered = next?.role === "user" && next.recall ? next : null;
+      return (
+        <RecallCheckCard
+          key={`c${i}`}
+          check={turn.check}
+          pick={answered?.recall ?? null}
+          verdict={answered?.verdict ?? null}
+          live={pendingAt === i}
+          rowLive={nextAt === lastVerdict}
+          disabled={busy || opening}
+          onSubmit={(pick) => submitRecall(i, pick)}
+          onRecord={(correct) => answered?.verdict && void record(answered.verdict.requestId, correct)}
+          concept={{ title, noteHref: NOTE_HASH }}
+        />
+      );
+    }
     const answer = next?.role === "user" ? (next.choice ?? null) : null;
     const answerId = answer?.requestId;
     return (
@@ -739,8 +799,8 @@ export function TutorChat({
 
         {turns.flatMap((turn, i) => {
           const enter = i < restored ? "animate-fade-in motion-reduce:animate-none" : "animate-enter motion-reduce:animate-none";
-          // A choice card's answer is the card's to show; the turn holds what the tutor was sent.
-          if (turn.role === "user" && turn.choice) return [rowAfter(i)];
+          // A card's answer is the card's to show; the turn holds what the tutor was sent.
+          if (turn.role === "user" && (turn.choice || turn.recall)) return [rowAfter(i)];
           const item = turn.role === "studio" ? (
             <Handed key={i} marker={turn} className={enter} />
           ) : turn.role === "user" ? (
@@ -768,7 +828,7 @@ export function TutorChat({
               <NoteProse source={turn.content} idPrefix={`t${i}-`} />
             </TutorMessage>
           );
-          return [item, choiceCardAfter(i), rowAfter(i)];
+          return [item, cardAfter(i), rowAfter(i)];
         })}
 
         {busy && (

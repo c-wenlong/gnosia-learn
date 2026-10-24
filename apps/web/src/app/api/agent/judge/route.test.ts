@@ -122,6 +122,9 @@ describe("POST /api/agent/judge", () => {
     [{ ...OK, answer: "  " }],
     [{ ...OK, answer: "a".repeat(4001) }],
     [{ conceptSlug: "dot-product" }],
+    [{ ...OK, commitment: "" }],
+    [{ ...OK, commitment: 42 }],
+    [{ ...OK, commitment: "c".repeat(801) }],
     ["not json"],
   ])("refuses %j as a 400 before any read", async (body) => {
     const { status, json } = await call(body);
@@ -141,6 +144,18 @@ describe("POST /api/agent/judge", () => {
     expect(messages[0]?.content).toContain("- Answer: They are orthogonal");
     expect(messages[0]?.content).toContain("The body.");
     expect(messages[1]?.content).toContain("<learner_answer>\nperpendicular\n</learner_answer>");
+  });
+
+  it("reads a recall check's commitment first, ahead of the note's matching check (structured checks, phase 2)", async () => {
+    completeWithFallback.mockResolvedValue(reply('{"correct": false, "feedback": "Missing why."}'));
+    const commitment = "They are orthogonal: the cosine of 90 degrees is zero, so the product vanishes.";
+    const { status, json } = await call({ ...OK, commitment });
+    expect(status).toBe(200);
+    expect(json.verdict).toEqual({ correct: false, feedback: "Missing why." });
+    const system = (completeWithFallback.mock.calls[0] as [{ role: string; content: string }[]])[0][0].content;
+    expect(system).toContain(`## The answer the tutor committed to`);
+    expect(system).toContain(commitment);
+    expect(system.indexOf(commitment)).toBeLessThan(system.indexOf("- Answer: They are orthogonal"));
   });
 
   it("answers UNSTRUCTURED_REPLY for a verdict that is not true or false", async () => {

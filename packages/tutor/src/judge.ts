@@ -1,3 +1,4 @@
+import { RECALL_ANSWER_LIMIT } from "./check-block";
 import { CONCEPT_BODY_LIMIT } from "./prompt";
 import { firstObject } from "./session-question";
 import { CHAT_ANSWER_LIMIT, CHECK_QUESTION_LIMIT, VERDICT_FEEDBACK_LIMIT } from "./tutor-check";
@@ -19,8 +20,22 @@ export interface JudgeInput {
   body: string | null;
   question: string;
   answer: string;
+  /**
+   * The answer the tutor committed to when it asked a recall check
+   * (docs/proposals/structured-checks.md, K1), or null for an open check. The
+   * judge's first reference, ahead of `reference`.
+   */
+  commitment: string | null;
   /** The note's check this question matches, when one does. */
   reference: { question: string; answer: string; why: string } | null;
+}
+
+/** What a judge request's `commitment` must be, said once for the route and the turn. */
+export const COMMITMENT_RULE = `commitment, when given, must be the answer the tutor committed to, 1 to ${RECALL_ANSWER_LIMIT} characters`;
+
+/** Whether a judge request's `commitment` is usable: absent, or the text of a recall check's answer. */
+export function isCommitment(value: unknown): boolean {
+  return value === undefined || (typeof value === "string" && value.trim() !== "" && value.length <= RECALL_ANSWER_LIMIT);
 }
 
 /** Strip the delimiters a learner could type to close the data block early. */
@@ -38,6 +53,13 @@ function fenced(text: string): string {
 export function buildJudgePrompt(input: JudgeInput): string {
   const body = (input.body ?? "").trim();
   const clipped = body.length > CONCEPT_BODY_LIMIT ? `${body.slice(0, CONCEPT_BODY_LIMIT)}\n\n[note truncated]` : body;
+  const commitment = input.commitment?.trim()
+    ? `## The answer the tutor committed to
+The tutor wrote this answer when it asked the question, before the learner replied. It is your first reference: grade the learner's answer against it.
+${input.commitment.trim().slice(0, RECALL_ANSWER_LIMIT)}
+
+`
+    : "";
   const reference = input.reference
     ? `## A check from the note that may be the same question
 Use its answer as your reference only if it asks the same thing as the tutor's question below. If it asks something different, ignore it.
@@ -56,7 +78,7 @@ You grade a learner's answer to one question about a concept in their notebook. 
 ## The note
 ${clipped || "(the note's body could not be read; judge from the summary and your own knowledge, and be conservative)"}
 
-${reference}## The question the tutor asked
+${commitment}${reference}## The question the tutor asked
 ${input.question.slice(0, CHECK_QUESTION_LIMIT)}
 
 ## How to grade

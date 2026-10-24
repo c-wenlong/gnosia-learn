@@ -4,15 +4,18 @@ import { tutorDeps, turnResponse } from "@/lib/agent/env";
 import { CHAT_RATE_LIMIT, enforceRateLimit, enforceSameOrigin } from "@/lib/agent/guard";
 import { isConceptSlug } from "@/lib/concept-workspace-core";
 import { requestOwner } from "@/lib/learner-api";
+import { COMMITMENT_RULE, isCommitment } from "@/lib/agent/judge";
 import { CHAT_ANSWER_LIMIT, CHECK_QUESTION_LIMIT } from "@/lib/tutor-check";
 import { judgeTurn } from "@gnosia/tutor/server/turns";
 
 export const runtime = "nodejs";
 
 /**
- * `POST /api/agent/judge` with `{ conceptSlug, question, answer }`: the
- * judge's verdict on one answer to a check the concept tutor asked in the
- * chat (R5 of docs/proposals/recall-in-chat.md).
+ * `POST /api/agent/judge` with `{ conceptSlug, question, answer, commitment? }`:
+ * the judge's verdict on one answer to a check the concept tutor asked in the
+ * chat (R5 of docs/proposals/recall-in-chat.md). A recall check sends the
+ * answer its tutor committed to as `commitment`, the judge's first reference
+ * (docs/proposals/structured-checks.md, phase 2).
  *
  * The chat page calls it beside `POST /api/agent/chat` when the learner
  * replies to a turn that carried a `CHECK:` marker, so the tutor's reply and
@@ -37,7 +40,7 @@ export async function POST(req: Request) {
     return bad("Invalid JSON body");
   }
   if (body === null || typeof body !== "object" || Array.isArray(body)) return bad("The body must be a JSON object");
-  const { conceptSlug, question, answer } = body as Record<string, unknown>;
+  const { conceptSlug, question, answer, commitment } = body as Record<string, unknown>;
   if (!isConceptSlug(conceptSlug)) return bad("conceptSlug must be a concept id (lowercase letters, digits and hyphens)");
   if (typeof question !== "string" || question.trim() === "" || question.length > CHECK_QUESTION_LIMIT) {
     return bad(`question must be the check the tutor asked, 1 to ${CHECK_QUESTION_LIMIT} characters`);
@@ -45,6 +48,7 @@ export async function POST(req: Request) {
   if (typeof answer !== "string" || answer.trim() === "" || answer.length > CHAT_ANSWER_LIMIT) {
     return bad(`answer must be the learner's reply, 1 to ${CHAT_ANSWER_LIMIT} characters`);
   }
+  if (!isCommitment(commitment)) return bad(COMMITMENT_RULE);
 
   // Before the read, so an unknown slug is not a free way to spin the limiter.
   const limited = enforceRateLimit(req, "judge", CHAT_RATE_LIMIT);

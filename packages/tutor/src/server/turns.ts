@@ -32,6 +32,8 @@ import { isConceptSlug, toConceptPromptInput } from "../concept-workspace-core";
 import { findTopicBySlugs } from "../lookup";
 import {
   buildJudgePrompt,
+  COMMITMENT_RULE,
+  isCommitment,
   judgeRequest,
   parseVerdict,
 } from "../judge";
@@ -521,10 +523,10 @@ async function completeTurn(
 
   // The concept tutor's and the topic tutor's prompts ask for a check block
   // or the marker; the open tutor's reply is returned exactly as the model
-  // wrote it. Only the concept tutor's page draws a choice card so far
-  // (docs/proposals/structured-checks.md, phase 1), so the topic tutor's
-  // choice block is kept as the open check it falls back to.
-  const split = checks === null ? null : splitTurnCheck(outcome.result.content, { choice: checks === "concept" });
+  // wrote it. Only the concept tutor's page draws check cards so far
+  // (docs/proposals/structured-checks.md, phases 1 and 2), so the topic
+  // tutor's block is kept as the open check it falls back to.
+  const split = checks === null ? null : splitTurnCheck(outcome.result.content, { cards: checks === "concept" });
   if (split !== null) {
     // A block that could not be used falls back (K7); the reason goes to the log, never the learner.
     if (split.refused !== null) console.warn(`tutor check block refused: ${split.refused}`);
@@ -551,13 +553,16 @@ function bad(error: string): TurnReply {
 }
 
 /**
- * `POST /api/agent/judge` with `{ conceptSlug, question, answer }`: the
- * judge's verdict on one answer to a check the concept tutor asked in the
+ * `POST /api/agent/judge` with `{ conceptSlug, question, answer, commitment? }`:
+ * the judge's verdict on one answer to a check the concept tutor asked in the
  * chat (R5 of docs/proposals/recall-in-chat.md). It writes nothing.
+ * `commitment` is the answer a recall check's tutor committed to when it
+ * asked (docs/proposals/structured-checks.md, phase 2), and the judge's first
+ * reference, ahead of any note check `matchCheck` finds.
  */
 export async function judgeTurn(deps: TutorDeps, body: unknown): Promise<TurnReply> {
   if (body === null || typeof body !== "object" || Array.isArray(body)) return bad("The body must be a JSON object");
-  const { conceptSlug, question, answer } = body as Record<string, unknown>;
+  const { conceptSlug, question, answer, commitment } = body as Record<string, unknown>;
   if (!isConceptSlug(conceptSlug)) return bad("conceptSlug must be a concept id (lowercase letters, digits and hyphens)");
   if (typeof question !== "string" || question.trim() === "" || question.length > CHECK_QUESTION_LIMIT) {
     return bad(`question must be the check the tutor asked, 1 to ${CHECK_QUESTION_LIMIT} characters`);
@@ -565,6 +570,7 @@ export async function judgeTurn(deps: TutorDeps, body: unknown): Promise<TurnRep
   if (typeof answer !== "string" || answer.trim() === "" || answer.length > CHAT_ANSWER_LIMIT) {
     return bad(`answer must be the learner's reply, 1 to ${CHAT_ANSWER_LIMIT} characters`);
   }
+  if (!isCommitment(commitment)) return bad(COMMITMENT_RULE);
 
   const read = await workspaceOf(deps, conceptSlug);
   if (read.state === "unreachable") {
@@ -590,6 +596,7 @@ export async function judgeTurn(deps: TutorDeps, body: unknown): Promise<TurnRep
           body: concept.body ?? null,
           question: question.trim(),
           answer,
+          commitment: typeof commitment === "string" ? commitment.trim() : null,
           reference: match ? { question: match.question, answer: match.answer, why: match.why } : null,
         }),
       },

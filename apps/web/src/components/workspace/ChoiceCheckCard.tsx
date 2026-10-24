@@ -32,7 +32,7 @@ import { RecordedCard } from "./VerdictRow";
  * (a message typed in the composer instead): the card folds to "Not answered"
  * and nothing is written, as an untapped verdict row folds to "Not recorded".
  */
-const STOP_ITEMS = CONFIDENCE_STOPS.map((stop) => ({ id: String(stop), label: `${stop}%` }));
+export const STOP_ITEMS = CONFIDENCE_STOPS.map((stop) => ({ id: String(stop), label: `${stop}%` }));
 
 export function ChoiceCheckCard({
   check,

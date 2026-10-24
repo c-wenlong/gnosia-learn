@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { act, createElement, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
 import type { SessionQuestion, SessionStep } from "@/lib/session-core";
+import type { WeekCheckPlan } from "@/lib/week-check";
 
 /**
  * How the session moves from step to step (docs/design/IMPLEMENTATION.md,
@@ -95,23 +96,31 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-async function mount() {
+const WEEK_PLAN: WeekCheckPlan = {
+  concepts: [{ slug: "tcp", title: "The TCP handshake", pL: 0.3, questions: [QUESTION] }],
+  modelAvailable: false,
+};
+
+async function mount({ weekCheck = false } = {}) {
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
   await act(async () => {
     root.render(
       createElement(SessionFocus, {
-        slug: "tcp",
-        title: "The TCP handshake",
-        mode: "learn",
-        plan: PLAN,
+        slug: weekCheck ? "networks-m1" : "tcp",
+        title: weekCheck ? "Networks, module 1" : "The TCP handshake",
+        mode: weekCheck ? "module" : "learn",
+        plan: weekCheck ? [] : PLAN,
         modelAvailable: false,
         nothingToAsk: false,
         teach: createElement("p", null, "Three packets."),
         asset: createElement("div", null, "a diagram"),
         assetCompact: null,
         next: null,
+        weekCheck: weekCheck
+          ? { moduleId: "networks-m1", plan: WEEK_PLAN, moduleHref: "/courses/networks/m1", reason: null }
+          : null,
       }),
     );
   });
@@ -205,5 +214,105 @@ describe("SessionFocus moving between steps", () => {
     const heading = column.querySelector("h1") as HTMLElement;
     expect(heading.textContent).toBe("Session closed");
     expect(document.activeElement).toBe(heading);
+  });
+});
+
+/** Every body the page sent to the observe route, in order. */
+const observed = () =>
+  (fetch as unknown as Mock).mock.calls
+    .filter(([url]) => url === "/api/learner/observe")
+    .map(([, init]) => JSON.parse((init as RequestInit).body as string) as Record<string, unknown>);
+
+const stop = (host: HTMLElement, percent: number) =>
+  host.querySelector(`button[role="radio"][data-option="${percent}"]`) as HTMLButtonElement | null;
+
+async function key(target: EventTarget, pressed: string) {
+  await act(async () => {
+    target.dispatchEvent(new KeyboardEvent("keydown", { key: pressed, bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
+
+async function type(field: HTMLTextAreaElement, text: string) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+  await act(async () => {
+    setter?.call(field, text);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+describe("SessionFocus confidence (docs/proposals/structured-checks.md, phase 3)", () => {
+  it("asks how sure only once there is a pick, resting on 50", async () => {
+    const host = await mount();
+    await press(button(host, "Continue"));
+    expect(host.textContent).not.toContain("How sure are you?");
+    expect(host.querySelector("textarea")).toBeNull();
+
+    await press(choice(host, "ACK"));
+    expect(host.textContent).toContain("How sure are you?");
+    expect(stop(host, 50)?.getAttribute("aria-checked")).toBe("true");
+    expect([0, 30, 70, 90, 100].map((p) => stop(host, p)?.getAttribute("aria-checked"))).toEqual(Array(5).fill("false"));
+    expect(host.querySelector("textarea")?.maxLength).toBe(2_000);
+  });
+
+  it("sends the confidence and the trimmed reasoning with the pick", async () => {
+    const host = await mount();
+    await press(button(host, "Continue"));
+    await press(choice(host, "SYN"));
+    await press(stop(host, 30) as HTMLElement);
+    await type(host.querySelector("textarea") as HTMLTextAreaElement, "  The client speaks first.  ");
+    await press(button(host, "Check"));
+
+    expect(observed()).toHaveLength(1);
+    expect(observed()[0]).toMatchObject({ chosen: "SYN", answer: "SYN", confidence: 30, thinking: "The client speaks first." });
+    // Answered, the stops are gone with the rest of the question's controls.
+    expect(host.textContent).not.toContain("How sure are you?");
+  });
+
+  it("leaves the reasoning out when none was written", async () => {
+    const host = await mount();
+    await press(button(host, "Continue"));
+    await press(choice(host, "FIN"));
+    await press(button(host, "Check"));
+    const body = observed()[0] as Record<string, unknown>;
+    expect(body.confidence).toBe(50);
+    expect("thinking" in body).toBe(false);
+  });
+
+  it("sends no confidence with I don't know (K6)", async () => {
+    const host = await mount();
+    await press(button(host, "Continue"));
+    await press(button(host, "I don't know"));
+    const body = observed()[0] as Record<string, unknown>;
+    expect(body.chosen).toBeNull();
+    expect("confidence" in body).toBe(false);
+    expect("thinking" in body).toBe(false);
+  });
+
+  it("keeps 1 to 4 picking and Enter checking with the focus on a stop, and leaves digits typed in the reasoning alone", async () => {
+    const host = await mount();
+    await press(button(host, "Continue"));
+    await key(document.body, "1");
+    expect(choice(host, "SYN").getAttribute("aria-pressed")).toBe("true");
+
+    const ninety = stop(host, 90) as HTMLButtonElement;
+    await press(ninety);
+    ninety.focus();
+    await key(ninety, "2");
+    expect(choice(host, "ACK").getAttribute("aria-pressed")).toBe("true");
+    await type(host.querySelector("textarea") as HTMLTextAreaElement, "3 packets");
+    await key(host.querySelector("textarea") as HTMLTextAreaElement, "3");
+    await key(ninety, "Enter");
+
+    expect(observed()).toHaveLength(1);
+    expect(observed()[0]).toMatchObject({ chosen: "ACK", confidence: 90, thinking: "3 packets" });
+  });
+
+  it("carries the confidence on a week check's answer too, with its module", async () => {
+    const host = await mount({ weekCheck: true });
+    await press(choice(host, "SYN"));
+    await press(stop(host, 100) as HTMLElement);
+    await press(button(host, "Check"));
+    expect(observed()[0]).toMatchObject({ module: "networks-m1", source: "probe", chosen: "SYN", confidence: 100 });
   });
 });

@@ -144,6 +144,55 @@ describe("a thread's checks and verdicts (docs/proposals/recall-in-chat.md)", ()
   });
 });
 
+describe("a card check in the thread (docs/proposals/structured-checks.md, phase 2)", () => {
+  const recall = { kind: "recall", question: "Why three packets?", answer: "Each side's SYN is acknowledged, and two of those share a packet." };
+  const pick = { answer: "Two SYNs, two ACKs, one shared.", confidence: 70, thinking: null };
+  const verdict = {
+    question: recall.question,
+    requestId: "chat-abc",
+    source: "probe",
+    judged: "ready",
+    suggested: true,
+    feedback: "Right.",
+    state: "open",
+    tapped: null,
+    error: null,
+    recorded: null,
+  };
+
+  it("keeps a recall check and the learner's pick through storage", () => {
+    const items = parseThread(
+      JSON.stringify([
+        { role: "assistant", content: "One check.", check: recall },
+        { role: "user", content: "<check_answer>…</check_answer>", recall: pick, verdict },
+      ]),
+    );
+    expect((items[0] as TutorTurn).check).toEqual(recall);
+    expect((items[1] as TutorTurn).recall).toEqual(pick);
+    expect((items[1] as TutorTurn).verdict).toEqual(verdict);
+    // A pick that is not one is dropped, and the turn kept.
+    const bad = parseThread(JSON.stringify([{ role: "user", content: "x", recall: { answer: "", confidence: 70 } }]));
+    expect(bad).toEqual([{ role: "user", content: "x" }]);
+  });
+
+  it("sends the asking turn back with its block, so the tutor sees what it committed to, and nothing else of the card", () => {
+    const items = parseThread(
+      JSON.stringify([
+        { role: "user", content: "Check me" },
+        { role: "assistant", content: "One check.", check: recall },
+        { role: "user", content: "<check_answer>…</check_answer>", recall: pick, verdict },
+      ]),
+    );
+    expect(requestTurns(items)).toEqual([
+      { role: "user", content: "Check me" },
+      { role: "assistant", content: `One check.\n\n\`\`\`check\n${JSON.stringify(recall)}\n\`\`\`` },
+      { role: "user", content: "<check_answer>…</check_answer>" },
+    ]);
+    // The planner and the hand-off still get the words the learner saw.
+    expect(chatTurns(items)[1]).toEqual({ role: "assistant", content: "One check." });
+  });
+});
+
 describe("a thread that opens on the tutor's recall question (R3)", () => {
   it("sends the seed before it, so the model sees a user turn first and its own question", () => {
     const items: ThreadItem[] = [

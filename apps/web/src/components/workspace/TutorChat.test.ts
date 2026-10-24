@@ -675,3 +675,120 @@ describe("a choice check (docs/proposals/structured-checks.md, phase 1)", () => 
     expect(typed.querySelector('[aria-label="Record this answer"]')).toBeNull();
   });
 });
+
+describe("a recall check (docs/proposals/structured-checks.md, phase 2)", () => {
+  const check = {
+    kind: "recall",
+    question: "Why does the handshake take three packets?",
+    answer: "Each side must send its own SYN and have it acknowledged; the server's ACK and SYN share one packet, so three suffice.",
+  };
+  const seed = (slug: string) =>
+    sessionStorage.setItem(threadKey(slug), JSON.stringify([{ role: "assistant", content: "One check.", check }]));
+  const card = (host: HTMLElement) => host.querySelector<HTMLElement>("section[aria-labelledby]");
+  const button = (root: HTMLElement, text: string) =>
+    [...root.querySelectorAll("button")].find((b) => b.textContent?.trim() === text) as HTMLButtonElement | undefined;
+  const click = async (el: HTMLElement | undefined) => {
+    expect(el).toBeDefined();
+    await act(async () => el!.click());
+    await settle();
+  };
+  const type = async (box: HTMLTextAreaElement, text: string) => {
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(box, text);
+      box.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  };
+  const recorded = { ok: true, result: { correct: true, pLBefore: 0.3, pLAfter: 0.52, card: { intervalDays: 1 } } };
+
+  beforeEach(() => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        fetched.push({ url, body: init?.body === undefined ? undefined : JSON.parse(String(init.body)) });
+        if (url === "/api/learner/observe") return new Response(JSON.stringify(recorded), { status: 200 });
+        if (url === "/api/agent/judge") {
+          return new Response(JSON.stringify({ verdict: { correct: true, feedback: "Both SYNs acknowledged." } }), { status: 200 });
+        }
+        return new Response(JSON.stringify({ message: { content: "Yes: as I had it, the middle packet does two jobs." } }), {
+          status: 200,
+        });
+      }),
+    );
+  });
+
+  it("judges the words against the commitment, shows the commitment, and records on one tap with confidence and reasoning", async () => {
+    seed("tcp-recall");
+    const host = await mount({ slug: "tcp-recall" });
+    const box = card(host)!;
+    expect(box.textContent).toContain(check.question);
+    // The commitment stays hidden until the learner has answered.
+    expect(box.textContent).not.toContain(check.answer);
+
+    await click(button(box, "Submit"));
+    expect(box.querySelector('[role="alert"]')?.textContent).toContain("Write your answer first.");
+    expect(fetched).toHaveLength(0);
+
+    const [answerBox, reasoningBox] = [...box.querySelectorAll("textarea")];
+    await type(answerBox, "Both sides send a SYN and get it acked.");
+    await click(button(box, "70%"));
+    await type(reasoningBox, "The middle one doubles up.");
+    await click(button(box, "Submit"));
+
+    const judged = fetched.filter((c) => c.url === "/api/agent/judge");
+    expect(judged).toHaveLength(1);
+    expect(judged[0].body).toEqual({
+      conceptSlug: "tcp-recall",
+      question: check.question,
+      answer: "Both sides send a SYN and get it acked.",
+      commitment: check.answer,
+    });
+
+    // The tutor sees its own block on the asking turn, and the learner's answer as data with no verdict.
+    const sent = chatCalls().at(-1)?.body as { messages: { role: string; content: string }[] };
+    expect(sent.messages.at(-2)?.content).toBe(`One check.\n\n\`\`\`check\n${JSON.stringify(check)}\n\`\`\``);
+    expect(sent.messages.at(-1)?.content).toBe(
+      "<check_answer>\nAnswer: Both sides send a SYN and get it acked.\nConfidence: 70%\nReasoning: The middle one doubles up.\n</check_answer>",
+    );
+    // The browser still shows the turn without its block.
+    expect(host.textContent).not.toContain("```check");
+
+    const after = card(host)!;
+    expect(after.querySelector("dl")?.textContent).toContain("Both sides send a SYN and get it acked.");
+    expect(after.querySelector("dl")?.textContent).toContain("70% sure");
+    expect(after.textContent).toContain("The tutor's answer");
+    expect(after.textContent).toContain(check.answer);
+    expect(after.textContent).toContain("Looks right.");
+    expect(fetched.filter((c) => c.url === "/api/learner/observe")).toHaveLength(0);
+
+    await click(button(after, "Record as correct"));
+    const observed = fetched.filter((c) => c.url === "/api/learner/observe");
+    expect(observed).toHaveLength(1);
+    expect(observed[0].body).toMatchObject({
+      conceptSlug: "tcp-recall",
+      correct: true,
+      source: "probe",
+      question: check.question,
+      answer: check.answer,
+      chosen: "Both sides send a SYN and get it acked.",
+      confidence: 70,
+      thinking: "The middle one doubles up.",
+    });
+    expect(card(host)!.querySelector("[data-recorded]")?.textContent).toContain("Mastery moved: p(L) 0.30 → 0.52");
+    expect(host.textContent).not.toContain("<check_answer>");
+    expect(host.textContent).toContain("the middle packet does two jobs");
+  });
+
+  it("folds to Not answered when a message is typed instead, and judges nothing", async () => {
+    seed("tcp-recall-typed");
+    const host = await mount({ slug: "tcp-recall-typed" });
+    const composer = [...host.querySelectorAll("textarea")].at(-1)!;
+    await type(composer, "Can you explain SYN first?");
+    await act(async () => {
+      composer.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    });
+    await settle();
+    expect(host.textContent).toContain("Not answered");
+    expect(fetched.filter((c) => c.url === "/api/agent/judge")).toHaveLength(0);
+    expect(host.querySelector('[aria-label="Record this answer"]')).toBeNull();
+  });
+});

@@ -10,12 +10,16 @@ import { Collapse } from "@/components/ui/Collapse";
 import { MathText } from "@/components/Math";
 import { FeedbackBar } from "@/components/ui/FeedbackBar";
 import { Placeholder } from "@/components/ui/Placeholder";
-import { cx, TRACK } from "@/components/ui/classes";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { Textarea } from "@/components/ui/Textarea";
+import { cx, LABEL, TRACK } from "@/components/ui/classes";
 import { TextLink } from "@/components/ui/TextLink";
+import { CONFIDENCE_STOPS, DEFAULT_CONFIDENCE } from "@/lib/check-block";
 import {
   feedbackNote,
   newSessionId,
   NOTHING_TO_ASK,
+  SESSION_TEXT_LIMIT,
   STEP_NAME,
   stepLabel,
   tutorPrefill,
@@ -51,7 +55,10 @@ import { SessionClose } from "./SessionClose";
  * filled (no check, no model) is not in the plan at all; `nothingToAsk` says
  * the plan asks nothing, and the teach step and the close screen say why.
  *
- * Picking is 1 to 4 or a click; Check (or Enter) grades. Every graded answer is
+ * Picking is 1 to 4 or a click; Check (or Enter) grades. A pick brings up how
+ * sure the learner is (six stops, resting on 50) and an optional line of
+ * reasoning, which go on the observation (docs/proposals/structured-checks.md,
+ * K5); "I don't know" carries no confidence (K6). Every graded answer is
  * one `POST /api/learner/observe`, and the verdict shows only once it is
  * recorded, so what the page says and what the log holds cannot disagree. A
  * write that fails stays on screen with the error and the same request id, so
@@ -88,6 +95,17 @@ export interface WeekCheckProps {
 }
 
 type Resolved = { question: SessionQuestion | null; note: string | null };
+
+/** One answer as first sent: a retry resends exactly this, under the same request id. */
+interface Attempt {
+  requestId: string;
+  picked: number | null;
+  /** Percent; null with "I don't know" (K6). */
+  confidence: number | null;
+  thinking: string | null;
+}
+
+const STOP_ITEMS = CONFIDENCE_STOPS.map((stop) => ({ id: String(stop), label: `${stop}%` }));
 
 interface Graded {
   picked: number | null;
@@ -153,6 +171,8 @@ export function SessionFocus({
   const [checkPlan] = useState(() => weekCheck?.plan ?? null);
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
+  const [confidence, setConfidence] = useState<number>(DEFAULT_CONFIDENCE);
+  const [thinking, setThinking] = useState("");
   const [graded, setGraded] = useState<Record<number, Graded>>({});
   const [resolved, setResolved] = useState<Record<number, Resolved>>({});
   const [whyOpen, setWhyOpen] = useState(false);
@@ -174,7 +194,7 @@ export function SessionFocus({
   // Refs, not state, for what a handler must see before React re-renders.
   const inFlight = useRef(false);
   const requested = useRef(new Set<number>());
-  const attempts = useRef<Record<number, { requestId: string; picked: number | null }>>({});
+  const attempts = useRef<Record<number, Attempt>>({});
   const sessionId = useRef<string | null>(null);
   const closed = useRef(false);
   /** The body of the answer being saved, if any: leaving resends it with the close. */
@@ -274,6 +294,8 @@ export function SessionFocus({
       : null;
   const question = current.status === "ready" ? current.question : null;
   const answered = graded[index];
+  /** The option on screen as picked: the one sent, once Check has been pressed. */
+  const shownPick = index in sent ? (sent[index] ?? null) : selected;
 
   const grade = useCallback(
     async (choice: number | null) => {
@@ -281,8 +303,14 @@ export function SessionFocus({
       inFlight.current = true;
       setPending(true);
       setError(null);
-      // The first attempt fixes the pick; a retry sends that pick again.
-      const attempt = (attempts.current[index] ??= { requestId: randomToken(), picked: choice });
+      // The first attempt fixes the pick, the confidence and the reasoning; a retry sends them again.
+      const reasoning = thinking.trim().slice(0, SESSION_TEXT_LIMIT);
+      const attempt = (attempts.current[index] ??= {
+        requestId: randomToken(),
+        picked: choice,
+        confidence: choice === null ? null : confidence,
+        thinking: reasoning === "" ? null : reasoning,
+      });
       const picked = attempt.picked;
       setSent((prev) => (index in prev ? prev : { ...prev, [index]: picked }));
       const correct = picked !== null && picked === question.correct;
@@ -302,6 +330,9 @@ export function SessionFocus({
         // `chosen` is the pick, null for "I don't know".
         answer: question.choices[question.correct] ?? null,
         chosen: picked === null ? null : (question.choices[picked] ?? null),
+        // Left out when absent, so an answer without them is the payload it always was.
+        ...(attempt.confidence === null ? {} : { confidence: attempt.confidence }),
+        ...(attempt.thinking === null ? {} : { thinking: attempt.thinking }),
       };
       saving.current = payload;
       try {
@@ -330,7 +361,7 @@ export function SessionFocus({
         setPending(false);
       }
     },
-    [question, step, graded, index, slug, mode, router, conceptOf, weekCheck],
+    [question, step, graded, index, slug, mode, router, conceptOf, weekCheck, confidence, thinking],
   );
 
   /**
@@ -407,6 +438,8 @@ export function SessionFocus({
     if (to >= walk.length) return;
     setIndex(to);
     setSelected(null);
+    setConfidence(DEFAULT_CONFIDENCE);
+    setThinking("");
     setWhyOpen(false);
     setError(null);
     if (walk[to]?.kind === "close") {
@@ -560,13 +593,23 @@ export function SessionFocus({
           {question !== null && (
             <Question
               question={question}
-              selected={index in sent ? (sent[index] ?? null) : selected}
+              selected={shownPick}
               answered={answered}
               locked={pending || index in sent}
               onSelect={setSelected}
               // A question the tutor wrote replaces its placeholder: it rises in, at
               // least as tall as the placeholder was, so nothing under it jumps up.
               className={step.question === null && modelAvailable ? "min-h-[180px] animate-enter motion-reduce:animate-none" : undefined}
+            />
+          )}
+
+          {question !== null && answered === undefined && shownPick !== null && (
+            <Sureness
+              confidence={confidence}
+              thinking={thinking}
+              locked={pending || index in sent}
+              onConfidence={setConfidence}
+              onThinking={setThinking}
             />
           )}
 
@@ -690,6 +733,59 @@ function Question({
           </ChoiceRow>
         ))}
       </div>
+    </div>
+  );
+}
+
+/**
+ * How sure the learner is of the option they picked, and why, both asked once
+ * there is a pick (the owner's choice, 2026-10-25): the same stops and box as
+ * the chat's choice card. Focus on a stop leaves 1 to 4 picking an option and
+ * Enter checking the answer (`quizKey`); the box is typing.
+ */
+function Sureness({
+  confidence,
+  thinking,
+  locked,
+  onConfidence,
+  onThinking,
+}: {
+  confidence: number;
+  thinking: string;
+  /** Saving, or sent and waiting to be retried: the answer cannot change. */
+  locked: boolean;
+  onConfidence: (next: number) => void;
+  onThinking: (next: string) => void;
+}) {
+  const id = useId();
+  return (
+    <div className="flex animate-enter flex-col gap-3 motion-reduce:animate-none">
+      <div className="flex flex-col gap-1.5">
+        <p id={`${id}-sure`} className={LABEL}>
+          How sure are you?
+        </p>
+        <SegmentedControl
+          label="How sure are you?"
+          labelledBy={`${id}-sure`}
+          items={STOP_ITEMS}
+          value={String(confidence)}
+          onChange={(next) => onConfidence(Number(next))}
+          size="sm"
+          block
+          disabled={locked}
+        />
+      </div>
+      <label className="flex flex-col gap-1.5">
+        <span className={LABEL}>Your reasoning (optional)</span>
+        <Textarea
+          value={thinking}
+          onChange={(e) => onThinking(e.target.value)}
+          maxLength={SESSION_TEXT_LIMIT}
+          rows={2}
+          disabled={locked}
+          placeholder="Why you picked it, or what you were unsure about"
+        />
+      </label>
     </div>
   );
 }

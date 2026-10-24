@@ -4,9 +4,9 @@ import { firstObject, QUESTION_LIMITS, shuffleWithSeed } from "./session-questio
 import { CHAT_ANSWER_LIMIT, CHECK_QUESTION_LIMIT, splitCheck, type RecordedResult, type TurnCheck } from "./tutor-check";
 
 /**
- * Structured checks, phase 1 (docs/proposals/structured-checks.md): the
- * `check` block a tutor turn ends with, read and refused here, and the rules
- * the choice card needs.
+ * Structured checks (docs/proposals/structured-checks.md): the `check` block
+ * a tutor turn ends with, read and refused here, and the rules the choice
+ * card (phase 1) and the recall card (phase 2) need.
  *
  * A choice check is a question, its options and the key, written by the
  * tutor in the same turn it asks (K1), as a fenced block at the end of its
@@ -18,10 +18,19 @@ import { CHAT_ANSWER_LIMIT, CHECK_QUESTION_LIMIT, splitCheck, type RecordedResul
  * ```
  * ````
  *
+ * A recall check is a question and the full answer the tutor has in mind,
+ * committed the same way, and judged against that answer once the learner
+ * has written theirs:
+ *
+ * ````
+ * ```check
+ * {"kind": "recall", "question": "...", "answer": "<the full answer, its reasoning included>"}
+ * ```
+ * ````
+ *
  * A block that cannot be used falls back (K7): with a readable question it
  * becomes an open check, judged as a `CHECK:` line is, and otherwise the turn
- * asked nothing. A recall block is an open check until phase 2 reads its
- * committed answer.
+ * asked nothing.
  *
  * React-free, so the rules are testable and the route can import them.
  */
@@ -44,6 +53,33 @@ export interface ChoiceCheck extends TurnCheck {
   answer: string;
 }
 
+/** A recall check as the route returns it and the thread keeps it. */
+export interface RecallCheck extends TurnCheck {
+  kind: "recall";
+  /** The full answer the tutor committed to when it asked: the judge's first reference, shown once the learner has answered. */
+  answer: string;
+}
+
+/** The longest committed answer a recall check may carry. */
+export const RECALL_ANSWER_LIMIT = QUESTION_LIMITS.explanation;
+
+/** A check with a card: the kinds a `check` block holds. */
+export type CardCheck = ChoiceCheck | RecallCheck;
+
+export function isRecallCheck(check: TurnCheck | null | undefined): check is RecallCheck {
+  return (
+    check !== null &&
+    check !== undefined &&
+    (check as Partial<RecallCheck>).kind === "recall" &&
+    typeof (check as Partial<RecallCheck>).answer === "string"
+  );
+}
+
+/** Whether a check is answered on a card (choice or recall) rather than in the composer. */
+export function isCardCheck(check: TurnCheck | null | undefined): check is CardCheck {
+  return isChoiceCheck(check) || isRecallCheck(check);
+}
+
 export function isChoiceCheck(check: TurnCheck | null | undefined): check is ChoiceCheck {
   return (
     check !== null &&
@@ -55,7 +91,7 @@ export function isChoiceCheck(check: TurnCheck | null | undefined): check is Cho
 
 /** A block read off a reply: the check it holds, or why it cannot be used and what is left of it. */
 export type BlockOutcome =
-  | { ok: true; check: ChoiceCheck }
+  | { ok: true; check: CardCheck }
   | { ok: false; reason: string; fallback: TurnCheck | null };
 
 /** One line of text: trimmed, inner whitespace collapsed. */
@@ -65,9 +101,10 @@ function line(value: unknown): string | null {
 
 /**
  * The block's object as a check, or the reason it is not one. The rules are
- * the proposal's table: a question within `CHECK_QUESTION_LIMIT`, three to
- * five distinct options within `QUESTION_LIMITS.option`, a `why` within
- * `QUESTION_LIMITS.explanation`, and a key equal to exactly one option. The
+ * the proposal's table: a question within `CHECK_QUESTION_LIMIT`; for a
+ * choice check three to five distinct options within `QUESTION_LIMITS.option`,
+ * a `why` within `QUESTION_LIMITS.explanation`, and a key equal to exactly one
+ * option; for a recall check an answer within `RECALL_ANSWER_LIMIT`. The
  * key is matched by its text, never its index, so a miscounted position
  * cannot grade the wrong option. A refused block keeps its question, when it
  * has a readable one, as the open check it falls back to.
@@ -83,7 +120,17 @@ export function readCheckBlock(data: unknown): BlockOutcome {
   const refuse = (reason: string): BlockOutcome => ({ ok: false, reason, fallback });
 
   if (fallback === null) return refuse(`The question must be 1 to ${CHECK_QUESTION_LIMIT} characters.`);
-  if (record.kind === "recall") return refuse("A recall block is read as an open check until phase 2.");
+  const concept = line(record.concept);
+  if (record.kind === "recall") {
+    // Trimmed only: spacing inside an answer can carry meaning (code, a formula), and it is the grading reference.
+    const answer = typeof record.answer === "string" ? record.answer.trim() : null;
+    if (answer === null || answer === "" || answer.length > RECALL_ANSWER_LIMIT) {
+      return refuse(`A recall check's "answer" must be 1 to ${RECALL_ANSWER_LIMIT} characters.`);
+    }
+    const check: RecallCheck = { question: fallback.question, kind: "recall", answer };
+    if (concept) check.concept = concept.toLowerCase();
+    return { ok: true, check };
+  }
   if (record.kind !== "choice") return refuse('"kind" must be "choice" or "recall".');
 
   if (!Array.isArray(record.options)) return refuse('"options" must be a list.');
@@ -105,7 +152,6 @@ export function readCheckBlock(data: unknown): BlockOutcome {
   if (answer === null || !texts.includes(answer)) return refuse("The answer is not one of the options, copied exactly.");
 
   const check: ChoiceCheck = { question: fallback.question, kind: "choice", options: texts, why, answer };
-  const concept = line(record.concept);
   if (concept) check.concept = concept.toLowerCase();
   return { ok: true, check };
 }
@@ -143,11 +189,11 @@ export interface SplitReply {
 
 /**
  * A reply with its check taken off: a `check` block first, then the `CHECK:`
- * line `splitCheck` reads. With `choice` false (a tutor whose page has no
- * choice card yet) a valid choice block is kept as the open check it falls
- * back to, so its question is still asked and judged.
+ * line `splitCheck` reads. With `cards` false (a tutor whose page draws no
+ * check cards yet) a valid block is kept as the open check it falls back to,
+ * so its question is still asked and judged.
  */
-export function splitTurnCheck(reply: string, { choice = true }: { choice?: boolean } = {}): SplitReply {
+export function splitTurnCheck(reply: string, { cards = true }: { cards?: boolean } = {}): SplitReply {
   const trimmed = reply.replace(/\s+$/, "");
   const block = lastBlock(trimmed);
   if (block === null) return { ...splitCheck(reply), refused: null };
@@ -167,17 +213,17 @@ export function splitTurnCheck(reply: string, { choice = true }: { choice?: bool
   let check: TurnCheck | null;
   let refused: string | null = null;
   if (outcome.ok) {
-    check = choice ? outcome.check : { question: outcome.check.question, ...(outcome.check.concept ? { concept: outcome.check.concept } : {}) };
+    check = cards ? outcome.check : { question: outcome.check.question, ...(outcome.check.concept ? { concept: outcome.check.concept } : {}) };
   } else {
     check = outcome.fallback;
     refused = outcome.reason;
   }
   // A reply that is nothing but the block keeps the question as its prose, as `splitCheck` does.
-  // An open check the block fell back to has no card to show its question, so the prose
+  // An open check (a fallback, or a block on a page with no cards) has no card to show its question, so the prose
   // carries it whenever it does not already ask it: an answer is never judged against
   // a question the learner never saw.
   let content = before === "" ? (check?.question ?? "") : before;
-  if (check !== null && !isChoiceCheck(check) && !asks(content, check.question)) content = `${content}\n\n${check.question}`;
+  if (check !== null && !isCardCheck(check) && !asks(content, check.question)) content = `${content}\n\n${check.question}`;
   return { content, check, refused };
 }
 
@@ -187,11 +233,27 @@ function asks(prose: string, question: string): boolean {
   return flat(prose).includes(flat(question));
 }
 
-/** A stored check back: a choice check only when it still passes `readCheckBlock`, else the open check it reduces to. */
-export function restoreChoiceCheck(value: unknown): ChoiceCheck | null {
-  if (value === null || typeof value !== "object" || (value as { kind?: unknown }).kind !== "choice") return null;
+/** A stored check back: a choice or recall check only while it still passes `readCheckBlock`, else null (the caller keeps the open check it reduces to). */
+export function restoreCardCheck(value: unknown): CardCheck | null {
+  if (value === null || typeof value !== "object") return null;
+  const kind = (value as { kind?: unknown }).kind;
+  if (kind !== "choice" && kind !== "recall") return null;
   const outcome = readCheckBlock(value);
   return outcome.ok ? outcome.check : null;
+}
+
+/**
+ * The block a card check was read from, written back (§5 of the proposal):
+ * the asking turn goes back to the tutor with it, so the tutor can see the
+ * answer it committed to and grade against it. Fields in the order the
+ * prompt asks for, `why` before `answer`.
+ */
+export function checkBlockText(check: CardCheck): string {
+  const data =
+    check.kind === "choice"
+      ? { kind: check.kind, question: check.question, options: check.options, why: check.why, answer: check.answer }
+      : { kind: check.kind, question: check.question, answer: check.answer };
+  return `\`\`\`check\n${JSON.stringify(data)}\n\`\`\``;
 }
 
 /**
@@ -257,6 +319,46 @@ export function choiceAnswerText(check: ChoiceCheck, pick: ChoicePick): string {
 /** Whether a confidence is one the observe write takes: a whole percent from 0 to 100. */
 export function isConfidence(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 100;
+}
+
+/** What the learner gave on a recall card: their words, how sure they are, and their reasoning. */
+export interface RecallPick {
+  answer: string;
+  /** Percent, one of `CONFIDENCE_STOPS`. A recall card has no "I don't know", so there is always one. */
+  confidence: number;
+  thinking: string | null;
+}
+
+/**
+ * A recall answer as the tutor reads it on the next turn (§5 of the
+ * proposal): the learner's words, the confidence and the reasoning, and no
+ * verdict, since the judge and the tutor's reply run side by side. The tutor
+ * grades it against the answer it committed to, which the request carries
+ * in the asking turn (`checkBlockText`).
+ */
+export function recallAnswerText(pick: RecallPick): string {
+  const lines = [`Answer: ${fenced(pick.answer.trim())}`, `Confidence: ${pick.confidence}%`];
+  const thinking = cleanThinking(pick.thinking);
+  if (thinking !== null) lines.push(`Reasoning: ${fenced(thinking)}`);
+  // The body is clipped, never the closing tag: a long answer and long reasoning together can pass the limit.
+  const [open, close] = ["<check_answer>\n", "\n</check_answer>"];
+  return `${open}${lines.join("\n").slice(0, CHAT_ANSWER_LIMIT - open.length - close.length)}${close}`;
+}
+
+/**
+ * A stored recall pick back, or null. Kept on the learner's turn beside its
+ * verdict, so a reload draws the card with the words, and the write sends
+ * them, the confidence and the reasoning.
+ */
+export function restoreRecallPick(value: unknown): RecallPick | null {
+  if (value === null || typeof value !== "object") return null;
+  const v = value as Record<string, unknown>;
+  if (typeof v.answer !== "string" || v.answer.trim() === "" || !isConfidence(v.confidence)) return null;
+  return {
+    answer: v.answer.slice(0, CHAT_ANSWER_LIMIT),
+    confidence: v.confidence,
+    thinking: typeof v.thinking === "string" ? cleanThinking(v.thinking) : null,
+  };
 }
 
 /**
