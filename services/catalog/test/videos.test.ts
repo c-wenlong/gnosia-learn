@@ -733,9 +733,12 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
     const dir = await candidate(slug);
     const a = connect({ url: scratch.url, copyOk: true });
     const b = connect({ url: scratch.url, copyOk: true });
-    // Hold the video's lock, so both puts pass every check outside the
-    // transaction and then queue on the locks inside it: the first behind the
-    // holder, the second behind the first, which is the order they land in.
+    // Hold the file's write lock, so both puts read the job as awaiting
+    // review and then wait on the holder. Which one lands is not fixed: on
+    // SQLite the lock also blocks the blob rows each put records before its
+    // transaction, so after the release the two finish their uploads in
+    // either order and enter the transaction in that order. What the race
+    // must give is one Accept and one retry answering with it.
     const holder = await holdLock(scratch.url, (tx) => lockEntity(tx, "video", slug));
     try {
       const args = { slug, dir, jobId: queued.id, base: null, reason: "r", author: "local", authorKind: "person" as const, ownerId: "local" };
@@ -745,7 +748,7 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
       await waitForBlocked(scratch.db, scratch.url, 2, holder);
       await holder.release();
       const results = await Promise.all([first, second]);
-      expect(results.map((r) => r.retry)).toEqual([false, true]);
+      expect(results.map((r) => r.retry).sort()).toEqual([false, true]);
       expect(results[0].revision).toBe(results[1].revision);
       expect(await jobState(queued.id)).toBe("accepted");
     } finally {
