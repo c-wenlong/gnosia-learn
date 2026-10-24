@@ -68,8 +68,9 @@ export interface ObserveInput {
    * The learner's confidence that the answer is right, a whole percent from 0
    * to 100 (docs/proposals/structured-checks.md, K5). A correct answer at
    * `LOW_CONFIDENCE` or less is graded at most 3 unless `grade` says
-   * otherwise. Left out of the event when undefined or null, so the CLI's
-   * observation is unchanged; p(L) never reads it.
+   * otherwise. Left out of the event when undefined or null, so an
+   * observation without one is unchanged; p(L) never reads it. The CLI's
+   * `--confidence` sends it.
    */
   confidence?: number | null;
   /** The learner's reasoning, written into the event's payload as given. Left out when undefined or null. */
