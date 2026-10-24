@@ -1,4 +1,12 @@
-import { restoreChoiceAnswer, restoreChoiceCheck, type ChoiceAnswer } from "@/lib/check-block";
+import {
+  checkBlockText,
+  isCardCheck,
+  restoreCardCheck,
+  restoreChoiceAnswer,
+  restoreRecallPick,
+  type ChoiceAnswer,
+  type RecallPick,
+} from "@/lib/check-block";
 import { restoreCheck, restoreVerdict, type TurnCheck, type Verdict } from "@/lib/tutor-check";
 
 /**
@@ -28,6 +36,13 @@ export interface TutorTurn {
    * tutor reads; the card under the asking turn is what the learner sees.
    */
   choice?: ChoiceAnswer | null;
+  /**
+   * A learner turn that answered a recall card (phase 2): their words, the
+   * confidence and the reasoning, beside the `verdict` the judge and the tap
+   * fill in. Its `content` is the `<check_answer>` block the tutor reads; the
+   * card under the asking turn is what the learner sees.
+   */
+  recall?: RecallPick | null;
 }
 
 /**
@@ -52,12 +67,14 @@ export type ThreadItem = TutorTurn | HandoffMarker;
 /** A stored turn back, with its check and verdict kept only when they are well formed. */
 function restoreTurn(t: TutorTurn): TutorTurn {
   const turn: TutorTurn = { role: t.role, content: t.content };
-  const check = t.role === "assistant" ? (restoreChoiceCheck(t.check) ?? restoreCheck(t.check)) : null;
+  const check = t.role === "assistant" ? (restoreCardCheck(t.check) ?? restoreCheck(t.check)) : null;
   if (check !== null) turn.check = check;
   const verdict = t.role === "user" ? restoreVerdict(t.verdict) : null;
   if (verdict !== null) turn.verdict = verdict;
   const choice = t.role === "user" ? restoreChoiceAnswer(t.choice) : null;
   if (choice !== null) turn.choice = choice;
+  const recall = t.role === "user" ? restoreRecallPick(t.recall) : null;
+  if (recall !== null) turn.recall = recall;
   return turn;
 }
 
@@ -114,8 +131,9 @@ export function markerPieces(marker: Pick<HandoffMarker, "content" | "mentions">
 
 /**
  * The tutor's own turns, markers left out and each cut to its role and
- * words: the only thing the chat route or the planner is sent. A turn's
- * check and verdict are the page's, and never reach a model.
+ * words: what the planner is sent, and what the chat route is sent once
+ * `requestTurns` has put each card check's block back. A turn's verdict and
+ * answer state are the page's, and never reach a model.
  */
 export function chatTurns(items: readonly ThreadItem[]): TutorTurn[] {
   return items
@@ -136,10 +154,19 @@ export const RECALL_SEED =
 /**
  * The turns a chat request sends: the tutor's own turns, cut to role and
  * words, with `RECALL_SEED` before a thread that opens on the tutor, then
- * trimmed to the route's bounds.
+ * trimmed to the route's bounds. A turn that asked a card check goes back
+ * with its `check` block rebuilt at the end (§5 of
+ * docs/proposals/structured-checks.md): the tutor grades a recall answer
+ * against the answer it committed to, which it can only do if it sees it.
+ * The browser still draws that turn without the block.
  */
 export function requestTurns(items: readonly ThreadItem[]): TutorTurn[] {
-  const turns = chatTurns(items);
+  const turns = items
+    .filter((item): item is TutorTurn => item.role !== "studio")
+    .map(({ role, content, check }) => ({
+      role,
+      content: role === "assistant" && isCardCheck(check) ? `${content}\n\n${checkBlockText(check)}` : content,
+    }));
   const seeded = turns[0]?.role === "assistant" ? [{ role: "user" as const, content: RECALL_SEED }, ...turns] : turns;
   return trimForRequest(seeded);
 }
