@@ -185,6 +185,42 @@ describe("POST /api/agent/chat with conceptSlug", () => {
     expect(sent[0].content).toContain("CHECK: <the question, on one line>");
   });
 
+  it("returns a choice block's check with its options and key, and falls back on a broken one (structured checks)", async () => {
+    readConceptWorkspace.mockResolvedValue({ state: "ok", workspace });
+    const choice = {
+      kind: "choice",
+      question: "What does a zero dot product say?",
+      options: ["The vectors are parallel", "The vectors are orthogonal", "One vector is zero, always"],
+      why: "Zero means no component of one lies along the other.",
+      answer: "The vectors are orthogonal",
+    };
+    const reply = (data: unknown) => ({
+      ok: true,
+      attempts: [],
+      result: {
+        content: `Try this one.\n\n\`\`\`check\n${JSON.stringify(data)}\n\`\`\``,
+        model: "m",
+        provider: "gemini",
+        providerLabel: "Gemini",
+      },
+    });
+    completeWithFallback.mockResolvedValueOnce(reply(choice));
+    const ok = await call({ conceptSlug: "dot-product", messages: [{ role: "user", content: "Check me" }] });
+    expect(ok.json.message).toEqual({ role: "assistant", content: "Try this one." });
+    expect(ok.json.check).toEqual(choice);
+    const sent = completeWithFallback.mock.calls[0][0] as { role: string; content: string }[];
+    expect(sent[0].content).toContain('"kind": "choice"');
+
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    completeWithFallback.mockResolvedValueOnce(reply({ ...choice, answer: "Orthogonal" }));
+    const broken = await call({ conceptSlug: "dot-product", messages: [{ role: "user", content: "Check me" }] });
+    expect(broken.json.check).toEqual({ question: choice.question });
+    // The open check it fell back to has no card, so its question stays in the prose.
+    expect(broken.json.message).toEqual({ role: "assistant", content: `Try this one.\n\n${choice.question}` });
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/check block refused/));
+    warn.mockRestore();
+  });
+
   it("answers check: null for a turn that asked none, and leaves the open tutor's reply alone", async () => {
     readConceptWorkspace.mockResolvedValue({ state: "ok", workspace });
     completeWithFallback.mockResolvedValue({

@@ -142,6 +142,13 @@ export interface RecordInput {
   question: string;
   /** The learner's answer; the observation stores its first `SESSION_TEXT_LIMIT` characters as `chosen`. */
   answer: string;
+  /**
+   * A choice card's answer (docs/proposals/structured-checks.md): the key the
+   * tutor committed to, the option picked (null for "I don't know"), the
+   * confidence and the reasoning. With it, `chosen` is the pick and `answer`
+   * the key, as the session page sends them; `answer` above is ignored.
+   */
+  choice?: { key: string; chosen: string | null; confidence: number | null; thinking: string | null };
   /** What the session is called and aims at when this answer opens it; the concept's when absent. */
   sessionTitle?: string;
   sessionGoal?: string;
@@ -170,8 +177,15 @@ export async function recordAnswer(input: RecordInput): Promise<RecordedResult> 
       requestId: input.requestId,
       sessionId,
       question: input.question,
-      // `chosen` is what the learner gave; `answer` is the right one, which a chat check has no key for.
-      chosen: input.answer.slice(0, SESSION_TEXT_LIMIT),
+      // `chosen` is what the learner gave; `answer` is the right one, which only a choice check has.
+      ...(input.choice
+        ? {
+            answer: input.choice.key.slice(0, SESSION_TEXT_LIMIT),
+            chosen: input.choice.chosen === null ? null : input.choice.chosen.slice(0, SESSION_TEXT_LIMIT),
+            ...(input.choice.confidence !== null ? { confidence: input.choice.confidence } : {}),
+            ...(input.choice.thinking !== null ? { thinking: input.choice.thinking.slice(0, SESSION_TEXT_LIMIT) } : {}),
+          }
+        : { chosen: input.answer.slice(0, SESSION_TEXT_LIMIT) }),
       ...(input.sessionTitle ? { sessionTitle: input.sessionTitle } : {}),
       ...(input.sessionGoal ? { sessionGoal: input.sessionGoal } : {}),
     };

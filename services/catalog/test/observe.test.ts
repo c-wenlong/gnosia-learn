@@ -4,6 +4,8 @@ import { update as bktUpdate, DEFAULT_PARAMS } from "../../../scripts/learn/lib/
 import { gradeFromOutcome, newCard, review as sm2 } from "../../../scripts/learn/lib/schedule.mjs";
 import {
   closeTutorSession,
+  confidenceGrade,
+  LOW_CONFIDENCE,
   ensureSession,
   openTutorSession,
   readConceptGraph,
@@ -346,6 +348,63 @@ describe.skipIf(!reachable.ok)("recordObservation", () => {
       recordObservation(scratch.db, { conceptId: "alpha", correct: true, graph, grade: Number.NaN }),
     ).rejects.toThrow(StateError);
     expect(await readEvents(scratch.db)).toEqual([]);
+  });
+
+  describe("a choice card's confidence and reasoning (docs/proposals/structured-checks.md, K5)", () => {
+    it("writes both into the payload and caps a correct answer given at low confidence at grade 3", async () => {
+      const graph = await readConceptGraph(scratch.db, LOCAL);
+      const result = await recordObservation(scratch.db, {
+        conceptId: "alpha",
+        correct: true,
+        graph,
+        source: "teach",
+        question: "Q?",
+        answer: "A",
+        chosen: "A",
+        confidence: LOW_CONFIDENCE,
+        thinking: "A guess, honestly.",
+        now: NOW,
+      });
+      const pLAfter = bktUpdate(0.25, true, { params: DEFAULT_PARAMS, opportunity: true }) as number;
+      // The confidence never reaches p(L).
+      expect(result.pLAfter).toBe(pLAfter);
+      expect(result.grade).toBe(Math.min(gradeFromOutcome(true, pLAfter) as number, 3));
+      const [written] = await readEvents(scratch.db);
+      expect(written).toMatchObject({ confidence: LOW_CONFIDENCE, thinking: "A guess, honestly.", grade: result.grade });
+    });
+
+    it("leaves the grade alone above the line, on a wrong answer, and with no confidence", () => {
+      expect(confidenceGrade(true, LOW_CONFIDENCE + 1, 0.95)).toBe(gradeFromOutcome(true, 0.95));
+      expect(confidenceGrade(true, 0, 0.95)).toBe(3);
+      expect(confidenceGrade(false, 100, 0.95)).toBe(gradeFromOutcome(false, 0.95));
+      expect(confidenceGrade(true, undefined, 0.95)).toBe(gradeFromOutcome(true, 0.95));
+    });
+
+    it("keeps the payload of an answer with neither exactly as before, keys absent", async () => {
+      const graph = await readConceptGraph(scratch.db, LOCAL);
+      await recordObservation(scratch.db, { conceptId: "alpha", correct: true, graph, confidence: null, thinking: null, now: NOW });
+      const [written] = await readEvents(scratch.db);
+      expect(written).not.toHaveProperty("confidence");
+      expect(written).not.toHaveProperty("thinking");
+    });
+
+    it("replays the capped grade: the schedule rebuild reproduces the stored card", async () => {
+      const graph = await readConceptGraph(scratch.db, LOCAL);
+      await recordObservation(scratch.db, { conceptId: "alpha", correct: true, graph, source: "teach", confidence: 0, now: NOW });
+      const { reviews } = replayReviews(await readEvents(scratch.db));
+      const cards = (await readReviews(scratch.db)).cards;
+      expect({ ...reviews.cards.alpha, history: [] }).toEqual(cards.alpha);
+    });
+
+    it("refuses a confidence that is not a whole percent, before writing anything", async () => {
+      const graph = fixtureGraph();
+      for (const confidence of [-1, 101, 50.5, Number.NaN]) {
+        await expect(recordObservation(scratch.db, { conceptId: "alpha", correct: true, graph, confidence })).rejects.toThrow(
+          StateError,
+        );
+      }
+      expect(await readEvents(scratch.db)).toEqual([]);
+    });
   });
 
   describe("a tutor session from a page", () => {
