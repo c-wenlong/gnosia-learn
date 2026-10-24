@@ -314,8 +314,8 @@ written here in this repository's words.
   carries a check block is a marker turn for R4, so the `probe` or `teach`
   rule reads it the same.
 - The `--json` shapes of `status`, `frontier`, `plan`, `observe` and
-  `review due`, and the terminal's `learn observe`. Neither gains a flag in
-  this proposal.
+  `review due`. The terminal's `learn observe` gains `--confidence` and
+  `--thinking` in the fourth PR, and its `--json` stays as it is.
 - BKT and its guess and slip rates.
 - The Teach session page and the week check, which already ask choice
   questions. Giving them the confidence stops is phase 3.
@@ -356,8 +356,13 @@ written here in this repository's words.
 | 3 | The course topic tutor's blocks with `concept`, and the confidence stops on the Teach session page and the week check | A topic check records against the concept it names; a session page answer carries a confidence |
 
 Each phase is its own PR. A `--confidence` flag for the terminal's
-`learn observe`, so the `learning` plugin can send one, would be a fourth,
-in the plugin as well as here.
+`learn observe`, so the `learning` plugin can send one, is a fourth, in the
+plugin as well as here. Built 2026-10-25: `learn observe` takes
+`--confidence 0-100` and `--thinking`, passes them to `recordObservation`,
+and refuses a confidence that is not a whole percent, or one with no
+`--chosen` ("I don't know"), before writing. An observe without them writes
+the event and prints the `--json` it always did, and `--json` does not echo
+them; the `/learn` skill sends them.
 
 ## Open questions for the owner
 

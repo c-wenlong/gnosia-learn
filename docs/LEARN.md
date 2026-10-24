@@ -274,7 +274,7 @@ Everything is `npm run learn -- <command>`; add `--json` for parseable output.
 | `vault pull\|push [--out D]` | Every note and log as a folder for Obsidian, and edited notes written back, one revision each; never overwrites an unpushed edit |
 | `check add\|list` | Verification questions stored in the note |
 | `probe [--goal]` | What to ask next, by information gain |
-| `observe --concept --correct` | **The RL step.** Record one answer |
+| `observe --concept --correct` | **The RL step.** Record one answer; `--confidence 0-100` (with `--chosen`) and `--thinking` put the learner's confidence and reasoning on the event |
 | `frontier [--goal]` | The edge of understanding |
 | `plan --goal [--mermaid]` | Ordered path from known to goal |
 | `teach [--goal]` | The single next concept, with context |
@@ -471,14 +471,17 @@ are ordinary `source: "probe"` observations, so the module is the only thing
 that tells them apart; there is no event type of its own and no score.
 
 An answer to a choice check in the concept tutor's chat
-([structured checks](proposals/structured-checks.md)) can add two more:
+([structured checks](proposals/structured-checks.md)), or a terminal
+`learn observe --confidence N --thinking T`, can add two more:
 `confidence`, the learner's stated chance that the pick is right, a whole
 percent from 0 to 100 (never on "I don't know", where `chosen` is null), and
 `thinking`, their reasoning in their own words. Neither moves p(L). A correct
 answer given at 30% or less is graded at most 3 (`confidenceGrade` in
 `services/catalog/src/state/observe.ts`), and the event's `grade` records
 that, so `review rebuild` replays it. An answer with neither carries neither
-key.
+key. The terminal's `--confidence` needs a non-blank `--chosen`, as the
+route needs a `chosen`: an "I don't know" carries no confidence. A bad value
+(not a whole number from 0 to 100) is refused before anything is written.
 
 Append-only is enforced by a trigger, not by discipline. An UPDATE or a DELETE
 raises. The correction path is a new row: `learn void --session S --reason R`
@@ -648,7 +651,11 @@ and any change to them is a breaking change to the plugin.
 }
 ```
 
-`observe --concept C --correct true|false` — the RL step:
+`observe --concept C --correct true|false` — the RL step. The shape is the
+same with `--confidence` and `--thinking`: neither is echoed, since the
+caller already has both and the plugin parses this shape as it is (K5 of
+[structured checks](proposals/structured-checks.md)). Read the event to see
+them:
 
 ```json
 {

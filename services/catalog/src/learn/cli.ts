@@ -324,6 +324,8 @@ interface Values {
   reason?: string;
   options?: string;
   chosen?: string;
+  confidence?: string;
+  thinking?: string;
   explain?: string;
   note?: string;
   session?: string;
@@ -1058,11 +1060,32 @@ commands.probe = async ({ values }, session) => {
   );
 };
 
+/**
+ * `--confidence`: the learner's stated chance that their pick is right, a
+ * whole percent from 0 to 100 (docs/proposals/structured-checks.md, K5).
+ * Checked here, before anything is opened, so a bad value writes nothing.
+ * It belongs to a pick, so it needs a non-blank `--chosen`: an "I don't know"
+ * carries none, as `POST /api/learner/observe` refuses it too (K6).
+ */
+function confidenceOf(values: Values): number | undefined {
+  if (values.confidence === undefined) return undefined;
+  if (!/^\d{1,3}$/.test(values.confidence) || Number(values.confidence) > 100) {
+    fail(`--confidence must be a whole number from 0 to 100; got "${values.confidence}"`);
+  }
+  if (!values.chosen?.trim()) {
+    fail(`--confidence needs --chosen: an "I don't know" answer carries no confidence`);
+  }
+  return Number(values.confidence);
+}
+
 /** The RL step: one observation updates belief and schedule, and is logged. */
 commands.observe = async ({ values }, session) => {
   const id = values.concept;
   if (id === undefined) fail("observe requires --concept");
   if (values.correct === undefined) fail("observe requires --correct true|false");
+  const confidence = confidenceOf(values);
+  // Blank reasoning is no reasoning, as the observe route reads it.
+  const thinking = values.thinking?.trim() ? values.thinking : undefined;
 
   const db = await session.db();
   const graph = await loadGraph();
@@ -1097,6 +1120,10 @@ commands.observe = async ({ values }, session) => {
     question: values.question ?? null,
     answer: values.answer ?? null,
     session: values.session ?? null,
+    // Both left out of the event when not given, so an observe without the
+    // flags writes the payload it always did (structured checks, K5).
+    confidence,
+    thinking,
   });
   const before = recorded.pLBefore;
   const after = recorded.pLAfter;
@@ -1895,6 +1922,10 @@ commands.help = async () => {
                                  [--question Q] [--options "a|b|c|d"] [--chosen X]
                                  [--answer A] [--note "learner's own words"]
                                  [--explain "why the others are wrong"]
+                                 [--confidence 0-100] [--thinking "their reasoning"]
+                                 --confidence needs --chosen, and a correct answer
+                                 at 30 or less is graded at most 3; both go on the
+                                 event, never into p(L) or the session log.
                                  With --session and --question it also writes the
                                  exchange into the session log as callouts.
   frontier [--goal G]            the edge of understanding
@@ -1957,6 +1988,8 @@ const OPTIONS = {
   reason: { type: "string" },
   options: { type: "string" },
   chosen: { type: "string" },
+  confidence: { type: "string" },
+  thinking: { type: "string" },
   explain: { type: "string" },
   note: { type: "string" },
   session: { type: "string" },
