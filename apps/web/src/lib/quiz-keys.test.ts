@@ -3,8 +3,9 @@ import { describe, expect, it } from "vitest";
 import { quizKey, type QuizKeyEvent } from "./quiz-keys";
 
 /** A stand-in for the focused element: its tag, and whether it sits in a live control. */
-function target(tagName: string, { editable = false, inControl = false } = {}): EventTarget {
-  return { tagName, isContentEditable: editable, closest: () => (inControl ? {} : null) } as unknown as EventTarget;
+function target(tagName: string, { editable = false, inControl = false, role = null as string | null } = {}): EventTarget {
+  const control = role === null ? {} : { getAttribute: (name: string) => (name === "role" ? role : null) };
+  return { tagName, isContentEditable: editable, closest: () => (inControl ? control : null) } as unknown as EventTarget;
 }
 
 const press = (key: string, over: Partial<QuizKeyEvent> = {}): QuizKeyEvent => ({
@@ -33,6 +34,13 @@ describe("quizKey", () => {
     expect(quizKey(press("Enter", onButton), false)).toEqual({ number: null, enter: false, space: false });
     expect(quizKey(press(" ", onButton), false)?.space).toBe(false);
     expect(quizKey(press("2", onButton), false)?.number).toBe(1);
+  });
+
+  it("leaves Space to a focused radio but gives Enter to the page, which a radio has no use for", () => {
+    const onRadio = { target: target("BUTTON", { inControl: true, role: "radio" }) };
+    expect(quizKey(press("Enter", onRadio), false)).toEqual({ number: null, enter: true, space: false });
+    expect(quizKey(press(" ", onRadio), false)?.space).toBe(false);
+    expect(quizKey(press("3", onRadio), false)?.number).toBe(2);
   });
 
   it("is not the page's while a modifier is held or a write is in flight", () => {
