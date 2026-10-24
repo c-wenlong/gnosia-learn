@@ -213,7 +213,7 @@ confident miss and an unsure one already come back tomorrow. What a
 confident miss changes is the tutor's next move (§5), and the confidence
 on the event keeps it on record.
 
-The event already records its `grade`, so a `model --rebuild` replays the
+The event already records its `grade`, so a `review rebuild` replays the
 schedule unchanged. p(L) moves exactly as it does today: `bktUpdate` reads
 `correct` only.
 
@@ -329,8 +329,9 @@ written here in this repository's words.
   learner's tell-tale is a question that answers itself.
 - **The key is wrong.** The learner sees it on submit, since `why` and the
   key show at once. Under K4 the observation is already written; the
-  learner can say so to the tutor, and `learn void --session` removes the
-  session's events. This is open question 1.
+  learner can say so to the tutor, and `learn void --session` retracts the
+  session's evidence: it appends a marker, and the next `model --rebuild`
+  and `review rebuild` skip what it names. This is open question 1.
 - **Two blocks in one turn.** Only a block at the very end counts, as only
   the last line counts for `CHECK:`. An earlier one stays in the prose as
   written.
