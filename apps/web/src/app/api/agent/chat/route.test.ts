@@ -215,6 +215,8 @@ describe("POST /api/agent/chat with conceptSlug", () => {
     completeWithFallback.mockResolvedValueOnce(reply({ ...choice, answer: "Orthogonal" }));
     const broken = await call({ conceptSlug: "dot-product", messages: [{ role: "user", content: "Check me" }] });
     expect(broken.json.check).toEqual({ question: choice.question });
+    // The open check it fell back to has no card, so its question stays in the prose.
+    expect(broken.json.message).toEqual({ role: "assistant", content: `Try this one.\n\n${choice.question}` });
     expect(warn).toHaveBeenCalledWith(expect.stringMatching(/check block refused/));
     warn.mockRestore();
   });

@@ -132,20 +132,21 @@ function parseObserve(body: Record<string, unknown>): ObserveRequest {
     module: typeof moduleId === "string" ? moduleId : null,
     sessionTitle: sessionTitleOf(body),
     sessionGoal: sessionGoalOf(body),
-    confidence: confidenceOf(body),
+    confidence: confidenceOf(body, optionalText(body, "chosen")),
     thinking: optionalText(body, "thinking"),
   };
 }
 
 /**
- * The learner's confidence: a whole percent from 0 to 100, or null. An
- * answer sent with `chosen: null` ("I don't know") carries none (K6).
+ * The learner's confidence: a whole percent from 0 to 100, or null. It
+ * belongs to a pick, so an answer with no `chosen` once read (null for "I
+ * don't know", left out, or blank) carries none (K6).
  */
-function confidenceOf(body: Record<string, unknown>): number | null {
+function confidenceOf(body: Record<string, unknown>, chosen: string | null): number | null {
   const value = body.confidence;
   if (value === undefined || value === null) return null;
   if (!isConfidence(value)) throw new BadRequest(`"confidence" must be a whole number from 0 to 100.`);
-  if (body.chosen === null) throw new BadRequest(`An "I don't know" answer ("chosen": null) carries no "confidence".`);
+  if (chosen === null) throw new BadRequest(`"confidence" needs a "chosen": an "I don't know" answer carries none.`);
   return value;
 }
 

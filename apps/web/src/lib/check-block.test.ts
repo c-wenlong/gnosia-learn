@@ -70,10 +70,14 @@ describe("splitTurnCheck", () => {
     expect(splitTurnCheck(block(choice))).toEqual({ content: "Good. One check.", check: choice, refused: null });
   });
 
-  it("falls back to an open check when the block cannot be used, saying why", () => {
+  it("falls back to an open check when the block cannot be used, saying why, with its question in the prose", () => {
     const out = splitTurnCheck(block({ ...choice, answer: "none of these" }));
     expect(out.check).toEqual({ question: choice.question });
     expect(out.refused).toMatch(/not one of the options/);
+    expect(out.content).toBe(`Good. One check.\n\n${choice.question}`);
+    // Prose that already asks it is left alone.
+    const asked = splitTurnCheck(`Here goes: ${choice.question.toUpperCase()}\n\n\`\`\`check\n${JSON.stringify({ ...choice, answer: "x" })}\n\`\`\``);
+    expect(asked.content).toBe(`Here goes: ${choice.question.toUpperCase()}`);
     expect(splitTurnCheck("Hi.\n```check\nnot json\n```")).toMatchObject({ check: null, content: "Hi." });
   });
 
@@ -85,6 +89,11 @@ describe("splitTurnCheck", () => {
       check: { question: "What is a witness?" },
       refused: null,
     });
+  });
+
+  it("is prose when the block is followed by more prose and another code block", () => {
+    const later = `${block(choice)}\n\nAnd in code:\n\n\`\`\`python\nprint("hi")\n\`\`\``;
+    expect(splitTurnCheck(later)).toEqual({ content: later.trim(), check: null, refused: null });
   });
 
   it("takes the last of two blocks, and keeps the question as prose when the reply is only the block", () => {

@@ -641,6 +641,9 @@ describe("a choice check (docs/proposals/structured-checks.md, phase 1)", () => 
 
     const after = card(host)!;
     expect(after.textContent).toContain(check.why);
+    // What was submitted stays readable on the locked card.
+    expect(after.querySelector("dl")?.textContent).toContain("SYN and ACK · 30% sure");
+    expect(after.querySelector("dl")?.textContent).toContain("Two flags, I think.");
     expect(after.querySelector("[data-recorded]")?.textContent).toContain("Mastery moved: p(L) 0.25 → 0.41");
     // The answer turn is the card's to show: no bubble holds the data block.
     expect(host.textContent).not.toContain("<check_answer>");
@@ -657,6 +660,7 @@ describe("a choice check (docs/proposals/structured-checks.md, phase 1)", () => 
     const observed = fetched.filter((c) => c.url === "/api/learner/observe")[0]?.body as Record<string, unknown>;
     expect(observed).toMatchObject({ correct: false, chosen: null, answer: "SYN and ACK" });
     expect(observed).not.toHaveProperty("confidence");
+    expect(card(host)!.querySelector("dl")?.textContent).toContain("I don't know");
 
     seed("tcp-typed");
     const typed = await mount({ slug: "tcp-typed" });

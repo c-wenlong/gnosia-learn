@@ -117,14 +117,21 @@ const OPENING = /(?:^|\n)[ \t]*(`{3,}|~{3,})[ \t]*check[ \t]*\n/gi;
  * The last fenced `check` block of a reply, when nothing but whitespace
  * follows its closing fence: where it starts and its body. Only that block
  * counts, as only the last line counts for `CHECK:`; an earlier one is prose.
+ * The closing fence is the first line after the opening that is the same
+ * fence alone, so a block followed by prose and another code block is prose,
+ * never a block whose body runs on to the reply's last fence.
  */
 function lastBlock(text: string): { index: number; body: string } | null {
   const openings = [...text.matchAll(OPENING)];
   const last = openings.at(-1);
   if (last === undefined || last.index === undefined) return null;
-  const rest = text.slice(last.index + last[0].length);
-  const close = new RegExp(`^([\\s\\S]*?)\\n?[ \\t]*${last[1].replace(/[`~]/g, "\\$&")}[ \\t]*$`).exec(rest);
-  return close === null ? null : { index: last.index, body: close[1] };
+  const start = last.index + last[0].length;
+  const lines = text.slice(start).split("\n");
+  const fence = last[1];
+  const closing = lines.findIndex((l) => l.trim() === fence);
+  if (closing === -1) return null;
+  if (lines.slice(closing + 1).some((l) => l.trim() !== "")) return null;
+  return { index: last.index, body: lines.slice(0, closing).join("\n") };
 }
 
 export interface SplitReply {
@@ -166,8 +173,18 @@ export function splitTurnCheck(reply: string, { choice = true }: { choice?: bool
     refused = outcome.reason;
   }
   // A reply that is nothing but the block keeps the question as its prose, as `splitCheck` does.
-  const content = before === "" ? (check?.question ?? "") : before;
+  // An open check the block fell back to has no card to show its question, so the prose
+  // carries it whenever it does not already ask it: an answer is never judged against
+  // a question the learner never saw.
+  let content = before === "" ? (check?.question ?? "") : before;
+  if (check !== null && !isChoiceCheck(check) && !asks(content, check.question)) content = `${content}\n\n${check.question}`;
   return { content, check, refused };
+}
+
+/** Whether prose already holds a question: its words, case and spacing aside. */
+function asks(prose: string, question: string): boolean {
+  const flat = (t: string) => t.toLowerCase().replace(/\s+/g, " ").trim();
+  return flat(prose).includes(flat(question));
 }
 
 /** A stored check back: a choice check only when it still passes `readCheckBlock`, else the open check it reduces to. */
