@@ -126,6 +126,8 @@ export {
 } from "./mastery";
 export {
   closeTutorSession,
+  confidenceGrade,
+  LOW_CONFIDENCE,
   openTutorSession,
   recordObservation,
   type CloseSessionResult,

@@ -1,3 +1,4 @@
+import { restoreChoiceAnswer, restoreChoiceCheck, type ChoiceAnswer } from "@/lib/check-block";
 import { restoreCheck, restoreVerdict, type TurnCheck, type Verdict } from "@/lib/tutor-check";
 
 /**
@@ -21,6 +22,12 @@ export interface TutorTurn {
   check?: TurnCheck | null;
   /** A learner turn that answered one: its verdict row (docs/proposals/recall-in-chat.md, R2). */
   verdict?: Verdict | null;
+  /**
+   * A learner turn that answered a choice card (docs/proposals/structured-checks.md):
+   * the pick and the write. Its `content` is the `<check_answer>` block the
+   * tutor reads; the card under the asking turn is what the learner sees.
+   */
+  choice?: ChoiceAnswer | null;
 }
 
 /**
@@ -45,10 +52,12 @@ export type ThreadItem = TutorTurn | HandoffMarker;
 /** A stored turn back, with its check and verdict kept only when they are well formed. */
 function restoreTurn(t: TutorTurn): TutorTurn {
   const turn: TutorTurn = { role: t.role, content: t.content };
-  const check = t.role === "assistant" ? restoreCheck(t.check) : null;
+  const check = t.role === "assistant" ? (restoreChoiceCheck(t.check) ?? restoreCheck(t.check)) : null;
   if (check !== null) turn.check = check;
   const verdict = t.role === "user" ? restoreVerdict(t.verdict) : null;
   if (verdict !== null) turn.verdict = verdict;
+  const choice = t.role === "user" ? restoreChoiceAnswer(t.choice) : null;
+  if (choice !== null) turn.choice = choice;
   return turn;
 }
 

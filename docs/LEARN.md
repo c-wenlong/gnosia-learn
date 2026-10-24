@@ -470,6 +470,16 @@ module the owner can read, or the answer is refused). A week check's answers
 are ordinary `source: "probe"` observations, so the module is the only thing
 that tells them apart; there is no event type of its own and no score.
 
+An answer to a choice check in the concept tutor's chat
+([structured checks](proposals/structured-checks.md)) can add two more:
+`confidence`, the learner's stated chance that the pick is right, a whole
+percent from 0 to 100 (never on "I don't know", where `chosen` is null), and
+`thinking`, their reasoning in their own words. Neither moves p(L). A correct
+answer given at 30% or less is graded at most 3 (`confidenceGrade` in
+`services/catalog/src/state/observe.ts`), and the event's `grade` records
+that, so `review rebuild` replays it. An answer with neither carries neither
+key.
+
 Append-only is enforced by a trigger, not by discipline. An UPDATE or a DELETE
 raises. The correction path is a new row: `learn void --session S --reason R`
 retracts a session's evidence, and the next rebuild skips it while the history

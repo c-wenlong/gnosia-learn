@@ -203,6 +203,16 @@ describe.skipIf(!reachable.ok)("the session's learner routes", () => {
     expect((await send({ ...answer, requestId: "req-bad-2", sessionGoal: "has space" })).status).toBe(400);
   });
 
+  it("records a choice card's confidence and reasoning, and refuses a bad confidence (structured checks, K5)", async () => {
+    const { status } = await send({ ...answer, confidence: 30, thinking: "Picked it on a hunch." });
+    expect(status).toBe(200);
+    expect((await state.readEvents(scratch.db))[1]).toMatchObject({ confidence: 30, thinking: "Picked it on a hunch." });
+    expect((await send({ ...answer, requestId: "req-c-1", confidence: 101 })).status).toBe(400);
+    expect((await send({ ...answer, requestId: "req-c-2", confidence: "50" })).status).toBe(400);
+    // "I don't know" carries no confidence (K6).
+    expect((await send({ ...answer, requestId: "req-c-3", chosen: null, confidence: 50 })).status).toBe(400);
+  });
+
   it("writes no module key when the answer names none", async () => {
     await send(answer);
     expect(Object.keys((await state.readEvents(scratch.db))[1] ?? {})).not.toContain("module");

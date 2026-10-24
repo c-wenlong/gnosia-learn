@@ -1,5 +1,6 @@
 import { readConceptGraph, recordObservation } from "@gnosia/catalog/state";
 
+import { isConfidence } from "@/lib/check-block";
 import { BadRequest, handler, optionalBoolean, requireBoolean } from "@/lib/learner-api";
 import { isConceptSlug } from "@/lib/concept-workspace-core";
 import { ownerScope } from "@/lib/owner";
@@ -74,6 +75,10 @@ interface ObserveRequest {
   /** The title and goal of the session this answer opens, when not the concept's. */
   sessionTitle: string | null;
   sessionGoal: string | null;
+  /** The learner's confidence in percent, or null (docs/proposals/structured-checks.md, K5). */
+  confidence: number | null;
+  /** The learner's reasoning, or null. */
+  thinking: string | null;
 }
 
 /** A collection id as the course files write them: lowercase letters, digits and hyphens. */
@@ -127,7 +132,21 @@ function parseObserve(body: Record<string, unknown>): ObserveRequest {
     module: typeof moduleId === "string" ? moduleId : null,
     sessionTitle: sessionTitleOf(body),
     sessionGoal: sessionGoalOf(body),
+    confidence: confidenceOf(body),
+    thinking: optionalText(body, "thinking"),
   };
+}
+
+/**
+ * The learner's confidence: a whole percent from 0 to 100, or null. An
+ * answer sent with `chosen: null` ("I don't know") carries none (K6).
+ */
+function confidenceOf(body: Record<string, unknown>): number | null {
+  const value = body.confidence;
+  if (value === undefined || value === null) return null;
+  if (!isConfidence(value)) throw new BadRequest(`"confidence" must be a whole number from 0 to 100.`);
+  if (body.chosen === null) throw new BadRequest(`An "I don't know" answer ("chosen": null) carries no "confidence".`);
+  return value;
 }
 
 /** A session's title: a short line of text. */
@@ -163,6 +182,8 @@ export const POST = handler("observe", parseObserve, async (db, input: ObserveRe
     question: input.question,
     answer: input.answer,
     chosen: input.chosen,
+    confidence: input.confidence,
+    thinking: input.thinking,
     session: input.sessionId,
     // The first answer opens the session, in the answer's own transaction:
     // a refused answer leaves no `session-start`, and a closed session (or a

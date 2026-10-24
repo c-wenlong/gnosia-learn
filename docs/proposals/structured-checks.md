@@ -1,7 +1,8 @@
 # Proposal: structured checks in the tutor chat
 
 Status: accepted, 2026-10-25, with the default of all four open questions
-(the owner's call). Nothing is built yet. Decisions K1 to K8, three phases. It builds on
+(the owner's call). Phase 1 is built; phases 2 and 3 are not. Decisions
+K1 to K8, three phases. It builds on
 [recall in the chat](recall-in-chat.md) and changes one of its decisions:
 R5 (structure in prose, judged by a second call) still holds for a recall
 check, and a choice check needs no judge at all (K4). R1 to R4 and R6 stand
@@ -350,7 +351,7 @@ written here in this repository's words.
 
 | Phase | Ships | Done when |
 | --- | --- | --- |
-| 1 | K1, K2, K4, K5, K6, K7 for choice checks on the concept tutor: `check-block.ts` and its tests, the route's split, the choice card, `confidence` and `thinking` through the observe route and into the payload, the grade rule, the prompt's option rules | A tutor turn with a valid choice block shows the card; submit writes one observation whose payload holds the confidence and the reasoning and whose `grade` follows the table; a broken block or a `CHECK:` line takes today's judge path; `observe --json` and a terminal observation's payload are byte for byte what they were; the owner's database holds its first observation from a chat check |
+| 1 (built) | K1, K2, K4, K5, K6, K7 for choice checks on the concept tutor: `check-block.ts` and its tests, the route's split, the choice card, `confidence` and `thinking` through the observe route and into the payload, the grade rule, the prompt's option rules | A tutor turn with a valid choice block shows the card; submit writes one observation whose payload holds the confidence and the reasoning and whose `grade` follows the table; a broken block or a `CHECK:` line takes today's judge path; `observe --json` and a terminal observation's payload are byte for byte what they were; the owner's database holds its first observation from a chat check |
 | 2 | Recall checks: the recall card, the commitment as the judge's first reference, the commitment shown on submit, the asking turn rebuilt with its block in the request | A recall answer is judged against the tutor's commitment, and the tutor's next turn can quote it |
 | 3 | The course topic tutor's blocks with `concept`, and the confidence stops on the Teach session page and the week check | A topic check records against the concept it names; a session page answer carries a confidence |
 
