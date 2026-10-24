@@ -31,6 +31,7 @@ import {
   type LastVisited,
 } from "@gnosia/schema/shared";
 
+import { isConfidence } from "../check-block";
 import { isConceptSlug } from "../concept-workspace-core";
 import { dayKey } from "../days";
 import { favoriteKey } from "../favorite";
@@ -406,6 +407,10 @@ interface ObserveRequest {
   /** The title and goal of the session this answer opens, when not the concept's. */
   sessionTitle: string | null;
   sessionGoal: string | null;
+  /** The learner's confidence in percent, or null (docs/proposals/structured-checks.md, K5). */
+  confidence: number | null;
+  /** The learner's reasoning, or null. */
+  thinking: string | null;
 }
 
 /** A collection id as the course files write them: lowercase letters, digits and hyphens. */
@@ -419,6 +424,19 @@ function optionalText(body: Record<string, unknown>, field: string): string | nu
     throw new BadRequest(`"${field}" is longer than ${SESSION_TEXT_LIMIT} characters.`);
   }
   return value.trim() === "" ? null : value;
+}
+
+/**
+ * The learner's confidence: a whole percent from 0 to 100, or null. It
+ * belongs to a pick, so an answer with no `chosen` once read (null for "I
+ * don't know", left out, or blank) carries none (K6).
+ */
+function confidenceOf(body: Record<string, unknown>, chosen: string | null): number | null {
+  const value = body.confidence;
+  if (value === undefined || value === null) return null;
+  if (!isConfidence(value)) throw new BadRequest(`"confidence" must be a whole number from 0 to 100.`);
+  if (chosen === null) throw new BadRequest(`"confidence" needs a "chosen": an "I don't know" answer carries none.`);
+  return value;
 }
 
 /** A session's title: a short line of text. */
@@ -477,6 +495,8 @@ function parseObserve(body: Record<string, unknown>): ObserveRequest {
     module: typeof moduleId === "string" ? moduleId : null,
     sessionTitle: sessionTitleOf(body),
     sessionGoal: sessionGoalOf(body),
+    confidence: confidenceOf(body, optionalText(body, "chosen")),
+    thinking: optionalText(body, "thinking"),
   };
 }
 
@@ -505,6 +525,8 @@ export async function observeTurn(deps: TutorDeps, body: unknown): Promise<TurnR
       question: input.question,
       answer: input.answer,
       chosen: input.chosen,
+      confidence: input.confidence,
+      thinking: input.thinking,
       session: input.sessionId,
       // The first answer opens the session, in the answer's own transaction:
       // a refused answer leaves no `session-start`, and a closed session (or a

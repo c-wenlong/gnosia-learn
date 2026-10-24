@@ -142,7 +142,7 @@ export function firstSentence(value: string): string {
 }
 
 /** A seeded Fisher-Yates, so the same reply always lands in the same order. */
-function shuffleWithSeed<T>(list: readonly T[], seed: number): T[] {
+export function shuffleWithSeed<T>(list: readonly T[], seed: number): T[] {
   const out = [...list];
   let a = seed;
   const next = () => {

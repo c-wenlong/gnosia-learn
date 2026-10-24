@@ -145,7 +145,7 @@ export function VerdictRow({
  * and a link to the concept's note. After Manus's deliverable card: the
  * thread shows what the turn left behind, not only that it happened.
  */
-function RecordedCard({
+export function RecordedCard({
   recorded,
   concept,
 }: {

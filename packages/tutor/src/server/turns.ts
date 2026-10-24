@@ -49,12 +49,13 @@ import {
   type TranscriptTurn,
 } from "../summary";
 import type { TopicKnowledge } from "../types";
+import { splitTurnCheck } from "../check-block";
 import {
   CHAT_ANSWER_LIMIT,
   CHECK_QUESTION_LIMIT,
   matchCheck,
-  splitCheck,
   topicCheck,
+  type TurnCheck,
 } from "../tutor-check";
 import { MAX_ASSET_ID_CHARS, readAssetDetail, readAssetText } from "./asset-detail";
 import { ContentUnavailableError } from "./content-source";
@@ -465,6 +466,14 @@ async function assetTurn(deps: TutorDeps, body: ChatBody): Promise<TurnReply> {
   return completeTurn(deps, buildVideoAskPrompt({ title, transcript }, position, { style }), messages);
 }
 
+/** The concept tutor's check on its own concept: any concept id the reply named is dropped. */
+function withoutConcept(check: TurnCheck | null): TurnCheck | null {
+  if (check === null) return null;
+  const rest = { ...check };
+  delete rest.concept;
+  return rest;
+}
+
 /** Send the turn to the provider cascade and shape the answer both tutors share. */
 async function completeTurn(
   deps: TutorDeps,
@@ -510,14 +519,16 @@ async function completeTurn(
     });
   }
 
-  // The concept tutor's and the topic tutor's prompts ask for the marker; the
-  // open tutor's reply is returned exactly as the model wrote it.
-  const split = checks === null ? null : splitCheck(outcome.result.content);
+  // The concept tutor's and the topic tutor's prompts ask for a check block
+  // or the marker; the open tutor's reply is returned exactly as the model
+  // wrote it. Only the concept tutor's page draws a choice card so far
+  // (docs/proposals/structured-checks.md, phase 1), so the topic tutor's
+  // choice block is kept as the open check it falls back to.
+  const split = checks === null ? null : splitTurnCheck(outcome.result.content, { choice: checks === "concept" });
   if (split !== null) {
-    split.check =
-      checks === "concept"
-        ? split.check && { question: split.check.question }
-        : topicCheck(split.check, checks as readonly string[]);
+    // A block that could not be used falls back (K7); the reason goes to the log, never the learner.
+    if (split.refused !== null) console.warn(`tutor check block refused: ${split.refused}`);
+    split.check = checks === "concept" ? withoutConcept(split.check) : topicCheck(split.check, checks as readonly string[]);
   }
   return reply(200, {
     message: { role: "assistant", content: split ? split.content : outcome.result.content },

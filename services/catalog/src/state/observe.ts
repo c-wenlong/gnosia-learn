@@ -64,6 +64,16 @@ export interface ObserveInput {
    * its `--chosen` goes to the markdown log only.
    */
   chosen?: string | null;
+  /**
+   * The learner's confidence that the answer is right, a whole percent from 0
+   * to 100 (docs/proposals/structured-checks.md, K5). A correct answer at
+   * `LOW_CONFIDENCE` or less is graded at most 3 unless `grade` says
+   * otherwise. Left out of the event when undefined or null, so the CLI's
+   * observation is unchanged; p(L) never reads it.
+   */
+  confidence?: number | null;
+  /** The learner's reasoning, written into the event's payload as given. Left out when undefined or null. */
+  thinking?: string | null;
   /** The session this answer belongs to; the row is created if nobody opened it. */
   session?: string | null;
   /**
@@ -150,6 +160,23 @@ type Params = typeof DEFAULT_PARAMS;
  * two events in the log and one of them absent from the projection until
  * somebody rebuilds.
  */
+/** A confidence at or under this many percent marks a correct answer as a likely guess (K5). */
+export const LOW_CONFIDENCE = 30;
+
+/**
+ * The SM-2 grade an answer schedules with: `gradeFromOutcome`'s, except that
+ * a correct answer given at `LOW_CONFIDENCE` or less passes at 3, the lowest
+ * passing grade, so the card's ease falls and its intervals grow more slowly
+ * (docs/proposals/structured-checks.md, K5). A wrong answer needs no rule:
+ * every failing grade sends the card back to one day and leaves its ease
+ * alone (`review` in schedule.mjs). The event records the grade, so
+ * `review rebuild` replays it unchanged.
+ */
+export function confidenceGrade(correct: boolean, confidence: number | undefined, pL: number): number {
+  const grade = gradeFromOutcome(correct, pL) as number;
+  return correct && confidence !== undefined && confidence <= LOW_CONFIDENCE ? Math.min(grade, 3) : grade;
+}
+
 export async function recordObservation(
   db: CatalogDatabase,
   input: ObserveInput,
@@ -171,6 +198,10 @@ export async function recordObservation(
   }
   if (input.grade !== undefined && !(Number.isFinite(input.grade) && input.grade >= 0 && input.grade <= 5)) {
     throw new StateError(`grade must be between 0 and 5; got ${input.grade}.`);
+  }
+  const confidence = input.confidence ?? undefined;
+  if (confidence !== undefined && !(Number.isInteger(confidence) && confidence >= 0 && confidence <= 100)) {
+    throw new StateError(`confidence must be a whole number from 0 to 100; got ${confidence}.`);
   }
   // Every state table names the concept through a foreign key, so evidence
   // about a slug the catalog has never seen has nowhere to go. Checked first
@@ -234,7 +265,7 @@ export async function recordObservation(
     // so every answered question earns a review slot, whatever the source.
     const reviews = await readReviews(tx, learnerId);
     const existing = reviews.cards[id];
-    const grade = input.grade !== undefined ? input.grade : (gradeFromOutcome(correct, nextPL) as number);
+    const grade = input.grade !== undefined ? input.grade : confidenceGrade(correct, confidence, nextPL);
     const card: ReviewCard | null = !schedule
       ? null
       : (sm2(existing ?? newCard(id, now), grade, { now }) as ReviewCard);
@@ -262,6 +293,9 @@ export async function recordObservation(
         question: input.question ?? null,
         answer: input.answer ?? null,
         chosen: input.chosen,
+        // Undefined for the CLI and for an answer with none, so its payload is what it always was.
+        confidence,
+        thinking: input.thinking ?? undefined,
         session: input.session ?? null,
         // Undefined for the CLI, and `toRow` drops an undefined key, so a
         // terminal observation's payload is exactly what it always was.

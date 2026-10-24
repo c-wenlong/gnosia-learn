@@ -43,7 +43,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("next/navigation", () => {
-  const router = { push: mocks.push, replace: vi.fn() };
+  const router = { push: mocks.push, replace: vi.fn(), refresh: vi.fn() };
   return { useRouter: () => router };
 });
 vi.mock("next/link", async () => {
@@ -566,5 +566,112 @@ describe("a recorded answer (D89)", () => {
     const open = await mount({ slug: "tcp-open" });
     expect(open.querySelector("[data-recorded]")).toBeNull();
     expect(open.querySelector('[aria-label="Record this answer"]')).not.toBeNull();
+  });
+});
+
+describe("a choice check (docs/proposals/structured-checks.md, phase 1)", () => {
+  const check = {
+    kind: "choice",
+    question: "What does the second packet carry?",
+    options: ["SYN alone", "SYN and ACK", "ACK alone"],
+    why: "The server acknowledges the client's SYN and sends its own in one packet.",
+    answer: "SYN and ACK",
+  };
+  const seed = (slug: string) =>
+    sessionStorage.setItem(threadKey(slug), JSON.stringify([{ role: "assistant", content: "One check.", check }]));
+  const card = (host: HTMLElement) => host.querySelector<HTMLElement>("section[aria-labelledby]");
+  const button = (root: HTMLElement, text: string) =>
+    [...root.querySelectorAll("button")].find((b) => b.textContent?.trim() === text) as HTMLButtonElement | undefined;
+  const click = async (el: HTMLElement | undefined) => {
+    expect(el).toBeDefined();
+    await act(async () => el!.click());
+    await settle();
+  };
+  const type = async (box: HTMLTextAreaElement, text: string) => {
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(box, text);
+      box.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  };
+  const recorded = { ok: true, result: { correct: true, pLBefore: 0.25, pLAfter: 0.41, card: { intervalDays: 1 } } };
+
+  beforeEach(() => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        fetched.push({ url, body: init?.body === undefined ? undefined : JSON.parse(String(init.body)) });
+        if (url === "/api/learner/observe") return new Response(JSON.stringify(recorded), { status: 200 });
+        return new Response(JSON.stringify({ message: { content: "Right, and you were unsure. Here is why." } }), { status: 200 });
+      }),
+    );
+  });
+
+  it("asks for a pick first, then records it with its confidence and reasoning and tells the tutor", async () => {
+    seed("tcp-choice");
+    const host = await mount({ slug: "tcp-choice" });
+    const box = card(host)!;
+    expect(box.textContent).toContain("What does the second packet carry?");
+    expect(button(box, "I don't know")).toBeDefined();
+
+    await click(button(box, "Submit"));
+    expect(box.querySelector('[role="alert"]')?.textContent).toContain("Pick an option");
+    expect(fetched.filter((c) => c.url === "/api/learner/observe")).toHaveLength(0);
+
+    await click(button(box, "SYN and ACK"));
+    await click(button(box, "30%"));
+    await type(box.querySelector("textarea")!, "Two flags, I think.");
+    await click(button(box, "Submit"));
+
+    const observed = fetched.filter((c) => c.url === "/api/learner/observe");
+    expect(observed).toHaveLength(1);
+    expect(observed[0].body).toMatchObject({
+      conceptSlug: "tcp-choice",
+      correct: true,
+      source: "probe",
+      question: check.question,
+      answer: "SYN and ACK",
+      chosen: "SYN and ACK",
+      confidence: 30,
+      thinking: "Two flags, I think.",
+    });
+    const sent = chatCalls().at(-1)?.body as { messages: { role: string; content: string }[] };
+    expect(sent.messages.at(-1)?.content).toBe(
+      '<check_answer>\nPicked: "SYN and ACK" (correct)\nConfidence: 30%\nReasoning: Two flags, I think.\n</check_answer>',
+    );
+
+    const after = card(host)!;
+    expect(after.textContent).toContain(check.why);
+    // What was submitted stays readable on the locked card.
+    expect(after.querySelector("dl")?.textContent).toContain("SYN and ACK · 30% sure");
+    expect(after.querySelector("dl")?.textContent).toContain("Two flags, I think.");
+    expect(after.querySelector("[data-recorded]")?.textContent).toContain("Mastery moved: p(L) 0.25 → 0.41");
+    // The answer turn is the card's to show: no bubble holds the data block.
+    expect(host.textContent).not.toContain("<check_answer>");
+    expect(host.textContent).toContain("Here is why.");
+  });
+
+  it("sends I don't know with no confidence, and folds to Not answered when a message is typed instead", async () => {
+    seed("tcp-dk");
+    const host = await mount({ slug: "tcp-dk" });
+    const box = card(host)!;
+    await click(button(box, "I don't know"));
+    expect(box.textContent).not.toContain("How sure are you?");
+    await click(button(box, "Submit"));
+    const observed = fetched.filter((c) => c.url === "/api/learner/observe")[0]?.body as Record<string, unknown>;
+    expect(observed).toMatchObject({ correct: false, chosen: null, answer: "SYN and ACK" });
+    expect(observed).not.toHaveProperty("confidence");
+    expect(card(host)!.querySelector("dl")?.textContent).toContain("I don't know");
+
+    seed("tcp-typed");
+    const typed = await mount({ slug: "tcp-typed" });
+    const composer = [...typed.querySelectorAll("textarea")].at(-1)!;
+    await type(composer, "Can you explain SYN first?");
+    await act(async () => {
+      composer.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    });
+    await settle();
+    expect(typed.textContent).toContain("Not answered");
+    expect(fetched.filter((c) => c.url === "/api/learner/observe")).toHaveLength(1);
+    expect(typed.querySelector('[aria-label="Record this answer"]')).toBeNull();
   });
 });
