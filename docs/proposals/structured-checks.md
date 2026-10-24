@@ -372,8 +372,10 @@ All four answered on 2026-10-25, each with the proposal's default.
 3. **K5.** Should confidence move p(L) as well, for example by trusting a
    low-confidence correct answer less? The default is no, so mastery stays
    comparable with every earlier observation. Answered 2026-10-25: no.
-   Every event stores its confidence, so this can be revisited with a
-   `model --rebuild`.
+   Every chat answer given with a confidence stores it on its event (an
+   "I don't know" and a terminal observation carry none), so this can be
+   revisited later and a `model --rebuild` would replay those answers
+   under the new rule.
 4. Should a recall check carry a confidence at all? LearnHarness asks for
    one only on multiple choice. The default here is yes, since how sure
    someone is of their own words still separates a guess from knowledge.
