@@ -1,6 +1,7 @@
 # Proposal: structured checks in the tutor chat
 
-Status: proposed, 2026-10-25. Decisions K1 to K8, three phases. It builds on
+Status: accepted, 2026-10-25, with the default of all four open questions
+(the owner's call). Nothing is built yet. Decisions K1 to K8, three phases. It builds on
 [recall in the chat](recall-in-chat.md) and changes one of its decisions:
 R5 (structure in prose, judged by a second call) still holds for a recall
 check, and a choice check needs no judge at all (K4). R1 to R4 and R6 stand
@@ -269,8 +270,8 @@ a bad block falls back instead (K7).
 
 **K3. Two kinds, chosen by the tutor.** Choice for a check whose wrong
 answers are worth telling apart, recall for producing the idea in one's
-own words. The prompt says when to use which. Whether Settings should
-override it is open question 2.
+own words. The prompt says when to use which, and Settings does not
+override it (open question 2).
 
 **K4. A choice check records on submit; a recall check keeps the tap.**
 R2 asked for a tap because a free model judging prose is noisy. A choice
@@ -279,8 +280,8 @@ committed to before the learner saw it, which is exactly what a session
 page question is, and the session page records a pick the moment it is
 made. The risk is a
 wrong key from the tutor, which writes a wrong observation into a log that
-only `learn void --session` can take back. Open question 1 asks the owner
-whether to keep a tap here too.
+only `learn void --session` can take back. The owner accepted that risk
+over a second tap (open question 1).
 
 **K5. Confidence and reasoning go on the event, and confidence shapes the
 review card, not p(L).** Mastery stays comparable with every observation
@@ -288,8 +289,8 @@ the terminal and the session page have written, and the five `--json`
 shapes the `learning` plugin parses do not change. The review schedule is
 where a lucky guess should differ from knowledge, and SM-2 already takes a
 grade; a wrong answer is rescheduled for tomorrow whatever its grade, so
-only the correct side needs a rule. Whether confidence should also move
-p(L) is open question 3.
+only the correct side needs a rule. Confidence does not move p(L) (open
+question 3).
 
 **K6. "I don't know" is a button.** It records incorrect with
 `chosen: null` and no confidence, as the session page does, and the judge
@@ -331,7 +332,8 @@ written here in this repository's words.
   key show at once. Under K4 the observation is already written; the
   learner can say so to the tutor, and `learn void --session` retracts the
   session's evidence: it appends a marker, and the next `model --rebuild`
-  and `review rebuild` skip what it names. This is open question 1.
+  and `review rebuild` skip what it names. The owner accepted this risk
+  (open question 1).
 - **Two blocks in one turn.** Only a block at the very end counts, as only
   the last line counts for `CHECK:`. An earlier one stays in the prose as
   written.
@@ -358,15 +360,23 @@ in the plugin as well as here.
 
 ## Open questions for the owner
 
+All four answered on 2026-10-25, each with the proposal's default.
+
 1. **K4.** Should a choice check record on submit, as proposed, or keep
    R2's tap after the reveal? The tap costs a second per check and guards
-   against a wrong key.
+   against a wrong key. Answered 2026-10-25: record on submit.
 2. **K3.** Should Settings offer a check style (choice, recall, or the
    tutor decides), as LearnHarness lets the learner pick a quizzing
-   mechanic? The default here is that the tutor decides.
+   mechanic? The default here is that the tutor decides. Answered
+   2026-10-25: the tutor decides, and Settings gains no check style.
 3. **K5.** Should confidence move p(L) as well, for example by trusting a
    low-confidence correct answer less? The default is no, so mastery stays
-   comparable with every earlier observation.
+   comparable with every earlier observation. Answered 2026-10-25: no.
+   Every chat answer given with a confidence stores it on its event (an
+   "I don't know" and a terminal observation carry none), so this can be
+   revisited later and a `model --rebuild` would replay those answers
+   under the new rule.
 4. Should a recall check carry a confidence at all? LearnHarness asks for
    one only on multiple choice. The default here is yes, since how sure
    someone is of their own words still separates a guess from knowledge.
+   Answered 2026-10-25: yes.
