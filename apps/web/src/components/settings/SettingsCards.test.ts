@@ -250,6 +250,13 @@ describe("the Model selection card", () => {
     expect(fetchMock.mock.calls.some((c) => String(c[0]).includes("/studio/api/"))).toBe(false);
   });
 
+  it("with the studio on, draws the Studio chats side and reads the runner's BYOK settings", async () => {
+    const container = mount(selection());
+    await act(async () => {});
+    expect(container.textContent).toContain("Studio chats");
+    expect(fetchMock.mock.calls.some((c) => String(c[0]) === "/studio/api/settings/byok")).toBe(true);
+  });
+
   it("shows the chain's first entry as the pick and fetches the provider's model list", async () => {
     const container = mount(selection());
     await act(async () => {});
