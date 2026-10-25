@@ -61,9 +61,15 @@ struct ModuleCheckView: View {
     /// A step left with no question: the concept it was about — the web's
     /// `skipped`, which is what ends that concept's asking.
     @State private var skipped: [Int: String] = [:]
-    /// The first attempt fixes the pick; a retry sends that pick again
-    /// under its first requestId, so a replay never duplicates evidence.
-    @State private var attempts: [Int: (requestId: String, picked: Int?)] = [:]
+    /// The first attempt fixes the pick, the confidence and the reasoning;
+    /// a retry sends them again under its first requestId, so a replay
+    /// never duplicates evidence.
+    @State private var attempts: [Int: (requestId: String, picked: Int?, confidence: Int?, thinking: String?)] = [:]
+    /// "How sure are you?" and the reasoning box, asked once an option is
+    /// picked (SessionSureness); they start over on every step.
+    @State private var confidence = sessionDefaultConfidence
+    @State private var thinking = ""
+    @FocusState private var reasoningFocused: Bool
     @State private var pending = false
     @State private var error: String? = nil
     @State private var whyOpen = false
@@ -276,7 +282,10 @@ struct ModuleCheckView: View {
         error = nil
         let attempt = attempts[index] ?? (
             requestId: UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased(),
-            picked: choice
+            picked: choice,
+            // "I don't know" carries no confidence (K6).
+            confidence: choice == nil ? nil : confidence,
+            thinking: sessionThinking(thinking)
         )
         attempts[index] = attempt
         let picked = attempt.picked
@@ -290,7 +299,7 @@ struct ModuleCheckView: View {
         // from the same state.
         let baseline = model
         var write = model.answer(
-            concept, correct: correct, source: "probe",
+            concept, correct: correct, source: "probe", confidence: attempt.confidence,
             prereqsOf: { store.learn.byId[$0]?.requires ?? [] }
         )
         write.sessionId = sessionId!
@@ -301,6 +310,7 @@ struct ModuleCheckView: View {
         write.question = question.prompt
         write.answer = question.choices[safe: question.correct]
         write.chosen = picked.flatMap { question.choices[safe: $0] }
+        write.thinking = attempt.thinking
         if learner.recordSessionAnswer(write) {
             graded[index] = Graded(picked: picked, correct: write.outcome.correct, outcome: write.outcome)
             answers.append(write.outcome)
@@ -331,6 +341,8 @@ struct ModuleCheckView: View {
         guard to < walk.count else { return }
         index = to
         selected = nil
+        confidence = sessionDefaultConfidence
+        thinking = ""
         whyOpen = false
         error = nil
         if walk[to].kind == .close {
@@ -497,6 +509,14 @@ struct ModuleCheckView: View {
                 }
             }
 
+            if answered == nil, shownPick != nil {
+                SessionSureness(
+                    confidence: $confidence, thinking: $thinking,
+                    locked: pending || attempts[index] != nil,
+                    reasoningFocused: $reasoningFocused
+                )
+            }
+
             if let answered {
                 feedbackBar(question, answered: answered)
             } else {
@@ -589,7 +609,9 @@ struct ModuleCheckView: View {
         }
         .buttonStyle(.plain)
         .disabled(answered != nil || pending || attempts[index] != nil)
-        .keyboardShortcut(KeyEquivalent(Character("\(i + 1)")), modifiers: [])
+        // Stood down while the reasoning box has focus, so a digit typed
+        // there stays in the box.
+        .keyboardShortcut(reasoningFocused ? nil : KeyboardShortcut(KeyEquivalent(Character("\(i + 1)")), modifiers: []))
     }
 
     /// The verdict bar — the web's FeedbackBar: tinted card, the ✓ or !

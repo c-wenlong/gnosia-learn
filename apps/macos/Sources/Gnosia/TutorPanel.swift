@@ -158,9 +158,15 @@ struct TutorSessionView: View {
     /// Steps whose tutor request already ran — the web's `requested` ref.
     @State private var requested = Set<Int>()
     @State private var graded: [Int: Graded] = [:]
-    /// The first attempt fixes the pick; a retry sends that pick again
-    /// under its first requestId, so a replay never duplicates evidence.
-    @State private var attempts: [Int: (requestId: String, picked: Int?)] = [:]
+    /// The first attempt fixes the pick, the confidence and the reasoning;
+    /// a retry sends them again under its first requestId, so a replay
+    /// never duplicates evidence.
+    @State private var attempts: [Int: (requestId: String, picked: Int?, confidence: Int?, thinking: String?)] = [:]
+    /// "How sure are you?" and the reasoning box, asked once an option is
+    /// picked (SessionSureness); they start over on every step.
+    @State private var confidence = sessionDefaultConfidence
+    @State private var thinking = ""
+    @FocusState private var reasoningFocused: Bool
     @State private var pending = false
     @State private var error: String? = nil
     @State private var whyOpen = false
@@ -275,6 +281,8 @@ struct TutorSessionView: View {
         answeredConcepts = []
         index = 0
         selected = nil
+        confidence = sessionDefaultConfidence
+        thinking = ""
         pending = false
         error = nil
         whyOpen = false
@@ -397,7 +405,10 @@ struct TutorSessionView: View {
         error = nil
         let attempt = attempts[index] ?? (
             requestId: UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased(),
-            picked: choice
+            picked: choice,
+            // "I don't know" carries no confidence (K6).
+            confidence: choice == nil ? nil : confidence,
+            thinking: sessionThinking(thinking)
         )
         attempts[index] = attempt
         let picked = attempt.picked
@@ -414,7 +425,7 @@ struct TutorSessionView: View {
         // the same state rather than stacking a second update on the first.
         let baseline = model
         var write = model.answer(
-            slug, correct: correct, source: source,
+            slug, correct: correct, source: source, confidence: attempt.confidence,
             prereqsOf: { store.learn.byId[$0]?.requires ?? [] }
         )
         write.sessionId = sessionId!
@@ -424,6 +435,7 @@ struct TutorSessionView: View {
         write.question = question.prompt
         write.answer = question.choices[safe: question.correct]
         write.chosen = picked.flatMap { question.choices[safe: $0] }
+        write.thinking = attempt.thinking
         if learner.recordSessionAnswer(write) {
             graded[index] = Graded(picked: picked, correct: write.outcome.correct, outcome: write.outcome)
             answers.append(write.outcome)
@@ -445,6 +457,8 @@ struct TutorSessionView: View {
         guard to < steps.count else { return }
         index = to
         selected = nil
+        confidence = sessionDefaultConfidence
+        thinking = ""
         error = nil
         whyOpen = false
         if steps[to].kind == .close {
@@ -636,6 +650,14 @@ struct TutorSessionView: View {
                 }
             }
 
+            if answered == nil, (attempts[index].map { $0.picked } ?? selected) != nil {
+                SessionSureness(
+                    confidence: $confidence, thinking: $thinking,
+                    locked: pending || attempts[index] != nil,
+                    reasoningFocused: $reasoningFocused
+                )
+            }
+
             if let answered {
                 feedbackBar(question, answered: answered)
             } else {
@@ -721,7 +743,9 @@ struct TutorSessionView: View {
         }
         .buttonStyle(.plain)
         .disabled(answered != nil || pending)
-        .keyboardShortcut(KeyEquivalent(Character("\(i + 1)")), modifiers: [])
+        // Stood down while the reasoning box has focus, so a digit typed
+        // there stays in the box.
+        .keyboardShortcut(reasoningFocused ? nil : KeyboardShortcut(KeyEquivalent(Character("\(i + 1)")), modifiers: []))
     }
 
     /// The verdict bar — the web's FeedbackBar: tinted card, the ✓ or !
