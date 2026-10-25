@@ -862,9 +862,9 @@ workspace, so `npm test` from the repo root is the whole suite.
 | `services/catalog/test/*.test.ts` | The schema's constraints, the indexers, the writer, the read commands |
 | `scripts/learn/lib/*.test.mjs` | BKT, the concept DAG, SM-2 conformance, frontmatter round-trips |
 
-Anything touching Postgres creates and drops its own scratch database and skips
-itself, with a reason, when no server is reachable. CI runs a `postgres:17`
-service so they are a gate there.
+Every catalog suite makes its own scratch SQLite file under the OS temp
+directory, so CI needs no database service and the suites are a gate
+everywhere they run.
 
 Coverage is scoped to `apps/web/src/lib`, `apps/web/src/data` and
 `scripts/learn` by design. Components and pages are verified by

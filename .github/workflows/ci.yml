@@ -1,8 +1,9 @@
 name: CI
 
 # Every pull request aimed at the default branch, and by hand from the Actions
-# tab. This workflow only checks the code; production deploys through Vercel's
-# Git integration (docs/DEPLOYMENT.md).
+# tab. This workflow only checks the code; production deploys when a release
+# is published (deploy.yml), and that workflow is where the production build
+# is a gate.
 #
 # A push to main does not run it. Every change reaches main through a pull
 # request that already ran this exact job, so the push run checked the same
@@ -15,14 +16,14 @@ on:
   pull_request:
     branches: [main, master]
     # A pull request that changes nothing a step reads does not need a
-    # fifteen-minute run. The Markdown ignored below is documentation only:
+    # ten-minute run. The Markdown ignored below is documentation only:
     # seed/ stays covered because the tests import it, and
     # services/studio/src/manual/sections/*.md stays covered because
     # assembleManual() reads it at runtime. The design folders skipped are
     # pictures, captured research and the untracked reference symlinks, while
     # docs/design/kit stays covered because eslint lints its scripts. A
     # tools/ pointer bump is a gitlink the checkout below never fetches
-    # (submodules are off), so it cannot move lint, typecheck, test or build
+    # (submodules are off), so it cannot move lint, typecheck or test
     # either. Everything else, including this file, still runs the full gate.
     paths-ignore:
       - "*.md"
@@ -50,6 +51,8 @@ on:
 # Least privilege by default. Nothing here writes to the repository, so the
 # GITHUB_TOKEN only needs to read code. Coverage is uploaded with an explicit
 # repository token rather than OIDC, so no `id-token: write` is needed either.
+# The caches below are written with the runner's own cache token, which needs
+# no permission here.
 # https://docs.github.com/en/actions/security-for-github-actions/security-guides/security-hardening-for-github-actions
 permissions:
   contents: read
@@ -69,6 +72,9 @@ concurrency:
 
 jobs:
   quality:
+    # The job's display name stays as it was, so links to old runs and any
+    # check someone pinned to the name still match. The build only runs on a
+    # manual run now (see "Production build" below).
     name: Lint, test, and build
     runs-on: ubuntu-latest
     # Measured 2026-10-02: the test step alone took 8 to 11 minutes while the
@@ -99,27 +105,44 @@ jobs:
           # the pull request changed.
           fetch-depth: 2
 
-      - name: Setup Node.js
-        # 22 matches the engines floor in package.json, which in turn clears
-        # Next 16's own floor of >=20.9.0. The npm cache is keyed on
-        # package-lock.json, so it is reused until a dependency actually moves.
-        uses: actions/setup-node@v7
+      - name: Install
+        # Node and node_modules, from the cache unless the lockfile moved.
+        # The steps and the reasoning are in the action.
+        uses: ./.github/actions/install
+
+      # The three checks below are kept separate on purpose. Each one fails
+      # with a different signal, so a red run says what kind of thing broke
+      # without anyone opening the log: style, types, or behaviour.
+
+      - name: Restore the ESLint cache
+        # ESLint's own cache: one entry per file, keyed on the file's content
+        # and the resolved config, so only the files a pull request changed
+        # are linted again. No rule here is type-aware (eslint.config.mjs has
+        # no parserOptions.project), so one file's result never depends on
+        # another file and a cached entry cannot go stale. The key moves with
+        # the lockfile and the config, which is when every entry would be
+        # thrown away anyway.
+        uses: actions/cache/restore@v6
         with:
-          node-version: 22
-          cache: npm
-
-      - name: Install dependencies
-        # ci, not install: it installs exactly what the lockfile pins and fails
-        # outright if package.json and package-lock.json have drifted apart,
-        # instead of quietly resolving something newer.
-        run: npm ci
-
-      # The four steps below are kept separate on purpose. Each one fails with
-      # a different signal, so a red run says what kind of thing broke without
-      # anyone opening the log: style, types, behaviour, or the build.
+          path: .eslintcache
+          key: eslint-${{ hashFiles('package-lock.json', 'eslint.config.mjs') }}-${{ github.sha }}
+          restore-keys: |
+            eslint-${{ hashFiles('package-lock.json', 'eslint.config.mjs') }}-
 
       - name: Lint
-        run: npm run lint
+        # content, not the default metadata: a fresh checkout gives every
+        # file a new modification time, which would miss every entry.
+        run: npm run lint -- --cache --cache-strategy content --cache-location .eslintcache
+
+      - name: Save the ESLint cache
+        # Even after a failed lint: ESLint records only the files that
+        # passed, so the cache is still correct, and the fix push re-lints
+        # only what changed.
+        if: always() && hashFiles('.eslintcache') != ''
+        uses: actions/cache/save@v6
+        with:
+          path: .eslintcache
+          key: eslint-${{ hashFiles('package-lock.json', 'eslint.config.mjs') }}-${{ github.sha }}
 
       - name: Typecheck
         run: npm run typecheck
@@ -171,10 +194,13 @@ jobs:
         run: npm run test:coverage -- --maxWorkers=2 ${{ steps.scope.outputs.args }}
 
       - name: Production build
-        # Runs on pull requests too, not only on the default branch. Next 16
-        # surfaces some type and route errors only when it actually builds, so
-        # a green typecheck is not enough to say the app compiles.
+        # A manual run only. On a pull request the build cost a minute and
+        # caught little the typecheck had not; the release is where a build
+        # failure matters, and deploy.yml builds before it deploys, so a
+        # release that does not compile never reaches Vercel. Run this
+        # workflow by hand on a branch to check a build before cutting one.
         # Agent chat uses free providers at runtime; the build needs no keys.
+        if: github.event_name == 'workflow_dispatch'
         run: npm run build
 
       - name: Check for a Codecov token
