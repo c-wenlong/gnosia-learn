@@ -34,15 +34,6 @@ const nextConfig: NextConfig = {
   outputFileTracingRoot: repoRoot,
 
   /**
-   * `pg` reaches the learner state, and it is a Node driver: it resolves its
-   * optional native binding (`pg-native`) and its Cloudflare socket shim
-   * through runtime `require`s that no bundler can follow. Left external, it
-   * is required from `node_modules` the ordinary way and behaves the same on a
-   * laptop and on Vercel.
-   */
-  serverExternalPackages: ["pg"],
-
-  /**
    * Next 16.3 writes an `AGENTS.md` and a `CLAUDE.md` into this directory on
    * every `next dev`, pointing agents at its bundled docs. The repository
    * already carries that notice at the top of the root `AGENTS.md`, which is
