@@ -1,7 +1,8 @@
 name: Install
 description: >-
   Node 22 and every workspace's node_modules, restored from the cache when the
-  lockfile has not moved and installed with npm ci when it has. Run after
+  lockfile and manifests have not moved and installed with npm ci when they
+  have. Run after
   actions/checkout.
 
 outputs:
@@ -25,16 +26,19 @@ runs:
     - name: Restore node_modules
       id: modules
       # The whole installed tree, every workspace's node_modules included, so
-      # a run whose lockfile did not move skips npm ci altogether. The key
-      # carries the exact Node version as well as the lockfile, because
-      # better-sqlite3 is a native module built for one Node ABI: a tree from
-      # another Node would install fine and then fail to open the catalog.
+      # a run whose dependencies did not move skips npm ci altogether. The
+      # key hashes every package.json as well as the lockfile: npm ci is also
+      # the check that the two agree, and a manifest edited without its
+      # lockfile has to miss so that check runs. It carries the exact Node
+      # version too, because better-sqlite3 is a native module built for one
+      # Node ABI: a tree from another Node would install fine and then fail
+      # to open the catalog.
       # There are no restore-keys on purpose. npm ci deletes node_modules
       # before installing, so a partial match would be downloaded and then
       # thrown away.
       #
       # A pull request can read its own caches and main's, never another pull
-      # request's, so cache.yml keeps one on main for the current lockfile.
+      # request's, so cache.yml keeps one on main for the current manifests.
       uses: actions/cache/restore@v6
       with:
         path: |
@@ -42,7 +46,7 @@ runs:
           apps/*/node_modules
           packages/*/node_modules
           services/*/node_modules
-        key: node-modules-${{ runner.os }}-${{ runner.arch }}-node${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json') }}
+        key: node-modules-${{ runner.os }}-${{ runner.arch }}-node${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json', 'package.json', 'apps/*/package.json', 'packages/*/package.json', 'services/*/package.json') }}
 
     - name: Install dependencies
       # ci, not install: it installs exactly what the lockfile pins and fails

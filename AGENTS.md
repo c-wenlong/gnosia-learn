@@ -1390,7 +1390,8 @@ not have to be worked out again.
   build` runs in `deploy.yml` when a release is published, so the local
   build is the one a PR gets. `node_modules` and the ESLint cache are
   restored from `main`'s caches, which `.github/workflows/cache.yml` refills
-  only when `package-lock.json` or `eslint.config.mjs` changes. Wait for both
+  only when `package-lock.json`, a `package.json` or `eslint.config.mjs`
+  changes. Wait for both
   before merging. What differs between
   the two, each of which once failed only on CI: text order, so every
   `ORDER BY` over text goes through `bytewise` in
