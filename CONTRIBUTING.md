@@ -173,7 +173,9 @@ bug fixes or docs. All welcome.
 2. Run the full gate locally, from the repo root:
    `npm run lint && npm run typecheck && npm test && npm run build`. All four
    span every workspace; none of them needs a `cd` into `apps/web`.
-3. Open a PR against `main` saying what changed and why.
+3. Open a PR against `main` saying what changed and why. A change to an
+   interaction on screen gets a browser video of it (see
+   [Recording a PR video](#recording-a-pr-video)).
 4. Wait for CI and for the Greptile review bot. Fix every CI failure and every
    valid review comment; reply on the threads you disagree with rather than
    leaving them open.
@@ -227,6 +229,41 @@ the `/api/agent/*` routes answer with no provider key is the one expected
 failure. Screenshots and `server.log` (the output of `next start`) are in the
 directory printed on the first line, under the OS temp directory, never in
 the tree.
+
+## Recording a PR video
+
+`npm run demo:record` records one interaction in the built app as an mp4, so a
+PR that changes what a person does on screen can show it:
+
+```bash
+npm run build
+npm run demo:record -- --scenario scripts/demo-scenarios/concept-tutor-choice-checks.mjs --out ~/Desktop/choice-checks.mp4
+```
+
+It builds a scratch catalog from `seed/` (the same steps as the end-to-end
+smoke, shared through `scripts/lib/app-harness.mjs`), starts `next start` from
+the build with the test password, signs in before the recording starts, and
+runs the scenario in Chromium with a visible pointer. Prerequisites are the
+smoke's (a current build, playwright-core and a Playwright Chromium) plus
+`ffmpeg` on `PATH`. The scratch directory goes under the OS temp directory and
+is removed afterwards, `--keep` leaves it, and `--out` is refused inside the
+checkout, so nothing lands in the tree. `--root <checkout>` records another
+worktree's build, for a branch cut before this script existed.
+
+**Tutor replies are scripted.** The server runs with every provider key blank,
+so no model answers. A scenario hands `routeChat` the tutor's turns in order
+(each the body `/api/agent/chat` sends: `content`, and a `check` when the turn
+asks one), and `routeJson` the bodies of any other route it stubs, such as the
+judge. Everything else is real: the page, the cards, and the writes into the
+scratch catalog. Say so in the PR body when you attach a video.
+
+A scenario is a module in `scripts/demo-scenarios/` that exports
+`async run({ page, base, cursor, routeChat, routeJson })`. Move the pointer
+with `cursor.click(locator)` and `cursor.type(locator, text)`, and give each
+step time to be seen with `cursor.pause(ms)`; the header of
+`scripts/demo-record.mjs` lists the rest. GitHub has no API to attach a video
+to a PR, so drag the mp4 into the PR description in the browser, or send it to
+the reviewer.
 
 ## Reporting bugs
 
