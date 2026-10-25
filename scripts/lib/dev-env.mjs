@@ -2,15 +2,19 @@
 // of Node so it is read the way the app reads it:
 //
 //   node scripts/lib/dev-env.mjs get <app dir> KEY...   KEY=value lines
-//   node scripts/lib/dev-env.mjs pg <database url>      URL=... and PGPASSWORD=...
+//   node scripts/lib/dev-env.mjs db <app dir>           the catalog file, checked
 //
 // `get` loads the app's .env files with Next's own loader (@next/env), so a
 // quoted value, a trailing comment and the .env.development files behave as
 // they do under `next dev`; a value already in the environment wins, as there.
-// `pg` takes the password out of a connection URL, so the rest of it can be an
-// argument to pg_isready and psql (libpq reads the password from PGPASSWORD)
-// without the secret being on a command line where `ps` shows it. A value
-// with a newline in it is not supported: the lines are the format.
+// `db` loads the same files, then resolves the catalog's SQLite file with the
+// catalog's own `databasePath()` (services/catalog/src/env.ts: CATALOG_DB,
+// then DATABASE_URL, then $GNOSIA_HOME/catalog.db, with services/catalog/.env
+// read under them), so it names the file the app will open, and opens it
+// read-only. It prints `FILE=<path>` and exits 0, or one line saying what is
+// wrong and exits 3. A value with a newline in it is not supported: the lines
+// are the format.
+import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 /**
@@ -27,37 +31,41 @@ export async function loadDevEnv(appDir) {
 }
 
 /**
- * A postgres:// or postgresql:// URL with the password taken out, and the
- * password. Everything else in the URL (the host, a socket directory, sslmode,
- * sslrootcert, sslcert, sslkey, options, anything libpq understands) is left
- * for libpq to parse as it always did; only the secret moves, into
- * PGPASSWORD, so it is never an argument. Throws on anything else, so the
- * caller can say it was not understood rather than check the wrong database.
- * @param {string} url
- * @returns {{ url: string, password: string }}
+ * The catalog file the app would open, checked: it must resolve (a
+ * postgres:// value is refused by the resolver itself), exist, open as a
+ * SQLite database, and hold the catalog's tables. Read-only and `fileMustExist`, so the
+ * check never creates or changes a file. Throws an Error whose message is the
+ * one line to show, the README step to run included.
+ * @param {string} appDir
+ * @returns {Promise<string>} the file's path
  */
-export function splitDatabaseUrl(url) {
-  const parsed = new URL(url);
-  if (parsed.protocol !== "postgres:" && parsed.protocol !== "postgresql:") {
-    throw new Error(`not a postgres URL: ${parsed.protocol}`);
-  }
-  let password = decodeURIComponent(parsed.password);
-  parsed.password = "";
-  // A password given as a query parameter is cut out of the raw query, pair by
-  // pair, leaving every other pair byte for byte: going through
-  // URLSearchParams would re-encode them (a space as "+", which libpq reads
-  // literally).
-  const pairs = parsed.search.replace(/^\?/, "").split("&");
-  if (pairs.some((pair) => decodeURIComponent(pair.split("=")[0]) === "password")) {
-    const kept = [];
-    for (const pair of pairs) {
-      const [key, ...value] = pair.split("=");
-      if (decodeURIComponent(key) === "password") password = decodeURIComponent(value.join("="));
-      else kept.push(pair);
+export async function checkCatalogFile(appDir) {
+  await loadDevEnv(appDir);
+  // env.ts is TypeScript; tsx's loader lets plain node import it, resolved
+  // from this file, so dev.sh needs no flags and no particular cwd.
+  const { register } = await import("tsx/esm/api");
+  register();
+  const { databasePath } = await import("../../services/catalog/src/env.ts");
+  const file = databasePath();
+  const setUp = "npm run catalog -- migrate, then import the seed (README, Install)";
+  if (!existsSync(file)) throw new Error(`there is no catalog at ${file}: ${setUp}`);
+  const { default: Database } = await import("better-sqlite3");
+  // One named table, not the table list: `learner` is made by the first
+  // migration, so a file without it was never migrated. (A read of every
+  // table is what services/catalog/test/provider-keys.test.ts guards.)
+  let migrated;
+  try {
+    const db = new Database(file, { readonly: true, fileMustExist: true });
+    try {
+      migrated = db.prepare("select 1 from sqlite_master where type = 'table' and name = 'learner'").get() !== undefined;
+    } finally {
+      db.close();
     }
-    parsed.search = kept.join("&");
+  } catch (error) {
+    throw new Error(`cannot open the catalog at ${file}: ${error instanceof Error ? error.message : String(error)}`);
   }
-  return { url: parsed.toString(), password };
+  if (!migrated) throw new Error(`the catalog at ${file} has no tables yet: ${setUp}`);
+  return file;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
@@ -69,12 +77,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       for (const key of keys) {
         if (env[key] !== undefined) process.stdout.write(`${key}=${env[key]}\n`);
       }
-    } else if (mode === "pg" && args.length === 1) {
-      const { url, password } = splitDatabaseUrl(args[0]);
-      process.stdout.write(`URL=${url}\n`);
-      if (password) process.stdout.write(`PGPASSWORD=${password}\n`);
+    } else if (mode === "db" && args.length === 1) {
+      process.stdout.write(`FILE=${await checkCatalogFile(args[0])}\n`);
     } else {
-      process.stderr.write("usage: dev-env.mjs get <app dir> KEY... | pg <database url>\n");
+      process.stderr.write("usage: dev-env.mjs get <app dir> KEY... | db <app dir>\n");
       process.exit(2);
     }
   } catch (error) {

@@ -4,10 +4,11 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import Database from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
 
 // scripts/dev.sh against a recording stand-in for tmux and for what it checks
-// (Postgres, ports). Nothing here starts a process or touches a real tmux
+// (the catalog file, ports). Nothing here starts a process or touches a real tmux
 // server. The script's own tmux calls were also run by hand on a real one,
 // including with base-index and pane-base-index set to 1, which is how
 // `remain-on-exit` being a window option, the `=session:` targets and the
@@ -26,11 +27,22 @@ const stub = (bin, name, body) => {
   chmodSync(file, 0o755);
 };
 
+/** A SQLite file holding `learner`, the one table the check asks a catalog for. */
+const makeCatalog = (file) => {
+  mkdirSync(dirname(file), { recursive: true });
+  const db = new Database(file);
+  db.exec("create table learner (id text primary key)");
+  db.close();
+  return file;
+};
+
 /**
  * A repository root, a bin directory of stubs and a call log. `envFile` is the
  * text of apps/web/.env.local; the stubs report success unless a test says so.
+ * HOME is the sandbox, so the catalog the app would open by default is
+ * `<sandbox>/.gnosia/catalog.db`, made unless `catalog` is false.
  */
-function sandbox({ nodeModules = true, envFile = "OWNER_PASSWORD=pw\nAUTH_SECRET=secret\n" } = {}) {
+function sandbox({ nodeModules = true, catalog = true, envFile = "OWNER_PASSWORD=pw\nAUTH_SECRET=secret\n" } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "dev-sh-"));
   dirs.push(dir);
   const root = join(dir, "root");
@@ -42,6 +54,8 @@ function sandbox({ nodeModules = true, envFile = "OWNER_PASSWORD=pw\nAUTH_SECRET
   writeFileSync(join(root, "apps", "web", ".env.local"), envFile);
   const log = join(dir, "calls.log");
   writeFileSync(log, "");
+  const defaultCatalog = join(dir, ".gnosia", "catalog.db");
+  if (catalog) makeCatalog(defaultCatalog);
 
   stub(bin, "tmux", `echo "tmux $*" >> "$CALLS_LOG"
 case "$1" in
@@ -60,11 +74,6 @@ case "$1" in
     esac ;;
 esac`);
   stub(bin, "npm", `echo "npm $* STUDIO_ENABLED=\${STUDIO_ENABLED:-unset}" >> "$CALLS_LOG"`);
-  // The Postgres tools log their arguments, and only whether a password came
-  // in the environment, never the password itself.
-  const pg = (name, ok) => stub(bin, name, `echo "${name} $* pw=\${PGPASSWORD:+set}" >> "$CALLS_LOG"; ${ok}`);
-  pg("pg_isready", `[ ! -f "$STATE_DIR/pg_down" ]`);
-  pg("psql", `[ ! -f "$STATE_DIR/no_database" ]`);
   stub(bin, "lsof", `[ -n "$BUSY_PORT" ] || exit 1
 case "$*" in *":$BUSY_PORT "*|*":$BUSY_PORT") echo "node 1 you 20u IPv4 TCP *:$BUSY_PORT (LISTEN)" ;; *) exit 1 ;; esac`);
   stub(bin, "claude", "exit 0");
@@ -74,8 +83,8 @@ case "$*" in *":$BUSY_PORT "*|*":$BUSY_PORT") echo "node 1 you 20u IPv4 TCP *:$B
     const ran = spawnSync("/bin/bash", [SCRIPT, ...args], {
       encoding: "utf8",
       env: {
-        // Built from nothing: the developer's own STUDIO_* and DATABASE_URL
-        // must not leak in. node is the test runner's, for the version check
+        // Built from nothing: the developer's own STUDIO_*, CATALOG_DB and
+        // DATABASE_URL must not leak in. node is the test runner's, for the version check
         // and the env loader.
         PATH: `${bin}:${dirname(process.execPath)}:/usr/bin:/bin`,
         HOME: dir,
@@ -101,7 +110,7 @@ case "$*" in *":$BUSY_PORT "*|*":$BUSY_PORT") echo "node 1 you 20u IPv4 TCP *:$B
     return { file, text: readFileSync(file, "utf8") };
   };
   const leftovers = () => readdirSync(tmp).filter((name) => name.startsWith("gnosia-dev."));
-  return { root, bin, run, flag, calls, paneEnv, leftovers };
+  return { dir, root, bin, run, flag, calls, paneEnv, leftovers, defaultCatalog };
 }
 
 const tmuxCall = (calls, verb) => calls.filter((c) => c.startsWith(`tmux ${verb} `));
@@ -182,12 +191,13 @@ describe("scripts/dev.sh start", () => {
   it("hands the panes PATH and the variables the processes read, and nothing else", () => {
     const { run, paneEnv } = sandbox();
     const ran = run(["--detach", "--no-checks"], {
-      env: { STUDIO_DAILY_USD: "3", DATABASE_URL: "postgres://localhost/other", SECRET_THING: "nope" },
+      env: { STUDIO_DAILY_USD: "3", CATALOG_DB: "/srv/catalog.db", DATABASE_URL: "/srv/other.db", SECRET_THING: "nope" },
     });
     for (const verb of ["new-session", "split-window"]) {
       const { file, text } = paneEnv(tmuxCall(ran.calls, verb)[0]);
       expect(text).toContain("export STUDIO_DAILY_USD=3");
-      expect(text).toContain("export DATABASE_URL=postgres://localhost/other");
+      expect(text).toContain("export CATALOG_DB=/srv/catalog.db");
+      expect(text).toContain("export DATABASE_URL=/srv/other.db");
       expect(text).not.toContain("SECRET_THING");
       expect(statSync(file).mode & 0o777).toBe(0o600);
     }
@@ -197,7 +207,7 @@ describe("scripts/dev.sh start", () => {
     const { run, flag, paneEnv } = sandbox();
     // The server was started when DATABASE_URL and two STUDIO_* variables were
     // set; this shell has since dropped DATABASE_URL and STUDIO_DAILY_USD.
-    flag("server_env", "STUDIO_DAILY_USD=9\nSTUDIO_OWNER=old\nDATABASE_URL=postgres://old/db\nPATH=/x\n-FOO\n");
+    flag("server_env", "STUDIO_DAILY_USD=9\nSTUDIO_OWNER=old\nDATABASE_URL=/old/catalog.db\nPATH=/x\n-FOO\n");
     const ran = run(["--detach", "--no-checks"], { env: { STUDIO_OWNER: "me" } });
     const { text } = paneEnv(tmuxCall(ran.calls, "new-session")[0]);
     expect(text).toContain("unset STUDIO_DAILY_USD");
@@ -205,20 +215,6 @@ describe("scripts/dev.sh start", () => {
     expect(text).toContain("export STUDIO_OWNER=me");
     expect(text).not.toContain("unset STUDIO_OWNER");
     expect(text).not.toContain("/x");
-  });
-
-  it("keeps a database password out of every command line", () => {
-    const url = "postgres://catalog:hunter2@db.example:5433/learn";
-    const { run, paneEnv } = sandbox();
-    const ran = run(["--detach"], { env: { DATABASE_URL: url } });
-    expect(ran.code).toBe(0);
-    // tmux's arguments, and the Postgres tools', carry no password ...
-    expect(ran.calls.filter((c) => c.includes("hunter2"))).toEqual([]);
-    expect(ran.out + ran.err).not.toContain("hunter2");
-    expect(ran.calls).toContain("pg_isready -q -d postgres://catalog@db.example:5433/learn pw=set");
-    expect(ran.calls).toContain("psql -d postgres://catalog@db.example:5433/learn -Atqc select 1 pw=set");
-    // ... and the one place it is, is a private file the pane reads and deletes.
-    expect(paneEnv(tmuxCall(ran.calls, "new-session")[0]).text).toContain("hunter2");
   });
 
   it("leaves nothing behind when the second pane cannot be created", () => {
@@ -290,56 +286,71 @@ describe("scripts/dev.sh checks", () => {
     expect(tmuxCall(ran.calls, "new-session")).toEqual([]);
   });
 
-  it("reads .env.local the way Next does: a quoted value and a trailing comment", () => {
-    const envFile = 'DATABASE_URL="postgres://catalog@db.example:5433/learn" # local database\nOWNER_PASSWORD=pw\nAUTH_SECRET=s\n';
-    const ran = sandbox({ envFile }).run(["--detach"]);
-    expect(ran.code).toBe(0);
-    expect(ran.calls).toContain("pg_isready -q -d postgres://catalog@db.example:5433/learn pw=");
-  });
-
-  it("passes every connection option on, certificate paths included", () => {
-    const query = "sslmode=verify-full&sslrootcert=/etc/ca.pem&sslcert=/c.pem&sslkey=/k.pem";
-    const ran = sandbox().run(["--detach"], { env: { DATABASE_URL: `postgres://u:pw@h/db?${query}` } });
-    expect(ran.code).toBe(0);
-    expect(ran.calls).toContain(`pg_isready -q -d postgres://u@h/db?${query} pw=set`);
-    expect(ran.calls).toContain(`psql -d postgres://u@h/db?${query} -Atqc select 1 pw=set`);
-  });
-
-  it("refuses, with the password hidden, when Postgres is not accepting connections", () => {
-    const envFile = "DATABASE_URL=postgres://catalog:hunter2@db.example:5433/learn\nOWNER_PASSWORD=pw\nAUTH_SECRET=s\n";
-    const refused = sandbox({ envFile });
-    refused.flag("pg_down");
-    const ran = refused.run(["--detach"]);
+  it("refuses, before touching tmux, when there is no catalog file", () => {
+    const { run, defaultCatalog } = sandbox({ catalog: false });
+    const ran = run(["--detach"]);
     expect(ran.code).toBe(1);
-    expect(ran.err).toContain("brew services start postgresql@17");
-    expect(ran.err).toContain("postgres://***@db.example:5433/learn");
-    expect(ran.err).not.toContain("hunter2");
+    expect(ran.err).toContain(`there is no catalog at ${defaultCatalog}`);
+    expect(ran.err).toContain("npm run catalog -- migrate");
     expect(tmuxCall(ran.calls, "new-session")).toEqual([]);
   });
 
-  it("uses DATABASE_URL from the environment before the file, and the Homebrew default last", () => {
-    const { run } = sandbox({ envFile: "DATABASE_URL=postgres://file/db\nOWNER_PASSWORD=pw\nAUTH_SECRET=s\n" });
-    expect(run(["--detach"], { env: { DATABASE_URL: "postgres://env/db" } }).calls).toContain(
-      "pg_isready -q -d postgres://env/db pw=",
+  it("reads .env.local the way Next does: a quoted value and a trailing comment", () => {
+    const { dir, root, run } = sandbox({ catalog: false });
+    const file = join(dir, "elsewhere", "catalog.db");
+    writeFileSync(join(root, "apps", "web", ".env.local"), `CATALOG_DB="${file}" # local database\nOWNER_PASSWORD=pw\nAUTH_SECRET=s\n`);
+    expect(run(["--detach"]).err).toContain(`there is no catalog at ${file}:`);
+    makeCatalog(file);
+    expect(run(["--detach"]).code).toBe(0);
+  });
+
+  it("takes CATALOG_DB before DATABASE_URL, the environment before the file, and $GNOSIA_HOME last", () => {
+    const { dir, run } = sandbox({ envFile: "CATALOG_DB=/from/file.db\nOWNER_PASSWORD=pw\nAUTH_SECRET=s\n" });
+    expect(run(["--detach"]).err).toContain("there is no catalog at /from/file.db");
+    expect(run(["--detach"], { env: { CATALOG_DB: "/from/env.db" } }).err).toContain("there is no catalog at /from/env.db");
+    const bare = sandbox({ catalog: false });
+    expect(bare.run(["--detach"], { env: { DATABASE_URL: "/from/url.db" } }).err).toContain("at /from/url.db");
+    expect(bare.run(["--detach"], { env: { DATABASE_URL: "/from/url.db", CATALOG_DB: "/from/env.db" } }).err).toContain(
+      "at /from/env.db",
     );
-    expect(sandbox().run(["--detach"]).calls).toContain(
-      "pg_isready -q -d postgres://localhost:5432/gnosia pw=",
+    expect(bare.run(["--detach"], { env: { GNOSIA_HOME: join(dir, "home") } }).err).toContain(
+      `at ${join(dir, "home", "catalog.db")}`,
     );
   });
 
-  it("warns, rather than checking the wrong database, when DATABASE_URL is not a postgres URL", () => {
-    const ran = sandbox().run(["--detach"], { env: { DATABASE_URL: "mysql://x/y" } });
-    expect(ran.code).toBe(0);
-    expect(ran.err).toContain("is not a postgres URL");
-    expect(ran.calls.some((c) => c.startsWith("pg_isready"))).toBe(false);
-  });
-
-  it("says to createdb when Postgres is up but the database is not there", () => {
-    const { run, flag } = sandbox();
-    flag("no_database");
-    const ran = run(["--detach"]);
+  it("refuses a postgres:// DATABASE_URL, with the password hidden", () => {
+    const envFile = "DATABASE_URL=postgres://catalog:hunter2@db.example:5433/learn\nOWNER_PASSWORD=pw\nAUTH_SECRET=s\n";
+    const ran = sandbox({ envFile }).run(["--detach"]);
     expect(ran.code).toBe(1);
-    expect(ran.err).toContain("createdb gnosia");
+    expect(ran.err).toContain("is a Postgres URL");
+    expect(ran.err).toContain("CATALOG_DB");
+    expect(ran.out + ran.err).not.toContain("hunter2");
+    expect(tmuxCall(ran.calls, "new-session")).toEqual([]);
+  });
+
+  it("refuses a file that is not a database, and a database never migrated", () => {
+    const { dir, run } = sandbox({ catalog: false });
+    const junk = join(dir, "junk.db");
+    writeFileSync(junk, "not a database, just text long enough to have a header\n".repeat(4));
+    const notDb = run(["--detach"], { env: { CATALOG_DB: junk } });
+    expect(notDb.code).toBe(1);
+    expect(notDb.err).toContain(`cannot open the catalog at ${junk}`);
+    const empty = join(dir, "empty.db");
+    new Database(empty).close();
+    const ran = run(["--detach"], { env: { CATALOG_DB: empty } });
+    expect(ran.code).toBe(1);
+    expect(ran.err).toContain(`the catalog at ${empty} has no tables yet`);
+  });
+
+  it("never creates or changes the catalog file it checks", () => {
+    const { run, defaultCatalog } = sandbox();
+    const before = statSync(defaultCatalog);
+    expect(run(["--detach"]).code).toBe(0);
+    const after = statSync(defaultCatalog);
+    expect([after.size, after.mtimeMs]).toEqual([before.size, before.mtimeMs]);
+    const missing = sandbox({ catalog: false });
+    missing.run(["--detach"]);
+    expect(existsSync(missing.defaultCatalog)).toBe(false);
   });
 
   it("warns, and still starts, when nobody could sign in", () => {
@@ -370,11 +381,10 @@ describe("scripts/dev.sh checks", () => {
   });
 
   it("is skipped by --no-checks", () => {
-    const { run, flag } = sandbox({ nodeModules: false });
-    flag("pg_down");
+    const { run } = sandbox({ nodeModules: false, catalog: false });
     const ran = run(["--detach", "--no-checks"]);
     expect(ran.code).toBe(0);
-    expect(ran.calls.some((c) => c.startsWith("pg_isready"))).toBe(false);
+    expect(ran.err).not.toContain("catalog");
     expect(tmuxCall(ran.calls, "new-session")).toHaveLength(1);
   });
 });
