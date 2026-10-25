@@ -28,6 +28,8 @@ import {
   DEFAULT_AGENT_MODEL,
 } from "@/lib/agent/prompt";
 import { RecapCard, RecapEditor } from "@/components/TopicRecap";
+import { ChoiceCheckCard } from "@/components/workspace/ChoiceCheckCard";
+import { RecallCheckCard } from "@/components/workspace/RecallCheckCard";
 import { VerdictRow } from "@/components/workspace/VerdictRow";
 import {
   chatRequestId,
@@ -35,6 +37,20 @@ import {
   judgeAnswer,
   recordAnswer,
 } from "@/lib/chat-recall";
+import {
+  checkBlockText,
+  choiceAnswerText,
+  choiceOrder,
+  gradeChoice,
+  isCardCheck,
+  isChoiceCheck,
+  isRecallCheck,
+  recallAnswerText,
+  restoreCardCheck,
+  type ChoiceAnswer,
+  type ChoicePick,
+  type RecallPick,
+} from "@/lib/check-block";
 import {
   checkSource,
   newVerdict,
@@ -56,6 +72,13 @@ interface UiMessage {
   /** A learner turn that answered one: its verdict row, and the concept it records against. */
   verdict?: Verdict | null;
   concept?: string;
+  /**
+   * A learner turn that answered a check card (docs/proposals/structured-checks.md,
+   * phase 3): a choice card's pick and write, or a recall card's words. Its
+   * `content` is the `<check_answer>` block the tutor reads; the card shows the answer.
+   */
+  choice?: ChoiceAnswer | null;
+  recall?: RecallPick | null;
 }
 
 function uid() {
@@ -66,10 +89,13 @@ export function AgentSession({
   course,
   module,
   topic,
+  conceptTitles = {},
 }: {
   course: Course;
   module: Module;
   topic: Topic;
+  /** The titles of the concepts the topic declares, by id, for the recorded-answer card; an id stands in for a missing one. */
+  conceptTitles?: Record<string, string>;
 }) {
   const router = useRouter();
   const { state, ready, saveKnowledge, saveError } = useLearner();
@@ -141,9 +167,14 @@ export function AgentSession({
           topicId: topic.id,
           learnerNote: learnerNote || undefined,
           priorKnowledge,
+          // A turn that asked a card check goes back with its block, so the
+          // tutor can grade a recall answer against what it committed to.
           messages: history.map((m) => ({
             role: m.role,
-            content: m.content,
+            content:
+              m.role === "assistant" && isCardCheck(m.check)
+                ? `${m.content}\n\n${checkBlockText(m.check)}`
+                : m.content,
           })),
         }),
       });
@@ -194,7 +225,10 @@ export function AgentSession({
           // The route keeps a check only when it names a concept this topic declares.
           check:
             data.check?.question && data.check.concept
-              ? { question: data.check.question, concept: data.check.concept }
+              ? (restoreCardCheck(data.check) ?? {
+                  question: data.check.question,
+                  concept: data.check.concept,
+                })
               : null,
           meta: data.providerLabel
             ? `${data.providerLabel} · ${data.model ?? ""}`
@@ -307,6 +341,14 @@ export function AgentSession({
     recording.current.add(verdict.requestId);
     patchVerdict(messageId, { state: "saving", tapped: correct, error: null });
     try {
+      // A recall card's answer records its words against the tutor's commitment.
+      const asked = messages
+        .slice(0, messages.indexOf(m))
+        .findLast((x) => x.role === "assistant");
+      const recall =
+        m.recall && isRecallCheck(asked?.check)
+          ? { pick: m.recall, check: asked.check }
+          : null;
       const recorded = await recordAnswer({
         scope,
         sessionLabel: topic.id,
@@ -319,6 +361,16 @@ export function AgentSession({
         // The session is the topic's: its answers span the concepts the topic declares.
         sessionTitle: `${course.code} · ${topic.title}`,
         sessionGoal: topic.id,
+        ...(recall !== null
+          ? {
+              card: {
+                key: recall.check.answer,
+                chosen: recall.pick.answer,
+                confidence: recall.pick.confidence,
+                thinking: recall.pick.thinking,
+              },
+            }
+          : {}),
       });
       patchVerdict(messageId, { state: "recorded", error: null, recorded });
       // The shell's learner snapshot (mastery, progress) reads the new state.
@@ -332,6 +384,114 @@ export function AgentSession({
       recording.current.delete(verdict.requestId);
     }
   }
+
+  /** Change one choice answer's write. */
+  function patchChoice(messageId: string, patch: Partial<ChoiceAnswer>) {
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === messageId && m.choice
+          ? { ...m, choice: { ...m.choice, ...patch } }
+          : m,
+      ),
+    );
+  }
+
+  /** Write a choice card's answer: one observation on its concept, replayed rather than doubled on a retry. */
+  async function recordChoice(answer: UiMessage, asked: UiMessage) {
+    const choice = answer.choice;
+    const check = asked.check;
+    if (!choice || !answer.concept || !isChoiceCheck(check)) return;
+    if (choice.state === "recorded" || recording.current.has(choice.requestId)) return;
+    recording.current.add(choice.requestId);
+    patchChoice(answer.id, { state: "saving", error: null });
+    try {
+      const recorded = await recordAnswer({
+        scope,
+        sessionLabel: topic.id,
+        conceptSlug: answer.concept,
+        correct: choice.correct,
+        source: choice.source,
+        requestId: choice.requestId,
+        question: check.question,
+        answer: answer.content,
+        sessionTitle: `${course.code} · ${topic.title}`,
+        sessionGoal: topic.id,
+        card: {
+          key: check.answer,
+          chosen: choice.picked === null ? null : (check.options[choice.picked] ?? null),
+          confidence: choice.confidence,
+          thinking: choice.thinking,
+        },
+      });
+      patchChoice(answer.id, { state: "recorded", error: null, recorded });
+      router.refresh();
+    } catch (e) {
+      patchChoice(answer.id, {
+        state: "failed",
+        error: e instanceof Error ? e.message : "The answer was not recorded.",
+      });
+    } finally {
+      recording.current.delete(choice.requestId);
+    }
+  }
+
+  /** Submit on a choice card: graded against the key, recorded at once, and sent to the tutor. */
+  function submitChoice(askedAt: number, pick: ChoicePick) {
+    const asked = messages[askedAt];
+    if (busy || !asked || !isChoiceCheck(asked.check) || !asked.check.concept) return;
+    if (pendingCheck(messages) !== askedAt) return;
+    const answer: UiMessage = {
+      id: uid(),
+      role: "user",
+      content: choiceAnswerText(asked.check, pick),
+      concept: asked.check.concept,
+      choice: {
+        ...pick,
+        requestId: chatRequestId(),
+        correct: gradeChoice(asked.check, pick),
+        source: checkSource(messages, askedAt),
+        state: "saving",
+        error: null,
+        recorded: null,
+      },
+    };
+    const history = [...messages, answer];
+    setMessages(history);
+    void recordChoice(answer, asked);
+    void callAgent(history);
+  }
+
+  /** Submit on a recall card: judged against the commitment, sent to the tutor, recorded on the learner's tap. */
+  function submitRecall(askedAt: number, pick: RecallPick) {
+    const asked = messages[askedAt];
+    if (busy || !asked || !isRecallCheck(asked.check) || !asked.check.concept) return;
+    if (pendingCheck(messages) !== askedAt) return;
+    const concept = asked.check.concept;
+    const answer: UiMessage = {
+      id: uid(),
+      role: "user",
+      content: recallAnswerText(pick),
+      concept,
+      recall: pick,
+      verdict: newVerdict(asked.check.question, chatRequestId(), checkSource(messages, askedAt)),
+    };
+    const history = [...messages, answer];
+    setMessages(history);
+    void judgeAnswer(concept, asked.check.question, pick.answer, asked.check.answer).then((v) =>
+      patchVerdict(
+        answer.id,
+        v === null
+          ? { judged: "unavailable", suggested: null }
+          : { judged: "ready", suggested: v.correct, feedback: v.feedback },
+      ),
+    );
+    void callAgent(history);
+  }
+
+  const titled = (concept: string) => ({
+    title: conceptTitles[concept] ?? concept,
+    noteHref: `/learn/${concept}`,
+  });
 
   // R6: the topic's chat session closes when the page goes away. Best-effort.
   useEffect(() => {
@@ -347,11 +507,12 @@ export function AgentSession({
   async function send(value: string) {
     const text = value.trim();
     if (!text || busy) return;
-    // A reply to a turn that asked a check is its answer, on the concept the check named.
+    // A reply to a turn that asked a check is its answer, on the concept the
+    // check named. A card check is answered on its card; a message typed instead is a message.
     const asked = pendingCheck(messages);
     const check = asked === null ? null : messages[asked].check;
     const next: UiMessage =
-      check?.concept && asked !== null
+      check?.concept && asked !== null && !isCardCheck(check)
         ? {
             id: uid(),
             role: "user",
@@ -383,6 +544,48 @@ export function AgentSession({
   }
 
   const backHref = `/courses/${course.slug}/${module.slug}`;
+
+  /** The card under a tutor turn that asked a card check, with the answer the next learner turn gave, if any. */
+  const pendingAt = pendingCheck(messages);
+  const lastVerdict = messages.findLastIndex((x) => x.verdict);
+  const cardAfter = (i: number) => {
+    const m = messages[i];
+    const check = m?.check;
+    if (!m || !isCardCheck(check) || !check.concept) return null;
+    const next = messages[i + 1]?.role === "user" ? messages[i + 1] : undefined;
+    const concept = titled(check.concept);
+    if (isRecallCheck(check)) {
+      const answered = next?.recall ? next : null;
+      return (
+        <RecallCheckCard
+          key={`c-${m.id}`}
+          check={check}
+          pick={answered?.recall ?? null}
+          verdict={answered?.verdict ?? null}
+          live={pendingAt === i}
+          rowLive={answered !== null && messages.indexOf(answered) === lastVerdict}
+          disabled={busy}
+          onSubmit={(pick) => submitRecall(i, pick)}
+          onRecord={(correct) => answered && void record(answered.id, correct)}
+          concept={concept}
+        />
+      );
+    }
+    const answer = next?.choice ?? null;
+    return (
+      <ChoiceCheckCard
+        key={`c-${m.id}`}
+        check={check}
+        order={choiceOrder(check, `${topic.id}#${m.id}#${check.question}`)}
+        answer={answer}
+        live={pendingAt === i}
+        disabled={busy}
+        onSubmit={(pick) => submitChoice(i, pick)}
+        onRetry={() => next && void recordChoice(next, m)}
+        concept={concept}
+      />
+    );
+  };
 
   return (
     // A 48rem reading measure, centred in the `app` layout's wider column.
@@ -481,6 +684,8 @@ export function AgentSession({
             </p>
           )}
           {messages.map((m, i) => {
+            // A card's answer is the card's to show; the turn holds what the tutor was sent.
+            if (m.role === "user" && (m.choice || m.recall)) return null;
             // Each answer's row sits under the tutor's reply to it, or under the answer until that arrives.
             const answered =
               messages[i - 1]?.role === "user" && m.role === "assistant"
@@ -488,7 +693,6 @@ export function AgentSession({
                 : m.role === "user" && messages[i + 1]?.role !== "assistant"
                   ? m
                   : null;
-            const lastVerdict = messages.findLastIndex((x) => x.verdict);
             return [
               // The kit's two voices: the tutor's bare prose and the learner's
               // tinted bubble, told apart by shape, so no turn carries a
@@ -505,7 +709,8 @@ export function AgentSession({
                   <MathText text={m.content} />
                 </UserMessage>
               ),
-              answered?.verdict ? (
+              m.role === "assistant" ? cardAfter(i) : null,
+              answered?.verdict && !answered.recall ? (
                 <VerdictRow
                   key={`v-${answered.id}`}
                   verdict={answered.verdict}

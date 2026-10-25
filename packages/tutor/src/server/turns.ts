@@ -523,10 +523,10 @@ async function completeTurn(
 
   // The concept tutor's and the topic tutor's prompts ask for a check block
   // or the marker; the open tutor's reply is returned exactly as the model
-  // wrote it. Only the concept tutor's page draws check cards so far
-  // (docs/proposals/structured-checks.md, phases 1 and 2), so the topic
-  // tutor's block is kept as the open check it falls back to.
-  const split = checks === null ? null : splitTurnCheck(outcome.result.content, { cards: checks === "concept" });
+  // wrote it. Both pages draw check cards (docs/proposals/structured-checks.md,
+  // phases 1 to 3); the topic tutor's card is kept, as its marker is, only for
+  // a concept the topic declares (`topicCheck`).
+  const split = checks === null ? null : splitTurnCheck(outcome.result.content);
   if (split !== null) {
     // A block that could not be used falls back (K7); the reason goes to the log, never the learner.
     if (split.refused !== null) console.warn(`tutor check block refused: ${split.refused}`);

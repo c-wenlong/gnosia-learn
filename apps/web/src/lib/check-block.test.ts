@@ -200,6 +200,15 @@ describe("the recall card's rules", () => {
       expect(splitTurnCheck(`Prose.\n\n${text}`).check).toEqual(data);
     }
   });
+
+  it("keeps the concept a topic tutor's check named, and writes none for a check that named none", () => {
+    for (const data of [{ ...choice, concept: "softmax" }, { ...recall, concept: "dot-product" }]) {
+      const text = checkBlockText(data as ChoiceCheck);
+      expect(text).toContain(`"concept":"${data.concept}"`);
+      expect(splitTurnCheck(`Prose.\n\n${text}`).check).toEqual(data);
+    }
+    expect(checkBlockText(choice as ChoiceCheck)).not.toContain("concept");
+  });
 });
 
 describe("restoring the thread", () => {
