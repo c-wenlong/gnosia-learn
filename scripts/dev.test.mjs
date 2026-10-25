@@ -217,7 +217,8 @@ describe("scripts/dev.sh start", () => {
     expect(text).toContain("unset DATABASE_URL");
     expect(text).toContain("export STUDIO_OWNER=me");
     expect(text).not.toContain("unset STUDIO_OWNER");
-    expect(text).not.toContain("/x");
+    // The stale PATH is not re-exported — anchored, since a real PATH has "/x64" in it.
+    expect(text).not.toMatch(/^export PATH=\/x$/m);
   });
 
   it("leaves nothing behind when the second pane cannot be created", () => {
