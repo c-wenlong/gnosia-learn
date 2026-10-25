@@ -63,15 +63,16 @@ describe("a draft without a concept", () => {
     // TOOLS line and the matrix's "Studio can make it unattended" row), and
     // again when phase 3 did the same for remotionkc, and again when the
     // matrix gained its row saying no studio job can be given footage or a
-    // screen recording, with the routing step that follows; the diagram-only one
-    // never changed.
+    // screen recording, with the routing step that follows; and all three
+    // moved when docs/STUDIO-CONSENT.md added the offer's `line`, the TRUSTED
+    // and DECLINED blocks and the untagged-svg blessing to the shared core.
     const hash = (input: CombinedPromptInput): string => createHash("sha256").update(buildCombinedSystemPrompt(input)).digest("hex");
-    expect(hash(base)).toBe("9cbace48977eaee9cace554667ea35f992f978ec40de1dfb35532e6e4b927bfc");
+    expect(hash(base)).toBe("cfb0743f1b7e21728e32966383f55197e4749129c6260fce8b94912cf9544641");
     expect(hash({ kinds: ["diagram"], vocabulary: vocabulary.entries, corpus: [], extending: "slug: a" })).toBe(
-      "d0fc1b3aec58fadb15a05657f8a92213843ead3d2c50db4a17e25da4cf2fc1f9",
+      "a74dbf3b9dc03c10c9fc6f8b30c92f187e84fffd0842cb8861f7a44f37ac7be2",
     );
     expect(hash({ kinds: ["diagram", "video"], vocabulary: vocabulary.entries, corpus: [], videos: null, changing: "slug: b" })).toBe(
-      "50a9219fdcf551812f0e62c9f1a0ef53ed2312e3ff4a11a1703ddd4bf15a6266",
+      "6fd59a7f5e51cc0994a41847068eaee3486f665ae20b992b2406e6368787839b",
     );
     expect(buildCombinedSystemPrompt({ ...base, concept: null, tutor: null })).toBe(buildCombinedSystemPrompt(base));
     expect(combinedPrompt(["diagram", "video"])).not.toContain(CONCEPT_PARAGRAPH);

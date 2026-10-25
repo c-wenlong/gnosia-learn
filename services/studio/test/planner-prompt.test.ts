@@ -76,8 +76,8 @@ describe("the combined prompt", () => {
     const prompt = combinedPrompt(["diagram", "video"]);
     expect(prompt).toContain("conversation: answer it, and write no brief, whatever it asks for");
     expect(prompt).toContain("A TAGS block ahead of the person's words is their order");
-    expect(prompt).toContain("An `@` word the TAGS\n  block does not list");
-    expect(prompt).toContain("Write a brief of a kind the TAGS and WAITING blocks do not name.");
+    expect(prompt).toContain("`@` word the TAGS block does not list");
+    expect(prompt).toContain("Write a brief of a kind no TAGS, WAITING or TRUSTED block names.");
     // Each kind's brief block names its kind first.
     expect(prompt).toContain('{"kind": "diagram", "intent"');
     expect(prompt).toContain('{"kind": "video", "title"');
@@ -211,17 +211,27 @@ describe("reading a reply with several kinds", () => {
   });
 
   it("reads a suggestion, kept to the kinds the draft carries, and drops a malformed one quietly", () => {
-    expect(readSuggest(reply(fenced("suggest", { kinds: ["video", "diagram"] })), ["diagram", "video"])).toEqual(["diagram", "video"]);
-    expect(readSuggest(reply(fenced("suggest", { kinds: ["video"] })), ["diagram"])).toEqual([]);
-    expect(readSuggest(reply(fenced("suggest", { kinds: ["podcast"] })), ["diagram", "video"])).toEqual([]);
-    expect(readSuggest(reply(fenced("suggest", "{kinds")), ["diagram", "video"])).toEqual([]);
-    expect(readSuggest("no block", ["diagram", "video"])).toEqual([]);
+    expect(readSuggest(reply(fenced("suggest", { kinds: ["video", "diagram"] })), ["diagram", "video"])).toEqual({ kinds: ["diagram", "video"], line: null });
+    expect(readSuggest(reply(fenced("suggest", { kinds: ["video"] })), ["diagram"])).toEqual({ kinds: [], line: null });
+    expect(readSuggest(reply(fenced("suggest", { kinds: ["podcast"] })), ["diagram", "video"])).toEqual({ kinds: [], line: null });
+    expect(readSuggest(reply(fenced("suggest", "{kinds")), ["diagram", "video"])).toEqual({ kinds: [], line: null });
+    expect(readSuggest("no block", ["diagram", "video"])).toEqual({ kinds: [], line: null });
+  });
+
+  it("reads the pitch line the consent card shows (D106), one line and capped", () => {
+    expect(readSuggest(reply(fenced("suggest", { kinds: ["video"], line: "a 30-second animation of an insert" })), ["video"])).toEqual({
+      kinds: ["video"],
+      line: "a 30-second animation of an insert",
+    });
+    expect(readSuggest(reply(fenced("suggest", { kinds: ["video"], line: "two\nlines" })), ["video"])?.line).toBe("two lines");
+    expect(readSuggest(reply(fenced("suggest", { kinds: ["video"], line: "x".repeat(300) })), ["video"])?.line).toHaveLength(120);
+    expect(readSuggest(reply(fenced("suggest", { kinds: ["video"] })), ["video"])?.line).toBeNull();
   });
 
   it("reads an svg suggestion too: it is a tag the reply answers, not a brief kind (D105)", () => {
-    expect(readSuggest(reply(fenced("suggest", { kinds: ["svg", "video"] })), ["diagram", "video", "svg"])).toEqual(["video", "svg"]);
+    expect(readSuggest(reply(fenced("suggest", { kinds: ["svg", "video"] })), ["diagram", "video", "svg"])).toEqual({ kinds: ["video", "svg"], line: null });
     // On a draft whose prompt predates the kind, svg drops like any other.
-    expect(readSuggest(reply(fenced("suggest", { kinds: ["svg"] })), ["diagram"])).toEqual([]);
+    expect(readSuggest(reply(fenced("suggest", { kinds: ["svg"] })), ["diagram"])).toEqual({ kinds: [], line: null });
   });
 
   it("reads a hold on live cards only, with its reason on one line and capped", () => {

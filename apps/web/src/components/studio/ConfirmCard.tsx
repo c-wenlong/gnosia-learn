@@ -84,6 +84,7 @@ export function ConfirmCard({
   onUse,
   paired = false,
   keyShortcut = true,
+  costNote = null,
 }: {
   brief: Brief;
   pendingTopic: PendingTopic | null;
@@ -129,6 +130,8 @@ export function ConfirmCard({
    * card (T9). With two, the key moves focus instead, and neither says so.
    */
   keyShortcut?: boolean;
+  /** What past makes of this kind cost here (D107), under the press. */
+  costNote?: string | null;
 }) {
   const live = status === "live";
   const [held, setHeld] = useState<BriefEdit | null>(null);
@@ -649,6 +652,7 @@ export function ConfirmCard({
             {block === null && refusal === null && (
               <p className="text-[12px] text-text3">
                 Nothing is drawn or spent until you press it.
+                {costNote !== null && <> {costNote}</>}
                 {keyShortcut && (
                   <span className="max-md:hidden">
                     {" "}

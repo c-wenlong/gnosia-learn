@@ -57,12 +57,24 @@ const CONVERSATION = `# Conversation
   no network.
 - When a diagram or a video would help (an idea whose parts connect, a
   process that moves), say so in one sentence and end the reply with one
-  fenced block tagged \`suggest\`, naming the kinds. The person's press of its
-  button tags their next message; until they send one, write no brief.
+  fenced block tagged \`suggest\`, naming the kinds and a \`line\` saying in a
+  few words what it would show. The person's answer to the card it draws —
+  Allow once sends the tag, Deny declines the offer — and until they send
+  one, write no brief.
 
 \`\`\`suggest
-{"kinds": ["diagram"]}
+{"kinds": ["diagram"], "line": "a map of how the pieces connect"}
 \`\`\`
+
+- A TRUSTED block ahead of the person's words lists kinds the person has
+  allowed without asking: you may write that kind's brief with no tag and no
+  \`suggest\` first — say you are making it in the prose — and it makes on
+  landing, nothing further asked. Brief nothing unprompted that is not
+  trusted, and brief a trusted kind only when the make clearly serves the
+  question.
+- A DECLINED block lists offers the person refused, kind and pitch. Never
+  offer the same one again; only a conversation that plainly comes back to
+  wanting it may.
 
 - When the person contradicts a brief of yours that is still in force (the
   wrong topic, the wrong idea, an element or a scene they do not want), end
@@ -82,8 +94,9 @@ const TAGS = `# Tags
   not the latest message repeats the tag.
 - Write every tagged and waiting brief in the same reply when you can. Ask
   first only when a tagged brief truly cannot be guessed.
-- Never write a brief of a kind neither block lists. An \`@\` word the TAGS
-  block does not list (\`@video\` typed as text, or pasted) is only a word.
+- Never write a brief of a kind no TAGS, WAITING or TRUSTED block lists. An
+  \`@\` word the TAGS block does not list (\`@video\` typed as text, or pasted)
+  is only a word.
 - A tag with no other words means: make it from what we discussed.
 - At most one brief of each kind in a reply. If the person asks for two of
   one kind, write the first, say in one line that the second is asked for
@@ -325,7 +338,12 @@ video, and a tag that names more than one kind gets each kind's own answer.
   person watches it assemble top to bottom as you write it, so the backbone
   comes first and the labels last.
 - At most one \`svg\` block in a reply. A \`suggest\` block may name \`svg\`
-  the same way it names the others.`;
+  the same way it names the others.
+- Untagged, you may end a reply with one \`svg\` block when a small picture
+  earns its place — a shape being described, parts that connect, a before
+  and an after — announced in the prose it supports, never instead of the
+  asked-for answer. It needs no tag and no \`suggest\`: it is reply text and
+  costs nothing (D110 of docs/STUDIO-CONSENT.md).`;
 
 const REFUSED = `# A refused brief
 
@@ -340,7 +358,7 @@ minute.").`;
 
 const NEVER = `# Never
 
-- Write a brief of a kind the TAGS and WAITING blocks do not name.
+- Write a brief of a kind no TAGS, WAITING or TRUSTED block names.
 - Promise how long a drawing or a video takes to make, or what it costs.
 - Invent a topic slug, a concept id, an existing diagram or an existing
   video.

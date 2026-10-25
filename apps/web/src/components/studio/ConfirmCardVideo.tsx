@@ -77,6 +77,7 @@ export function ConfirmCardVideo({
   tools = [],
   onSwitchTool,
   charsPerSecond,
+  costNote = null,
 }: {
   brief: VideoBrief;
   pendingTopic: PendingTopic | null;
@@ -109,6 +110,8 @@ export function ConfirmCardVideo({
   onSwitchTool?: (tool: VideoToolName) => Promise<string | null>;
   /** Health's `video.narration.charsPerSecond`: the runner's speech rate, from gnosia-audio. Absent shows the length as unknown. */
   charsPerSecond?: number;
+  /** What past makes of this kind cost here (D107), under the press. */
+  costNote?: string | null;
 }) {
   const [using, setUsing] = useState(false);
   const [useError, setUseError] = useState<string | null>(null);
@@ -235,6 +238,7 @@ export function ConfirmCardVideo({
             {block === null && refusal === null && (
               <p className="text-[12px] text-text3">
                 Nothing is made or spent until you press it.
+                {costNote !== null && <> {costNote}</>}
                 {keyShortcut && (
                   <span className="max-md:hidden">
                     {" "}

@@ -880,3 +880,61 @@ describe("the event stream", () => {
   });
 });
 
+
+describe("the consent routes (D106–D109)", () => {
+  const suggest = (kinds: string[], line?: string) =>
+    `An offer.\n\n\`\`\`suggest\n${JSON.stringify(line === undefined ? { kinds } : { kinds, line })}\n\`\`\``;
+
+  it("make on a message launches the tagged kind's job without a draw press", async () => {
+    await fake.script([{ text: "Plain talk." }, { text: proposing(good) }]);
+    const { draftId } = (await (await post("/api/drafts", { idempotencyKey: "k" })).json()) as { draftId: string };
+    const first = await post(`/api/drafts/${draftId}/messages`, { text: "how does TCP back off?" });
+    expect(first.status).toBe(202);
+    await drafts.settled(draftId);
+    const allowed = await post(`/api/drafts/${draftId}/messages`, { text: "@diagram", mentions: [{ kind: "diagram", start: 0, end: 8 }], make: true });
+    expect(allowed.status).toBe(202);
+    await drafts.settled(draftId);
+    const read = (await (await fetch(`${base}/api/drafts/${draftId}`)).json()) as { slots: Record<string, { state: string; jobId?: string | null }> };
+    expect(read.slots.diagram?.state).toBe("drawing");
+    const jobId = read.slots.diagram?.jobId;
+    expect(typeof jobId).toBe("string");
+    expect(((await (await fetch(`${base}/api/jobs/${jobId}`)).json()) as { draftId: string }).draftId).toBe(draftId);
+    // The consent launch is idempotent by its consent key: the same reply
+    // cannot be paid for twice.
+    const jobs = (await (await fetch(`${base}/api/jobs`)).json()) as { jobs: unknown[] };
+    expect(jobs.jobs).toHaveLength(1);
+    // Parked on the agent, which never answers, so the teardown does not race the job's own writes.
+    await until(() => agentMock.startAgent.mock.calls.length > 0, "the job never reached its agent");
+  });
+
+  it("declined marks the reply and its offer, and PUT trust allows and revokes", async () => {
+    await fake.script([{ text: suggest(["diagram"], "the window shrinking") }]);
+    const { draftId } = (await (await post("/api/drafts", { idempotencyKey: "k" })).json()) as { draftId: string };
+    await post(`/api/drafts/${draftId}/messages`, { text: "how does TCP back off?" });
+    await drafts.settled(draftId);
+    const read = (await (await fetch(`${base}/api/drafts/${draftId}`)).json()) as { transcript: { role: string; seq: number; suggest?: string[]; pitch?: string | null; declined?: string[] }[] };
+    const reply = read.transcript.at(-1)!;
+    expect(reply).toMatchObject({ role: "planner", suggest: ["diagram"], pitch: "the window shrinking" });
+
+    const denied = await post(`/api/drafts/${draftId}/declined`, { replySeq: reply.seq, kinds: ["diagram"] });
+    expect(denied.status).toBe(200);
+    expect(await denied.json()).toMatchObject({ draftId, declined: ["diagram"] });
+    // Validation: a reply that offered none of it, and the missing fields.
+    expect((await post(`/api/drafts/${draftId}/declined`, { replySeq: reply.seq, kinds: ["video"] })).status).toBe(409);
+    expect((await post(`/api/drafts/${draftId}/declined`, { kinds: ["diagram"] })).status).toBe(400);
+    expect((await post(`/api/drafts/${draftId}/declined`, { replySeq: reply.seq })).status).toBe(400);
+    const marked = (await (await fetch(`${base}/api/drafts/${draftId}`)).json()) as { transcript: { declined?: string[] }[]; trust?: string[] };
+    expect(marked.transcript.at(-1)?.declined).toEqual(["diagram"]);
+
+    const put = (body: unknown) => fetch(`${base}/api/drafts/${draftId}/trust`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    expect((await put({ kind: "diagram", trusted: true })).status).toBe(200);
+    const trusted = (await (await fetch(`${base}/api/drafts/${draftId}`)).json()) as { trust?: string[] };
+    expect(trusted.trust).toEqual(["diagram"]);
+    expect((await put({ kind: "svg", trusted: true })).status).toBe(400);
+    expect((await put({ kind: "video", trusted: true })).status).toBe(409);
+    expect((await put({ kind: "diagram" })).status).toBe(400);
+    expect((await put({ kind: "diagram", trusted: false })).status).toBe(200);
+    const revoked = (await (await fetch(`${base}/api/drafts/${draftId}`)).json()) as { trust?: string[] };
+    expect(revoked.trust).toEqual([]);
+  });
+});

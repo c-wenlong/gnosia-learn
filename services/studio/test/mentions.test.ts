@@ -845,3 +845,152 @@ describe("a draft from before tags", () => {
     await expect(drafts.send(record.id, ...chips("x", "video"))).rejects.toMatchObject({ status: 409, detail: { reason: "kind-not-in-conversation" } });
   });
 });
+
+describe("the consent card (D106–D110)", () => {
+  it("a suggestion's pitch lands on the reply for its card", async () => {
+    await fake.script([{ text: `A video would help.\n\n${block("suggest", { kinds: ["video"], line: "how slow-start grows the window" })}` }]);
+    const { record } = await drafts.create({});
+    await send(record.id, "how does TCP back off?");
+    const view = await drafts.view(record.id);
+    expect(view.transcript.at(-1)).toMatchObject({ role: "planner", suggest: ["video"], pitch: "how slow-start grows the window" });
+  });
+
+  it("Allow once: a make-marked tag's brief starts drawing itself, keyed to its message", async () => {
+    await fake.script([{ text: "Sure." }, { text: `Here it is.\n\n${block("brief", { kind: "diagram", ...good })}` }]);
+    const { record } = await drafts.create({});
+    await send(record.id, "how does TCP back off?");
+    const { seq } = await drafts.send(record.id, "@diagram", [{ kind: "diagram", start: 0, end: 8 }], { make: true });
+    await drafts.settled(record.id);
+    expect(runner.enqueue).toHaveBeenCalledTimes(1);
+    expect(runner.enqueue.mock.calls[0]![0]).toMatchObject({ idempotencyKey: `draft:${record.id}:consent:${seq}:diagram` });
+    const view = await drafts.view(record.id);
+    expect(view.slots.diagram).toMatchObject({ state: "drawing", busy: { state: "queued" }, requestSeq: seq });
+  });
+
+  it("a make-marked send does not launch a kind its message did not tag", async () => {
+    await fake.script([{ text: "Sure." }, { text: `Both, unasked.\n\n${block("brief", { kind: "diagram", ...good })}\n\n${block("brief", { kind: "video", ...videoBrief })}` }]);
+    const { record } = await drafts.create({});
+    await send(record.id, "how does TCP back off?");
+    // The reply's untagged video brief is ignored (T24); only the tagged
+    // diagram's lands, and it alone launches.
+    await drafts.send(record.id, "@diagram", [{ kind: "diagram", start: 0, end: 8 }], { make: true });
+    await drafts.settled(record.id);
+    expect(runner.enqueue).toHaveBeenCalledTimes(1);
+    expect(videoRunner.enqueue).not.toHaveBeenCalled();
+    const view = await drafts.view(record.id);
+    expect(view.slots.video).toBeUndefined();
+  });
+
+  it("an unmarked tag's brief still waits for the press", async () => {
+    await fake.script([{ text: "Sure." }, { text: `Here it is.\n\n${block("brief", { kind: "diagram", ...good })}` }]);
+    const { record } = await drafts.create({});
+    await send(record.id, "how does TCP back off?");
+    await drafts.send(record.id, "@diagram", [{ kind: "diagram", start: 0, end: 8 }]);
+    await drafts.settled(record.id);
+    expect(runner.enqueue).not.toHaveBeenCalled();
+    const view = await drafts.view(record.id);
+    expect(view.slots.diagram).toMatchObject({ state: "briefed", live: true });
+  });
+
+  it("trust is kept on the draft, shown in the view, told to the planner, and revocable", async () => {
+    const { record } = await drafts.create({});
+    expect(await drafts.setTrust(record.id, "video", true)).toEqual({ trust: ["video"] });
+    let view = await drafts.view(record.id);
+    expect(view.trust).toEqual(["video"]);
+    // The next turn's prompt carries the TRUSTED block.
+    await fake.script([{ text: "Noted." }]);
+    await send(record.id, "go on");
+    expect(await prompt(0)).toContain("-----BEGIN TRUSTED-----\nvideo\n-----END TRUSTED-----");
+    expect(await drafts.setTrust(record.id, "video", false)).toEqual({ trust: [] });
+    view = await drafts.view(record.id);
+    expect(view.trust).toEqual([]);
+    await fake.script([{ text: "Again." }]);
+    await send(record.id, "once more");
+    expect(await prompt(1)).not.toContain("BEGIN TRUSTED");
+    // svg spends nothing, so it cannot be trusted; neither can a kind the
+    // draft cannot make, nor a missing flag.
+    await expect(drafts.setTrust(record.id, "svg", true)).rejects.toMatchObject({ status: 400, detail: { field: "kind" } });
+    await expect(drafts.setTrust(record.id, "video", undefined)).rejects.toMatchObject({ status: 400, detail: { field: "trusted" } });
+  });
+
+  it("a trusted kind's unprompted brief lands live and launches itself (D108)", async () => {
+    await fake.script([{ text: `While we are here.\n\n${block("brief", { kind: "video", ...videoBrief })}` }]);
+    const { record } = await drafts.create({});
+    await drafts.setTrust(record.id, "video", true);
+    await send(record.id, "tell me about tcp slow start");
+    expect(videoRunner.enqueue).toHaveBeenCalledTimes(1);
+    const view = await drafts.view(record.id);
+    expect(view.slots.video).toMatchObject({ state: "drawing", busy: { state: "queued" }, briefBy: "planner" });
+    expect(view.transcript.at(-1)!.briefs).toEqual([expect.objectContaining({ kind: "video" })]);
+  });
+
+  it("an untrusted kind's unprompted brief is still ignored", async () => {
+    await fake.script([{ text: `While we are here.\n\n${block("brief", { kind: "video", ...videoBrief })}` }]);
+    const { record } = await drafts.create({});
+    await send(record.id, "tell me about tcp slow start");
+    expect(videoRunner.enqueue).not.toHaveBeenCalled();
+    const view = await drafts.view(record.id);
+    expect(view.slots.video).toBeUndefined();
+    expect(view.transcript.at(-1)).toMatchObject({ briefsIgnored: ["video"] });
+  });
+
+  it("Deny marks the reply's kinds and the planner reads DECLINED next turn (D109)", async () => {
+    await fake.script([{ text: `A video would help.\n\n${block("suggest", { kinds: ["video", "diagram"], line: "the window opening and closing" })}` }, { text: "Fair enough." }]);
+    const { record } = await drafts.create({});
+    await send(record.id, "how does TCP back off?");
+    const view = await drafts.view(record.id);
+    const replySeq = view.transcript.at(-1)!.seq;
+    // Only kinds the reply actually suggested can be declined.
+    await expect(drafts.decline(record.id, { replySeq, kinds: ["svg"] })).rejects.toMatchObject({ status: 409, detail: { reason: "not-suggested" } });
+    await expect(drafts.decline(record.id, { replySeq: 99, kinds: ["video"] })).rejects.toMatchObject({ status: 409, detail: { reason: "not-suggested" } });
+    expect(await drafts.decline(record.id, { replySeq, kinds: ["video"] })).toEqual({ declined: ["video"] });
+    const marked = await drafts.view(record.id);
+    expect(marked.transcript.at(-1)).toMatchObject({ declined: ["video"] });
+    // The next prompt carries the refusal, kind and pitch.
+    await send(record.id, "what about retransmit timers?");
+    expect(await prompt(1)).toContain("-----BEGIN DECLINED-----\nvideo: the window opening and closing\n-----END DECLINED-----");
+    // A fresh read of the record still knows the refusal.
+    const onDisk = JSON.parse(await readFile(draftJsonPath(record.id), "utf8")) as { declined?: { kind: string; pitch: string | null }[] };
+    expect(onDisk.declined).toEqual([{ kind: "video", pitch: "the window opening and closing", at: expect.any(String) }]);
+    // Input validation.
+    await expect(drafts.decline(record.id, {})).rejects.toMatchObject({ status: 400, detail: { field: "replySeq" } });
+    await expect(drafts.decline(record.id, { replySeq, kinds: [] })).rejects.toMatchObject({ status: 400, detail: { field: "kinds" } });
+  });
+
+  it("estimates: a band over finished jobs' recorded costs, null under three (D107)", async () => {
+    const { record } = await drafts.create({});
+    let view = await drafts.view(record.id);
+    expect(view.estimates).toEqual({ diagram: null, video: null });
+    const finish = async (store: { create: (r: never) => Promise<{ id: string }>; update: (id: string, r: never) => Promise<unknown> }, kind: string, cost: number | null, i: number) => {
+      const job = await store.create({
+        id: `job-${kind[0]}-${i}`,
+        kind,
+        state: "done",
+        slug: "s",
+        topic: "t",
+        targetPath: "p",
+        draftId: record.id,
+        brief: {},
+        idempotencyKey: `k${i}`,
+        requestedAt: new Date().toISOString(),
+        gate: null,
+        error: null,
+      } as never);
+      await store.update(job.id, { finishedAt: new Date().toISOString(), costUsd: cost } as never);
+    };
+    // Two finished videos is not enough for a band.
+    await finish(videoStore, "video", 1.0, 1);
+    await finish(videoStore, "video", 2.0, 2);
+    view = await drafts.view(record.id);
+    expect(view.estimates?.video).toBeNull();
+    await finish(videoStore, "video", 1.5, 3);
+    // A queued job and a null cost do not count.
+    await videoStore.create({
+      id: "job-v-running", kind: "video", state: "queued", slug: "s", topic: "t", targetPath: "p", draftId: record.id, brief: {}, idempotencyKey: "kr", requestedAt: new Date().toISOString(), gate: null, error: null,
+    } as never);
+    view = await drafts.view(record.id);
+    expect(view.estimates?.video).toEqual({ low: 1.0, high: 2.0, n: 3 });
+    // Diagrams draw their band from the diagram store, independently.
+    expect(view.estimates?.diagram).toBeNull();
+  });
+});
