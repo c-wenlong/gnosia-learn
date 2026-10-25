@@ -18,20 +18,16 @@ export const HEALTH_READ_MS = 30_000;
 
 /**
  * Whether a health answer lets a tag do something: the runner can run its
- * planner (`ok`, which is false without the `claude` CLI), and a diagram or a
- * video can be made. Anything that is not an answer (the runner down, the
- * proxy refusing, a runner serving another owner) is no.
+ * planner (`ok`, which is false without the `claude` CLI). Anything that is
+ * not an answer (the runner down, the proxy refusing, a runner serving
+ * another owner) is no. A working planner is enough on its own since SVG
+ * needs no machine (D105); the other entries carry their own reasons then.
  *
- * A spent daily cap is still yes: the menu shows, with both entries disabled
+ * A spent daily cap is still yes: the menu shows, with the entries disabled
  * and the reason, since the cap frees itself within the day.
  */
 export function studioCanTag(health: unknown): boolean {
-  if (typeof health !== "object" || health === null) return false;
-  const raw = health as { ok?: unknown; diagramAgent?: unknown; video?: unknown };
-  if (raw.ok !== true) return false;
-  const diagram = !(typeof raw.diagramAgent === "object" && raw.diagramAgent !== null && (raw.diagramAgent as { ok?: unknown }).ok === false);
-  const video = typeof raw.video === "object" && raw.video !== null && (raw.video as { ok?: unknown }).ok === true;
-  return diagram || video;
+  return typeof health === "object" && health !== null && (health as { ok?: unknown }).ok === true;
 }
 
 /**

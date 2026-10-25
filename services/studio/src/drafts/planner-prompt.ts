@@ -28,6 +28,19 @@ export function isBriefKind(value: unknown): value is BriefKind {
   return typeof value === "string" && (BRIEF_KINDS as readonly string[]).includes(value);
 }
 
+/**
+ * The kinds a message can tag (D105): the brief kinds plus `svg`, the
+ * picture a reply draws itself as one fenced `svg` block. `svg` belongs in
+ * every list of kinds except where only a brief makes sense — slots,
+ * waiting, jobs, holds.
+ */
+export const TAG_KINDS = ["diagram", "video", "svg"] as const;
+export type TagKind = (typeof TAG_KINDS)[number];
+
+export function isTagKind(value: unknown): value is TagKind {
+  return typeof value === "string" && (TAG_KINDS as readonly string[]).includes(value);
+}
+
 const OPENING = `You are the planner in a studio that makes teaching diagrams and short
 explainer videos. Mostly you talk: you answer the person's questions and help
 them think an idea through. You write a brief, the plan a drawing or video
@@ -276,6 +289,44 @@ holding one JSON object whose first field is \`"kind": "video"\`:
 - No other fields. A change after a brief is answered with a whole new brief,
   never a patch.`;
 
+/**
+ * The SVG section (D105): an `svg` tag orders a picture the reply itself
+ * carries, one fenced `svg` block of markup the app draws as it streams in.
+ * Only a prompt whose draft carries the kind gets it, so
+ * `combinedPrompt(["diagram", "video"])` stays byte for byte the text
+ * STUDIO-MENTIONS.md quotes.
+ */
+const SVG = `# An SVG tag
+
+\`svg\` is the one tag that orders no brief: the reply itself is the picture.
+After the prose, end the reply with one fenced block tagged \`svg\` holding
+one complete inline SVG document. No card, no Draw, nothing to press. It is
+the fast way to show a small thing — the shape of an idea, one relation, a
+before and an after. What a viewer should watch happen still asks for a
+video, and a tag that names more than one kind gets each kind's own answer.
+
+\`\`\`svg
+<svg viewBox="0 0 640 360" role="img" aria-label="Two lines crossing">…</svg>
+\`\`\`
+
+- \`viewBox\` always, \`width\` and \`height\` never: the app sizes the picture
+  to the column.
+- Text, thin strokes and outlines in \`currentColor\`, so the picture reads
+  in either theme; fills in one or two mid-tone hues, never pure black or
+  white.
+- \`font-family="inherit"\` and \`font-size\` in px; \`text-anchor\` centres a
+  label. Words on the picture are few — a label is under forty characters,
+  as a diagram's is.
+- Self-contained and still: no \`<script>\`, \`<foreignObject>\`, \`<style>\`,
+  \`style\` attribute, \`<image>\` or \`href\` to anywhere. The renderer keeps
+  a fixed set of elements — shapes, paths, lines, text, gradients, markers —
+  and drops the rest.
+- Small and sure: a viewBox near 640×360 and a dozen elements or two. The
+  person watches it assemble top to bottom as you write it, so the backbone
+  comes first and the labels last.
+- At most one \`svg\` block in a reply. A \`suggest\` block may name \`svg\`
+  the same way it names the others.`;
+
 const REFUSED = `# A refused brief
 
 When a STUDIO message says a brief was refused, it names the kind, the field
@@ -329,7 +380,7 @@ ${CONCEPT_PARAGRAPH}`;
  * on a concept gets one more section, before the never-list (D65 of
  * docs/STUDIO-TUTOR-HANDOFF.md).
  */
-export function combinedPrompt(kinds: readonly BriefKind[], options: { concept?: boolean } = {}): string {
+export function combinedPrompt(kinds: readonly TagKind[], options: { concept?: boolean } = {}): string {
   return [
     OPENING,
     CONVERSATION,
@@ -338,6 +389,7 @@ export function combinedPrompt(kinds: readonly BriefKind[], options: { concept?:
     TOPICS,
     ...(kinds.includes("diagram") ? [DIAGRAM] : []),
     ...(kinds.includes("video") ? [VIDEO] : []),
+    ...(kinds.includes("svg") ? [SVG] : []),
     REFUSED,
     ...(options.concept === true ? [CONCEPT] : []),
     NEVER,
@@ -620,7 +672,7 @@ export function tutorBlock(turns: readonly TutorTurn[]): { body: string | null; 
 }
 
 export interface CombinedPromptInput {
-  kinds: readonly BriefKind[];
+  kinds: readonly TagKind[];
   vocabulary: readonly TopicEntry[];
   corpus: readonly CorpusEntry[];
   /** The VIDEOS block's entries; null when the list could not be read. Ignored without the video kind. */

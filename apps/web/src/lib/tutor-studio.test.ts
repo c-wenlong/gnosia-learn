@@ -24,9 +24,9 @@ describe("whether a health answer lets the tutor tag", () => {
     expect(studioCanTag({ diagramAgent: { ok: true }, video: { ok: true } })).toBe(false);
   });
 
-  it("says no when neither kind can be made", () => {
-    expect(studioCanTag({ ...good, diagramAgent: { ok: false, problem: "a quote in the path" }, video: { ok: false } })).toBe(false);
-    expect(studioCanTag({ ...good, diagramAgent: { ok: false }, video: undefined })).toBe(false);
+  it("says yes even when neither machine kind can be made: an SVG is the reply itself, needing no machine (D105)", () => {
+    expect(studioCanTag({ ...good, diagramAgent: { ok: false, problem: "a quote in the path" }, video: { ok: false } })).toBe(true);
+    expect(studioCanTag({ ...good, diagramAgent: { ok: false }, video: undefined })).toBe(true);
   });
 
   it("says yes when one kind can be made", () => {

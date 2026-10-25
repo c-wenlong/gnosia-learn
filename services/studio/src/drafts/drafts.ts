@@ -79,10 +79,13 @@ import {
   changingSummary,
   conceptBlock,
   isBriefKind,
+  isTagKind,
   lengthOf,
+  TAG_KINDS,
   tutorBlock,
   TUTOR_TURN_CAP,
   type BriefKind,
+  type TagKind,
   type TutorTurn,
   type VideoCorpusEntry,
 } from "./planner-prompt";
@@ -195,8 +198,8 @@ export interface DraftRecord {
   kind: BriefKind;
   /** A summary of the slots for the list and the pruner (D62), or `abandoned`. */
   state: DraftState;
-  /** The kinds this draft's planner prompt carries (D59). Absent on a draft from before, which is `["diagram"]`. */
-  plannerKinds?: BriefKind[];
+  /** The kinds this draft's planner prompt carries (D59, D105). Absent on a draft from before, which is `["diagram"]`. */
+  plannerKinds?: TagKind[];
   /**
    * True for a draft whose prompt is the combined, conversational one: an
    * untagged message is conversation. Absent on a draft from before, whose
@@ -338,7 +341,7 @@ export type DraftRole = "person" | "planner" | "studio";
 /** One entry of a draft's transcript, as the API reports it. */
 /** A mention as a message carries it: `text.slice(start, end)` reads `@<kind>`. */
 export interface Mention {
-  kind: BriefKind;
+  kind: TagKind;
   start: number;
   end: number;
 }
@@ -376,7 +379,7 @@ export interface TranscriptEntry {
   /** Kinds whose brief the reply carried and the runner dropped, since nothing tagged them (T24). */
   briefsIgnored?: string[];
   /** A reply's suggestion buttons (D58). */
-  suggest?: BriefKind[];
+  suggest?: TagKind[];
   /** A reply's hold on live cards (D60). */
   hold?: { kinds: BriefKind[]; reason: string };
   superseded?: boolean;
@@ -420,7 +423,7 @@ export interface DraftView {
   draftId: string;
   kind: BriefKind;
   state: DraftState;
-  plannerKinds: BriefKind[];
+  plannerKinds: TagKind[];
   conversational: boolean;
   sourceKind: BriefKind;
   source: string | null;
@@ -757,9 +760,9 @@ export class Drafts {
     video?.store.onStateChange((record) => follow(record, "video"));
   }
 
-  /** The kinds a draft made now carries (D59): every kind this build has. */
-  plannerKindsNow(): BriefKind[] {
-    return this.video !== undefined && videoKindBuilt() ? ["diagram", "video"] : ["diagram"];
+  /** The kinds a draft made now carries (D59, D105): every kind this build has. `svg` needs no machine. */
+  plannerKindsNow(): TagKind[] {
+    return this.video !== undefined && videoKindBuilt() ? [...TAG_KINDS] : ["diagram", "svg"];
   }
 
   /** A job of either kind, by id. */
@@ -1601,7 +1604,7 @@ export class Drafts {
     const kinds = plannerKindsOf(record);
     for (const mention of mentions) {
       if (!kinds.includes(mention.kind)) {
-        throw new JobRefused(409, `this conversation's planner cannot make a ${mention.kind}: start a new conversation to make one`, {
+        throw new JobRefused(409, `this conversation's planner cannot make ${mention.kind === "svg" ? "an" : "a"} ${mention.kind}: start a new conversation to make one`, {
           reason: "kind-not-in-conversation",
           kind: mention.kind,
         });
@@ -1653,7 +1656,8 @@ export class Drafts {
       // A tag orders a brief, and the order stands until a brief of it lands,
       // a newer tag moves it, the person stops waiting, or it is refused twice
       // (D57). A draft from before tags reads every message as tagged Diagram.
-      const asked: BriefKind[] = current.conversational === true ? tags : ["diagram"];
+      // `svg` orders no brief: the reply itself is the picture (D105).
+      const asked: BriefKind[] = current.conversational === true ? tags.filter(isBriefKind) : ["diagram"];
       let slots = current.slots ?? {};
       for (const kind of asked) {
         const slot = slots[kind] ?? emptySlot();
@@ -1730,21 +1734,26 @@ export class Drafts {
    * brief of a kind the message tagged or that is still waiting, with one
    * shared retry for the refused ones.
    */
-  private async converse(id: string, turn: number, text: string, tags: BriefKind[]): Promise<void> {
+  private async converse(id: string, turn: number, text: string, tags: TagKind[]): Promise<void> {
     await this.tellVocabularyChanges(id);
     const record = this.require(id);
     const conversational = record.conversational === true;
     const kinds = plannerKindsOf(record);
-    const tagged: BriefKind[] = conversational ? tags : ["diagram"];
+    // `tagged` is every tag the message carried, for the TAGS block the
+    // planner reads; only the brief kinds ever open a slot, wait or judge
+    // (D105: `svg` is answered by the reply itself).
+    const briefKinds = kinds.filter(isBriefKind);
+    const tagged: TagKind[] = conversational ? tags : ["diagram"];
+    const taggedBriefs = tagged.filter(isBriefKind);
     const waiting = conversational
-      ? kinds
-          .filter((kind) => !tagged.includes(kind) && slotOf(record, kind).waiting !== null)
+      ? briefKinds
+          .filter((kind) => !taggedBriefs.includes(kind) && slotOf(record, kind).waiting !== null)
           .sort((a, b) => slotOf(record, a).waiting!.requestSeq - slotOf(record, b).waiting!.requestSeq)
       : [];
-    const edits = kinds.map((kind) => slotOf(record, kind).pendingEdit?.text ?? null).filter((note): note is string => note !== null);
+    const edits = briefKinds.map((kind) => slotOf(record, kind).pendingEdit?.text ?? null).filter((note): note is string => note !== null);
     // V11: the video brief in force, weighed for abbreviations as it stands
     // now, so a brief replaced since it was proposed is never described.
-    const abbreviations = kinds.includes("video") ? abbreviationCheck(slotOf(record, "video")) : null;
+    const abbreviations = briefKinds.includes("video") ? abbreviationCheck(slotOf(record, "video")) : null;
     const notes = [...record.undelivered, ...edits, ...(abbreviations?.note == null ? [] : [abbreviations.note])];
     const blocks = [
       ...(waiting.length > 0 ? [fence("WAITING", waiting.join("\n"))] : []),
@@ -1753,7 +1762,7 @@ export class Drafts {
     const prompt = [...notes.map(studioMessage), ...blocks, text].join("\n\n");
     const delivered = {
       undelivered: [...record.undelivered],
-      edits: Object.fromEntries(kinds.map((kind) => [kind, slotOf(record, kind).pendingEdit?.text ?? null])) as Partial<Record<BriefKind, string | null>>,
+      edits: Object.fromEntries(briefKinds.map((kind) => [kind, slotOf(record, kind).pendingEdit?.text ?? null])) as Partial<Record<BriefKind, string | null>>,
       abbreviations: abbreviations?.told ?? null,
     };
     const abbreviationNote = abbreviations?.note ?? null;
@@ -1773,10 +1782,10 @@ export class Drafts {
     const toldMoved =
       abbreviations !== null && JSON.stringify(abbreviations.told) !== JSON.stringify(slotOf(record, "video").abbreviationsTold ?? []);
     if (notes.length > 0 || toldMoved) await this.write(id, () => this.clearDelivered(id, delivered));
-    const asked = kinds.filter((kind) => tagged.includes(kind) || waiting.includes(kind));
+    const asked = briefKinds.filter((kind) => taggedBriefs.includes(kind) || waiting.includes(kind));
     const judged = await this.judgeReply(first.text, asked, conversational, record.concept);
     const refused = await this.write(id, () =>
-      this.settleReply(id, { replySeq: first.seq, messageSeq: turn, tagged, judged, hold: first.hold, retry: false }),
+      this.settleReply(id, { replySeq: first.seq, messageSeq: turn, tagged: taggedBriefs, judged, hold: first.hold, retry: false }),
     );
     if (refused.length === 0) return;
 
@@ -1835,7 +1844,7 @@ export class Drafts {
       const stillRefused = await this.settleReply(id, {
         replySeq: second.seq,
         messageSeq: turn,
-        tagged: tagged.filter((kind) => toRetry.some((verdict) => verdict.kind === kind)),
+        tagged: taggedBriefs.filter((kind) => toRetry.some((verdict) => verdict.kind === kind)),
         judged: again,
         hold: null,
         retry: true,
@@ -2204,7 +2213,7 @@ export class Drafts {
       const current = this.require(id);
       const conversational = current.conversational === true;
       const kinds = plannerKindsOf(current);
-      const live = kinds.filter((kind) => {
+      const live = kinds.filter(isBriefKind).filter((kind) => {
         const slot = slotOf(current, kind);
         return slot.brief !== null && (slot.state === "briefed" || slot.state === "drawing");
       });
@@ -3409,7 +3418,7 @@ export class Drafts {
 /* -------------------------------------------------------------------------- */
 
 /** The kinds a draft's planner prompt carries: `["diagram"]` for a draft from before D59. */
-export function plannerKindsOf(record: Pick<DraftRecord, "plannerKinds">): BriefKind[] {
+export function plannerKindsOf(record: Pick<DraftRecord, "plannerKinds">): TagKind[] {
   return record.plannerKinds ?? ["diagram"];
 }
 
@@ -3496,11 +3505,11 @@ export function parseMentions(text: string, raw: unknown): Mention[] {
     throw new JobRefused(400, `"mentions" ${why}`, { field: "mentions" });
   };
   if (!Array.isArray(raw)) return refuse("is a list of { kind, start, end }");
-  if (raw.length > BRIEF_KINDS.length) refuse(`holds at most one mention of each kind`);
+  if (raw.length > TAG_KINDS.length) refuse(`holds at most one mention of each kind`);
   const mentions = raw.map((entry, index): Mention => {
     const item = typeof entry === "object" && entry !== null ? (entry as Record<string, unknown>) : refuse(`[${index}] is not an object`);
     const kind = item.kind;
-    if (!isBriefKind(kind)) return refuse(`[${index}].kind is not a kind this studio makes (${BRIEF_KINDS.join(", ")})`);
+    if (!isTagKind(kind)) return refuse(`[${index}].kind is not a kind this studio makes (${TAG_KINDS.join(", ")})`);
     const start = item.start;
     const end = item.end;
     if (typeof start !== "number" || typeof end !== "number" || !Number.isInteger(start) || !Number.isInteger(end)) {
@@ -4321,7 +4330,7 @@ function entryOf(event: TranscriptEvent): TranscriptEntry | null {
         text,
         at: event.at,
         ...(event.interrupted === true ? { interrupted: true } : {}),
-        ...(Array.isArray(event.suggest) && event.suggest.length > 0 ? { suggest: event.suggest as BriefKind[] } : {}),
+        ...(Array.isArray(event.suggest) && event.suggest.length > 0 ? { suggest: event.suggest as TagKind[] } : {}),
         ...(typeof event.hold === "object" && event.hold !== null ? { hold: event.hold as { kinds: BriefKind[]; reason: string } } : {}),
         costUsd: typeof event.costUsd === "number" ? event.costUsd : null,
         costSource: (event.costSource as CostSource | null | undefined) ?? null,

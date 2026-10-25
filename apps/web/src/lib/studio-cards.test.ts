@@ -377,7 +377,14 @@ describe("the menu's entries", () => {
     expect(options.map((option) => [option.name, option.disabledReason])).toEqual([
       ["Diagram", null],
       ["Video", null],
+      // A draft from before the kind gets the new-conversation reason (T4, D105).
+      ["SVG", "Start a new conversation to make an SVG"],
     ]);
+  });
+
+  it("offers SVG wherever the draft carries it: it needs no machine (D105)", () => {
+    expect(kindUnavailable("svg", { plannerKinds: ["diagram", "video", "svg"] }, { ok: false, reason: "down" })).toBeNull();
+    expect(kindUnavailable("svg", {}, null)).toBe("Start a new conversation to make an SVG");
   });
 });
 

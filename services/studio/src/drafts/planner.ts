@@ -8,7 +8,7 @@ import { BriefError, validateBrief, type ValidBrief, type Vocabulary } from "../
 import type { InspectReport } from "../canvas/canvas";
 import type { TopicProposal } from "../data/catalog";
 import { CLAUDE_BIN, KILL_GRACE_MS, PLANNER_IDLE_MS, PLANNER_TURN_MS, type AgentAuth } from "../config";
-import { isBriefKind, type BriefKind } from "./planner-prompt";
+import { isBriefKind, TAG_KINDS, type BriefKind, type TagKind } from "./planner-prompt";
 import { signalGroup } from "../proc";
 import { validateVideoBrief, type ValidVideoBrief } from "../video/brief";
 
@@ -920,7 +920,7 @@ export function briefBlocks(text: string): BriefBlock[] {
  * nothing allowed, is dropped quietly: a malformed offer is not worth a paid
  * retry. The last block wins.
  */
-export function readSuggest(text: string, allowed: readonly BriefKind[]): BriefKind[] {
+export function readSuggest(text: string, allowed: readonly TagKind[]): TagKind[] {
   const body = fencedBlocks(text, "suggest").at(-1);
   if (body === undefined) return [];
   let parsed: Record<string, unknown> | null = null;
@@ -930,7 +930,7 @@ export function readSuggest(text: string, allowed: readonly BriefKind[]): BriefK
     return [];
   }
   const kinds = Array.isArray(parsed?.kinds) ? parsed.kinds : [];
-  return (["diagram", "video"] as const).filter((kind) => kinds.includes(kind) && allowed.includes(kind));
+  return TAG_KINDS.filter((kind) => kinds.includes(kind) && allowed.includes(kind));
 }
 
 /** The longest hold reason kept, in characters: "a reason of a few words". */

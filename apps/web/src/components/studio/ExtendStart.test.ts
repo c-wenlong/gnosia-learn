@@ -170,11 +170,13 @@ const VIDEO_OF_IT: Value = { text: "A @video of the close", mentions: [{ kind: "
 const DIAGRAM_OF_IT: Value = { text: "then a @diagram of it", mentions: [{ kind: "diagram", start: 7, end: 15 }] };
 
 describe("the composer", () => {
-  it("is the conversation's: both tags in its menu, Video following the doctor, focused when it arrives", async () => {
+  it("is the conversation's: all three tags in its menu, Video following the doctor, focused when it arrives", async () => {
     await mount({ video: { ok: false, reason: "no ffmpeg" } });
-    expect(mocks.composer!.mentions.map((option) => option.id)).toEqual(["diagram", "video"]);
+    expect(mocks.composer!.mentions.map((option) => option.id)).toEqual(["diagram", "video", "svg"]);
     expect(mocks.composer!.mentions[0]!.disabledReason).toBeNull();
     expect(mocks.composer!.mentions[1]!.disabledReason).toBe("Videos are unavailable: no ffmpeg");
+    // An SVG needs no machine: nothing disables it here (D105).
+    expect(mocks.composer!.mentions[2]!.disabledReason).toBeNull();
     expect(mocks.focus).toHaveBeenCalled();
   });
 

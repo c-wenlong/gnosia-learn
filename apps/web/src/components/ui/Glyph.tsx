@@ -29,6 +29,8 @@ const PATHS = {
   done: "M10 17a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM7 10.2l2 2 4-4.4",
   // A screen with a play mark.
   video: "M3.5 5h13v10h-13zM8.5 7.8v4.4l3.6-2.2z",
+  // A picture in a frame: the inline SVG a reply draws (D105).
+  svg: "M4 4.5h12v11H4zM7.2 9.6a1.4 1.4 0 1 0 0-2.8 1.4 1.4 0 0 0 0 2.8zM4 14l3-3 2.6 2.6 3-3.4 3.4 3.3",
   // Three joined nodes.
   diagram: "M5 6.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM15 11.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM5 16.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM6.3 5.8l7.4 3.4M6.3 14.2l7.4-3.4",
   // A page with lines.

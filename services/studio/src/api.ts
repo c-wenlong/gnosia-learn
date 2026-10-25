@@ -1502,7 +1502,7 @@ async function draftRoutes(
           ? record.concept != null
             ? `a conversation about the concept ${record.concept.slug}`
             : record.source === null
-              ? "a new conversation: ask about an idea, or tag @diagram or @video to make one"
+              ? "a new conversation: ask about an idea, or tag @diagram, @video or @svg to make one"
               : record.sourceKind === "video"
                 ? `a conversation about changing the video ${record.source}`
                 : `a conversation about extending ${record.source}`

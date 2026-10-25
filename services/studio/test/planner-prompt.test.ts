@@ -92,6 +92,20 @@ describe("the combined prompt", () => {
     expect(diagramOnly).not.toContain(STORYBOARD_RULES);
   });
 
+  it("adds the SVG section only to a draft that carries the kind (D105)", () => {
+    const without = combinedPrompt(["diagram", "video"]);
+    expect(without).not.toContain("# An SVG tag");
+    const withSvg = combinedPrompt(["diagram", "video", "svg"]);
+    expect(withSvg).toContain("# An SVG tag");
+    // It is its own section between the video's and the refusal rules, and
+    // the reply itself is the picture: no brief is ordered for it.
+    expect(withSvg.indexOf("# An SVG tag")).toBeGreaterThan(withSvg.indexOf("# A video brief"));
+    expect(withSvg.indexOf("# An SVG tag")).toBeLessThan(withSvg.indexOf("# A refused brief"));
+    expect(withSvg).toContain("the reply itself is the picture");
+    expect(withSvg).toContain("```svg\n<svg viewBox=");
+    expect(withSvg).toContain("the backbone\n  comes first and the labels last");
+  });
+
   it("is followed by VOCABULARY, CORPUS, VIDEOS, VOICES and TOOLS, and CHANGING on a change draft", () => {
     const vocabulary = testVocabulary().entries;
     const full = buildCombinedSystemPrompt({
@@ -202,6 +216,12 @@ describe("reading a reply with several kinds", () => {
     expect(readSuggest(reply(fenced("suggest", { kinds: ["podcast"] })), ["diagram", "video"])).toEqual([]);
     expect(readSuggest(reply(fenced("suggest", "{kinds")), ["diagram", "video"])).toEqual([]);
     expect(readSuggest("no block", ["diagram", "video"])).toEqual([]);
+  });
+
+  it("reads an svg suggestion too: it is a tag the reply answers, not a brief kind (D105)", () => {
+    expect(readSuggest(reply(fenced("suggest", { kinds: ["svg", "video"] })), ["diagram", "video", "svg"])).toEqual(["video", "svg"]);
+    // On a draft whose prompt predates the kind, svg drops like any other.
+    expect(readSuggest(reply(fenced("suggest", { kinds: ["svg"] })), ["diagram"])).toEqual([]);
   });
 
   it("reads a hold on live cards only, with its reason on one line and capped", () => {

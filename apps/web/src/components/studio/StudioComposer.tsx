@@ -9,7 +9,7 @@ import { cx } from "@/components/ui/classes";
 import { COMPOSER_BOX_MIN_ROWS, COMPOSER_FRAME, composerBoxFieldPx } from "@/components/ui/composer-keys";
 import type { MentionComposerProps } from "@/components/ui/MentionComposer";
 import { carryMentions, fallbackTagLine, mapOffset } from "@/components/ui/mention-text";
-import type { DraftKind } from "@/lib/studio-drafts";
+import type { TagKind } from "@/lib/studio-drafts";
 
 /**
  * The studio's composer, loaded only when a conversation opens: it carries
@@ -24,7 +24,7 @@ import type { DraftKind } from "@/lib/studio-drafts";
 export const MentionComposer = dynamic(
   () =>
     import("@/components/ui/MentionComposer")
-      .then((module) => module.MentionComposer as unknown as (props: MentionComposerProps<DraftKind>) => ReactNode)
+      .then((module) => module.MentionComposer as unknown as (props: MentionComposerProps<TagKind>) => ReactNode)
       // A chunk that will not load (a rebuild while the tab was open, the
       // network gone) costs the tags, never the page: the plain composer
       // stands in, and words still send.
@@ -38,7 +38,7 @@ export const MentionComposer = dynamic(
       </div>
     ),
   },
-) as (props: MentionComposerProps<DraftKind>) => ReactNode;
+) as (props: MentionComposerProps<TagKind>) => ReactNode;
 
 /**
  * The same composer in the box layout, for the studio home (D88 of
@@ -50,7 +50,7 @@ export const MentionComposer = dynamic(
 const LoadedBox = dynamic(
   () =>
     import("@/components/ui/MentionComposer")
-      .then((module) => module.MentionComposer as unknown as (props: MentionComposerProps<DraftKind>) => ReactNode)
+      .then((module) => module.MentionComposer as unknown as (props: MentionComposerProps<TagKind>) => ReactNode)
       .catch(() => PlainFallback),
   {
     ssr: false,
@@ -64,9 +64,9 @@ const LoadedBox = dynamic(
       </div>
     ),
   },
-) as (props: MentionComposerProps<DraftKind>) => ReactNode;
+) as (props: MentionComposerProps<TagKind>) => ReactNode;
 
-export function MentionComposerBox(props: Omit<MentionComposerProps<DraftKind>, "layout">) {
+export function MentionComposerBox(props: Omit<MentionComposerProps<TagKind>, "layout">) {
   return <LoadedBox {...props} layout="box" />;
 }
 
@@ -81,7 +81,7 @@ export function MentionComposerBox(props: Omit<MentionComposerProps<DraftKind>, 
  * toolbar, whose toggles change the value rather than the editor and so still
  * work here.
  */
-function PlainFallback(props: MentionComposerProps<DraftKind>) {
+function PlainFallback(props: MentionComposerProps<TagKind>) {
   const field = useRef<HTMLTextAreaElement | null>(null);
   // A caret to put back once the textarea holds `text` (a toggle's edit).
   const pendingCaret = useRef<{ text: string; start: number; end: number } | null>(null);

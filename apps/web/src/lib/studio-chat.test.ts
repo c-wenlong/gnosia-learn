@@ -93,6 +93,16 @@ describe("splitReply", () => {
     expect(splitReply(text).prose).toBe(text);
   });
 
+  it("keeps an svg block in the prose: it is the picture, not machine text (D105)", () => {
+    const text = 'Here.\n```svg\n<svg viewBox="0 0 1 1"><rect width="1" height="1"/></svg>\n```\n';
+    expect(splitReply(text)).toEqual({ prose: text.trim(), hadBrief: false, checking: false });
+  });
+
+  it("keeps an unclosed svg block while streaming, so the partial picture draws", () => {
+    const text = 'Here.\n```svg\n<svg viewBox="0 0 1 1"><rect width="1"';
+    expect(splitReply(text, true)).toMatchObject({ prose: text, checking: false });
+  });
+
   it("cuts an unclosed brief while streaming and says it is checking", () => {
     expect(splitReply('Summary.\n```brief\n{"intent": "Sh', true)).toEqual({
       prose: "Summary.",

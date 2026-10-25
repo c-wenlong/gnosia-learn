@@ -5,7 +5,7 @@ import { useState } from "react";
 
 import { usePanelHost } from "@/components/studio/panel-host";
 import type { MentionValue } from "@/components/ui/mention-text";
-import { createDraft, idempotencyKey, type DraftKind } from "@/lib/studio-drafts";
+import { createDraft, idempotencyKey, type TagKind } from "@/lib/studio-drafts";
 import { leaveOpener, sessionStore } from "@/lib/studio-extend";
 import { panelHref } from "@/lib/studio-view";
 
@@ -30,7 +30,7 @@ import { panelHref } from "@/lib/studio-view";
  * typed.
  */
 export function useStartDraft(path: string): {
-  start: (first?: MentionValue<DraftKind>, model?: string) => Promise<boolean>;
+  start: (first?: MentionValue<TagKind>, model?: string) => Promise<boolean>;
   busy: boolean;
   error: string | null;
 } {
@@ -39,7 +39,7 @@ export function useStartDraft(path: string): {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function start(first?: MentionValue<DraftKind>, model?: string): Promise<boolean> {
+  async function start(first?: MentionValue<TagKind>, model?: string): Promise<boolean> {
     if (busy) return false;
     setBusy(true);
     setError(null);

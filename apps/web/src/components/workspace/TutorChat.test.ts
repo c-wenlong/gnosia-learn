@@ -236,11 +236,17 @@ describe("with the studio on", () => {
     expect(mocks.imported).toBe(0);
   });
 
-  it("keeps the plain field when neither kind can be made", async () => {
-    health = { ...GOOD, diagramAgent: { ok: false, problem: "x" }, video: { ok: false } };
+  it("keeps the plain field when the planner cannot run, and mounts it when only the machines are down: an SVG needs no machine (D105)", async () => {
+    health = { ...GOOD, ok: false };
     await mount({ studio: true });
     expect(mocks.field).toBeNull();
     expect(mocks.imported).toBe(0);
+    // Both machine kinds down, planner up: the @ composer still mounts.
+    health = { ...GOOD, diagramAgent: { ok: false, problem: "x" }, video: { ok: false } };
+    const host = await mount({ studio: true });
+    await settle();
+    expect(mocks.field).not.toBeNull();
+    expect(host.querySelector("textarea")).toBeNull();
   });
 
   it("swaps the @ composer in after a good read while the field is empty and unfocused, without taking focus", async () => {

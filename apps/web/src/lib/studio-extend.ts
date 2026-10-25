@@ -1,5 +1,5 @@
 import { validMentions, valueOf, type MentionValue } from "@/components/ui/mention-text";
-import { isDraftKind, runnerDown, type DraftKind, type DraftMention, type Refusal, type VideoAvailability } from "@/lib/studio-drafts";
+import { isTagKind, runnerDown, type DraftKind, type DraftMention, type Refusal, type TagKind, type VideoAvailability } from "@/lib/studio-drafts";
 
 /**
  * Extend from a tile (docs/STUDIO-CHAT-FIRST.md, phase 2): the words, the
@@ -27,7 +27,7 @@ import { isDraftKind, runnerDown, type DraftKind, type DraftMention, type Refusa
  * through press, which never sends one (the person edits the prefill, or
  * writes their own, before anything is paid for).
  */
-export function firstTurn(queued: MentionValue<DraftKind> | null, talk: boolean): MentionValue<DraftKind> | null {
+export function firstTurn(queued: MentionValue<TagKind> | null, talk: boolean): MentionValue<TagKind> | null {
   return queued ?? (talk ? null : { text: EXTEND_OPENER, mentions: [] });
 }
 
@@ -286,7 +286,7 @@ export interface ExtendOpener {
    * (STUDIO-MENTIONS.md, 2c). Kinds only, since they sit ahead of the words.
    * Absent is none.
    */
-  mentions?: DraftKind[];
+  mentions?: TagKind[];
 }
 
 /**
@@ -395,7 +395,7 @@ export function readOpener(storage: Storage | null, draftId: string): ExtendOpen
   const send = typeof parsed.send === "string" && parsed.send.trim() !== "" ? parsed.send : null;
   const compose = typeof parsed.compose === "string" ? parsed.compose : "";
   const source = typeof parsed.source === "string" && parsed.source !== "" ? parsed.source : null;
-  const mentions = Array.isArray(parsed.mentions) ? [...new Set(parsed.mentions.filter(isDraftKind))] : [];
+  const mentions = Array.isArray(parsed.mentions) ? [...new Set(parsed.mentions.filter(isTagKind))] : [];
   return {
     send,
     sendMentions: send === null ? [] : chipsIn(send, parsed.sendMentions),
@@ -416,7 +416,7 @@ function chipsIn(text: string, raw: unknown): DraftMention[] {
   if (!Array.isArray(raw)) return [];
   const known = raw.filter(
     (mention): mention is DraftMention =>
-      typeof mention === "object" && mention !== null && isDraftKind((mention as { kind?: unknown }).kind),
+      typeof mention === "object" && mention !== null && isTagKind((mention as { kind?: unknown }).kind),
   );
   return validMentions(text, known);
 }

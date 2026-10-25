@@ -147,7 +147,7 @@ async function draft(): Promise<string> {
   const created = await post("/api/drafts", { idempotencyKey: `k-${Math.random()}` });
   expect(created.status).toBe(201);
   const body = (await created.json()) as { draftId: string; plannerKinds: string[]; sourceKind: string };
-  expect(body).toMatchObject({ plannerKinds: ["diagram", "video"], sourceKind: "diagram" });
+  expect(body).toMatchObject({ plannerKinds: ["diagram", "video", "svg"], sourceKind: "diagram" });
   return body.draftId;
 }
 
@@ -170,7 +170,7 @@ describe("messages with mentions", () => {
     await drafts.settled(id);
     const view = await get(`/api/drafts/${id}`);
     expect(view).toMatchObject({
-      plannerKinds: ["diagram", "video"],
+      plannerKinds: ["diagram", "video", "svg"],
       conversational: true,
       sourceKind: "diagram",
       kind: "video",

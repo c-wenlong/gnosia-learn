@@ -104,6 +104,12 @@ is video phase 2 work.
 | --- | --- | --- | --- | --- |
 | Diagram | `diagram`, three joined nodes | Diagram | Shapes and arrows that show how it fits together | `draw`, `drawing` |
 | Video | `video`, a screen with a play mark | Video | A narrated animation, one to ten minutes | `animation`, `explainer` |
+| SVG | `svg`, a framed picture with a sun and a slope | SVG | A quick picture drawn right into the reply | `image`, `picture`, `sketch`, `draw` |
+
+`svg` is the odd entry out (D105): it orders no brief, no card and no job —
+the reply itself is the picture. It is never disabled by a doctor or a cap of
+its own, since nothing but the planner's reply makes it, though a draft whose
+prompt predates the kind still gets "Start a new conversation to make an SVG".
 
 Names are the kinds' own words, the ones the plus card, the grid and the
 confirm cards already use, so a chip reads naturally in a sentence ("a Video
@@ -358,7 +364,9 @@ is not a hint: a tagged message the planner can answer with a brief, it answers
 with one in the same reply, and a question comes first only when a tagged
 brief truly cannot be guessed. The stop rules of both prompts still hold for a
 tagged request (at most three questions in a row), counted across the reply,
-not per kind.
+not per kind. (`svg` is the exception that proves the wording (D105): its tag
+orders the picture inside the reply itself, and it never waits, never holds a
+slot and never judges a brief.)
 
 **Several tags, several briefs.** "Make a @video and a @diagram of how
 attention weights are computed" gets one reply with a summary and a brief block
@@ -1317,6 +1325,40 @@ three for tags first.
 **Rejected:** building it with the tags: it needs its own answers (below)
 about size, scoping and what the drawing and video agents receive, and the tags
 are useful without it.
+
+### D105. An `svg` tag orders a picture the reply itself draws
+
+**Verdict (the owner's request, 2026-10-25, issue #510):** a third kind, `svg`,
+joins the menu. A message tagged `@svg` asks the planner to end its reply with
+one fenced `svg` block holding one complete inline SVG document, and the web
+renders the block as a picture rather than as code — while the reply is still
+streaming, the elements whose markup has finished draw, top to bottom, as each
+arrives. No brief, no slot, no card, no job: the reply is the picture. `svg`
+is a `TagKind` (the menu's kinds: `diagram`, `video`, `svg`), never a
+`BriefKind`, so nothing downstream of a brief — waiting, judging, `hold`, Draw,
+a job — ever sees it; the `suggest` block may name it like the others, and a
+message may tag it beside the brief kinds.
+
+**Why:** SVG is the compressed way to show a small thing — the shape of an
+idea, one relation, a before and after — in the seconds a diagram brief, a card
+and a Draw would take many times over. The planner already writes text the
+panel renders as markdown while it streams, so a fenced block needs no new
+plumbing to appear progressively: `splitReply` never strips it (it is not a
+machine block), the note parser reads an unclosed fence to the end of the
+reply, and a tolerant compiler (`apps/web/src/lib/svg-block.ts`) draws whatever
+has completed and drops the dangling tail. The prompt's rules are the honest
+contract (`viewBox` always, `width`/`height` never, `currentColor` for strokes
+and text so both themes read it, few short labels, backbone first and labels
+last), and the renderer's allowlist is the hard one: a fixed set of elements
+and attributes, no script, no event or `style` attribute, no `<image>` or
+`<foreignObject>`, `href` only to a `#` fragment inside the same picture.
+
+**Rejected:** a brief kind with its own card and Draw press — a job is the
+expensive machinery a quick picture exists to avoid; embedding the markup in a
+`brief` block's field, which would put it through brief validation it has no
+schema for; `dangerouslySetInnerHTML` on the raw markup, which the allowlist
+exists to refuse; a separate rendering protocol (JSON shape ops), which no
+model writes as fluently as SVG.
 
 ## Later: "Add from library"
 
