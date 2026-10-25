@@ -246,13 +246,16 @@ export function restoreCardCheck(value: unknown): CardCheck | null {
  * The block a card check was read from, written back (§5 of the proposal):
  * the asking turn goes back to the tutor with it, so the tutor can see the
  * answer it committed to and grade against it. Fields in the order the
- * prompt asks for, `why` before `answer`.
+ * prompts ask for, `why` before `answer`, and `concept` after `kind` when the
+ * check names one: a topic tutor checks several concepts, and each earlier
+ * check keeps the one it tested.
  */
 export function checkBlockText(check: CardCheck): string {
+  const named = check.concept ? { concept: check.concept } : {};
   const data =
     check.kind === "choice"
-      ? { kind: check.kind, question: check.question, options: check.options, why: check.why, answer: check.answer }
-      : { kind: check.kind, question: check.question, answer: check.answer };
+      ? { kind: check.kind, ...named, question: check.question, options: check.options, why: check.why, answer: check.answer }
+      : { kind: check.kind, ...named, question: check.question, answer: check.answer };
   return `\`\`\`check\n${JSON.stringify(data)}\n\`\`\``;
 }
 

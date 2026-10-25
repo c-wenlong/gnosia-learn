@@ -318,6 +318,26 @@ describe("POST /api/agent/chat with conceptSlug", () => {
     const foreign = await call(ask);
     expect(foreign.json.check).toBeNull();
     expect(foreign.json.message).toEqual({ role: "assistant", content: "One." });
+
+    // A check block is a card on the topic page too (structured checks, phase 3),
+    // kept only for a concept the topic declares, as the marker is.
+    const sentRule = (completeWithFallback.mock.calls.at(-1)?.[0] as { content: string }[])[0].content;
+    expect(sentRule).toContain('"kind": "choice", "concept": "<concept id>"');
+    const card = {
+      kind: "choice",
+      concept: "softmax",
+      question: "Why exp?",
+      options: ["Positive weights", "Sorted scores", "Rounded scores"],
+      why: "exp is positive and keeps the order.",
+      answer: "Positive weights",
+    };
+    const block = (data: unknown) => `Exit ticket.\n\n\`\`\`check\n${JSON.stringify(data)}\n\`\`\``;
+    completeWithFallback.mockResolvedValueOnce(reply(block(card)));
+    const carded = await call(ask);
+    expect(carded.json.check).toEqual(card);
+    expect(carded.json.message).toEqual({ role: "assistant", content: "Exit ticket." });
+    completeWithFallback.mockResolvedValueOnce(reply(block({ ...card, concept: "attention" })));
+    expect((await call(ask)).json.check).toBeNull();
     getCourses.mockReset();
   });
 
