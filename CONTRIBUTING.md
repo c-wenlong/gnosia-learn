@@ -49,20 +49,17 @@ moves with it in the same commit.
 a copy at the repository root is never read. Set `OWNER_PASSWORD` and
 `AUTH_SECRET` first (`openssl rand -base64 32` for the secret), or `/sign-in`
 refuses every password and says why: the landing page at `/` is the only
-page that opens without them. Then fix the `DATABASE_URL` line the copy
-carries: `.env.example` still names a `postgres://` URL, a leftover of the
-port, and the catalog refuses one (`databasePath()` in
-`services/catalog/src/env.ts`). Set it to the catalog's file,
-`DATABASE_URL=~/.gnosia/catalog.db`, which is also the default the app and
-the catalog CLI use with no variable set (`$GNOSIA_HOME/catalog.db` when that
-is set); a path there also keeps `npm run dev:up`'s leftover Postgres check
-out of the way. The app reads every course, note and
-diagram from that file, so it has to be migrated, imported and flipped first
-(README.md, "Install"). A different file goes in `services/catalog/.env` as
-well (copy `services/catalog/.env.example`, whose `DATABASE_URL` line needs
-the same fix), because the catalog CLI reads that file and never
-`apps/web/.env.local`; set in one place only, `migrate` and the app talk to
-different databases. The file matters for the agent chat too, which needs at least one
+page that opens without them. The catalog needs no line at all: the app and
+the catalog CLI both open `~/.gnosia/catalog.db` with no variable set
+(`$GNOSIA_HOME/catalog.db` when that is set), and a `postgres://` value is
+refused (`databasePath()` in `services/catalog/src/env.ts`). The app reads
+every course, note and diagram from that file, so it has to be migrated,
+imported and flipped first (README.md, "Install"); `npm run dev:up` stops
+with that step named when the file is missing or empty. A different file is
+`CATALOG_DB` in `services/catalog/.env` (copy
+`services/catalog/.env.example`), which the catalog CLI and the app both
+read; set in `apps/web/.env.local` alone, the app opens it while `migrate`
+works on the default. The file matters for the agent chat too, which needs at least one
 provider key (`NVIDIA_API_KEY`, `GEMINI_API_KEY` or `OPENROUTER_API_KEY`).
 With none set, the `/api/agent/*` routes answer `MISSING_API_KEY` and the rest
 of the app works.

@@ -20,11 +20,11 @@ Options for start:
   --no-checks   skip the checks
   -h, --help    show this help
 
-The panes get PATH, DATABASE_URL, PORT, GNOSIA_HOME and STUDIO_* from the
-shell that ran this (a variable it does not have is unset for them), because
-a tmux server that was already running would otherwise hand them its own
-environment. They are passed in a private file the pane reads and deletes, so
-a password in DATABASE_URL never appears in a command line. Everything else
+The panes get PATH, CATALOG_DB, DATABASE_URL, PORT, GNOSIA_HOME and STUDIO_*
+from the shell that ran this (a variable it does not have is unset for them),
+because a tmux server that was already running would otherwise hand them its
+own environment. They are passed in a private file the pane reads and
+deletes, so no value appears in a command line. Everything else
 belongs in apps/web/.env.local or services/catalog/.env, which the processes
 read themselves. STUDIO_ENABLED is set for the web pane here, to 1 or (with
 --no-studio) 0, whatever that file says: a runner with nothing proxying to it
@@ -90,7 +90,7 @@ any_pane_alive() {
 # by load_env and then answered from memory. Never printed.
 ENV_CACHE=""
 load_env() {
-  ENV_CACHE="$(node "$DEV_ENV" get "$root/apps/web" DATABASE_URL OWNER_PASSWORD AUTH_SECRET 2>/dev/null)" || ENV_CACHE=""
+  ENV_CACHE="$(node "$DEV_ENV" get "$root/apps/web" OWNER_PASSWORD AUTH_SECRET 2>/dev/null)" || ENV_CACHE=""
 }
 env_value() {
   local line
@@ -100,17 +100,6 @@ env_value() {
   return 0
 }
 
-# `pg_isready` and `psql`: PATH first, then PG_BIN, then Homebrew's keg-only
-# Postgres 17, which is not on PATH unless linked (scripts/lib/pg.mjs).
-pg_tool() {
-  local dir
-  command -v "$1" 2>/dev/null && return 0
-  for dir in "${PG_BIN:-}" /opt/homebrew/opt/postgresql@17/bin /usr/local/opt/postgresql@17/bin; do
-    if [ -n "$dir" ] && [ -x "$dir/$1" ]; then printf '%s\n' "$dir/$1"; return 0; fi
-  done
-  return 1
-}
-
 port_busy() {
   command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1
 }
@@ -118,8 +107,7 @@ port_busy() {
 # ---------------------------------------------------------------------- checks
 # Errors stop the start; warnings say what will not work and carry on.
 preflight() {
-  local errors=0 major url shown isready psql_bin line conn safe_url
-  local -a pgenv=()
+  local errors=0 major problem
 
   # Without these nothing else can be read or run, so they stop the checks.
   major="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
@@ -128,30 +116,11 @@ preflight() {
 
   load_env
 
-  url="$(env_value DATABASE_URL)"
-  url="${url:-postgres://localhost:5432/gnosia}"
-  shown="$(printf '%s' "$url" | sed -E 's#://[^@/]*@#://***@#')"
-  # The URL goes to pg_isready and psql with its password taken out; libpq
-  # reads that from PGPASSWORD, so the secret is never an argument that `ps`
-  # would show.
-  if ! conn="$(node "$DEV_ENV" pg "$url" 2>/dev/null)"; then
-    warn "DATABASE_URL ($shown) is not a postgres URL, so Postgres was not checked"
-  elif isready="$(pg_tool pg_isready)"; then
-    while IFS= read -r line; do
-      case "$line" in
-        URL=*) safe_url="${line#URL=}" ;;
-        PGPASSWORD=*) pgenv+=("$line") ;;
-      esac
-    done <<<"$conn"
-    if ! env ${pgenv[@]+"${pgenv[@]}"} "$isready" -q -d "$safe_url" 2>/dev/null; then
-      warn "Postgres is not accepting connections at $shown (brew services start postgresql@17)"
-      errors=1
-    elif psql_bin="$(pg_tool psql)" && ! env ${pgenv[@]+"${pgenv[@]}"} "$psql_bin" -d "$safe_url" -Atqc 'select 1' >/dev/null 2>&1; then
-      warn "cannot open the database at $shown: createdb gnosia, then npm run catalog -- migrate (README, Install)"
-      errors=1
-    fi
-  else
-    warn "no pg_isready on PATH or in Homebrew's postgresql@17, so Postgres was not checked"
+  # The catalog is a SQLite file the app opens itself, so the check is that
+  # the file the app would resolve exists and opens (scripts/lib/dev-env.mjs).
+  if ! problem="$(node "$DEV_ENV" db "$root/apps/web" 2>&1 >/dev/null)"; then
+    warn "${problem#dev-env.mjs: }"
+    errors=1
   fi
 
   if [ -z "$(env_value OWNER_PASSWORD)" ] || [ -z "$(env_value AUTH_SECRET)" ]; then
@@ -178,7 +147,7 @@ preflight() {
 # and deletes before running the process. A tmux server that predates this
 # shell would hand a pane its own environment, so the file sets what this
 # shell has and unsets what it has not, among the names the processes read.
-# It also keeps a password in DATABASE_URL out of every command line.
+# It also keeps every value out of the command lines `ps` shows.
 PANE_FILES=()
 PANE_CMD=""
 CREATED=0
@@ -207,7 +176,7 @@ pane_command() { # pane_command <process command...>
 
   {
     printf 'export PATH=%q\n' "$PATH"
-    for name in DATABASE_URL PORT GNOSIA_HOME ${held[@]+"${held[@]}"}; do
+    for name in CATALOG_DB DATABASE_URL PORT GNOSIA_HOME ${held[@]+"${held[@]}"}; do
       case "$name" in STUDIO_ENABLED) continue ;; esac
       if [ -n "${!name+x}" ]; then printf 'export %s=%q\n' "$name" "${!name}"; else printf 'unset %s\n' "$name"; fi
     done

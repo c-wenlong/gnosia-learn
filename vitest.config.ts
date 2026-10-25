@@ -23,9 +23,8 @@ export default defineConfig({
     // migrated scratch database, so each clones it instead of migrating its
     // own (services/catalog/test/scratch-database.ts).
     globalSetup: ["./services/catalog/test/migrated-template.ts"],
-    // services/catalog's tests create and drop a scratch database and apply
-    // every migration to it. That is slower than the in-process suites, and on
-    // a cold Postgres the first connection can take a while.
+    // services/catalog's tests create and drop a scratch database file and
+    // apply every migration to it, which is slower than the in-process suites.
     testTimeout: 30_000,
     hookTimeout: 60_000,
     clearMocks: true,
@@ -51,20 +50,21 @@ export default defineConfig({
       // points under what the suite measures today, so a run goes red when
       // coverage drops rather than every time it fails to climb. Raise these
       // when the real number moves up.
-      // services/ and packages/ are deliberately absent. The catalog service is
-      // covered by tests that need a real Postgres, so its number would swing
-      // between a laptop with the database up and one without, and a coverage
-      // floor that moves with the environment is not a floor. The schema
-      // package is declarations, with nothing to execute.
+      // services/ and packages/ are deliberately absent. They were left out
+      // while the catalog's tests needed a running Postgres and skipped
+      // themselves without one, so the number swung with the environment; on
+      // SQLite they always run, and bringing them into scope is a decision of
+      // its own, with floors measured for it. The schema package is
+      // declarations, with nothing to execute.
       // Measured 2026-09-12: statements 58, branches 54, functions 51, lines 60.
       // Measured 2026-09-13 with Postgres up: statements 71, branches 64,
       // functions 64, lines 74. The floors deliberately do not move to meet
       // that. Two files now in scope — apps/web/src/lib/learner-api.ts and
       // apps/web/src/lib/learner-store.ts — are exercised by suites that need
-      // a real database and skip themselves without one, so the measured
-      // number moves with the environment even though the code did not. A
-      // floor that only holds on a laptop with Postgres running is not a
-      // floor. The numbers below still clear a run with the database down.
+      // a real database, and while that was Postgres they skipped themselves
+      // without one, so the measured number moved with the environment even
+      // though the code did not. The numbers below still clear such a run;
+      // on SQLite those suites always run.
       thresholds: {
         statements: 55,
         branches: 50,

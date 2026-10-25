@@ -69,8 +69,14 @@ export const TLDRAWKC_ROOT_ENV = "TLDRAWKC_ROOT";
 /** Files already read, so each is read at most once. */
 const loaded = new Set<string>();
 
-/** The dotenv this service reads unless a caller says otherwise. */
-export const ENV_FILE = path.join(SERVICE_ROOT, ".env");
+/**
+ * The dotenv this service reads unless a caller says otherwise.
+ * `CATALOG_ENV_FILE` replaces it, for a test that spawns something which
+ * resolves the database: without it, a developer's own services/catalog/.env
+ * (a `CATALOG_DB` of their own, say) would reach the child, and the test
+ * would check their database instead of its scratch file.
+ */
+export const ENV_FILE = process.env.CATALOG_ENV_FILE?.trim() || path.join(SERVICE_ROOT, ".env");
 
 /**
  * Reads services/catalog/.env if it exists. `process.loadEnvFile` is stdlib
