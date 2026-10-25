@@ -158,6 +158,7 @@ describe("the topic tutor's choice card", () => {
     const sent = chats().at(-1)!.body.messages as Array<{ role: string; content: string }>;
     // The asking turn goes back with its block; the answer is the data block.
     expect(sent.at(-2)?.content).toContain("```check");
+    expect(sent.at(-2)?.content).toContain('"concept":"softmax"');
     expect(sent.at(-1)?.content).toContain('Picked: "To make every weight positive" (correct)');
 
     const recorded = card(host)!.querySelector<HTMLElement>("[data-recorded]");
