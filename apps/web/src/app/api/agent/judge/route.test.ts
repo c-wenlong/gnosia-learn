@@ -24,6 +24,11 @@ vi.mock("@/lib/agent/providers", async (importOriginal) => ({
 const tutorCredentials = vi.hoisted(() => vi.fn());
 const signedIn = vi.hoisted(() => ({ value: true }));
 vi.mock("@/lib/agent/credentials", () => ({ tutorCredentials }));
+// tutorDeps opens the catalog for every request. Unmocked, that is the
+// owner's real ~/.gnosia/catalog.db on a laptop, and a rejected promise on CI,
+// whose DATABASE_URL is a postgres:// tripwire the catalog refuses. Nothing
+// this route reads here goes through the handle, so a stand-in will do.
+vi.mock("@/lib/learner-store", () => ({ catalogDatabase: async () => ({}) }));
 vi.mock("@/lib/auth/session", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth/session")>()),
   isSignedIn: async () => signedIn.value,
