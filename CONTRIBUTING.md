@@ -191,7 +191,7 @@ Prerequisites:
 
 - A current production build: `npm run build`. The script never builds, and
   runs whatever `apps/web/.next` holds, so rebuild after changing the app.
-- No database server. The catalog's own file is needed only with `--copy`.
+- No database server. A catalog file is needed only with `--copy`.
 - playwright-core from the tldrawkc submodule (`npm ci` inside
   `tools/tldrawkc`), or `PLAYWRIGHT_CORE` pointing at its `index.mjs`, and a
   Playwright Chromium in the cache or `CHROMIUM` pointing at one. This is the
@@ -209,10 +209,13 @@ By default it builds that database from the seed, exactly as README.md,
 import seed/`, all six types flipped, and one `learn observe` so a review card
 is due, with the diagram's SVG in a temp blob store. The seed has no videos, so
 the video step (play, pause, see the place saved) prints `SKIP` with the reason
-and counts as neither a pass nor a failure. `--copy` (or `E2E_TEMPLATE_DB=<file>`) copies the catalog's
-own file, or the file named, instead, through SQLite's backup API so a file
+and counts as neither a pass nor a failure. `--copy` (or `E2E_TEMPLATE_DB=<file>`) copies
+`$GNOSIA_HOME/catalog.db` (else `~/.gnosia/catalog.db`), or the file named,
+instead, through SQLite's backup API so a file
 another process holds open still copies whole (`copyDatabase` in
-`scripts/lib/sqlite.mjs`); every content type must be flipped there.
+`scripts/lib/sqlite.mjs`); every content type must be flipped there. `--copy` reads neither
+`CATALOG_DB` nor `DATABASE_URL` (`TEMPLATE_DB` in `scripts/e2e.mjs`), so a
+catalog kept anywhere else is named with `E2E_TEMPLATE_DB`.
 `--seed` is still accepted and means the default.
 
 Reading a failure: the run prints one line per step and a final `PASS` or
