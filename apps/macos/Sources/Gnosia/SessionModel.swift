@@ -467,8 +467,24 @@ let sessionDefaultConfidence = 50
 /// A confidence at or under this marks a correct answer as a likely guess —
 /// observe.ts's LOW_CONFIDENCE.
 let sessionLowConfidence = 30
-/// The longest reasoning an answer carries — SESSION_TEXT_LIMIT.
+/// The longest reasoning an answer carries — SESSION_TEXT_LIMIT, counted in
+/// UTF-16 units as the route's `value.length` counts it.
 let sessionTextLimit = 2_000
+
+/// `text` cut to at most `limit` UTF-16 units, never inside a character: a
+/// cap in Swift characters would let emoji past the route's limit, which
+/// refuses the whole observation.
+func sessionPrefix(_ text: String, utf16 limit: Int) -> String {
+    guard text.utf16.count > limit else { return text }
+    var units = 0
+    var out = ""
+    for character in text {
+        units += character.utf16.count
+        if units > limit { break }
+        out.append(character)
+    }
+    return out
+}
 
 /// The SM-2 grade an answer schedules with — confidenceGrade: a correct
 /// answer at `sessionLowConfidence` or less passes at 3 at most, so a lucky
@@ -481,9 +497,10 @@ func confidenceGrade(correct: Bool, confidence: Int?, pL: Double) -> Int {
 }
 
 /// The reasoning box's text as an answer sends it: trimmed, cut to
-/// `sessionTextLimit`, and nil when nothing is left.
+/// `sessionTextLimit` UTF-16 units, and nil when nothing is left.
 func sessionThinking(_ text: String) -> String? {
-    let trimmed = String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(sessionTextLimit))
+    let cut = sessionPrefix(text.trimmingCharacters(in: .whitespacesAndNewlines), utf16: sessionTextLimit)
+    let trimmed = cut.trimmingCharacters(in: .whitespacesAndNewlines)
     return trimmed.isEmpty ? nil : trimmed
 }
 

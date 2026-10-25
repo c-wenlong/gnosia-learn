@@ -49,7 +49,7 @@ struct SessionSureness: View {
                     .overlay(RoundedRectangle(cornerRadius: 10).stroke(G.border))
                     // The web's maxLength: the box holds no more than an answer sends.
                     .onChange(of: thinking) { _, next in
-                        if next.count > sessionTextLimit { thinking = String(next.prefix(sessionTextLimit)) }
+                        if next.utf16.count > sessionTextLimit { thinking = sessionPrefix(next, utf16: sessionTextLimit) }
                     }
             }
         }

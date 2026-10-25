@@ -45,6 +45,20 @@ import CSQLite3
         #expect(sessionThinking("  because  ") == "because")
         #expect(sessionThinking(String(repeating: "x", count: 2_500))?.count == sessionTextLimit)
     }
+
+    @Test func theCapCountsUTF16AsTheRouteDoes() throws {
+        // 1,998 letters then two emoji of two units each: 2,000 characters,
+        // but 2,002 units, which the route would refuse whole.
+        let text = String(repeating: "a", count: 1_998) + "👍👍"
+        #expect(text.count == sessionTextLimit)
+        let sent = try #require(sessionThinking(text))
+        // The emoji that does not fit is dropped, never split.
+        #expect(sent == String(repeating: "a", count: 1_998) + "👍")
+        #expect(sent.utf16.count == sessionTextLimit)
+        #expect(sessionPrefix("ab👍", utf16: 3) == "ab")
+        #expect(sessionPrefix("ab👍", utf16: 4) == "ab👍")
+        #expect(sessionPrefix("é👨‍👩‍👧", utf16: 5) == "é")
+    }
 }
 
 @MainActor @Suite struct ObservationPayload {
