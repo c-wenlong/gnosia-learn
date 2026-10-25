@@ -15,6 +15,7 @@ import { loadSettings } from "@/lib/settings";
 import { TUTOR_TO_BYOK } from "@/lib/byok-providers";
 import { providersView } from "@/lib/providers/view";
 import { isMacUserAgent } from "@/lib/shortcuts";
+import { studioEnabled } from "@/lib/studio";
 import { loadTutorModels } from "@/lib/tutor-models/settings";
 
 export const metadata: Metadata = { title: "Settings" };
@@ -32,8 +33,8 @@ export const metadata: Metadata = { title: "Settings" };
  * The Models tab is two cards: Providers lists every provider with its
  * key's state (docs/BYOK.md, saved through `/api/learner/provider-key`,
  * handed to the card as its last four characters and date, never the key),
- * and Model selection picks the model the tutor calls and the provider
- * Studio chats run on.
+ * and Model selection picks the model the tutor calls and, when the studio
+ * is on, the provider Studio chats run on.
  *
  * The cards are grouped into tabs (General, Profile, Tutor, Data) so the page
  * is one short group at a time; `?tab=` opens one, read by `SettingsTabs`.
@@ -48,6 +49,7 @@ export default async function SettingsPage() {
   const mac = isMacUserAgent(request.get("user-agent"));
   const models = await loadTutorModels(owner);
   const view = providersView(keys, models.chain, models.reachable);
+  const studio = studioEnabled();
   return (
     <div data-layout="app" className={cx("flex max-w-[1084px] flex-col gap-4", PAGE_ENTER)}>
       <h1 className={PAGE_TITLE}>Settings</h1>
@@ -71,9 +73,10 @@ export default async function SettingsPage() {
             glyph: "sparkle",
             content: (
               <>
-                <Providers view={view} />
+                <Providers view={view} studio={studio} />
                 <ModelSelection
                   view={view}
+                  studio={studio}
                   chain={models.chain}
                   tutorStyle={settings.tutorStyle}
                   savedForTutor={keys.rows

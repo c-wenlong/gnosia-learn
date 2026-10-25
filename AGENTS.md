@@ -1039,13 +1039,10 @@ not have to be worked out again.
   on first use (`services/catalog/src/db.ts`), so there is no `createdb`
   step. A `postgres://` value is refused with a pointer to
   [docs/SQLITE-MIGRATION.md](docs/SQLITE-MIGRATION.md) rather than read as a
-  file name (`databasePath()` in `env.ts`). Both `.env.example` and
-  `services/catalog/.env.example` still carry
-  `DATABASE_URL=postgres://localhost:5432/gnosia`, a leftover of the port, so
-  set that line to the file's path (`DATABASE_URL=~/.gnosia/catalog.db`) in
-  any copy you make of them; a path there also skips the leftover Postgres
-  check in `scripts/dev.sh`, which otherwise stops `npm run dev:up` on a
-  machine with `pg_isready` installed and no Postgres running. The suites never read the
+  file name (`databasePath()` in `env.ts`). `npm run dev:up` checks that the
+  file the app would open exists, opens and has been migrated
+  (`node scripts/lib/dev-env.mjs db`, which resolves it with that same
+  `databasePath()`), and stops the start when it does not. The suites never read the
   catalog's own file: each makes a scratch file under the OS temp directory
   (`services/catalog/test/scratch-database.ts`), and the end-to-end one
   imports `seed/`, a small real slice cut with `catalog export --subset`
@@ -1247,8 +1244,8 @@ not have to be worked out again.
   Next keeps it external with no configuration: it is on Next's built-in
   `serverExternalPackages` list
   (`node_modules/next/dist/docs/01-app/03-api-reference/05-config/01-next-config-js/serverExternalPackages.md`).
-  The `serverExternalPackages: ["pg"]` entry still in
-  `apps/web/next.config.ts` is a leftover of the Postgres driver. `transpilePackages` is deliberately *not* there —
+  So `apps/web/next.config.ts` lists no `serverExternalPackages` at all.
+  `transpilePackages` is deliberately *not* there —
   Turbopack transpiles workspace packages on its own, verified by removing an
   entry and building. A client component must take the shared constants from
   `@gnosia/schema/shared`, which imports nothing; taking them from
@@ -1381,18 +1378,13 @@ not have to be worked out again.
 - **CI is a gate again, and it is Linux where the local gate is macOS.**
   "Lint, test, and build" runs on Ubuntu; the local gate (`npm run lint &&
   npm run typecheck && npm test && npm run build`) runs on the Mac, and
-  neither needs a database server. `.github/workflows/ci.yml` starts none,
-  but exports a `postgres://` `DATABASE_URL` that nothing listens on, on
-  purpose: the catalog refuses that URL (`databasePath()` in
-  `services/catalog/src/env.ts`), so code that opens the default database
-  instead of a scratch file fails on CI and not on a laptop with
-  `DATABASE_URL` unset. CI does not build on a pull request: `npm run
+  neither needs a database server or sets `DATABASE_URL`: every catalog suite
+  makes its own scratch file. CI does not build on a pull request: `npm run
   build` runs in `deploy.yml` when a release is published, so the local
   build is the one a PR gets. `node_modules` and the ESLint cache are
   restored from `main`'s caches, which `.github/workflows/cache.yml` refills
   only when `package-lock.json`, a `package.json` or `eslint.config.mjs`
-  changes. Wait for both
-  before merging. What differs between
+  changes. Wait for both before merging. What differs between
   the two, each of which once failed only on CI: text order, so every
   `ORDER BY` over text goes through `bytewise` in
   `services/catalog/src/sql-order.ts` or spells `collate binary` (on Postgres
