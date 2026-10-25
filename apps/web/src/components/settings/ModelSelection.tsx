@@ -26,6 +26,9 @@ import { usePreference } from "./SettingsForm";
  * whole chain it replaces. The Studio chats side is `ByokConfig` trimmed to
  * selection (`manageKeys` off): a connected provider's pick and its
  * Lite/Default/Max models, its key coming from the Providers card above.
+ * It is drawn only with `studio` (the server's `studioEnabled()`): without
+ * the studio, its runner's `/studio/api/settings/byok` answers 404 and the
+ * picker would say Loading for good.
  */
 
 type Status = { kind: "idle" } | { kind: "busy"; text: string } | { kind: "done"; text: string } | { kind: "error"; text: string };
@@ -55,6 +58,7 @@ export function ModelSelection({
   chain,
   tutorStyle,
   savedForTutor,
+  studio,
 }: {
   view: ProvidersView;
   /** The tutor's chain as the server read it; the first entry is the pick the tutor uses. */
@@ -62,12 +66,15 @@ export function ModelSelection({
   tutorStyle: TutorStyle;
   /** BYOK preset names with a key saved on the Providers card — listed so they connect with that key, no re-typing (D95). */
   savedForTutor: string[];
+  /** `studioEnabled()` on the server: whether to draw the Studio chats side at all. */
+  studio: boolean;
 }) {
   const style = usePreference<TutorStyle>(PREFERENCE_KEYS.tutorStyle, tutorStyle);
   return (
     <Card title="Model selection">
       <p className="text-[14px] text-text2">
-        The model the tutor calls and the provider Studio chats run on. Keys live on the Providers card above.
+        {studio ? "The model the tutor calls and the provider Studio chats run on." : "The model the tutor calls."} Keys
+        live on the Providers card above.
       </p>
       <div className="flex flex-col gap-3">
         <p className="text-[14px] font-medium text-text">Tutor</p>
@@ -90,16 +97,18 @@ export function ModelSelection({
         </FormRow>
         <TutorPick view={view} chain={chain} />
       </div>
-      <div className="flex flex-col gap-3 border-t-2 border-border pt-4">
-        <div className="flex flex-col gap-0.5">
-          <p className="text-[14px] font-medium text-text">Studio chats</p>
-          <p className="text-[12px] text-text2">
-            The provider chats run on, and the Lite, Default and Max models the picker offers. Connecting a provider
-            uses the key saved above, no re-typing.
-          </p>
+      {studio && (
+        <div className="flex flex-col gap-3 border-t-2 border-border pt-4">
+          <div className="flex flex-col gap-0.5">
+            <p className="text-[14px] font-medium text-text">Studio chats</p>
+            <p className="text-[12px] text-text2">
+              The provider chats run on, and the Lite, Default and Max models the picker offers. Connecting a provider
+              uses the key saved above, no re-typing.
+            </p>
+          </div>
+          <ByokConfig manageKeys={false} savedForTutor={savedForTutor} />
         </div>
-        <ByokConfig manageKeys={false} savedForTutor={savedForTutor} />
-      </div>
+      )}
     </Card>
   );
 }

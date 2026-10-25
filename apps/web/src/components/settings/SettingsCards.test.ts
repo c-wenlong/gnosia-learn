@@ -101,12 +101,13 @@ const view = (over: Partial<ProvidersView> = {}): ProvidersView => ({
 });
 
 const selection = (viewOver: Partial<ProvidersView> = {}, chain: ChainEntry[] = [{ provider: "openrouter", model: "m-1" }]) =>
-  createElement(ModelSelection, { view: view(viewOver), chain, tutorStyle: "guide-concise", savedForTutor: [] });
+  createElement(ModelSelection, { view: view(viewOver), chain, tutorStyle: "guide-concise", savedForTutor: [], studio: true });
 
 describe("the Providers card", () => {
   it("lists every row it is handed, an unkeyed one with Add key", () => {
     const container = mount(
       createElement(Providers, {
+        studio: true,
         view: view({
           rows: [row(), row({ id: "nvidia", label: "NVIDIA NIM", saved: null, inUse: null, models: [] })],
         }),
@@ -119,7 +120,7 @@ describe("the Providers card", () => {
   });
 
   it("opens Edit into its key field, and Cancel gives focus back to Edit and drops the field", () => {
-    const container = mount(createElement(Providers, { view: view() }));
+    const container = mount(createElement(Providers, { studio: true, view: view() }));
     expect(container.querySelector('input[type="password"]')).toBeNull();
 
     act(() => button(container, "Edit").click());
@@ -136,11 +137,11 @@ describe("the Providers card", () => {
   });
 
   it("opens Delete onto its Cancel, saying what goes, and Cancel goes back to Delete", () => {
-    const container = mount(createElement(Providers, { view: view() }));
+    const container = mount(createElement(Providers, { studio: true, view: view() }));
     act(() => button(container, "Delete").click());
     const group = container.querySelector('[role="group"][aria-label^="Confirm deleting"]')!;
     expect(group.textContent).toContain("Your key and its 1 model go with it.");
-    const keyOnly = mount(createElement(Providers, { view: view({ rows: [row({ models: [] })] }) }));
+    const keyOnly = mount(createElement(Providers, { studio: true, view: view({ rows: [row({ models: [] })] }) }));
     expect(keyOnly.textContent).toContain("Your key goes with it.");
     const cancel = [...group.querySelectorAll("button")].find((b) => b.textContent === "Cancel")!;
     expect(document.activeElement).toBe(cancel);
@@ -157,7 +158,7 @@ describe("the Providers card", () => {
       act(() => root.unmount());
       container.remove();
     });
-    act(() => root.render(createElement(Providers, { view: view({ rows: [row({ id: "custom-gw", label: "My gateway", custom: { baseUrl: "https://gw.example/v1" }, models: [] })] }) })));
+    act(() => root.render(createElement(Providers, { studio: true, view: view({ rows: [row({ id: "custom-gw", label: "My gateway", custom: { baseUrl: "https://gw.example/v1" }, models: [] })] }) })));
     act(() => button(container, "Delete").click());
     const group = container.querySelector('[role="group"][aria-label^="Confirm deleting"]')!;
     const confirm = [...group.querySelectorAll("button")].find((b) => b.textContent === "Delete")!;
@@ -166,12 +167,12 @@ describe("the Providers card", () => {
       confirm.click();
     });
     // The refresh's answer: the custom row is gone and Add custom provider takes focus.
-    act(() => root.render(createElement(Providers, { view: view({ rows: [] }) })));
+    act(() => root.render(createElement(Providers, { studio: true, view: view({ rows: [] }) })));
     expect(document.activeElement).toBe(button(container, "Add custom provider"));
   });
 
   it("opens Add custom provider as a dialog whose Escape and Close give the button back focus", async () => {
-    const container = mount(createElement(Providers, { view: view() }));
+    const container = mount(createElement(Providers, { studio: true, view: view() }));
     const add = button(container, "Add custom provider");
     act(() => add.click());
     const dialog = container.querySelector("dialog")!;
@@ -198,7 +199,7 @@ describe("the Providers card", () => {
   });
 
   it("adds a custom provider in one request with its name, base URL and key", async () => {
-    const container = mount(createElement(Providers, { view: view() }));
+    const container = mount(createElement(Providers, { studio: true, view: view() }));
     act(() => button(container, "Add custom provider").click());
     const form = container.querySelector<HTMLFormElement>('form[aria-label="Add a custom provider"]')!;
     const inputs = [...form.querySelectorAll("input")];
@@ -221,6 +222,7 @@ describe("the Providers card", () => {
   it("shows a custom provider's base URL, and its Edit takes the name and the URL with the key optional", () => {
     const container = mount(
       createElement(Providers, {
+        studio: true,
         view: view({ rows: [row({ id: "custom-my-gateway", label: "My gateway", model: "", custom: { baseUrl: "https://gw.example/v1" }, models: [] })] }),
       }),
     );
@@ -238,6 +240,14 @@ describe("the Model selection card", () => {
   it("says to add a key first when no provider has one", () => {
     const container = mount(selection({ rows: [row({ saved: null, inUse: null, models: [] })] }, []));
     expect(container.textContent).toContain("No provider has a key yet");
+  });
+
+  it("with the studio off, draws no Studio chats side and never asks the studio's runner", async () => {
+    const chain: ChainEntry[] = [{ provider: "openrouter", model: "m-1" }];
+    const container = mount(createElement(ModelSelection, { view: view(), chain, tutorStyle: "guide-concise", savedForTutor: [], studio: false }));
+    await act(async () => {});
+    expect(container.textContent).not.toContain("Studio chats");
+    expect(fetchMock.mock.calls.some((c) => String(c[0]).includes("/studio/api/"))).toBe(false);
   });
 
   it("shows the chain's first entry as the pick and fetches the provider's model list", async () => {
