@@ -24,6 +24,12 @@ vi.mock("@/lib/asset-library", () => ({
   readAssetText,
   withCatalog: async (fn: (db: unknown) => Promise<unknown>) => fn({}),
 }));
+// tutorDeps opens the catalog for every request and hands the handle to
+// readAssetText. Unmocked, that is the owner's real ~/.gnosia/catalog.db on a
+// laptop, and a rejected promise on CI, whose DATABASE_URL is a postgres://
+// tripwire the catalog refuses. readAssetText is mocked, so a stand-in handle
+// is all it needs.
+vi.mock("@/lib/learner-store", () => ({ catalogDatabase: async () => ({}) }));
 vi.mock("@/lib/agent/providers", async (importOriginal) => ({
   // The pure helpers (the missing-key message, the skipped entries) are real.
   ...(await importOriginal<typeof import("@/lib/agent/providers")>()),
