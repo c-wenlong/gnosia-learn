@@ -604,7 +604,7 @@ final class LearnerStore {
     /// text travel as null when absent; an empty session title is simply not
     /// sent (the route refuses one). Encoded here rather than in the client
     /// so the dictionary — built on this actor — crosses as bytes.
-    private static func observeJSON(_ write: SessionAnswerWrite) -> Data? {
+    static func observeJSON(_ write: SessionAnswerWrite) -> Data? {
         var body: [String: Any] = [
             "conceptSlug": write.outcome.concept,
             "correct": write.outcome.correct,
@@ -621,6 +621,10 @@ final class LearnerStore {
         // server-side as a live module the owner can read. A concept
         // session sends no key, as the web's payload does.
         if let module = write.module { body["module"] = module }
+        // How sure and why (K5), left out when absent so an answer without
+        // them is the body it always was; "I don't know" has no confidence.
+        if let confidence = write.confidence { body["confidence"] = confidence }
+        if let thinking = write.thinking { body["thinking"] = thinking }
         return try? JSONSerialization.data(withJSONObject: body)
     }
 
@@ -725,6 +729,10 @@ final class LearnerStore {
         // `module` on a week check's event — recordObservation's
         // `module: weekModule?.id`, absent on a concept session's.
         if let module = write.module { payload["module"] = module }
+        // recordObservation's `confidence` and `thinking`, absent rather
+        // than null when the answer carried none.
+        if let confidence = write.confidence { payload["confidence"] = confidence }
+        if let thinking = write.thinking { payload["thinking"] = thinking }
         try db.run(
             "INSERT INTO event (at, learner_id, type, payload) VALUES (?, 'local', 'observation', ?)",
             [.real(at), .text(Self.json(payload))]

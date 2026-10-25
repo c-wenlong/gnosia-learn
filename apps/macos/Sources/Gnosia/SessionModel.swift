@@ -13,6 +13,7 @@
 //    services/catalog/src/state/observe.ts  — recordObservation's writes
 //    scripts/learn/lib/bkt.mjs              — the Bayesian update
 //    scripts/learn/lib/schedule.mjs         — gradeFromOutcome, newCard
+//    packages/tutor/src/check-block.ts      — the confidence stops
 //
 //  The concept session's two modes: learn (Teach me — probe, teach, check,
 //  close) and check (`?mode=check`, the workspace's Quiz me — the note's
@@ -457,6 +458,35 @@ func gradeFromOutcome(correct: Bool, pL: Double) -> Int {
     return 3
 }
 
+// MARK: - Confidence (docs/proposals/structured-checks.md, K5 and K6)
+
+/// The stops "How sure are you?" offers, in percent — CONFIDENCE_STOPS.
+let sessionConfidenceStops = [0, 30, 50, 70, 90, 100]
+/// The stop it rests on before the learner moves it — DEFAULT_CONFIDENCE.
+let sessionDefaultConfidence = 50
+/// A confidence at or under this marks a correct answer as a likely guess —
+/// observe.ts's LOW_CONFIDENCE.
+let sessionLowConfidence = 30
+/// The longest reasoning an answer carries — SESSION_TEXT_LIMIT.
+let sessionTextLimit = 2_000
+
+/// The SM-2 grade an answer schedules with — confidenceGrade: a correct
+/// answer at `sessionLowConfidence` or less passes at 3 at most, so a lucky
+/// guess grows its interval more slowly. Confidence never moves p(L), and a
+/// wrong answer needs no rule (every failing grade resets the card).
+func confidenceGrade(correct: Bool, confidence: Int?, pL: Double) -> Int {
+    let grade = gradeFromOutcome(correct: correct, pL: pL)
+    guard correct, let confidence, confidence <= sessionLowConfidence else { return grade }
+    return min(grade, 3)
+}
+
+/// The reasoning box's text as an answer sends it: trimmed, cut to
+/// `sessionTextLimit`, and nil when nothing is left.
+func sessionThinking(_ text: String) -> String? {
+    let trimmed = String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(sessionTextLimit))
+    return trimmed.isEmpty ? nil : trimmed
+}
+
 // MARK: - One answer, recorded (recordObservation)
 
 /// A prerequisite a correct answer spread to.
@@ -502,6 +532,11 @@ struct SessionAnswerWrite {
     var question: String?
     var answer: String?
     var chosen: String?
+    /// How sure the learner was of the pick, in percent; nil for "I don't
+    /// know" (K6) and for an answer asked without the stops.
+    var confidence: Int? = nil
+    /// Their reasoning, trimmed; nil when they wrote none.
+    var thinking: String? = nil
     var at: Date
 }
 
@@ -521,12 +556,13 @@ struct SessionLearnerModel {
     /// `recordObservation` over the in-memory model: the BKT update (with the
     /// transit step only when the source teaches), a correct answer spread to
     /// the prerequisites, and the concept's card rescheduled under the grade
-    /// the outcome maps to. `prereqsOf` walks the `requires` edges — the same
-    /// graph `prerequisiteDistances` BFSes.
+    /// the outcome and the confidence map to. `prereqsOf` walks the
+    /// `requires` edges — the same graph `prerequisiteDistances` BFSes.
     mutating func answer(
         _ slug: String,
         correct: Bool,
         source: String,
+        confidence: Int? = nil,
         prereqsOf: (String) -> [String],
         at now: Date = Date()
     ) -> SessionAnswerWrite {
@@ -581,7 +617,7 @@ struct SessionLearnerModel {
         // Whether an answer teaches and whether it should come back for
         // review are different questions: every answered question earns a
         // review slot, whatever the source.
-        let grade = gradeFromOutcome(correct: correct, pL: nextPL)
+        let grade = confidenceGrade(correct: correct, confidence: confidence, pL: nextPL)
         let existing = cards[slug]
         let sched = sm2Review(card: existing, grade: grade, now: now)
         let card = CatalogReview(
@@ -615,6 +651,7 @@ struct SessionLearnerModel {
             sessionTitle: "",
             sessionGoal: slug,
             requestId: "",
+            confidence: confidence,
             at: now
         )
     }
