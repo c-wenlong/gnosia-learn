@@ -1,12 +1,12 @@
 import { spawn, spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { freePort, seedEnv, stopGroup } from "./lib/app-harness.mjs";
+import { buildSeedDatabase, freePort, seedEnv, stopGroup } from "./lib/app-harness.mjs";
 
 // scripts/demo-record.mjs refuses a bad command line before it builds or
 // starts anything, and the harness it shares with scripts/e2e.mjs. Recording
@@ -55,6 +55,14 @@ describe("demo-record's command line", () => {
     expect(ran.stderr).toContain("is inside the checkout");
   });
 
+  it("refuses an --out reached through a symlink to the checkout", () => {
+    const link = join(scratch(), "checkout");
+    symlinkSync(ROOT, link);
+    const ran = run("--scenario", SCENARIO, "--out", join(link, "demo.mp4"));
+    expect(ran.status).toBe(2);
+    expect(ran.stderr).toContain("is inside the checkout");
+  });
+
   it("refuses an --out whose directory does not exist", () => {
     const ran = run("--scenario", SCENARIO, "--out", join(scratch(), "missing", "a.mp4"));
     expect(ran.status).toBe(2);
@@ -78,6 +86,10 @@ describe("demo-record's command line", () => {
 });
 
 describe("the app harness", () => {
+  it("starts no seed command once it is told to stop", async () => {
+    await expect(buildSeedDatabase("/nonexistent", {}, { stopped: () => true })).rejects.toThrow("interrupted");
+  });
+
   it("points every catalog command at the scratch database and no video tool", () => {
     const env = seedEnv({ root: "/r", db: "/w/catalog.db", home: "/w/home", emptyRoot: "/w/empty" });
     expect(env).toMatchObject({

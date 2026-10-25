@@ -48,9 +48,9 @@
 // Exit codes: 0 the video was written, 1 the scenario or the run failed, 2 a
 // prerequisite is missing or the command line is wrong.
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, renameSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, realpathSync, renameSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, relative, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 
@@ -97,8 +97,12 @@ const inside = (dir, path) => {
   return rel === '' || (!rel.startsWith('..') && !rel.startsWith('/'));
 };
 if (!OUT.endsWith('.mp4')) missing(`--out must name an .mp4 file, not ${OUT}`);
-if (inside(ROOT, OUT)) missing(`--out ${OUT} is inside the checkout ${ROOT}; write the video somewhere outside it, such as a scratch directory`);
 if (!existsSync(dirname(OUT))) missing(`the directory for --out does not exist: ${dirname(OUT)}`);
+// Real paths on both sides, so a symlink to the checkout is caught too.
+const realRoot = existsSync(ROOT) ? realpathSync(ROOT) : ROOT;
+if (inside(realRoot, join(realpathSync(dirname(OUT)), basename(OUT)))) {
+  missing(`--out ${OUT} is inside the checkout ${ROOT}; write the video somewhere outside it, such as a scratch directory`);
+}
 if (!existsSync(SCENARIO)) missing(`no scenario at ${SCENARIO}`);
 if (!existsSync(join(ROOT, 'apps/web/.next/BUILD_ID'))) {
   missing(`no production build at ${join(ROOT, 'apps/web/.next')}. Run \`npm run build\` there first; this script never builds.`);
@@ -134,11 +138,14 @@ const SIZE = { width: 1280, height: 860 };
 // Cleanup, reached from `finally` and from a signal, so an interrupted run
 // still stops the server and removes the scratch directory.
 
-const held = { browser: null, server: null };
+const held = { building: null, browser: null, server: null };
 let teardown = null;
 let failed = false;
 function cleanup() {
   teardown ??= (async () => {
+    // Let the seed command running now finish before its files are removed;
+    // the build starts no other once `interrupted` is set.
+    if (held.building !== null) await held.building.catch(() => {});
     const browser = held.browser === null ? null : await held.browser.catch(() => null);
     if (browser !== null) await browser.close().catch(() => {});
     if (held.server !== null && !(await stopGroup(held.server))) {
@@ -249,7 +256,8 @@ function routesFor(page) {
 async function record() {
   console.log(`demo: building a scratch catalog from seed/ in ${WORK}`);
   const emptyRoot = mkdtempSync(join(WORK, 'no-video-tools-'));
-  await buildSeedDatabase(ROOT, seedEnv({ root: ROOT, db: DB, home: HOME, emptyRoot }));
+  held.building = buildSeedDatabase(ROOT, seedEnv({ root: ROOT, db: DB, home: HOME, emptyRoot }), { stopped: () => interrupted });
+  await held.building;
   if (interrupted) return;
   const base = await startServer({
     root: ROOT,
@@ -311,9 +319,12 @@ async function record() {
 try {
   await record();
 } catch (error) {
-  failed = true;
-  console.error(`demo: ${error.message}`);
-  console.error(`demo: the server log ends:\n${tail(SERVER_LOG)}`);
+  // An interrupt is not a failure: the signal handler cleans up and exits 130.
+  if (!interrupted) {
+    failed = true;
+    console.error(`demo: ${error.message}`);
+    console.error(`demo: the server log ends:\n${tail(SERVER_LOG)}`);
+  }
 } finally {
   await cleanup();
 }

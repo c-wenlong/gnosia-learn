@@ -80,12 +80,17 @@ export async function npmScript(root, env, script, args) {
  * order (the web app refuses a type the database does not own). A flip checks
  * parity against the tree and records its hash; it writes nothing under seed/.
  * No create-database step: `catalog migrate` makes the file on first connect,
- * which is the whole point of a SQLite catalog.
+ * which is the whole point of a SQLite catalog. `stopped` is asked before
+ * each command; when it answers true the build throws instead of going on.
  */
-export async function buildSeedDatabase(root, env) {
-  await npmScript(root, env, 'catalog', ['migrate']);
-  await npmScript(root, env, 'catalog', ['import', join(root, 'seed')]);
-  for (const type of FLIP_ORDER) await npmScript(root, env, 'catalog', ['flip', type]);
+export async function buildSeedDatabase(root, env, { stopped = () => false } = {}) {
+  const steps = [['migrate'], ['import', join(root, 'seed')], ...FLIP_ORDER.map((type) => ['flip', type])];
+  for (const args of steps) {
+    // Checked between commands, so a teardown that awaits this build waits
+    // for the command running now and starts no other.
+    if (stopped()) throw new Error('interrupted');
+    await npmScript(root, env, 'catalog', args);
+  }
 }
 
 // ---------------------------------------------------------------------------
