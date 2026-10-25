@@ -65,7 +65,14 @@ const textOf = (s: Status) => (s.kind === "idle" ? null : s.text);
 const failure = (what: string, reply: { status: number; data: Reply } | null) =>
   reply === null ? `Not ${what}: the server did not answer.` : (reply.data.error ?? `Not ${what} (HTTP ${reply.status}).`);
 
-export function Providers({ view }: { view: ProvidersView }) {
+export function Providers({
+  view,
+  studio,
+}: {
+  view: ProvidersView;
+  /** `studioEnabled()` on the server: whether the keys reach Studio chats too. */
+  studio: boolean;
+}) {
   const router = useRouter();
   const base = useId();
   const [status, setStatus] = useState<Status>({ kind: "idle" });
@@ -100,8 +107,8 @@ export function Providers({ view }: { view: ProvidersView }) {
   return (
     <Card title="Providers" action={addButton}>
       <p className="text-[14px] text-text2">
-        Your model providers and the keys they run on, shared by the tutor and Studio chats below. A row without a key
-        calls nothing until you add one.
+        Your model providers and the keys they run on, {studio ? "shared by the tutor and Studio chats" : "used by the tutor"}.
+        A row without a key calls nothing until you add one.
       </p>
       {!view.keysReachable && (
         <Callout role="status" bordered>
