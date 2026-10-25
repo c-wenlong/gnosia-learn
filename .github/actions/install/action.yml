@@ -1,0 +1,67 @@
+name: Install
+description: >-
+  Node 22 and every workspace's node_modules, restored from the cache when the
+  lockfile has not moved and installed with npm ci when it has. Run after
+  actions/checkout.
+
+outputs:
+  cache-hit:
+    description: "'true' when node_modules came from the cache and npm ci did not run"
+    value: ${{ steps.modules.outputs.cache-hit }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node.js
+      id: node
+      # 22 matches the engines floor in package.json, which in turn clears
+      # Next 16's own floor of >=20.9.0. No `cache: npm`: the step below
+      # caches the installed tree itself, which makes npm's download cache
+      # redundant on a hit.
+      uses: actions/setup-node@v7
+      with:
+        node-version: 22
+
+    - name: Restore node_modules
+      id: modules
+      # The whole installed tree, every workspace's node_modules included, so
+      # a run whose lockfile did not move skips npm ci altogether. The key
+      # carries the exact Node version as well as the lockfile, because
+      # better-sqlite3 is a native module built for one Node ABI: a tree from
+      # another Node would install fine and then fail to open the catalog.
+      # There are no restore-keys on purpose. npm ci deletes node_modules
+      # before installing, so a partial match would be downloaded and then
+      # thrown away.
+      #
+      # A pull request can read its own caches and main's, never another pull
+      # request's, so cache.yml keeps one on main for the current lockfile.
+      uses: actions/cache/restore@v6
+      with:
+        path: |
+          node_modules
+          apps/*/node_modules
+          packages/*/node_modules
+          services/*/node_modules
+        key: node-modules-${{ runner.os }}-${{ runner.arch }}-node${{ steps.node.outputs.node-version }}-${{ hashFiles('package-lock.json') }}
+
+    - name: Install dependencies
+      # ci, not install: it installs exactly what the lockfile pins and fails
+      # outright if package.json and package-lock.json have drifted apart,
+      # instead of quietly resolving something newer.
+      if: steps.modules.outputs.cache-hit != 'true'
+      shell: bash
+      run: npm ci
+
+    - name: Save node_modules
+      # Saved here rather than by a post step, which only saves when the
+      # whole job passes: a pull request with a failing test would otherwise
+      # leave its next push to install from scratch again.
+      if: steps.modules.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v6
+      with:
+        path: |
+          node_modules
+          apps/*/node_modules
+          packages/*/node_modules
+          services/*/node_modules
+        key: ${{ steps.modules.outputs.cache-primary-key }}

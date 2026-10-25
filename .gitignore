@@ -40,6 +40,8 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
+# ESLint's --cache file (CI caches it between runs)
+.eslintcache
 next-env.d.ts
 
 # learning pipeline: `learn/state/` is gone. model.json, reviews.json,

@@ -58,14 +58,18 @@ Test files are also excluded from `apps/web/tsconfig.json`, which is the config
 1. Changes land on `main` through pull requests. Nothing deploys.
 2. Cut a release: `gh release create v<x.y.z> --generate-notes` (or the
    Releases page). Publishing it starts the Deploy workflow.
-3. The workflow uploads the tree (less what `.vercelignore` leaves out:
+3. The workflow's first job runs `npm run build` on the tag, with no
+   database and no keys. This is the only place CI builds the app: pull
+   requests skip it (`ci.yml` builds only on a manual run). A release that
+   does not compile stops here, before any upload or deployment.
+4. The second job uploads the tree (less what `.vercelignore` leaves out:
    `docs/`, `tools/`), Vercel builds it from the Root Directory, and on
    success promotes it to the production alias. A failed build leaves the
    previous deployment serving.
 
 The workflow needs one repository secret, `VERCEL_TOKEN`, a token from
 https://vercel.com/account/tokens (`gh secret set VERCEL_TOKEN`). Without it
-the job fails on its first step and says so. The org and project ids are in
+the deploy job fails on its first step and says so. The org and project ids are in
 the workflow itself; they are identifiers, not secrets.
 
 To redeploy without a new release (a retry, or a rollback to an older tag),

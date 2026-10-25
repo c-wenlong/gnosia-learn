@@ -28,15 +28,19 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  production:
-    name: Deploy to production
+  build:
+    # The production build is a gate on the release, and nowhere else: pull
+    # requests skip it (ci.yml, "Production build"). A release that does not
+    # compile stops here, before anything is uploaded to Vercel or counts
+    # against its daily deployments. A job of its own, so the deploy below
+    # uploads a clean checkout rather than this job's node_modules and .next.
+    #
+    # It builds with no database, which is the property the web app keeps on
+    # purpose: nothing reads the catalog at build time (AGENTS.md, "Every page
+    # is dynamic").
+    name: Build the release
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    env:
-      # Identifiers, not secrets: the same values `vercel link` writes to
-      # .vercel/project.json. The token is the only secret.
-      VERCEL_ORG_ID: team_3RwDblsQVK0MHQPOndO1vDl8
-      VERCEL_PROJECT_ID: prj_KfVuvAc4rWmQRe4NiSVgeEm5etXD
     steps:
       - name: Only a published release
         # A manual run picks its ref from a menu that lists branches too.
@@ -64,6 +68,29 @@ jobs:
       - name: Checkout
         # The release's tag (GITHUB_REF on a release event). Submodules are not
         # needed: the app imports nothing under tools/.
+        uses: actions/checkout@v7
+
+      - name: Install
+        # node_modules from main's cache (cache.yml) when the release's
+        # lockfile matches it, which a tag cut from main's head always does.
+        uses: ./.github/actions/install
+
+      - name: Production build
+        run: npm run build
+
+  production:
+    name: Deploy to production
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Identifiers, not secrets: the same values `vercel link` writes to
+      # .vercel/project.json. The token is the only secret.
+      VERCEL_ORG_ID: team_3RwDblsQVK0MHQPOndO1vDl8
+      VERCEL_PROJECT_ID: prj_KfVuvAc4rWmQRe4NiSVgeEm5etXD
+    steps:
+      - name: Checkout
+        # The same tag the build job built.
         uses: actions/checkout@v7
 
       - name: Setup Node.js

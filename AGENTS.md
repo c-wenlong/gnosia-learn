@@ -1381,13 +1381,17 @@ not have to be worked out again.
 - **CI is a gate again, and it is Linux where the local gate is macOS.**
   "Lint, test, and build" runs on Ubuntu; the local gate (`npm run lint &&
   npm run typecheck && npm test && npm run build`) runs on the Mac, and
-  neither needs a database server. `.github/workflows/ci.yml` still starts a
-  `postgres:17` service, installs the Postgres 17 client tools and exports a
-  `postgres://` `DATABASE_URL` to every step, all leftovers of the port: the
-  catalog refuses that URL (`databasePath()` in
+  neither needs a database server. `.github/workflows/ci.yml` starts none,
+  but exports a `postgres://` `DATABASE_URL` that nothing listens on, on
+  purpose: the catalog refuses that URL (`databasePath()` in
   `services/catalog/src/env.ts`), so code that opens the default database
   instead of a scratch file fails on CI and not on a laptop with
-  `DATABASE_URL` unset. Wait for both before merging. What differs between
+  `DATABASE_URL` unset. CI does not build on a pull request: `npm run
+  build` runs in `deploy.yml` when a release is published, so the local
+  build is the one a PR gets. `node_modules` and the ESLint cache are
+  restored from `main`'s caches, which `.github/workflows/cache.yml` refills
+  only when `package-lock.json` or `eslint.config.mjs` changes. Wait for both
+  before merging. What differs between
   the two, each of which once failed only on CI: text order, so every
   `ORDER BY` over text goes through `bytewise` in
   `services/catalog/src/sql-order.ts` or spells `collate binary` (on Postgres

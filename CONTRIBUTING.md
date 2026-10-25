@@ -138,7 +138,9 @@ bug fixes or docs. All welcome.
    Next's docs say) and the route types under `.next/types/` it imports exist
    only once `next typegen`, `next dev` or `next build` has run, and without
    them a fresh clone's typecheck fails on every image import. The build is
-   still the gate that compiles the app the way it ships.
+   still the gate that compiles the app the way it ships. CI builds only when
+   a release is published (`deploy.yml`), so on a pull request the local
+   build is the only one that runs before the merge.
 3. **The knowledge base is a real study record, and none of it is in git.**
    The notes, the session logs and the diagrams are rows in the catalog with a
    revision per write, and the nightly export (`npm run export:nightly`) is

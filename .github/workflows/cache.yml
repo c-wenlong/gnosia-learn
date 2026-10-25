@@ -1,0 +1,56 @@
+name: Cache
+
+# Keeps the dependency and lint caches on main, the one ref every pull
+# request's run can read. GitHub scopes a cache to the ref that saved it: a
+# pull request reads its own and main's, never another pull request's. CI
+# does not run on main (ci.yml says why), so without this every pull
+# request's first run installed from scratch and linted every file.
+#
+# It runs only when what the caches are keyed on changes: the lockfile, the
+# ESLint config, or the install action itself. A merge that touches none of
+# those leaves the caches valid, so it starts nothing. GitHub evicts a cache
+# nobody has read for seven days; each pull request's restore counts as a
+# read, and after a quiet week the first run misses and this can be run by
+# hand from the Actions tab.
+on:
+  push:
+    branches: [main]
+    paths:
+      - package-lock.json
+      - eslint.config.mjs
+      - .github/actions/install/**
+      - .github/workflows/cache.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  warm:
+    name: Warm the caches
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install
+        uses: ./.github/actions/install
+
+      - name: Lint
+        # Fills the ESLint cache for main's files; a pull request then lints
+        # only the files it changed (ci.yml, "Restore the ESLint cache"). A
+        # lint failure here still saves what passed, and is not this
+        # workflow's to report: CI already ran on the pull request.
+        continue-on-error: true
+        run: npm run lint -- --cache --cache-strategy content --cache-location .eslintcache
+
+      - name: Save the ESLint cache
+        if: hashFiles('.eslintcache') != ''
+        uses: actions/cache/save@v6
+        with:
+          path: .eslintcache
+          key: eslint-${{ hashFiles('package-lock.json', 'eslint.config.mjs') }}-${{ github.sha }}
