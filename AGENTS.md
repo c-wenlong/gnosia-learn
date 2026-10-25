@@ -21,7 +21,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 | [seed/README.md](seed/README.md) | The export format (the layout `catalog export` writes and `catalog import` reads), and the seed, which is all the content a fresh clone has |
 | [seed/COURSES.md](seed/COURSES.md) | The course YAML of the export format: the shape of a file and what the reader refuses |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | How production deploys, secrets, the Vercel CLI |
-| [docs/HOMESERVER.md](docs/HOMESERVER.md) | Running the app on an Ubuntu homeserver behind Tailscale with a copy of the laptop's data: the dump and restore, the blob store re-claim, the two env files, systemd units for the app, the studio (diagrams only, V4) and the nightly export. Decisions S1 to S7 |
+| [docs/HOMESERVER.md](docs/HOMESERVER.md) | Running the app on an Ubuntu homeserver behind Tailscale with a copy of the laptop's data: the dump and restore, the blob store re-claim, the two env files, systemd units for the app, the studio (diagrams only, V4) and the nightly export. Decisions S1 to S7. Written for Postgres: its database steps (a `postgres:17` container, `pg_dump` and `pg_restore`) predate [docs/SQLITE-MIGRATION.md](docs/SQLITE-MIGRATION.md), where the database is one file |
 | [docs/BYOK.md](docs/BYOK.md) | Bring your own key: the owner's model provider keys, saved in Settings and stored AES-256-GCM encrypted in `provider_key` under a key derived from `AUTH_SECRET`, with the env keys as the fallback. The decisions, the threat model, rotation, and what is out of scope |
 | [docs/TUTOR-MODELS.md](docs/TUTOR-MODELS.md) | The tutor's model chain: the owner's ordered provider and model list in `tutor_model`, edited in Settings' Providers card (each provider's key and its models together), tried top to bottom, with the built-in defaults when there is none, a per-call limit and a turn deadline. Decisions T1 to T11 |
 | [docs/CURRICULUM.md](docs/CURRICULUM.md) | Editing course data without breaking learner state |
@@ -41,7 +41,8 @@ This version has breaking changes — APIs, conventions, and file structure may 
 | [docs/STUDIO-TUTOR-HANDOFF.md](docs/STUDIO-TUTOR-HANDOFF.md) | Accepted, phases 1 (the runner) and 2 (the web app) built and measured, the paid hand-offs and the iOS Safari touch check included; Android Chrome and VoiceOver are the owner's to run: the concept tutor on `/learn/<concept>` gets the @ composer, and a Diagram or Video tag hands the concept to a new studio conversation (the note and the last tutor turns as data blocks, the message sent on arrival). When tags show, when Lexical loads, the runner change, D64 to D70 |
 | [docs/VIDEO-TOOLS.md](docs/VIDEO-TOOLS.md) | Which of the four video tools (manimkc, remotionkc, revideokc, blenderkc) makes a given video: what each is good for, a capability matrix with where each claim was proven, the risks, and the routing procedure the `video-router` skill runs |
 | [docs/STUDIO-VIDEO-TOOLS.md](docs/STUDIO-VIDEO-TOOLS.md) | Built in phases, phase 3 (remotionkc) the last: the studio picks a video tool. The planner proposes manimkc, remotionkc or revideokc in the brief with a reason (a TOOLS block pinned to VIDEO-TOOLS.md), the card shows it as a switchable chip, the runner gets a backend per tool, and headless Chrome runs inside the job's Seatbelt profile (measured). D71 to D80 |
-| [docs/CONTENT-MIGRATION.md](docs/CONTENT-MIGRATION.md) | Moving authored content out of files in git into Postgres and object storage, built through the phase 3 cut-over: the phases, the revision table, the blob store and the decisions behind them |
+| [docs/CONTENT-MIGRATION.md](docs/CONTENT-MIGRATION.md) | Moving authored content out of files in git into the database (Postgres at the time) and object storage, built through the phase 3 cut-over: the phases, the revision table, the blob store and the decisions behind them |
+| [docs/SQLITE-MIGRATION.md](docs/SQLITE-MIGRATION.md) | The catalog moved from a Postgres server to one SQLite file, `$GNOSIA_HOME/catalog.db` (default `~/.gnosia/catalog.db`): where the file is, `CATALOG_DB` and `DATABASE_URL`, porting an old Postgres database with `services/catalog/scripts/pg-to-sqlite.mjs`, and what changed under the same API |
 | [docs/design/DESIGN.md](docs/design/DESIGN.md) | The redesign: sixteen decisions, the routes and screens, the hi-fi tokens and where each came from |
 | [docs/design/IMPLEMENTATION.md](docs/design/IMPLEMENTATION.md) | Building the redesign: the phases and their status, the token and component contract, the shell (the sidebar, the phone header, `data-layout`), the habit data, `/courses`, and the screenshot tool |
 | [docs/design/BRAND.md](docs/design/BRAND.md) | The Gnosia brand: the idea, the seven `--brand-*` tokens with their contrast ratios, how the mark is built, the mascot rules, and where each piece appears |
@@ -54,7 +55,7 @@ two on purpose:
 | Layer | Where | What |
 | --- | --- | --- |
 | Instructions | `learning` plugin, `learning` marketplace | The `/learn` and `/review` skills, plus the `concept-mapper`, `fact-checker` and `diagram-maker` subagents |
-| Code and data | this repo | The `learn` CLI (entry point `scripts/learn/cli.mjs`, command `services/catalog/src/learn/`), the notes, session logs and diagrams as rows in the catalog database beside the learner state (Postgres), the web view at `apps/web/src/app/(app)/learn/` |
+| Code and data | this repo | The `learn` CLI (entry point `scripts/learn/cli.mjs`, command `services/catalog/src/learn/`), the notes, session logs and diagrams as rows in the catalog database beside the learner state (one SQLite file, [docs/SQLITE-MIGRATION.md](docs/SQLITE-MIGRATION.md)), the web view at `apps/web/src/app/(app)/learn/` |
 
 The `/learn` and `/review` skills are not in this repo. They live in the
 `learning` plugin under the `learning` marketplace, at
@@ -444,7 +445,7 @@ Rules of engagement:
   behind the `/studio/api/*` rewrite), deliberately not from the library's
   `/api/assets/{id}/file`, which serves asset rows. The runner streams the
   blob the diagram's row names, by the key in its (cached) diagram list, so a
-  tile still draws with Postgres down. `STUDIO_DAILY_USD` is a rolling 24-hour spend cap in
+  tile still draws with the catalog unreadable. `STUDIO_DAILY_USD` is a rolling 24-hour spend cap in
   dollars; unset, the default, means no cap.
 - The runner serves one owner, `STUDIO_OWNER` (default `local`). Every
   `catalog diagram`, `draft`, `job`, `session` and `topic` verb it spawns
@@ -497,7 +498,7 @@ Rules of engagement:
   unscoped and is never read); with the catalog down a brief is checked
   against that copy, `/api/health` reports `vocabulary.stale` with its
   `readAt`, and `/api/vocabulary` serves it, which is where the web studio
-  screens take their topics from so they still work with Postgres down.
+  screens take their topics from so they still work with the catalog down.
 - A job writes only to its own workspace, `$STUDIO_HOME/jobs/<id>/candidate/`
   (`<slug>.tldr` and `.svg`), never into the tree. The permission file allows
   those two files and denies every other job's workspace and the rest of
@@ -519,7 +520,7 @@ Rules of engagement:
   write-through branch in `services/catalog/src/content/diagrams.ts`, which
   also wrote the `.tldr` and `.svg` into a tree and had the panel print a
   `git add` line, runs only on a database that has not flipped diagrams,
-  which after the cut-over is a test's scratch one. With Postgres down Accept
+  which after the cut-over is a test's scratch one. With the catalog down Accept
   refuses and the candidate waits in the job workspace. `indexed: false`
   after an accept means the diagram landed and the job row did not record it;
   Reindex finishes it.
@@ -769,12 +770,12 @@ On a billing block, merge when all three hold:
 1. The local gate CI would have run passes in the PR's worktree: `npm run
    lint`, `npm run typecheck`, `npm run test:coverage` (the coverage
    thresholds in `vitest.config.ts` are part of the gate, so a run of only
-   the touched tests is not enough), and `npm run build`. Postgres 17, the
-   major version of CI's service (Homebrew's `postgresql@17`; `psql -c 'show
-   server_version'` says), must be up for the test run, and its output must
-   show the catalog suites ran rather than skipped: without a database they
-   skip themselves and the run stays green, which proves nothing about the
-   schema. Only a change confined to `docs/` and the top-level Markdown files
+   the touched tests is not enough), and `npm run build`. Nothing has to be
+   running for the test run: the catalog is a SQLite file
+   ([docs/SQLITE-MIGRATION.md](docs/SQLITE-MIGRATION.md)), and each catalog
+   suite makes its own scratch file under the OS temp directory
+   (`services/catalog/test/scratch-database.ts`), so the suites run on every
+   machine and never skip for want of a database. Only a change confined to `docs/` and the top-level Markdown files
    needs none of this; Markdown anywhere else can be read by a test (the
    studio's manual sections under `services/studio/src/manual/` are), so it
    takes the full gate. Say in the PR body which of these ran.
@@ -939,13 +940,15 @@ not have to be worked out again.
   else can resolve. Workflow 1 under [Workflows](#workflows) has the full
   sequence: `--check`, put the submodule back on `main`, run the script,
   rebuild, then commit.
-- **The `event` append-only trigger is `FOR EACH ROW`, and must stay that way.**
-  As `FOR EACH STATEMENT` (how migration `0001` first wrote it) it fired on the
-  `ON DELETE SET NULL` that Postgres runs against `event.concept_slug` whenever
-  any concept is deleted — even with `event` completely empty. The effect was
-  that no `concept` row could ever be deleted, which breaks the indexers.
-  Migration `0003_append_only_per_row` fixes it and
-  `services/catalog/test/schema.test.ts` guards it.
+- **The `event` append-only triggers are row triggers.** On Postgres the
+  first version (`FOR EACH STATEMENT`, migration `0001` of the old
+  `services/catalog/drizzle/` journal) fired on the `ON DELETE SET NULL` that
+  ran against `event.concept_slug` whenever any concept was deleted, even
+  with `event` empty, so no `concept` row could ever be deleted; `0003`
+  fixed it. SQLite has row triggers only, so `event_no_update` and
+  `event_no_delete` in `services/catalog/drizzle-sqlite/0000_majestic_ronan.sql`
+  cannot fall into it, and `event.concept_slug` is `ON DELETE restrict`
+  there: a concept with evidence cannot be deleted at all.
 - **`index_run.source_root` is not where a manimkc file is.** It is the
   directory the run *read*, which for manimkc is the checkout the CLI was
   pointed at, and for `concepts`, `diagrams` and `sessions` is a repo-relative
@@ -1029,33 +1032,44 @@ not have to be worked out again.
   `--workspaces`. Miss either and the workspace is never type-checked at all.
   They are NOT eslint-ignored: unlike the two submodules they are ours, and the
   root config lints them correctly.
-- **The catalog needs a database before its tests do anything.**
-  `createdb gnosia` against the Homebrew Postgres 17, then
-  `npm run catalog -- migrate`. Without a reachable Postgres the schema tests
-  skip themselves with a named reason and `npm test` still passes, so a green
-  local run is not proof the schema is sound. CI runs a `postgres:17` service
-  and is where they are a real gate. The suites never read `gnosia`'s rows:
-  each makes a scratch database, and the end-to-end one imports `seed/`, a
-  small real slice cut with `catalog export --subset` (seed/README.md), since
-  the phase 3 cut-over removed `content/` and `learn/`. A database of your own
-  to look at is `createdb`, `migrate`,
-  `MANIMKC_ROOT=/nonexistent REMOTIONKC_ROOT=/nonexistent
-  REVIDEOKC_ROOT=/nonexistent BLENDERKC_ROOT=/nonexistent npm run catalog --
-  import seed`, then
+- **The catalog is a SQLite file, and there is no server to start.** The
+  file is `CATALOG_DB`, else `DATABASE_URL` when it names a path, else
+  `$GNOSIA_HOME/catalog.db`, else `~/.gnosia/catalog.db` (`databaseUrl()` in
+  `services/catalog/src/env.ts`), and `connect` creates it and its directory
+  on first use (`services/catalog/src/db.ts`), so there is no `createdb`
+  step. A `postgres://` value is refused with a pointer to
+  [docs/SQLITE-MIGRATION.md](docs/SQLITE-MIGRATION.md) rather than read as a
+  file name (`databasePath()` in `env.ts`). Both `.env.example` and
+  `services/catalog/.env.example` still carry
+  `DATABASE_URL=postgres://localhost:5432/gnosia`, a leftover of the port, so
+  set that line to the file's path (`DATABASE_URL=~/.gnosia/catalog.db`) in
+  any copy you make of them; a path there also skips the leftover Postgres
+  check in `scripts/dev.sh`, which otherwise stops `npm run dev:up` on a
+  machine with `pg_isready` installed and no Postgres running. The suites never read the
+  catalog's own file: each makes a scratch file under the OS temp directory
+  (`services/catalog/test/scratch-database.ts`), and the end-to-end one
+  imports `seed/`, a small real slice cut with `catalog export --subset`
+  (seed/README.md), since the phase 3 cut-over removed `content/` and
+  `learn/`. A database of your own to look at is `CATALOG_DB=<file> npm run
+  catalog -- migrate`, then `MANIMKC_ROOT=/nonexistent
+  REMOTIONKC_ROOT=/nonexistent REVIDEOKC_ROOT=/nonexistent
+  BLENDERKC_ROOT=/nonexistent npm run catalog -- import seed`, then
   `catalog flip` for topics, tags, concepts, sessions, courses and diagrams in
-  that order (`scripts/lib/flip-order.mjs`; README.md, "Install"). `npm run
-  e2e` builds exactly that database on its own.
+  that order (`scripts/lib/flip-order.mjs`; README.md, "Install"), all with
+  the same `CATALOG_DB`. `npm run e2e` builds exactly that database on its
+  own.
 - **A suite that wants every migration takes `migratedScratchDatabase()`,
   not `createScratchDatabase()` plus `applyMigrations`.** vitest's global
   setup (`services/catalog/test/migrated-template.ts`) migrates one template
-  per run and each call clones it with `CREATE DATABASE ... TEMPLATE`, which
-  cut the catalog suites' summed time from 417 s to 224 s with two workers
+  file per run, checkpoints its WAL into the main file and closes it, and
+  each call copies that file (`services/catalog/test/scratch-database.ts`).
+  On Postgres the same shortcut, `CREATE DATABASE ... TEMPLATE`, cut the
+  catalog suites' summed time from 417 s to 224 s with two workers
   (2026-10-04). `createScratchDatabase()` is still the empty database, for a
-  suite that migrates from empty or stops part-way (`partialMigrations`,
-  `BEFORE_BLOB_CONTRACT`); `schema.test.ts` migrating from empty is what
-  keeps the template honest. The template refuses connections, since
-  Postgres will not copy a database anyone is connected to, so never connect
-  to a `gnosia_test_template_*` database or point a suite at it.
+  suite that migrates from empty or stops part-way (`partialMigrations`);
+  `schema.test.ts` migrating from empty is what keeps the template honest.
+  Never open the template file or point a suite at it: a copy is only whole
+  because nothing holds the template open with a fresh WAL.
 - **`catalog import` is the name; `catalog index` is the alias.** `index`
   is `import` with no directory; it still runs it and prints the new name once
   on stderr, so a `--json` reader is unaffected. A few comments still say
@@ -1085,24 +1099,24 @@ not have to be worked out again.
   was imported from, which is why a test that flips some types sees files
   written.
 - **Flip day and the cut-over were a script, and it stays.**
-  `node scripts/flip-rehearsal.mjs --tree-from <dir>` copies `gnosia`
-  with `createdb -T`, imports a temp copy of `<dir>/content` and
+  `node scripts/flip-rehearsal.mjs --tree-from <dir>` copies the catalog's
+  file (or `--from <file>`) through SQLite's backup API
+  (`copyDatabase` in `scripts/lib/sqlite.mjs`), imports a temp copy of `<dir>/content` and
   `<dir>/learn`, flips the six types in the plan's order with an export after
   each group, imports and checks parity again, uploads manimkc's renders
   twice into a temp blob store, audits it, and drops the copy (`--keep`
   leaves it). Since the cut-over a checkout has neither folder, so a rehearsal
   with no `--tree-from` refuses by name; point it at an export
-  (`catalog export --out <dir>`) or `seed/`. It expects a database that holds
-  0013, or holds nothing 0013's guard would refuse: one at 0009 with renders
-  nobody uploaded fails its first `migrate`. Point `MANIMKC_ROOT` and
+  (`catalog export --out <dir>`) or `seed/`. Point `MANIMKC_ROOT` and
   `TLDRAWKC_ROOT` at a checkout with the submodules when the worktree has
-  none. Two steps guard the database: the first is a `pg_dump -Fc` backup
-  checked to list the learner tables, and the first import runs on a
-  throwaway copy and fails if it would remove any row (a tree without the
-  owner's untracked files prunes their rows, and deletions cascade).
-  `--real --database <name> --checkout <dir>` runs the same steps against
-  that database in place, from the checkout the script sits in only, with the
-  backup at `~/<name>-preflip-<time>.dump`, and `--real --cutover` (#157) is
+  none. Two steps guard the database: the first is a backup, a copy of the
+  database file checked to list the learner tables, and the first import
+  runs on a throwaway copy and fails if it would remove any row (a tree
+  without the owner's untracked files prunes their rows, and deletions
+  cascade). `--real --database <file> --checkout <dir>` runs the same steps
+  against that file in place, from the checkout the script sits in only,
+  with the backup in the home directory, named after the database (`~/catalog-preflip-<UTC time>.db` for `catalog.db`; `backupFile`
+  in the script), and `--real --cutover` (#157) is
   the cut-over itself. The owner tagged `content-files-final` on `a0afd93`
   and ran flip day from a worktree at it, so the cut-over runs from the main
   checkout's script with `--checkout` at that worktree: `--cutover` alone
@@ -1125,46 +1139,42 @@ not have to be worked out again.
   archive inside the checkout, where a `git clean` or a relayout could delete
   it. It records nothing on the database. Scheduling it is the launchd
   example in docs/DEPLOYMENT.md, "The nightly export".
-- **`0013_asset_blob_contract` is an ordinary migration again, and
-  `CONTRACT_MIGRATIONS` is empty.** 0013 requires a blob behind every video,
-  sidecar, poster and diagram SVG. Until the cut-over it was registered in
-  `services/catalog/src/migrations.ts`, so `migrate` held it back on a
-  database whose renders were never uploaded, since its guard would have
-  raised and rolled back the whole run, 0010 to 0012 included, which the
-  upload needs. The cost was that any migration generated after it waited
-  behind it on such a database. The cut-over unregistered it so migrations
-  may follow it again; the owner chose to merge that before their own
-  database had been through flip day, so theirs is the one database still
-  behind it. On a database without it, `migrate` now applies it like any
-  other, and its guard raises naming the assets and keys in the way and rolls
-  that run back. On such a database `catalog import` and `catalog asset
-  upload` then refuse too, since migrations are outstanding, so the way
-  forward is the code from before the cut-over, where 0013 is still held:
-  `git worktree add <dir> content-files-final` (the tag on `a0afd93`), run
-  flip day there (`node scripts/flip-rehearsal.mjs --real ...`, which
-  uploads and applies 0013), then come back; docs/CONTENT-MIGRATION.md,
-  "After the merge", has the steps. Only a database that was never through flip day can
-  be in that state; a fresh one has nothing 0013 refuses, since the import
-  after 0013 stores every file before its row. The holding
-  machinery stays for the next contract, and `test/blob-contract.test.ts`
-  registers 0013 through the `contracts` option to keep it tested. The
-  manimkc import stores each file itself, so a test fixture that writes a
-  stored-kind asset needs a blob (`services/catalog/test/stored-blob.ts`), or
-  a scratch database stopped at 0012
-  (`partialMigrations(BEFORE_BLOB_CONTRACT)`) when the upload before the
-  contract is what it tests.
-- **Never edit a migration under `services/catalog/drizzle/` once it has been
-  applied.** drizzle applies by the journal's timestamp (`when`), running
+- **`0013_asset_blob_contract` is Postgres history, and
+  `CONTRACT_MIGRATIONS` is empty.** On Postgres, 0013 required a blob behind
+  every video, sidecar, poster and diagram SVG, and until the cut-over
+  `migrate` held it back on a database whose renders were never uploaded,
+  since its guard would have rolled back the whole run. The SQLite journal
+  (`services/catalog/drizzle-sqlite/meta/_journal.json`) has two entries, and
+  the first, `0000_majestic_ronan`, carries the contract as a check from the
+  start (`asset_stored_blob_check`), so a fresh file has nothing to hold back.
+  A Postgres database that never went through flip day still holds rows that
+  check forbids, and `services/catalog/scripts/pg-to-sqlite.mjs` migrates its
+  target to head before copying, so those rows fail on the way in. The way
+  forward for such a database is flip day from the code at the tag
+  `content-files-final` (`git worktree add <dir> content-files-final`, then
+  `node scripts/flip-rehearsal.mjs --real ...` there, which uploads and
+  applies 0013; docs/CONTENT-MIGRATION.md, "After the merge"), then the port.
+  The holding machinery in `services/catalog/src/migrations.ts` stays for the
+  next contract; the suites in `test/blob-contract.test.ts` that need the
+  pre-0013 schema are skipped, since SQLite ships no such schema. A test
+  fixture that writes a stored-kind asset needs a blob
+  (`services/catalog/test/stored-blob.ts`), or the check refuses the row.
+- **Never edit a migration under `services/catalog/drizzle-sqlite/` once it
+  has been applied.** drizzle applies by the journal's timestamp (`when`), running
   every entry newer than the last one recorded, and never compares a hash; the
   catalog's own status (`migrationStatus`) compares each file's sha256 with
   the hashes drizzle recorded. So an edited applied file shows as pending
   forever while drizzle skips it on every run, and `catalog migrate` now
   refuses with `MigrationSkipped` naming it rather than report success. Change
-  `packages/schema/src/`, then `npm run generate -w @gnosia/catalog`.
-- **`learn/state/` is gone, and `learn` needs Postgres.** `events.jsonl`,
+  `packages/schema/src/`, then `npm run generate -w @gnosia/catalog`, which
+  writes into `drizzle-sqlite/` (`services/catalog/drizzle.config.ts`). The
+  old `services/catalog/drizzle/` folder is the Postgres journal, kept only
+  for the port script's reference (docs/SQLITE-MIGRATION.md); nothing applies
+  it.
+- **`learn/state/` is gone, and `learn` needs the catalog.** `events.jsonl`,
   `model.json` and `reviews.json` are the `event`, `mastery` and `review`
-  tables; `index.json` is a query. `npm run learn -- status` fails when the
-  database is down, which is deliberate: both skills open with it and stop.
+  tables; `index.json` is a query. `npm run learn -- status` fails when it
+  cannot open the catalog's file, which is deliberate: both skills open with it and stop.
   Since Track C, `concept add`, `check add` and `session log` need it too: they
   read the `content_source` row to know whether a note or a log is a file or
   rows, and since the cut-over every one is rows; a whole note is edited with
@@ -1183,15 +1193,18 @@ not have to be worked out again.
   an unreachable database is refused too. Before the cut-over both cases read
   the repository's folder, and an empty folder answered "no notes" when the
   truth was a database that was down or had not flipped the type.
-- **Migration `0010` seeds two rows and guards every table, and both surprise a
-  test.** It inserts the `local` learner (before the first `owner_id` foreign
-  key) and a `catalog_instance` row saying `primary`, so a fresh scratch
-  database is no longer empty: a test that inserts `learner` without
-  `onConflictDoNothing()` fails on `learner_pkey`. And every table but
-  `catalog_instance` carries a statement trigger that refuses all writes when
-  that row says `copy`; a database made with `createdb -T` from a copy is a
-  copy too. Tests and `scripts/e2e.mjs` pass `CATALOG_COPY_OK=1` (or
-  `connect({ copyOk: true })`, or `set gnosia.copy_ok = on` in psql);
+- **The foundation migration seeds two rows and guards every table, and both
+  surprise a test.** `0000_majestic_ronan` in `services/catalog/drizzle-sqlite/`
+  (on Postgres it was `0010`) inserts the `local` learner and a
+  `catalog_instance` row saying `primary`, so a fresh scratch database is not
+  empty: a test that inserts `learner` without `onConflictDoNothing()` fails
+  on its primary key. And every table but `catalog_instance` carries three
+  row triggers (`<table>_copy_guard_ins`, `_upd`, `_del`) that refuse a
+  write when that row says `copy`; a file copied from a copy is a copy too.
+  The triggers call `catalog_copy_ok()`, a function `connect` registers on
+  each connection (`services/catalog/src/db.ts`), so a bare `sqlite3` shell
+  fails every write to a guarded table with "no such function". Tests and `scripts/e2e.mjs`
+  pass `CATALOG_COPY_OK=1` (or `connect({ copyOk: true })`);
   nothing else should. A content table is written only from
   `services/catalog/src/content/` or `src/index/`, which
   `services/catalog/test/content-writes.test.ts` checks by grep, and a
@@ -1228,17 +1241,20 @@ not have to be worked out again.
   no owner at all, so accounts need every type flipped first. Do not answer
   a scoped read's error by reading unscoped: `scopedRead` does that only
   after the catalog says `owner_id` is absent.
-- **The web app imports `@gnosia/catalog/state`, and `pg` stays external.**
-  `serverExternalPackages: ["pg"]` in `apps/web/next.config.ts` is
-  load-bearing: the
-  driver resolves its optional native binding through a runtime `require` no
-  bundler can follow. `transpilePackages` is deliberately *not* there —
+- **The web app imports `@gnosia/catalog/state`, and its driver stays
+  external.** The catalog's driver is `better-sqlite3`
+  (`services/catalog/package.json`), a native addon no bundler can pack, and
+  Next keeps it external with no configuration: it is on Next's built-in
+  `serverExternalPackages` list
+  (`node_modules/next/dist/docs/01-app/03-api-reference/05-config/01-next-config-js/serverExternalPackages.md`).
+  The `serverExternalPackages: ["pg"]` entry still in
+  `apps/web/next.config.ts` is a leftover of the Postgres driver. `transpilePackages` is deliberately *not* there —
   Turbopack transpiles workspace packages on its own, verified by removing an
   entry and building. A client component must take the shared constants from
   `@gnosia/schema/shared`, which imports nothing; taking them from
   `@gnosia/schema` would drag drizzle into the browser bundle, and
   `apps/web/src/lib/learner-store.ts` carries `import "server-only"` so that mistake
-  fails the build rather than shipping a Postgres driver.
+  fails the build rather than shipping a database driver.
 - **Every page under `(app)/` has a loading boundary, and must keep one.**
   `apps/web/src/app/(app)/loading.tsx` draws `PageLoading`, so a press on a
   tab shows the new tab and a frame at once; without it Next has nothing to
@@ -1260,8 +1276,10 @@ not have to be worked out again.
   theme cookie and the learner snapshot, so nothing is prerendered. Nothing
   reads the database at build time either — every read calls `connection()`
   first — so `npm run build` succeeds with no database, which is what Vercel
-  has today. Verify both after touching the layout: build with `DATABASE_URL`
-  pointed at a dead port, then serve it and load a page.
+  has today. Verify both after touching the layout: build with `CATALOG_DB`
+  pointed at a path in an empty scratch directory and check no file appeared
+  there (`connect` creates the file on first use, so a file there means
+  something read at build time), then serve it and load a page.
 - **`provider_key` is named in one module, and a drizzle error near it is
   never logged whole.** The owner's provider keys ([docs/BYOK.md](docs/BYOK.md))
   are read and written only by `services/catalog/src/state/provider-keys.ts`;
@@ -1278,19 +1296,19 @@ not have to be worked out again.
   that is the design, not a bug.
 - **A drizzle error's message never says why the database failed.** drizzle
   wraps every driver error as `Failed query: <sql>` and puts the driver's error
-  on `cause`, and a refused `localhost` connection arrives there as an
-  `AggregateError` with an empty message. So a dead port, a bad password and a
-  missing database all read the same. Read the `code` down the `cause` chain,
-  as `services/catalog/src/connection-failure.ts` does; the catalog CLI turns
-  it into exit 3 for unreachable, which is what the studio's D16 degrade keys
-  on. A regex over the text is how the studio once refused every job with the
+  on `cause`, so a file that cannot be opened, a locked one and one that is
+  not a database all read the same. Read the `code` down the `cause` chain,
+  as `services/catalog/src/connection-failure.ts` does (`SQLITE_CANTOPEN` is
+  unreachable; `SQLITE_BUSY` and `SQLITE_NOTADB` are refusals, beside the
+  Postgres-era codes it still lists); the catalog CLI turns unreachable into
+  exit 3, which is what the studio's D16 degrade keys on. A regex over the text is how the studio once refused every job with the
   database down.
 - **Never edit an applied migration, including its comments.** The catalog
   reads a migration as applied by the sha256 of the whole file (drizzle itself
   goes by timestamp and skips it), so rewording a comment in
-  `services/catalog/drizzle/*.sql` makes it pending forever and
+  `services/catalog/drizzle-sqlite/*.sql` makes it pending forever and
   `npm run learn -- doctor` starts reporting the database as behind. Bundle 5
-  did this to itself once, tidying a comment in 0004. Corrections go in
+  did this to itself once, tidying a comment in the Postgres journal's 0004. Corrections go in
   `SCHEMA.md` or in the schema source, never in the SQL.
 - **A `"use client"` module's exports are client references, functions
   included.** A server component that imports `assetKindLabel` from
@@ -1361,21 +1379,24 @@ not have to be worked out again.
   again. "Told it to stop" and "it has stopped" are different facts, and only
   the second is safe to rename a file behind.
 - **CI is a gate again, and it is Linux where the local gate is macOS.**
-  "Lint, test, and build" runs on Ubuntu against a `postgres:17` service; the
-  local gate (`npm run lint && npm run typecheck && npm test && npm run
-  build`, with Postgres up) runs on Homebrew's Postgres. Wait for both before
-  merging. What differs between the two, each of which once failed only on
-  CI: the database's default collation (C on Homebrew, en_US.utf8 in the
-  image), so every `ORDER BY` over text goes through `bytewise` in
-  `services/catalog/src/sql-order.ts` or spells `collate "C"`, and the scratch
-  databases sort linguistically on purpose so a missing one fails locally too
-  (`services/catalog/test/scratch-database.ts`); the home directory
-  (`/home/runner`, so never test for a `/home/` prefix); file times
+  "Lint, test, and build" runs on Ubuntu; the local gate (`npm run lint &&
+  npm run typecheck && npm test && npm run build`) runs on the Mac, and
+  neither needs a database server. `.github/workflows/ci.yml` still starts a
+  `postgres:17` service, installs the Postgres 17 client tools and exports a
+  `postgres://` `DATABASE_URL` to every step, all leftovers of the port: the
+  catalog refuses that URL (`databasePath()` in
+  `services/catalog/src/env.ts`), so code that opens the default database
+  instead of a scratch file fails on CI and not on a laptop with
+  `DATABASE_URL` unset. Wait for both before merging. What differs between
+  the two, each of which once failed only on CI: text order, so every
+  `ORDER BY` over text goes through `bytewise` in
+  `services/catalog/src/sql-order.ts` or spells `collate binary` (on Postgres
+  the default collation was C on Homebrew and en_US.utf8 in CI's image;
+  SQLite's default is already binary, and the rule stays so no order depends
+  on a default); the home directory
+  (`/home/runner`, so never test for a `/home/` prefix); and file times
   (`utimes` keeps whole microseconds of a double, so a time read back from
-  `stat` and set again can come out a microsecond short on Linux); the
-  Postgres client tools (found through `PG_BIN`, `PATH`, `pg_config --bindir`
-  or Homebrew, in `scripts/lib/pg.mjs`, and installed at version 17 by the
-  workflow); and `gnosia`, which on CI is the service's empty database.
+  `stat` and set again can come out a microsecond short on Linux).
   History: from 2026-09-14 to about 2026-10-01 Actions was blocked by billing
   and every PR merged on the local gate alone. That failure looks like a run
   that fails in single-digit seconds with zero steps run, on `main` as well

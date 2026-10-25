@@ -32,7 +32,7 @@ Gnosia
 
 **Gnosia** is a personal study workspace built around the NUS School of Computing AY2026/27 course shortlist. A Next.js hub renders each course as a docs-style roadmap: topic checklists, notes, curated resources, and short Socratic tutoring sessions whose conclusions are saved back against the topic.
 
-Behind the hub sits a tutoring loop that runs inside Claude Code. It measures what you already know, plans a path from there to a goal, teaches one reasoning step at a time, and schedules what you will forget. Everything it writes lands in Postgres, each change a revision with an author and a reason that `catalog history` shows, and `learn vault pull` hands the notes back as plain Markdown you can read and edit.
+Behind the hub sits a tutoring loop that runs inside Claude Code. It measures what you already know, plans a path from there to a goal, teaches one reasoning step at a time, and schedules what you will forget. Everything it writes lands in the catalog, a SQLite file, each change a revision with an author and a reason that `catalog history` shows, and `learn vault pull` hands the notes back as plain Markdown you can read and edit.
 
 A third part, the `tools/manimkc/` submodule, renders narrated animations for concepts that text and SVG cannot carry.
 
@@ -55,15 +55,15 @@ Knowing what is worth learning and actually learning it are two different proble
 | Part | Where | What it does |
 | --- | --- | --- |
 | Roadmap | `apps/web/` | Next.js hub over the AY2026/27 shortlist: progress, notes, resources, tutoring sessions, topic recaps |
-| Learning pipeline | `scripts/learn/`, `services/catalog/src/learn/` | Probe → Plan → Teach → Close loop over a knowledge base in Postgres |
+| Learning pipeline | `scripts/learn/`, `services/catalog/src/learn/` | Probe → Plan → Teach → Close loop over a knowledge base in the catalog |
 | Asset generation | `tools/manimkc/` (submodule) | Narrated manim animations for concepts with moving parts |
 | Asset generation | `tools/remotionkc/` (submodule) | Narrated Remotion explainer videos, indexed like manimkc's and labelled "remotion" |
 | Asset generation | `tools/revideokc/` (submodule) | Narrated Revideo explainer videos, indexed like manimkc's and labelled "revideo" |
 | Asset generation | `tools/blenderkc/` (submodule) | Narrated photoreal 3D explainer videos rendered by Blender's Cycles, indexed like manimkc's and labelled "blender" |
 | Diagrams | [`tools/tldrawkc/`](tools/tldrawkc/README.md) (submodule) | Teaching diagrams drawn on a real tldraw canvas, exported as self-contained SVG with the editable `.tldr` committed beside it |
-| Catalog | `packages/schema/`, `services/catalog/` | The Postgres database that owns the content and the learner state, and the `catalog` CLI that writes and reads it |
+| Catalog | `packages/schema/`, `services/catalog/` | The SQLite database (one file, `~/.gnosia/catalog.db` by default) that owns the content and the learner state, and the `catalog` CLI that writes and reads it |
 
-Ten courses are covered (CS2111, CS4263, CP4281 through CP4285, CS3216, CS3227, CS3249). Three have inferred syllabi and say so in a banner until official NUSMods data lands. Learner state — ticks, notes, recaps, preferences — lives in Postgres alongside the catalog; there are no accounts yet, just one learner row behind one owner password (`/sign-in`). A browser that used the old `localStorage` document imports it once, automatically, on first load.
+Ten courses are covered (CS2111, CS4263, CP4281 through CP4285, CS3216, CS3227, CS3249). Three have inferred syllabi and say so in a banner until official NUSMods data lands. Learner state — ticks, notes, recaps, preferences — lives in the same database as the catalog; there are no accounts yet, just one learner row behind one owner password (`/sign-in`). A browser that used the old `localStorage` document imports it once, automatically, on first load.
 
 | Surface | Purpose |
 | --- | --- |
@@ -127,7 +127,7 @@ back in layers with `ls`, `show`, `path` and `search`, every one of them
 git clone https://github.com/c-wenlong/gnosia
 cd gnosia
 npm ci
-cp .env.example apps/web/.env.local   # Next reads it from apps/web/, never the root
+cp .env.example apps/web/.env.local   # Next reads it from apps/web/, never the root; fix its DATABASE_URL (below)
 npm run dev
 ```
 
@@ -139,22 +139,21 @@ tooling at the end of this section fetches one of them.
 
 Open [http://localhost:3000](http://localhost:3000). Node 22 or newer is required.
 
-The diagram studio at `/studio` needs its runner beside the app. `npm run dev:up` starts both in one tmux session, a pane each, after checking Node, `node_modules`, Postgres, your sign-in variables and the tldrawkc build; `npm run dev:down` stops them, the runner first so it can finish what it is writing. Without tmux it runs both in the one terminal, as `npm run dev:all` does. `scripts/dev.sh --help` lists the options.
+The diagram studio at `/studio` needs its runner beside the app. `npm run dev:up` starts both in one tmux session, a pane each, after checking Node, `node_modules`, your sign-in variables and the tldrawkc build; `npm run dev:down` stops them, the runner first so it can finish what it is writing. Without tmux it runs both in the one terminal, as `npm run dev:all` does. `scripts/dev.sh --help` lists the options. Its database check is a leftover of the port and still looks for Postgres whenever `DATABASE_URL` in `apps/web/.env.local` is unset or a `postgres://` URL: on a machine with `pg_isready` installed it stops the start when no Postgres answers. With `DATABASE_URL` set to the catalog file's path, as below, it skips that check with a warning; `--no-checks` skips every check.
 
-The app reads its courses, topics, notes and diagrams from Postgres, and nothing else, so it needs Postgres 17 running locally (`brew install postgresql@17 && brew services start postgresql@17`). The repository holds no content of its own beyond [`seed/`](seed/README.md), a small real slice in the export format, so a fresh clone builds its database from that. With Postgres up, the first time:
+The app reads its courses, topics, notes and diagrams from the catalog, and nothing else. The catalog is one SQLite file, `$GNOSIA_HOME/catalog.db`, else `~/.gnosia/catalog.db`, so there is no database server to install or start ([SQLITE-MIGRATION.md](docs/SQLITE-MIGRATION.md)). The repository holds no content of its own beyond [`seed/`](seed/README.md), a small real slice in the export format, so a fresh clone builds its database from that. The first time:
 
 ```bash
-createdb gnosia                                         # first checkout only; a second checkout reuses it
-npm run catalog -- migrate                                  # creates the tables, or brings them up to date
+npm run catalog -- migrate                                  # creates the file, or brings its tables up to date
 MANIMKC_ROOT=/nonexistent REMOTIONKC_ROOT=/nonexistent REVIDEOKC_ROOT=/nonexistent BLENDERKC_ROOT=/nonexistent npm run catalog -- import seed    # the seed, leaving the video tools out
 for t in topics tags concepts sessions courses diagrams; do npm run catalog -- flip $t; done   # the database owns each type
 ```
 
 The flips run in that order, the one `scripts/lib/flip-order.mjs` keeps. `MANIMKC_ROOT=/nonexistent` leaves manimkc out, since no seed topic maps a video folder and the import would refuse the renders it found, and `REMOTIONKC_ROOT=/nonexistent`, `REVIDEOKC_ROOT=/nonexistent` and `BLENDERKC_ROOT=/nonexistent` do the same for remotionkc, revideokc and blenderkc, whose folders name topics the seed does not hold; the seed's README says more. With your own content, import an export of it (`catalog import <dir>`) in place of `seed`. Once topics map their folders (`catalog topic map`), a bare `npm run catalog -- import` takes in the submodules' videos and `npm run catalog -- asset upload --source manimkc` (and `--source remotionkc`, `--source revideokc`) copies them, their captions and posters into the blob store. `npm run e2e` builds exactly this database on its own, under a throwaway name, so the smoke test needs none of these steps.
 
-A type that has not been flipped is refused by name rather than read from the files: the page says it could not read its content, and the server log names the `catalog flip` to run ([CONTENT-MIGRATION.md](docs/CONTENT-MIGRATION.md) has the flip-day details). Without Postgres the app shows a banner saying nothing you change is saved, and each page that shows content says it could not read it.
+A type that has not been flipped is refused by name rather than read from the files: the page says it could not read its content, and the server log names the `catalog flip` to run ([CONTENT-MIGRATION.md](docs/CONTENT-MIGRATION.md) has the flip-day details). When the app cannot open the catalog it shows a banner saying nothing you change is saved, and each page that shows content says it could not read it.
 
-Both the app and the catalog CLI default to `postgres://localhost:5432/gnosia`. If you point `DATABASE_URL` anywhere else, set the same value in `services/catalog/.env` (copy `services/catalog/.env.example`): the CLI reads that file and never `apps/web/.env.local`, so a value set in only one place migrates one database while the app connects to another.
+Both the app and the catalog CLI default to that file, and `CATALOG_DB` names another (`services/catalog/src/env.ts`). `.env.example` and `services/catalog/.env.example` still set `DATABASE_URL` to a `postgres://` URL, a leftover of the port that the catalog refuses (`databasePath()` in `env.ts`). In your copies, set it to the file's path instead, `DATABASE_URL=~/.gnosia/catalog.db`: the catalog reads a path there and expands the `~`. If you point the catalog anywhere else, set the same value in `services/catalog/.env` (copy `services/catalog/.env.example`): the CLI reads that file and never `apps/web/.env.local`, so a value set in only one place migrates one database while the app connects to another. A database from before the move is carried over with `services/catalog/scripts/pg-to-sqlite.mjs` ([SQLITE-MIGRATION.md](docs/SQLITE-MIGRATION.md)).
 
 Three video-tool submodules are private, so a clone leaves `tools/manimkc/`, `tools/remotionkc/` and `tools/revideokc/` empty, and the app, the tests and `npm run catalog -- import seed` all work without them. On a machine with access, `git submodule update --init tools/manimkc` fetches one (add `--recursive` for manimkc, which nests a manim submodule of its own). A clone that predates the tools/ move needs `git submodule sync --recursive` first, because the submodule paths changed.
 
@@ -255,11 +254,11 @@ flowchart LR
         LIB["bkt · graph<br/>schedule"]
         ST["the learner store"]
     end
-    subgraph KB["the notes (rows in postgres)"]
+    subgraph KB["the notes (rows in the catalog)"]
         REC["concept · session_log_entry<br/>(authored during Close)"]
         MAP["learn map<br/>(derived, printed)"]
     end
-    subgraph PG["postgres"]
+    subgraph PG["the catalog (SQLite)"]
         EV[("event<br/>source of truth, append-only")]
         DER["mastery · review<br/>(projections, replayable)"]
         STA["progress · recap · preference<br/>(the web hub's state)"]
@@ -282,11 +281,11 @@ flowchart LR
 
 | Path | Purpose | Shipped? |
 | --- | --- | --- |
-| `concept`, `session_log_entry`, `diagram` (Postgres) | Atomic concept notes (Obsidian-compatible and wikilinked once pulled), one log per session written live, and the diagrams drawn while teaching. `catalog export` or the nightly export is the copy | not in git |
+| `concept`, `session_log_entry`, `diagram` (the catalog) | Atomic concept notes (Obsidian-compatible and wikilinked once pulled), one log per session written live, and the diagrams drawn while teaching. `catalog export` or the nightly export is the copy | not in git |
 | `seed/` | A small slice of the content in the export format, for a fresh clone and the tests | tracked |
 | `~/.gnosia/` (`GNOSIA_HOME`) | The blob store (`blobs/`), the Obsidian vault (`vault/`) and the nightly export (`archive/`, `npm run export:nightly`) | outside the repo |
-| `event`, `mastery`, `review` (Postgres) | The trajectory and its projections. `event` is the only copy | not in git |
-| `progress`, `recap`, `preference` (Postgres) | The web hub's ticks, notes and recaps. Also the only copy | not in git |
+| `event`, `mastery`, `review` (the catalog) | The trajectory and its projections. `event` is the only copy | not in git |
+| `progress`, `recap`, `preference` (the catalog) | The web hub's ticks, notes and recaps. Also the only copy | not in git |
 | `apps/web/.env.local` | `OWNER_PASSWORD`, `AUTH_SECRET`, `DATABASE_URL`, provider keys; read from `apps/web/`, never the root | gitignored |
 | `tools/manimkc/out/`, `tools/manimkc/cache/` | Rendered videos and the TTS cache | gitignored |
 
@@ -316,14 +315,14 @@ Keys are read server-side only (`apps/web/src/lib/agent/providers.ts`); the brow
 | `npm run test` | Vitest, single run |
 | `npm run test:watch` | Vitest watch mode |
 | `npm run test:coverage` | Vitest with v8 coverage, lcov for Codecov |
-| `npm run e2e` | Headless smoke test of a production build against a throwaway database it builds from `seed/`. Needs `npm run build` and Postgres first; see [CONTRIBUTING.md](CONTRIBUTING.md#end-to-end-smoke) |
+| `npm run e2e` | Headless smoke test of a production build against a throwaway database it builds from `seed/`. Needs `npm run build` first; see [CONTRIBUTING.md](CONTRIBUTING.md#end-to-end-smoke) |
 | `npm run learn -- <cmd>` | The learning pipeline CLI |
 | `npm run canvas -- <cmd>` | The `tools/tldrawkc/` diagram CLI. Needs `npm ci && npm run build` inside the submodule first |
-| `npm run catalog -- <cmd>` | The catalog CLI: `migrate`, `import` (`index` is its old name), `status`, `ls`, `show`, `path`, `search`. Needs `createdb gnosia` against a local Postgres 17 |
+| `npm run catalog -- <cmd>` | The catalog CLI: `migrate`, `import` (`index` is its old name), `status`, `ls`, `show`, `path`, `search`. Works on the catalog's SQLite file, created by `migrate` on first use |
 
-Thirteen Vitest files cover the three halves. On the web side: curriculum integrity, progress counting, learner-state reducers, topic recaps and the v1 to v2 migration, the recap summariser, and agent prompt/provider/objective selection. On the pipeline side: BKT update formulas and information-gain ordering, DAG cycle detection and frontier advance, the SM-2 interval ladder and leech handling, frontmatter and wikilink parsing, and `scripts/learn/cli.test.mjs` over the command surface itself. On the catalog side: migrations applying from empty and staying idempotent, and the constraints that make the database worth having — an unknown foreign key, a prerequisite kind outside `requires|assumes`, a `collection_item` with zero or two targets, and an `UPDATE` on `event`. Those need a reachable Postgres and skip themselves with a named reason without one, so `npm test` stays green on a machine that has none; CI runs a `postgres:17` service so they are a real gate there.
+Thirteen Vitest files cover the three halves. On the web side: curriculum integrity, progress counting, learner-state reducers, topic recaps and the v1 to v2 migration, the recap summariser, and agent prompt/provider/objective selection. On the pipeline side: BKT update formulas and information-gain ordering, DAG cycle detection and frontier advance, the SM-2 interval ladder and leech handling, frontmatter and wikilink parsing, and `scripts/learn/cli.test.mjs` over the command surface itself. On the catalog side: migrations applying from empty and staying idempotent, and the constraints that make the database worth having — an unknown foreign key, a prerequisite kind outside `requires|assumes`, a `collection_item` with zero or two targets, and an `UPDATE` on `event`. Each runs against a scratch SQLite file of its own under the OS temp directory (`services/catalog/test/scratch-database.ts`), so they need no database server and run everywhere.
 
-`.github/workflows/ci.yml` runs `lint` → `typecheck` → `test:coverage` → `build` on every pull request (not on the push that merges it, which would test the same code twice), with two test files at a time, against a `postgres:17` service container, then uploads the lcov report to Codecov. Production deploys only when a GitHub release is published (`.github/workflows/deploy.yml`); pull requests get no preview and a merge to `main` deploys nothing. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+`.github/workflows/ci.yml` runs `lint` → `typecheck` → `test:coverage` → `build` on every pull request (not on the push that merges it, which would test the same code twice), with two test files at a time, then uploads the lcov report to Codecov. Production deploys only when a GitHub release is published (`.github/workflows/deploy.yml`); pull requests get no preview and a merge to `main` deploys nothing. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Contributing
 

@@ -1,7 +1,7 @@
 # Contributing to gnosia
 
 Thanks for your interest in contributing! gnosia is a Next.js study hub
-with a tutoring pipeline beside it, both over one Postgres database. Both
+with a tutoring pipeline beside it, both over one SQLite database file. Both
 halves are meant to stay readable: every write is a revision with a reason,
 and `catalog export` turns the content back into plain files at any time.
 
@@ -11,7 +11,7 @@ and `catalog export` turns the content back into plain files at any time.
 git clone https://github.com/c-wenlong/gnosia.git
 cd gnosia
 npm ci
-cp .env.example apps/web/.env.local
+cp .env.example apps/web/.env.local   # then fix its DATABASE_URL line (see below)
 npm run dev
 npm test
 ```
@@ -20,8 +20,7 @@ The web app reads everything from the catalog, and a fresh clone's catalog is
 built from [`seed/`](seed/README.md), the only content the repository holds:
 
 ```bash
-createdb gnosia            # Homebrew Postgres 17, already running
-npm run catalog -- migrate
+npm run catalog -- migrate   # creates the catalog file, ~/.gnosia/catalog.db by default
 MANIMKC_ROOT=/nonexistent REMOTIONKC_ROOT=/nonexistent REVIDEOKC_ROOT=/nonexistent BLENDERKC_ROOT=/nonexistent npm run catalog -- import seed
 for t in topics tags concepts sessions courses diagrams; do npm run catalog -- flip $t; done
 npm run catalog -- status
@@ -30,9 +29,11 @@ npm run catalog -- status
 README.md, "Install", says why each step is there. The tests do not use this
 database.
 
-Without a reachable Postgres the catalog tests skip themselves with a reason
-and `npm test` still passes. With one, they never read your `gnosia`: each
-suite creates and drops its own scratch database, and the end-to-end suite
+The catalog is one SQLite file, so there is no database server to install or
+start ([docs/SQLITE-MIGRATION.md](docs/SQLITE-MIGRATION.md)). The catalog
+tests never read your catalog: each suite makes its own scratch file under the
+OS temp directory and removes it (`services/catalog/test/scratch-database.ts`),
+and the end-to-end suite
 imports [`seed/`](seed/README.md), a small real slice of the content in the
 export format. The repository's `content/` and `learn/` went in phase 3 of
 [docs/CONTENT-MIGRATION.md](docs/CONTENT-MIGRATION.md). A suite that needs a
@@ -48,12 +49,20 @@ moves with it in the same commit.
 a copy at the repository root is never read. Set `OWNER_PASSWORD` and
 `AUTH_SECRET` first (`openssl rand -base64 32` for the secret), or `/sign-in`
 refuses every password and says why: the landing page at `/` is the only
-page that opens without them. Set `DATABASE_URL` there if yours is not the
-default; the app reads every course, note and diagram from that database, so
-it has to be migrated, imported and flipped first (README.md, "Install"). A non-default `DATABASE_URL` also goes in
-`services/catalog/.env` (copy `services/catalog/.env.example`), because the
-catalog CLI reads that file and never `apps/web/.env.local`; set in one place
-only, `migrate` and the app talk to different databases. The file matters for the agent chat too, which needs at least one
+page that opens without them. Then fix the `DATABASE_URL` line the copy
+carries: `.env.example` still names a `postgres://` URL, a leftover of the
+port, and the catalog refuses one (`databasePath()` in
+`services/catalog/src/env.ts`). Set it to the catalog's file,
+`DATABASE_URL=~/.gnosia/catalog.db`, which is also the default the app and
+the catalog CLI use with no variable set (`$GNOSIA_HOME/catalog.db` when that
+is set); a path there also keeps `npm run dev:up`'s leftover Postgres check
+out of the way. The app reads every course, note and
+diagram from that file, so it has to be migrated, imported and flipped first
+(README.md, "Install"). A different file goes in `services/catalog/.env` as
+well (copy `services/catalog/.env.example`, whose `DATABASE_URL` line needs
+the same fix), because the catalog CLI reads that file and never
+`apps/web/.env.local`; set in one place only, `migrate` and the app talk to
+different databases. The file matters for the agent chat too, which needs at least one
 provider key (`NVIDIA_API_KEY`, `GEMINI_API_KEY` or `OPENROUTER_API_KEY`).
 With none set, the `/api/agent/*` routes answer `MISSING_API_KEY` and the rest
 of the app works.
@@ -131,7 +140,7 @@ bug fixes or docs. All welcome.
    them a fresh clone's typecheck fails on every image import. The build is
    still the gate that compiles the app the way it ships.
 3. **The knowledge base is a real study record, and none of it is in git.**
-   The notes, the session logs and the diagrams are rows in Postgres with a
+   The notes, the session logs and the diagrams are rows in the catalog with a
    revision per write, and the nightly export (`npm run export:nightly`) is
    their copy; the event log, the mastery model and the schedule are rows with
    no second copy anywhere. A PR carries no study data, and nothing in a PR
@@ -176,35 +185,37 @@ bug fixes or docs. All welcome.
 right password, one review card rated Good, `/learn`, a concept workspace and
 its tutor with no provider key, a session walked to its close screen, Mark
 watched on a video, a settings change, the dark theme, and sign-out. It is
-not part of `npm test`, because it needs a build and Postgres.
+not part of `npm test`, because it needs a build.
 
 Prerequisites:
 
 - A current production build: `npm run build`. The script never builds, and
   runs whatever `apps/web/.next` holds, so rebuild after changing the app.
-- Homebrew Postgres 17 running. The client tools are found on `PATH`, then
-  through `pg_config --bindir`, then in Homebrew's
-  `/opt/homebrew/opt/postgresql@17/bin`; set `PG_BIN` to name another
-  directory. A `gnosia` database is needed only with `--copy`.
+- No database server. A catalog file is needed only with `--copy`.
 - playwright-core from the tldrawkc submodule (`npm ci` inside
   `tools/tldrawkc`), or `PLAYWRIGHT_CORE` pointing at its `index.mjs`, and a
   Playwright Chromium in the cache or `CHROMIUM` pointing at one. This is the
   same lookup `docs/design/kit/shots.mjs` uses; the repo installs nothing for it.
 
-**It never touches `gnosia`.** A review rating, a session answer and Mark
-watched all write real evidence, and the event log is append-only, so the run
-works on a database of its own, `gnosia_e2e_<pid>_<time>`, and drops it
-afterwards, on a failure and on Ctrl-C too. `--keep-db` leaves it behind to
-inspect, and prints the `dropdb` line; `--headed` shows the browser.
+**It never writes to your catalog.** A review rating, a session answer and
+Mark watched all write real evidence, and the event log is append-only, so
+the run works on a database file of its own,
+`<OS temp dir>/gnosia_e2e_<pid>_<time>.db`, and removes it afterwards, on a
+failure and on Ctrl-C too (`scripts/e2e.mjs`). `--keep-db` leaves it behind
+to inspect, and prints the `rm` line; `--headed` shows the browser.
 
 By default it builds that database from the seed, exactly as README.md,
 "Install", builds a fresh clone's: an empty database, migrated, `catalog
 import seed/`, all six types flipped, and one `learn observe` so a review card
 is due, with the diagram's SVG in a temp blob store. The seed has no videos, so
 the video step (play, pause, see the place saved) prints `SKIP` with the reason
-and counts as neither a pass nor a failure. `--copy` (or `E2E_TEMPLATE_DB=<name>`) copies `gnosia`,
-or the database named, instead (`createdb -T`, or `pg_dump` when another
-connection holds the template open); every content type must be flipped there.
+and counts as neither a pass nor a failure. `--copy` (or `E2E_TEMPLATE_DB=<file>`) copies
+`$GNOSIA_HOME/catalog.db` (else `~/.gnosia/catalog.db`), or the file named,
+instead, through SQLite's backup API so a file
+another process holds open still copies whole (`copyDatabase` in
+`scripts/lib/sqlite.mjs`); every content type must be flipped there. `--copy` reads neither
+`CATALOG_DB` nor `DATABASE_URL` (`TEMPLATE_DB` in `scripts/e2e.mjs`), so a
+catalog kept anywhere else is named with `E2E_TEMPLATE_DB`.
 `--seed` is still accepted and means the default.
 
 Reading a failure: the run prints one line per step and a final `PASS` or
