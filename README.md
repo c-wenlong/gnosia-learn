@@ -11,7 +11,7 @@ Gnosia
 </p>
 
 <p align="center">
-  <a href="https://github.com/c-wenlong/gnosia/actions/workflows/ci.yml"><img src="https://github.com/c-wenlong/gnosia/actions/workflows/ci.yml/badge.svg?event=pull_request" alt="CI status"></a>
+  <a href="https://github.com/c-wenlong/gnosia-learn/actions/workflows/ci.yml"><img src="https://github.com/c-wenlong/gnosia-learn/actions/workflows/ci.yml/badge.svg?event=pull_request" alt="CI status"></a>
   <a href="https://app.codecov.io/gh/c-wenlong/gnosia"><img src="https://codecov.io/gh/c-wenlong/gnosia/graph/badge.svg?token=LRJZ81XZA4&branch=main" alt="Test coverage"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/typescript-5-blue.svg" alt="TypeScript 5"></a>
@@ -124,8 +124,8 @@ back in layers with `ls`, `show`, `path` and `search`, every one of them
 ## Install
 
 ```bash
-git clone https://github.com/c-wenlong/gnosia
-cd gnosia
+git clone https://github.com/c-wenlong/gnosia-learn
+cd gnosia-learn
 npm ci
 cp .env.example apps/web/.env.local   # Next reads it from apps/web/, never the root; fix its DATABASE_URL (below)
 npm run dev

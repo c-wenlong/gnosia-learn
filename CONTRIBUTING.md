@@ -8,8 +8,8 @@ and `catalog export` turns the content back into plain files at any time.
 ## Getting started
 
 ```bash
-git clone https://github.com/c-wenlong/gnosia.git
-cd gnosia
+git clone https://github.com/c-wenlong/gnosia-learn.git
+cd gnosia-learn
 npm ci
 cp .env.example apps/web/.env.local   # then fix its DATABASE_URL line (see below)
 npm run dev
@@ -266,7 +266,7 @@ the reviewer.
 
 ## Reporting bugs
 
-Use the [bug report template](https://github.com/c-wenlong/gnosia/issues/new?template=bug_report.yml)
+Use the [bug report template](https://github.com/c-wenlong/gnosia-learn/issues/new?template=bug_report.yml)
 and include your OS, Node version, browser and whether it was the live site or
 `npm run dev`; the exact command or route that failed with its full output; and
 steps to reproduce.
@@ -276,4 +276,4 @@ steps to reproduce.
 Read [README.md](README.md) for the tour, [ARCHITECTURE.md](ARCHITECTURE.md)
 for how the layers fit together, and [docs/LEARN.md](docs/LEARN.md) for the
 tutoring loop. Discussions are not enabled on this repo, so an
-[issue](https://github.com/c-wenlong/gnosia/issues) is the only channel.
+[issue](https://github.com/c-wenlong/gnosia-learn/issues) is the only channel.

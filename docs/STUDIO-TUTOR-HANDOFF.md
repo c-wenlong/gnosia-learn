@@ -205,7 +205,7 @@ The tutor shows @ only when a tag can work, and loads Lexical only then.
 | Daily cap reached (`dailyCap.exceeded`) | Same read | `MentionComposer` with both entries disabled, "Today's studio spend is used up", since the first planner turn would be refused |
 
 **Why one browser read after idle.** Health answers in 0.8 to 37 ms from the
-runner (*measured*, PR [#218](https://github.com/c-wenlong/gnosia/pull/218),
+runner (*measured*, PR [#218](https://github.com/c-wenlong/gnosia-learn/pull/218),
 idle to loaded), so the read is cheap, but a server-side read would still sit
 in front of every concept page's render and stall it for a whole timeout on a
 runner that hangs. Read from the browser, the page renders at once with the
