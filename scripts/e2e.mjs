@@ -46,15 +46,22 @@
 // under os.tmpdir().
 //
 // Exit codes: 0 every step passed, 1 something failed, 2 a prerequisite is missing.
-import { spawn } from 'node:child_process';
-import { closeSync, existsSync, mkdtempSync, openSync, readdirSync, readFileSync } from 'node:fs';
-import { createServer } from 'node:net';
+import { existsSync, mkdtempSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { FLIP_ORDER } from './lib/flip-order.mjs';
-import { exec as execTool } from './lib/proc.mjs';
+import {
+  buildSeedDatabase,
+  findChromium,
+  freePort,
+  npmScript,
+  playwrightCorePath,
+  seedEnv as harnessSeedEnv,
+  startServer as harnessStartServer,
+  stopGroup as harnessStopGroup,
+  TEST_PASSWORD,
+} from './lib/app-harness.mjs';
 import { copyDatabase, dropDatabase, openDatabase } from './lib/sqlite.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -76,9 +83,8 @@ if (flags.size > 0 || (SEED_FLAG && COPY)) {
 // content of its own since the cut-over, and gnosia is the owner's.
 const SEED = !COPY;
 
-/** Values the server is started with. Test values only; nothing real is typed anywhere. */
-const PASSWORD = 'e2e-smoke-owner-password';
-const SECRET = 'e2e-smoke-auth-secret-0123456789abcdef';
+/** The password the server is started with (scripts/lib/app-harness.mjs). A test value only. */
+const PASSWORD = TEST_PASSWORD;
 // The database file copied with --copy. The catalog's own by default
 // ($GNOSIA_HOME/catalog.db, else ~/.gnosia); E2E_TEMPLATE_DB names
 // another, such as a scratch copy flipped for a rehearsal, since the app
@@ -104,7 +110,7 @@ if (!existsSync(join(WEB, '.next/BUILD_ID'))) {
   missing('no production build at apps/web/.next. Run `npm run build` first; this script never builds.');
 }
 
-const corePath = process.env.PLAYWRIGHT_CORE ?? join(ROOT, 'tools/tldrawkc/node_modules/playwright-core/index.mjs');
+const corePath = playwrightCorePath(ROOT);
 if (!existsSync(corePath)) {
   missing(
     `playwright-core not found at ${corePath}. It comes from the tldrawkc submodule, not from this repo's dependencies: ` +
@@ -112,14 +118,6 @@ if (!existsSync(corePath)) {
   );
 }
 
-/** Same lookup as docs/design/kit/shots.mjs: the newest Chromium in the Playwright cache. */
-function findChromium() {
-  if (process.env.CHROMIUM) return process.env.CHROMIUM;
-  const cache = join(homedir(), 'Library/Caches/ms-playwright');
-  const dir = existsSync(cache) ? readdirSync(cache).filter((d) => d.startsWith('chromium-')).sort().pop() : undefined;
-  if (!dir) return undefined; // let Playwright look for its own
-  return join(cache, dir, 'chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing');
-}
 const chromiumPath = findChromium();
 if (chromiumPath !== undefined && !existsSync(chromiumPath)) {
   missing(`Chromium not found at ${chromiumPath}. Run \`npx playwright install chromium\` inside tools/tldrawkc, or set CHROMIUM.`);
@@ -200,91 +198,33 @@ function stopIfInterrupted() {
   if (interrupted) throw new Error('interrupted');
 }
 
-/**
- * Run a command from the repository root and collect its output, in a process
- * group of its own (scripts/lib/proc.mjs), so a Ctrl-C meant for this script
- * does not kill a child halfway through; the handler above decides what
- * stops, and in what order.
- */
-const exec = (command, args, env = process.env) => execTool(command, args, { env, cwd: ROOT });
-
-/**
- * Signal the server's whole process group and wait until nothing in it answers.
- * The server is spawned `detached`, so it leads its own group; `kill(-pid)`
- * reaches whatever it started too. services/studio/src/proc.ts explains why
- * "told it to stop" is not the same as "it stopped".
- */
+/** Stop the server's process group (scripts/lib/app-harness.mjs); a group that survives SIGKILL fails the run. */
 async function stopGroup(child) {
-  const alive = () => {
-    try {
-      process.kill(-child.pid, 0);
-      return true;
-    } catch (error) {
-      return error.code === 'EPERM';
-    }
-  };
-  const signal = (sig) => {
-    try {
-      process.kill(-child.pid, sig);
-    } catch {
-      /* already gone */
-    }
-  };
-  for (const sig of ['SIGTERM', 'SIGKILL']) {
-    signal(sig);
-    const until = Date.now() + 5_000;
-    while (alive() && Date.now() < until) await sleep(50);
-    if (!alive()) return;
-  }
+  if (await harnessStopGroup(child)) return;
   teardownProblem = `the server's process group ${child.pid} survived SIGKILL`;
   console.error(`e2e: ${teardownProblem}`);
 }
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // ---------------------------------------------------------------------------
 // The database copy.
 
 /** The environment every catalog and learn command against the seed database runs with. */
 function seedEnv() {
-  return {
-    ...process.env,
-    CATALOG_DB: COPY_DB,
-    DATABASE_URL: COPY_DB,
-    GNOSIA_HOME: SEED_HOME,
-    MANIMKC_ROOT: NO_MANIMKC,
-    REMOTIONKC_ROOT: NO_MANIMKC,
-    REVIDEOKC_ROOT: NO_MANIMKC,
-    BLENDERKC_ROOT: NO_MANIMKC,
-    // The knowledge base is the seed's, for any learn command that still
-    // looks at files; after the flips below it reads the notes from rows.
-    LEARN_ROOT: join(ROOT, 'seed'),
-  };
+  return harnessSeedEnv({ root: ROOT, db: COPY_DB, home: SEED_HOME, emptyRoot: NO_MANIMKC });
 }
 
 /** One `npm run --silent <script> -- ...` against the seed database, or a thrown error naming it. */
 async function seedCommand(script, args) {
-  const ran = await exec('npm', ['run', '--silent', script, '--', ...args], seedEnv());
-  if (ran.status !== 0) {
-    throw new Error(`\`npm run ${script} -- ${args.join(' ')}\` failed (${ran.status}): ${(ran.stderr || ran.stdout).trim().slice(-600)}`);
-  }
+  await npmScript(ROOT, seedEnv(), script, args);
 }
 
 /**
- * --seed: the database is built, not copied. Migrated, the seed imported the
- * way `catalog import` reads any tree, every type flipped in the flip-day
- * order (the web app refuses a type the database does not own), and one
+ * --seed: the database is built, not copied (buildSeedDatabase), and one
  * answer recorded through the learn CLI so the review flow has a card (the
- * seed carries content, not learner state). A flip checks parity against the
- * tree and records its hash; it writes nothing under seed/.
+ * seed carries content, not learner state).
  */
-
 async function buildFromSeed() {
-  // No create-database step: `catalog migrate` makes the file on first
-  // connect, which is the whole point of a SQLite catalog.
-  await seedCommand('catalog', ['migrate']);
-  await seedCommand('catalog', ['import', join(ROOT, 'seed')]);
-  for (const type of FLIP_ORDER) await seedCommand('catalog', ['flip', type]);
+  await buildSeedDatabase(ROOT, seedEnv());
   await seedCommand('learn', ['observe', '--concept', 'tool-calling', '--correct', 'true']);
 }
 
@@ -340,93 +280,18 @@ async function markReviewDue() {
 // ---------------------------------------------------------------------------
 // The server.
 
-/** A port nothing holds on either loopback address, since `localhost` may resolve to either. */
-async function freePort() {
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    const port = await listenOnce(0, '127.0.0.1');
-    // In use on ::1 means try another; no IPv6 loopback at all (EADDRNOTAVAIL) is fine.
-    const clash = await listenOnce(port, '::1').then(() => false, (error) => error.code === 'EADDRINUSE');
-    if (!clash) return port;
-  }
-  throw new Error('could not find a free port on 127.0.0.1 and ::1');
-}
-
-function listenOnce(port, host) {
-  return new Promise((resolve, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(port, host, () => {
-      const bound = server.address().port;
-      server.close(() => resolve(bound));
-    });
-  });
-}
-
 async function startServer(port) {
-  const env = {
-    ...process.env,
-    NODE_ENV: 'production',
-    CATALOG_DB: COPY_DB,
-    DATABASE_URL: COPY_DB,
-    OWNER_PASSWORD: PASSWORD,
-    AUTH_SECRET: SECRET,
-    // The seed's blob store, where its import put the diagram SVG.
-    ...(SEED_HOME === null ? {} : { GNOSIA_HOME: SEED_HOME }),
-    // The copy is throwaway, and may have been made from a database marked
-    // `copy`; this is the flag that says writing to it is intended.
-    CATALOG_COPY_OK: '1',
-    // Blank rather than unset: Next loads apps/web/.env.local and fills in any
-    // variable that is *undefined*, so deleting a key would let a real one back
-    // in. An empty string is defined, and the provider cascade treats it as absent.
-    NVIDIA_API_KEY: '',
-    GEMINI_API_KEY: '',
-    OPENROUTER_API_KEY: '',
-  };
-  delete env.__NEXT_PROCESSED_ENV;
-
   stopIfInterrupted();
-  const log = openSync(SERVER_LOG, 'a');
-  // `next` directly, not `npm run start`: npm would be the process we hold and
-  // the server a grandchild. `detached` makes it a group leader for stopGroup.
-  const child = spawn(process.execPath, [join(ROOT, 'node_modules/next/dist/bin/next'), 'start', '-p', String(port), '-H', '127.0.0.1'], {
-    cwd: WEB,
-    env,
-    detached: true,
-    stdio: ['ignore', log, log],
+  return harnessStartServer({
+    root: ROOT,
+    port,
+    db: COPY_DB,
+    home: SEED_HOME,
+    logFile: SERVER_LOG,
+    onSpawn: (child) => {
+      held.server = child;
+    },
   });
-  closeSync(log);
-  held.server = child;
-
-  let exited = null;
-  child.once('exit', (code, signal) => {
-    exited = { code, signal };
-  });
-
-  // `localhost`, not 127.0.0.1, although the server binds the IPv4 loopback
-  // only: a route handler's `request.url` under `next start` always names
-  // `localhost`, so the sign-in and sign-out redirects land there, and a
-  // cookie set for 127.0.0.1 would not be sent to it.
-  const base = `http://localhost:${port}`;
-  const until = Date.now() + 60_000;
-  for (;;) {
-    if (exited) throw new Error(`next start exited (${exited.code ?? exited.signal}) before answering. Server log:\n${tail(SERVER_LOG)}`);
-    try {
-      const res = await fetch(`${base}/`, { redirect: 'manual' });
-      if (res.status === 200) return base;
-    } catch {
-      /* not listening yet */
-    }
-    if (Date.now() > until) throw new Error(`next start did not answer 200 on / within 60s. Server log:\n${tail(SERVER_LOG)}`);
-    await sleep(250);
-  }
-}
-
-function tail(file, lines = 30) {
-  try {
-    return readFileSync(file, 'utf8').trimEnd().split('\n').slice(-lines).join('\n');
-  } catch {
-    return '(no log)';
-  }
 }
 
 // ---------------------------------------------------------------------------

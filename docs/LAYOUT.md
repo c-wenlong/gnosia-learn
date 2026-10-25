@@ -261,10 +261,12 @@ docs name this path — and `lib/`, the pipeline's pure maths (`bkt`, `graph`,
 `schedule`, `markdown`, `render`, `session-log`), imported by the TypeScript
 CLI and by the web app. The rest are one-off jobs: `dev.sh`
 (`dev:up`/`dev:down`, the dev processes), `nightly-export.mjs` (the dated
-export under the data root's `archive/`), `e2e.mjs`, `flip-rehearsal.mjs`,
+export under the data root's `archive/`), `e2e.mjs`, `demo-record.mjs` (a
+PR's browser video, its scenarios in `demo-scenarios/`), `flip-rehearsal.mjs`,
 `move-course-covers.mjs`, `update-gitmodules.sh`, `link-design-systems.py`,
 `course-covers.json`, and `lib/` (the scripts' own helpers — `pg.mjs`,
-`dev-env.mjs`, `cutover.mjs`, `flip-order.mjs`).
+`dev-env.mjs`, `cutover.mjs`, `flip-order.mjs`, and `app-harness.mjs`, the
+seed catalog and `next start` that `e2e.mjs` and `demo-record.mjs` share).
 
 ## .studio/
 

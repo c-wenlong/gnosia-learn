@@ -32,6 +32,7 @@
     "catalog": "tsx services/catalog/src/cli.ts",
     "studio": "tsx services/studio/src/index.ts",
     "e2e": "node scripts/e2e.mjs",
+    "demo:record": "node scripts/demo-record.mjs",
     "export:nightly": "node scripts/nightly-export.mjs"
   },
   "devDependencies": {
