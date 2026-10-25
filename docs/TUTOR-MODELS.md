@@ -347,3 +347,6 @@ The Studio chats side is the picker's `ByokConfig` trimmed to selection
 (`manageKeys` off): connected providers and tutor-saved ones that connect
 with their key, no key field, the Lite/Default/Max tiers unchanged. The
 harness picker's dialog keeps the full `ByokConfig`, key entry included.
+The Studio chats side is drawn only when `STUDIO_ENABLED` is set: without
+the studio its runner's `/studio/api/settings/byok` answers 404, and the
+picker would say Loading for good.

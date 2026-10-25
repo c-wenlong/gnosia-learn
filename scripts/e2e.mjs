@@ -301,14 +301,14 @@ const results = [];
 
 /**
  * The tutor's notice when it has no key to call (T4, `missingKeyMessage` in
- * apps/web/src/lib/agent/providers.ts). From the seed there is no model chain,
- * so it says "No model provider key is set" (or the client's own "no model
- * provider key yet"). A `--copy` carries the owner's chain in `tutor_model`
- * and their keys in `provider_key`, sealed under their `AUTH_SECRET`; this
- * run's server has its own secret, so no saved key opens (docs/BYOK.md), the
- * env keys are blanked, and the notice names the chain's providers instead.
+ * packages/tutor/src/providers.ts). From the seed there is no model chain, so
+ * it says "No model is set up" (or the client's own "no model provider key
+ * yet"). A `--copy` carries the owner's chain in `tutor_model` and their keys
+ * in `provider_key`, sealed under their `AUTH_SECRET`; this run's server has
+ * its own secret, so no saved key opens (docs/BYOK.md), the env keys are
+ * blanked, and the notice names the chain's providers instead.
  */
-const NO_KEY = /no model provider key (is set|yet)\. Add one in Settings|None of your models has a key\. In Settings, add a key for /i;
+const NO_KEY = /No model is set up\. In Settings, add a key|no model provider key yet\. Add one in Settings|None of your models has a key\. In Settings, add a key for /i;
 
 /** A step this run cannot take, and why: listed as SKIP, never as a pass. */
 function skip(name, why) {
@@ -1159,13 +1159,13 @@ async function run() {
     // module, which lists what it lists (agent memory as well, since then).
     const modulePage = '/courses/cp4284/m3-agentic-frameworks';
     await go(modulePage);
-    const row = main.getByRole('link', { name: /^Week check/ });
+    const row = main.getByRole('link', { name: /^Module check/ });
     await row.getByText(SEED ? /^2 concepts · up to 6 questions$/ : /^\d+ concepts? · up to \d+ questions?$/).waitFor();
     await clickHydrated(page, row);
     await page.waitForURL(`${base}${modulePage}/check`);
 
     const bar = page.getByRole('progressbar', { name: 'Session progress' });
-    const closed = page.getByRole('heading', { name: 'Week check done' });
+    const closed = page.getByRole('heading', { name: 'Module check done' });
     const check = page.getByRole('button', { name: 'Check', exact: true });
     const cont = page.getByRole('button', { name: 'Continue', exact: true });
     const choices = page.locator('[role=group][aria-labelledby="session-question"]').getByRole('button');
@@ -1454,7 +1454,8 @@ async function run() {
     // sticky sidebar stopped short with a blank strip under it. The Models tab
     // holds shut folds with such lines (each row's key form and confirm).
     if (new URL(page.url()).searchParams.get('tab') !== 'models') await go('/settings?tab=models');
-    await main.getByRole('button', { name: 'Add custom provider', expanded: false }).waitFor();
+    // The button opens a dialog, so it carries `aria-haspopup` and no `aria-expanded`.
+    await main.getByRole('button', { name: 'Add custom provider' }).waitFor();
     for (const height of [860, 600]) {
       await page.setViewportSize({ width: 1280, height });
       const m = await page.evaluate(async () => {
