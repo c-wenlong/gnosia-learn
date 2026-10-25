@@ -10,6 +10,7 @@ progress — v1 is the video library.
 cd apps/macos
 swift build          # the gate; headless, no Xcode project needed
 swift run Gnosia     # opens the window (runs unbundled)
+swift test           # GnosiaTests: the session arithmetic and learner.db writes
 ```
 
 macOS 14+, Swift 6 toolchain. There are no external SPM dependencies: the app

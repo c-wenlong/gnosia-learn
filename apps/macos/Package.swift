@@ -2,9 +2,9 @@
 //
 // Gnosia: the native macOS reader for the gnosia catalog. A SwiftPM
 // executable rather than an Xcode project so `swift build` works headless;
-// `swift run Gnosia` shows the window. No external dependencies — the only
-// target beside the app is CSQLite3, the module map that puts the SDK's
-// libsqlite3 under a Swift name.
+// `swift run Gnosia` shows the window, `swift test` runs GnosiaTests. No
+// external dependencies — the only other target is CSQLite3, the module map
+// that puts the SDK's libsqlite3 under a Swift name.
 import PackageDescription
 
 let package = Package(
@@ -28,6 +28,13 @@ let package = Package(
             // the icon source, not a bundle resource.
             exclude: ["AppIcon.png"],
             resources: [.process("Resources"), .copy("katex"), .copy("note.html"), .copy("chat.html"), .copy("mdcore.js")]
+        ),
+        // `swift test`: the pure session arithmetic and the learner store's
+        // writes, against a learner.db in a temp directory.
+        .testTarget(
+            name: "GnosiaTests",
+            dependencies: ["Gnosia", "CSQLite3"],
+            path: "Tests/GnosiaTests"
         ),
     ]
 )
