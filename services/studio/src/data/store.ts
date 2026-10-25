@@ -328,6 +328,15 @@ export class RecordStore<R extends StoredRecord> {
   }
   private readonly records = new Map<string, R>();
   private readonly streams = new Map<string, Stream>();
+  private versionN = 0;
+  /**
+   * Bumped on every change to `records`, so a derived read — the drafts' cost
+   * bands over finished jobs — can cache against it instead of re-listing and
+   * re-sorting the whole history on every draft view.
+   */
+  get version(): number {
+    return this.versionN;
+  }
   /**
    * One write at a time per record, chained.
    *
@@ -367,6 +376,7 @@ export class RecordStore<R extends StoredRecord> {
         const record = normalise(JSON.parse(raw) as R);
         if ((record.kind ?? "diagram") !== this.kind) continue;
         this.records.set(record.id, record);
+        this.versionN += 1;
       } catch {
         // A directory with no readable job.json is a workspace that was created
         // and never written, or one a person has been poking at. Skipping it is
@@ -379,6 +389,7 @@ export class RecordStore<R extends StoredRecord> {
     await mkdir(scratchDir(record.id), { recursive: true });
     await mkdir(tmpDir(record.id), { recursive: true });
     this.records.set(record.id, record);
+    this.versionN += 1;
     await this.persist(record);
     return record;
   }
@@ -399,6 +410,7 @@ export class RecordStore<R extends StoredRecord> {
   forget(id: string): void {
     this.records.delete(id);
     this.streams.delete(id);
+    this.versionN += 1;
   }
 
   /** Newest first, which is the order every list in the UI wants. */
@@ -427,6 +439,7 @@ export class RecordStore<R extends StoredRecord> {
     if (record === undefined) throw new Error(`no job ${id}`);
     const next = { ...record, ...patch };
     this.records.set(id, next);
+    this.versionN += 1;
     await this.persist(next);
     if (next.state !== record.state) {
       for (const listener of this.stateListeners) listener(next, record.state);

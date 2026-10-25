@@ -993,4 +993,96 @@ describe("the consent card (D106–D110)", () => {
     // Diagrams draw their band from the diagram store, independently.
     expect(view.estimates?.diagram).toBeNull();
   });
+
+  it("the make mark lives on the waiting request: a clarifying turn spends nothing, the answer's brief still launches (D107)", async () => {
+    await fake.script([{ text: "Sure." }, { text: "Slow start, or avoidance?" }, { text: `Here.\n\n${block("brief", { kind: "diagram", ...good })}` }]);
+    const { record } = await drafts.create({});
+    await send(record.id, "how does TCP back off?");
+    await drafts.send(record.id, ...chips("the window", "diagram"), { make: true });
+    await drafts.settled(record.id);
+    // The reply asked rather than briefed: still waiting, nothing drawn.
+    expect((await drafts.view(record.id)).waiting).toEqual(["diagram"]);
+    expect(runner.enqueue).not.toHaveBeenCalled();
+    // The plain answer's brief launches on landing: the consent was for the
+    // request, not the turn that happened to ask a question.
+    const answer = await drafts.send(record.id, "slow start");
+    await drafts.settled(record.id);
+    expect(runner.enqueue).toHaveBeenCalledTimes(1);
+    expect(runner.enqueue.mock.calls[0]![0]).toMatchObject({ idempotencyKey: `draft:${record.id}:consent:${answer.seq}:diagram` });
+  });
+
+  it("a stopped make-marked request draws nothing, and the brief it would have replaced stays put", async () => {
+    await fake.script([
+      { text: `One.\n\n${block("brief", { kind: "diagram", ...good, title: "First" })}` },
+      { text: `Two.\n\n${block("brief", { kind: "diagram", ...good, title: "Second" })}`, hangMs: 300 },
+    ]);
+    const { record } = await drafts.create({});
+    await send(record.id, "a diagram of the window", "diagram");
+    expect((await drafts.view(record.id)).slots.diagram?.brief?.title).toBe("First");
+    // Ask again with consent, then stop the request while the turn runs: the
+    // reply's brief is dropped and the older one is never drawn for it.
+    await drafts.send(record.id, ...chips("again", "diagram"), { make: true });
+    await drafts.stopWaiting(record.id, "diagram");
+    await drafts.settled(record.id);
+    expect(runner.enqueue).not.toHaveBeenCalled();
+    const view = await drafts.view(record.id);
+    expect(view.slots.diagram).toMatchObject({ state: "briefed", live: true, waiting: null });
+    expect(view.slots.diagram?.brief?.title).toBe("First");
+    expect(view.transcript.at(-1)).toMatchObject({ role: "planner", briefsIgnored: ["diagram"] });
+  });
+
+  it("a tag stopped mid-turn drops even when the kind is trusted", async () => {
+    await fake.script([{ text: `Here.\n\n${block("brief", { kind: "diagram", ...good })}`, hangMs: 300 }]);
+    const { record } = await drafts.create({});
+    await drafts.setTrust(record.id, "diagram", true);
+    await drafts.send(record.id, ...chips("the window", "diagram"));
+    await drafts.stopWaiting(record.id, "diagram");
+    await drafts.settled(record.id);
+    expect(runner.enqueue).not.toHaveBeenCalled();
+    const view = await drafts.view(record.id);
+    expect(view.slots.diagram).toMatchObject({ brief: null, waiting: null });
+    expect(view.transcript.at(-1)).toMatchObject({ role: "planner", briefsIgnored: ["diagram"] });
+  });
+
+  it("a trust revoked mid-turn keeps the unprompted brief from landing or launching", async () => {
+    await fake.script([{ text: `Here, unprompted.\n\n${block("brief", { kind: "video", ...videoBrief })}`, hangMs: 300 }]);
+    const { record } = await drafts.create({});
+    await drafts.setTrust(record.id, "video", true);
+    await drafts.send(record.id, "tell me about tcp");
+    await drafts.setTrust(record.id, "video", false);
+    await drafts.settled(record.id);
+    expect(videoRunner.enqueue).not.toHaveBeenCalled();
+    const view = await drafts.view(record.id);
+    expect(view.slots.video).toBeUndefined();
+    expect(view.transcript.at(-1)).toMatchObject({ role: "planner", briefsIgnored: ["video"] });
+  });
+
+  it("a trusted kind's corrected brief launches after the retry", async () => {
+    const badVideo = { kind: "video", ...videoBrief, targetSeconds: 300 };
+    await fake.script([
+      { text: `Here, unprompted.\n\n${block("brief", badVideo)}` },
+      { text: `Fixed.\n\n${block("brief", { kind: "video", ...videoBrief })}` },
+    ]);
+    const { record } = await drafts.create({});
+    await drafts.setTrust(record.id, "video", true);
+    await send(record.id, "tell me about tcp slow start");
+    expect(videoRunner.enqueue).toHaveBeenCalledTimes(1);
+    const view = await drafts.view(record.id);
+    expect(view.slots.video).toMatchObject({ state: "drawing", busy: { state: "queued" }, briefBy: "planner" });
+  });
+
+  it("the cost band caches on the store's version: reads repeat free until a job lands", async () => {
+    const { record } = await drafts.create({});
+    const spy = vi.spyOn(store, "list");
+    await drafts.view(record.id);
+    await drafts.view(record.id);
+    await drafts.view(record.id);
+    expect(spy).toHaveBeenCalledTimes(1);
+    await store.create({
+      id: "job-d-new", kind: "diagram", state: "queued", slug: "s", topic: "t", targetPath: "p", draftId: record.id, brief: {}, idempotencyKey: "kn", requestedAt: new Date().toISOString(), gate: null, error: null,
+    } as never);
+    await drafts.view(record.id);
+    expect(spy).toHaveBeenCalledTimes(2);
+    spy.mockRestore();
+  });
 });

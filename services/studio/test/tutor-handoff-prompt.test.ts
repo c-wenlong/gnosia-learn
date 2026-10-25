@@ -65,14 +65,16 @@ describe("a draft without a concept", () => {
     // matrix gained its row saying no studio job can be given footage or a
     // screen recording, with the routing step that follows; and all three
     // moved when docs/STUDIO-CONSENT.md added the offer's `line`, the TRUSTED
-    // and DECLINED blocks and the untagged-svg blessing to the shared core.
+    // and DECLINED blocks and the untagged-svg blessing to the shared core,
+    // and again when the review fixed the opening and the conversation rule
+    // to name the trusted exception instead of contradicting it.
     const hash = (input: CombinedPromptInput): string => createHash("sha256").update(buildCombinedSystemPrompt(input)).digest("hex");
-    expect(hash(base)).toBe("cfb0743f1b7e21728e32966383f55197e4749129c6260fce8b94912cf9544641");
+    expect(hash(base)).toBe("d2583724f0198ceecc184d5f9fdf7cf2658c40c1693d89d5a0a8f54d629a3fb5");
     expect(hash({ kinds: ["diagram"], vocabulary: vocabulary.entries, corpus: [], extending: "slug: a" })).toBe(
-      "a74dbf3b9dc03c10c9fc6f8b30c92f187e84fffd0842cb8861f7a44f37ac7be2",
+      "f3e89ac8ff25f4001f688f2be4dc970bb6be508c0e962783b8b75598a7c1f07b",
     );
     expect(hash({ kinds: ["diagram", "video"], vocabulary: vocabulary.entries, corpus: [], videos: null, changing: "slug: b" })).toBe(
-      "6fd59a7f5e51cc0994a41847068eaee3486f665ae20b992b2406e6368787839b",
+      "a85f09f496b1ecd793f6cc63639604a0d3b23027c2a4707e57ea7356222636a0",
     );
     expect(buildCombinedSystemPrompt({ ...base, concept: null, tutor: null })).toBe(buildCombinedSystemPrompt(base));
     expect(combinedPrompt(["diagram", "video"])).not.toContain(CONCEPT_PARAGRAPH);

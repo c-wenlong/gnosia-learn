@@ -59,14 +59,19 @@ kind's chip, exactly as if they had placed it and pressed send. The transcript
 stays honest — a tag is data on a message whoever placed it — and the whole
 existing path runs: TAGS block, brief, validation, card. What changes is the
 tail: a message sent by consent carries `make: true`, and when its brief
-validates the job spawns without waiting for the card's press (D107).
+validates the job spawns without waiting for the card's press (D107). The
+mark lives on the waiting request, so a turn the planner spends asking costs
+nothing and the brief that finally lands still launches — while a request
+stopped on the way cancels the spend with it.
 
 **Always allow** does Allow once and one more thing: it writes the kind into
 the draft's `trust` list. The planner reads `trust` in its prompt and may
 write that kind's brief with no `suggest` and no consent card at all, and a
 trusted kind's brief launches its job on validation like a consented one. The
 draft's menu lists trusted kinds with a way to take each back; revoking only
-means the planner asks again.
+means the planner asks again. A revoke while a turn is running is honoured:
+trust is read again when the reply settles and when the launch fires, so an
+unprompted brief landing after it stays a card, never a job.
 
 **Deny** dismisses the card and writes `declined` onto the reply's transcript
 entry, naming the kinds refused. The runner shows declines in the planner's

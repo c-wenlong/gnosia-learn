@@ -825,4 +825,39 @@ describe("the consent card (D106–D110)", () => {
     );
     expect(host.textContent).toContain("Past diagrams here ran $0.02–$0.15.");
   });
+
+  it("a refused Allow once re-arms the card rather than sticking on an answer that never landed", async () => {
+    mocks.sendMessage.mockResolvedValue({ ok: false, status: 409, refusal: { error: "a turn is in flight", detail: { reason: "in-flight" } } });
+    const host = await mount(offered());
+    await act(async () => button(host, "Allow once")!.click());
+    await settle();
+    const allow = button(host, "Allow once")!;
+    expect(allow.hasAttribute("disabled")).toBe(false);
+    expect(allow.textContent).toContain("Allow once");
+    expect(host.textContent).toContain("still answering");
+  });
+
+  it("Always allow sends first and trusts after — a refused send never grants it", async () => {
+    let release: (value: unknown) => void = () => {};
+    mocks.sendMessage.mockImplementation(() => new Promise((resolve) => (release = resolve)));
+    const host = await mount(offered());
+    await act(async () => button(host, "Always allow here")!.click());
+    // The send is still out: the trust write has not run yet.
+    expect(mocks.setDraftTrust).not.toHaveBeenCalled();
+    await act(async () => release({ ok: false, status: 409, refusal: { error: "a turn is in flight", detail: { reason: "in-flight" } } }));
+    await settle();
+    expect(mocks.setDraftTrust).not.toHaveBeenCalled();
+    expect(button(host, "Allow once")!.hasAttribute("disabled")).toBe(false);
+  });
+
+  it("a failed Deny re-arms the card", async () => {
+    mocks.declineSuggestion.mockResolvedValue({ ok: false, status: 502, refusal: { error: "the studio runner is not running" } });
+    const host = await mount(offered());
+    await act(async () => button(host, "Deny")!.click());
+    await settle();
+    const deny = button(host, "Deny")!;
+    expect(deny.hasAttribute("disabled")).toBe(false);
+    expect(deny.textContent).toContain("Deny");
+    expect(mocks.declineSuggestion).toHaveBeenCalledWith("d1", 2, ["video"]);
+  });
 });

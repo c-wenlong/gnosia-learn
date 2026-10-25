@@ -556,9 +556,9 @@ export function DraftPanel({
    * one must not clear. `make` is the consent card's mark: the briefs this
    * turn earns start drawing themselves once they land (D107).
    */
-  async function send(raw: Value, { keepComposer = false, make = false }: { keepComposer?: boolean; make?: boolean } = {}) {
+  async function send(raw: Value, { keepComposer = false, make = false }: { keepComposer?: boolean; make?: boolean } = {}): Promise<boolean> {
     const body = trimValue(raw);
-    if (isEmptyValue(body) || view === null) return;
+    if (isEmptyValue(body) || view === null) return false;
     setSendError(null);
     setPending({ value: body, seq: null });
     if (!keepComposer) setValue(EMPTY_MENTION_VALUE);
@@ -570,10 +570,11 @@ export function DraftPanel({
       if (result.status === 429) setCap(capFrom({ ...(result.refusal.detail as object), exceeded: true }) ?? cap);
       setSendError(sendRefusal(result.status, result.refusal));
       void load();
-      return;
+      return false;
     }
     setPending({ value: body, seq: result.data.seq });
     void load();
+    return true;
   }
 
   // The opener effect below is a callback made once per draft, so it reaches
@@ -588,27 +589,37 @@ export function DraftPanel({
    * The consent card's answers (D106–D109). Allow once and Always allow both
    * send a message that is only the kind's chip — what the person would have
    * typed, so the transcript reads the same — marked `make` so the brief it
-   * earns starts drawing itself. Always first trusts the kind on this
+   * earns starts drawing itself. Always then trusts the kind on this
    * conversation; Deny tells the runner the offer was refused, so the card
-   * collapses and the planner is told not to make it again.
+   * collapses and the planner is told not to make it again. False on a
+   * refused step, so the card re-arms instead of sticking on an answer that
+   * never landed.
    */
-  async function allowOffer(kind: TagKind, always: boolean) {
+  async function allowOffer(kind: TagKind, always: boolean): Promise<boolean> {
+    // Send before trusting: awaiting the trust write first leaves a window
+    // where another send takes the turn and the consent message is refused
+    // while the kind was already allowed (the Greptile review). The mark on
+    // the message is what launches this one; trust is for the turns after.
+    const sent = await send(valueOf<TagKind>([{ type: "mention", kind }]), { keepComposer: true, make: true });
+    if (!sent) return false;
     if (always) {
-      if (!isDraftKind(kind)) return;
+      if (!isDraftKind(kind)) return false;
       const result = await setDraftTrust(draftId, kind, true);
       if (!result.ok) {
         setSendError(sendRefusal(result.status, result.refusal));
         void load();
-        return;
+        return false;
       }
+      void load();
     }
-    void send(valueOf<TagKind>([{ type: "mention", kind }]), { keepComposer: true, make: true });
+    return true;
   }
 
-  async function declineOffer(replySeq: number, kind: TagKind) {
+  async function declineOffer(replySeq: number, kind: TagKind): Promise<boolean> {
     const result = await declineSuggestion(draftId, replySeq, [kind]);
     if (!result.ok) setSendError(sendRefusal(result.status, result.refusal));
     void load();
+    return result.ok;
   }
 
   /** Take back an always-allowed kind (D108): later offers ask again. */
@@ -1124,8 +1135,8 @@ export function DraftPanel({
               suggestion={suggested !== null && suggested.seq === entry.seq ? suggested : null}
               estimates={view.estimates}
               unavailable={(kind) => kindUnavailable(kind, view, video)}
-              onAllow={(kind, always) => void allowOffer(kind, always)}
-              onDecline={(kind) => void declineOffer(entry.seq, kind)}
+              onAllow={(kind, always) => allowOffer(kind, always)}
+              onDecline={(kind) => declineOffer(entry.seq, kind)}
               costNote={costNote}
               singleCard={cards.length <= 1}
               videoTools={video?.tools ?? []}
@@ -1374,9 +1385,9 @@ function Entry({
   estimates: DraftView["estimates"];
   unavailable: (kind: TagKind) => string | null;
   /** Allow once or Always allow on a paid kind's consent card (D106). */
-  onAllow: (kind: TagKind, always: boolean) => void;
+  onAllow: (kind: TagKind, always: boolean) => Promise<boolean>;
   /** Deny an offered kind: the runner keeps the refusal (D109). */
-  onDecline: (kind: TagKind) => void;
+  onDecline: (kind: TagKind) => Promise<boolean>;
   /** The cost note under a brief card's press, or null before enough history. */
   costNote: (kind: DraftKind) => string | null;
   /** Whether at most one card is live, so Cmd+Enter presses it. */
@@ -1578,8 +1589,8 @@ function ConsentCard({
   declined: boolean;
   cost: string | null;
   unavailable: string | null;
-  onAllow: (always: boolean) => void;
-  onDecline: () => void;
+  onAllow: (always: boolean) => Promise<boolean>;
+  onDecline: () => Promise<boolean>;
 }) {
   const [answering, setAnswering] = useState<"once" | "always" | "deny" | null>(null);
   if (declined) {
@@ -1592,8 +1603,12 @@ function ConsentCard({
   }
   const press = (answer: "once" | "always" | "deny") => {
     setAnswering(answer);
-    if (answer === "deny") onDecline();
-    else onAllow(answer === "always");
+    const done = answer === "deny" ? onDecline() : onAllow(answer === "always");
+    // A refused step re-arms the card: a card stuck disabled on an answer
+    // that never landed reads as consent given when none was.
+    void done.then((ok) => {
+      if (!ok) setAnswering(null);
+    });
   };
   return (
     <div className="rounded-xl border border-border bg-surface px-4 py-3" data-consent={kind}>
