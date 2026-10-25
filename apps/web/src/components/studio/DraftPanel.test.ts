@@ -23,8 +23,11 @@ const mocks = vi.hoisted(() => ({
   createDraft: vi.fn(),
   drawDraft: vi.fn(),
   drawBoth: vi.fn(),
+  setDraftTrust: vi.fn(),
+  declineSuggestion: vi.fn(),
   push: vi.fn(),
   focus: vi.fn(),
+  insertMention: vi.fn(),
   lateHandle: false,
   events: null as null | { onEvent: (event: { type: string; data: unknown }) => void },
   composer: null as null | {
@@ -54,7 +57,7 @@ vi.mock("next/dynamic", () => ({
       // A late handle stands in for the real composer's lazy chunk: rendered,
       // but with nothing to focus until the test hands it over.
       if (!mocks.lateHandle && props.handleRef && typeof props.handleRef === "object") {
-        props.handleRef.current = { focus: mocks.focus, insertMention: () => {} };
+        props.handleRef.current = { focus: mocks.focus, insertMention: mocks.insertMention };
       }
       return createElement("div", { "data-composer": JSON.stringify(props.value) });
     },
@@ -81,6 +84,8 @@ vi.mock("@/lib/studio-drafts", async (importOriginal) => ({
   createDraft: mocks.createDraft,
   drawDraft: mocks.drawDraft,
   drawBoth: mocks.drawBoth,
+  setDraftTrust: mocks.setDraftTrust,
+  declineSuggestion: mocks.declineSuggestion,
   openDraftEvents: (_id: string, _after: unknown, handlers: NonNullable<typeof mocks.events>) => {
     mocks.events = handlers;
     return () => {};
@@ -98,12 +103,18 @@ beforeEach(() => {
   mocks.composer = null;
   mocks.events = null;
   mocks.focus.mockClear();
+  mocks.insertMention.mockClear();
+  mocks.setDraftTrust.mockClear();
+  mocks.declineSuggestion.mockClear();
+  mocks.sendMessage.mockClear();
   mocks.lateHandle = false;
   sessionStorage.clear();
   mocks.sendMessage.mockResolvedValue({ ok: true, status: 202, data: { draftId: "d1", seq: 1, note: "" } });
   mocks.abandonDraft.mockResolvedValue({ ok: true, status: 200, data: { draftId: "d1", state: "abandoned", note: "" } });
   mocks.createDraft.mockResolvedValue({ ok: true, status: 201, data: { draftId: "d2", state: "open", note: "" } });
   mocks.drawDraft.mockResolvedValue({ ok: true, status: 200, data: { draftId: "d1", jobId: "j1", state: "drawing", note: "" } });
+  mocks.setDraftTrust.mockResolvedValue({ ok: true, status: 200, data: { draftId: "d1", trust: ["video"], note: "" } });
+  mocks.declineSuggestion.mockResolvedValue({ ok: true, status: 200, data: { draftId: "d1", declined: ["video"], note: "" } });
 });
 
 const mounted: Array<() => void> = [];
@@ -174,7 +185,7 @@ function draft(over: Partial<DraftView> = {}): DraftView {
     created: "2026-09-29T00:00:00Z",
     updated: "2026-09-29T00:00:00Z",
     note: "",
-    plannerKinds: ["diagram", "video"],
+    plannerKinds: ["diagram", "video", "svg"],
     slots: { diagram: slot(), video: slot() },
     ...over,
   } as DraftView;
@@ -707,5 +718,164 @@ describe("what the conversation made (D89)", () => {
     const host = await mount(accepted());
     expect(host.querySelector("[data-made]")).toBeNull();
     expect(host.textContent).not.toContain("Everything made");
+  });
+});
+
+describe("the consent card (D106–D110)", () => {
+  const offered = (extra: Partial<DraftView> = {}, replyExtra: Partial<TranscriptEntry> = {}) =>
+    draft({
+      turns: 1,
+      transcript: [
+        entry(1, "person", "how does TCP back off?"),
+        entry(2, "planner", "A video would show it moving.", { suggest: ["video"], pitch: "the window shrinking on loss", ...replyExtra }),
+      ],
+      ...extra,
+    });
+  const button = (host: HTMLElement, label: string) =>
+    [...host.querySelectorAll("button")].find((candidate) => candidate.textContent?.includes(label));
+
+  it("shows the pitch, the recorded cost band and the three answers", async () => {
+    const host = await mount(offered({ estimates: { video: { low: 0.74, high: 1.35, n: 8 } } }));
+    const card = host.querySelector('[data-consent="video"]');
+    expect(card).not.toBeNull();
+    expect(card!.textContent).toContain("The planner wants to make a video");
+    expect(card!.textContent).toContain("the window shrinking on loss");
+    expect(card!.textContent).toContain("$0.74–$1.35");
+    expect(card!.textContent).toContain("8 makes");
+    expect(button(host, "Allow once")).toBeDefined();
+    expect(button(host, "Always allow here")).toBeDefined();
+    expect(button(host, "Deny")).toBeDefined();
+  });
+
+  it("Allow once sends the kind's chip marked make, and keeps a half-typed message", async () => {
+    const host = await mount(offered());
+    await act(async () => mocks.composer!.onChange({ text: "half typed", mentions: [] }));
+    await act(async () => button(host, "Allow once")!.click());
+    await settle();
+    expect(mocks.sendMessage).toHaveBeenCalledWith("d1", {
+      text: "@video",
+      mentions: [{ kind: "video", start: 0, end: 6 }],
+      make: true,
+    });
+    expect(mocks.composer!.value.text).toBe("half typed");
+    expect(mocks.setDraftTrust).not.toHaveBeenCalled();
+  });
+
+  it("Always allow trusts the kind on this conversation, then sends the same chip", async () => {
+    const host = await mount(offered());
+    await act(async () => button(host, "Always allow here")!.click());
+    await settle();
+    expect(mocks.setDraftTrust).toHaveBeenCalledWith("d1", "video", true);
+    expect(mocks.sendMessage).toHaveBeenCalledWith("d1", expect.objectContaining({ text: "@video", make: true }));
+  });
+
+  it("Deny tells the runner which reply's offer was refused, and sends nothing", async () => {
+    const host = await mount(offered());
+    await act(async () => button(host, "Deny")!.click());
+    await settle();
+    expect(mocks.declineSuggestion).toHaveBeenCalledWith("d1", 2, ["video"]);
+    expect(mocks.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("a declined offer collapses to a quiet line", async () => {
+    const host = await mount(offered({}, { declined: ["video"] }));
+    expect(host.querySelector('[data-consent="declined"]')).not.toBeNull();
+    expect(host.querySelector('[data-consent="video"]')).toBeNull();
+    expect(host.textContent).toContain("will not offer it again");
+    expect(button(host, "Allow once")).toBeUndefined();
+  });
+
+  it("an svg offer is the same card minus the spend: no band, no Always allow (D110)", async () => {
+    const host = await mount(offered({}, { suggest: ["svg"], pitch: "a small sketch" }));
+    const card = host.querySelector('[data-consent="svg"]');
+    expect(card).not.toBeNull();
+    expect(card!.textContent).toContain("The planner wants to draw an SVG");
+    expect(card!.textContent).toContain("a small sketch");
+    expect(card!.textContent).not.toContain("cost");
+    expect(button(host, "Always allow")).toBeUndefined();
+    await act(async () => button(host, "Allow once")!.click());
+    await settle();
+    expect(mocks.sendMessage).toHaveBeenCalledWith("d1", { text: "@svg", mentions: [{ kind: "svg", start: 0, end: 4 }], make: true });
+    expect(mocks.setDraftTrust).not.toHaveBeenCalled();
+  });
+
+  it("a trusted kind sits under the composer until its press revokes it", async () => {
+    const host = await mount(
+      draft({ trust: ["video"], turns: 1, transcript: [entry(1, "person", "hi"), entry(2, "planner", "There.")] }),
+    );
+    const chip = button(host, "Video allowed");
+    expect(chip).toBeDefined();
+    await act(async () => chip!.click());
+    await settle();
+    expect(mocks.setDraftTrust).toHaveBeenCalledWith("d1", "video", false);
+  });
+
+  it("a brief card's press carries the kind's recorded cost band", async () => {
+    const host = await mount(
+      draft({
+        state: "briefed",
+        turns: 1,
+        transcript: [
+          entry(1, "person", "@diagram the window", { mentions: [{ kind: "diagram", start: 0, end: 8 }] }),
+          entry(2, "planner", "Here.", { briefs: [{ kind: "diagram", brief: DIAGRAM, requestSeq: 1 }] }),
+        ],
+        slots: { diagram: slot({ brief: DIAGRAM, briefSeq: 2, requestSeq: 1, state: "briefed" }), video: slot() },
+        estimates: { diagram: { low: 0.02, high: 0.15, n: 5 }, video: null },
+      }),
+    );
+    expect(host.textContent).toContain("Past diagrams here ran $0.02–$0.15.");
+  });
+
+  it("a refused Allow once re-arms the card rather than sticking on an answer that never landed", async () => {
+    mocks.sendMessage.mockResolvedValue({ ok: false, status: 409, refusal: { error: "a turn is in flight", detail: { reason: "in-flight" } } });
+    const host = await mount(offered());
+    await act(async () => button(host, "Allow once")!.click());
+    await settle();
+    const allow = button(host, "Allow once")!;
+    expect(allow.hasAttribute("disabled")).toBe(false);
+    expect(allow.textContent).toContain("Allow once");
+    expect(host.textContent).toContain("still answering");
+  });
+
+  it("Always allow sends first and trusts after — a refused send never grants it", async () => {
+    let release: (value: unknown) => void = () => {};
+    mocks.sendMessage.mockImplementation(() => new Promise((resolve) => (release = resolve)));
+    const host = await mount(offered());
+    await act(async () => button(host, "Always allow here")!.click());
+    // The send is still out: the trust write has not run yet.
+    expect(mocks.setDraftTrust).not.toHaveBeenCalled();
+    await act(async () => release({ ok: false, status: 409, refusal: { error: "a turn is in flight", detail: { reason: "in-flight" } } }));
+    await settle();
+    expect(mocks.setDraftTrust).not.toHaveBeenCalled();
+    expect(button(host, "Allow once")!.hasAttribute("disabled")).toBe(false);
+  });
+
+  it("a failed Deny re-arms the card", async () => {
+    mocks.declineSuggestion.mockResolvedValue({ ok: false, status: 502, refusal: { error: "the studio runner is not running" } });
+    const host = await mount(offered());
+    await act(async () => button(host, "Deny")!.click());
+    await settle();
+    const deny = button(host, "Deny")!;
+    expect(deny.hasAttribute("disabled")).toBe(false);
+    expect(deny.textContent).toContain("Deny");
+    expect(mocks.declineSuggestion).toHaveBeenCalledWith("d1", 2, ["video"]);
+  });
+
+  it("a trust write that fails after the send gets its own retry — no second make request", async () => {
+    mocks.setDraftTrust
+      .mockResolvedValueOnce({ ok: false, status: 502, refusal: { error: "the studio runner is not running" } })
+      .mockResolvedValueOnce({ ok: true, status: 200, data: { draftId: "d1", trust: ["video"], note: "" } });
+    const host = await mount(offered());
+    await act(async () => button(host, "Always allow here")!.click());
+    await settle();
+    // The send landed and the card is gone; the owed write shows its retry on the error line.
+    expect(mocks.sendMessage).toHaveBeenCalledTimes(1);
+    const retry = button(host, "Save always-allow")!;
+    expect(retry).toBeDefined();
+    await act(async () => retry.click());
+    await settle();
+    expect(mocks.setDraftTrust).toHaveBeenCalledTimes(2);
+    expect(mocks.sendMessage).toHaveBeenCalledTimes(1);
+    expect(button(host, "Save always-allow")).toBeUndefined();
   });
 });

@@ -181,6 +181,10 @@ export interface TranscriptEntry {
   mentions?: DraftMention[];
   /** On a planner reply: the kinds it offers as suggestion buttons (D58, D105). */
   suggest?: TagKind[];
+  /** On a planner reply with a suggestion: the pitch line its consent card shows (D106). */
+  pitch?: string | null;
+  /** The kinds of the reply's suggestion the person declined (D109). */
+  declined?: TagKind[];
   /** On a planner reply: the live cards it puts on hold (D60). */
   hold?: HoldBlock | null;
   /** Refused briefs of a reply, by kind, when more than one kind was judged. */
@@ -253,6 +257,17 @@ export interface DraftView {
    */
   harness?: string | null;
   transcript: TranscriptEntry[];
+  /**
+   * The brief kinds this conversation may start unprompted, from Always allow
+   * on a consent card (D108). Optional: a runner before the consent card does
+   * not send it.
+   */
+  trust?: DraftKind[];
+  /**
+   * What a make of each kind has cost on this machine, for the consent card's
+   * estimate (D107): null under three finished jobs. Optional, as above.
+   */
+  estimates?: Partial<Record<DraftKind, CostBand | null>>;
   brief: Brief | null;
   /** The seq of the entry carrying the brief in force. Optional: a runner from before phase 3 does not send it. */
   briefSeq?: number | null;
@@ -267,6 +282,13 @@ export interface DraftView {
   created: string;
   updated: string;
   note: string;
+}
+
+/** A kind's cost band from the machine's finished jobs (D107). */
+export interface CostBand {
+  low: number;
+  high: number;
+  n: number;
 }
 
 /** `concept` on a draft's record (D65 of docs/STUDIO-TUTOR-HANDOFF.md). */
@@ -631,12 +653,40 @@ export function getDraft(draftId: string) {
  * `mentions` is left out when there are none, so an untagged turn is the body
  * a runner from before STUDIO-MENTIONS.md already takes.
  */
-export function sendMessage(draftId: string, body: string | { text: string; mentions?: readonly DraftMention[] }) {
+export function sendMessage(
+  draftId: string,
+  body: string | { text: string; mentions?: readonly DraftMention[]; make?: boolean },
+) {
   const message = typeof body === "string" ? { text: body } : body;
-  const payload = message.mentions !== undefined && message.mentions.length > 0 ? message : { text: message.text };
+  const payload =
+    message.mentions !== undefined && message.mentions.length > 0 ? message : { text: message.text, ...(message.make === true ? { make: true } : {}) };
   return call<{ draftId: string; seq: number; note: string }>(draftPath(draftId, "/messages"), {
     method: "POST",
     body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * `PUT /api/drafts/{id}/trust` (D108): Always allow on a consent card, and the
+ * draft menu's revoke. `trusted: true` lets the planner brief — and launch —
+ * the kind unprompted on this conversation.
+ */
+export function setDraftTrust(draftId: string, kind: DraftKind, trusted: boolean) {
+  return call<{ draftId: string; trust: DraftKind[]; note: string }>(draftPath(draftId, "/trust"), {
+    method: "PUT",
+    body: JSON.stringify({ kind, trusted }),
+  });
+}
+
+/**
+ * `POST /api/drafts/{id}/declined` (D109): the consent card's Deny. The reply
+ * is marked so its card reads declined, and the planner is told not to make
+ * the same offer again.
+ */
+export function declineSuggestion(draftId: string, replySeq: number, kinds: readonly TagKind[]) {
+  return call<{ draftId: string; declined: TagKind[]; note: string }>(draftPath(draftId, "/declined"), {
+    method: "POST",
+    body: JSON.stringify({ replySeq, kinds }),
   });
 }
 

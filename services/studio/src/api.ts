@@ -426,9 +426,9 @@ async function handle(
         "/api/jobs/{id}/cancel|accept|discard|reindex|revise|resume|compare",
         "/api/drafts",
         "/api/drafts/{id}",
-        "/api/drafts/{id}/messages|events|draw|abandon",
+        "/api/drafts/{id}/messages|events|draw|abandon|declined",
         "PUT /api/drafts/{id}/brief",
-        "PUT /api/drafts/{id}/name|model|harness",
+        "PUT /api/drafts/{id}/name|model|harness|trust",
         "/api/settings/agent",
         "/api/settings/byok",
         "/api/diagrams",
@@ -1563,8 +1563,34 @@ async function draftRoutes(
       const input = await body();
       if (input === null) return;
       try {
-        const { seq } = await drafts.send(id, input.text, input.mentions);
+        // `make` is the consent card's Allow once (D107 of
+        // docs/STUDIO-CONSENT.md): the tagged kinds' briefs launch their jobs
+        // as they validate, with no press to wait for.
+        const { seq } = await drafts.send(id, input.text, input.mentions, { make: input.make === true });
         return send(response, 202, { draftId: id, seq, note: "the planner is answering; follow /events for its reply" });
+      } catch (error) {
+        return refusal(error);
+      }
+    }
+    case "PUT trust": {
+      // The consent card's Always allow, and the draft menu's revoke (D108).
+      const input = await body();
+      if (input === null) return;
+      try {
+        const { trust } = await drafts.setTrust(id, input.kind, input.trusted);
+        return send(response, 200, { draftId: id, trust, note: "the kinds the planner may start unprompted on this conversation" });
+      } catch (error) {
+        return refusal(error);
+      }
+    }
+    case "POST declined": {
+      // The consent card's Deny (D109): marked on the reply, remembered for
+      // the planner's next turn.
+      const input = await body();
+      if (input === null) return;
+      try {
+        const { declined } = await drafts.decline(id, input);
+        return send(response, 200, { draftId: id, declined, note: "the suggestion is declined and will not be offered again" });
       } catch (error) {
         return refusal(error);
       }
@@ -1689,7 +1715,7 @@ async function draftRoutes(
     }
     default:
       return fail(response, 404, `no route ${method} ${url.pathname}`, {
-        routes: ["POST messages", "GET events", "POST draw", "POST abandon", "PUT brief", "PUT name", "PUT model", "PUT harness", "POST slots/{kind}/stop-waiting", "POST slots/{kind}/use"],
+        routes: ["POST messages", "GET events", "POST draw", "POST abandon", "POST declined", "PUT brief", "PUT name", "PUT model", "PUT harness", "PUT trust", "POST slots/{kind}/stop-waiting", "POST slots/{kind}/use"],
       });
   }
 }

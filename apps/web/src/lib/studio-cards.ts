@@ -18,6 +18,7 @@ import {
 import { jobCardSentence, jobStateInline } from "@/lib/studio-job-state";
 import { replacesJob } from "@/lib/studio-drafts";
 import type {
+  CostBand,
   DraftKind,
   DraftMention,
   DraftSlot,
@@ -538,11 +539,14 @@ export function waitingLine(kind: DraftKind): string {
 }
 
 /**
- * The suggestion buttons (D58): the kinds the newest planner reply offers,
- * under that reply only, since an older offer may no longer fit. Nothing
- * while a turn is in flight: the reply it is writing is the newest.
+ * The suggestion card (D58, D106): what the newest planner reply offers —
+ * its kinds, the `line` pitch it made, and the kinds the person already
+ * declined — under that reply only, since an older offer may no longer fit.
+ * Nothing while a turn is in flight: the reply it is writing is the newest.
  */
-export function suggestionsFor(view: Pick<DraftView, "transcript" | "inFlight">): { seq: number; kinds: TagKind[] } | null {
+export function suggestionsFor(
+  view: Pick<DraftView, "transcript" | "inFlight">,
+): { seq: number; kinds: TagKind[]; pitch: string | null; declined: TagKind[] } | null {
   if (view.inFlight) return null;
   const replies = visibleEntries(view.transcript).filter((entry) => entry.role === "planner");
   const newest = replies.at(-1);
@@ -551,7 +555,9 @@ export function suggestionsFor(view: Pick<DraftView, "transcript" | "inFlight">)
   // A person's message after it means the conversation has moved on.
   if (last !== undefined && last.role === "person") return null;
   const kinds = suggestKinds(newest.suggest);
-  return kinds.length === 0 ? null : { seq: newest.seq, kinds };
+  if (kinds.length === 0) return null;
+  const declined = Array.isArray(newest.declined) ? newest.declined.filter(isTagKind) : [];
+  return { seq: newest.seq, kinds, pitch: typeof newest.pitch === "string" ? newest.pitch : null, declined };
 }
 
 /** A reply's `suggest`, read as a list of kinds whether it arrives as `["video"]` or `{ kinds: ["video"] }`. */
@@ -563,9 +569,26 @@ export function suggestKinds(raw: unknown): TagKind[] {
   return out;
 }
 
-/** A suggestion button's accessible name. */
-export function suggestionName(kind: TagKind): string {
-  return `Add ${kind === "svg" ? "an" : "a"} ${KIND_NAME[kind]} tag to your message`;
+/** The suggestion card's title line, kind first. */
+export function suggestionTitle(kind: TagKind): string {
+  if (kind === "svg") return "The planner wants to draw an SVG";
+  return `The planner wants to make a ${KIND_NAME[kind].toLowerCase()}`;
+}
+
+/**
+ * What an offered make costs, for the card's estimate line (D107): the
+ * recorded band of finished jobs of the kind, or a broad fallback while the
+ * machine has made too few to say. SVG spends nothing and never asks.
+ */
+export function suggestionCost(kind: TagKind, band: CostBand | null | undefined): string | null {
+  if (kind === "svg") return null;
+  if (band !== null && band !== undefined) return `has cost ${usd(band.low)}–${usd(band.high)} here, over ${band.n} ${band.n === 1 ? "make" : "makes"}`;
+  return kind === "video" ? "usually a dollar or two — narration is the dear part" : "usually a few cents";
+}
+
+/** A cost band's ends as money text: `$0.74`, `$1.35`. */
+function usd(cost: number): string {
+  return `$${cost.toFixed(2)}`;
 }
 
 /* -------------------------------------------------------------------------- */

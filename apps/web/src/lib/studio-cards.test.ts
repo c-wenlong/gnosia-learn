@@ -26,7 +26,9 @@ import {
   newestBriefSeq,
   plannerKindsOf,
   pressLabel,
+  suggestionCost,
   suggestionsFor,
+  suggestionTitle,
   suggestKinds,
   topicSuggestionValue,
   valueBack,
@@ -351,15 +353,38 @@ describe("waiting and suggestions", () => {
     const current = view({
       transcript: [entry(1, "person", "what is attention?"), entry(2, "planner", "It is...", { suggest: ["video", "diagram"] })],
     });
-    expect(suggestionsFor(current)).toEqual({ seq: 2, kinds: ["video", "diagram"] });
+    expect(suggestionsFor(current)).toEqual({ seq: 2, kinds: ["video", "diagram"], pitch: null, declined: [] });
     current.transcript.push(entry(3, "person", "go on"));
     expect(suggestionsFor(current)).toBeNull();
     expect(suggestionsFor({ ...current, transcript: current.transcript.slice(0, 2), inFlight: true })).toBeNull();
   });
 
+  it("carries the reply's pitch and declines to the card (D106, D109)", () => {
+    const current = view({
+      transcript: [
+        entry(1, "person", "what is attention?"),
+        entry(2, "planner", "It is...", { suggest: ["video"], pitch: "a map of the pieces", declined: ["video"] }),
+      ],
+    });
+    expect(suggestionsFor(current)).toEqual({ seq: 2, kinds: ["video"], pitch: "a map of the pieces", declined: ["video"] });
+    // A reply without them still reads as no pitch, nothing declined.
+    const plain = view({ transcript: [entry(1, "planner", "x", { suggest: ["diagram"] })] });
+    expect(suggestionsFor(plain)).toMatchObject({ pitch: null, declined: [] });
+  });
+
   it("reads suggest as a list or as the block's own object", () => {
     expect(suggestKinds({ kinds: ["diagram", "nope", "diagram"] })).toEqual(["diagram"]);
     expect(suggestKinds(null)).toEqual([]);
+  });
+
+  it("titles the card and costs a make from the recorded band (D106, D107)", () => {
+    expect(suggestionTitle("video")).toBe("The planner wants to make a video");
+    expect(suggestionTitle("svg")).toBe("The planner wants to draw an SVG");
+    expect(suggestionCost("svg", null)).toBeNull();
+    expect(suggestionCost("video", { low: 0.74, high: 1.35, n: 8 })).toBe("has cost $0.74–$1.35 here, over 8 makes");
+    expect(suggestionCost("diagram", { low: 0.02, high: 0.05, n: 3 })).toBe("has cost $0.02–$0.05 here, over 3 makes");
+    expect(suggestionCost("video", null)).toBe("usually a dollar or two — narration is the dear part");
+    expect(suggestionCost("diagram", undefined)).toBe("usually a few cents");
   });
 });
 

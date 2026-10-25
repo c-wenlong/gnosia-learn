@@ -915,23 +915,31 @@ export function briefBlocks(text: string): BriefBlock[] {
 }
 
 /**
- * The kinds a `suggest` block offers (D58), kept to `allowed` (the draft's
- * `plannerKinds`), in the build's order. A block that does not parse, or names
- * nothing allowed, is dropped quietly: a malformed offer is not worth a paid
- * retry. The last block wins.
+ * The kinds a `suggest` block offers (D58) and the one-line pitch its card
+ * shows (D106), kept to `allowed` (the draft's `plannerKinds`), in the
+ * build's order. A block that does not parse, or names nothing allowed, is
+ * dropped quietly: a malformed offer is not worth a paid retry. The last
+ * block wins.
  */
-export function readSuggest(text: string, allowed: readonly TagKind[]): TagKind[] {
+export function readSuggest(text: string, allowed: readonly TagKind[]): { kinds: TagKind[]; line: string | null } {
   const body = fencedBlocks(text, "suggest").at(-1);
-  if (body === undefined) return [];
+  if (body === undefined) return { kinds: [], line: null };
   let parsed: Record<string, unknown> | null = null;
   try {
     parsed = record(JSON.parse(body));
   } catch {
-    return [];
+    return { kinds: [], line: null };
   }
   const kinds = Array.isArray(parsed?.kinds) ? parsed.kinds : [];
-  return TAG_KINDS.filter((kind) => kinds.includes(kind) && allowed.includes(kind));
+  const line = typeof parsed?.line === "string" ? oneLine(parsed.line) : "";
+  return {
+    kinds: TAG_KINDS.filter((kind) => kinds.includes(kind) && allowed.includes(kind)),
+    line: line === "" ? null : line.length > SUGGEST_LINE_LIMIT ? `${line.slice(0, SUGGEST_LINE_LIMIT - 1).trimEnd()}…` : line,
+  };
 }
+
+/** The longest pitch a `suggest` block's `line` keeps, in characters. */
+export const SUGGEST_LINE_LIMIT = 120;
 
 /** The longest hold reason kept, in characters: "a reason of a few words". */
 export const HOLD_REASON_LIMIT = 120;

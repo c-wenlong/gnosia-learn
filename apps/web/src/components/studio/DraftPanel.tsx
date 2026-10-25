@@ -23,7 +23,7 @@ import { MentionComposer } from "@/components/studio/StudioComposer";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { Chip } from "@/components/ui/Chip";
-import { chipClasses, cx } from "@/components/ui/classes";
+import { cx } from "@/components/ui/classes";
 import { FilterMenu } from "@/components/ui/FilterMenu";
 import { Glyph } from "@/components/ui/Glyph";
 import { InlineConfirm } from "@/components/ui/InlineConfirm";
@@ -34,6 +34,7 @@ import {
   isEmptyValue,
   prependValue,
   trimValue,
+  valueOf,
   type MentionValue,
 } from "@/components/ui/mention-text";
 import { TutorMessage, UserMessage } from "@/components/ui/Message";
@@ -62,8 +63,9 @@ import {
   mentionOptions,
   modEnterPlan,
   pressUnderWay,
-  suggestionName,
+  suggestionCost,
   suggestionsFor,
+  suggestionTitle,
   topicSuggestionValue,
   TWO_READY,
   valueBack,
@@ -100,11 +102,13 @@ import {
 } from "@/lib/studio-chat";
 import {
   abandonDraft,
+  declineSuggestion,
   drawBoth,
   drawDraft,
   getDraft,
   getByokSettings,
   BYOK_SETTINGS_CHANGED,
+  isDraftKind,
   openDraftEvents,
   readStudioHealth,
   refusalReason,
@@ -112,6 +116,7 @@ import {
   sendMessage,
   setDraftModel,
   setDraftHarness,
+  setDraftTrust,
   stopWaiting,
   releaseHold,
   videoAvailability,
@@ -237,6 +242,8 @@ export function DraftPanel({
   /** The person's turn between Send and the record having it. */
   const [pending, setPending] = useState<{ value: Value; seq: number | null } | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
+  /** A kind whose Always-allow write failed after its consent send landed: the error line's retry. */
+  const [trustRetry, setTrustRetry] = useState<DraftKind | null>(null);
   const [value, setValue] = useState<Value>(EMPTY_MENTION_VALUE);
   const [cap, setCap] = useState<CapStatus | null>(initialCap);
   const [video, setVideo] = useState<VideoAvailability | null>(initialVideo);
@@ -546,16 +553,19 @@ export function DraftPanel({
 
   /**
    * One person turn. `keepComposer` is for a turn that was not typed in the
-   * composer (the opener an Extend press hands over, a Try again), whose
-   * composer may hold a second message that sending this one must not clear.
+   * composer (the opener an Extend press hands over, a Try again, a consent
+   * card's Allow), whose composer may hold a second message that sending this
+   * one must not clear. `make` is the consent card's mark: the briefs this
+   * turn earns start drawing themselves once they land (D107).
    */
-  async function send(raw: Value, { keepComposer = false }: { keepComposer?: boolean } = {}) {
+  async function send(raw: Value, { keepComposer = false, make = false }: { keepComposer?: boolean; make?: boolean } = {}): Promise<boolean> {
     const body = trimValue(raw);
-    if (isEmptyValue(body) || view === null) return;
+    if (isEmptyValue(body) || view === null) return false;
     setSendError(null);
+    setTrustRetry(null);
     setPending({ value: body, seq: null });
     if (!keepComposer) setValue(EMPTY_MENTION_VALUE);
-    const result = await sendMessage(draftId, body);
+    const result = await sendMessage(draftId, make ? { ...body, make: true } : body);
     if (!result.ok) {
       setPending(null);
       // Give the words and the chips back: a refused turn should not cost the typing (T17).
@@ -563,10 +573,11 @@ export function DraftPanel({
       if (result.status === 429) setCap(capFrom({ ...(result.refusal.detail as object), exceeded: true }) ?? cap);
       setSendError(sendRefusal(result.status, result.refusal));
       void load();
-      return;
+      return false;
     }
     setPending({ value: body, seq: result.data.seq });
     void load();
+    return true;
   }
 
   // The opener effect below is a callback made once per draft, so it reaches
@@ -576,6 +587,78 @@ export function DraftPanel({
   useEffect(() => {
     sendRef.current = send;
   });
+
+  /**
+   * The consent card's answers (D106–D109). Allow once and Always allow both
+   * send a message that is only the kind's chip — what the person would have
+   * typed, so the transcript reads the same — marked `make` so the brief it
+   * earns starts drawing itself. Always then trusts the kind on this
+   * conversation; Deny tells the runner the offer was refused, so the card
+   * collapses and the planner is told not to make it again. False on a
+   * refused step, so the card re-arms instead of sticking on an answer that
+   * never landed.
+   */
+  async function allowOffer(kind: TagKind, always: boolean): Promise<boolean> {
+    // Send before trusting: awaiting the trust write first leaves a window
+    // where another send takes the turn and the consent message is refused
+    // while the kind was already allowed (the Greptile review). The mark on
+    // the message is what launches this one; trust is for the turns after.
+    const sent = await send(valueOf<TagKind>([{ type: "mention", kind }]), { keepComposer: true, make: true });
+    if (!sent) return false;
+    if (always) {
+      if (!isDraftKind(kind)) return false;
+      const result = await setDraftTrust(draftId, kind, true);
+      if (!result.ok) {
+        // The send landed, so the card is gone — the owed write gets a retry
+        // of its own on the error line instead of another make request.
+        setTrustRetry(kind);
+        setSendError(sendRefusal(result.status, result.refusal));
+        void load();
+        return false;
+      }
+      void load();
+    }
+    return true;
+  }
+
+  /** The owed trust write's own press: no new send, just the permission. */
+  async function retryTrust() {
+    const kind = trustRetry;
+    if (kind === null) return;
+    setSendError(null);
+    const result = await setDraftTrust(draftId, kind, true);
+    if (!result.ok) {
+      setSendError(sendRefusal(result.status, result.refusal));
+      void load();
+      return;
+    }
+    setTrustRetry(null);
+    void load();
+  }
+
+  async function declineOffer(replySeq: number, kind: TagKind): Promise<boolean> {
+    const result = await declineSuggestion(draftId, replySeq, [kind]);
+    if (!result.ok) setSendError(sendRefusal(result.status, result.refusal));
+    void load();
+    return result.ok;
+  }
+
+  /** Take back an always-allowed kind (D108): later offers ask again. */
+  async function revokeTrust(kind: DraftKind) {
+    const result = await setDraftTrust(draftId, kind, false);
+    if (!result.ok) setSendError(sendRefusal(result.status, result.refusal));
+    void load();
+  }
+
+  /**
+   * The cost note under a brief card's press (D107): what finished jobs of
+   * the kind have cost on this machine, while there are enough to say.
+   */
+  function costNote(kind: DraftKind): string | null {
+    const band = view?.estimates?.[kind];
+    if (band === null || band === undefined) return null;
+    return `Past ${kind === "video" ? "videos" : "diagrams"} here ran $${band.low.toFixed(2)}–$${band.high.toFixed(2)}.`;
+  }
 
   const cards = useMemo(
     () => (view === null ? [] : liveCards(view, jobs, cap, video, diagramAgent)),
@@ -1070,9 +1153,12 @@ export function DraftPanel({
               bothError={bothError}
               waiting={waiting}
               path={path}
-              suggest={suggested !== null && suggested.seq === entry.seq ? suggested.kinds : null}
+              suggestion={suggested !== null && suggested.seq === entry.seq ? suggested : null}
+              estimates={view.estimates}
               unavailable={(kind) => kindUnavailable(kind, view, video)}
-              onSuggest={(kind) => composer.current?.insertMention(kind)}
+              onAllow={(kind, always) => allowOffer(kind, always)}
+              onDecline={(kind) => declineOffer(entry.seq, kind)}
+              costNote={costNote}
               singleCard={cards.length <= 1}
               videoTools={video?.tools ?? []}
               charsPerSecond={video?.charsPerSecond}
@@ -1116,7 +1202,17 @@ export function DraftPanel({
         )}
 
         {sendError !== null && (
-          <Callout role="alert" className={ENTER}>
+          <Callout
+            role="alert"
+            className={ENTER}
+            actions={
+              trustRetry !== null ? (
+                <Button size="sm" variant="secondary" onClick={() => void retryTrust()}>
+                  Save always-allow
+                </Button>
+              ) : undefined
+            }
+          >
             {sendError}
           </Callout>
         )}
@@ -1191,6 +1287,21 @@ export function DraftPanel({
             busy={modelPick !== null}
             onChange={(next) => void pickModel(next)}
           />
+          {/* The kinds always allowed here (D108): each a chip whose press
+              takes the trust back, so the next offer asks again. */}
+          {(view.trust ?? []).map((kind) => (
+            <button
+              key={kind}
+              type="button"
+              onClick={() => void revokeTrust(kind)}
+              title={`The planner may start ${KIND_NAME[kind].toLowerCase()} makes here without asking — press to ask again`}
+              className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[12px] text-text3 transition-colors hover:text-text"
+            >
+              <Glyph name={kind} size={13} />
+              {KIND_NAME[kind]} allowed
+              <span aria-hidden>×</span>
+            </button>
+          ))}
           {/* The question and the press swap in place, each fading in. The
               problem card's Start over opens the question too. */}
           {(confirmStartOver || view.transcript.length > 0) && (
@@ -1267,9 +1378,12 @@ function Entry({
   bothError,
   waiting,
   path,
-  suggest,
+  suggestion,
+  estimates,
   unavailable,
-  onSuggest,
+  onAllow,
+  onDecline,
+  costNote,
   singleCard,
   videoTools,
   charsPerSecond,
@@ -1296,10 +1410,17 @@ function Entry({
   bothError: string | null;
   waiting: readonly { kind: DraftKind; requestSeq: number }[];
   path: string;
-  /** The kinds the newest reply suggests, on that reply only. */
-  suggest: readonly TagKind[] | null;
+  /** The newest reply's offer, on that reply only: kinds, pitch, declines (D106). */
+  suggestion: { seq: number; kinds: TagKind[]; pitch: string | null; declined: TagKind[] } | null;
+  /** What finished jobs of each kind have cost here, for the card's estimate (D107). */
+  estimates: DraftView["estimates"];
   unavailable: (kind: TagKind) => string | null;
-  onSuggest: (kind: TagKind) => void;
+  /** Allow once or Always allow on a paid kind's consent card (D106). */
+  onAllow: (kind: TagKind, always: boolean) => Promise<boolean>;
+  /** Deny an offered kind: the runner keeps the refusal (D109). */
+  onDecline: (kind: TagKind) => Promise<boolean>;
+  /** The cost note under a brief card's press, or null before enough history. */
+  costNote: (kind: DraftKind) => string | null;
   /** Whether at most one card is live, so Cmd+Enter presses it. */
   singleCard: boolean;
   /** Health's `video.tools`, for the video card's tool row (D73). */
@@ -1361,6 +1482,7 @@ function Entry({
           onUse={() => onUse("diagram", entry.seq)}
           paired={paired}
           keyShortcut={singleCard}
+          costNote={costNote("diagram")}
         />
       ) : (
         <ConfirmCardVideo
@@ -1388,6 +1510,7 @@ function Entry({
           replacing={live?.replaces != null}
           tools={videoTools}
           charsPerSecond={charsPerSecond}
+          costNote={costNote("video")}
           onSwitchTool={async (tool) => {
             const outcome = await onSave(switchedTool(item.brief, tool), entry.seq, "video");
             return outcome.ok ? null : `The tool could not be switched: ${outcome.refusal.error}`;
@@ -1455,28 +1578,98 @@ function Entry({
       {reply.prose !== "" && <NoteProse source={reply.prose} idPrefix={`p${entry.seq}-`} images="link" />}
       {entry.interrupted === true && <p className="mt-2 text-[13px] text-text3">The reply was cut off.</p>}
       {cardsHere !== null && <div className="mt-3">{cardsHere}</div>}
-      {suggest !== null && suggest.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-2" aria-label="Suggested">
-          {suggest.map((kind) => {
-            const reason = unavailable(kind);
-            return (
-              <button
-                key={kind}
-                type="button"
-                onClick={() => onSuggest(kind)}
-                disabled={reason !== null}
-                title={reason ?? undefined}
-                aria-label={suggestionName(kind)}
-                className={chipClasses({ size: "sm" })}
-              >
-                <Glyph name={kind} size={16} className="text-accent-text" />
-                {KIND_NAME[kind]}
-              </button>
-            );
-          })}
+      {suggestion !== null && suggestion.kinds.length > 0 && (
+        <div className="mt-3 flex flex-col gap-2" aria-label="Suggested">
+          {suggestion.kinds.map((kind) => (
+            <ConsentCard
+              key={kind}
+              kind={kind}
+              pitch={suggestion.pitch}
+              declined={suggestion.declined.includes(kind)}
+              cost={suggestionCost(kind, isDraftKind(kind) ? estimates?.[kind] : undefined)}
+              unavailable={unavailable(kind)}
+              onAllow={(always) => onAllow(kind, always)}
+              onDecline={() => onDecline(kind)}
+            />
+          ))}
         </div>
       )}
     </TutorMessage>
+  );
+}
+
+/**
+ * The consent card (D106): the planner's offer of a make — what it would
+ * show, what the kind has cost here — with the answers: Allow once, Always
+ * allow (this conversation, paid kinds only), Deny. An svg offer is the
+ * same card minus the spend: it costs nothing, so there is no band and
+ * nothing to always-allow (D110). A declined offer collapses to a quiet
+ * line; the runner was told and the planner will not re-offer.
+ */
+function ConsentCard({
+  kind,
+  pitch,
+  declined,
+  cost,
+  unavailable,
+  onAllow,
+  onDecline,
+}: {
+  kind: TagKind;
+  pitch: string | null;
+  declined: boolean;
+  cost: string | null;
+  unavailable: string | null;
+  onAllow: (always: boolean) => Promise<boolean>;
+  onDecline: () => Promise<boolean>;
+}) {
+  const [answering, setAnswering] = useState<"once" | "always" | "deny" | null>(null);
+  if (declined) {
+    return (
+      <p className="text-[12px] text-text3" data-consent="declined">
+        <Glyph name={kind} size={14} className="mr-1 inline-block align-[-2px]" />
+        {KIND_NAME[kind]} declined — the planner will not offer it again.
+      </p>
+    );
+  }
+  const press = (answer: "once" | "always" | "deny") => {
+    setAnswering(answer);
+    const done = answer === "deny" ? onDecline() : onAllow(answer === "always");
+    // A refused step re-arms the card: a card stuck disabled on an answer
+    // that never landed reads as consent given when none was.
+    void done.then((ok) => {
+      if (!ok) setAnswering(null);
+    });
+  };
+  return (
+    <div className="rounded-xl border border-border bg-surface px-4 py-3" data-consent={kind}>
+      <p className="flex items-center gap-2 text-[13px] font-medium text-text">
+        <Glyph name={kind} size={16} className="text-accent-text" />
+        {suggestionTitle(kind)}
+      </p>
+      {pitch !== null && <p className="mt-1 text-[13px] leading-5 text-text2">{pitch}</p>}
+      {cost !== null && <p className="mt-1 text-[12px] leading-4 text-text3">A make of this kind {cost}.</p>}
+      {unavailable !== null && <p className="mt-1 text-[12px] leading-4 text-text3">{unavailable}</p>}
+      <div className="mt-2.5 flex flex-wrap gap-2">
+        <Button size="sm" onClick={() => press("once")} disabled={answering !== null || unavailable !== null} title={unavailable ?? undefined}>
+          {answering === "once" ? "Sending…" : "Allow once"}
+        </Button>
+        {kind !== "svg" && (
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => press("always")}
+            disabled={answering !== null || unavailable !== null}
+            title={unavailable ?? "Let the planner start this kind on its own, on this conversation only"}
+          >
+            {answering === "always" ? "Allowing…" : "Always allow here"}
+          </Button>
+        )}
+        <Button size="sm" variant="ghost" onClick={() => press("deny")} disabled={answering !== null}>
+          {answering === "deny" ? "Noting…" : "Deny"}
+        </Button>
+      </div>
+    </div>
   );
 }
 

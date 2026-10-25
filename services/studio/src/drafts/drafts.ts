@@ -160,7 +160,7 @@ export interface KindSlot {
   /** The last verdict on this kind's job the draft acted on. */
   followed: { jobId: string; state: string } | null;
   /** A tagged request for this kind still owed a brief, and how often its brief was refused so far. */
-  waiting: { requestSeq: number; refusals?: number } | null;
+  waiting: { requestSeq: number; refusals?: number; make?: boolean } | null;
   /** The tagged message the brief in force answered: what pairs two cards for Make both. */
   requestSeq: number | null;
   /** Set by a planner `hold` block until Use this brief, an edit, or a new brief. */
@@ -311,6 +311,19 @@ export interface DraftRecord {
   jobIds: string[];
   /** The last job verdict this draft acted on, so no verdict is acted on twice. */
   followed?: { jobId: string; state: string } | null;
+  /**
+   * D108 of docs/STUDIO-CONSENT.md: the brief kinds the person has allowed
+   * without asking, on this conversation only. A trusted kind may be briefed
+   * unprompted, and that brief's job launches on validation like a consented
+   * one.
+   */
+  trust?: BriefKind[];
+  /**
+   * D109: the suggestions the person declined, kind and the pitch line it was
+   * offered with. Read back to the planner as a DECLINED block so the same
+   * offer is not re-made. Capped, newest last.
+   */
+  declined?: DeclinedOffer[];
   catalogErrors: string[];
   createdAt: string;
   updatedAt: string;
@@ -330,6 +343,7 @@ export interface TranscriptEvent {
     | "studio"
     | "draw"
     | "job"
+    | "declined"
     | "error"
     | "abandoned";
   at: string;
@@ -337,6 +351,20 @@ export interface TranscriptEvent {
 }
 
 export type DraftRole = "person" | "planner" | "studio";
+
+/** One offer the person declined (D109): its kind and the pitch it made. */
+export interface DeclinedOffer {
+  kind: TagKind;
+  pitch: string | null;
+  at: string;
+}
+
+/** A kind's cost band from the machine's finished jobs (D107): `n` of them ran $`low`–$`high`, middle of the spread. */
+export interface CostBand {
+  low: number;
+  high: number;
+  n: number;
+}
 
 /** One entry of a draft's transcript, as the API reports it. */
 /** A mention as a message carries it: `text.slice(start, end)` reads `@<kind>`. */
@@ -380,6 +408,10 @@ export interface TranscriptEntry {
   briefsIgnored?: string[];
   /** A reply's suggestion buttons (D58). */
   suggest?: TagKind[];
+  /** The suggestion card's pitch: the `suggest` block's `line` (D106). */
+  pitch?: string | null;
+  /** The kinds of the reply's suggestion the person declined (D109). */
+  declined?: TagKind[];
   /** A reply's hold on live cards (D60). */
   hold?: { kinds: BriefKind[]; reason: string };
   superseded?: boolean;
@@ -454,6 +486,14 @@ export interface DraftView {
   /** The harness the conversation's turns run on: `"claude"`, `"byok"` or `"codex"` (the pane picker's pick). */
   harness: "claude" | "byok" | "codex";
   transcript: TranscriptEntry[];
+  /** The brief kinds the person has allowed this conversation to start unprompted (D108). */
+  trust: BriefKind[];
+  /**
+   * What a make of each kind has cost on this machine, for the consent card's
+   * estimate (D107): null for a kind with under three finished jobs, absent
+   * for a kind with no store.
+   */
+  estimates: Partial<Record<BriefKind, CostBand | null>>;
   /** The newest brief of any kind, kept one release for the web app from before (D61). */
   brief: AnyDraftBrief | null;
   /** The seq of the transcript entry carrying `brief`; what `PUT .../brief?base=` names. */
@@ -724,6 +764,14 @@ export class Drafts {
    * create the topic twice and queue a second job.
    */
   private readonly draws = new Map<string, { key: string; result: Promise<unknown> }>();
+  /**
+   * D107: the kinds a settled turn earned a launch for — a consented tag or a
+   * trusted kind's unprompted brief — queued while the turn was open and
+   * drawn once it closes and `inFlight` clears. A `trust` entry re-reads the
+   * draft's trust at flush, so a revoke while the turn ran costs nothing.
+   */
+  private readonly pendingLaunch = new Map<string, Map<BriefKind, "consent" | "trust">>();
+  private readonly launching = new Map<string, Promise<void>>();
   private draining = false;
   /** Creates in progress, by idempotency key, so two posts of one key make one draft. */
   private readonly creating = new Map<string, Promise<{ record: DraftRecord; created: boolean }>>();
@@ -1046,6 +1094,8 @@ export class Drafts {
       // The picker's pick, spelled out so a pane never guesses the default.
       harness: record.harness ?? "claude",
       transcript: transcriptOf(await this.events(id)),
+      trust: (record.trust ?? []).filter((kind) => plannerKindsOf(record).includes(kind)),
+      estimates: this.costBands(record),
       brief: record.brief,
       briefSeq: record.brief === null ? null : (record.briefSeq ?? null),
       pendingTopic: record.pendingTopic,
@@ -1592,7 +1642,7 @@ export class Drafts {
    * kind runs (C14 lifted by D60). Otherwise the message is on disk before this
    * returns, and the turn runs on.
    */
-  async send(id: string, rawText: unknown, rawMentions?: unknown): Promise<{ seq: number }> {
+  async send(id: string, rawText: unknown, rawMentions?: unknown, options: { make?: boolean } = {}): Promise<{ seq: number }> {
     const record = this.require(id);
     const raw = typeof rawText === "string" ? rawText : "";
     const parsed = parseMentions(raw, rawMentions);
@@ -1665,7 +1715,9 @@ export class Drafts {
           ...slots,
           [kind]: {
             ...slot,
-            ...(current.conversational === true ? { waiting: { requestSeq: message.seq } } : {}),
+            ...(current.conversational === true
+              ? { waiting: { requestSeq: message.seq, ...(options.make === true ? { make: true } : {}) } }
+              : {}),
             // Another diagram after a finished one opens its slot again.
             ...(slot.state === "done" ? { state: "open" as const } : {}),
           },
@@ -1684,7 +1736,7 @@ export class Drafts {
     });
     // Registered synchronously, so a second message in the same tick is 409.
     const whole = turn
-      .then(() => this.converse(id, seq, text, tags))
+      .then(() => this.converse(id, seq, text, tags, options.make === true))
       .catch(async (error: unknown) => {
         await this.write(id, () =>
           this.recordError(id, "agent", `the studio failed while running this turn: ${(error as Error).message}`),
@@ -1694,6 +1746,9 @@ export class Drafts {
         this.live.delete(id);
         await this.write(id, () => this.save(id, { inFlight: null })).catch(() => undefined);
         this.turnsInFlight.delete(id);
+        // D107: consent and trust spend on landing — the briefs this turn
+        // earned a launch for draw now that `inFlight` is cleared.
+        await this.flushLaunch(id, seq);
         this.maybeCapTurns(id);
       });
     this.turnsInFlight.set(id, whole);
@@ -1704,6 +1759,7 @@ export class Drafts {
   /** Resolves once the draft's current turn, and every write it queued, has landed. */
   async settled(id: string): Promise<void> {
     await this.turnsInFlight.get(id);
+    await this.launching.get(id);
     await this.chains.get(id);
     await this.mirroring.get(id)?.done;
   }
@@ -1734,11 +1790,14 @@ export class Drafts {
    * brief of a kind the message tagged or that is still waiting, with one
    * shared retry for the refused ones.
    */
-  private async converse(id: string, turn: number, text: string, tags: TagKind[]): Promise<void> {
+  private async converse(id: string, turn: number, text: string, tags: TagKind[], make: boolean): Promise<void> {
     await this.tellVocabularyChanges(id);
     const record = this.require(id);
     const conversational = record.conversational === true;
     const kinds = plannerKindsOf(record);
+    // D108: kinds the person has allowed without asking. One is briefed
+    // unprompted — announced in prose — and its job launches on validation.
+    const trusted = (record.trust ?? []).filter((kind) => kinds.includes(kind));
     // `tagged` is every tag the message carried, for the TAGS block the
     // planner reads; only the brief kinds ever open a slot, wait or judge
     // (D105: `svg` is answered by the reply itself).
@@ -1750,14 +1809,23 @@ export class Drafts {
           .filter((kind) => !taggedBriefs.includes(kind) && slotOf(record, kind).waiting !== null)
           .sort((a, b) => slotOf(record, a).waiting!.requestSeq - slotOf(record, b).waiting!.requestSeq)
       : [];
+    // D107: a waiting request its message marked `make` stays approved while
+    // the planner clarifies — the consent was for the request, not the turn.
+    const approved = conversational
+      ? briefKinds.filter((kind) => slotOf(record, kind).waiting?.make === true)
+      : [];
     const edits = briefKinds.map((kind) => slotOf(record, kind).pendingEdit?.text ?? null).filter((note): note is string => note !== null);
     // V11: the video brief in force, weighed for abbreviations as it stands
     // now, so a brief replaced since it was proposed is never described.
     const abbreviations = briefKinds.includes("video") ? abbreviationCheck(slotOf(record, "video")) : null;
     const notes = [...record.undelivered, ...edits, ...(abbreviations?.note == null ? [] : [abbreviations.note])];
+    // D109: the offers the person declined, so the same one is not re-made.
+    const declined = (record.declined ?? []).map((offer) => `${offer.kind}${offer.pitch === null ? "" : `: ${offer.pitch}`}`);
     const blocks = [
       ...(waiting.length > 0 ? [fence("WAITING", waiting.join("\n"))] : []),
       ...(conversational && tagged.length > 0 ? [fence("TAGS", tagged.join("\n"))] : []),
+      ...(conversational && trusted.length > 0 ? [fence("TRUSTED", trusted.join("\n"))] : []),
+      ...(conversational && declined.length > 0 ? [fence("DECLINED", declined.join("\n"))] : []),
     ];
     const prompt = [...notes.map(studioMessage), ...blocks, text].join("\n\n");
     const delivered = {
@@ -1783,10 +1851,26 @@ export class Drafts {
       abbreviations !== null && JSON.stringify(abbreviations.told) !== JSON.stringify(slotOf(record, "video").abbreviationsTold ?? []);
     if (notes.length > 0 || toldMoved) await this.write(id, () => this.clearDelivered(id, delivered));
     const asked = briefKinds.filter((kind) => taggedBriefs.includes(kind) || waiting.includes(kind));
-    const judged = await this.judgeReply(first.text, asked, conversational, record.concept);
+    // D108: a trusted kind briefed unprompted is judged like a tagged one;
+    // a brief of any other unasked kind stays ignored (T24).
+    const unprompted = conversational
+      ? trusted.filter((kind) => !asked.includes(kind) && briefBlocks(first.text).some((block) => block.kind === kind))
+      : [];
+    const judged = await this.judgeReply(first.text, [...asked, ...unprompted], conversational, record.concept);
     const refused = await this.write(id, () =>
       this.settleReply(id, { replySeq: first.seq, messageSeq: turn, tagged: taggedBriefs, judged, hold: first.hold, retry: false }),
     );
+    // D107: a consented tag's brief and a trusted kind's unprompted one
+    // launch their job once the turn closes; a person's own tag still waits
+    // on its press. Only the brief this reply landed may launch: a request
+    // stopped or a trust revoked while the planner answered left the older
+    // brief in force, and this consent never covered it.
+    const settled = this.require(id);
+    for (const [kind, verdict] of judged.verdicts) {
+      if (verdict.kind !== "valid" || slotOf(settled, kind).briefSeq !== first.seq) continue;
+      if (unprompted.includes(kind)) this.pendingLaunchFor(id).set(kind, "trust");
+      else if ((make && taggedBriefs.includes(kind)) || approved.includes(kind)) this.pendingLaunchFor(id).set(kind, "consent");
+    }
     if (refused.length === 0) return;
 
     // Refusals are counted per waiting request, not per turn (the #207
@@ -1849,6 +1933,12 @@ export class Drafts {
         hold: null,
         retry: true,
       });
+      const corrected = this.require(id);
+      for (const [kind, verdict] of again.verdicts) {
+        if (verdict.kind !== "valid" || slotOf(corrected, kind).briefSeq !== second.seq) continue;
+        if (unprompted.includes(kind)) this.pendingLaunchFor(id).set(kind, "trust");
+        else if ((make && taggedBriefs.includes(kind)) || approved.includes(kind)) this.pendingLaunchFor(id).set(kind, "consent");
+      }
       for (const verdict of stillRefused) {
         await this.append(id, {
           type: "brief-invalid",
@@ -1959,7 +2049,12 @@ export class Drafts {
     for (const [kind, verdict] of input.judged.verdicts) {
       const current = this.require(id);
       const slot = slotOf(current, kind);
-      if (conversational && slot.waiting === null) {
+      // D108: a trusted kind's unprompted brief needs no waiting request — but
+      // only one nobody asked for. A tag whose waiting was stopped still
+      // drops, trusted or not, and trust is read as it stands now: a revoke
+      // while the planner answered keeps the spend from landing.
+      const trustedNow = !input.tagged.includes(kind) && (current.trust ?? []).includes(kind);
+      if (conversational && slot.waiting === null && !trustedNow) {
         await this.append(id, { type: "brief-ignored", replySeq: input.replySeq, kind, reason: "stopped-waiting" });
         continue;
       }
@@ -2217,7 +2312,7 @@ export class Drafts {
         const slot = slotOf(current, kind);
         return slot.brief !== null && (slot.state === "briefed" || slot.state === "drawing");
       });
-      const suggest = conversational && !retry ? readSuggest(run.text, kinds) : [];
+      const suggested = conversational && !retry ? readSuggest(run.text, kinds) : null;
       const hold = conversational && !retry ? readHold(run.text, live) : null;
       const shown = conversational ? stripFencedBlocks(run.text, ["suggest", "hold"]) : run.text;
       const reply = await this.append(id, {
@@ -2226,7 +2321,7 @@ export class Drafts {
         text: shown,
         ...cost,
         ...(retry ? { retry: true } : {}),
-        ...(suggest.length > 0 ? { suggest } : {}),
+        ...(suggested !== null && suggested.kinds.length > 0 ? { suggest: suggested.kinds, pitch: suggested.line } : {}),
         ...(hold === null ? {} : { hold }),
       });
       return { seq: reply.seq, text: run.text, hold };
@@ -2707,6 +2802,158 @@ export class Drafts {
       await this.write(id, () => this.note(id, `The video in review (job ${parent.jobId}) was discarded and replaced by the new brief; nothing of it landed.`));
     }
     return { kind: "video", jobId: job.id, created, replaces: parent?.discard === true ? parent.jobId : null };
+  }
+
+  /** The set a turn adds launches to (D107), created on first use. */
+  private pendingLaunchFor(id: string): Map<BriefKind, "consent" | "trust"> {
+    let pending = this.pendingLaunch.get(id);
+    if (pending === undefined) {
+      pending = new Map();
+      this.pendingLaunch.set(id, pending);
+    }
+    return pending;
+  }
+
+  /**
+   * Draw what a turn earned consent or trust for (D107), run from `send`'s
+   * tail once `inFlight` is cleared so `draw`'s own guards all pass. A kind
+   * no longer launchable — held, busy, out of force — is skipped quietly: a
+   * refusal here would make a card of a race the person never asked about.
+   * Anything `draw` still refuses lands as a `draw` event like any press.
+   */
+  private async flushLaunch(id: string, messageSeq: number): Promise<void> {
+    const pending = this.pendingLaunch.get(id);
+    if (pending === undefined) return;
+    this.pendingLaunch.delete(id);
+    const record = this.records.get(id);
+    if (record === undefined || record.state === "abandoned") return;
+    const items = [...pending]
+      .filter(([kind, via]) => {
+        // Trust is read as it stands at launch: a revoke while the turn ran
+        // costs nothing. A `consent` launch stands on its own mark.
+        if (via === "trust" && !(record.trust ?? []).includes(kind)) return false;
+        const slot = slotOf(record, kind);
+        return slot.state === "briefed" && slot.brief !== null && slot.held === null && this.pressStatus(record, kind).busy === null;
+      })
+      .map(([kind]) => ({ kind, idempotencyKey: `consent:${messageSeq}:${kind}` }));
+    if (items.length === 0) return;
+    const doing = this.draw(id, { items })
+      .then(() => undefined)
+      .catch(async (error: unknown) => {
+        await this.write(id, () =>
+          this.recordError(id, "agent", `the consented draw failed before queueing: ${(error as Error).message}`),
+        ).catch(() => undefined);
+      });
+    this.launching.set(id, doing);
+    try {
+      await doing;
+    } finally {
+      this.launching.delete(id);
+    }
+  }
+
+  /** The band a kind last computed to, keyed on the job store's version. */
+  private readonly bandCache = new Map<BriefKind, { version: number; band: CostBand | null }>();
+
+  /**
+   * What a make of each kind has cost on this machine (D107): the finished
+   * jobs' `costUsd`, middle of the spread — a quarter of them in at the low
+   * end, a tenth off the top — so a runaway render does not widen the promise
+   * the card makes. Null with under three records, where a band would just be
+   * noise; the card falls back to a fixed "usually" line. Cached on the job
+   * store's version: a draft view is read on every change and every poll, and
+   * the history under a band moves only when a job's record does.
+   */
+  private costBands(record: DraftRecord): Partial<Record<BriefKind, CostBand | null>> {
+    const estimates: Partial<Record<BriefKind, CostBand | null>> = {};
+    for (const kind of plannerKindsOf(record).filter(isBriefKind)) {
+      const store = kind === "diagram" ? this.store : this.video?.store;
+      if (store === undefined) {
+        estimates[kind] = null;
+        continue;
+      }
+      const hit = this.bandCache.get(kind);
+      if (hit !== undefined && hit.version === store.version) {
+        estimates[kind] = hit.band;
+        continue;
+      }
+      // A band that cannot be read — a store with records too old to list —
+      // is just unknown; the card falls back like an empty one.
+      let band: CostBand | null = null;
+      try {
+        band = costBandOf(store.list());
+      } catch {
+        band = null;
+      }
+      this.bandCache.set(kind, { version: store.version, band });
+      estimates[kind] = band;
+    }
+    return estimates;
+  }
+
+  /**
+   * `PUT /api/drafts/{id}/trust` (D108): allow or take back a kind the
+   * planner may brief — and launch — unprompted on this conversation.
+   * `svg` is refused: it spends nothing and asks for nothing (D110).
+   */
+  async setTrust(id: string, rawKind: unknown, rawTrusted: unknown): Promise<{ trust: BriefKind[] }> {
+    const record = this.require(id);
+    if (!isBriefKind(rawKind)) {
+      throw new JobRefused(400, `"kind" is diagram or video — svg needs no trust: it spends nothing`, { field: "kind" });
+    }
+    if (typeof rawTrusted !== "boolean") {
+      throw new JobRefused(400, `"trusted" is required: true to allow the kind unprompted, false to ask again`, { field: "trusted" });
+    }
+    if (!plannerKindsOf(record).includes(rawKind)) {
+      throw new JobRefused(409, `this conversation's planner cannot make a ${rawKind}`, { reason: "kind-not-in-conversation", kind: rawKind });
+    }
+    const kind = rawKind;
+    const trusted = rawTrusted;
+    await this.write(id, async () => {
+      const current = this.require(id);
+      const trust = (current.trust ?? []).filter((listed) => listed !== kind);
+      if (trusted) trust.push(kind);
+      await this.save(id, { trust });
+    });
+    return { trust: this.require(id).trust ?? [] };
+  }
+
+  /**
+   * `POST /api/drafts/{id}/declined` (D109): the person answered a suggestion
+   * card with Deny. The kinds are written onto the reply's transcript entry —
+   * the card collapses to a quiet declined line — and kept on the record,
+   * with the pitch they were offered under, for the DECLINED block every
+   * later turn reads. Only kinds the named reply actually suggested count.
+   */
+  async decline(id: string, input: unknown): Promise<{ declined: TagKind[] }> {
+    this.require(id);
+    const body = typeof input === "object" && input !== null && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
+    const replySeq = typeof body.replySeq === "number" && Number.isInteger(body.replySeq) ? body.replySeq : null;
+    if (replySeq === null) {
+      throw new JobRefused(400, `"replySeq" is required: the reply whose suggestion is declined`, { field: "replySeq" });
+    }
+    const kinds = Array.isArray(body.kinds) ? body.kinds.filter(isTagKind) : [];
+    if (kinds.length === 0) {
+      throw new JobRefused(400, `"kinds" is required: the suggested kinds being declined`, { field: "kinds" });
+    }
+    const events = await this.events(id);
+    const reply = events.find((event) => event.seq === replySeq && event.type === "reply");
+    const offered = reply === undefined ? [] : (Array.isArray(reply.suggest) ? reply.suggest.filter(isTagKind) : []);
+    const counts = kinds.filter((kind) => offered.includes(kind));
+    if (counts.length === 0) {
+      throw new JobRefused(409, `reply ${replySeq} suggested none of those kinds`, { reason: "not-suggested", replySeq });
+    }
+    const pitch = typeof reply?.pitch === "string" ? reply.pitch : null;
+    await this.write(id, async () => {
+      const current = this.require(id);
+      await this.append(id, { type: "declined", replySeq, kinds: counts });
+      const kept = [...(current.declined ?? [])];
+      for (const kind of counts) {
+        if (!kept.some((offer) => offer.kind === kind && offer.pitch === pitch)) kept.push({ kind, pitch, at: new Date().toISOString() });
+      }
+      await this.save(id, { declined: kept.slice(-20) });
+    });
+    return { declined: counts };
   }
 
   /** The press's topic: created, or the reason it could not be. Clears the pending topic on every slot naming it (T11). */
@@ -3425,6 +3672,24 @@ export function plannerKindsOf(record: Pick<DraftRecord, "plannerKinds">): TagKi
 /** A kind's slot, or an empty one. */
 export function slotOf(record: Pick<DraftRecord, "slots">, kind: BriefKind): KindSlot {
   return record.slots?.[kind] ?? emptySlot();
+}
+
+/**
+ * The cost band over finished jobs (D107): their `costUsd`, middle of the
+ * spread — a quarter of them in at the low end, a tenth off the top — so a
+ * runaway render does not widen the promise the card makes. Null with under
+ * three records, where a band would just be noise.
+ */
+export function costBandOf(jobs: { costUsd: number | null; finishedAt: string | null }[]): CostBand | null {
+  const costs = jobs
+    .filter((job) => job.finishedAt !== null)
+    .map((job) => job.costUsd)
+    .filter((usd): usd is number => usd !== null && usd > 0)
+    .sort((a, b) => a - b);
+  if (costs.length < 3) return null;
+  const low = costs[Math.floor(costs.length * 0.25)]!;
+  const high = costs[Math.min(costs.length - 1, Math.ceil(costs.length * 0.9) - 1)]!;
+  return { low: Math.floor(low * 100) / 100, high: Math.max(Math.ceil(high * 100) / 100, Math.floor(low * 100) / 100), n: costs.length };
 }
 
 /** The `slots` patch that changes one kind's slot. `save` recomputes the row's summary from it. */
@@ -4331,6 +4596,7 @@ function entryOf(event: TranscriptEvent): TranscriptEntry | null {
         at: event.at,
         ...(event.interrupted === true ? { interrupted: true } : {}),
         ...(Array.isArray(event.suggest) && event.suggest.length > 0 ? { suggest: event.suggest as TagKind[] } : {}),
+        ...(typeof event.pitch === "string" ? { pitch: event.pitch } : {}),
         ...(typeof event.hold === "object" && event.hold !== null ? { hold: event.hold as { kinds: BriefKind[]; reason: string } } : {}),
         costUsd: typeof event.costUsd === "number" ? event.costUsd : null,
         costSource: (event.costSource as CostSource | null | undefined) ?? null,
@@ -4391,6 +4657,11 @@ export function transcriptOf(events: readonly TranscriptEvent[]): TranscriptEntr
       reply.briefInvalid = invalid;
     } else if (event.type === "brief-ignored") {
       reply.briefsIgnored = [...(reply.briefsIgnored ?? []), String(event.kind)];
+    } else if (event.type === "declined" && Array.isArray(event.kinds)) {
+      // D109: the person's Deny, marked on the reply that offered so its card
+      // reads declined rather than live.
+      const kinds = (event.kinds as unknown[]).filter(isTagKind);
+      reply.declined = [...new Set([...(reply.declined ?? []), ...kinds])];
     }
   }
   for (const entry of entries) {
