@@ -860,4 +860,22 @@ describe("the consent card (D106–D110)", () => {
     expect(deny.textContent).toContain("Deny");
     expect(mocks.declineSuggestion).toHaveBeenCalledWith("d1", 2, ["video"]);
   });
+
+  it("a trust write that fails after the send gets its own retry — no second make request", async () => {
+    mocks.setDraftTrust
+      .mockResolvedValueOnce({ ok: false, status: 502, refusal: { error: "the studio runner is not running" } })
+      .mockResolvedValueOnce({ ok: true, status: 200, data: { draftId: "d1", trust: ["video"], note: "" } });
+    const host = await mount(offered());
+    await act(async () => button(host, "Always allow here")!.click());
+    await settle();
+    // The send landed and the card is gone; the owed write shows its retry on the error line.
+    expect(mocks.sendMessage).toHaveBeenCalledTimes(1);
+    const retry = button(host, "Save always-allow")!;
+    expect(retry).toBeDefined();
+    await act(async () => retry.click());
+    await settle();
+    expect(mocks.setDraftTrust).toHaveBeenCalledTimes(2);
+    expect(mocks.sendMessage).toHaveBeenCalledTimes(1);
+    expect(button(host, "Save always-allow")).toBeUndefined();
+  });
 });

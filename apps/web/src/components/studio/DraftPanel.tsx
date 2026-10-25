@@ -242,6 +242,8 @@ export function DraftPanel({
   /** The person's turn between Send and the record having it. */
   const [pending, setPending] = useState<{ value: Value; seq: number | null } | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
+  /** A kind whose Always-allow write failed after its consent send landed: the error line's retry. */
+  const [trustRetry, setTrustRetry] = useState<DraftKind | null>(null);
   const [value, setValue] = useState<Value>(EMPTY_MENTION_VALUE);
   const [cap, setCap] = useState<CapStatus | null>(initialCap);
   const [video, setVideo] = useState<VideoAvailability | null>(initialVideo);
@@ -560,6 +562,7 @@ export function DraftPanel({
     const body = trimValue(raw);
     if (isEmptyValue(body) || view === null) return false;
     setSendError(null);
+    setTrustRetry(null);
     setPending({ value: body, seq: null });
     if (!keepComposer) setValue(EMPTY_MENTION_VALUE);
     const result = await sendMessage(draftId, make ? { ...body, make: true } : body);
@@ -606,6 +609,9 @@ export function DraftPanel({
       if (!isDraftKind(kind)) return false;
       const result = await setDraftTrust(draftId, kind, true);
       if (!result.ok) {
+        // The send landed, so the card is gone — the owed write gets a retry
+        // of its own on the error line instead of another make request.
+        setTrustRetry(kind);
         setSendError(sendRefusal(result.status, result.refusal));
         void load();
         return false;
@@ -613,6 +619,21 @@ export function DraftPanel({
       void load();
     }
     return true;
+  }
+
+  /** The owed trust write's own press: no new send, just the permission. */
+  async function retryTrust() {
+    const kind = trustRetry;
+    if (kind === null) return;
+    setSendError(null);
+    const result = await setDraftTrust(draftId, kind, true);
+    if (!result.ok) {
+      setSendError(sendRefusal(result.status, result.refusal));
+      void load();
+      return;
+    }
+    setTrustRetry(null);
+    void load();
   }
 
   async function declineOffer(replySeq: number, kind: TagKind): Promise<boolean> {
@@ -1181,7 +1202,17 @@ export function DraftPanel({
         )}
 
         {sendError !== null && (
-          <Callout role="alert" className={ENTER}>
+          <Callout
+            role="alert"
+            className={ENTER}
+            actions={
+              trustRetry !== null ? (
+                <Button size="sm" variant="secondary" onClick={() => void retryTrust()}>
+                  Save always-allow
+                </Button>
+              ) : undefined
+            }
+          >
             {sendError}
           </Callout>
         )}
