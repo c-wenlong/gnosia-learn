@@ -1,10 +1,10 @@
 import { MentionChip } from "@/components/ui/MentionChip";
 import { inlinePieces, type MentionValue } from "@/components/ui/mention-text";
 import { KIND_NAME } from "@/lib/studio-cards";
-import type { DraftKind } from "@/lib/studio-drafts";
+import type { TagKind } from "@/lib/studio-drafts";
 
 /** A sent message's words, with its chips drawn back where they were (D57). */
-export function Sentence({ value, waiting = [] }: { value: MentionValue<DraftKind>; waiting?: readonly DraftKind[] }) {
+export function Sentence({ value, waiting = [] }: { value: MentionValue<TagKind>; waiting?: readonly TagKind[] }) {
   return (
     <>
       {inlinePieces(value).map((piece, at) =>

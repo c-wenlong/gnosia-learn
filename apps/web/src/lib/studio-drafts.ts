@@ -39,8 +39,20 @@ export function isDraftKind(value: unknown): value is DraftKind {
   return typeof value === "string" && (DRAFT_KINDS as readonly string[]).includes(value);
 }
 
+/**
+ * The kinds a message can tag (D105): the draft kinds plus `svg`, the
+ * picture a planner reply draws itself as one fenced `svg` block. `svg`
+ * never has a slot, a waiting, a card or a job — it is content, not a brief.
+ */
+export const TAG_KINDS = ["diagram", "video", "svg"] as const;
+export type TagKind = (typeof TAG_KINDS)[number];
+
+export function isTagKind(value: unknown): value is TagKind {
+  return typeof value === "string" && (TAG_KINDS as readonly string[]).includes(value);
+}
+
 /** A chip in a person's message: the kind it tags and where its `@<kind>` sits in the text (D57). */
-export type DraftMention = Mention<DraftKind>;
+export type DraftMention = Mention<TagKind>;
 
 /** One brief a planner reply (or an edit's note) carries, with the tagged message it answers (D61). */
 export type TranscriptBrief =
@@ -167,8 +179,8 @@ export interface TranscriptEntry {
   briefs?: TranscriptBrief[];
   /** On a person's message: its chips (D57). */
   mentions?: DraftMention[];
-  /** On a planner reply: the kinds it offers as suggestion buttons (D58). */
-  suggest?: DraftKind[];
+  /** On a planner reply: the kinds it offers as suggestion buttons (D58, D105). */
+  suggest?: TagKind[];
   /** On a planner reply: the live cards it puts on hold (D60). */
   hold?: HoldBlock | null;
   /** Refused briefs of a reply, by kind, when more than one kind was judged. */
@@ -201,8 +213,8 @@ export interface DraftView {
   sourceKind?: DraftKind;
   /** Per kind: the brief in force, its job, waiting and held (D62). Absent from a runner before 2a. */
   slots?: DraftSlots;
-  /** The kinds this draft's planner prompt carries (D59). Absent means `["diagram"]`, a draft from before. */
-  plannerKinds?: DraftKind[];
+  /** The kinds this draft's planner prompt carries (D59, D105). Absent means `["diagram"]`, a draft from before. */
+  plannerKinds?: TagKind[];
   /** False for a draft from before the combined prompt, whose untagged messages count as tagged Diagram (#207). */
   conversational?: boolean;
   /** The kinds still owed a brief, oldest request first (#207). The slots' `waiting` says the same per kind. */

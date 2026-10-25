@@ -12,6 +12,8 @@ import {
   type Inline,
 } from "@/components/markdown";
 import { EmbedImage } from "@/components/EmbedImage";
+import { SvgBlock } from "@/components/SvgBlock";
+import { compileSvg } from "@/lib/svg-block";
 import { cx } from "@/components/ui/classes";
 import { DisplayMath, InlineMath } from "@/components/Math";
 import { WidgetFailure } from "@/components/WidgetFailure";
@@ -271,8 +273,14 @@ function BlockView({
       );
     }
 
-    case "code":
+    case "code": {
+      // An `svg` fence is a picture the reply drew, not source to read
+      // (D105 of docs/STUDIO-MENTIONS.md); a block that compiles to nothing
+      // and never opened `<svg` still shows as the code it is.
+      const svg = block.info === "svg" ? compileSvg(block.text) : null;
+      if (svg !== null && svg.kind !== "not-svg") return <SvgBlock compiled={svg} className={space.code} />;
       return <CodeBlock info={block.info} text={block.text} className={space.code} />;
+    }
 
     case "rule":
       return <hr className={cx(space.rule, "h-px border-0 bg-border")} />;

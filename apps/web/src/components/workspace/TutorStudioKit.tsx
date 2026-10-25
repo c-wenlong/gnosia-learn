@@ -6,7 +6,7 @@ import { openConceptConversation } from "@/app/(app)/studio/actions";
 import { MentionComposer, type MentionComposerHandle } from "@/components/ui/MentionComposer";
 import type { MentionValue } from "@/components/ui/mention-text";
 import { MENTION_HINT } from "@/lib/studio-cards";
-import { idempotencyKey, type DraftKind } from "@/lib/studio-drafts";
+import { idempotencyKey, type TagKind } from "@/lib/studio-drafts";
 import { extendKey, forgetExtendKey, leaveOpener, sessionStore } from "@/lib/studio-extend";
 import { conversationHref } from "@/lib/studio-view";
 import {
@@ -36,7 +36,7 @@ export { OPENING_THE_STUDIO } from "@/lib/tutor-handoff";
  * the conversation.
  */
 
-type Value = MentionValue<DraftKind>;
+type Value = MentionValue<TagKind>;
 
 export function TutorMentionField({
   value,
@@ -66,7 +66,7 @@ export function TutorMentionField({
   const tagBlock = tagSendBlock(value, options);
   const tooLong = tutorLengthBlock(value);
   return (
-    <MentionComposer<DraftKind>
+    <MentionComposer<TagKind>
       handleRef={handleRef}
       value={value}
       onChange={onChange}

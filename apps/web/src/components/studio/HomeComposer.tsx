@@ -25,9 +25,9 @@ import {
 } from "@/components/ui/mention-text";
 import { MENTION_HINT, mentionOptions, valueSendBlock } from "@/lib/studio-cards";
 import { harnessModelOptions, type RunnerResolved } from "@/lib/studio-agent-settings";
-import { DRAFT_KINDS, type DraftKind, type VideoAvailability } from "@/lib/studio-drafts";
+import { TAG_KINDS, type TagKind, type VideoAvailability } from "@/lib/studio-drafts";
 
-type Value = MentionValue<DraftKind>;
+type Value = MentionValue<TagKind>;
 
 /**
  * The studio's way in: one composer in the middle of the home view, the
@@ -98,17 +98,17 @@ export function HomeComposer({
     return () => window.removeEventListener(NEW_CHAT_EVENT, focus);
   }, []);
 
-  // A new conversation has the current runner's kinds: both. It re-reads them
-  // from its record, and a tag it cannot take comes back into its composer
-  // with the reason.
-  const options = useMemo(() => mentionOptions({ plannerKinds: [...DRAFT_KINDS] }, video), [video]);
+  // A new conversation has the current runner's kinds: all three (D105). It
+  // re-reads them from its record, and a tag it cannot take comes back into
+  // its composer with the reason.
+  const options = useMemo(() => mentionOptions({ plannerKinds: [...TAG_KINDS] }, video), [video]);
   // The same list the settings panel's menus offer (`agent-settings.ts`),
   // with the default row saying what no pick means here: each part's own.
   const modelMenu = useMemo(() => harnessModelOptions(harness, model, resolved, byokTiers), [harness, model, resolved, byokTiers]);
   const block = valueSendBlock(value, true);
   const [announcement, setAnnouncement] = useState("");
 
-  function toggle(option: MentionOption<DraftKind>) {
+  function toggle(option: MentionOption<TagKind>) {
     const tagged = hasMention(value, option.id);
     // An unavailable kind can still be taken out, never put in.
     if (!tagged && !isUsable(option)) return;
@@ -176,7 +176,7 @@ export function HomeComposer({
  * `aria-disabled` rather than `disabled`, so it keeps its focus and its reason
  * can be read; a pressed one stays pressable, so its chip can still come out.
  */
-function KindToggle({ option, pressed, onPress }: { option: MentionOption<DraftKind>; pressed: boolean; onPress: () => void }) {
+function KindToggle({ option, pressed, onPress }: { option: MentionOption<TagKind>; pressed: boolean; onPress: () => void }) {
   const reasonId = useId();
   const blocked = !pressed && !isUsable(option);
   return (

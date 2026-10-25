@@ -35,7 +35,7 @@ import { UserMessage } from "@/components/ui/Message";
 import { TextLink } from "@/components/ui/TextLink";
 import type { AgentKind } from "@/lib/studio-agent-settings";
 import { kindUnavailable } from "@/lib/studio-cards";
-import { DRAFT_KINDS, type DraftKind, type DraftSummary } from "@/lib/studio-drafts";
+import { TAG_KINDS, type DraftSummary, type TagKind } from "@/lib/studio-drafts";
 import type { StudioVideo } from "@/lib/studio-video";
 import {
   browserMove,
@@ -89,7 +89,7 @@ import {
  */
 
 type ConversationProps = Omit<ComponentProps<typeof DraftPanel>, "draftId" | "jobId" | "path">;
-type Value = MentionValue<DraftKind>;
+type Value = MentionValue<TagKind>;
 
 /**
  * A diagram's job history: the rows the page read, brought up to date with
@@ -368,7 +368,7 @@ export function PanelHost({
             path={path}
             extendHref={panelHref(path, { extend: diagram.name, selected: null, job: null, draft: null })}
             makeVideoHref={panelHref(path, { extend: diagram.name, makeVideo: true, selected: null, job: null, draft: null })}
-            videoBlocked={kindUnavailable("video", { plannerKinds: [...DRAFT_KINDS] }, conversation.video ?? null)}
+            videoBlocked={kindUnavailable("video", { plannerKinds: [...TAG_KINDS] }, conversation.video ?? null)}
           />
         )}
       </StudioDialog>

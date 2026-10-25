@@ -17,7 +17,7 @@ import { TutorMessage, UserMessage } from "@/components/ui/Message";
 import { TextLink } from "@/components/ui/TextLink";
 import type { CitationSource } from "@/lib/agent/prompt";
 import { prefersReducedMotion, scrollBehavior } from "@/lib/motion";
-import type { DraftKind } from "@/lib/studio-drafts";
+import type { TagKind } from "@/lib/studio-drafts";
 import { useHydrated } from "@/lib/use-hydrated";
 import { HEALTH_READ_MS, readHealth, studioCanTag, whenIdle } from "@/lib/tutor-studio";
 import {
@@ -160,7 +160,7 @@ function errorFor(status: number, data: ChatReply): string {
   return data.error ?? `The tutor did not answer (HTTP ${status}).`;
 }
 
-type Value = MentionValue<DraftKind>;
+type Value = MentionValue<TagKind>;
 
 
 type Kit = typeof import("./TutorStudioKit");

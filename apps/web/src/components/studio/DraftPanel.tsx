@@ -118,6 +118,7 @@ import {
   diagramAvailability,
   type DraftKind,
   type DraftView,
+  type TagKind,
   type TranscriptBrief,
   type TranscriptEntry,
   type VideoAvailability,
@@ -186,7 +187,7 @@ const POLL_IN_FLIGHT_MS = 4_000;
  */
 const CAP_READ_MS = 30_000;
 type Status = "loading" | "ready" | "gone" | "down";
-type Value = MentionValue<DraftKind>;
+type Value = MentionValue<TagKind>;
 /** A card's identity: its reply and its kind. */
 type CardKey = `${number}:${DraftKind}`;
 
@@ -1296,9 +1297,9 @@ function Entry({
   waiting: readonly { kind: DraftKind; requestSeq: number }[];
   path: string;
   /** The kinds the newest reply suggests, on that reply only. */
-  suggest: readonly DraftKind[] | null;
-  unavailable: (kind: DraftKind) => string | null;
-  onSuggest: (kind: DraftKind) => void;
+  suggest: readonly TagKind[] | null;
+  unavailable: (kind: TagKind) => string | null;
+  onSuggest: (kind: TagKind) => void;
   /** Whether at most one card is live, so Cmd+Enter presses it. */
   singleCard: boolean;
   /** Health's `video.tools`, for the video card's tool row (D73). */

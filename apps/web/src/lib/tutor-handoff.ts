@@ -4,10 +4,10 @@ import { mentionOptions } from "@/lib/studio-cards";
 import { capFrom } from "@/lib/studio-chat";
 import {
   diagramAvailability,
-  DRAFT_KINDS,
   RUNNER_DOWN,
+  TAG_KINDS,
   videoAvailability,
-  type DraftKind,
+  type TagKind,
 } from "@/lib/studio-drafts";
 import { extendRefusal } from "@/lib/studio-extend";
 import { chatTurns, type ThreadItem, type TutorTurn } from "@/lib/tutor-thread";
@@ -24,7 +24,7 @@ import { chatTurns, type ThreadItem, type TutorTurn } from "@/lib/tutor-thread";
  * `openConceptConversation` in `app/(app)/studio/actions.ts`.
  */
 
-type Value = MentionValue<DraftKind>;
+type Value = MentionValue<TagKind>;
 
 /** The tutor's field once tags can work. */
 export const TUTOR_MENTION_PLACEHOLDER = "Ask about this concept, or type @ to make something";
@@ -39,30 +39,31 @@ export const CAP_SPENT = "Today's studio spend is used up";
 export const STUDIO_NOT_ANSWERING = "The studio runner is not answering";
 
 /**
- * The @ menu's two entries for a tutor, from the newest health answer.
+ * The @ menu's entries for a tutor, from the newest health answer.
  *
- * A new draft carries both kinds, so `plannerKinds` is both and only the
- * machine decides: Video from the video doctor (`mentionOptions`, T5), and
+ * A new draft carries every kind, so `plannerKinds` is all of them and only
+ * the machine decides: Video from the video doctor (`mentionOptions`, T5),
  * Diagram from `diagramAgent` (#206), since a diagram brief nobody can draw
- * is not worth a planner turn. A spent cap disables both (the first turn
- * would be refused), and a read with no answer disables both with that
- * reason, rather than swapping the field back under the person's caret (D67).
+ * is not worth a planner turn, and SVG from nothing — a reply draws it
+ * itself (D105). A spent cap disables all three (the first turn would be
+ * refused), and a read with no answer disables all three with that reason,
+ * rather than swapping the field back under the person's caret (D67).
  */
-export function tutorMentionOptions(health: unknown): MentionOption<DraftKind>[] {
-  const both = mentionOptions({ plannerKinds: [...DRAFT_KINDS] }, videoAvailability(healthPart(health, "video")));
+export function tutorMentionOptions(health: unknown): MentionOption<TagKind>[] {
+  const offered = mentionOptions({ plannerKinds: [...TAG_KINDS] }, videoAvailability(healthPart(health, "video")));
   if (typeof health !== "object" || health === null) {
-    return both.map((option) => ({ ...option, disabledReason: STUDIO_NOT_ANSWERING }));
+    return offered.map((option) => ({ ...option, disabledReason: STUDIO_NOT_ANSWERING }));
   }
   const raw = health as { ok?: unknown; note?: unknown };
   if (raw.ok !== true) {
     const note = typeof raw.note === "string" && raw.note.trim() !== "" ? raw.note.trim() : null;
-    return both.map((option) => ({ ...option, disabledReason: note === null ? "The studio cannot run now" : `The studio cannot run now: ${note}` }));
+    return offered.map((option) => ({ ...option, disabledReason: note === null ? "The studio cannot run now" : `The studio cannot run now: ${note}` }));
   }
   if (capFrom(healthPart(health, "dailyCap"))?.exceeded === true) {
-    return both.map((option) => ({ ...option, disabledReason: CAP_SPENT }));
+    return offered.map((option) => ({ ...option, disabledReason: CAP_SPENT }));
   }
   const diagram = diagramAvailability(healthPart(health, "diagramAgent"));
-  return both.map((option) =>
+  return offered.map((option) =>
     option.id === "diagram" && !diagram.ok && !option.disabledReason
       ? { ...option, disabledReason: diagram.reason === null ? "Diagrams cannot be drawn on this machine" : `Diagrams are unavailable: ${diagram.reason}` }
       : option,
@@ -78,7 +79,7 @@ function healthPart(health: unknown, key: string): unknown {
  * (the cap was spent, videos went away) would open a conversation that
  * refuses it. The words are the menu's own.
  */
-export function tagSendBlock(value: Value, options: readonly MentionOption<DraftKind>[]): string | null {
+export function tagSendBlock(value: Value, options: readonly MentionOption<TagKind>[]): string | null {
   for (const mention of value.mentions) {
     const reason = options.find((option) => option.id === mention.kind)?.disabledReason;
     if (reason) return reason;

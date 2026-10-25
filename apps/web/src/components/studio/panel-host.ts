@@ -3,7 +3,7 @@
 import { createContext, useContext } from "react";
 
 import type { MentionValue } from "@/components/ui/mention-text";
-import type { DraftKind } from "@/lib/studio-drafts";
+import type { TagKind } from "@/lib/studio-drafts";
 
 /**
  * What `PanelHost` lets a way into a panel do, in a module of its own so a
@@ -14,7 +14,7 @@ export interface HostControls {
    * A conversation is being made: open it now, showing `first` as the
    * person's turn when there is one. Returns the attempt's token.
    */
-  begin: (first: MentionValue<DraftKind> | null) => number;
+  begin: (first: MentionValue<TagKind> | null) => number;
   /**
    * The attempt ended: go to `href`, or, with null, close the conversation
    * again. True when it went to `href`; false when the person had moved on.

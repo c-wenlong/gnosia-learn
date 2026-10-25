@@ -24,7 +24,7 @@ import {
 import { UserMessage } from "@/components/ui/Message";
 import { TypingDots } from "@/components/ui/TypingDots";
 import { MENTION_HINT, mentionOptions, valueSendBlock } from "@/lib/studio-cards";
-import { createDraft, DRAFT_KINDS, idempotencyKey, type DraftKind, type VideoAvailability } from "@/lib/studio-drafts";
+import { createDraft, idempotencyKey, TAG_KINDS, type TagKind, type VideoAvailability } from "@/lib/studio-drafts";
 import {
   carryOpener,
   firstTurn,
@@ -42,7 +42,7 @@ import {
 } from "@/lib/studio-extend";
 import { canvasHref, panelHref } from "@/lib/studio-view";
 
-type Value = MentionValue<DraftKind>;
+type Value = MentionValue<TagKind>;
 
 /**
  * The panel between pressing Extend and the conversation existing
@@ -217,10 +217,10 @@ export function ExtendStart({
     return () => clearTimeout(later);
   }, [name, talk, setValue]);
 
-  // The draft is new, so it will have the current runner's kinds: both. The
-  // conversation re-reads them from its record, and a tag it cannot take
-  // comes back into its composer with the reason.
-  const options = useMemo(() => mentionOptions({ plannerKinds: [...DRAFT_KINDS] }, video), [video]);
+  // The draft is new, so it will have the current runner's kinds: all three
+  // (D105). The conversation re-reads them from its record, and a tag it
+  // cannot take comes back into its composer with the reason.
+  const options = useMemo(() => mentionOptions({ plannerKinds: [...TAG_KINDS] }, video), [video]);
   // A bare tag gives the planner nothing to go on in a conversation with no
   // turn yet (T15), and this one has none.
   const valueBlock = valueSendBlock(value, true);

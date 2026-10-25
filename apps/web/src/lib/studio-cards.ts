@@ -23,10 +23,12 @@ import type {
   DraftSlot,
   DraftView,
   PendingTopic,
+  TagKind,
   TranscriptBrief,
   TranscriptEntry,
   VideoAvailability,
 } from "@/lib/studio-drafts";
+import { isTagKind, TAG_KINDS } from "@/lib/studio-drafts";
 
 /**
  * The conversation's cards once a draft can hold a brief of each kind
@@ -46,10 +48,10 @@ import type {
 /* Words                                                                      */
 /* -------------------------------------------------------------------------- */
 
-export const KIND_NAME: Record<DraftKind, string> = { diagram: "Diagram", video: "Video" };
+export const KIND_NAME: Record<TagKind, string> = { diagram: "Diagram", video: "Video", svg: "SVG" };
 
 /** The opening line of an empty conversation (STUDIO-MENTIONS.md, phase 2b). */
-export const MENTION_OPENING_TURN = "Ask me about an idea, or type @ to make a diagram or a video of it.";
+export const MENTION_OPENING_TURN = "Ask me about an idea, or type @ to make a diagram, a video or an SVG of it.";
 /** A conversation opened with Change on a video tile (`sourceKind: "video"`): the planner has its brief. */
 export const CHANGE_OPENING_TURN = "I've read this video's brief. Tell me what it should change, or ask me what's in it first.";
 
@@ -82,13 +84,13 @@ export function tutorTurnsWords(turns: number): string | null {
 
 export const MENTION_PLACEHOLDER = "Ask about an idea, or type @ to make something";
 /** The menu's foot line: the one thing a person cannot see from the entries. */
-export const MENTION_HINT = "Tag one or both";
+export const MENTION_HINT = "Tag as many as fit";
 /** T15: a bare tag in an empty conversation gives the planner nothing to go on. */
 export const SAY_WHAT = "Say what it should show";
 export const TWO_READY = "Two briefs are ready. Press Make both, or the card you want.";
 
-/** The @ menu's entries (STUDIO-MENTIONS.md, "What is in it"). */
-const ENTRIES: Record<DraftKind, MentionOption<DraftKind>> = {
+/** The @ menu's entries (STUDIO-MENTIONS.md, "What is in it"; `svg` is D105). */
+const ENTRIES: Record<TagKind, MentionOption<TagKind>> = {
   diagram: {
     id: "diagram",
     name: "Diagram",
@@ -103,25 +105,37 @@ const ENTRIES: Record<DraftKind, MentionOption<DraftKind>> = {
     icon: "video",
     aliases: ["animation", "explainer"],
   },
+  svg: {
+    id: "svg",
+    name: "SVG",
+    description: "A quick picture drawn right into the reply",
+    icon: "svg",
+    aliases: ["image", "picture", "sketch", "draw"],
+  },
 };
 
 /** The kinds a draft's planner prompt carries: absent means a draft from before, diagrams only (T4). */
-export function plannerKindsOf(view: Pick<DraftView, "plannerKinds">): DraftKind[] {
+export function plannerKindsOf(view: Pick<DraftView, "plannerKinds">): TagKind[] {
   return view.plannerKinds !== undefined && view.plannerKinds.length > 0 ? view.plannerKinds : ["diagram"];
 }
 
 /**
  * Why a kind cannot be tagged right now, or null. The menu keeps the entry
  * and shows this in place of its description, and a suggestion button of the
- * kind is disabled with the same words (T4, T5, T25).
+ * kind is disabled with the same words (T4, T5, T25). `svg` needs no
+ * machine: a draft that carries the kind can always draw (D105).
  */
 export function kindUnavailable(
-  kind: DraftKind,
+  kind: TagKind,
   view: Pick<DraftView, "plannerKinds">,
   video: VideoAvailability | null,
 ): string | null {
   if (!plannerKindsOf(view).includes(kind)) {
-    return kind === "video" ? "Start a new conversation to make a video" : "Start a new conversation to make a diagram";
+    return kind === "svg"
+      ? "Start a new conversation to make an SVG"
+      : kind === "video"
+        ? "Start a new conversation to make a video"
+        : "Start a new conversation to make a diagram";
   }
   if (kind === "video" && video !== null && !video.ok) {
     return video.reason === null ? "Videos are not available on this machine" : `Videos are unavailable: ${video.reason}`;
@@ -129,9 +143,9 @@ export function kindUnavailable(
   return null;
 }
 
-/** The menu's two entries, each with its reason when it cannot be used. */
-export function mentionOptions(view: Pick<DraftView, "plannerKinds">, video: VideoAvailability | null): MentionOption<DraftKind>[] {
-  return (["diagram", "video"] as const).map((kind) => ({ ...ENTRIES[kind], disabledReason: kindUnavailable(kind, view, video) }));
+/** The menu's entries, each with its reason when it cannot be used. */
+export function mentionOptions(view: Pick<DraftView, "plannerKinds">, video: VideoAvailability | null): MentionOption<TagKind>[] {
+  return TAG_KINDS.map((kind) => ({ ...ENTRIES[kind], disabledReason: kindUnavailable(kind, view, video) }));
 }
 
 /* -------------------------------------------------------------------------- */
@@ -528,7 +542,7 @@ export function waitingLine(kind: DraftKind): string {
  * under that reply only, since an older offer may no longer fit. Nothing
  * while a turn is in flight: the reply it is writing is the newest.
  */
-export function suggestionsFor(view: Pick<DraftView, "transcript" | "inFlight">): { seq: number; kinds: DraftKind[] } | null {
+export function suggestionsFor(view: Pick<DraftView, "transcript" | "inFlight">): { seq: number; kinds: TagKind[] } | null {
   if (view.inFlight) return null;
   const replies = visibleEntries(view.transcript).filter((entry) => entry.role === "planner");
   const newest = replies.at(-1);
@@ -541,17 +555,17 @@ export function suggestionsFor(view: Pick<DraftView, "transcript" | "inFlight">)
 }
 
 /** A reply's `suggest`, read as a list of kinds whether it arrives as `["video"]` or `{ kinds: ["video"] }`. */
-export function suggestKinds(raw: unknown): DraftKind[] {
+export function suggestKinds(raw: unknown): TagKind[] {
   const list = Array.isArray(raw) ? raw : typeof raw === "object" && raw !== null ? (raw as { kinds?: unknown }).kinds : null;
   if (!Array.isArray(list)) return [];
-  const out: DraftKind[] = [];
-  for (const kind of list) if ((kind === "diagram" || kind === "video") && !out.includes(kind)) out.push(kind);
+  const out: TagKind[] = [];
+  for (const kind of list) if (isTagKind(kind) && !out.includes(kind)) out.push(kind);
   return out;
 }
 
 /** A suggestion button's accessible name. */
-export function suggestionName(kind: DraftKind): string {
-  return `Add a ${kind} tag to your message`;
+export function suggestionName(kind: TagKind): string {
+  return `Add ${kind === "svg" ? "an" : "a"} ${KIND_NAME[kind]} tag to your message`;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -588,12 +602,12 @@ export function topicSuggestionValue(label: string): MentionValue<DraftKind> {
 }
 
 /** A person's entry as the value it was sent as: its text and the chips the runner recorded. */
-export function entryValue(entry: Pick<TranscriptEntry, "text" | "mentions">): MentionValue<DraftKind> {
+export function entryValue(entry: Pick<TranscriptEntry, "text" | "mentions">): MentionValue<TagKind> {
   return { text: entry.text, mentions: validMentions(entry.text, entry.mentions) };
 }
 
 /** The last thing the person said, chips included, for Try again (E1, E2). */
-export function lastPersonValue(transcript: readonly TranscriptEntry[]): MentionValue<DraftKind> | null {
+export function lastPersonValue(transcript: readonly TranscriptEntry[]): MentionValue<TagKind> | null {
   const person = visibleEntries(transcript).filter((entry) => entry.role === "person").at(-1);
   return person === undefined ? null : entryValue(person);
 }
@@ -605,10 +619,10 @@ export function lastPersonValue(transcript: readonly TranscriptEntry[]): Mention
  * (an opener) goes back in front of whatever it holds.
  */
 export function valueBack(
-  held: MentionValue<DraftKind>,
-  body: MentionValue<DraftKind>,
+  held: MentionValue<TagKind>,
+  body: MentionValue<TagKind>,
   keptComposer: boolean,
-): MentionValue<DraftKind> {
+): MentionValue<TagKind> {
   if (isEmptyValue(held)) return body;
   return keptComposer ? prependValue(body, held) : held;
 }
@@ -625,14 +639,12 @@ export function openerValue(opener: {
   compose: string;
   composeMentions?: readonly DraftMention[];
   mentions?: readonly unknown[];
-}): MentionValue<DraftKind> | null {
-  const words = inlinePieces<DraftKind>({ text: opener.compose, mentions: [...(opener.composeMentions ?? [])] });
+}): MentionValue<TagKind> | null {
+  const words = inlinePieces<TagKind>({ text: opener.compose, mentions: [...(opener.composeMentions ?? [])] });
   const inWords = new Set(words.flatMap((piece) => (piece.type === "mention" ? [piece.kind] : [])));
-  const kinds = [
-    ...new Set((opener.mentions ?? []).filter((kind): kind is DraftKind => kind === "diagram" || kind === "video")),
-  ].filter((kind) => !inWords.has(kind));
+  const kinds = [...new Set((opener.mentions ?? []).filter(isTagKind))].filter((kind) => !inWords.has(kind));
   if (opener.compose === "" && kinds.length === 0) return null;
-  return valueOf<DraftKind>([
+  return valueOf<TagKind>([
     ...kinds.flatMap((kind) => [{ type: "mention" as const, kind }, { type: "text" as const, text: " " }]),
     ...words,
   ]);
@@ -642,7 +654,7 @@ export function openerValue(opener: {
  * The first turn an opener sends into an empty conversation, chips where
  * the person put them, or null when it sends none.
  */
-export function openerSend(opener: { send: string | null; sendMentions?: readonly DraftMention[] }): MentionValue<DraftKind> | null {
+export function openerSend(opener: { send: string | null; sendMentions?: readonly DraftMention[] }): MentionValue<TagKind> | null {
   if (opener.send === null) return null;
   return { text: opener.send, mentions: validMentions(opener.send, [...(opener.sendMentions ?? [])]) };
 }

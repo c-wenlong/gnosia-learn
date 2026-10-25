@@ -31,27 +31,27 @@ const good = {
 const reasons = (health: unknown) => Object.fromEntries(tutorMentionOptions(health).map((option) => [option.id, option.disabledReason ?? null]));
 
 describe("the menu's entries from health (D67)", () => {
-  it("offers both kinds when both can be made", () => {
-    expect(tutorMentionOptions(good).map((option) => option.id)).toEqual(["diagram", "video"]);
-    expect(reasons(good)).toEqual({ diagram: null, video: null });
+  it("offers all three kinds when the machines can make them", () => {
+    expect(tutorMentionOptions(good).map((option) => option.id)).toEqual(["diagram", "video", "svg"]);
+    expect(reasons(good)).toEqual({ diagram: null, video: null, svg: null });
   });
 
   it("disables Video with the video doctor's reason (H4)", () => {
     const health = { ...good, video: { ok: false, checks: [{ name: "ffmpeg", ok: false, detail: "ffmpeg is not on PATH" }] } };
-    expect(reasons(health)).toEqual({ diagram: null, video: "Videos are unavailable: ffmpeg is not on PATH" });
+    expect(reasons(health)).toEqual({ diagram: null, video: "Videos are unavailable: ffmpeg is not on PATH", svg: null });
   });
 
-  it("disables Diagram when the diagram agent cannot run", () => {
-    const health = { ...good, diagramAgent: { ok: false, problem: "the studio home has a quote in it" } };
-    expect(reasons(health)).toEqual({ diagram: "Diagrams are unavailable: the studio home has a quote in it", video: null });
+  it("disables Diagram when the diagram agent cannot run, and SVG stays: it needs no machine (D105)", () => {
+    const health = { ...good, diagramAgent: { ok: false, problem: "the studio home has a quote in it" }, video: { ok: false } };
+    expect(reasons(health)).toEqual({ diagram: "Diagrams are unavailable: the studio home has a quote in it", video: "Videos are not available on this machine", svg: null });
   });
 
-  it("disables both when the day's cap is spent, since the first planner turn would be refused", () => {
-    expect(reasons({ ...good, dailyCap: { totalUsd: 11, capUsd: 10, exceeded: true } })).toEqual({ diagram: CAP_SPENT, video: CAP_SPENT });
+  it("disables all three when the day's cap is spent, since the first planner turn would be refused", () => {
+    expect(reasons({ ...good, dailyCap: { totalUsd: 11, capUsd: 10, exceeded: true } })).toEqual({ diagram: CAP_SPENT, video: CAP_SPENT, svg: CAP_SPENT });
   });
 
-  it("disables both on a later read with no answer, rather than swapping the field back (H3)", () => {
-    expect(reasons(null)).toEqual({ diagram: STUDIO_NOT_ANSWERING, video: STUDIO_NOT_ANSWERING });
+  it("disables all three on a later read with no answer, rather than swapping the field back (H3)", () => {
+    expect(reasons(null)).toEqual({ diagram: STUDIO_NOT_ANSWERING, video: STUDIO_NOT_ANSWERING, svg: STUDIO_NOT_ANSWERING });
   });
 
   it("disables both, with the runner's note, when it can no longer run its planner", () => {

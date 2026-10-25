@@ -90,7 +90,7 @@ const both = (diagram: unknown = { kind: "diagram", ...good }, video: unknown = 
 const videoOnly = (video: unknown = { kind: "video", ...videoBrief }): string => `A video.\n\n${block("brief", video)}`;
 
 /** The composer's `{ text, mentions }` for a message with these chips first. */
-function chips(text: string, ...kinds: ("diagram" | "video")[]): [string, { kind: string; start: number; end: number }[]] {
+function chips(text: string, ...kinds: ("diagram" | "video" | "svg")[]): [string, { kind: string; start: number; end: number }[]] {
   let prefix = "";
   const mentions: { kind: string; start: number; end: number }[] = [];
   for (const kind of kinds) {
@@ -198,7 +198,7 @@ afterEach(async () => {
   await rm(process.env.STUDIO_HOME!, { recursive: true, force: true });
 });
 
-async function send(id: string, text: string, ...kinds: ("diagram" | "video")[]): Promise<void> {
+async function send(id: string, text: string, ...kinds: ("diagram" | "video" | "svg")[]): Promise<void> {
   if (kinds.length === 0) await drafts.send(id, text);
   else await drafts.send(id, ...chips(text, ...kinds));
   await drafts.settled(id);
@@ -210,9 +210,10 @@ describe("a new draft", () => {
   it("carries the combined prompt with the video section and its data blocks, and records its kinds", async () => {
     catalogMock.videoList.mockResolvedValue(ok({ videos: [{ origin: "studio", slug: "two-boxes", assetId: "video:two-boxes", title: "Two boxes", topic: "tcp-congestion-control", durationSeconds: 61 }] }));
     const { record } = await drafts.create({});
-    expect(record).toMatchObject({ plannerKinds: ["diagram", "video"], conversational: true, sourceKind: "diagram" });
+    expect(record).toMatchObject({ plannerKinds: ["diagram", "video", "svg"], conversational: true, sourceKind: "diagram" });
     const system = await readFile(plannerSystemPath(record.id), "utf8");
     expect(system).toContain("# A video brief");
+    expect(system).toContain("# An SVG tag");
     expect(system).toContain("two-boxes | Two boxes | tcp-congestion-control | 1 min 1 s | studio");
     expect(system).toContain("-----BEGIN VOICES-----");
   });
@@ -262,7 +263,7 @@ describe("mentions on a message (D57)", () => {
     process.env.STUDIO_VIDEO_KIND = "off";
     try {
       const { record } = await drafts.create({});
-      expect(record.plannerKinds).toEqual(["diagram"]);
+      expect(record.plannerKinds).toEqual(["diagram", "svg"]);
       await expect(drafts.send(record.id, ...chips("attention", "video"))).rejects.toMatchObject({
         status: 409,
         detail: { reason: "kind-not-in-conversation", kind: "video" },
@@ -416,6 +417,65 @@ describe("a tag waits for its brief (T30)", () => {
     await expect(drafts.send(record.id, ...chips("now", "video"))).rejects.toMatchObject({ status: 409, detail: { reason: "in-flight" } });
     await drafts.settled(record.id);
     expect((await drafts.view(record.id)).waiting).toEqual([]);
+  });
+});
+
+describe("the svg tag (D105)", () => {
+  const picture = `Here is the shape of it.\n\n\`\`\`svg\n<svg viewBox="0 0 640 360"><rect x="10" y="10" width="80" height="40"/></svg>\n\`\`\``;
+
+  it("orders no brief: the reply is the picture, and no slot waits", async () => {
+    await fake.script([{ text: picture }]);
+    const { record } = await drafts.create({});
+    await send(record.id, "how a TCP window moves", "svg");
+    // The TAGS block carries it like the brief kinds do.
+    expect(await prompt(0)).toBe("-----BEGIN TAGS-----\nsvg\n-----END TAGS-----\n\n@svg how a TCP window moves");
+    const view = await drafts.view(record.id);
+    const reply = view.transcript.at(-1)!;
+    expect(reply.role).toBe("planner");
+    // The fence stays in the reply's text: the web renderer draws it.
+    expect(reply.text).toContain("```svg");
+    expect(reply.briefs).toBeUndefined();
+    expect(view.slots).toEqual({});
+    expect(view.waiting).toEqual([]);
+    expect(view.state).toBe("open");
+  });
+
+  it("rides along with a brief tag, each kind answered its own way", async () => {
+    await fake.script([{ text: `The picture and the card.\n\n\`\`\`svg\n<svg viewBox="0 0 1 1"/>\n\`\`\`\n\n${block("brief", { kind: "diagram", ...good })}` }]);
+    const { record } = await drafts.create({});
+    await send(record.id, "window growth", "svg", "diagram");
+    const view = await drafts.view(record.id);
+    expect(view.slots.diagram).toMatchObject({ state: "briefed", live: true });
+    expect(view.slots).not.toHaveProperty("svg");
+    expect(view.slots).not.toHaveProperty("video");
+    const reply = view.transcript.at(-1)!;
+    expect(reply.text).toContain("```svg");
+    expect(reply.briefs).toEqual([expect.objectContaining({ kind: "diagram" })]);
+  });
+
+  it("may be named by a suggest block like the other kinds", async () => {
+    await fake.script([{ text: `A quick picture would help.\n\n${block("suggest", { kinds: ["svg"] })}` }]);
+    const { record } = await drafts.create({});
+    await send(record.id, "what does slow start look like?");
+    expect((await drafts.view(record.id)).transcript.at(-1)).toMatchObject({ suggest: ["svg"] });
+  });
+
+  it("is refused on a draft whose prompt predates it, with the article fixed", async () => {
+    const { record } = await drafts.create({});
+    // A draft saved before the kind existed carries no plannerKinds.
+    const legacy = { ...drafts.get(record.id)! } as Record<string, unknown>;
+    delete legacy.plannerKinds;
+    await writeFile(draftJsonPath(record.id), JSON.stringify(legacy));
+    await drafts.drain();
+    drafts = build();
+    await drafts.load();
+    // Loaded, it is the diagram-only planner it was written as.
+    expect(drafts.get(record.id)?.plannerKinds).toEqual(["diagram"]);
+    await expect(drafts.send(record.id, ...chips("show it", "svg"))).rejects.toMatchObject({
+      status: 409,
+      detail: { reason: "kind-not-in-conversation", kind: "svg" },
+      message: expect.stringContaining("an svg"),
+    });
   });
 });
 
@@ -611,7 +671,7 @@ describe("a video of a diagram (D86 of STUDIO-CHAT-FIRST.md)", () => {
 
   it("carries the diagram as EXTENDING beside the video section, and makes a new video from a Video tag", async () => {
     const id = await openOnDiagram();
-    expect(drafts.get(id)).toMatchObject({ sourceKind: "diagram", source: "tcp-congestion-window", plannerKinds: ["diagram", "video"] });
+    expect(drafts.get(id)).toMatchObject({ sourceKind: "diagram", source: "tcp-congestion-window", plannerKinds: ["diagram", "video", "svg"] });
     const system = await readFile(plannerSystemPath(id), "utf8");
     expect(system).toContain("# A video brief");
     expect(system).toContain("-----BEGIN EXTENDING-----\nslug: tcp-congestion-window");
