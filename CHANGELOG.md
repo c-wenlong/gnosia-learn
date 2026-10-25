@@ -653,7 +653,7 @@ This project is continuously deployed and not versioned; entries are grouped by 
 ### Added
 
 - **A pixel-art app icon, README banner and social card**
-  ([#1](https://github.com/c-wenlong/gnosia/pull/1)). The icon and the
+  ([#1](https://github.com/c-wenlong/gnosia-learn/pull/1)). The icon and the
   touch icon use the Next file conventions; the Open Graph card is declared
   by hand in the root layout, because under Turbopack the
   `app/opengraph-image.png` convention ignores the documented

@@ -10,7 +10,7 @@ current production deploy. There is no older line to back-port to.
 
 If you discover a security issue, please **do not** open a public GitHub issue
 describing it. Use GitHub's
-[private vulnerability reporting](https://github.com/c-wenlong/gnosia/security/advisories/new)
+[private vulnerability reporting](https://github.com/c-wenlong/gnosia-learn/security/advisories/new)
 instead.
 
 Include:

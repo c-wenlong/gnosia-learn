@@ -10,7 +10,7 @@ live. Every PR and every merge used to build a deployment, and on the free
 plan's 100 deployments a day the busy days ran out (2026-10-04).
 
 - **Production alias:** https://gnosia-one.vercel.app
-- **Project:** `kaichen/gnosia`, linked to `https://github.com/c-wenlong/gnosia`
+- **Project:** `kaichen/gnosia`, linked to `https://github.com/c-wenlong/gnosia-learn`
 - **Root Directory:** `apps/web`, with **Include source files outside of the
   Root Directory in the Build Step** on
 

@@ -5,7 +5,7 @@ Status: accepted, 2026-10-04, and all three phases are built. R2 is the owner's 
 questions 2 and 3 take theirs until the owner says otherwise. Step 1 of the
 same conversation, taking
 Review out of the sidebar, shipped on its own
-([#343](https://github.com/c-wenlong/gnosia/pull/343)) and is recorded
+([#343](https://github.com/c-wenlong/gnosia-learn/pull/343)) and is recorded
 in [DESIGN.md](../design/DESIGN.md), "Information architecture".
 
 ## The problem

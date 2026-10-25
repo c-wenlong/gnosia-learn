@@ -1,10 +1,10 @@
 # Proposal: the Learn map is grouped by domain
 
 Status: built, 2026-10-04, all four phases: 1 the tree and the layout
-([#354](https://github.com/c-wenlong/gnosia/pull/354)), 2 the views and
-the island map removed ([#358](https://github.com/c-wenlong/gnosia/pull/358)),
-3 hover and drag ([#365](https://github.com/c-wenlong/gnosia/pull/365)),
-4 these docs ([#366](https://github.com/c-wenlong/gnosia/pull/366)); the
+([#354](https://github.com/c-wenlong/gnosia-learn/pull/354)), 2 the views and
+the island map removed ([#358](https://github.com/c-wenlong/gnosia-learn/pull/358)),
+3 hover and drag ([#365](https://github.com/c-wenlong/gnosia-learn/pull/365)),
+4 these docs ([#366](https://github.com/c-wenlong/gnosia-learn/pull/366)); the
 axes layout (D11) followed on 2026-10-05. It replaces the island map
 of [knowledge-map.md](knowledge-map.md), decisions G2 to G8; G1 (the graph
 is what `/learn` opens on, the table at `?view=table`) stands.

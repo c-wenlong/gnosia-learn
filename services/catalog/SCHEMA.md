@@ -5,8 +5,8 @@ Postgres 17. This document is the reasoning; [`packages/schema/src/`](../../pack
 definition, and `services/catalog/drizzle/` is the SQL that definition
 generates. When they disagree, the code is right and this file is stale.
 
-The plan is [#27](https://github.com/c-wenlong/gnosia/issues/27); this is
-the first half of bundle 3, [#21](https://github.com/c-wenlong/gnosia/issues/21).
+The plan is [#27](https://github.com/c-wenlong/gnosia-learn/issues/27); this is
+the first half of bundle 3, [#21](https://github.com/c-wenlong/gnosia-learn/issues/21).
 
 [docs/CONTENT-MIGRATION.md](../../docs/CONTENT-MIGRATION.md) is the plan
 that made Postgres the source of truth for content, and it is built through
@@ -854,7 +854,7 @@ which destinations it audited, the writer clears only those, and
 An unresolved reference stops the run and names the file and the slug. A skipped
 row is an asset that is silently absent from the catalog, with nothing anywhere
 saying so — which is the failure the audit in
-[#27](https://github.com/c-wenlong/gnosia/issues/27) already recorded once,
+[#27](https://github.com/c-wenlong/gnosia-learn/issues/27) already recorded once,
 when a rendered video outlived its source and nothing flagged it. Errors are
 collected per source and reported together, so one run fixes one edit rather
 than thirty runs fixing thirty.

@@ -1,7 +1,7 @@
 import { cx } from "@/components/ui/classes";
 
 /** The repository, for "See the source" and the footer. */
-export const GITHUB_URL = "https://github.com/c-wenlong/gnosia";
+export const GITHUB_URL = "https://github.com/c-wenlong/gnosia-learn";
 
 /**
  * A link on the public pages: a focus ring in the brand teal. Pass the
