@@ -210,14 +210,14 @@ describe("scripts/dev.sh start", () => {
     const { run, flag, paneEnv } = sandbox();
     // The server was started when DATABASE_URL and two STUDIO_* variables were
     // set; this shell has since dropped DATABASE_URL and STUDIO_DAILY_USD.
-    flag("server_env", "STUDIO_DAILY_USD=9\nSTUDIO_OWNER=old\nDATABASE_URL=/old/catalog.db\nPATH=/x\n-FOO\n");
+    flag("server_env", "STUDIO_DAILY_USD=9\nSTUDIO_OWNER=old\nDATABASE_URL=/old/catalog.db\nPATH=/stale-tmux-path\n-FOO\n");
     const ran = run(["--detach", "--no-checks"], { env: { STUDIO_OWNER: "me" } });
     const { text } = paneEnv(tmuxCall(ran.calls, "new-session")[0]);
     expect(text).toContain("unset STUDIO_DAILY_USD");
     expect(text).toContain("unset DATABASE_URL");
     expect(text).toContain("export STUDIO_OWNER=me");
     expect(text).not.toContain("unset STUDIO_OWNER");
-    expect(text).not.toContain("/x");
+    expect(text).not.toContain("/stale-tmux-path");
   });
 
   it("leaves nothing behind when the second pane cannot be created", () => {
