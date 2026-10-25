@@ -41,6 +41,9 @@ export async function loadDevEnv(appDir) {
  */
 export async function checkCatalogFile(appDir) {
   await loadDevEnv(appDir);
+  // `next dev` runs in the app's directory, and a relative CATALOG_DB
+  // resolves against the cwd, so resolve it from there too.
+  process.chdir(appDir);
   // env.ts is TypeScript; tsx's loader lets plain node import it, resolved
   // from this file, so dev.sh needs no flags and no particular cwd.
   const { register } = await import("tsx/esm/api");

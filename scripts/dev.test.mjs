@@ -93,6 +93,9 @@ case "$*" in *":$BUSY_PORT "*|*":$BUSY_PORT") echo "node 1 you 20u IPv4 TCP *:$B
         DEV_TMUX_BIN: tmux,
         CALLS_LOG: log,
         STATE_DIR: state,
+        // A developer's services/catalog/.env must not change which file the
+        // check looks at.
+        CATALOG_ENV_FILE: join(dir, "no-catalog.env"),
         // Ports nothing should listen on, so `status` never reaches a real
         // server, and different, so each message names the right one.
         PORT: "19001",

@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,8 +19,13 @@ const appDir = (files) => {
   return dir;
 };
 // `get` runs in a process of its own: Next's loader writes to process.env.
+// CATALOG_ENV_FILE names nothing, so a developer's services/catalog/.env
+// cannot reach `db` and change which file it checks.
 const cli = (args, env = {}) => {
-  const ran = spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8", env: { PATH: process.env.PATH, ...env } });
+  const ran = spawnSync(process.execPath, [CLI, ...args], {
+    encoding: "utf8",
+    env: { PATH: process.env.PATH, CATALOG_ENV_FILE: "/nonexistent/catalog.env", ...env },
+  });
   return { code: ran.status, out: ran.stdout, err: ran.stderr };
 };
 
@@ -52,6 +57,26 @@ describe("dev-env.mjs db", () => {
     const file = catalogAt(join(home, "data", "catalog.db"));
     expect(cli(["db", appDir({})], { HOME: home, CATALOG_DB: "~/data/catalog.db" }).out).toBe(`FILE=${file}\n`);
     expect(cli(["db", appDir({})], { HOME: home, DATABASE_URL: `sqlite://${file}` }).out).toBe(`FILE=${file}\n`);
+  });
+
+  it("resolves a relative CATALOG_DB from the app's directory, where next dev runs", () => {
+    const app = appDir({ ".env.local": "CATALOG_DB=./data/catalog.db\n" });
+    const file = catalogAt(join(app, "data", "catalog.db"));
+    const ran = cli(["db", app], { HOME: appDir({}) });
+    expect(ran.code).toBe(0);
+    // The cwd is the real path (macOS's /var is /private/var), so compare those.
+    expect(ran.out).toBe(`FILE=${realpathSync(file)}\n`);
+  });
+
+  it("reads services/catalog/.env under the app's files, as the app does", () => {
+    const home = appDir({});
+    const file = catalogAt(join(home, "from-catalog-env.db"));
+    const envFile = join(appDir({}), "catalog.env");
+    writeFileSync(envFile, `CATALOG_DB=${file}\n`);
+    expect(cli(["db", appDir({})], { HOME: home, CATALOG_ENV_FILE: envFile }).out).toBe(`FILE=${file}\n`);
+    const other = catalogAt(join(home, "from-app.db"));
+    const app = appDir({ ".env.local": `CATALOG_DB=${other}\n` });
+    expect(cli(["db", app], { HOME: home, CATALOG_ENV_FILE: envFile }).out).toBe(`FILE=${other}\n`);
   });
 
   it("exits 3 with one line, and prints nothing on stdout, when the file is missing or a postgres URL is set", () => {
