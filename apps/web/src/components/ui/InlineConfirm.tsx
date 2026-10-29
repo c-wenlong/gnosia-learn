@@ -21,9 +21,10 @@ const SWAP = "animate-fade-in motion-reduce:animate-none";
  * small ones. `tone="danger"` makes the confirming press the destructive one
  * (danger words, or the warn button); `neutral` an ordinary one.
  *
- * Uncontrolled by default, closing once `onConfirm` is called. A caller that
- * opens it from elsewhere too, or keeps the question up while the work runs
- * (`busy`, with `busyLabel` on the press), holds `open` and `onOpenChange`.
+ * Uncontrolled by default, closing once `onConfirm` is called, or once
+ * `busy` ends when `onConfirm` made it busy. A caller that opens it from
+ * elsewhere too, or decides itself when the question goes, holds `open` and
+ * `onOpenChange`.
  *
  * Focus follows the swap. The trigger leaves the page as the question
  * arrives, so focus that was on it goes to Keep it, the press that loses
@@ -70,6 +71,14 @@ export function InlineConfirm({
   className?: string;
 }) {
   const [own, setOwn] = useState(false);
+  // Uncontrolled, confirmed, and the work it started still running: the
+  // question stays up until `busy` ends. The trigger is disabled while busy
+  // and could not take focus back, which would drop it to the page.
+  const [held, setHeld] = useState(false);
+  if (held && !busy) {
+    setHeld(false);
+    setOwn(false);
+  }
   const controlled = openProp !== undefined;
   const open = controlled ? openProp : own;
   const setOpen = (next: boolean) => {
@@ -96,7 +105,8 @@ export function InlineConfirm({
 
   const confirm = () => {
     onConfirm();
-    if (!controlled) setOwn(false);
+    // Closed on the next render, unless `onConfirm` made it busy.
+    if (!controlled) setHeld(true);
   };
   const onKeyDown = (event: KeyboardEvent<HTMLSpanElement>) => {
     if (event.key !== "Escape") return;

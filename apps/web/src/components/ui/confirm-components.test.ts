@@ -281,4 +281,32 @@ describe("InlineConfirm", () => {
     press(button(root, "Keep it"));
     expect(button(root, "Start over").disabled).toBe(true);
   });
+
+  it("uncontrolled, keeps the question up while the confirmed work runs, then gives focus back to the press", () => {
+    function Work() {
+      const [busy, setBusy] = useState(false);
+      return createElement(
+        Fragment,
+        null,
+        createElement(InlineConfirm, {
+          label: "Discard",
+          question: "Sure?",
+          confirmLabel: "Discard it",
+          busyLabel: "Discarding",
+          busy,
+          onConfirm: () => setBusy(true),
+        }),
+        createElement("button", { type: "button", tabIndex: -1, onMouseDown: (e: { preventDefault: () => void }) => e.preventDefault(), onClick: () => setBusy(false) }, "Finish"),
+      );
+    }
+    const root = mount(createElement(Work));
+    press(button(root, "Discard"));
+    press(button(root, "Discard it"));
+    // The trigger would be disabled now, and could not hold focus.
+    expect(button(root, "Discarding").disabled).toBe(true);
+    // The work ends without anyone pressing anything in the row.
+    act(() => button(root, "Finish").click());
+    expect(button(root, "Discard").disabled).toBe(false);
+    expect(document.activeElement).toBe(button(root, "Discard"));
+  });
 });
