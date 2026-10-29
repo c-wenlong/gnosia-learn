@@ -423,7 +423,7 @@ describe("safeHref", () => {
 
   it("treats a protocol-relative URL as leaving the app, however its slashes are written", () => {
     // A browser opens every one of these on evil.example.
-    for (const href of ["//evil.example/x", "/\\evil.example/x", "\\\\evil.example/x", "https:\\\\evil.example", "/\t/evil.example"]) {
+    for (const href of ["//evil.example/x", "/\\evil.example/x", "\\\\evil.example/x", "https:\\\\evil.example", "/\t/evil.example", "\u001f//evil.example/x", "\u0000https://evil.example"]) {
       expect(isExternalHref(href), href).toBe(true);
     }
     expect(isExternalHref("/x//y")).toBe(false);
