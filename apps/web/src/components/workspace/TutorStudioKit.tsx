@@ -4,7 +4,7 @@ import { useMemo, type Ref } from "react";
 
 import { openConceptConversation } from "@/app/(app)/studio/actions";
 import { MentionComposer, type MentionComposerHandle } from "@/components/ui/MentionComposer";
-import type { MentionValue } from "@/components/ui/mention-text";
+import type { MentionValue } from "@/lib/mentions";
 import { MENTION_HINT } from "@/lib/studio-cards";
 import { idempotencyKey, type TagKind } from "@/lib/studio-drafts";
 import { extendKey, forgetExtendKey, leaveOpener, sessionStore } from "@/lib/studio-extend";
@@ -22,7 +22,7 @@ import {
 } from "@/lib/tutor-handoff";
 import type { HandoffMarker, ThreadItem } from "@/lib/tutor-thread";
 
-export { isEmptyValue, trimValue } from "@/components/ui/mention-text";
+export { isEmptyValue, trimValue } from "@/lib/mentions";
 export { OPENING_THE_STUDIO } from "@/lib/tutor-handoff";
 
 /**

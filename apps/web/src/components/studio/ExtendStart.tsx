@@ -20,7 +20,7 @@ import {
   sameValue,
   trimValue,
   type MentionValue,
-} from "@/components/ui/mention-text";
+} from "@/lib/mentions";
 import { UserMessage } from "@/components/ui/Message";
 import { TypingDots } from "@/components/ui/TypingDots";
 import { MENTION_HINT, mentionOptions, valueSendBlock } from "@/lib/studio-cards";

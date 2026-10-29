@@ -85,6 +85,27 @@ export function nextIndexForKey(key: string, index: number, count: number): numb
   }
 }
 
+/** A pause this long between keys starts a new typeahead prefix. */
+export const TYPEAHEAD_RESET_MS = 700;
+
+/** What a list's typeahead has heard: the prefix typed so far, and when its last key came. */
+export interface Typeahead {
+  buffer: string;
+  at: number;
+}
+
+/** Nothing typed yet, as a list holds on opening. */
+export const NO_TYPEAHEAD: Typeahead = { buffer: "", at: 0 };
+
+/**
+ * The typeahead after `key` at `timeStamp` (the key event's own clock): a
+ * pause longer than `TYPEAHEAD_RESET_MS` starts a new prefix, otherwise the
+ * key is added to it. `typeaheadIndex` then finds where the prefix lands.
+ */
+export function typeaheadStep(state: Typeahead, key: string, timeStamp: number): Typeahead {
+  return { buffer: timeStamp - state.at > TYPEAHEAD_RESET_MS ? key : state.buffer + key, at: timeStamp };
+}
+
 /**
  * Typeahead: the option a typed prefix lands on, or null when none matches.
  *

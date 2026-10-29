@@ -17,26 +17,27 @@ import {
   MENTION_NODE_TYPE,
   mentionQuery,
   menuOpenedAnnouncement,
-  moveActive,
   plusMenuStays,
   prependValue,
   removeMention,
   rowAnnouncement,
   sameValue,
   serializeMentions,
-  toggleMention,
   toggleMentionEdit,
   trimValue,
   validMentions,
   valueOf,
   valuePieces,
-  withMention,
-  withoutMention,
   type CaretLine,
   type MentionOption,
   type MentionValue,
   type SerializedNodeLike,
-} from "./mention-text";
+} from "./mentions";
+import { moveActive } from "@/components/ui/roving";
+
+const addMentionValue = <K extends string>(value: MentionValue<K>, kind: K) => addMention(value, kind).value;
+const removeMentionValue = <K extends string>(value: MentionValue<K>, kind: K) => removeMention(value, kind).value;
+const toggleMentionValue = <K extends string>(value: MentionValue<K>, kind: K) => toggleMentionEdit(value, kind).value;
 
 const text = (value: string): SerializedNodeLike => ({ type: "text", text: value });
 const chip = (kind: string): SerializedNodeLike => ({ type: MENTION_NODE_TYPE, kind });
@@ -164,7 +165,7 @@ describe("a kind's toggle (D88)", () => {
   const empty = { text: "", mentions: [] };
 
   it("puts the chip at the start of an empty field, with a space to type after", () => {
-    const tagged = withMention(empty, "diagram");
+    const tagged = addMentionValue(empty, "diagram");
     expect(tagged).toEqual({ text: "@diagram ", mentions: [{ kind: "diagram", start: 0, end: 8 }] });
     expect(hasMention(tagged, "diagram")).toBe(true);
     expect(hasMention(tagged, "video")).toBe(false);
@@ -172,7 +173,7 @@ describe("a kind's toggle (D88)", () => {
 
   it("puts the chip in front of words already typed, and moves every other chip with them", () => {
     const typed = valueOf([{ type: "text", text: "how raft keeps a " }, { type: "mention", kind: "video" }]);
-    const tagged = withMention(typed, "diagram");
+    const tagged = addMentionValue(typed, "diagram");
     expect(tagged.text).toBe("@diagram how raft keeps a @video");
     expect(validMentions(tagged.text, tagged.mentions)).toEqual([
       { kind: "diagram", start: 0, end: 8 },
@@ -181,8 +182,8 @@ describe("a kind's toggle (D88)", () => {
   });
 
   it("adds a space of its own even before text that starts with one, so it can take back only that", () => {
-    expect(withMention({ text: " tcp", mentions: [] }, "video").text).toBe("@video  tcp");
-    expect(withoutMention(withMention({ text: " tcp", mentions: [] }, "video"), "video")).toEqual({ text: " tcp", mentions: [] });
+    expect(addMentionValue({ text: " tcp", mentions: [] }, "video").text).toBe("@video  tcp");
+    expect(removeMentionValue(addMentionValue({ text: " tcp", mentions: [] }, "video"), "video")).toEqual({ text: " tcp", mentions: [] });
   });
 
   it("is an exact round trip, leading spaces and repeated toggles included (Greptile on #306)", () => {
@@ -196,14 +197,14 @@ describe("a kind's toggle (D88)", () => {
     for (const start of starts) {
       let value = start;
       for (let round = 0; round < 3; round += 1) {
-        value = toggleMention(toggleMention(value, "diagram"), "diagram");
+        value = toggleMentionValue(toggleMentionValue(value, "diagram"), "diagram");
         expect(value).toEqual(start);
       }
       // Both on, then both off in either order.
-      const both = toggleMention(toggleMention(start, "diagram"), "video");
+      const both = toggleMentionValue(toggleMentionValue(start, "diagram"), "video");
       if (!start.mentions.length) {
-        expect(toggleMention(toggleMention(both, "diagram"), "video")).toEqual(start);
-        expect(toggleMention(toggleMention(both, "video"), "diagram")).toEqual(start);
+        expect(toggleMentionValue(toggleMentionValue(both, "diagram"), "video")).toEqual(start);
+        expect(toggleMentionValue(toggleMentionValue(both, "video"), "diagram")).toEqual(start);
       }
     }
   });
@@ -218,13 +219,13 @@ describe("a kind's toggle (D88)", () => {
 
   it("never tags a kind twice", () => {
     const typed = valueOf([{ type: "text", text: "a " }, { type: "mention", kind: "diagram" }]);
-    expect(withMention(typed, "diagram")).toBe(typed);
+    expect(addMentionValue(typed, "diagram")).toBe(typed);
   });
 
   it("takes the chip out with its space, giving back the words as they were", () => {
     const words = { text: "how raft keeps a log in step", mentions: [] };
-    expect(withoutMention(withMention(words, "video"), "video")).toEqual(words);
-    expect(toggleMention(toggleMention(empty, "diagram"), "diagram")).toEqual(empty);
+    expect(removeMentionValue(addMentionValue(words, "video"), "video")).toEqual(words);
+    expect(toggleMentionValue(toggleMentionValue(empty, "diagram"), "diagram")).toEqual(empty);
   });
 
   it("takes out a chip typed mid-sentence, and moves the chips after it back", () => {
@@ -234,23 +235,23 @@ describe("a kind's toggle (D88)", () => {
       { type: "text", text: " of tcp and a " },
       { type: "mention", kind: "diagram" },
     ]);
-    const out = withoutMention(typed, "video");
+    const out = removeMentionValue(typed, "video");
     expect(out.text).toBe("make a of tcp and a @diagram");
     expect(validMentions(out.text, out.mentions)).toEqual([{ kind: "diagram", start: 20, end: 28 }]);
   });
 
   it("takes the space before a chip that ends the text", () => {
     const typed = valueOf([{ type: "text", text: "tcp " }, { type: "mention", kind: "video" }]);
-    expect(withoutMention(typed, "video")).toEqual({ text: "tcp", mentions: [] });
+    expect(removeMentionValue(typed, "video")).toEqual({ text: "tcp", mentions: [] });
   });
 
   it("leaves a value that does not tag the kind, and ignores a range that does not read @<kind>", () => {
     const typed = { text: "@video typed as words", mentions: [] };
-    expect(withoutMention(typed, "video")).toBe(typed);
+    expect(removeMentionValue(typed, "video")).toBe(typed);
     expect(hasMention(typed, "video")).toBe(false);
     const stale = { text: "words", mentions: [{ kind: "video", start: 0, end: 5 }] };
     expect(hasMention(stale, "video")).toBe(false);
-    expect(withMention(stale, "video")).toEqual({ text: "@video words", mentions: [{ kind: "video", start: 0, end: 6 }] });
+    expect(addMentionValue(stale, "video")).toEqual({ text: "@video words", mentions: [{ kind: "video", start: 0, end: 6 }] });
   });
 });
 
@@ -340,13 +341,7 @@ describe("the menu", () => {
     expect(firstActive([{ ...OPTIONS[1]!, disabledReason: "no" }])).toBe(-1);
   });
 
-  it("moves through every row when told nothing is unusable, as the ask list does", () => {
-    const rows = ["a", "b", "c"];
-    expect(moveActive(rows, 0, 1)).toBe(1);
-    expect(moveActive(rows, 2, 1)).toBe(0);
-    expect(moveActive(rows, 0, -1)).toBe(2);
-    expect(moveActive([], 0, 1)).toBe(-1);
-    // Without the predicate a disabled mention row is a row like any other.
+  it("moves past a disabled row only when told it is unusable", () => {
     const options = [OPTIONS[0]!, { ...OPTIONS[1]!, disabledReason: "no" }];
     expect(moveActive(options, 0, 1)).toBe(1);
   });

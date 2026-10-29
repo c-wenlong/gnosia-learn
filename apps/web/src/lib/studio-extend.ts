@@ -1,4 +1,4 @@
-import { validMentions, valueOf, type MentionValue } from "@/components/ui/mention-text";
+import { validMentions, valueOf, type MentionValue } from "@/lib/mentions";
 import { isTagKind, runnerDown, type DraftKind, type DraftMention, type Refusal, type TagKind, type VideoAvailability } from "@/lib/studio-drafts";
 
 /**

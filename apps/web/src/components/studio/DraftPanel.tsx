@@ -36,7 +36,7 @@ import {
   trimValue,
   valueOf,
   type MentionValue,
-} from "@/components/ui/mention-text";
+} from "@/lib/mentions";
 import { TutorMessage, UserMessage } from "@/components/ui/Message";
 import { TextLink } from "@/components/ui/TextLink";
 import { TypingDots } from "@/components/ui/TypingDots";

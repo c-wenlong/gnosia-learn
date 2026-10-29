@@ -7,7 +7,7 @@ import { Glyph, type GlyphName } from "@/components/ui/Glyph";
 import { SearchField } from "@/components/ui/SearchField";
 import { cx, MENU_PANEL, menuRowClasses } from "@/components/ui/classes";
 import { isImeKey } from "@/components/ui/composer-keys";
-import { moveActive } from "@/components/ui/mention-text";
+import { moveActive } from "@/components/ui/roving";
 import { usePresence } from "@/components/ui/use-presence";
 import { ASK_START_KEY, askTutorHref, MAX_ASK_QUERY, type AskEntry, type AskKind } from "@/lib/ask-core";
 
