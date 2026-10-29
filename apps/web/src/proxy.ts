@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { HOME_PATH, isApiPath, isPublicPath, originFromHeaders, readAuthConfig, SESSION_COOKIE, verifySession } from "@/lib/auth/core";
+import { contentSecurityPolicy, makeNonce, NONCE_HEADER } from "@/lib/auth/csp";
 
 /**
  * The front door. Runs before every route the matcher lets through and asks
@@ -22,6 +23,9 @@ import { HOME_PATH, isApiPath, isPublicPath, originFromHeaders, readAuthConfig, 
  * landing page and the social card need while signed out. Everything under
  * `/api/` is deliberately *in*: the learner routes write the only copy of the
  * study record.
+ *
+ * Every page it lets through leaves with a Content-Security-Policy carrying a
+ * fresh nonce (`pass`, and `src/lib/auth/csp.ts` for the policy).
  */
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
@@ -30,14 +34,36 @@ export async function proxy(request: NextRequest) {
   const signedIn = config.ok && (await verifySession(config.config.secret, token, Math.floor(Date.now() / 1000)));
 
   if (pathname === "/" || pathname === "/sign-in") {
-    return signedIn ? redirect(request, HOME_PATH) : NextResponse.next();
+    return signedIn ? redirect(request, HOME_PATH) : pass(request);
   }
-  if (isPublicPath(pathname) || signedIn) return NextResponse.next();
+  if (isPublicPath(pathname) || signedIn) return pass(request);
 
   if (isApiPath(pathname)) {
     return NextResponse.json({ error: "UNAUTHENTICATED", signIn: "/sign-in" }, { status: 401 });
   }
   return redirect(request, `/sign-in?${new URLSearchParams({ next: `${pathname}${search}` })}`);
+}
+
+/**
+ * Let the request through, with a nonce policy when it is for a page.
+ *
+ * The policy goes on the request as well as the response: Next reads the
+ * nonce out of the request's `Content-Security-Policy` header while rendering
+ * and stamps it on every script it writes, and the layouts read
+ * `NONCE_HEADER` for their own two inline scripts. An API path gets neither: a
+ * route handler that serves a document sets its own policy, and JSON needs
+ * none.
+ */
+function pass(request: NextRequest): NextResponse {
+  if (isApiPath(request.nextUrl.pathname)) return NextResponse.next();
+  const nonce = makeNonce();
+  const policy = contentSecurityPolicy({ nonce, dev: process.env.NODE_ENV !== "production" });
+  const headers = new Headers(request.headers);
+  headers.set(NONCE_HEADER, nonce);
+  headers.set("content-security-policy", policy);
+  const response = NextResponse.next({ request: { headers } });
+  response.headers.set("content-security-policy", policy);
+  return response;
 }
 
 /**

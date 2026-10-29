@@ -1,7 +1,8 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 
 import { AppShell } from "@/components/AppShell";
 import { MotionSeed } from "@/components/settings/MotionSeed";
+import { NONCE_HEADER } from "@/lib/auth/csp";
 import { requireSignedIn } from "@/lib/auth/session";
 import { LearnerProvider } from "@/lib/learner-context";
 import { loadLearnerSnapshot } from "@/lib/learner-store";
@@ -46,7 +47,9 @@ export default async function AppLayout({
   children: React.ReactNode;
 }>) {
   await requireSignedIn();
-  const cookieStore = await cookies();
+  const [cookieStore, requestHeaders] = await Promise.all([cookies(), headers()]);
+  // The motion script needs the request's CSP nonce to run (`@/lib/auth/csp`).
+  const nonce = requestHeaders.get(NONCE_HEADER) ?? undefined;
   const motionKnown =
     asMotionMode(cookieStore.get(MOTION_COOKIE)?.value ?? cookieStore.get(LEGACY_MOTION_COOKIE)?.value) !== null;
   const [{ state, reachable }, storedMotion] = await Promise.all([
@@ -61,7 +64,7 @@ export default async function AppLayout({
 
   return (
     <>
-      {storedMotion === "always" && <script dangerouslySetInnerHTML={{ __html: MOTION_REDUCE_SCRIPT }} />}
+      {storedMotion === "always" && <script nonce={nonce} dangerouslySetInnerHTML={{ __html: MOTION_REDUCE_SCRIPT }} />}
       <LearnerProvider initialState={initialState} reachable={reachable}>
         {storedMotion !== null && <MotionSeed mode={storedMotion} />}
         <AppShell studio={studioEnabled()} collapsed={sidebarCollapsed(cookieStore.get(SIDEBAR_COOKIE)?.value)}>
