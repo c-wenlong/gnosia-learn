@@ -126,6 +126,19 @@ describe("Dialog", () => {
     expect(document.activeElement).toBe(field);
   });
 
+  it("stays shut when the caller closes it through its ref while asked, on an Escape it could not refuse", () => {
+    // StudioDialog under reduced motion: its close navigates and shuts the
+    // element at once, before the browser's own close lands.
+    const ref = { current: null as HTMLDialogElement | null };
+    const { container } = mount(dialogOf({ ref, onClose: () => ref.current!.close() }));
+    const element = dialog(container);
+    act(() => {
+      element.dispatchEvent(new Event("cancel", { cancelable: false }));
+      element.dispatchEvent(new Event("close"));
+    });
+    expect(element.hasAttribute("open")).toBe(false);
+  });
+
   it("leaves a close of the caller's own through its ref alone", () => {
     const ref = { current: null as HTMLDialogElement | null };
     const { container } = mount(dialogOf({ ref }));

@@ -302,8 +302,10 @@ describe("InlineConfirm", () => {
     const root = mount(createElement(Work));
     press(button(root, "Discard"));
     press(button(root, "Discard it"));
-    // The trigger would be disabled now, and could not hold focus.
+    // The trigger would be disabled now, and could not hold focus; nor can
+    // the confirming press, so Keep it holds it while the work runs.
     expect(button(root, "Discarding").disabled).toBe(true);
+    expect(document.activeElement).toBe(button(root, "Keep it"));
     // The work ends without anyone pressing anything in the row.
     act(() => button(root, "Finish").click());
     expect(button(root, "Discard").disabled).toBe(false);

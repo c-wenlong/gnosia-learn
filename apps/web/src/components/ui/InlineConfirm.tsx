@@ -29,7 +29,8 @@ const SWAP = "animate-fade-in motion-reduce:animate-none";
  * Focus follows the swap. The trigger leaves the page as the question
  * arrives, so focus that was on it goes to Keep it, the press that loses
  * nothing; opened from elsewhere, focus stays where it was. When the question
- * goes, focus that was in it comes back to the trigger. Escape in the
+ * goes, focus that was in it comes back to the trigger; while the work runs,
+ * focus on the disabled confirming press moves to Keep it. Escape in the
  * question is Keep it, which stays pressable while `busy`: putting the
  * question away does not stop the work, and the trigger stays disabled.
  */
@@ -89,6 +90,7 @@ export function InlineConfirm({
   const questionId = useId();
   const trigger = useRef<HTMLButtonElement>(null);
   const keep = useRef<HTMLButtonElement>(null);
+  const confirmPress = useRef<HTMLButtonElement>(null);
   const was = useRef(open);
   useEffect(() => {
     if (was.current === open) return;
@@ -102,6 +104,14 @@ export function InlineConfirm({
       trigger.current?.focus();
     }
   }, [open]);
+
+  // The work starting disables the confirming press, which a browser then
+  // drops focus from: Keep it, which stays pressable, takes it instead.
+  useEffect(() => {
+    if (!open || !busy) return;
+    const at = document.activeElement;
+    if (at === null || at === document.body || at === confirmPress.current) keep.current?.focus();
+  }, [open, busy]);
 
   const confirm = () => {
     onConfirm();
@@ -141,7 +151,7 @@ export function InlineConfirm({
       </span>
       {size === "text" ? (
         <>
-          <TextLink onClick={confirm} tone={tone === "danger" ? "danger" : "accent"} pending={busy}>
+          <TextLink ref={confirmPress} onClick={confirm} tone={tone === "danger" ? "danger" : "accent"} pending={busy}>
             {confirmWords}
           </TextLink>
           <TextLink ref={keep} onClick={() => setOpen(false)} tone="muted" weight="normal">
@@ -150,7 +160,7 @@ export function InlineConfirm({
         </>
       ) : (
         <>
-          <Button size="sm" variant={tone === "danger" ? "warn" : "secondary"} disabled={busy} onClick={confirm}>
+          <Button ref={confirmPress} size="sm" variant={tone === "danger" ? "warn" : "secondary"} disabled={busy} onClick={confirm}>
             {confirmWords}
           </Button>
           <Button ref={keep} size="sm" variant="ghost" onClick={() => setOpen(false)}>

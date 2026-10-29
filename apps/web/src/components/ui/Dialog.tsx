@@ -210,8 +210,10 @@ export function Dialog({
       onCancel={(event) => {
         // Escape. The dialog would close itself, behind the caller's back.
         event.preventDefault();
-        if (!event.cancelable) forced.current = { focused: document.activeElement };
+        const focused = document.activeElement;
         ask();
+        // Unless the caller already shut it through `ref` while asked.
+        if (!event.cancelable && event.currentTarget.open) forced.current = { focused };
       }}
       onClose={(event) => {
         // Closed by the browser after an Escape it would not let us prevent.
