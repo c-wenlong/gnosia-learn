@@ -17,8 +17,8 @@
   "scripts": {
     "dev": "npm run dev --workspace @gnosia/web",
     "dev:all": "npm run dev & DEV=$!; npm run studio & STUDIO=$!; while [ \"$(jobs -rp | wc -l)\" -ge 2 ]; do sleep 1; done; kill $(jobs -rp) 2>/dev/null; wait $DEV; DEV=$?; wait $STUDIO; STUDIO=$?; [ $DEV -eq 0 ] || exit $DEV; exit $STUDIO",
-  "dev:up": "scripts/dev.sh start",
-  "dev:down": "scripts/dev.sh stop",
+    "dev:up": "scripts/dev.sh start",
+    "dev:down": "scripts/dev.sh stop",
     "build": "npm run build --workspace @gnosia/web",
     "start": "npm run start --workspace @gnosia/web",
     "lint": "eslint",
@@ -40,11 +40,17 @@
     "@vitejs/plugin-react": "^6.1.1",
     "@vitest/coverage-v8": "^5.0.2",
     "eslint": "^9",
-    "eslint-config-next": "16.3.7",
+    "eslint-config-next": "16.4.3",
     "jsdom": "^30.1.1",
     "tsx": "^4.23.15",
     "typescript": "^6",
     "vitest": "^5.0.0",
     "yaml": "^2.9.1"
-  }
+  },
+  "overrides": {
+    "@tailwindcss/typography": {
+      "postcss-selector-parser": "6.1.5"
+    }
+  },
+  "//overrides": "@tailwindcss/typography pins postcss-selector-parser 6.0.10 exactly, which carries GHSA-rj75-hqrm-r3gf (quadratic selector parsing). 6.1.5 is the same major with the fix; drop this once typography releases a version that depends on it."
 }
