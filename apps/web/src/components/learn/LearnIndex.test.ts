@@ -123,6 +123,19 @@ describe("LearnIndex graph card", () => {
   });
 });
 
+describe("LearnIndex table", () => {
+  it("says which row the graph shows on that row's title link, not with aria-selected on a plain table row", () => {
+    const host = mount();
+    const current = () => [...host.querySelectorAll("table a[aria-current]")].map((a) => [a.textContent, a.getAttribute("aria-current")]);
+    expect(current()).toEqual([["TCP", "true"]]);
+    expect(host.querySelector("tr[aria-selected]")).toBeNull();
+
+    const ip = [...host.querySelectorAll("table a")].find((a) => a.textContent === "IP") as HTMLAnchorElement;
+    act(() => ip.focus());
+    expect(current()).toEqual([["IP", "true"]]);
+  });
+});
+
 describe("LearnIndex map details", () => {
   it("moves focus to the newly chosen concept's name after a Needs or Leads to press", () => {
     const node = (id: string, title: string) => ({ id, title, bucket: "learning", pL: 0.4, courses: [], domain: "networks" }) as unknown as GraphNode;
