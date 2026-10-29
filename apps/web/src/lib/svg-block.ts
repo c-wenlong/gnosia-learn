@@ -37,7 +37,8 @@ export interface SvgNode {
 
 /** What a `svg` block's text compiles to. */
 export type SvgCompile =
-  | { kind: "figure"; root: SvgNode }
+  /** `prefix` starts every id in `root`, so `SvgBlock` can scope them again per rendered copy. */
+  | { kind: "figure"; root: SvgNode; prefix: string }
   /** It opens `<svg` but nothing has drawn yet: the stream is mid-picture. */
   | { kind: "drawing" }
   /** No `<svg` element in it at all: the caller shows the code. */
@@ -446,10 +447,8 @@ function cleanAttr(name: string, value: string, prefix: string): { name: string;
     const ids = text.trim().split(/\s+/).filter((id) => ID.test(id));
     return ids.length === 0 ? null : { name: key === "arialabelledby" ? "aria-labelledby" : "aria-describedby", value: ids.map((id) => prefix + id).join(" ") };
   }
-  if (/^aria-[a-z]+$/i.test(name)) {
-    const kept = cleanValue(text, prefix);
-    return kept === null ? null : { name: name.toLowerCase(), value: kept };
-  }
+  // Words a screen reader says, never parsed as CSS: "CPU (core 1)" is a label.
+  if (/^aria-[a-z]+$/i.test(name)) return { name: name.toLowerCase(), value: text };
   if (key === "attributename") {
     // Read whole by `cleanNode`, which drops the animation when it names an
     // attribute the picture could not have written.
@@ -497,8 +496,9 @@ function cleanNode(node: RawNode, depth: number, prefix: string): SvgNode | null
 /**
  * The per-picture `id` prefix: a hash of the block's text, so the server
  * render and the browser's agree, and two different pictures in one thread
- * never share an id. A generated id uses `_` after it, which a model's
- * (always `<prefix>-<id>`) cannot.
+ * never share an id. Two copies of the same text share it, so `SvgBlock`
+ * adds its own `useId` to it per rendered copy. A generated id uses `_` after
+ * it, which a model's (always `<prefix>-<id>`) cannot.
  */
 function idPrefix(source: string): string {
   let hash = 0x811c9dc5;
@@ -531,7 +531,7 @@ function compile(source: string): SvgCompile {
   nameFromTitle(clean, prefix);
   // A root that opened and saw nothing complete yet draws as it goes, not
   // "not yet": an empty picture is still the picture being drawn.
-  return { kind: "figure", root: clean };
+  return { kind: "figure", root: clean, prefix };
 }
 
 /**

@@ -1,4 +1,4 @@
-import { createElement } from "react";
+import { createElement, Fragment } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
@@ -278,6 +278,22 @@ describe("class and id are the picture's own (S2-04)", () => {
     expect(plain!.attrs.id).toMatch(/^svg[0-9a-z]+-fetch$/);
   });
 
+  it("gives two copies of the same picture on one page their own ids, references included", () => {
+    const source = '<svg><circle id="button" r="2"/><animate attributeName="r" begin="button.click" to="4"/><use href="#button"/></svg>';
+    const compiled = compileSvg(source);
+    if (compiled.kind === "not-svg") throw new Error("expected a picture");
+    const markup = renderToStaticMarkup(
+      createElement(Fragment, null, createElement(SvgBlock, { compiled }), createElement(SvgBlock, { compiled })),
+    );
+    const ids = [...markup.matchAll(/ id="([^"]+)"/g)].map((match) => match[1]!);
+    expect(ids).toHaveLength(2);
+    expect(ids[0]).not.toBe(ids[1]);
+    for (const id of ids) {
+      expect(markup).toContain(`begin="${id}.click"`);
+      expect(markup).toContain(`href="#${id}"`);
+    }
+  });
+
   it("points aria references at the prefixed ids", () => {
     const root = figure('<svg aria-describedby="d"><desc id="d">Two arrows</desc></svg>');
     expect(root.attrs["aria-describedby"]).toBe((root.children[0] as SvgNode).attrs.id);
@@ -291,6 +307,10 @@ describe("the picture's accessible name (S2-22)", () => {
     expect(id).toBeDefined();
     expect(markup).toContain(`aria-labelledby="${id}"`);
     expect(markup).not.toContain("aria-label=");
+  });
+
+  it("keeps a label's words as written, brackets and all", () => {
+    expect(rendered('<svg aria-label="CPU (core 1) \\ cache"><rect/></svg>')).toContain('aria-label="CPU (core 1) \\ cache"');
   });
 
   it("keeps a name the markup gave it", () => {
