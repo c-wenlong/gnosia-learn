@@ -5,6 +5,7 @@ import { parse } from "yaml";
 import { ContentError } from "./errors";
 import {
   filesIn,
+  KEBAB_SLUG,
   mappingList,
   optionalText,
   readYamlFile,
@@ -430,6 +431,21 @@ interface References {
  * Duplicates across files are caught through `claims`; unresolved references
  * go to `problems`, so one read reports all of them.
  */
+/**
+ * A course or module slug is a URL segment, and a page's `params` arrive
+ * still percent-encoded, so a slug that needs escaping (a space, an accent,
+ * a capital the link and the row disagree on) would 404 on every page built
+ * from it. Kebab-case is the rule topics and tags already keep.
+ */
+function urlSlug(slug: string, where: string, field: string): string {
+  if (!KEBAB_SLUG.test(slug)) {
+    throw new ContentError(
+      `${where}: ${field} "${slug}" is not kebab-case (lowercase letters and digits joined by single dashes): it is a URL segment`,
+    );
+  }
+  return slug;
+}
+
 function readCourse(
   parsed: RawCourse | null,
   where: string,
@@ -443,7 +459,7 @@ function readCourse(
 
   const id = requireText(parsed.id, where, "id");
   claim(claims.courseIds, "course", id, where);
-  const slug = requireText(parsed.slug, where, "slug");
+  const slug = urlSlug(requireText(parsed.slug, where, "slug"), where, "slug");
   claim(claims.courseSlugs, "course slug", slug, where);
 
   const order = requireInteger(parsed.order, where, "order");
@@ -520,7 +536,7 @@ function readCourse(
     );
     for (const resource of resources) claim(claims.resourceIds, "resource", resource.id, at);
 
-    const moduleSlug = requireText(mod.slug, at, "slug");
+    const moduleSlug = urlSlug(requireText(mod.slug, at, "slug"), at, "slug");
     claim(moduleSlugs, "module slug", moduleSlug, at);
 
     const read: Module = {

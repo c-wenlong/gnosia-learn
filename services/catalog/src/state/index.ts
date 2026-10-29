@@ -39,6 +39,11 @@
  * `services/`. One door.
  */
 export { connect, inTransaction, withDatabase, type CatalogDatabase, type Connection } from "../db";
+/**
+ * Whether an error is the database not answering, read from its codes, so a
+ * route can tell an outage (a 503) from a bug (a 500).
+ */
+export { classifyConnectionFailure, type ConnectionFailure } from "../connection-failure";
 
 /**
  * The database half of the content reader seam (docs/CONTENT-MIGRATION.md

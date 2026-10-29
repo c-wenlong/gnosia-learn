@@ -9,7 +9,7 @@ import { contentSource } from "@/data/source";
  * The app's view of the shared topic vocabulary.
  *
  * Through the content seam, which reads the `topic` rows (the database only,
- * since phase 2), so with Postgres down this throws. The studio's screens
+ * since phase 2), so with the catalog unreadable this throws. The studio's screens
  * keep U3 by not depending on it: a topic title is the label on a chip, and
  * they fall back to the slug.
  *

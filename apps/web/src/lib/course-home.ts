@@ -20,9 +20,11 @@ import type { Course } from "@/lib/types";
  * vocabulary's `summary` for the module's `topic:`), its assets from the
  * catalog, and what its path needs (`@/lib/module-path`): the slice of the
  * knowledge base holding its concepts and their prerequisites, the assets
- * the path places and the checks each note holds. The knowledge base and the catalog both degrade to empty when
- * Postgres is down: a topic then shows its tick, and the module says the
- * catalog did not answer.
+ * the path places and the checks each note holds. The knowledge base and the
+ * asset reads degrade to empty when they alone fail: a topic then shows its
+ * tick, and the module says the catalog did not answer. A catalog that does
+ * not answer at all refuses the course read first, so the page falls to the
+ * error boundary instead.
  *
  * Every module is resolved, not only the one on screen: the sidebar marks each
  * module's standing, and `/courses/[slug]` picks its module on the client,

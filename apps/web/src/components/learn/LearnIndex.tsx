@@ -360,7 +360,6 @@ function ConceptTable({
               <tr
                 key={r.id}
                 onClick={() => onSelect(r.id)}
-                aria-selected={r.id === selected}
                 className={cx(
                   "cursor-pointer border-b border-hair transition-colors duration-100 last:border-b-0 motion-reduce:transition-none",
                   r.id === selected ? "bg-surface2" : "hover:bg-surface2/60",
@@ -371,6 +370,9 @@ function ConceptTable({
                     <MasteryDot bucket={r.bucket} className="shrink-0" />
                     <Link
                       href={`/learn/${r.id}`}
+                      // The row the graph shows, said to a screen reader too: a plain table's
+                      // row cannot carry aria-selected, and the tint alone is colour only.
+                      aria-current={r.id === selected ? "true" : undefined}
                       onClick={(e) => e.stopPropagation()}
                       // Tabbing through the titles moves the graph along with the focus.
                       onFocus={() => onSelect(r.id)}

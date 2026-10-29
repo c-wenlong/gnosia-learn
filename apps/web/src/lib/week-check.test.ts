@@ -8,7 +8,9 @@ import {
   outcomeOf,
   WEEK_CHECK_LIMIT,
   weekCheckBound,
+  weekCheckLabel,
   weekCheckOrder,
+  weekCheckPercent,
   weekCheckSteps,
   type WeekCheckConcept,
   type WeekCheckOutcome,
@@ -183,6 +185,42 @@ describe("weekCheckSteps", () => {
   it("is the close alone when no concept can be asked", () => {
     expect(weekCheckSteps(plan([concept("big-o", 0)], false), []).map((s) => s.kind)).toEqual(["close"]);
     expect(weekCheckSteps(plan([]), []).map((s) => s.kind)).toEqual(["close"]);
+  });
+});
+
+describe("weekCheckLabel and weekCheckPercent", () => {
+  it("count concepts on a check every concept fits", () => {
+    const two = plan([concept("big-o"), concept("theta")]);
+    const steps = weekCheckSteps(two, [right("big-o"), wrong("big-o")]);
+    expect(weekCheckLabel(steps[2])).toBe("Concept 2 of 2 · Question 1");
+    expect(weekCheckPercent(steps[2])).toBe(62.5);
+    expect(weekCheckPercent(steps[0])).toBe(12.5);
+  });
+
+  it("count questions against the 24 on a check that stops before its last concepts", () => {
+    // Twelve concepts, each answered right three times without mastering: the
+    // check stops after eight of them, so "of 12" would never be reached.
+    const twelve = plan(Array.from({ length: 12 }, (_, i) => concept(`c${i + 1}`)));
+    const outcomes = twelve.concepts.slice(0, 8).flatMap((c) => [right(c.slug), right(c.slug), right(c.slug)]);
+    const steps = weekCheckSteps(twelve, outcomes.slice(0, 23));
+    const last = steps[23];
+    expect(last?.place).toMatchObject({ position: 8, of: 12, question: 3, answered: 23 });
+    expect(weekCheckLabel(last)).toBe("Question 24 of up to 24");
+    expect(weekCheckPercent(last)).toBeCloseTo((23 / 24) * 100);
+    expect(weekCheckLabel(steps[0])).toBe("Question 1 of up to 24");
+    expect(weekCheckPercent(steps[0])).toBe(0);
+    expect(weekCheckSteps(twelve, outcomes).at(-1)?.kind).toBe("close");
+  });
+
+  it("does not count a step with no question to ask as answered", () => {
+    const twelve = plan(Array.from({ length: 12 }, (_, i) => concept(`c${i + 1}`)));
+    const steps = weekCheckSteps(twelve, [{ concept: "c1", result: "none", mastered: false }, right("c2")]);
+    expect(weekCheckLabel(steps[2])).toBe("Question 2 of up to 24");
+  });
+
+  it("read the close and a step with no place", () => {
+    expect(weekCheckPercent({ kind: "close", question: null, fallback: null })).toBe(100);
+    expect(weekCheckLabel(undefined)).toBe("Module check");
   });
 });
 

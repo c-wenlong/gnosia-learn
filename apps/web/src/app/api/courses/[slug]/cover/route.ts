@@ -1,4 +1,4 @@
-import { courseCoverBlob, type CourseCoverBlob } from "@gnosia/catalog/state";
+import { classifyConnectionFailure, courseCoverBlob, type CourseCoverBlob } from "@gnosia/catalog/state";
 import { COURSE_COVER_TYPES } from "@gnosia/schema/shared";
 import { NextResponse } from "next/server";
 
@@ -40,9 +40,11 @@ import { currentScope, NoOwnerError, type OwnerScope } from "@/lib/owner";
  *
  * A store that signs URLs (the cloud adapter, when there is one) is answered
  * with a 302 to it and `no-store`, as the asset routes do; the `fs` store
- * returns none, so the bytes are streamed. A database that does not answer is
- * a 503 `catalog-unreachable`; the course list has already fallen back to its
- * placeholder by then, since it reads covers the same way.
+ * returns none, so the bytes are streamed. A database that does not answer
+ * (an error whose code `classifyConnectionFailure` knows) is a 503
+ * `catalog-unreachable`; the course list has already fallen back to its
+ * placeholder by then, since it reads covers the same way. Any other failure
+ * of the lookup is a bug, not an outage, and is thrown, so it is a 500.
  */
 
 export const runtime = "nodejs";
@@ -77,8 +79,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   try {
     row = await withLearnerStore((db) => courseCoverBlob(db, slug, scope));
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.warn(`course cover: catalog unreachable: ${message}`);
+    const failure = classifyConnectionFailure(error);
+    if (failure === null) throw error;
+    console.warn(`course cover: catalog unreachable: ${failure.reason} (${failure.code})`);
     return NextResponse.json(
       { error: "The catalog is unreachable.", code: "catalog-unreachable", detail: "Could not look this cover up." },
       { status: 503 },
