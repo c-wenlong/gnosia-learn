@@ -5,10 +5,26 @@ import { EMPTY_KNOWLEDGE_BASE } from "@/lib/kb/types";
 
 // The app reads courses from the database only; this suite tests logic over
 // real course data, so it reads the export tree instead (`@/test/content-files`).
-vi.mock("@/data/source", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/data/source")>()),
-  contentSource: (await import("@/test/content-files")).fileContentSource,
-}));
+// `outage` stands the courses read in for a database that does not answer,
+// which refuses content reads as well as the knowledge base's.
+const outage = vi.hoisted(() => ({ on: false }));
+vi.mock("@/data/source", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/data/source")>();
+  const { fileContentSource } = await import("@/test/content-files");
+  return {
+    ...actual,
+    contentSource: () => {
+      const source = fileContentSource();
+      if (!outage.on) return source;
+      return {
+        ...source,
+        courses: async () => {
+          throw new actual.ContentUnavailableError("unreachable", null, "The catalog database could not be read.");
+        },
+      };
+    },
+  };
+});
 
 /**
  * `/learn` renders when the database is unreachable, and says which kind of
@@ -17,7 +33,7 @@ vi.mock("@/data/source", async (importOriginal) => ({
  * The page is an async server component, so it is awaited into an element tree
  * and rendered to static markup — everything below it is synchronous. That is
  * enough to check the branch, which is the thing that would otherwise only be
- * discovered by someone loading the page with Postgres down.
+ * discovered by someone loading the page with the catalog unreadable.
  */
 const loadKnowledgeBase = vi.hoisted(() => vi.fn());
 
@@ -43,15 +59,23 @@ async function render(params: Record<string, string> = {}): Promise<string> {
 describe("/learn", () => {
   beforeEach(() => {
     vi.resetModules();
+    outage.on = false;
   });
 
   it("says the database is unreachable rather than showing an empty base", async () => {
+    // A real outage: the courses read is refused as well as the knowledge base's.
+    outage.on = true;
     loadKnowledgeBase.mockResolvedValue({ kb: EMPTY_KNOWLEDGE_BASE, reachable: false });
     const html = await render();
 
     expect(html).toContain("Knowledge base unavailable");
     expect(html).toContain("catalog -- status");
     expect(html).not.toContain("No concepts yet");
+  });
+
+  it("says so too when only the knowledge base read failed", async () => {
+    loadKnowledgeBase.mockResolvedValue({ kb: EMPTY_KNOWLEDGE_BASE, reachable: false });
+    expect(await render()).toContain("Knowledge base unavailable");
   });
 
   it("says the base is empty when it really is", async () => {

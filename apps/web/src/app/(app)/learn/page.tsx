@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { LearnIndex } from "@/components/learn/LearnIndex";
 import { Notice } from "@/components/ui/Notice";
 import { getCourses } from "@/data/courses";
+import { unlessUnreachable } from "@/data/source";
 import { getTopics } from "@/data/topics";
 import { defaultSelection } from "@/lib/concept-graph";
 import { cachedDomainLayout, domainTree, type DomainMapData, type DomainNode, type DomainTopic } from "@/lib/domain-map";
@@ -60,13 +61,15 @@ function toRow(
  *
  * Dynamic, because it reads the database, and it still says which kind of
  * empty it is: "you have no concepts" and "I could not ask" look identical and
- * are not.
+ * are not. A database that does not answer fails the courses read as well as
+ * the knowledge base's, so that read is caught too, or an outage would reach
+ * the error boundary instead of this page's notice.
  */
 export default async function LearnPage({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
   const [{ kb, reachable }, courses, recentCourses, topics] = await Promise.all([
     loadKnowledgeBase(),
-    getCourses(),
+    unlessUnreachable(getCourses()),
     currentOwner().then(readRecentCourses),
     // The vocabulary places each concept in a domain (D1 of docs/proposals/domain-map.md).
     // Without it every concept falls back to its folder, which still draws a map, and
@@ -77,8 +80,19 @@ export default async function LearnPage({ searchParams }: { searchParams: Search
     ),
   ]);
 
+  if (courses === null || !reachable) {
+    return (
+      <div data-layout="app">
+        <Unreachable />
+      </div>
+    );
+  }
   if (kb.concepts.length === 0) {
-    return <div data-layout="app">{reachable ? <EmptyState /> : <Unreachable />}</div>;
+    return (
+      <div data-layout="app">
+        <EmptyState />
+      </div>
+    );
   }
 
   const now = new Date();
