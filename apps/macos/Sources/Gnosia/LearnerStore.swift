@@ -120,13 +120,48 @@ struct WatchEntry: Hashable {
     /// The file's length the last heartbeat knew — kept so a Recent row can
     /// say "2:17 of 11:36" without asking the player.
     var duration: Double? = nil
+    /// The stretches that actually played here, merged, in seconds.
+    var ranges: [[Double]] = []
 }
 
+// MARK: - Coverage (packages/tutor/src/playback.ts)
+
 /// How much of a video has to have played before it counts as watched —
-/// WATCHED_FRACTION in apps/web/src/lib/playback.ts. The web measures the
-/// stretches that actually played; this app does not track ranges, so here
-/// the playhead reaching 90% of the duration is the crossing.
+/// WATCHED_FRACTION in packages/tutor/src/playback.ts. Coverage, not
+/// position: a learner who drags to the last second has not watched it.
 let watchedFraction = 0.9
+
+/// The most ranges one save may carry — MAX_RANGES.
+let maxPlaybackRanges = 500
+
+/// `mergeRanges`: sorted, overlapping or touching (within half a second)
+/// stretches joined, empty ones dropped.
+func mergeRanges(_ ranges: [[Double]]) -> [[Double]] {
+    let sorted = ranges
+        .filter { $0.count == 2 && $0[0].isFinite && $0[1].isFinite && $0[1] > $0[0] }
+        .sorted { $0[0] < $1[0] }
+    var out: [[Double]] = []
+    for range in sorted {
+        if let last = out.last, range[0] <= last[1] + 0.5 {
+            out[out.count - 1][1] = max(last[1], range[1])
+        } else {
+            out.append(range)
+        }
+    }
+    return out
+}
+
+/// `clampRanges`: every range clipped into `[0, duration]`, then merged.
+func clampRanges(_ ranges: [[Double]], duration: Double) -> [[Double]] {
+    mergeRanges(ranges.compactMap { $0.count == 2 ? [max(0, $0[0]), min(duration, $0[1])] : nil })
+}
+
+/// `coverage`: the fraction of `duration` the ranges cover, 0 to 1.
+func playbackCoverage(_ ranges: [[Double]], duration: Double) -> Double {
+    guard duration > 0 else { return 0 }
+    let seconds = clampRanges(ranges, duration: duration).reduce(0) { $0 + ($1[1] - $1[0]) }
+    return min(1, seconds / duration)
+}
 
 /// The longest name `asset_name` takes — ASSET_NAME_MAX in shared.ts.
 let assetNameMax = 200
@@ -134,6 +169,20 @@ let assetNameMax = 200
 /// The longest scratch note `progress.note` takes — MAX_NOTE_CHARS in
 /// apps/web/src/lib/learner-api.ts.
 let maxNoteChars = 20_000
+
+/// A note as the route takes it: cut to `maxNoteChars` UTF-16 units, the
+/// JavaScript `.length` the route counts, never splitting a character. A
+/// cut by Swift characters let an emoji-heavy note past the local check,
+/// the route refused it, and the mirror dropped it for good.
+func learnerNoteValue(_ note: String) -> String {
+    sessionPrefix(note, utf16: maxNoteChars)
+}
+
+/// Whether a name is over `assetNameMax` as the route measures it: the
+/// cleaned name, in UTF-16 units.
+func assetNameTooLong(_ name: String) -> Bool {
+    (cleanAssetName(name)?.utf16.count ?? 0) > assetNameMax
+}
 
 /// cleanAssetName in packages/schema/src/shared.ts: whitespace runs as one
 /// space, ends trimmed, and an empty remainder means "no name of mine".
@@ -298,31 +347,36 @@ final class LearnerStore {
     /// write here — a player heartbeat and an explicit mark — and they are
     /// two different web routes, so the caller names its own.
     enum WatchMirror {
-        /// The player's heartbeat: `POST /api/learner/playback`. This app
-        /// tracks no ranges, so the save claims the prefix up to the
-        /// playhead — the same approximation the local `done` verdict makes
-        /// when the playhead crosses `watchedFraction`, and the route's own
-        /// merge is what appends the `watched` event on the crossing.
-        case position(duration: Double)
+        /// The player's heartbeat: `POST /api/learner/playback`, with the
+        /// stretches that played since the last one. The row keeps every
+        /// stretch this app has seen, merged, and each save sends them all:
+        /// the route unions them into what it stored, so a resend changes
+        /// nothing, and the dedupe that collapses queued heartbeats to the
+        /// newest loses nothing either. The route's own merge is what
+        /// appends the `watched` event on the crossing.
+        case position(duration: Double, ranges: [[Double]])
         /// The "Mark watched" / "Mark read" press: `POST /api/learner/watched`,
         /// one `watched` event, as the web's button appends.
         case marked
     }
 
-    /// Record where an asset's playback is. `done` is the watched verdict —
-    /// the caller decides the fraction, the store only remembers.
-    func setWatch(_ assetID: String, seconds: Double, done: Bool, mirror: WatchMirror) {
+    /// Record where an asset's playback is. `done` is the caller's verdict
+    /// for a mark; a heartbeat's is the stored one or the coverage of every
+    /// stretch played here reaching `watchedFraction`, and it never goes back.
+    func setWatch(_ assetID: String, seconds: Double, done marked: Bool, mirror: WatchMirror) {
         let now = Date()
+        let stored = watches[assetID]
+        var ranges = stored?.ranges ?? []
+        var done = marked || (stored?.done ?? false)
+        if case .position(let duration, let played) = mirror, duration > 0 {
+            ranges = Array(clampRanges(ranges + played, duration: duration).suffix(maxPlaybackRanges))
+            done = done || playbackCoverage(ranges, duration: duration) >= watchedFraction
+        }
         // The mirror body, decided up front — a zero duration has nothing
         // to claim, so no write of it is owed.
         let call: MirrorCall?
         switch mirror {
-        case .position(let duration):
-            // `[0, position]` is this store's honest coverage: it holds no
-            // ranges, so the playhead's prefix is all it can claim. The
-            // server merges it into what it stored, so each heartbeat just
-            // stretches the one range — and the dedupe key collapses queued
-            // heartbeats to the latest claim, exactly the row the file holds.
+        case .position(let duration, _):
             let position = min(max(0, seconds), duration)
             call = duration > 0
                 ? MirrorCall(
@@ -332,7 +386,7 @@ final class LearnerStore {
                         "assetId": assetID,
                         "duration": duration,
                         "position": position,
-                        "ranges": position > 0 ? [[0, position]] : [],
+                        "ranges": ranges,
                     ])
                 : nil
         case .marked:
@@ -347,22 +401,24 @@ final class LearnerStore {
         // write's own to keep; a `.marked` press names none and the stored
         // one stays (COALESCE), as the player knew it last.
         let duration: Double?
-        if case .position(let d) = mirror { duration = d } else { duration = nil }
+        if case .position(let d, _) = mirror { duration = d } else { duration = nil }
         write(mirror: call) { db in
             try db.run("""
-                INSERT INTO watch (asset_id, seconds, done, updated_at, duration)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO watch (asset_id, seconds, done, updated_at, duration, ranges)
+                VALUES (?, ?, ?, ?, ?, ?)
                 ON CONFLICT (asset_id) DO UPDATE SET
                     seconds = excluded.seconds, done = excluded.done,
                     updated_at = excluded.updated_at,
-                    duration = COALESCE(excluded.duration, watch.duration)
+                    duration = COALESCE(excluded.duration, watch.duration),
+                    ranges = excluded.ranges
                 """,
                 [.text(assetID), .real(seconds), .int(done ? 1 : 0), .real(now.timeIntervalSince1970),
-                 duration.map(Bind.real) ?? .null]
+                 duration.map(Bind.real) ?? .null, .text(Self.rangesJSON(ranges))]
             )
             watches[assetID] = WatchEntry(
                 seconds: seconds, done: done, updatedAt: now,
-                duration: duration ?? watches[assetID]?.duration
+                duration: duration ?? watches[assetID]?.duration,
+                ranges: ranges
             )
         }
     }
@@ -423,6 +479,9 @@ final class LearnerStore {
             clearName(assetID)
             return
         }
+        // The route would refuse it, and a refused mirror is dropped, so the
+        // name would live here and nowhere else. The field stops it first.
+        guard !assetNameTooLong(cleaned) else { return }
         write(mirror: MirrorCall(
             path: "/api/learner/asset-name",
             dedupeKey: "asset-name:\(assetID)",
@@ -533,7 +592,7 @@ final class LearnerStore {
     /// there, while this file's row masks the snapshot's progress mirror,
     /// and a deleted row would let a stale mirrored note show through.
     func setNote(_ itemID: String, note: String) {
-        let value = note.prefix(maxNoteChars)
+        let value = learnerNoteValue(note)
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         let now = Date().timeIntervalSince1970
         write(mirror: MirrorCall(
@@ -898,6 +957,44 @@ final class LearnerStore {
 
     /// JSONSerialization of a small payload, "" on failure — a payload that
     /// will not encode has no business landing as `{}` pretending to be one.
+    /// Drop learner.db's copies of answers the catalog has and a snapshot
+    /// since mirrored back (matched by `requestId`): the merged log reads the
+    /// mirror's, so the local rows only grew the file and every walk of it.
+    /// An answer still owed to the catalog is never in the mirror, so it is
+    /// never pruned.
+    func pruneMirroredEvents(_ requestIds: Set<String>) {
+        guard let db, !requestIds.isEmpty else { return }
+        let ids = Array(requestIds)
+        // In chunks, under SQLite's bound-parameter limit.
+        for start in stride(from: 0, to: ids.count, by: 500) {
+            let chunk = Array(ids[start ..< min(start + 500, ids.count)])
+            let marks = Array(repeating: "?", count: chunk.count).joined(separator: ", ")
+            do {
+                try db.run(
+                    "DELETE FROM event WHERE type IN ('observation', 'review') AND json_extract(payload, '$.requestId') IN (\(marks))",
+                    chunk.map { .text($0) }
+                )
+            } catch {
+                self.error = "learner.db: \(error.localizedDescription)"
+                return
+            }
+        }
+    }
+
+    /// The `watch.ranges` column: `[[start, end], ...]` as JSON.
+    static func rangesJSON(_ ranges: [[Double]]) -> String {
+        (try? JSONSerialization.data(withJSONObject: ranges))
+            .flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
+    }
+
+    /// The column read back; anything unreadable is no ranges.
+    static func parseRanges(_ text: String?) -> [[Double]] {
+        guard let data = text?.data(using: .utf8),
+              let list = try? JSONSerialization.jsonObject(with: data) as? [[NSNumber]]
+        else { return [] }
+        return mergeRanges(list.map { $0.map(\.doubleValue) })
+    }
+
     private static func json(_ object: [String: Any]) -> String {
         (try? JSONSerialization.data(withJSONObject: object))
             .flatMap { String(data: $0, encoding: .utf8) } ?? ""
@@ -1210,6 +1307,14 @@ final class LearnerStore {
         if !hasDuration {
             try db.exec("ALTER TABLE watch ADD COLUMN duration REAL")
         }
+        // `ranges` (the stretches that played, as JSON) came with coverage;
+        // an older row has none and counts only what plays from now on.
+        let wcols = try db.query("PRAGMA table_info(watch)")
+        var hasRanges = false
+        while wcols.next() { if wcols.text(1) == "ranges" { hasRanges = true } }
+        if !hasRanges {
+            try db.exec("ALTER TABLE watch ADD COLUMN ranges TEXT NOT NULL DEFAULT '[]'")
+        }
         // `favorite.starred` came with the unstar-tombstone change; files
         // from before it carry rows that are all stars (the only kind they
         // could write), so the default keeps them true.
@@ -1240,14 +1345,15 @@ final class LearnerStore {
         self.unfavorites = unfavorites
 
         var watches: [String: WatchEntry] = [:]
-        let watchRows = try db.query("SELECT asset_id, seconds, done, updated_at, duration FROM watch")
+        let watchRows = try db.query("SELECT asset_id, seconds, done, updated_at, duration, ranges FROM watch")
         while watchRows.next() {
             guard let id = watchRows.text(0) else { continue }
             watches[id] = WatchEntry(
                 seconds: watchRows.double(1) ?? 0,
                 done: (watchRows.int64(2) ?? 0) != 0,
                 updatedAt: Date(timeIntervalSince1970: watchRows.double(3) ?? 0),
-                duration: watchRows.double(4)
+                duration: watchRows.double(4),
+                ranges: Self.parseRanges(watchRows.text(5))
             )
         }
 

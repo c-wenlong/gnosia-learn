@@ -22,17 +22,20 @@ import SwiftUI
 ///
 /// The web player posts where the learner is every fifteen seconds of play,
 /// on pause, at the end and when the page is left (LibraryVideo.tsx); here
-/// `onPosition` is the same heartbeat — (position, duration) in seconds —
-/// driven by a timer while playing, by the pause and end edges, and once
-/// more from dismantle, and `resumeAt` is the start offset a returning
-/// learner gets (the web's resumeAt rule applied by the caller).
+/// `onPosition` is the same heartbeat — (position, duration, ranges) in
+/// seconds — driven by a timer while playing, by the pause and end edges,
+/// and once more from dismantle, and `resumeAt` is the start offset a
+/// returning learner gets (the web's resumeAt rule applied by the caller).
+/// `ranges` are the stretches that actually played since the last report,
+/// as the web player tracks them: a seek or a pause closes one, so a
+/// scrub to the end is not a watch.
 struct PlayerView: NSViewRepresentable {
     let url: URL
     @Binding var seekTo: Double?
     /// Where playback starts; 0 is the top. Applied on open and on a URL
     /// swap, which is the detail pane's version of a page navigation.
     var resumeAt: Double = 0
-    var onPosition: @MainActor (Double, Double) -> Void = { _, _ in }
+    var onPosition: @MainActor (Double, Double, [[Double]]) -> Void = { _, _, _ in }
     /// The live playhead in seconds, about once a second by default — far
     /// finer than the heartbeat above, which lags up to fifteen seconds.
     /// The detail pane reads it for Ask's `at`, so a mid-watch question
@@ -95,8 +98,15 @@ struct PlayerView: NSViewRepresentable {
     /// the timer is the main runloop's, the observers are the main queue's.
     @MainActor
     final class Coordinator {
-        var onPosition: (Double, Double) -> Void = { _, _ in }
+        var onPosition: (Double, Double, [[Double]]) -> Void = { _, _, _ in }
         var onPlayhead: (Double) -> Void = { _ in }
+        /// The stretch playing now (its start), the last playhead seen, the
+        /// stretches closed since the last report, and the largest step two
+        /// ticks of continuous play can take before it reads as a seek.
+        private var open: Double?
+        private var last: Double = 0
+        private var played: [[Double]] = []
+        private var jump: Double = 3
         private var timer: Timer?
         private var endObserver: NSObjectProtocol?
         private var pauseObservation: NSKeyValueObservation?
@@ -106,25 +116,61 @@ struct PlayerView: NSViewRepresentable {
         private var playheadObserver: (player: AVPlayer, token: Any)?
 
         /// The playhead and the item's length, told to onPosition when both
-        /// are known — a video still loading has nothing to write yet.
+        /// are known — a video still loading has nothing to write yet — with
+        /// the stretches played since the last report. A stretch still
+        /// playing is sent up to now and carried on from here.
         func report(_ view: AVPlayerView) {
             guard let player = view.player, let item = player.currentItem else { return }
             let position = player.currentTime().seconds
             let duration = item.duration.seconds
             guard position.isFinite, duration.isFinite, duration > 0 else { return }
-            onPosition(position, duration)
+            if let start = open {
+                // The playhead now ends the stretch, unless it got here by a
+                // seek since the last tick; then the last tick does.
+                let continuous = position >= start && position <= last + jump
+                let end = continuous ? position : last
+                if end > start { played.append([start, end]) }
+                open = player.rate > 0 ? position : nil
+            }
+            last = position
+            let ranges = played
+            played = []
+            onPosition(position, duration, ranges)
+        }
+
+        /// One playhead tick: a stretch opens when play starts, closes on a
+        /// pause, and a step back or a step far ahead (a seek) closes it and
+        /// opens the next where the playhead landed.
+        func track(_ player: AVPlayer, at seconds: Double) {
+            if player.rate > 0 {
+                if let start = open, seconds < last - 0.5 || seconds > last + jump {
+                    if last > start { played.append([start, last]) }
+                    open = seconds
+                } else if open == nil {
+                    open = seconds
+                }
+            } else if let start = open {
+                if last > start { played.append([start, last]) }
+                open = nil
+            }
+            last = seconds
         }
 
         /// Point every edge at the player the view holds now; the timer is
         /// (re)started rather than shared so a stale one never reports.
         func arm(
             _ view: AVPlayerView,
-            onPosition: @escaping @MainActor (Double, Double) -> Void,
+            onPosition: @escaping @MainActor (Double, Double, [[Double]]) -> Void,
             onPlayhead: @escaping @MainActor (Double) -> Void,
             every interval: Double = 1
         ) {
             self.onPosition = onPosition
             self.onPlayhead = onPlayhead
+            open = nil
+            played = []
+            let now = view.player?.currentTime().seconds ?? 0
+            last = now.isFinite ? now : 0
+            jump = max(3, interval * 4)
             timer?.invalidate()
             timer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self, weak view] _ in
                 MainActor.assumeIsolated {
@@ -149,10 +195,13 @@ struct PlayerView: NSViewRepresentable {
                 player.addPeriodicTimeObserver(
                     forInterval: CMTime(seconds: interval, preferredTimescale: 600),
                     queue: .main
-                ) { [weak self] time in
+                ) { [weak self, weak player] time in
                     let seconds = time.seconds
                     guard seconds.isFinite else { return }
-                    MainActor.assumeIsolated { self?.onPlayhead(seconds) }
+                    MainActor.assumeIsolated {
+                        if let player { self?.track(player, at: seconds) }
+                        self?.onPlayhead(seconds)
+                    }
                 }
             )
             endObserver = NotificationCenter.default.addObserver(
