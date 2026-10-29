@@ -5,7 +5,7 @@ import { getTags, tagsFor } from "@/data/content";
 import { getCourses, getRelatedCourses } from "@/data/courses";
 import { getTopics } from "@/data/topics";
 import { loadCourseAssets } from "@/lib/course-assets";
-import { conceptsForTopic, guidebookConcept, resolveTopicMastery, type TopicMastery } from "@/lib/course-path";
+import { conceptsByItem, conceptsForTopic, guidebookConcept, resolveTopicMastery, type TopicMastery } from "@/lib/course-path";
 import { loadKnowledgeBase } from "@/lib/kb/load";
 import type { PathKbConcept } from "@/lib/module-path";
 import type { Course } from "@/lib/types";
@@ -51,6 +51,7 @@ export async function loadCourseHome(course: Course): Promise<CourseHomeData> {
   const bySlug = new Map(topics.map((t) => [t.slug, t]));
   const known = kbReachable ? new Set(kb.concepts.map((c) => c.id)) : null;
   const kbById = new Map(kb.concepts.map((c) => [c.id, c]));
+  const byItem = conceptsByItem(kb.concepts);
 
   const mastery: Record<string, TopicMastery> = {};
   const modules: Record<string, ModuleData> = {};
@@ -58,7 +59,7 @@ export async function loadCourseHome(course: Course): Promise<CourseHomeData> {
     const entry = bySlug.get(m.topic);
     const authored = entry?.maps.concepts ?? [];
     const resolved = m.topics.map((t) => {
-      const result = resolveTopicMastery(conceptsForTopic(kb.concepts, t.id, authored), kb.frontier);
+      const result = resolveTopicMastery(conceptsForTopic(byItem.get(t.id) ?? [], t.id, authored), kb.frontier);
       if (result) mastery[t.id] = result;
       return { mastery: result };
     });

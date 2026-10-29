@@ -1,6 +1,6 @@
 import "server-only";
 
-import { readEvents } from "@gnosia/catalog/state";
+import { readConceptObservations } from "@gnosia/catalog/state";
 import { connection } from "next/server";
 
 import { readConceptNote } from "@/lib/concept-note";
@@ -58,7 +58,12 @@ export async function loadWeekCheck(module: Pick<Module, "topics">): Promise<Wee
 
   let events;
   try {
-    events = await readEvents(await catalogDatabase(), owner);
+    // Only these concepts' observations and the voids: the whole log only grows.
+    events = await readConceptObservations(
+      await catalogDatabase(),
+      owner,
+      concepts.map((c) => c.id),
+    );
   } catch (error) {
     console.warn(`week check: the event log is unavailable, ${error instanceof Error ? error.message : String(error)}`);
     return { state: "unreachable" };

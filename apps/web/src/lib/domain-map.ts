@@ -63,10 +63,20 @@ export interface DomainLayout {
   groups: { topic: string; title: string; concepts: string[] }[];
   /** The domain's own edges, both ends inside it, transitively reduced. */
   edges: GraphEdge[];
-  /** Edges with one end in another domain, unreduced, `inside` naming the end in this one. */
-  outside: (GraphEdge & { domain: string; inside: string })[];
   /** The same concepts on axes (D11): by when each is learnt and by how many concepts need it. */
   axes: AxesLayout;
+}
+
+/**
+ * `AxesLayout` with the two numbers each concept was placed by: what the
+ * placement is tested against. The page sends only the placement, since the
+ * picture draws positions and never reads these.
+ */
+export interface AxesPlacement extends AxesLayout {
+  /** Each concept's layer, from 0. */
+  layer: Record<string, number>;
+  /** How many concepts of the domain need each one. */
+  needed: Record<string, number>;
 }
 
 export type { AxesLayout };
@@ -321,7 +331,7 @@ const LOG_STEP = 80;
  * earlier one always to the left, and no two dots come within
  * `AXES_DOT_CLEAR` of each other.
  */
-export function axesLayout(ids: readonly string[], edges: readonly GraphEdge[]): AxesLayout {
+export function axesLayout(ids: readonly string[], edges: readonly GraphEdge[]): AxesPlacement {
   const sorted = [...ids].sort(byId);
   const needs = new Map<string, Set<string>>(sorted.map((id) => [id, new Set<string>()]));
   const leads = new Map<string, Set<string>>(sorted.map((id) => [id, new Set<string>()]));
@@ -393,12 +403,36 @@ export function axesLayout(ids: readonly string[], edges: readonly GraphEdge[]):
   return { width, height: axesGeometry({ plot, width }).height, positions, layer, needed, layers, column, plot, zone };
 }
 
+/** What every domain's layout reads of one graph, worked out once for all of them. */
+interface Prepared {
+  topics: readonly DomainTopic[];
+  bySlug: ReadonlyMap<string, DomainTopic>;
+  /** By id, so every step sees the rows in one order. */
+  sorted: DomainNode[];
+  domainOf: ReadonlyMap<string, string>;
+  /** Known, deduplicated and sorted. */
+  edges: GraphEdge[];
+}
+
+function graphOf(nodes: readonly DomainNode[], edges: readonly GraphEdge[], topics: readonly DomainTopic[]): Prepared {
+  const bySlug = new Map(topics.map((t) => [t.slug, t]));
+  const sorted = [...nodes].sort((a, b) => byId(a.id, b.id));
+  return {
+    topics,
+    bySlug,
+    sorted,
+    domainOf: new Map(sorted.map((n) => [n.id, domainOfNode(n, bySlug)])),
+    edges: cleanEdges(new Map(sorted.map((n) => [n.id, n])), edges),
+  };
+}
+
 /**
  * One domain as a picture (D3, D4): a group per topic, packed left to right in
  * rows sized so the whole is about `ASPECT` wide (at most `MAX_ROW_WIDTH`),
  * prerequisite topics first.
  * The edges drawn are the domain's own, reduced over the whole domain; the
- * ones that reach another domain are listed in `outside`, not drawn.
+ * ones that reach another domain are not drawn, and are counted in the
+ * domain's `links` (`domainTree`).
  */
 export function domainLayout(
   nodes: readonly DomainNode[],
@@ -406,22 +440,15 @@ export function domainLayout(
   topics: readonly DomainTopic[],
   domain: string,
 ): DomainLayout {
-  const bySlug = new Map(topics.map((t) => [t.slug, t]));
-  const sorted = [...nodes].sort((a, b) => byId(a.id, b.id));
-  const nodesById = new Map(sorted.map((n) => [n.id, n]));
-  const domainOf = new Map(sorted.map((n) => [n.id, domainOfNode(n, bySlug)]));
-  const members = sorted.filter((n) => domainOf.get(n.id) === domain);
+  return layoutOf(graphOf(nodes, edges, topics), domain);
+}
+
+function layoutOf(graph: Prepared, domain: string): DomainLayout {
+  const { topics, bySlug } = graph;
+  const members = graph.sorted.filter((n) => graph.domainOf.get(n.id) === domain);
   const inside = new Set(members.map((n) => n.id));
-  const all = cleanEdges(nodesById, edges);
-  const own = all.filter((e) => inside.has(e.from) && inside.has(e.to));
+  const own = graph.edges.filter((e) => inside.has(e.from) && inside.has(e.to));
   const drawn = reduceEdges(own);
-  const outside = all
-    .filter((e) => inside.has(e.from) !== inside.has(e.to))
-    .map((e) => {
-      const here = inside.has(e.from) ? e.from : e.to;
-      const there = here === e.from ? e.to : e.from;
-      return { ...e, domain: domainOf.get(there) as string, inside: here };
-    });
 
   const groups = topicsOf(members, topics, bySlug);
   const topicOf = new Map(groups.flatMap((g) => g.concepts.map((id) => [id, g.slug] as const)));
@@ -457,6 +484,17 @@ export function domainLayout(
     x += t.width + GROUP_GAP;
   }
   const byOrder = new Map(order.map((slug, i) => [slug, i]));
+  // The placement's own numbers (`layer`, `needed`) stay here: the picture draws the positions only.
+  const placed = axesLayout(members.map((n) => n.id), own);
+  const axes: AxesLayout = {
+    width: placed.width,
+    height: placed.height,
+    positions: placed.positions,
+    layers: placed.layers,
+    column: placed.column,
+    plot: placed.plot,
+    zone: placed.zone,
+  };
 
   return {
     domain,
@@ -467,48 +505,59 @@ export function domainLayout(
       .sort((a, b) => (byOrder.get(a.slug) ?? 0) - (byOrder.get(b.slug) ?? 0))
       .map((g) => ({ topic: g.slug, title: g.title, concepts: g.concepts })),
     edges: drawn,
-    outside,
-    axes: axesLayout(members.map((n) => n.id), own),
+    axes,
   };
 }
 
-/** The inputs a domain's layout depends on: not mastery, not titles of concepts. */
-function layoutKey(nodes: readonly DomainNode[], edges: readonly GraphEdge[], topics: readonly DomainTopic[], domain: string): string {
+/** The inputs a graph's layouts depend on: not mastery, not titles of concepts. */
+function graphKey(nodes: readonly DomainNode[], edges: readonly GraphEdge[], topics: readonly DomainTopic[]): string {
   const ns = nodes
     .map((n) => [n.id, n.topic ?? "", n.domain ?? ""].join("\u0001"))
     .sort(byId)
     .join("\u0002");
   const es = edges.map(edgeKey).sort(byId).join("\u0002");
   const ts = topics.map((t) => [t.slug, t.title, t.domain].join("\u0001")).join("\u0002");
-  return `${domain}\u0003${ns}\u0003${es}\u0003${ts}`;
+  return `${ns}\u0003${es}\u0003${ts}`;
 }
 
-const CACHE_SIZE = 32;
-const cache = new Map<string, DomainLayout>();
+/** Graphs remembered, each with every domain of it asked for so far: one per owner, and a few stale ones. */
+const CACHE_GRAPHS = 8;
+const cache = new Map<string, Map<string, DomainLayout>>();
 
 /**
- * `domainLayout`, remembered per graph and domain. The Learn page asks on
- * every request and the graph changes only when a note or a topic does.
- * Mastery is not part of the key: colours come from the rows the page sends,
- * never from the layout.
+ * `domainLayout` for each of `domains`, remembered per graph. The Learn page
+ * asks for every domain on every request, and the graph changes only when a
+ * note or a topic does. Mastery is not part of the key: colours come from the
+ * rows the page sends, never from the layout.
+ *
+ * The key is built once per call, not once per domain, and the cache holds
+ * graphs, not domains, so one owner's many domains cannot push each other
+ * (or another owner's) out within a single request. A graph not seen before
+ * is prepared once for all its domains.
  */
-export function cachedDomainLayout(
+export function cachedDomainLayouts(
   nodes: readonly DomainNode[],
   edges: readonly GraphEdge[],
   topics: readonly DomainTopic[],
-  domain: string,
-): DomainLayout {
-  const key = layoutKey(nodes, edges, topics, domain);
-  const hit = cache.get(key);
-  if (hit !== undefined) {
-    cache.delete(key);
-    cache.set(key, hit);
-    return hit;
+  domains: readonly string[],
+): Record<string, DomainLayout> {
+  const key = graphKey(nodes, edges, topics);
+  const layouts = cache.get(key) ?? new Map<string, DomainLayout>();
+  cache.delete(key);
+  cache.set(key, layouts);
+  if (cache.size > CACHE_GRAPHS) cache.delete(cache.keys().next().value as string);
+  let graph: Prepared | null = null;
+  const out: Record<string, DomainLayout> = {};
+  for (const domain of domains) {
+    let layout = layouts.get(domain);
+    if (layout === undefined) {
+      graph ??= graphOf(nodes, edges, topics);
+      layout = layoutOf(graph, domain);
+      layouts.set(domain, layout);
+    }
+    out[domain] = layout;
   }
-  const fresh = domainLayout(nodes, edges, topics, domain);
-  cache.set(key, fresh);
-  if (cache.size > CACHE_SIZE) cache.delete(cache.keys().next().value as string);
-  return fresh;
+  return out;
 }
 
 /** What the Learn page sends the browser: every domain, and each one's picture. */

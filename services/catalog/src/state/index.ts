@@ -102,6 +102,7 @@ export {
 } from "./sessions";
 export {
   appendEvent,
+  readConceptObservations,
   readEvents,
   toRecord,
   toRow,

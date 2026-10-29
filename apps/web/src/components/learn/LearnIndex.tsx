@@ -426,8 +426,13 @@ function GraphCard({
   onScope: (scope: GraphScope) => void;
   onSelect: (id: string) => void;
 }) {
-  const course = focus ? courseScope(nodes, edges, focus.id) : null;
-  const shown = focus === null ? null : scope === "course" && course ? course : neighbourhood(nodes, edges, focus.id);
+  // Once per concept and scope, not per keystroke in the search beside it: both walk the whole graph.
+  const focusId = focus?.id ?? null;
+  const course = useMemo(() => (focusId === null ? null : courseScope(nodes, edges, focusId)), [nodes, edges, focusId]);
+  const shown = useMemo(
+    () => (focusId === null ? null : scope === "course" && course ? course : neighbourhood(nodes, edges, focusId)),
+    [nodes, edges, focusId, scope, course],
+  );
   const wider = course?.basis === "domain" ? "Folder" : "Course";
   const graphBox = useRef<HTMLDivElement>(null);
   /** A node was chosen from inside the graph, which its key then replaces whole. */
