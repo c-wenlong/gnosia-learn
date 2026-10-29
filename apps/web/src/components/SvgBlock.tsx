@@ -31,16 +31,17 @@ export function SvgBlock({ compiled, className }: { compiled: Exclude<SvgCompile
   if (compiled.kind === "drawing") {
     // The opening `<svg` is in but no element has finished: the frame says a
     // picture is being drawn here, dashed like the thread's other
-    // still-arriving cards.
+    // still-arriving cards. Its words never change while it waits, so the
+    // status is read once, not on every delta.
     return (
       <p
         role="status"
         className={cx(
           className,
-          "flex items-center rounded-xl border-2 border-dashed border-border px-4 py-8 font-mono text-xs text-text3",
+          "flex items-center rounded-xl border-2 border-dashed border-border px-4 py-8 text-xs text-text3",
         )}
       >
-        svg
+        Drawing a picture…
       </p>
     );
   }
@@ -56,6 +57,9 @@ export function SvgBlock({ compiled, className }: { compiled: Exclude<SvgCompile
   delete attrs.width;
   delete attrs.height;
   attrs.role = typeof attrs.role === "string" ? attrs.role : "img";
+  // A screen reader names the picture by its own `<title>` (compileSvg points
+  // `aria-labelledby` at it), else by what it is.
+  if (attrs["aria-label"] === undefined && attrs["aria-labelledby"] === undefined) attrs["aria-label"] = "Picture";
   attrs.style = { display: "block", width: "100%", height: "auto" };
   return (
     <figure className={cx(className, "overflow-hidden rounded-xl border border-border")}>
