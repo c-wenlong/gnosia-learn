@@ -1,5 +1,6 @@
 import "server-only";
 
+import { classifyConnectionFailure } from "@gnosia/catalog/state";
 import { unstable_rethrow } from "next/navigation";
 import { connection } from "next/server";
 import { cache } from "react";
@@ -32,14 +33,23 @@ export type { ContentSource };
 
 /**
  * `read`, or null when the catalog did not answer, for a page that has its
- * own word for an outage. Only an outage is caught: a type nobody flipped,
- * or any other failure, still throws, so the error boundary names it.
+ * own word for an outage. Only an outage is caught: the seam calls any
+ * failure to read its rows "unreachable", a missing table included, so the
+ * cause has to be a connection failure (`classifyConnectionFailure`) too. A
+ * type nobody flipped, a schema error or anything else still throws, so the
+ * error boundary names it.
  */
 export async function unlessUnreachable<T>(read: Promise<T>): Promise<T | null> {
   try {
     return await read;
   } catch (error) {
-    if (error instanceof ContentUnavailableError && error.reason === "unreachable") return null;
+    if (
+      error instanceof ContentUnavailableError &&
+      error.reason === "unreachable" &&
+      classifyConnectionFailure(error.cause) !== null
+    ) {
+      return null;
+    }
     throw error;
   }
 }

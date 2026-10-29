@@ -81,7 +81,8 @@ vi.mock("@/lib/auth/session", async (importOriginal) => ({
   isSignedIn: async () => true,
 }));
 vi.mock("@/lib/learner-store", () => ({ catalogDatabase: async () => ({}) }));
-vi.mock("@gnosia/catalog/state", () => ({
+vi.mock("@gnosia/catalog/state", async (importOriginal) => ({
+  classifyConnectionFailure: (await importOriginal<typeof import("@gnosia/catalog/state")>()).classifyConnectionFailure,
   contentOwnership: () => catalog.ownership(),
   dbSource: () => rowsSource,
 }));
@@ -188,9 +189,21 @@ describe("unlessUnreachable", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
       catalog.ownership = async () => {
-        throw new Error("unable to open database file (SQLITE_CANTOPEN)");
+        throw Object.assign(new Error("unable to open database file"), { code: "SQLITE_CANTOPEN" });
       };
       await expect(inRequest(() => unlessUnreachable(getCourses()))).resolves.toBeNull();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("still throws a schema error, which the seam also calls unreachable", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      catalog.ownership = async () => {
+        throw new Error("no such table: content_source");
+      };
+      await expect(inRequest(() => unlessUnreachable(getCourses()))).rejects.toMatchObject({ reason: "unreachable" });
     } finally {
       warn.mockRestore();
     }

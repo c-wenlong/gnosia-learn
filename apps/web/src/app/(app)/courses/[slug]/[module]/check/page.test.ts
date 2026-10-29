@@ -18,7 +18,9 @@ vi.mock("@/data/source", async (importOriginal) => {
       return {
         ...source,
         courses: async () => {
-          throw new actual.ContentUnavailableError("unreachable", null, "The catalog database could not be read.");
+          throw new actual.ContentUnavailableError("unreachable", null, "The catalog database could not be read.", {
+            cause: Object.assign(new Error("unable to open database file"), { code: "SQLITE_CANTOPEN" }),
+          });
         },
       };
     },
