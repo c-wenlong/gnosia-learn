@@ -93,7 +93,9 @@ export const ENV_FILE = process.env.CATALOG_ENV_FILE?.trim() || path.join(SERVIC
 export function loadEnv(file: string = ENV_FILE): void {
   if (loaded.has(file)) return;
   loaded.add(file);
-  if (!existsSync(file)) return;
+  // `turbopackIgnore`: the web app imports this module, and a computed path
+  // here makes Turbopack trace the whole repository into the server bundle.
+  if (!existsSync(/* turbopackIgnore: true */ file)) return;
   const before = { ...process.env };
   process.loadEnvFile(file);
   for (const [key, value] of Object.entries(before)) {

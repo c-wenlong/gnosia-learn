@@ -103,7 +103,7 @@ export function fsStore(root: string = defaultBlobRoot()): BlobStore {
   if (constants.O_NOFOLLOW === undefined) {
     throw new BlobError("BLOB_LINK", `the fs blob store needs O_NOFOLLOW, which ${process.platform} does not have`);
   }
-  const base = path.resolve(root);
+  const base = path.resolve(/* turbopackIgnore: true */ root);
   const checkout = gnosiaCheckoutAbove(base);
   if (checkout !== null) {
     throw new BlobError(
