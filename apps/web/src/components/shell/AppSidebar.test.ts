@@ -23,7 +23,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("next/navigation", () => ({ usePathname: () => mocks.pathname }));
 vi.mock("@/lib/studio-drafts", () => ({ listDrafts: mocks.listDrafts, renameDraft: mocks.renameDraft }));
-vi.mock("@/lib/recent-client", () => ({ fetchRecent: mocks.fetchRecent, changeRecent: mocks.changeRecent }));
+vi.mock("@/lib/recent-client", () => ({ fetchRecent: mocks.fetchRecent, changeRecent: mocks.changeRecent, VISIT_STORED_EVENT: "gnosia:visit-stored" }));
 vi.mock("next/image", () => ({ default: () => null }));
 vi.mock("@/components/brand", () => ({ GnosiaWordmark: () => createElement("span", null, "Gnosia") }));
 vi.mock("@/components/ThemeSwitch", () => ({ ThemeSwitch: () => null }));
@@ -70,14 +70,14 @@ afterEach(() => {
   while (mounted.length) mounted.pop()?.();
 });
 
-async function mount(studio: boolean, page: () => null = () => null) {
+async function mount(studio: boolean, page: () => null = () => null, runner: boolean = studio) {
   const container = document.createElement("div");
   document.body.append(container);
   const root: Root = createRoot(container);
   await act(async () => {
     // Children as an argument, as the lint rule wants; the props type
     // requires them, hence the cast.
-    root.render(createElement(ShellFrame, { studio, initialCollapsed: false } as ComponentProps<typeof ShellFrame>, createElement(page)));
+    root.render(createElement(ShellFrame, { studio, runner, initialCollapsed: false } as ComponentProps<typeof ShellFrame>, createElement(page)));
   });
   // The sidebar's first read waits a task for a page's list.
   await act(async () => {
@@ -409,6 +409,49 @@ describe("the sections", () => {
     await mount(false);
     expect(mocks.fetchRecent).toHaveBeenCalledWith({ pages: 1, drafts: true });
     expect(mocks.listDrafts).not.toHaveBeenCalled();
+  });
+
+  it("asks nothing of a runner the server found stopped, and shows the catalog's mirror of the conversations", async () => {
+    const MIRRORED = item({ key: "draft:d9", kind: "draft", title: "Mirrored chat", href: "/studio?draft=d9", draftId: "d9" });
+    withRows({ items: [MIRRORED, VIDEO] });
+    const container = await mount(true, () => null, false);
+    expect(mocks.listDrafts).not.toHaveBeenCalled();
+    expect(mocks.fetchRecent).toHaveBeenCalledWith({ pages: 1, drafts: true });
+    expect(recentRows(container)).toEqual(["Conversation: Mirrored chat", "Video: Master theorem"]);
+    // Focus wakes the catalog's read, never the runner's.
+    await act(async () => void window.dispatchEvent(new Event("focus")));
+    expect(mocks.listDrafts).not.toHaveBeenCalled();
+  });
+
+  it("asks the runner again once the studio page has read its list, whatever the server's look found", async () => {
+    function Studio() {
+      usePublishStudioChats({ active: null, pending: null, newChat: () => undefined, navigate: () => true, path: "/studio", initial: [DRAFT], titles: {} });
+      return null;
+    }
+    const container = await mount(true, Studio, false);
+    expect(recentRows(container)).toContain("Conversation: TCP vs UDP");
+    await vi.waitFor(() => expect(mocks.fetchRecent).toHaveBeenLastCalledWith({ pages: 1, drafts: false }));
+  });
+
+  it("falls back to the catalog's conversations when the runner stops answering before any list landed", async () => {
+    mocks.listDrafts.mockResolvedValue({ ok: false, status: 502, data: { error: "the studio runner is not answering" } });
+    await mount(true);
+    expect(mocks.listDrafts).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(mocks.fetchRecent).toHaveBeenLastCalledWith({ pages: 1, drafts: true }));
+  });
+
+  it("says in Courses why there are none when nobody flipped them", async () => {
+    withRows({ courses: [], coursesUnavailable: "Run `npm run catalog -- flip courses`." });
+    const container = await mount(false);
+    expect(section(container, "sidebar-courses").textContent).toContain("Run `npm run catalog -- flip courses`.");
+    expect(section(container, "sidebar-courses").textContent).not.toContain("Courses you open show here.");
+  });
+
+  it("reads Recent again once a module visit is stored, the module just opened in it", async () => {
+    await mount(false);
+    const reads = mocks.fetchRecent.mock.calls.length;
+    await act(async () => void window.dispatchEvent(new Event("gnosia:visit-stored")));
+    expect(mocks.fetchRecent.mock.calls.length).toBe(reads + 1);
   });
 
   it("merges the catalog's rows with the runner's conversations, newest first under day headings, each with its kind", async () => {

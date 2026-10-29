@@ -29,8 +29,10 @@ import {
   setLastVisited,
   setNote,
   setTheme,
-  toggleTopic,
+  setTopicCompleted,
 } from "@/lib/storage";
+import { announceVisitStored } from "@/lib/recent-client";
+import { withDeadline } from "@/lib/send-json";
 import { applyThemeToDocument, followTheme, writeThemeCookie } from "@/lib/theme-cookie";
 import { createWriteQueue } from "@/lib/write-queue";
 
@@ -50,6 +52,19 @@ import { createWriteQueue } from "@/lib/write-queue";
  * case that matters: a learner who has just typed three paragraphs into a note
  * should not watch them vanish because the database is down. The banner says
  * it is not saved; the text is still there to copy.
+ *
+ * It stays past the next snapshot too. A note, a tick, a recap or the theme
+ * refused for a reason that can pass (the database down or busy, the network
+ * gone, no answer in time) is kept, shown over every snapshot adopted after
+ * it, and sent again once a snapshot comes back from a reachable database or
+ * the browser is back online (`unsaved`, `retryUnsaved`). A snapshot from an
+ * unreachable database is not adopted at all: it is empty, and carries
+ * nothing but the outage the banner already names. A refusal that will not
+ * pass (a 400: the write itself is wrong) is not kept, and the next snapshot
+ * shows what the database holds.
+ *
+ * Writes go with `keepalive` while they are small, so one still in flight
+ * when the tab closes is delivered rather than cancelled.
  *
  * **`reachable` is not the same as "no data".** A learner with an empty
  * database and a learner whose database is unreachable both see zeros, and the
@@ -101,6 +116,8 @@ interface ApiResponse {
   error?: string;
   code?: string;
   result?: unknown;
+  /** A refusal's HTTP status; absent when no answer came at all. */
+  status?: number;
 }
 
 const UNREACHABLE = "Not saved: the database is unreachable.";
@@ -108,35 +125,79 @@ const UNREACHABLE = "Not saved: the database is unreachable.";
 /** How many times a snapshot that disagrees with a stored write is read again. */
 const MAX_REREADS = 2;
 
+/**
+ * How long a write waits for its answer. One that never answers would hold
+ * its key's queue, and every snapshot behind it, until a reload; past this it
+ * is a refusal like any other, kept and sent again (`unsaved`).
+ */
+export const POST_TIMEOUT_MS = 15_000;
+
+/**
+ * `keepalive` bounds. A browser refuses a keepalive request outright once
+ * the keepalive bodies it has in flight pass 64 KiB, so these writes take at
+ * most 48 KB of it, leaving room for the playback beacons, and a body larger
+ * than 32 KB (a long note, a reset's batch of ids) goes as a plain request.
+ */
+const KEEPALIVE_TOTAL = 48_000;
+const KEEPALIVE_ONE = 32_000;
+let keepaliveInFlight = 0;
+
+/**
+ * At most this many ids in one reset request: the route takes 1000, and a
+ * body of 400 of the longest ids it accepts stays under its 64 KB limit.
+ */
+export const RESET_BATCH = 400;
+
+/** A refusal that can pass: worth keeping and sending again. */
+function retryable(response: ApiResponse): boolean {
+  if (response.ok !== false) return false;
+  const status = response.status;
+  return status === undefined || status >= 500 || status === 408 || status === 429 || response.code === "STORE_UNAVAILABLE";
+}
+
 async function post(path: string, body: unknown): Promise<ApiResponse> {
-  let response: Response;
+  const json = JSON.stringify(body);
+  const size = new TextEncoder().encode(json).length;
+  const keepalive = size <= KEEPALIVE_ONE && keepaliveInFlight + size <= KEEPALIVE_TOTAL;
+  if (keepalive) keepaliveInFlight += size;
+  const deadline = withDeadline(POST_TIMEOUT_MS);
   try {
-    response = await fetch(`/api/learner/${path}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-  } catch (error) {
-    // `fetch` rejects when the request never reached a server at all — offline,
-    // DNS, a dropped connection. That is the same thing to a learner as a 503,
-    // and it must be an answer rather than a rejection: the write queue behind
-    // this chains on the returned promise.
+    let response: Response;
+    try {
+      response = await fetch(`/api/learner/${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: json,
+        keepalive,
+        signal: deadline.signal,
+      });
+    } catch (error) {
+      // `fetch` rejects when the request never reached a server at all —
+      // offline, DNS, a dropped connection — or got no answer in time. That
+      // is the same thing to a learner as a 503, and it must be an answer
+      // rather than a rejection: the write queue behind this chains on the
+      // returned promise.
+      return {
+        ok: false,
+        error: `${UNREACHABLE} (${error instanceof Error ? error.message : "no response"})`,
+        code: "STORE_UNAVAILABLE",
+      };
+    }
+    // A 500 from a route that threw before its handler ran has no JSON body, and
+    // `response.json()` would then reject with a parse error the learner cannot
+    // read. The status is the fallback.
+    const payload = (await response.json().catch(() => ({}))) as ApiResponse;
+    if (response.ok && payload.ok !== false) return payload;
     return {
       ok: false,
-      error: `${UNREACHABLE} (${error instanceof Error ? error.message : "no response"})`,
-      code: "STORE_UNAVAILABLE",
+      error: payload.error ?? `${UNREACHABLE} (HTTP ${response.status})`,
+      code: payload.code,
+      status: response.status,
     };
+  } finally {
+    deadline.done();
+    if (keepalive) keepaliveInFlight -= size;
   }
-  // A 500 from a route that threw before its handler ran has no JSON body, and
-  // `response.json()` would then reject with a parse error the learner cannot
-  // read. The status is the fallback.
-  const payload = (await response.json().catch(() => ({}))) as ApiResponse;
-  if (response.ok && payload.ok !== false) return payload;
-  return {
-    ok: false,
-    error: payload.error ?? `${UNREACHABLE} (HTTP ${response.status})`,
-    code: payload.code,
-  };
 }
 
 /**
@@ -240,6 +301,18 @@ export function LearnerProvider({
    * reset raised and the database never did.
    */
   const epochFloor = useRef(initialState.epoch);
+  /**
+   * Each refused write that can still be stored, by its one key: how to show
+   * it again over a snapshot, and how to send it again. Only writes whose
+   * reducer gives the same state however often it runs are kept (a note, a
+   * tick, a recap, the theme), since one may land on a snapshot that already
+   * has it; a reset never is, since a learner told "Not reset" should not see
+   * it happen later on its own. A stored write on a key, a reset's included,
+   * drops what was kept there. Two tabs can still race: a kept note sent
+   * again replaces one another tab stored since, as two tabs' writes always
+   * have (`createWriteQueue`).
+   */
+  const unsaved = useRef(new Map<string, { reduce: (previous: LearnerState) => LearnerState; send: (next: LearnerState) => Promise<ApiResponse>; confirm: Confirm }>());
 
   /**
    * The server is the authority. When a navigation or a `router.refresh()`
@@ -266,13 +339,17 @@ export function LearnerProvider({
    * before the next click.
    *
    * A refused write leaves nothing in `stored`: the database never had it, so
-   * a snapshot showing the old row is the truth, and the banner says so.
+   * a snapshot showing the old row is the truth, and the banner says so. A
+   * refused write that is kept (`unsaved`) is drawn over the adopted
+   * snapshot, so its text stays on screen until it is sent again.
+   *
+   * Resolves true when the snapshot was adopted.
    */
   const receive = useCallback(
-    (snapshot: LearnerState) => {
+    (snapshot: LearnerState): boolean => {
       if (queue.current.pending > 0) {
         held.current = snapshot;
-        return;
+        return false;
       }
       held.current = null;
       // Below the floor, the snapshot predates a stored reset, whose own
@@ -282,23 +359,19 @@ export function LearnerProvider({
       if (!shown && rereads.current < MAX_REREADS) {
         rereads.current += 1;
         router.refresh();
-        return;
+        return false;
       }
       stored.current.clear();
       rereads.current = 0;
       epochFloor.current = snapshot.epoch;
-      current.current = snapshot;
-      setState(snapshot);
+      let next = snapshot;
+      for (const { reduce } of unsaved.current.values()) next = reduce(next);
+      current.current = next;
+      setState(next);
+      return true;
     },
     [router],
   );
-
-  const seen = useRef(initialState);
-  useEffect(() => {
-    if (seen.current === initialState) return;
-    seen.current = initialState;
-    receive(initialState);
-  }, [initialState, receive]);
 
   /**
    * Apply the reducer, then write. `send` receives the reducer's output, so
@@ -324,6 +397,10 @@ export function LearnerProvider({
    * replaces once that one is stored: when the newer one is refused, the
    * database still holds the older, and a snapshot from before it must not
    * be adopted.
+   *
+   * `keep` marks a write worth keeping when it is refused for a reason that
+   * can pass (`unsaved`): one key, and a reducer that gives the same state
+   * however often it runs.
    */
   const commit = useCallback(
     (
@@ -331,12 +408,20 @@ export function LearnerProvider({
       reduce: (previous: LearnerState) => LearnerState,
       send: (next: LearnerState) => Promise<ApiResponse>,
       confirm: Confirm,
+      keep = false,
     ): Promise<boolean> => {
       const next = reduce(current.current);
       current.current = next;
       setState(next);
       const keys = typeof key === "string" ? [key] : key;
       const record = (response: ApiResponse) => {
+        // The queue settles a key's writes in order, so this is the newest
+        // word on each of its keys so far.
+        if (response.ok !== false) for (const k of keys) unsaved.current.delete(k);
+        else if (typeof key === "string") {
+          if (keep && retryable(response)) unsaved.current.set(key, { reduce, send, confirm });
+          else unsaved.current.delete(key);
+        }
         if (response.ok === false) return;
         // A write recorded on any of these keys is older, since the queue
         // runs a key's writes in order, and a snapshot that shows this one
@@ -369,6 +454,29 @@ export function LearnerProvider({
     [receive],
   );
 
+  /** Send every kept write again: see `unsaved`. Each that is refused again is kept again. */
+  const retryUnsaved = useCallback(() => {
+    const kept = [...unsaved.current];
+    unsaved.current.clear();
+    for (const [key, { reduce, send, confirm }] of kept) void commit(key, reduce, send, confirm, true);
+  }, [commit]);
+
+  // A snapshot from a database that did not answer is not adopted: it is
+  // empty, and would wipe every tick and note on screen. One that did answer
+  // is, and is the moment to send again what was refused while it was down.
+  const seen = useRef(initialState);
+  useEffect(() => {
+    if (seen.current === initialState) return;
+    seen.current = initialState;
+    if (!reachable) return;
+    if (receive(initialState) && unsaved.current.size > 0) retryUnsaved();
+  }, [initialState, reachable, receive, retryUnsaved]);
+
+  useEffect(() => {
+    window.addEventListener("online", retryUnsaved);
+    return () => window.removeEventListener("online", retryUnsaved);
+  }, [retryUnsaved]);
+
   // The root layout can only read the theme cookie, so a browser without one
   // is served light even when the preference row says dark. The provider is
   // seeded from the row, so it is the thing that knows; it corrects the class
@@ -393,6 +501,7 @@ export function LearnerProvider({
         (previous) => setTheme(previous, theme),
         () => post("preference", { key: "theme", value: theme }),
         same((state) => state.theme),
+        true,
       );
     },
     [commit],
@@ -429,15 +538,15 @@ export function LearnerProvider({
 
   const toggleTopicCompletion = useCallback(
     (topicId: string) => {
+      // The value, decided here, rather than a toggle: a kept write drawn
+      // again over a snapshot must not flip a tick the snapshot already has.
+      const done = current.current.completed[topicId] !== true;
       commit(
         `progress:${topicId}`,
-        (previous) => toggleTopic(previous, topicId),
-        (next) =>
-          post("progress", {
-            curriculumItemId: topicId,
-            completed: next.completed[topicId] === true,
-          }),
+        (previous) => setTopicCompleted(previous, topicId, done),
+        () => post("progress", { curriculumItemId: topicId, completed: done }),
         same((state) => state.completed[topicId] === true),
+        true,
       );
     },
     [commit],
@@ -450,6 +559,7 @@ export function LearnerProvider({
         (previous) => setNote(previous, topicId, note),
         () => post("note", { curriculumItemId: topicId, note }),
         same((state) => state.notes[topicId] ?? null),
+        true,
       );
     },
     [commit],
@@ -491,6 +601,7 @@ export function LearnerProvider({
             countSession: options?.countSession !== false,
           }),
         same((state) => recapOf(state, topicId)),
+        true,
       );
     },
     [commit],
@@ -530,11 +641,22 @@ export function LearnerProvider({
         // stored reset, so the floor moves here, for every reset: the queue
         // reports only the newest write on a key, and an overlapping reset of
         // the same course still moved the database's epoch.
-        () =>
-          post("reset", { curriculumItemIds: topicIds }).then((response) => {
-            if (response.ok !== false) epochFloor.current += 1;
-            return response;
-          }),
+        //
+        // In batches of `RESET_BATCH`, one after another: one request for
+        // every item of every course was refused outright once the catalog
+        // passed the route's 1000 ids. A batch refused leaves the ones before
+        // it stored (each moved the epoch, so each moved the floor), and the
+        // reset says it was not stored; the next snapshot shows what was.
+        async () => {
+          let i = 0;
+          do {
+            const response = await post("reset", { curriculumItemIds: topicIds.slice(i, i + RESET_BATCH) });
+            if (response.ok === false) return response;
+            epochFloor.current += 1;
+            i += RESET_BATCH;
+          } while (i < topicIds.length);
+          return { ok: true };
+        },
         () => {
           // A snapshot that shows this reset has at least the floor as it
           // stands now (more if another tab reset). A reset with nothing to
@@ -550,14 +672,18 @@ export function LearnerProvider({
 
   const markVisited = useCallback(
     (courseSlug: string, moduleSlug?: string) => {
-      commit(
+      void commit(
         "preference:lastVisited",
         (previous) => setLastVisited(previous, courseSlug, moduleSlug),
         (next) => post("preference", { key: "lastVisited", value: next.lastVisited }),
         // Not `at`: the server keeps the time, but a check that compared it
         // would also have to agree on its precision.
         same((state) => [state.lastVisited?.courseSlug ?? null, state.lastVisited?.moduleSlug ?? null]),
-      );
+      ).then((stored) => {
+        // The sidebar's Recent reads again once the visit is stored, rather
+        // than guessing how long the write takes.
+        if (stored) announceVisitStored();
+      });
     },
     [commit],
   );
@@ -625,8 +751,11 @@ export function LearnerProvider({
  *
  * Every browser that used the app before bundle 5 is holding ticks, notes and
  * recaps that no database has. This posts them on first mount and removes the
- * key when the server confirms. The key is only removed on success, so a
- * failed attempt is retried on the next load rather than losing the document.
+ * key when the server confirms. A failure that can pass (no answer, a 5xx, a
+ * rate limit) keeps the key, so it is tried again on the next load rather
+ * than losing the document; a refusal of the document itself (a 400, a body
+ * too large) is final, and the key goes rather than being posted on every
+ * load for good. So does a value that is not a document at all.
  *
  * `refresh` afterwards, because the imported rows are in the snapshot the
  * server rendered *before* they existed.
@@ -660,15 +789,24 @@ function useLegacyImport(refresh: () => void): void {
       }
       return;
     }
-    if (payload === null || typeof payload !== "object" || Array.isArray(payload)) return;
-
-    void post("import", payload).then((response) => {
-      if (response.ok === false) return;
+    const drop = () => {
       try {
         window.localStorage.removeItem(LEGACY_STORAGE_KEY);
       } catch {
-        /* the import landed; the leftover key is harmless and retries as a no-op */
+        /* the leftover key is harmless: an import retries as a no-op */
       }
+    };
+    if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
+      drop();
+      return;
+    }
+
+    void post("import", payload).then((response) => {
+      if (response.ok === false) {
+        if (!retryable(response) && response.status !== 401 && response.status !== 403) drop();
+        return;
+      }
+      drop();
       refresh();
     });
   }, [refresh]);

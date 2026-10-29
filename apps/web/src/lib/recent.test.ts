@@ -471,6 +471,19 @@ describe("readRecent", () => {
     state.catalogDatabase.mockRejectedValue(new Error("connect ECONNREFUSED"));
     expect(await readRecent()).toEqual({ reachable: false, items: [], more: false, pinned: [], courses: [] });
   });
+
+  it("says why there are no courses when nobody flipped them, as Home's error boundary does", async () => {
+    const { ContentUnavailableError } = await import("@/data/source");
+    state.getCourses.mockRejectedValue(new ContentUnavailableError("not-flipped", "courses", "Run `npm run catalog -- flip courses`."));
+    const { readRecent } = await import("./recent");
+    const recent = await readRecent();
+    expect(recent.reachable).toBe(true);
+    expect(recent.courses).toEqual([]);
+    expect(recent.coursesUnavailable).toBe("Run `npm run catalog -- flip courses`.");
+    // Any other failure costs the courses quietly, as before.
+    state.getCourses.mockRejectedValue(new Error("boom"));
+    expect((await readRecent()).coursesUnavailable).toBeUndefined();
+  });
 });
 
 describe("conceptsNamed", () => {

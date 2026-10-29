@@ -23,10 +23,13 @@ import { PublishContext, ShellContext, type ShellControls, type StudioChats } fr
  */
 export function ShellFrame({
   studio,
+  runner = studio,
   initialCollapsed,
   children,
 }: {
   studio: boolean;
+  /** Whether the studio's runner was listening when the server drew the page (`runnerListening`). */
+  runner?: boolean;
   initialCollapsed: boolean;
   children: ReactNode;
 }) {
@@ -83,9 +86,12 @@ export function ShellFrame({
     writeSidebarCookie(value);
   }, []);
 
+  // A studio page that read the runner's list on the server has heard it
+  // answer since, whatever the layout's earlier look found.
+  const answering = studio && (runner || (chats?.initial ?? null) !== null);
   const controls = useMemo<ShellControls>(
-    () => ({ studio, drawer, openDrawer, closeDrawer, collapsed, setCollapsed, chats, setChats }),
-    [studio, drawer, openDrawer, closeDrawer, collapsed, setCollapsed, chats],
+    () => ({ studio, runner: answering, drawer, openDrawer, closeDrawer, collapsed, setCollapsed, chats, setChats }),
+    [studio, answering, drawer, openDrawer, closeDrawer, collapsed, setCollapsed, chats],
   );
 
   return (

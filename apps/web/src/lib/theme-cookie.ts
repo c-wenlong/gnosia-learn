@@ -27,8 +27,10 @@ export { appearanceOf, asThemeMode, paletteOf, THEME_APPEARANCES, THEME_MODES, T
  *
  * So: a cookie the server reads while composing the document, and a
  * `preference` row as the durable copy. The cookie is written by the client
- * when the mode is chosen, and `LearnerProvider` reseeds it from the row when
- * it is missing (a new browser, or cleared site data).
+ * when the mode is chosen, and `LearnerProvider` rewrites it from the row
+ * whenever the two differ (a new browser, cleared site data, a theme chosen
+ * on another device): the `(app)` layout seeds the provider with the row
+ * whenever the database answered, and with the cookie only when it did not.
  *
  * Not `httpOnly`: the client writes it, and it is a display preference rather
  * than anything that authenticates. `SameSite=Lax` because nothing

@@ -47,7 +47,9 @@ import { useRecent } from "./use-recent";
  * the runner (`useConversations`), which names a conversation from its first
  * message before it has a title. `mergeStreams` holds back what a list that
  * has more could still outrank, so Show older is never wrong about order.
- * Without a studio the catalog's read is the whole list.
+ * Without a studio the catalog's read is the whole list, and so it is while
+ * the runner is not answering: the catalog's `draft` mirror then brings the
+ * conversations, as the runner last told it of them.
  *
  * Rename keeps the name on the conversation's draft, through the runner
  * (`renameDraft`), so the studio's own pages, Home and the runner's search
@@ -76,8 +78,11 @@ export function Sections({ rail, onPick, search }: { rail: boolean; onPick: () =
   const studio = shell?.studio ?? false;
   const chats = shell?.chats ?? null;
   const pathname = usePathname();
-  const recent = useRecent(studio);
-  const conversations = useConversations(studio, chats);
+  const conversations = useConversations(shell?.runner ?? false, chats);
+  // The runner's conversations while it answers for them; the catalog's
+  // mirror of them otherwise, so a runner that is down hides none.
+  const fromRunnerLive = (shell?.runner ?? false) && !conversations.failed;
+  const recent = useRecent(!fromRunnerLive);
   const model = recent.model;
   const path = chats?.path ?? "/studio";
   const active = chats?.active ?? null;
@@ -186,7 +191,7 @@ export function Sections({ rail, onPick, search }: { rail: boolean; onPick: () =
       {/* Shown once Recent has answered, empty or not, so its add button
           to /courses is there for someone who has opened no course yet. */}
       <Collapse open={model?.reachable === true} className="min-w-0">
-        <CoursesSection courses={courses} rail={rail} pathname={pathname} onPick={onPick} />
+        <CoursesSection courses={courses} unavailable={model?.coursesUnavailable ?? null} rail={rail} pathname={pathname} onPick={onPick} />
       </Collapse>
 
       <Collapse open={pinned.length > 0} className="min-w-0">
@@ -206,7 +211,7 @@ export function Sections({ rail, onPick, search }: { rail: boolean; onPick: () =
           <div inert={rail}>
             <SearchResults
               search={search}
-              studio={studio}
+              studio={fromRunnerLive}
               path={path}
               active={active}
               navigate={chats?.navigate ?? null}
@@ -288,11 +293,14 @@ function SectionLabel({ id, rail, action, children }: { id: string; rail: boolea
 
 function CoursesSection({
   courses,
+  unavailable,
   rail,
   pathname,
   onPick,
 }: {
   courses: readonly SidebarCourse[];
+  /** Why the catalog has no courses to give, when it is the owner's to fix. */
+  unavailable: string | null;
   rail: boolean;
   pathname: string | null;
   onPick: () => void;
@@ -322,7 +330,9 @@ function CoursesSection({
         Courses
       </SectionLabel>
       {courses.length === 0 && (
-        <p className={cx("px-2 pb-1 text-[13px] leading-5 text-text3", FADE, rail ? "opacity-0" : FADE_IN)}>Courses you open show here.</p>
+        <p className={cx("px-2 pb-1 text-[13px] leading-5 text-text3", FADE, rail ? "opacity-0" : FADE_IN)}>
+          {unavailable ?? "Courses you open show here."}
+        </p>
       )}
       <ul className="flex flex-col gap-px">
         {courses.map((course) => {

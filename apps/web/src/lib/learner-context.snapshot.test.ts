@@ -53,19 +53,21 @@ function setup(initial: Partial<LearnerState>) {
   vi.stubGlobal("fetch", fetcher);
   const container = document.createElement("div");
   root = createRoot(container);
-  const draw = (snapshot: Partial<LearnerState>) => {
+  const draw = (snapshot: Partial<LearnerState>, reachable = true) => {
     const state: LearnerState = { ...emptyLearnerState(), ...snapshot };
     act(() =>
       root!.render(
         createElement(
           LearnerProvider,
-          { initialState: state, reachable: true } as ComponentProps<typeof LearnerProvider>,
+          { initialState: state, reachable } as ComponentProps<typeof LearnerProvider>,
           createElement(Probe),
         ),
       ),
     );
   };
   draw(initial);
+  /** The body of the `n`th request (from 0), as sent. */
+  const sent = (n: number) => JSON.parse((fetcher.mock.calls[n] as unknown as [string, RequestInit])[1].body as string) as Record<string, unknown>;
   /** Answer the next held request with `status`, and let the provider react. */
   const answer = async (status = 200) => {
     await vi.waitFor(() => expect(answers.length).toBeGreaterThan(0));
@@ -75,7 +77,7 @@ function setup(initial: Partial<LearnerState>) {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
   };
-  return { container, draw, answer, fetcher };
+  return { container, draw, answer, fetcher, sent };
 }
 
 describe("a snapshot during a write", () => {
@@ -243,7 +245,7 @@ describe("a snapshot during a write", () => {
     act(() => held.learner!.updateNote("t1", "second"));
     draw({ notes: { t1: "old" } });
     await answer();
-    await answer(503);
+    await answer(400);
     expect(held.learner!.saveError).toBe("Not saved.");
     // The held snapshot predates "first", which was stored: read again.
     expect(container.textContent).toBe("note=second tick=false");
@@ -262,8 +264,8 @@ describe("a snapshot during a write", () => {
     });
     draw({ completed: { t1: true }, notes: { t1: "old" } });
     await answer();
-    await answer(503);
-    await answer(503);
+    await answer(400);
+    await answer(400);
     expect(container.textContent).toBe("note=again tick=true epoch=1");
     expect(router.refresh).toHaveBeenCalledTimes(1);
     draw({ epoch: 1 });
@@ -301,14 +303,108 @@ describe("a snapshot during a write", () => {
     expect(router.refresh).toHaveBeenCalledTimes(1);
   });
 
-  it("protects nothing for a refused write: the database never had it", async () => {
+  it("protects nothing for a write refused for good: the database never had it", async () => {
     const { container, draw, answer } = setup({});
     act(() => held.learner!.updateNote("t1", "three paragraphs"));
     draw({});
     expect(container.textContent).toBe("note=three paragraphs tick=false");
-    await answer(503);
+    await answer(400);
     expect(held.learner!.saveError).toBe("Not saved.");
     expect(container.textContent).toBe("note=none tick=false");
     expect(router.refresh).not.toHaveBeenCalled();
+  });
+});
+
+describe("a write refused for a reason that can pass", () => {
+  it("keeps the note over the snapshots after it, and sends it again from the next reachable one", async () => {
+    const { container, draw, answer, fetcher, sent } = setup({});
+    act(() => held.learner!.updateNote("t1", "three paragraphs"));
+    draw({});
+    await answer(503);
+    expect(held.learner!.saveError).toBe("Not saved.");
+    // The snapshot held during the write is adopted, with the note drawn over it.
+    expect(container.textContent).toBe("note=three paragraphs tick=false");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+
+    // A navigation: the database answers, without the note. Shown, and sent again.
+    draw({ completed: { t1: true } });
+    expect(container.textContent).toBe("note=three paragraphs tick=true");
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
+    expect(sent(1)).toEqual({ curriculumItemId: "t1", note: "three paragraphs" });
+    await answer();
+    expect(held.learner!.saveError).toBeNull();
+
+    // Stored now: the next snapshot that shows it is adopted, and nothing is sent.
+    draw({ completed: { t1: true }, notes: { t1: "three paragraphs" } });
+    expect(container.textContent).toBe("note=three paragraphs tick=true");
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps it again when it is refused again, and drops it once a later write on its key is stored", async () => {
+    const { container, draw, answer, fetcher } = setup({});
+    act(() => held.learner!.updateNote("t1", "draft"));
+    await answer(503);
+    draw({});
+    await answer(503);
+    draw({});
+    expect(container.textContent).toBe("note=draft tick=false");
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(3));
+    act(() => held.learner!.updateNote("t1", "rewritten"));
+    await answer(503);
+    await answer();
+    draw({ notes: { t1: "rewritten" } });
+    expect(container.textContent).toBe("note=rewritten tick=false");
+    expect(fetcher).toHaveBeenCalledTimes(4);
+  });
+
+  it("sets a refused tick again rather than flipping it, over a snapshot that already has it", async () => {
+    const { container, draw, answer, sent } = setup({});
+    act(() => held.learner!.toggleTopicCompletion("t1"));
+    await answer(503);
+    // The write landed after all (an answer that came too late): the snapshot has the tick.
+    draw({ completed: { t1: true } });
+    expect(container.textContent).toBe("note=none tick=true");
+    await vi.waitFor(() => expect(sent(1)).toEqual({ curriculumItemId: "t1", completed: true }));
+  });
+
+  it("does not keep a reset: a learner told it was not stored does not see it happen later", async () => {
+    const { container, draw, answer, fetcher } = setup({ completed: { t1: true } });
+    act(() => void held.learner!.resetCourse(["t1"]));
+    await answer(503);
+    draw({ completed: { t1: true } });
+    expect(container.textContent).toBe("note=none tick=true");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops a kept note once a reset of its item is stored", async () => {
+    const { container, draw, answer, fetcher } = setup({});
+    act(() => held.learner!.updateNote("t1", "draft"));
+    await answer(503);
+    act(() => void held.learner!.resetCourse(["t1"]));
+    await answer();
+    draw({ epoch: 1 });
+    expect(container.textContent).toBe("note=none tick=false epoch=1");
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("sends kept writes again when the browser is back online", async () => {
+    const { answer, fetcher, sent } = setup({});
+    act(() => held.learner!.updateNote("t1", "offline"));
+    await answer(503);
+    act(() => void window.dispatchEvent(new Event("online")));
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
+    expect(sent(1)).toEqual({ curriculumItemId: "t1", note: "offline" });
+  });
+});
+
+describe("a snapshot from a database that did not answer", () => {
+  it("is not adopted: it is empty, and would wipe what is on screen", () => {
+    const { container, draw } = setup({ completed: { t1: true }, notes: { t1: "kept" } });
+    draw({}, false);
+    expect(container.textContent).toBe("note=kept tick=true");
+    expect(router.refresh).not.toHaveBeenCalled();
+    // The database answers again: adopted.
+    draw({ notes: { t1: "kept" } });
+    expect(container.textContent).toBe("note=kept tick=false");
   });
 });

@@ -17,6 +17,12 @@ export interface Conversations {
   showOlder: () => Promise<boolean>;
   /** Every page shown, read again now (after a rename); false when the runner did not answer. */
   refresh: () => Promise<boolean>;
+  /**
+   * True when no list has landed and the last read found the runner not
+   * answering: the sidebar then shows the conversations the catalog's
+   * `draft` mirror holds instead of none.
+   */
+  failed: boolean;
 }
 
 /**
@@ -56,6 +62,7 @@ export function useConversations(enabled: boolean, chats: StudioChats | null): C
     if (seen !== "none") adopted.current = true;
   }, [seen]);
   const [titles, setTitles] = useState<Readonly<Record<string, string>>>({});
+  const [failed, setFailed] = useState(false);
   if (chats !== null && chats.titles !== titles) setTitles(chats.titles);
 
   /** How many pages are shown: one, and one more for each Show older. */
@@ -80,6 +87,7 @@ export function useConversations(enabled: boolean, chats: StudioChats | null): C
     if (ticket < landed.current) return result !== null;
     // A failed read keeps what is shown: an empty list would read as "no
     // conversations" when the truth is a runner that stopped answering.
+    setFailed(result === null);
     if (result === null) return false;
     landed.current = ticket;
     setList(result);
@@ -118,7 +126,7 @@ export function useConversations(enabled: boolean, chats: StudioChats | null): C
     return ok;
   }, [read]);
 
-  return { list: enabled ? list : null, titles, showOlder, refresh: reread };
+  return { list: enabled ? list : null, titles, showOlder, refresh: reread, failed: enabled && list === null && failed };
 }
 
 function signature(drafts: readonly DraftSummary[] | null): string {

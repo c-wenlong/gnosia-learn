@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useId, useRef, useState, type ReactNode } from "react";
 import { AVATARS, avatarLabel, DISPLAY_NAME_MAX, PREFERENCE_KEYS, type AvatarId } from "@gnosia/schema/shared";
 
 import { ThemeSwitch } from "@/components/ThemeSwitch";
@@ -16,7 +16,7 @@ import { buttonClasses, cx, inputClasses } from "@/components/ui/classes";
 import { isImeKey } from "@/components/ui/composer-keys";
 import { statusProps, useSaveStatus, type SaveStatus } from "@/components/ui/save-status";
 import { useLearner } from "@/lib/learner-context";
-import { applyMotionToDocument, readMotionCookie, writeMotionCookie } from "@/lib/motion";
+import { applyMotionToDocument, writeMotionCookie } from "@/lib/motion";
 import { sendJson } from "@/lib/send-json";
 import { MOTION_MODES, type MotionMode } from "@/lib/preferences";
 import type { SettingsSnapshot } from "@/lib/settings";
@@ -63,17 +63,9 @@ export function usePreference<T>(key: string, initial: T) {
 
 /** The General tab: how the app looks and moves. */
 export function GeneralSettings({ settings }: { settings: SettingsSnapshot }) {
+  // The cookie is brought in line with the stored row on every page, this one
+  // included, by the layout's `MotionSeed`.
   const motion = usePreference<MotionMode>(PREFERENCE_KEYS.reducedMotion, settings.motion);
-
-  // The stored row is the truth once it has been read: a browser whose
-  // cookie disagrees (a save that failed, a change made in another browser)
-  // is brought in line with what this page shows.
-  const storedMotion = settings.reachable ? settings.motion : null;
-  useEffect(() => {
-    if (storedMotion === null || readMotionCookie() === storedMotion) return;
-    writeMotionCookie(storedMotion);
-    applyMotionToDocument(storedMotion);
-  }, [storedMotion]);
   return (
     <Card title="Appearance">
       <Field label="Theme" note="Classic is the original palette and Gnosia the brand's; each has a light and a dark. System follows your device.">
@@ -355,7 +347,9 @@ function DataActions({ topicIds }: { topicIds: string[] }) {
       setConfirming(false);
       setStatus({ kind: "saved" });
     } else {
-      setStatus({ kind: "error", message: "Not reset: the write was not stored." });
+      // A long catalog resets in batches, and the ones before a refused batch
+      // stay cleared, so this does not promise nothing changed.
+      setStatus({ kind: "error", message: "Not reset: the write was not stored, so some ticks and notes may remain. Try again." });
     }
   };
 

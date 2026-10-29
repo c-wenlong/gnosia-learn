@@ -10,7 +10,7 @@ import { cx, STATUS_TEXT } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
 import { SearchField as KitSearchField } from "@/components/ui/SearchField";
 import { isCurrentRow } from "@/lib/nav";
-import { matchedTitle, type RecentItem } from "@/lib/recent-core";
+import { matchedTitle, time, type RecentItem } from "@/lib/recent-core";
 import { matchParts, searchRows, type SearchRow } from "@/lib/studio-draft-list";
 import { conversationHref, relativeTime } from "@/lib/studio-view";
 
@@ -116,7 +116,9 @@ export function SearchResults({
   const hits: ({ type: "draft"; at: string; row: SearchRow } | { type: "item"; at: string; item: RecentItem })[] = [
     ...conversations.map((row) => ({ type: "draft" as const, at: row.updated, row })),
     ...others.map((item) => ({ type: "item" as const, at: item.at, item })),
-  ].sort((a, b) => b.at.localeCompare(a.at));
+    // By the instant, as every list in Recent is: the runner and the catalog
+    // spell their times differently, and a string compare misorders them.
+  ].sort((a, b) => time(b.at) - time(a.at));
   const searching = (studio && search.searching) || (recent.found === null && recent.error === null);
   const settled = !searching && (!studio || search.found !== null || search.error !== null);
   const errors = [studio ? search.error : null, recent.error].filter((e): e is string => e !== null);

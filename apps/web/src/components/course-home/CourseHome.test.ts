@@ -220,6 +220,16 @@ describe("CourseHome", () => {
     expect(learner.updateNote).toHaveBeenCalledWith("m1-a", "remember the heuristic");
   });
 
+  it("saves a note edit still pending when the page is left, which unmounts nothing", () => {
+    const { host } = render("m1");
+    act(() => topicToggle(host, "m1-a").click());
+    type(host.querySelector("textarea")!, "closing the tab");
+    act(() => void window.dispatchEvent(new Event("pagehide")));
+    expect(learner.updateNote).toHaveBeenCalledWith("m1-a", "closing the tab");
+    act(() => mounted.pop()?.());
+    expect(learner.updateNote).toHaveBeenCalledTimes(1);
+  });
+
   it("saves a note at once when the field loses focus, and only once", () => {
     const { host } = render("m1");
     act(() => topicToggle(host, "m1-a").click());
