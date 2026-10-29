@@ -201,7 +201,7 @@ export function splitTurnCheck(reply: string, { cards = true }: { cards?: boolea
   const before = trimmed.slice(0, block.index).trim();
   const raw = firstObject(block.body);
   let outcome: BlockOutcome;
-  if (raw === null) outcome = { ok: false, reason: "The block held no JSON object.", fallback: null };
+  if (raw === null) outcome = { ok: false, reason: "The block held no JSON object.", fallback: noteFormQuestion(block.body) };
   else {
     try {
       outcome = readCheckBlock(JSON.parse(raw));
@@ -225,6 +225,18 @@ export function splitTurnCheck(reply: string, { cards = true }: { cards?: boolea
   let content = before === "" ? (check?.question ?? "") : before;
   if (check !== null && !isCardCheck(check) && !asks(content, check.question)) content = `${content}\n\n${check.question}`;
   return { content, check, refused };
+}
+
+/**
+ * The question of a block written in a note's own check form (`q:`, `a:`,
+ * `why:` lines) rather than as JSON, kept as the open check it falls back to:
+ * a model that copies the note's format has still asked the learner
+ * something, and dropping the block would take the question with it.
+ */
+function noteFormQuestion(body: string): TurnCheck | null {
+  const match = /^[ \t]*(?:q|question)[ \t]*:[ \t]*(.+)$/im.exec(body);
+  const question = match === null ? null : line(match[1]);
+  return question !== null && question !== "" && question.length <= CHECK_QUESTION_LIMIT ? { question } : null;
 }
 
 /** Whether prose already holds a question: its words, case and spacing aside. */

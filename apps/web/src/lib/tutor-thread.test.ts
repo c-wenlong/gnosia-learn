@@ -5,10 +5,12 @@ import {
   citedNumbers,
   markerPieces,
   parseThread,
+  recapTurns,
   RECALL_SEED,
   requestTurns,
   sessionKey,
   threadKey,
+  topicRequestTurns,
   trimForRequest,
   type HandoffMarker,
   type ThreadItem,
@@ -217,5 +219,44 @@ describe("a thread that opens on the tutor's recall question (R3)", () => {
   it("keeps the session id beside the thread, per concept", () => {
     expect(sessionKey("dot-product")).toBe("gnosia:tutor-session:dot-product");
     expect(sessionKey("dot-product")).not.toBe(threadKey("dot-product"));
+  });
+});
+
+describe("the course topic tutor's requests", () => {
+  /** Forty-four turns of a long session, well past the route's 40 messages. */
+  const long: TutorTurn[] = Array.from({ length: 44 }, (_, i) => ({
+    role: i % 2 === 0 ? "user" : "assistant",
+    content: `turn ${i} `.repeat(60),
+  }));
+
+  it("sends the newest turns that fit the route's bounds, starting on a learner turn", () => {
+    const sent = topicRequestTurns(long);
+    expect(sent.length).toBeLessThanOrEqual(30);
+    expect(sent.reduce((n, t) => n + t.content.length, 0)).toBeLessThanOrEqual(20_000);
+    expect(sent[0].role).toBe("user");
+    expect(sent.at(-1)).toEqual(long.at(-1));
+  });
+
+  it("takes the learner's note out of the character budget, since the route counts it too", () => {
+    const note = "n".repeat(15_000);
+    const sent = topicRequestTurns(long, note);
+    expect(sent.reduce((n, t) => n + t.content.length, 0) + note.length).toBeLessThanOrEqual(24_000);
+  });
+
+  it("puts a card check's block back on the turn that asked it, counted in the budget", () => {
+    const check = { kind: "recall" as const, concept: "softmax", question: "Why exp?", answer: "Positive weights." };
+    const sent = topicRequestTurns([
+      { role: "user", content: "Go" },
+      { role: "assistant", content: "One check.", check },
+    ]);
+    expect(sent[1].content).toBe(`One check.\n\n\`\`\`check\n${JSON.stringify(check)}\n\`\`\``);
+  });
+
+  it("summarises from the tail of a long session and says older turns were left out", () => {
+    const whole = recapTurns(long.slice(0, 4));
+    expect(whole).toEqual({ turns: long.slice(0, 4).map(({ role, content }) => ({ role, content })), partial: false });
+    const tail = recapTurns(long);
+    expect(tail.partial).toBe(true);
+    expect(tail.turns.at(-1)).toEqual(long.at(-1));
   });
 });

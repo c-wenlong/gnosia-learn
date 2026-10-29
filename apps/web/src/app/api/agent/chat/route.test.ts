@@ -364,6 +364,18 @@ describe("POST /api/agent/chat with conceptSlug", () => {
     expect(String(res.json.error)).toContain("courseSlug, moduleSlug, topicId");
   });
 
+  it("refuses a malformed topic turn before any read or provider call, as the other paths do", async () => {
+    getCourses.mockClear();
+    const topic = { courseSlug: "cp4284", moduleSlug: "m1", topicId: "t1" };
+    for (const messages of [[{ role: "tool", content: "x" }], [{ role: "user", content: { parts: ["x"] } }], [null]]) {
+      const { status, json } = await call({ ...topic, messages });
+      expect(status).toBe(400);
+      expect(json.code).toBe("BAD_REQUEST");
+    }
+    expect(getCourses).not.toHaveBeenCalled();
+    expect(completeWithFallback).not.toHaveBeenCalled();
+  });
+
   it("answers the topic path's refused course read with a 503 body, not a bare 500", async () => {
     const { ContentUnavailableError } = await import("@/data/source");
     const topic = { courseSlug: "cp4284", moduleSlug: "m1", topicId: "t1", messages: [{ role: "user", content: "hi" }] };

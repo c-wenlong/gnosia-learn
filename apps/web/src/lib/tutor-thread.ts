@@ -161,14 +161,45 @@ export const RECALL_SEED =
  * The browser still draws that turn without the block.
  */
 export function requestTurns(items: readonly ThreadItem[]): TutorTurn[] {
-  const turns = items
-    .filter((item): item is TutorTurn => item.role !== "studio")
-    .map(({ role, content, check }) => ({
-      role,
-      content: role === "assistant" && isCardCheck(check) ? `${content}\n\n${checkBlockText(check)}` : content,
-    }));
+  const turns = withCheckBlocks(items.filter((item): item is TutorTurn => item.role !== "studio"));
   const seeded = turns[0]?.role === "assistant" ? [{ role: "user" as const, content: RECALL_SEED }, ...turns] : turns;
   return trimForRequest(seeded);
+}
+
+/** Each turn cut to role and words, a card check's block put back at the end of the turn that asked it. */
+function withCheckBlocks(turns: readonly Pick<TutorTurn, "role" | "content" | "check">[]): TutorTurn[] {
+  return turns.map(({ role, content, check }) => ({
+    role,
+    content: role === "assistant" && isCardCheck(check) ? `${content}\n\n${checkBlockText(check)}` : content,
+  }));
+}
+
+/** The fewest characters of turns a topic request keeps, however long the learner's note. */
+const MIN_TURN_CHARS = 2_000;
+
+/**
+ * The turns the course topic tutor sends (`AgentSession`): as `requestTurns`
+ * does, each card check's block put back, then the tail that fits the
+ * route's bounds. The topic route counts the learner's note against the same
+ * character budget, so the note's length comes off the turns' share. Without
+ * this a long session reached the route's 40 messages or 24000 characters
+ * and every turn after it was refused.
+ */
+export function topicRequestTurns(
+  turns: readonly Pick<TutorTurn, "role" | "content" | "check">[],
+  learnerNote = "",
+): TutorTurn[] {
+  return trimForRequest(withCheckBlocks(turns), { maxChars: Math.max(MIN_TURN_CHARS, 20_000 - learnerNote.length) });
+}
+
+/**
+ * The transcript the topic tutor's recap is made from: the tail of the
+ * session that fits the summarize route's bounds, each turn cut to role and
+ * words. `partial` says older turns were left out.
+ */
+export function recapTurns(turns: readonly Pick<TutorTurn, "role" | "content">[]): { turns: TutorTurn[]; partial: boolean } {
+  const kept = trimForRequest(turns.map(({ role, content }) => ({ role, content })));
+  return { turns: kept, partial: kept.length < turns.length };
 }
 
 /** Where a thread's session id lives in `sessionStorage` (R6): beside the thread, gone with the tab. */

@@ -101,6 +101,15 @@ describe("splitTurnCheck", () => {
     expect(splitTurnCheck("Hi.\n```check\nnot json\n```")).toMatchObject({ check: null, content: "Hi." });
   });
 
+  it("keeps the question of a block in the note's q:/a: form as an open check, so the learner still sees it", () => {
+    // A model that copies a note's own check fence, rather than the JSON the prompt asks for.
+    const out = splitTurnCheck("Let us test that.\n\n```check\nq: Why does softmax exponentiate?\na: To make every weight positive.\nwhy: exp is positive.\n```");
+    expect(out.check).toEqual({ question: "Why does softmax exponentiate?" });
+    expect(out.refused).toMatch(/no JSON object/);
+    expect(out.content).toBe("Let us test that.\n\nWhy does softmax exponentiate?");
+    expect(splitTurnCheck("```check\nq: Why?\na: Because.\n```").content).toBe("Why?");
+  });
+
   it("reads only a block at the very end; a block mid-reply is prose, and the CHECK line still works", () => {
     const mid = `${block(choice)}\n\nMore words after it.`;
     expect(splitTurnCheck(mid)).toEqual({ content: mid.trim(), check: null, refused: null });
