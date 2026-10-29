@@ -27,7 +27,7 @@ import {
   compareByKindThenId,
   isCompanionKind,
 } from "@/lib/library";
-import { currentOwner, currentScope, type OwnerScope } from "@/lib/owner";
+import { currentOwner, currentScope, NoOwnerError, type OwnerScope } from "@/lib/owner";
 import { contentSource } from "@/data/source";
 import { assetBlobStore } from "@/lib/blob-store";
 import { FAVORITE_PREFIX, favoriteKey, parseFavorite, type Favorite } from "@/lib/favorite";
@@ -54,7 +54,7 @@ export type { AssetDetail };
  * `@/lib/learner-store`.
  *
  * **Server only**, and `import "server-only"` enforces it: everything here ends
- * at a Postgres pool or the blob store, and a `"use client"` import would
+ * at the catalog's database or the blob store, and a `"use client"` import would
  * compile and ship both to the browser. The pages are server components; the cards and
  * players they render take resolved props.
  *
@@ -91,8 +91,9 @@ export type { AssetDetail };
  * 20,000 is about twenty times that catalog. It stays as a limit so a runaway
  * catalog says so ("Read stopped at ...") rather than quietly showing a prefix
  * of itself, and it keeps the reads that name every row by id
- * (`assetParents`, the stored-blob checks) well under Postgres's 65,535 bind
- * parameters per statement.
+ * (`assetParents`, the stored-blob checks) under SQLite's limit on bind
+ * parameters per statement: 32,766 in the `better-sqlite3` build the catalog
+ * runs on, one per id plus a few for the owners.
  */
 export const LIBRARY_ROW_CAP = 20_000;
 
@@ -143,7 +144,7 @@ const EMPTY_LIBRARY: LibrarySnapshot = {
  * needs a count per topic over the rows being shown. One read answers the grid,
  * both rails and the totals; four reads would answer the same question in more
  * round trips and could disagree with each other, since each would get its own
- * snapshot under READ COMMITTED.
+ * snapshot outside one transaction.
  *
  * The ordering is re-done here rather than taken from SQL. `listAssets` returns
  * kind-then-id, where kind is alphabetical, which puts `captions` and
@@ -387,6 +388,8 @@ export async function readFileProblems(
       out.set(id, resolved.ok ? null : resolved.code);
     }
   } catch (error) {
+    // A request with no owner is not a catalog that cannot be reached.
+    if (error instanceof NoOwnerError) throw error;
     warn("file problems", error);
     for (const id of ids) if (!out.has(id)) out.set(id, "catalog-unreachable");
   }

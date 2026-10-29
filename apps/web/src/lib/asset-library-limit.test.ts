@@ -81,10 +81,12 @@ describe("the Library's read", () => {
     expect(cut.rows).toHaveLength(LIBRARY_ROW_CAP);
   });
 
-  it("keeps a limit far above the old 1,000, under Postgres's bind limit, and no lower than the pages' group order", () => {
+  it("keeps a limit far above the old 1,000, under SQLite's bind limit, and no lower than the pages' group order", () => {
     expect(LIBRARY_ROW_CAP).toBeGreaterThanOrEqual(10_000);
-    // `assetParents` and the stored-blob checks bind one parameter per row.
-    expect(LIBRARY_ROW_CAP).toBeLessThan(65_535);
+    // `assetParents` and the stored-blob checks bind one parameter per row,
+    // plus the owners. SQLITE_MAX_VARIABLE_NUMBER is 32,766 in the bundled
+    // `better-sqlite3` build, which sets no override.
+    expect(LIBRARY_ROW_CAP + 64).toBeLessThan(32_766);
     // Every group holds a row, so an order can be as long as the rows read.
     expect(MAX_ORDER).toBeGreaterThanOrEqual(LIBRARY_ROW_CAP);
   });

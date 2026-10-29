@@ -288,7 +288,7 @@ export function noteIndex(rows: AssetWithTopics[]): Record<string, string> {
  * row.
  *
  * Null means "no text to show", for every reason there is: the row has no
- * file, nothing was uploaded, it is larger than the cap. The callers all
+ * file, nothing was uploaded, it is larger than the cap, it is not text. The callers all
  * render the same thing for all of them (the file's metadata and a link), so
  * distinguishing them here would produce a difference nothing acts on.
  */
@@ -309,6 +309,17 @@ export async function readAssetText(
  */
 const NOT_READABLE_YET: ReadonlySet<RouteProblemCode> = new Set(["not-uploaded", "not-flipped"]);
 
+/**
+ * Whether a served type is words. The extension list in `./asset-files`
+ * also holds a poster's JPEG, a raster PNG, a video and its PDF, and decoding
+ * those as UTF-8 would hand a page (or a model) a screen of mojibake. An SVG
+ * is XML text, which the chat reads a diagram's labels out of.
+ */
+function isTextType(contentType: string): boolean {
+  const type = contentType.split(";")[0].trim().toLowerCase();
+  return type.startsWith("text/") || type === "application/json" || type === "image/svg+xml";
+}
+
 /** `readAssetText`, saying whether a null was one of `NOT_READABLE_YET`. */
 export async function readAssetTextFor(
   seams: AssetSeams,
@@ -319,6 +330,7 @@ export async function readAssetTextFor(
   try {
     const resolved = await resolveAsset(seams, db, id);
     if (resolved.ok === false) return { text: null, unreadable: NOT_READABLE_YET.has(resolved.code) };
+    if (!isTextType(resolved.contentType)) return { text: null, unreadable: false };
     if (resolved.bytes > limit) return { text: null, unreadable: false };
     if (resolved.source === "row") return { text: resolved.body.toString("utf8"), unreadable: false };
     const read = await openBlob(seams, resolved.key);
