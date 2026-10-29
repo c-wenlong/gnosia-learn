@@ -42,7 +42,9 @@ private func optional<T>(_ value: Any?) -> T? {
     @Test func theBlockWrittenBackIsTheWebsByteForByte() throws {
         for c in try fixture() {
             let check = try #require(TutorCardCheck(json: c.check))
-            #expect(check.blockText == c.block)
+            // Bytes, not Swift string equality, which would call a composed
+            // and a decomposed é the same.
+            #expect(Array(check.blockText.utf8) == Array(c.block.utf8))
         }
     }
 
@@ -55,11 +57,11 @@ private func optional<T>(_ value: Any?) -> T? {
                 if check.kind == .choice {
                     let picked: Int? = optional(a["picked"])
                     let confidence: Int? = optional(a["confidence"])
-                    #expect(tutorChoiceAnswerText(check, picked: picked, confidence: confidence, thinking: thinking) == expected)
+                    #expect(Array(tutorChoiceAnswerText(check, picked: picked, confidence: confidence, thinking: thinking).utf8) == Array(expected.utf8))
                 } else {
                     let words = try #require(a["words"] as? String)
                     let confidence = try #require(a["confidence"] as? Int)
-                    #expect(tutorRecallAnswerText(answer: words, confidence: confidence, thinking: thinking) == expected)
+                    #expect(Array(tutorRecallAnswerText(answer: words, confidence: confidence, thinking: thinking).utf8) == Array(expected.utf8))
                 }
             }
         }

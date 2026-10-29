@@ -216,6 +216,10 @@ struct TutorCheckCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            // The question, as both web cards draw it: the prose before a
+            // card need not ask it ("Let's try a quick check").
+            MathText(text: check.question, font: .callout.weight(.medium))
+                .foregroundStyle(G.text)
             Text(check.kind == .choice ? "Pick one" : "Answer in your own words")
                 .font(.caption)
                 .foregroundStyle(G.text2)
@@ -236,7 +240,7 @@ struct TutorCheckCard: View {
             if answer.picked == nil {
                 Text("You said you don't know.").font(.callout).foregroundStyle(G.text2)
             }
-            Text(check.why).font(.callout).foregroundStyle(G.text)
+            MathText(text: check.why).foregroundStyle(G.text)
         } else if live {
             Button("I don't know") { submitChoice(nil) }
                 .buttonStyle(.plain)
@@ -253,7 +257,9 @@ struct TutorCheckCard: View {
     private func optionRow(_ i: Int) -> some View {
         let text = check.options[i]
         let isKey = text == check.answer
-        let chosen = (answer?.picked ?? picked) == i
+        // Once answered, the answer alone says what was picked: an option
+        // tapped before "I don't know" is not a pick.
+        let chosen = (answer == nil ? picked : answer?.picked) == i
         let mark: (String, Color)? = answer == nil
             ? nil
             : isKey ? ("checkmark.circle.fill", G.okText) : chosen ? ("xmark.circle.fill", G.danger) : nil
@@ -263,8 +269,7 @@ struct TutorCheckCard: View {
             HStack(spacing: 8) {
                 Image(systemName: mark?.0 ?? (chosen ? "largecircle.fill.circle" : "circle"))
                     .foregroundStyle(mark?.1 ?? (chosen ? G.accentText : G.text3))
-                Text(text)
-                    .font(.callout)
+                MathText(text: text)
                     .foregroundStyle(G.text)
                     .multilineTextAlignment(.leading)
                 Spacer(minLength: 0)
@@ -290,9 +295,9 @@ struct TutorCheckCard: View {
 
     @ViewBuilder private var recall: some View {
         if let answer {
-            Text(answer.words ?? "").font(.callout).foregroundStyle(G.text)
+            MathText(text: answer.words ?? "").foregroundStyle(G.text)
             Text("The tutor's answer").font(.caption).foregroundStyle(G.text2)
-            Text(check.answer).font(.callout).foregroundStyle(G.text)
+            MathText(text: check.answer).foregroundStyle(G.text)
         } else if live {
             TextField("Your answer", text: $words, axis: .vertical)
                 .textFieldStyle(.plain)
@@ -301,8 +306,11 @@ struct TutorCheckCard: View {
                 .padding(.vertical, 9)
                 .background(G.page, in: RoundedRectangle(cornerRadius: 10))
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(G.border))
+                // The web card's limit: room is left in the answer block for
+                // the confidence and reasoning lines, so the tutor reads the
+                // words whole.
                 .onChange(of: words) { _, next in
-                    if next.utf16.count > tutorChatAnswerLimit { words = sessionPrefix(next, utf16: tutorChatAnswerLimit) }
+                    if next.utf16.count > sessionTextLimit { words = sessionPrefix(next, utf16: sessionTextLimit) }
                 }
             SessionSureness(confidence: $confidence, thinking: $thinking, locked: false, reasoningFocused: $reasoningFocused)
             Button("Submit") {

@@ -73,9 +73,9 @@
     "check": {
       "kind": "recall",
       "question": "Why does TCP need a three-way handshake?",
-      "answer": "Both sides must learn the other's initial sequence number\nand confirm it: SYN, SYN-ACK, ACK.\t\"Two\" is not enough. 👍 é \u0001 a/b \\ end"
+      "answer": "Both sides must learn the other's initial sequence number\nand confirm it: SYN, SYN-ACK, ACK.\t\"Two\" is not enough. 👍 é é \u0001 a/b \\ end"
     },
-    "block": "```check\n{\"kind\":\"recall\",\"question\":\"Why does TCP need a three-way handshake?\",\"answer\":\"Both sides must learn the other's initial sequence number\\nand confirm it: SYN, SYN-ACK, ACK.\\t\\\"Two\\\" is not enough. 👍 é \\u0001 a/b \\\\ end\"}\n```",
+    "block": "```check\n{\"kind\":\"recall\",\"question\":\"Why does TCP need a three-way handshake?\",\"answer\":\"Both sides must learn the other's initial sequence number\\nand confirm it: SYN, SYN-ACK, ACK.\\t\\\"Two\\\" is not enough. 👍 é é \\u0001 a/b \\\\ end\"}\n```",
     "answers": [
       {
         "words": "  So both ISNs are confirmed.  ",

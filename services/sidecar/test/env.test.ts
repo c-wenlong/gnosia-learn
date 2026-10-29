@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -65,6 +65,19 @@ describe("the sidecar's environment", () => {
   it("starts with neither file", async () => {
     const env = await loaded({ GNOSIA_HOME: temp() }, join(temp(), "missing"), ["AUTH_SECRET"]);
     expect(env).toEqual({});
+  });
+
+  it("reads the data home's file as the desktop shell does", () => {
+    // The same fixture apps/desktop's CheckoutTests holds Checkout.parseDotenv
+    // to: the shell hands the web the AUTH_SECRET it reads, and this read
+    // must open what that secret sealed.
+    const fixture = JSON.parse(readFileSync(resolve(__dirname, "fixtures/dotenv.json"), "utf8")) as {
+      text: string;
+      expected: Record<string, string>;
+    };
+    const file = join(temp(), ".env");
+    writeFileSync(file, fixture.text);
+    expect(readEnvFile(file)).toEqual(fixture.expected);
   });
 
   it("names the data home's file and reads a dotenv", () => {
