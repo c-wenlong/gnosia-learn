@@ -22,8 +22,10 @@ export const metadata: Metadata = { title: "Courses" };
  * concepts and which of those are mastered, from the knowledge base, and
  * which courses have a cover photo in the blob store (`getCourseCovers`). The list
  * combines that with the learner's ticks, which stay on the client. When the
- * catalog cannot be read the standing is empty and every topic is tick-only,
- * the same fallback the course path makes.
+ * knowledge base alone cannot be read the standing is empty and every topic
+ * is tick-only, the same fallback the course path makes. A catalog that does
+ * not answer at all refuses the courses read too, and the page falls to the
+ * error boundary.
  */
 export default async function CoursesPage() {
   const [courses, tags, { kb }, covers] = await Promise.all([

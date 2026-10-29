@@ -252,6 +252,18 @@ describe("loadCourses refuses", () => {
     );
   });
 
+  it("a course slug a URL would have to escape", () => {
+    const root = tree({ "xx1000.yaml": courseYaml({ slug: "intro ml" }) });
+    expect(() => loadCourses({ root })).toThrow(/slug "intro ml" is not kebab-case/);
+  });
+
+  it("a module slug a URL would have to escape", () => {
+    const course = JSON.parse(courseYaml()) as { modules: Record<string, unknown>[] };
+    course.modules[0]!.slug = "réseaux";
+    const root = tree({ "xx1000.yaml": JSON.stringify(course) });
+    expect(() => loadCourses({ root })).toThrow(/module\[0\]: slug "réseaux" is not kebab-case/);
+  });
+
   it("inferred left off, rather than reading it as false", () => {
     const course = JSON.parse(courseYaml()) as Record<string, unknown>;
     delete course.inferred;
