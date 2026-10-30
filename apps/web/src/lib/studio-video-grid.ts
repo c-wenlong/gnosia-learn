@@ -1,3 +1,4 @@
+import { collate } from "@/lib/studio-grid";
 import { NO_TOPIC } from "@/lib/studio-url";
 import { videoAssetId } from "@/lib/studio-video-job";
 
@@ -96,7 +97,7 @@ export function sortVideos(
   const sign = view.direction === "asc" ? 1 : -1;
   const titleOf = (video: StudioVideo): string => video.title ?? video.slug;
   return [...videos].sort((a, b) => {
-    if (view.sort === "title") return sign * titleOf(a).localeCompare(titleOf(b));
+    if (view.sort === "title") return sign * collate(titleOf(a), titleOf(b));
     const at = Date.parse(a.updated);
     const bt = Date.parse(b.updated);
     if (!Number.isFinite(at) && !Number.isFinite(bt)) return 0;
@@ -159,7 +160,7 @@ export function gridSections<D>(
   }
   const list = [...sections.values()];
   if (group === "none") return list;
-  return list.sort((a, b) => (a.key === NO_TOPIC ? 1 : b.key === NO_TOPIC ? -1 : a.label.localeCompare(b.label)));
+  return list.sort((a, b) => (a.key === NO_TOPIC ? 1 : b.key === NO_TOPIC ? -1 : collate(a.label, b.label)));
 }
 
 /** One tile in a section: a diagram or a studio video. */
@@ -193,7 +194,7 @@ export function sectionItems<D>(
     }),
   ];
   keyed.sort((a, b) => {
-    if (view.sort === "title") return sign * a.title.localeCompare(b.title);
+    if (view.sort === "title") return sign * collate(a.title, b.title);
     const aDated = Number.isFinite(a.time);
     const bDated = Number.isFinite(b.time);
     if (!aDated && !bDated) return 0;

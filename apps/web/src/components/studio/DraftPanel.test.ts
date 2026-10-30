@@ -788,6 +788,31 @@ describe("the consent card (D106–D110)", () => {
     expect(mocks.sendMessage).toHaveBeenCalledWith("d1", expect.objectContaining({ text: "@video", make: true }), expect.any(String));
   });
 
+  it("holds Allow while a brief card is being edited, as Send is held (R2-1-07)", async () => {
+    const host = await mount(
+      draft({
+        state: "briefed",
+        turns: 1,
+        transcript: [
+          entry(1, "person", "@diagram attention", { mentions: [{ kind: "diagram", start: 0, end: 8 }] }),
+          entry(2, "planner", "Here, and a video would show it moving.", {
+            briefs: [{ kind: "diagram", brief: DIAGRAM, requestSeq: 1 }],
+            suggest: ["video"],
+            pitch: "the weights shifting",
+          }),
+        ],
+        slots: { diagram: slot({ brief: DIAGRAM, briefSeq: 2, requestSeq: 1, state: "briefed" }), video: slot() },
+      }),
+    );
+    expect(button(host, "Allow once")!.disabled).toBe(false);
+    await act(async () => host.querySelector<HTMLElement>("[data-card-edit]")!.click());
+    await settle();
+    expect(button(host, "Allow once")!.disabled).toBe(true);
+    expect(button(host, "Always allow here")!.disabled).toBe(true);
+    expect(button(host, "Deny")!.disabled).toBe(false);
+    expect(host.querySelector('[data-consent="video"]')!.textContent).toContain("Save or cancel your edits to the brief first.");
+  });
+
   it("Deny tells the runner which reply's offer was refused, and sends nothing", async () => {
     const host = await mount(offered());
     await act(async () => button(host, "Deny")!.click());
@@ -896,6 +921,24 @@ describe("the consent card (D106–D110)", () => {
     expect(mocks.setDraftTrust).toHaveBeenCalledTimes(2);
     expect(mocks.sendMessage).toHaveBeenCalledTimes(1);
     expect(button(host, "Save always-allow")).toBeUndefined();
+  });
+});
+
+describe("two health reads answering out of order (R2-1-18)", () => {
+  it("keeps the newer answer, not the one that landed last", async () => {
+    let releaseOld: (value: unknown) => void = () => undefined;
+    const spent = { dailyCap: { capUsd: 5, totalUsd: 6, exceeded: true, oldestAgesOutAt: "2026-10-31T00:00:00Z" }, video: null, diagramAgent: null, agent: null };
+    const free = { dailyCap: { capUsd: 5, totalUsd: 1, exceeded: false }, video: null, diagramAgent: null, agent: null };
+    // The opening read hangs; a BYOK write's read answers at once.
+    mocks.readStudioHealth.mockImplementationOnce(() => new Promise((resolve) => (releaseOld = resolve)));
+    mocks.readStudioHealth.mockImplementationOnce(async () => free);
+    await mount(draft());
+    await act(async () => window.dispatchEvent(new Event("gnosia:byok-settings")));
+    await settle();
+    expect(mocks.composer!.sendDisabled).not.toBe(true);
+    await act(async () => releaseOld(spent));
+    await settle();
+    expect(mocks.composer!.sendDisabled).not.toBe(true);
   });
 });
 

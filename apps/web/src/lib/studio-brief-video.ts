@@ -221,7 +221,13 @@ export function abbreviationWarning(words: readonly string[]): string | null {
   return `The voice may read ${list} as ${one ? "a word" : "words"}. Spell ${one ? "it" : "them"} out ("${spelled}") where ${one ? "it is" : "they are"} said letter by letter.`;
 }
 
-/** Whether a value looks enough like a video brief to draw a card from. */
+/**
+ * Whether a value looks enough like a video brief to draw a card from: every
+ * field the card reads in a way that throws is checked, down to each beat's
+ * words, since `abbreviations` and the timing read `say` and `labels` of every
+ * beat (R2-1-09). `concepts` may be absent on an old brief; when present it
+ * is a list.
+ */
 export function isVideoBrief(value: unknown): value is VideoBrief {
   if (typeof value !== "object" || value === null) return false;
   const brief = value as Partial<VideoBrief>;
@@ -229,7 +235,21 @@ export function isVideoBrief(value: unknown): value is VideoBrief {
     typeof brief.title === "string" &&
     typeof brief.slug === "string" &&
     typeof brief.voice === "string" &&
+    (brief.concepts === undefined || (Array.isArray(brief.concepts) && brief.concepts.every((slug) => typeof slug === "string"))) &&
     Array.isArray(brief.scenes) &&
-    brief.scenes.every((scene) => typeof scene?.name === "string" && Array.isArray(scene.beats))
+    brief.scenes.every((scene) => typeof scene?.name === "string" && Array.isArray(scene.beats) && scene.beats.every(isBeat))
+  );
+}
+
+function isBeat(value: unknown): boolean {
+  if (typeof value !== "object" || value === null) return false;
+  const beat = value as Partial<VideoBeat>;
+  return (
+    typeof beat.say === "string" &&
+    typeof beat.show === "string" &&
+    Array.isArray(beat.labels) &&
+    beat.labels.every((label) => typeof label === "string") &&
+    // A silent beat's hold, drawn as written: anything but a number throws there.
+    (beat.seconds === undefined || (typeof beat.seconds === "number" && Number.isFinite(beat.seconds)))
   );
 }

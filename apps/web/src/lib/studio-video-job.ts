@@ -6,6 +6,7 @@ import { assetFileHref, assetStatusHref } from "@/lib/library";
 import { capitalised } from "@/lib/sentence";
 import { chapterTitle, isNarrated as briefIsNarrated, shortLength, type VideoBrief } from "@/lib/studio-brief-video";
 import { announceStop, jobKindOf, type Announcement, type GateStep } from "@/lib/studio-jobs";
+import { jobStateLabel } from "@/lib/studio-job-state";
 
 
 /**
@@ -336,7 +337,8 @@ const DOING: Record<VideoStepName, string> = {
   ready: "Ready to review",
 };
 
-export type StepStatus = "done" | "current" | "pending" | "failed";
+/** `stopped` is where a cancelled job stopped: the person's decision, not a failure (R2-1-11). */
+export type StepStatus = "done" | "current" | "pending" | "failed" | "stopped";
 
 export interface StepRow {
   key: VideoStepName | "lines";
@@ -407,7 +409,7 @@ export function stepRows(job: VideoJob): StepRow[] {
     else if (step === undefined) status = "pending";
     else if (step.state !== "running") status = step.state;
     else if (name !== active) status = step.rounds > 0 ? "done" : "pending";
-    else if (stopped) status = sentFailed ? "pending" : "failed";
+    else if (stopped) status = sentFailed ? "pending" : job.state === "cancelled" ? "stopped" : "failed";
     else status = "current";
     if (settled && (status === "current" || status === "pending")) status = "done";
     rows.push({
@@ -439,7 +441,9 @@ export function stepRows(job: VideoJob): StepRow[] {
       if (row.key !== "lines" && row.status === "done") reached = at;
     });
     const next = rows.slice(reached + 1).find((row) => row.status === "pending");
-    if (next !== undefined) next.status = "failed";
+    // A cancel is the person's decision here too, not a failure (R2-1-11),
+    // including a job cancelled before any step ran.
+    if (next !== undefined) next.status = job.state === "cancelled" ? "stopped" : "failed";
   }
   return rows;
 }
@@ -478,7 +482,7 @@ export function videoHeadline(job: VideoJob): string {
   if (job.state === "awaiting_review") return DOING.ready;
   if (job.state === "running" && job.cancelRequestedAt !== null) return "Stopping";
   const step = currentStep(job);
-  if (step === null) return job.state === "running" ? "Starting" : sentence(job.state.replace("_", " ")) ?? "";
+  if (step === null) return job.state === "running" ? "Starting" : jobStateLabel(job.state);
   const rounds = job.steps.find((entry) => entry.name === step)?.rounds ?? 0;
   if (step === "preview" && rounds > 1) return `Previewing, round ${rounds}`;
   return DOING[step];
