@@ -5,7 +5,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import type { ConceptCheck } from "../src/concept-note-core";
 import type { ConceptWorkspace } from "../src/concept-workspace-core";
 import type { CompleteOutcome } from "../src/providers";
-import { checkHash, readWrittenOptions, storeOptions } from "../src/server/check-options";
+import { checkHash, forgetRefusals, readWrittenOptions, REFUSAL_TTL_MS, storeOptions } from "../src/server/check-options";
 import type { TutorDeps } from "../src/server/deps";
 import { checkOptionsTurn } from "../src/server/turns";
 import { migratedScratchDatabase, probe, type Scratch } from "../../../services/catalog/test/scratch-database";
@@ -94,6 +94,7 @@ describe.skipIf(!reachable.ok)("checkOptionsTurn", () => {
     checks = [{ id: "c1", question: "What does the dot product of unit vectors measure?", answer: ANSWER, why: "", source: "" }];
     complete.mockReset();
     complete.mockResolvedValue(ok(JSON.stringify({ wrong: GOOD })));
+    forgetRefusals();
   });
 
   it("writes on a miss, once for two asks at the same time, and reads the store after that", async () => {
@@ -138,6 +139,45 @@ describe.skipIf(!reachable.ok)("checkOptionsTurn", () => {
     const refused = await checkOptionsTurn(deps(LOCAL_LEARNER_ID), { conceptSlug: "alpha", checkId: "c1" });
     expect(refused).toMatchObject({ status: 502, body: { code: "UNSTRUCTURED_REPLY" } });
     expect(await readCheckDistractors(scratch.db, LOCAL_LEARNER_ID, ["alpha"])).toEqual([]);
+  });
+
+  it("remembers a failed generation, so the next visits pay no model call until the window or the check changes", async () => {
+    const ask = () => checkOptionsTurn(deps(LOCAL_LEARNER_ID), { conceptSlug: "alpha", checkId: "c1" });
+    const start = Date.now();
+    const now = vi.spyOn(Date, "now").mockReturnValue(start);
+    try {
+      complete.mockResolvedValue(ok("not the JSON asked for"));
+      expect(await ask()).toMatchObject({ status: 502, body: { code: "UNSTRUCTURED_REPLY" } });
+      expect(await ask()).toMatchObject({ status: 502, body: { code: "UNSTRUCTURED_REPLY" } });
+      expect(complete).toHaveBeenCalledTimes(1);
+
+      // Another learner's ask is their own.
+      await checkOptionsTurn(deps(OTHER), { conceptSlug: "alpha", checkId: "c1" });
+      expect(complete).toHaveBeenCalledTimes(2);
+
+      // A failed chain is remembered the same way.
+      checks = [{ ...(checks[0] as ConceptCheck), question: "What does it measure, for unit vectors?" }];
+      complete.mockResolvedValue({ ok: false, attempts: [], code: "ALL_PROVIDERS_FAILED" });
+      expect((await ask()).status).toBe(502);
+      expect((await ask()).status).toBe(502);
+      expect(complete).toHaveBeenCalledTimes(3);
+
+      // Past the window it asks again, and a good reply is stored.
+      complete.mockResolvedValue(ok(JSON.stringify({ wrong: GOOD })));
+      now.mockReturnValue(start + REFUSAL_TTL_MS + 1);
+      expect(await ask()).toMatchObject({ status: 200, body: { options: GOOD, cached: false } });
+      expect(complete).toHaveBeenCalledTimes(4);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it("does not remember a missing key, so a key added takes effect at once", async () => {
+    complete.mockResolvedValue({ ok: false, attempts: [], code: "MISSING_API_KEY" });
+    expect((await checkOptionsTurn(deps(LOCAL_LEARNER_ID), { conceptSlug: "alpha", checkId: "c1" })).status).toBe(503);
+    complete.mockResolvedValue(ok(JSON.stringify({ wrong: GOOD })));
+    expect((await checkOptionsTurn(deps(LOCAL_LEARNER_ID), { conceptSlug: "alpha", checkId: "c1" })).status).toBe(200);
+    expect(complete).toHaveBeenCalledTimes(2);
   });
 
   it("passes on no key and a failed chain, so the page keeps the notes' options", async () => {
