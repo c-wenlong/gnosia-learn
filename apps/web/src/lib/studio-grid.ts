@@ -66,6 +66,15 @@ export interface DiagramListing {
 /* Filtering, sorting and grouping                                            */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * How every title and label in the grids is ordered: one fixed locale, so
+ * the server's render (Node's default locale, from `LANG`) and the browser's
+ * (the viewer's) order tiles alike and hydration never sees two orders
+ * (R2-1-12). Case and accents do not decide the order; numbers read as
+ * numbers.
+ */
+export const collate = new Intl.Collator("en", { sensitivity: "base", numeric: true }).compare;
+
 export interface TopicChip {
   slug: string;
   label: string;
@@ -99,7 +108,7 @@ export function topicChips(
       domain: domains.get(slug) ?? null,
       count,
     }))
-    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+    .sort((a, b) => b.count - a.count || collate(a.label, b.label));
   return [...chips, { slug: NO_TOPIC, label: "No topic", domain: null, count: untopiced }];
 }
 
@@ -151,7 +160,7 @@ export function sortDiagrams(diagrams: readonly Diagram[], view: StudioView): Di
   return [...diagrams].sort((a, b) => {
     switch (view.sort) {
       case "title":
-        return sign * displayTitle(a).localeCompare(displayTitle(b));
+        return sign * collate(displayTitle(a), displayTitle(b));
       case "created":
         return timeCompare(a.created, b.created, sign);
       default:
@@ -196,7 +205,7 @@ export function groupDiagrams(
   return [...groups.values()].sort((a, b) => {
     if (a.key === NO_TOPIC) return 1;
     if (b.key === NO_TOPIC) return -1;
-    return a.label.localeCompare(b.label);
+    return collate(a.label, b.label);
   });
 }
 

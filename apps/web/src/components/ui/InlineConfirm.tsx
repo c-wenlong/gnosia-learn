@@ -92,6 +92,7 @@ export function InlineConfirm({
   const keep = useRef<HTMLButtonElement>(null);
   const confirmPress = useRef<HTMLButtonElement>(null);
   const was = useRef(open);
+  const owesFocus = useRef(false);
   useEffect(() => {
     if (was.current === open) return;
     was.current = open;
@@ -101,9 +102,19 @@ export function InlineConfirm({
     if (open) {
       if (dropped) keep.current?.focus();
     } else if (dropped) {
-      trigger.current?.focus();
+      // Put away while the work still runs (Keep it stays pressable): the
+      // trigger is disabled and cannot take focus yet, so it waits for `busy`.
+      if (trigger.current?.disabled) owesFocus.current = true;
+      else trigger.current?.focus();
     }
   }, [open]);
+
+  useEffect(() => {
+    if (busy || !owesFocus.current) return;
+    owesFocus.current = false;
+    const at = document.activeElement;
+    if (at === null || at === document.body) trigger.current?.focus();
+  }, [busy]);
 
   // The work starting disables the confirming press, which a browser then
   // drops focus from: Keep it, which stays pressable, takes it instead.

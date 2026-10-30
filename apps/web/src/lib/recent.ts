@@ -20,6 +20,7 @@ import {
 
 import { getCourses } from "@/data/courses";
 import { ContentUnavailableError } from "@/data/source";
+import { conceptHref } from "@/lib/course-path";
 import { catalogDatabase } from "@/lib/learner-store";
 import { bucketOf } from "@gnosia/tutor/mastery-bucket";
 import { currentOwner, ownerScope, type OwnerScope } from "@/lib/owner";
@@ -178,7 +179,7 @@ export async function sessionTouches(
     const href = hasLog
       ? `/library/${encodeURIComponent(logId)}`
       : goal !== null && s.goal !== null
-        ? `/learn/${encodeURIComponent(s.goal)}`
+        ? conceptHref(s.goal)
         : null;
     if (title === undefined || href === null) return;
     out.push({ id: s.id, title: title.trim(), href, updatedAt: s.updatedAt });

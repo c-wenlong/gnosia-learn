@@ -4,8 +4,9 @@ import Link from "next/link";
 import { useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/Button";
-import { cx, FOCUS, STATUS_TEXT } from "@/components/ui/classes";
+import { cx, FOCUS } from "@/components/ui/classes";
 import { Collapse } from "@/components/ui/Collapse";
+import { FormRow } from "@/components/ui/FormRow";
 import { Input } from "@/components/ui/Input";
 import { useLearner } from "@/lib/learner-context";
 import { prefersReducedMotion } from "@/lib/motion";
@@ -16,6 +17,7 @@ import { Glyph } from "@/components/ui/Glyph";
 import { RESOURCE_GLYPH } from "./icons";
 import { resourceLink } from "./resource-link";
 import { ROW, ROW_HOVER, ROW_LIST, ROW_META, ROW_TITLE, STRETCHED } from "./rows";
+import { ownValue } from "@gnosia/tutor/own-key";
 
 const TYPE_LABEL: Record<Resource["type"], string> = {
   paper: "Paper",
@@ -58,6 +60,16 @@ function ResourceAnchor({
   );
 }
 
+/** Why a typed URL is refused, or null: only an http or https address is a resource. */
+function urlError(value: string): string | null {
+  try {
+    const { protocol } = new URL(value);
+    return protocol === "http:" || protocol === "https:" ? null : "Enter a valid URL (including https://).";
+  } catch {
+    return "Enter a valid URL (including https://).";
+  }
+}
+
 /**
  * One curated reading as an item row: its type's icon, its title, and a meta
  * line saying what kind it is and where it lives. The module path draws a
@@ -91,15 +103,17 @@ export function ResourceRow({ resource: r }: { resource: Resource }) {
  * remove is removed at once, so nothing is lost to a navigation, and a copy
  * of it stays in its place for the 300ms it takes to fold away (`Collapse`),
  * with focus moved to Add a resource, since the Remove pressed goes with it.
- * The form's error fades in.
+ * The form's fields are kit `FormRow`s, so a refused one is marked invalid
+ * and its reason is announced and read with it.
  */
 export function ModuleResources({ moduleId, curated }: { moduleId: string; curated: readonly Resource[] }) {
   const { state, addResource, removeResource } = useLearner();
-  const yours = state.userResources[moduleId] ?? [];
+  const yours = ownValue(state.userResources, moduleId) ?? [];
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
   const [url, setUrl] = useState("");
-  const [error, setError] = useState("");
+  // Why each field was refused, under the field at fault; null when it was not.
+  const [errors, setErrors] = useState<{ title: string | null; url: string | null }>({ title: null, url: null });
   const formId = useId();
   // Removed rows still folding away, each at the place it had in the list.
   const [ghosts, setGhosts] = useState<{ resource: (typeof yours)[number]; at: number }[]>([]);
@@ -123,23 +137,11 @@ export function ModuleResources({ moduleId, curated }: { moduleId: string; curat
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
-    setError("");
     const t = title.trim();
     const u = url.trim();
-    if (!t || !u) {
-      setError("Title and URL are required.");
-      return;
-    }
-    try {
-      const parsed = new URL(u);
-      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-        setError("Enter a valid URL (including https://).");
-        return;
-      }
-    } catch {
-      setError("Enter a valid URL (including https://).");
-      return;
-    }
+    const next = { title: t ? null : "Enter a title.", url: u ? urlError(u) : "Enter a URL." };
+    setErrors(next);
+    if (next.title !== null || next.url !== null) return;
     addResource(moduleId, { title: t, url: u });
     setTitle("");
     setUrl("");
@@ -192,32 +194,39 @@ export function ModuleResources({ moduleId, curated }: { moduleId: string; curat
           <span className="pl-1 text-[14px] font-semibold text-text">Add a resource</span>
         </button>
         <Collapse open={adding} id={formId}>
-          {/* noValidate: a malformed URL gets this form's own line below, not
-              the browser's bubble, which the platform draws in its own style. */}
-          <form onSubmit={onSubmit} noValidate className="ml-[40px] mr-2 mt-1 mb-2 grid gap-2 sm:grid-cols-2">
-            <Input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Title"
-              aria-label="Title"
-            />
-            <Input
-              type="url"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder="https://…"
-              aria-label="URL"
-            />
-            <div className="flex items-center gap-3 sm:col-span-2">
+          {/* noValidate: a malformed URL gets this form's own line under the
+              field, not the browser's bubble, which the platform draws in its
+              own style. */}
+          <form onSubmit={onSubmit} noValidate className="ml-[40px] mr-2 mt-1 mb-2 grid items-start gap-2 sm:grid-cols-2">
+            <FormRow label="Title" error={errors.title}>
+              {({ id, describedBy, invalid }) => (
+                <Input
+                  id={id}
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  aria-invalid={invalid || undefined}
+                  aria-describedby={describedBy}
+                />
+              )}
+            </FormRow>
+            <FormRow label="URL" error={errors.url}>
+              {({ id, describedBy, invalid }) => (
+                <Input
+                  id={id}
+                  type="url"
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  placeholder="https://…"
+                  aria-invalid={invalid || undefined}
+                  aria-describedby={describedBy}
+                />
+              )}
+            </FormRow>
+            <div className="sm:col-span-2">
               <Button type="submit" variant="secondary" size="sm">
                 Add
               </Button>
-              {error && (
-                <p key={error} className={cx(STATUS_TEXT, "animate-fade-in text-danger motion-reduce:animate-none")}>
-                  {error}
-                </p>
-              )}
             </div>
           </form>
         </Collapse>

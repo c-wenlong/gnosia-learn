@@ -103,13 +103,7 @@ export function applyThemeToDocument(theme: ThemeMode): void {
   root.dataset.theme = theme;
 }
 
-/**
- * Apply a mode and, under either system mode, keep following the device until
- * the returned function is called. The other four modes are applied once and
- * the cleanup is a no-op, so an effect can return this directly. Pure over
- * the `window` it is handed, which is what lets a test drive it without a
- * browser.
- */
+/** The part of a `MediaQueryList` `followTheme` uses. */
 interface SchemeQuery {
   readonly matches: boolean;
   addEventListener(type: "change", listener: () => void): void;
@@ -121,6 +115,13 @@ export interface SchemeWindow {
   matchMedia(query: string): SchemeQuery;
 }
 
+/**
+ * Apply a mode and, under either system mode, keep following the device until
+ * the returned function is called. The other four modes are applied once and
+ * the cleanup is a no-op, so an effect can return this directly. Pure over
+ * the `window` it is handed, which is what lets a test drive it without a
+ * browser.
+ */
 export function followTheme(
   theme: ThemeMode,
   win: SchemeWindow | undefined = typeof window === "undefined" ? undefined : window,

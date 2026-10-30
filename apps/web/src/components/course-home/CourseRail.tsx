@@ -12,6 +12,7 @@ import { TextLink } from "@/components/ui/TextLink";
 import { Callout } from "@/components/ui/Callout";
 import { courseTopicIds, doneWord, moduleHref, topicMeta, type PathStatus, type TopicMastery } from "@/lib/course-path";
 import type { Course, Module, Topic } from "@gnosia/tutor/types";
+import { ownValue } from "@gnosia/tutor/own-key";
 
 import type { RelatedCourse } from "./types";
 
@@ -88,7 +89,7 @@ export function CourseRail({
                 <div>
                   <p className="text-[16px] font-semibold leading-6 text-text">{nextShown.topic.title}</p>
                   <p className="text-[14px] leading-5 text-text2">
-                    {topicMeta(mastery[nextShown.topic.id], false)} · Module {nextShown.module.order}
+                    {topicMeta(ownValue(mastery, nextShown.topic.id), false)} · Module {nextShown.module.order}
                   </p>
                 </div>
                 <Button

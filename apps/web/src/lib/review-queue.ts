@@ -43,8 +43,10 @@ function firstCheck(checks: readonly ConceptCheck[]): ConceptCheck | null {
  * Wrong options for one card, best first: other due notes' check answers in the
  * same domain, then in any domain, then same-domain summaries, then the rest.
  * Check answers lead because they are shaped like answers; summaries only fill.
+ * Not the session's `distractorPool` (`@gnosia/tutor/session-core`), which
+ * ranks summaries by how near each concept sits to the one being asked about.
  */
-function distractorPool(
+function reviewDistractorPool(
   self: ReviewQueueItem,
   answers: readonly { conceptId: string; domain: string | null; answer: string }[],
   summaries: readonly ConceptSummary[],
@@ -182,7 +184,7 @@ export async function readReviewSession(
   }));
 
   const items = queue.items.map((item, i) =>
-    toReviewItem(item, checks[i] ?? [], distractorPool(item, answers, summaries), written.get(item.conceptId), true),
+    toReviewItem(item, checks[i] ?? [], reviewDistractorPool(item, answers, summaries), written.get(item.conceptId), true),
   );
   // Whether a model can be asked is read only when some card would ask one.
   const canWrite = items.some((item) => item.rewrite !== undefined) && (await tutorModelConfigured().catch(() => false));

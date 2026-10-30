@@ -16,6 +16,9 @@
  */
 export const HEALTH_READ_MS = 30_000;
 
+/** How long one health read waits: as long as any studio call (`CALL_TIMEOUT_MS`), since doctor can launch a browser. */
+export const HEALTH_TIMEOUT_MS = 60_000;
+
 /**
  * Whether a health answer lets a tag do something: the runner can run its
  * planner (`ok`, which is false without the `claude` CLI). Anything that is
@@ -37,7 +40,10 @@ export function studioCanTag(health: unknown): boolean {
  */
 export async function readHealth(): Promise<unknown> {
   try {
-    const response = await fetch("/studio/api/health", { cache: "no-store" });
+    // A deadline, as every other runner read has (`CALL_TIMEOUT_MS`): a runner
+    // that took the connection and hung left this pending, holding one of the
+    // six connections a browser keeps per origin (R2-1-18).
+    const response = await fetch("/studio/api/health", { cache: "no-store", signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS) });
     if (!response.ok) return null;
     return (await response.json()) as unknown;
   } catch {

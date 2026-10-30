@@ -65,7 +65,8 @@ async function verb(name: string, diagram: string, path: string): Promise<never>
   const outcome: VerbOutcome = result.ok
     ? {
         ok: result.data.ok,
-        headline: result.data.note ?? `${name} finished`,
+        // The runner's own words or none: the banner's headline is the page's.
+        headline: result.data.note ?? "",
         detail: (result.data.detail ?? []).join(" · ") || null,
       }
     : { ok: false, headline: result.headline, detail: result.detail };
@@ -113,7 +114,7 @@ export async function commitDiagram(formData: FormData): Promise<void> {
   redirect(
     withOutcome(path, "commit", {
       ok: result.ok && result.data.ok,
-      headline: result.ok ? (result.data.note ?? "committed") : result.headline,
+      headline: result.ok ? (result.data.note ?? "") : result.headline,
       detail: result.ok ? null : result.detail,
     }),
   );
@@ -139,7 +140,7 @@ export async function restartMirror(formData: FormData): Promise<void> {
   redirect(
     withOutcome(path, "restart", {
       ok: result.ok,
-      headline: result.ok ? "The canvas was closed; a fresh one starts on this render." : result.headline,
+      headline: result.ok ? (result.data.note ?? "") : result.headline,
       detail: result.ok ? null : result.detail,
     }),
   );

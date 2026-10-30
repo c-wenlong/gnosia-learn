@@ -97,7 +97,12 @@ describe("conceptOrder", () => {
       { id: "a", requires: ["b"], assumes: [] },
       { id: "c", requires: [], assumes: ["a"] },
     ]);
-    expect(cyclic.size).toBe(3);
+    // The exact order, so one that moves between runs fails: the cycle's two, then `c`, which assumes one of them.
+    expect([...cyclic.entries()]).toEqual([
+      ["a", 0],
+      ["b", 1],
+      ["c", 2],
+    ]);
   });
 });
 

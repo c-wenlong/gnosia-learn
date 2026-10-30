@@ -38,7 +38,15 @@ import {
   parseVerdict,
 } from "../judge";
 import { buildCheckOptionsPrompt, canWriteOptionsFor, CHECK_OPTIONS_REQUEST, parseCheckOptions } from "../check-options";
-import { checkHash, generationKey, oncePerCheck, readWrittenOptions, storeOptions } from "./check-options";
+import {
+  checkHash,
+  generationKey,
+  oncePerCheck,
+  readWrittenOptions,
+  rememberedRefusal,
+  rememberRefusal,
+  storeOptions,
+} from "./check-options";
 import {
   buildSessionQuestionPrompt,
   parseSessionQuestion,
@@ -72,6 +80,7 @@ import {
   type CustomProvider,
 } from "./custom-providers";
 import type { Env, TutorDeps } from "./deps";
+import { echoesKey } from "./key-echo";
 import { cachedModelList } from "./model-list";
 import {
   failureCode,
@@ -772,6 +781,16 @@ export function validateCheckOptionsBody(body: unknown): TurnReply | null {
 }
 
 /**
+ * A failed generation's 502, remembered so the next visit within the window
+ * answers it without a model call (`rememberRefusal`). A missing key is not
+ * remembered: adding one should take effect on the next request.
+ */
+function refuseFor(key: string, refusal: TurnReply): TurnReply {
+  rememberRefusal(key, refusal);
+  return refusal;
+}
+
+/**
  * `POST /api/agent/check-options` with `{ conceptSlug, checkId }`: three
  * wrong options for one of the note's own checks, written by the tutor model
  * once and stored per learner (`check_distractor`), so the next session, week
@@ -823,7 +842,10 @@ export async function checkOptionsTurn(deps: TutorDeps, body: unknown): Promise<
     });
   }
 
-  return oncePerCheck(generationKey(deps.owner, conceptSlug, checkId, hash), async (): Promise<TurnReply> => {
+  const key = generationKey(deps.owner, conceptSlug, checkId, hash);
+  const remembered = rememberedRefusal<TurnReply>(key);
+  if (remembered !== undefined) return remembered;
+  return oncePerCheck(key, async (): Promise<TurnReply> => {
     const credentials = await credentialsOf(deps);
     const outcome = await completeWith(
       deps,
@@ -841,14 +863,17 @@ export async function checkOptionsTurn(deps: TutorDeps, body: unknown): Promise<
             attempts: outcome.attempts,
             providers: availableProviderSummary(credentials),
           })
-        : reply(502, { error: "All free providers failed", code: "ALL_PROVIDERS_FAILED", attempts: outcome.attempts });
+        : refuseFor(key, reply(502, { error: "All free providers failed", code: "ALL_PROVIDERS_FAILED", attempts: outcome.attempts }));
     }
     const parsed = parseCheckOptions(outcome.result.content, answer);
     if (!parsed.ok) {
-      return reply(502, {
-        error: `The tutor did not write usable wrong options. ${parsed.reason}`,
-        code: "UNSTRUCTURED_REPLY",
-      });
+      return refuseFor(
+        key,
+        reply(502, {
+          error: `The tutor did not write usable wrong options. ${parsed.reason}`,
+          code: "UNSTRUCTURED_REPLY",
+        }),
+      );
     }
     await storeOptions(deps.db, deps.owner, {
       conceptSlug,
@@ -1282,8 +1307,8 @@ function chainEntryOf(body: unknown): { entry: { provider: ProviderName; model: 
 /**
  * The key gate an add and a replace share (docs/TUTOR-MODELS.md): the
  * provider must hold a key — a saved key that cannot be read because the
- * database is down is not "no key" — and the model id must not be, hold, or
- * be a long part of any key the tutor could call with (T11). Answers the
+ * database is down is not "no key" — and the model id must not hold a whole
+ * key the tutor could call with (T11, `echoesKey`). Answers the
  * refusal, or `serverKey` for the write's own under-lock check.
  */
 async function chainKeyGate(
@@ -1306,20 +1331,6 @@ async function chainKeyGate(
     return { refused: writeRefuse("That is one of your API keys, not a model id. Keys go in a provider's API key field.") };
   }
   return { serverKey: keyFor(provider, {}, deps.env) !== null };
-}
-
-/** Whether `model` is, holds, or is a long part of any key the tutor could call with. */
-function echoesKey(model: string, saved: SavedKeys, env: Env): boolean {
-  // The server's keys come through `keyFor`; every saved key is checked as
-  // well, a custom provider's included, which `PROVIDER_IDS` does not name.
-  const keys = [
-    ...PROVIDER_IDS.flatMap((id) => {
-      const key = keyFor(id, saved, env);
-      return key === null ? [] : [key.apiKey];
-    }),
-    ...Object.values(saved).filter((key): key is string => typeof key === "string" && key !== ""),
-  ];
-  return keys.some((key) => model.includes(key) || (model.length >= 12 && key.includes(model)));
 }
 
 const CHAIN_STATUS: Record<TutorModelError["code"], number> = {

@@ -342,6 +342,7 @@ export function DraftPanel({
     waiting,
     path,
     video,
+    editing,
   };
   const entryActions: EntryActions = {
     save: verbs.saveEdit,

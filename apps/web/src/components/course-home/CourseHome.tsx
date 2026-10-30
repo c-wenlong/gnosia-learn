@@ -15,6 +15,7 @@ import { CourseRail } from "./CourseRail";
 import { CourseSidebar } from "./CourseSidebar";
 import { ModuleMain } from "./ModuleMain";
 import type { ModuleData, RelatedCourse } from "./types";
+import { ownValue } from "@gnosia/tutor/own-key";
 
 /**
  * A course page in the layout of Coursera's course home: the course sidebar
@@ -61,7 +62,7 @@ export function CourseHome({
   const status = useMemo(
     () =>
       pathStatus(
-        course.modules.map((m) => ({ id: m.id, topics: m.topics.map((t) => ({ id: t.id, mastery: mastery[t.id] })) })),
+        course.modules.map((m) => ({ id: m.id, topics: m.topics.map((t) => ({ id: t.id, mastery: ownValue(mastery, t.id) })) })),
         state.completed,
       ),
     [course, mastery, state.completed],
@@ -91,7 +92,7 @@ export function CourseHome({
   const activeModule = course.modules.find((m) => m.id === status.active?.moduleId);
   const activeTopic = activeModule?.topics.find((t) => t.id === status.active?.topicId);
   const activeHref =
-    activeModule && activeTopic ? continueHref(course.slug, activeModule.slug, activeTopic.id, mastery[activeTopic.id]) : null;
+    activeModule && activeTopic ? continueHref(course.slug, activeModule.slug, activeTopic.id, ownValue(mastery, activeTopic.id)) : null;
 
   // The course's assets, each topic counted once (two modules may share one).
   const assetTotal = [...new Map(course.modules.map((m) => [m.topic, modules[m.id]?.assets?.count ?? 0])).values()].reduce(

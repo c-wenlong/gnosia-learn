@@ -3,10 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { capFrom, type CapStatus } from "@/lib/studio-chat";
-import { BYOK_SETTINGS_CHANGED } from "@/lib/studio-byok";
+import { activeByokTiers, BYOK_SETTINGS_CHANGED, getByokSettings } from "@/lib/studio-byok";
 import { diagramAvailability, readStudioHealth, videoAvailability, type VideoAvailability } from "@/lib/studio-health";
 import { runnerSettings } from "@/lib/studio-agent-settings";
-import { useByokTiers } from "@/lib/use-byok-tiers";
 
 /**
  * How often focus may re-read health. `/api/health` runs `doctor`, which the
@@ -21,8 +20,8 @@ export type AgentMenu = ReturnType<typeof runnerSettings>;
 /**
  * What the conversation's presses and pickers need from `/api/health`: the
  * day's spend against the cap, whether Video and Draw can run at all, and the
- * model picker's list, with a BYOK conversation's tiers read fresh
- * (`useByokTiers`). The page's render-time copies seed it; it reads again on
+ * model picker's list, with a BYOK conversation's tiers read fresh from
+ * the settings route. The page's render-time copies seed it; it reads again on
  * opening, on a BYOK write, on focus (at most every `CAP_READ_MS`), and when
  * a spent cap frees.
  *
@@ -54,38 +53,50 @@ export function useStudioHealth({
   // The BYOK tier models, read fresh: health's copy can be older than a
   // Connect that just wrote them. Every health read is followed by a fresh
   // read (it bumps `tiersAsked`), as when one callback read both: health's
-  // copy stands from its answer until the fresh read answers, and stays when
-  // that read fails, so a failed settings read never leaves older tiers
-  // over newer ones.
+  // copy stands from its answer until the fresh read asked after it answers,
+  // and stays when that read fails, so a failed settings read never leaves
+  // older tiers over newer ones. Each answer carries the count it was asked
+  // at, so two reads that say the same thing (nothing configured, twice) are
+  // still two answers: comparing the answers themselves kept health's copy
+  // after the second, and it offered tiers that could not run (R2-1-02).
   const [tiersAsked, setTiersAsked] = useState(0);
-  // Not listening itself: the health read below answers a BYOK write and
-  // asks for the tiers after it, so a save is read once.
-  const fresh = useByokTiers(byok, tiersAsked, { listen: false });
-  const [healthLast, setHealthLast] = useState(false);
-  const [seenFresh, setSeenFresh] = useState(fresh);
-  if (fresh !== seenFresh) {
-    setSeenFresh(fresh);
-    setHealthLast(false);
-  }
+  const [fresh, setFresh] = useState<{ asked: number; tiers: ReturnType<typeof activeByokTiers> } | null>(null);
+  useEffect(() => {
+    if (!byok) return;
+    // Not listening for BYOK writes itself: the health read below answers
+    // one and asks for the tiers after it, so a save is read once.
+    let alive = true;
+    void getByokSettings().then((result) => {
+      // A read asked before the latest one is dropped, whichever lands last.
+      if (alive && result.ok) setFresh({ asked: tiersAsked, tiers: activeByokTiers(result.data) });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [byok, tiersAsked]);
 
   // The presses' disabled reasons are re-checked when the panel regains
   // focus: a job held elsewhere may have been accepted meanwhile, the day's
   // spend may have aged out, and the video doctor may have recovered.
   const capReadAt = useRef(0);
+  /** The newest health read asked, so an older one that lands later is dropped (R2-1-18). */
+  const healthAsked = useRef(0);
   // Stable, so no effect below reads health a second time when the record
   // lands: a callback over `view?.harness` changed identity as it did, and
-  // every effect read health again (S1-11). The tiers are `useByokTiers`'s.
+  // every effect read health again (S1-11). The tiers are read by the effect above.
   const readHealth = useCallback(async () => {
     capReadAt.current = Date.now();
+    const mine = (healthAsked.current += 1);
     const health = await readStudioHealth();
-    if (health === null) return;
+    // A read asked before the latest one would put older spend and an older
+    // menu over newer ones, whichever lands last.
+    if (health === null || mine !== healthAsked.current) return;
     const next = capFrom(health.dailyCap);
     if (next !== null) setCap(next);
     setVideo(videoAvailability(health.video));
     setDiagramAgent(diagramAvailability(health.diagramAgent));
     setAgentMenu(runnerSettings(health.agent));
     // Health's copy until the fresh read that follows it answers.
-    setHealthLast(true);
     setTiersAsked((count) => count + 1);
   }, []);
   // A BYOK write from the dialog or Settings re-reads health at once (D94),
@@ -124,7 +135,11 @@ export function useStudioHealth({
     setCap((held) => capFrom({ ...(detail as object), exceeded: true }) ?? held);
   }, []);
 
-  // Until the fresh read answers (or when it fails), health's copy stands.
-  const menu: AgentMenu = fresh === undefined || healthLast ? agentMenu : { ...agentMenu, byokModel: fresh?.model ?? null, byokTiers: fresh?.tiers ?? null };
+  // Until the fresh read asked after the last health read answers (or when
+  // it fails), health's copy stands.
+  const menu: AgentMenu =
+    !byok || fresh === null || fresh.asked !== tiersAsked
+      ? agentMenu
+      : { ...agentMenu, byokModel: fresh.tiers?.model ?? null, byokTiers: fresh.tiers?.tiers ?? null };
   return { cap, video, diagramAgent, agentMenu: menu, capRefused };
 }

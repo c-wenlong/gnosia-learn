@@ -20,7 +20,7 @@ vi.mock("@/lib/learner-store", () => ({ withLearnerStore: vi.fn() }));
 vi.mock("@/lib/owner", () => ({ currentOwner: mocks.currentOwner }));
 vi.mock("@/lib/concept-workspace", () => ({ readConceptWorkspace: mocks.readConceptWorkspace }));
 
-const { openConceptConversation } = await import("@/app/(app)/studio/actions");
+const { openConceptConversation } = await import("./actions");
 
 const NOTE = "---\ntitle: The TCP handshake\nsources: []\n---\n\n# The handshake\n\nSYN, SYN-ACK, ACK.\n";
 
