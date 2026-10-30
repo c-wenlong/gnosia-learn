@@ -171,6 +171,20 @@ export interface RecordInput {
  * elsewhere (another tab, `learn session close`) wrote nothing, so it is sent
  * once more under a fresh session. Throws with a message to show.
  */
+/**
+ * Whether a 400 from the observe route is the catalog refusing the session
+ * itself (closed, or its id taken), the one refusal a fresh session fixes.
+ * The two sentences `openTutorSession` in `services/catalog/src/state/observe.ts`
+ * writes, matched whole: a field's validation error such as `"sessionTitle"
+ * must be 1 to 200 characters.` also names a session, and a fresh session
+ * would only be refused the same way.
+ */
+export function sessionRefused(error: string | undefined): boolean {
+  return /^session "[^"]*" is [a-z]+; start a new one\.$|^session id "[^"]*" is already in use; start a new session\.$/.test(
+    error ?? "",
+  );
+}
+
 export async function recordAnswer(input: RecordInput): Promise<RecordedResult> {
   const session = () => {
     const held = readSession(input.scope);
@@ -226,7 +240,7 @@ export async function recordAnswer(input: RecordInput): Promise<RecordedResult> 
     let res = await send(session());
     let data = (await res.json().catch(() => null)) as ObserveReply | null;
     answered = true;
-    if (res.status === 400 && /session/i.test(data?.error ?? "") && (closedTimes.get(input.scope) ?? 0) === closedAtStart) {
+    if (res.status === 400 && sessionRefused(data?.error) && (closedTimes.get(input.scope) ?? 0) === closedAtStart) {
       writeSession(input.scope, null);
       answered = false;
       res = await send(session());

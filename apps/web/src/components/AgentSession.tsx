@@ -4,6 +4,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { providerLabel } from "@gnosia/schema/shared";
 import { MathText } from "@/components/Math";
+import { NoteProse } from "@/components/NoteProse";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { Card } from "@/components/ui/Card";
@@ -23,10 +24,7 @@ import type {
   TopicKnowledge,
 } from "@/lib/types";
 import { useLearner } from "@/lib/learner-context";
-import {
-  buildAgentSessionContext,
-  DEFAULT_AGENT_MODEL,
-} from "@/lib/agent/prompt";
+import { buildAgentSessionContext } from "@/lib/agent/prompt";
 import { RecapCard, RecapEditor } from "@/components/TopicRecap";
 import { ChoiceCheckCard } from "@/components/workspace/ChoiceCheckCard";
 import { RecallCheckCard } from "@/components/workspace/RecallCheckCard";
@@ -38,7 +36,6 @@ import {
   recordAnswer,
 } from "@/lib/chat-recall";
 import {
-  checkBlockText,
   choiceAnswerText,
   choiceOrder,
   gradeChoice,
@@ -59,6 +56,7 @@ import {
   type Verdict,
 } from "@/lib/tutor-check";
 import { scrollBehavior } from "@/lib/motion";
+import { recapTurns, topicRequestTurns } from "@/lib/tutor-thread";
 
 type Role = "user" | "assistant";
 
@@ -139,8 +137,11 @@ export function AgentSession({
   const [recapDraft, setRecapDraft] = useState<Partial<KnowledgeInput> | null>(
     null,
   );
-  const [justSaved, setJustSaved] = useState(false);
+  const [justSaved, setJustSaved] = useState<"whole" | "partial" | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  /** The tutor turn in flight, aborted if the page goes away so a late reply never lands. */
+  const inflight = useRef<AbortController | null>(null);
+  useEffect(() => () => inflight.current?.abort(), []);
 
   const hasDialogue = messages.some((m) => m.role === "assistant");
 
@@ -155,6 +156,8 @@ export function AgentSession({
   }
 
   async function callAgent(history: UiMessage[]) {
+    const controller = new AbortController();
+    inflight.current = controller;
     setBusy(true);
     setError("");
     try {
@@ -168,17 +171,14 @@ export function AgentSession({
           learnerNote: learnerNote || undefined,
           priorKnowledge,
           // A turn that asked a card check goes back with its block, so the
-          // tutor can grade a recall answer against what it committed to.
-          messages: history.map((m) => ({
-            role: m.role,
-            content:
-              m.role === "assistant" && isCardCheck(m.check)
-                ? `${m.content}\n\n${checkBlockText(m.check)}`
-                : m.content,
-          })),
+          // tutor can grade a recall answer against what it committed to; a
+          // long session sends its newest turns that fit the route's bounds.
+          messages: topicRequestTurns(history, learnerNote),
         }),
+        signal: controller.signal,
       });
-      const data = (await res.json()) as {
+      // A proxy's HTML error page or an empty 500 is no JSON: the status says what happened.
+      const data = (await res.json().catch(() => ({}))) as {
         message?: { content?: string };
         check?: TurnCheck | null;
         error?: string;
@@ -199,7 +199,7 @@ export function AgentSession({
                 .join(" | ")}`
             : "";
         throw new Error(
-          data.error +
+          (data.error ?? `The tutor did not answer (HTTP ${res.status}).`) +
             (data.detail ? `: ${data.detail}` : "") +
             attemptHint +
             (data.code === "MISSING_API_KEY"
@@ -208,6 +208,7 @@ export function AgentSession({
         );
       }
       const content = data.message?.content?.trim();
+      if (controller.signal.aborted) return;
       if (!content) throw new Error("Empty assistant reply");
       if (data.model) {
         setActiveModel(
@@ -236,9 +237,11 @@ export function AgentSession({
         },
       ]);
     } catch (e) {
+      if (controller.signal.aborted) return;
       setError(e instanceof Error ? e.message : "Request failed");
     } finally {
-      setBusy(false);
+      if (inflight.current === controller) inflight.current = null;
+      if (!controller.signal.aborted) setBusy(false);
     }
   }
 
@@ -246,6 +249,8 @@ export function AgentSession({
     if (summarizing || !hasDialogue) return;
     setSummarizing(true);
     setRecapError("");
+    // A long session is summarised from its newest turns that fit the route's bounds.
+    const transcript = recapTurns(messages);
     try {
       const res = await fetch("/api/agent/summarize", {
         method: "POST",
@@ -254,13 +259,10 @@ export function AgentSession({
           courseSlug: course.slug,
           moduleSlug: module.slug,
           topicId: topic.id,
-          messages: messages.map((m) => ({
-            role: m.role,
-            content: m.content,
-          })),
+          messages: transcript.turns,
         }),
       });
-      const data = (await res.json()) as {
+      const data = (await res.json().catch(() => ({}))) as {
         knowledge?: KnowledgeInput;
         error?: string;
         code?: string;
@@ -282,7 +284,7 @@ export function AgentSession({
       }
 
       saveKnowledge(topic.id, data.knowledge);
-      setJustSaved(true);
+      setJustSaved(transcript.partial ? "partial" : "whole");
       setRecapDraft(null);
     } catch (e) {
       setRecapError(
@@ -597,9 +599,7 @@ export function AgentSession({
       </nav>
 
       <header className="flex flex-col gap-3">
-        <p className="text-[13px] font-medium text-accent-text">
-          Micro-learning · {DEFAULT_AGENT_MODEL}
-        </p>
+        <p className="text-[13px] font-medium text-accent-text">Micro-learning</p>
         <h1 className={PAGE_TITLE}>{topic.title}</h1>
         <p className="text-[14px] text-text2">
           {course.code} · M{module.order} {module.title}
@@ -675,12 +675,12 @@ export function AgentSession({
         <p className={cx(NOTE, "border-b border-hair px-4 py-2")}>
           Browser session · {activeModel}
         </p>
-        <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
+        <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-4 py-4" aria-live="polite" aria-busy={busy}>
           {!started && messages.length === 0 && (
             <p className="text-[14px] text-text2">
               Press <strong className="font-semibold text-text">Start Socratic dialogue</strong> to launch the agent
-              with the full topic system prompt. Production uses free providers:
-              NVIDIA NIM → Gemini Flash → OpenRouter free.
+              with the full topic system prompt. It answers with the models you
+              chose in Settings.
             </p>
           )}
           {messages.map((m, i) => {
@@ -700,9 +700,8 @@ export function AgentSession({
               m.role === "assistant" ? (
                 <TutorMessage key={m.id} className="animate-enter motion-reduce:animate-none">
                   {m.meta && <p className={cx(NOTE, "mb-1")}>{m.meta}</p>}
-                  <div className="whitespace-pre-wrap">
-                    <MathText text={m.content} />
-                  </div>
+                  {/* The tutor writes markdown, as the concept tutor's does; an image in it is a link. */}
+                  <NoteProse source={m.content} idPrefix={`t${i}-`} images="link" />
                 </TutorMessage>
               ) : (
                 <UserMessage key={m.id} className="animate-enter motion-reduce:animate-none">
@@ -716,6 +715,8 @@ export function AgentSession({
                   verdict={answered.verdict}
                   live={messages.indexOf(answered) === lastVerdict}
                   onRecord={(correct) => void record(answered.id, correct)}
+                  // The concept the prose check named, as a card check's row names it.
+                  concept={answered.concept ? titled(answered.concept) : undefined}
                 />
               ) : null,
             ];
@@ -809,7 +810,7 @@ export function AgentSession({
               saveKnowledge(topic.id, input);
               setRecapDraft(null);
               setRecapError("");
-              setJustSaved(true);
+              setJustSaved("whole");
             }}
             onCancel={() => setRecapDraft(null)}
           />
@@ -818,7 +819,13 @@ export function AgentSession({
         {storedKnowledge && !recapDraft && (
           <div className="flex flex-col gap-2 animate-fade-in motion-reduce:animate-none">
             <LiveStatus
-              text={justSaved ? "Saved. This now appears on the module page." : null}
+              text={
+                justSaved === null
+                  ? null
+                  : justSaved === "partial"
+                    ? "Saved. The session was long, so the recap covers its later part. This now appears on the module page."
+                    : "Saved. This now appears on the module page."
+              }
               tone="ok"
             />
             <RecapCard

@@ -316,3 +316,45 @@ describe("SessionFocus confidence (docs/proposals/structured-checks.md, phase 3)
     expect(observed()[0]).toMatchObject({ module: "networks-m1", source: "probe", chosen: "SYN", confidence: 100 });
   });
 });
+
+describe("a question the tutor writes", () => {
+  it("is abandoned when the page goes away, so nothing waits on a reply nobody will read", async () => {
+    const signals: AbortSignal[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_url: string, init?: RequestInit) => {
+        if (init?.signal) signals.push(init.signal);
+        return new Promise<Response>(() => undefined);
+      }),
+    );
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    await act(async () => {
+      root.render(
+        createElement(SessionFocus, {
+          slug: "tcp",
+          title: "The TCP handshake",
+          mode: "check",
+          plan: [
+            { kind: "probe", question: null, fallback: null },
+            { kind: "close", question: null, fallback: null },
+          ],
+          modelAvailable: true,
+          nothingToAsk: false,
+          teach: createElement("p", null, "Three packets."),
+          asset: null,
+          assetCompact: null,
+          next: null,
+        }),
+      );
+    });
+    const asked = vi.mocked(fetch).mock.calls.filter(([url]) => url === "/api/agent/session");
+    expect(asked).toHaveLength(1);
+    expect(signals.some((s) => s.aborted)).toBe(false);
+    act(() => root.unmount());
+    host.remove();
+    expect(signals.length).toBeGreaterThan(0);
+    expect(signals.every((s) => s.aborted)).toBe(true);
+  });
+});

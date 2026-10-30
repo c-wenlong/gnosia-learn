@@ -64,9 +64,14 @@ export function TabList<T extends string>({
   const vertical = useMediaQuery(WIDE, false) && responsive;
   const buttons = useRef<(HTMLButtonElement | null)[]>([]);
 
+  // The tab in the tab order: the chosen one, or the first while `value` is
+  // none of them (a stale `?tab=`, a panel taken away), so the row is never
+  // out of reach.
+  const index = items.findIndex((item) => item.id === value);
+  const stop = index < 0 ? 0 : index;
+
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    const index = items.findIndex((item) => item.id === value);
-    const next = tabKeyIndex(event.key, index, items.length, responsive ? "both" : "horizontal", true);
+    const next = tabKeyIndex(event.key, stop, items.length, responsive ? "both" : "horizontal", true);
     if (next < 0) return;
     event.preventDefault();
     onChange(items[next].id);
@@ -103,7 +108,7 @@ export function TabList<T extends string>({
             id={ids.tab}
             aria-selected={active}
             aria-controls={ids.panel}
-            tabIndex={active ? 0 : -1}
+            tabIndex={i === stop ? 0 : -1}
             onClick={() => onChange(item.id)}
             className={cx(
               "relative flex shrink-0 items-center gap-2 border-b-2 px-3 py-3 text-[14px] font-medium whitespace-nowrap",

@@ -40,8 +40,8 @@ export function ProgressBar({
   /** 8px (`md`) or 6px (`sm`). */
   size?: "sm" | "md";
   tone?: ProgressTone;
-  /** Accessible name, e.g. "CP4281 progress". */
-  label?: string;
+  /** Accessible name, e.g. "CP4281 progress". A progress bar must have one. */
+  label: string;
   className?: string;
 }) {
   const raw = percent ?? progress?.percent ?? 0;

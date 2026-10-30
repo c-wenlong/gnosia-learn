@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { chatRequestId, closeChatSession, judgeAnswer, recordAnswer, type RecordInput } from "./chat-recall";
+import { chatRequestId, closeChatSession, judgeAnswer, recordAnswer, sessionRefused, type RecordInput } from "./chat-recall";
 
 /**
  * The browser half both tutors share (recall in the chat). `fetch` is a
@@ -99,6 +99,31 @@ describe("chat recall", () => {
     await expect(recordAnswer(input())).rejects.toThrow("Too many answers in a minute.");
     fetchMock.mockResolvedValueOnce(json(400, { ok: false, error: "Unknown concept." }));
     await expect(recordAnswer(input())).rejects.toThrow("Unknown concept.");
+  });
+
+  it("sends once under a fresh session when the id is taken, and never on a field's validation error", async () => {
+    fetchMock
+      .mockResolvedValueOnce(json(400, { ok: false, error: 'session id "x" is already in use; start a new session.' }))
+      .mockResolvedValueOnce(json(200, { ok: true, result: RESULT }));
+    await recordAnswer(input());
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    // Names a session, and is no refusal a fresh one would fix.
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValue(json(400, { ok: false, error: '"sessionTitle" must be 1 to 200 characters.' }));
+    await expect(recordAnswer(input({ sessionTitle: "t" }))).rejects.toThrow('"sessionTitle" must be 1 to 200 characters.');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("sessionRefused", () => {
+  it("is the catalog's two session refusals, whole, and nothing else that names a session", () => {
+    expect(sessionRefused('session "chat-1" is closed; start a new one.')).toBe(true);
+    expect(sessionRefused('session "chat-1" is abandoned; start a new one.')).toBe(true);
+    expect(sessionRefused('session id "chat-1" is already in use; start a new session.')).toBe(true);
+    expect(sessionRefused('"sessionGoal" must be a short id of letters, digits, "-" and "_".')).toBe(false);
+    expect(sessionRefused('"sessionId" must be a short token of letters, digits, "-" and "_".')).toBe(false);
+    expect(sessionRefused(undefined)).toBe(false);
   });
 });
 

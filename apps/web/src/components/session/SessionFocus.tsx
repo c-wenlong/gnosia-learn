@@ -244,6 +244,24 @@ export function SessionFocus({
     [steps, modelAvailable, resolved],
   );
 
+  /**
+   * Question requests in flight, by the step that asked, aborted if the page
+   * goes away: nobody is left to read the answer. The step is forgotten too,
+   * so a remount (React's development double mount among them) asks again.
+   */
+  const asking = useRef(new Map<AbortController, number>());
+  useEffect(() => {
+    const held = asking.current;
+    const asked = requested.current;
+    return () => {
+      for (const [controller, at] of held) {
+        controller.abort();
+        asked.delete(at);
+      }
+      held.clear();
+    };
+  }, []);
+
   // A question step with nothing from the note asks the tutor, once.
   useEffect(() => {
     const s = steps[index];
@@ -259,20 +277,26 @@ export function SessionFocus({
       .flatMap((q) => (q.status === "ready" ? [q.question.prompt] : []))
       .slice(-4);
     const at = index;
+    const controller = new AbortController();
+    asking.current.set(controller, at);
     fetch("/api/agent/session", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ conceptSlug: concept, step: s.kind, avoid: asked }),
+      signal: controller.signal,
     })
       .then(async (res) => {
         const body = (await res.json().catch(() => ({}))) as { question?: SessionQuestion; code?: string; error?: string };
+        if (controller.signal.aborted) return;
         const question = res.ok && body.question !== undefined ? body.question : null;
         const note = question === null ? modelProblem(body.code, body.error, res.status) : null;
         setResolved((prev) => ({ ...prev, [at]: { question, note } }));
       })
       .catch(() => {
+        if (controller.signal.aborted) return;
         setResolved((prev) => ({ ...prev, [at]: { question: null, note: "The tutor could not be reached." } }));
-      });
+      })
+      .finally(() => asking.current.delete(controller));
   }, [index, steps, modelAvailable, graded, questionFor, conceptOf]);
 
   // A failed request is forgotten, and the effect above asks again.

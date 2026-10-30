@@ -126,7 +126,7 @@ export function AskPanel({
               </UserMessage>
             ) : (
               <TutorMessage key={i} className="animate-enter motion-reduce:animate-none">
-                <NoteProse source={turn.content} idPrefix={`ask${i}-`} />
+                <NoteProse source={turn.content} idPrefix={`ask${i}-`} images="link" />
               </TutorMessage>
             ),
           )}
