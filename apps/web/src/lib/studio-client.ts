@@ -83,15 +83,28 @@ export async function call<T>(path: string, init: RequestInit = {}): Promise<Api
       headers: init.body === undefined ? init.headers : { "content-type": "application/json", ...init.headers },
     });
   } catch (error) {
-    return {
-      ok: false,
-      status: 0,
-      refusal: { error: RUNNER_DOWN, detail: (error as Error).message },
-    };
+    return { ok: false, status: 0, refusal: { error: RUNNER_DOWN, detail: (error as Error).message } };
   }
-  const body: unknown = await response.json().catch(() => null);
+  // The deadline covers the body too: a body cut off mid-read is a runner
+  // that stopped answering, never a success with nothing in it.
+  let text: string;
+  try {
+    text = await response.text();
+  } catch (error) {
+    return { ok: false, status: 0, refusal: { error: RUNNER_DOWN, detail: (error as Error).message } };
+  }
+  const body = parsed(text);
   if (!response.ok) return { ok: false, status: response.status, refusal: asRefusal(response.status, body) };
   return { ok: true, status: response.status, data: body as T };
+}
+
+/** A body as JSON, or null when it is not JSON. */
+function parsed(text: string): unknown {
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return null;
+  }
 }
 
 /* -------------------------------------------------------------------------- */

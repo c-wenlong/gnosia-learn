@@ -16,6 +16,8 @@ import {
   openDraftEvents,
   readStudioHealth,
   reconnectDelay,
+  RUNNER_DOWN,
+  runnerDown,
   refusalNumber,
   refusalReason,
   refusalString,
@@ -142,6 +144,14 @@ describe("the calls", () => {
     expect(await readStudioHealth()).toBeNull();
     vi.stubGlobal("fetch", vi.fn(async () => new Response("not json", { status: 200 })));
     expect(await readStudioHealth()).toBeNull();
+  });
+
+  it("reads a body cut off by the deadline as a runner that stopped answering, not a success", async () => {
+    const cut = { ok: true, status: 201, text: () => Promise.reject(new DOMException("The operation timed out.", "TimeoutError")) };
+    vi.stubGlobal("fetch", vi.fn(async () => cut));
+    const result = await createDraft({ idempotencyKey: "k" });
+    expect(result).toEqual({ ok: false, status: 0, refusal: { error: RUNNER_DOWN, detail: "The operation timed out." } });
+    expect(result.ok === false && runnerDown(result.status, result.refusal)).toBe(true);
   });
 
   it("gives every call a deadline, so a runner that hangs does not leave a press spinning", async () => {
