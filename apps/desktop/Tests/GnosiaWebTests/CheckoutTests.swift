@@ -30,4 +30,33 @@ final class CheckoutTests: XCTestCase {
             XCTAssertEqual(Array(read[key]?.utf8 ?? "".utf8), Array(value.utf8), key)
         }
     }
+
+    /// S9-08: the resolver's answer is one JSON object of strings, possibly
+    /// after whatever a login shell printed first.
+    func testTheResolversAnswerReads() throws {
+        let out = Data("profile says hi\n{\"CATALOG_DB\":\"/x/catalog.db\",\"AUTH_SECRET\":\"s\"}\n".utf8)
+        XCTAssertEqual(Checkout.parseResolved(out), ["CATALOG_DB": "/x/catalog.db", "AUTH_SECRET": "s"])
+        XCTAssertNil(Checkout.parseResolved(Data("{\"PORT\":7250}".utf8)))
+        XCTAssertNil(Checkout.parseResolved(Data("child-env: failed\n".utf8)))
+    }
+
+    /// S9-15: the web's own `studioEnabled` rule.
+    func testTheStudioStartsOnlyWhenTheWebServesIt() {
+        XCTAssertFalse(Checkout.studioEnabled([:]))
+        for off in ["", " ", "0", "false", "OFF", "no", "false\n", " off\r\n"] {
+            XCTAssertFalse(Checkout.studioEnabled(["STUDIO_ENABLED": off]), off)
+        }
+        for on in ["1", "true", "yes", "anything"] {
+            XCTAssertTrue(Checkout.studioEnabled(["STUDIO_ENABLED": on]), on)
+        }
+    }
+
+    /// S9-10: an attachment, or a type the view cannot show, is saved.
+    func testAttachmentsAreSavedNotShown() {
+        XCTAssertTrue(shouldDownload(disposition: "attachment; filename=\"gnosia-export.json\"", canShowMIMEType: true))
+        XCTAssertTrue(shouldDownload(disposition: "Attachment", canShowMIMEType: true))
+        XCTAssertFalse(shouldDownload(disposition: "inline; filename=\"a.mp4\"", canShowMIMEType: true))
+        XCTAssertFalse(shouldDownload(disposition: nil, canShowMIMEType: true))
+        XCTAssertTrue(shouldDownload(disposition: nil, canShowMIMEType: false))
+    }
 }

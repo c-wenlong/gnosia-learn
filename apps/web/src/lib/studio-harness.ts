@@ -1,3 +1,5 @@
+import { safely } from "@/lib/storage-safe";
+
 /**
  * The pane picker's last pick, kept in `localStorage`: a draft is made before
  * its pane exists, and `POST /api/drafts`'s `harness` is read from here so the
@@ -10,15 +12,6 @@ const KEY = "studio:harness";
 export type HarnessValue = "claude" | "codex" | "byok";
 
 const KNOWN: readonly string[] = ["claude", "codex", "byok"];
-
-/** A read or write that throws (a private window, blocked site data) is a convenience lost, never an error. */
-function safely<T>(run: () => T, fallback: T): T {
-  try {
-    return run();
-  } catch {
-    return fallback;
-  }
-}
 
 /** The pick as last made this page load, for when storage cannot be read either. */
 let held: HarnessValue | null = null;

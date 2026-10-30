@@ -69,6 +69,17 @@ export function readEnvFile(file: string): Record<string, string> {
   }
 }
 
+/**
+ * How the desktop shell runs the web: `GNOSIA_WEB_MODE`, `dev` unless it
+ * says `start` (WebServer.mode in apps/desktop). Next reads
+ * `.env.production*` under `next start` and `.env.development*` under
+ * `next dev`, and a value this environment hands the server wins over its
+ * files, so the files read here must be the ones that mode reads.
+ */
+export function webMode(env: Record<string, string | undefined>): "dev" | "start" {
+  return env.GNOSIA_WEB_MODE?.trim() === "start" ? "start" : "dev";
+}
+
 interface NextEnv {
   loadEnvConfig?: (dir: string, dev: boolean, log: { info(): void; error(): void }, forceReload: boolean) => unknown;
 }
@@ -85,7 +96,10 @@ function repoRoot(): string {
  * A loader that cannot run (no `@next/env` in a stripped checkout) costs the
  * app's files, not the start: the data home's values are already in.
  */
-export async function loadSidecarEnv({ appDir = join(repoRoot(), "apps", "web") }: { appDir?: string } = {}): Promise<void> {
+export async function loadSidecarEnv({
+  appDir = join(repoRoot(), "apps", "web"),
+  dev = webMode(process.env) !== "start",
+}: { appDir?: string; dev?: boolean } = {}): Promise<void> {
   for (const [key, value] of Object.entries(readEnvFile(dataHomeEnvFile(process.env)))) {
     if (process.env[key] === undefined) process.env[key] = value;
   }
@@ -96,7 +110,7 @@ export async function loadSidecarEnv({ appDir = join(repoRoot(), "apps", "web") 
     const mod = (await import("@next/env")) as NextEnv & { default?: NextEnv };
     const load = mod.loadEnvConfig ?? mod.default?.loadEnvConfig;
     if (load === undefined) throw new Error("@next/env has no loadEnvConfig");
-    load(appDir, true, { info() {}, error() {} }, true);
+    load(appDir, dev, { info() {}, error() {} }, true);
   } catch (error) {
     process.stderr.write(
       `sidecar: could not read ${appDir}'s .env files: ${error instanceof Error ? error.message : String(error)}\n`,
@@ -106,4 +120,47 @@ export async function loadSidecarEnv({ appDir = join(repoRoot(), "apps", "web") 
     const value = process.env[key];
     if (value !== undefined) process.env[key] = catalogPathFrom(appDir, value);
   }
+}
+
+/**
+ * Pin `CATALOG_DB` at the file the catalog's own resolver names
+ * (`databasePath()`: `CATALOG_DB`, then `services/catalog/.env`, then
+ * `DATABASE_URL`, then the data home), so every process this environment
+ * reaches opens that one file whatever its working directory or its own
+ * reading of the dotenv files. A value the resolver refuses (a Postgres URL)
+ * is left for the catalog to refuse with its own message.
+ *
+ * Read after `loadSidecarEnv`, which is what makes a value in the data
+ * home's `.env` or the web app's `.env.local` count.
+ */
+export async function pinCatalogFile(): Promise<string | null> {
+  const { databasePath } = await import("@gnosia/catalog/state");
+  let file: string | null = null;
+  try {
+    file = databasePath();
+  } catch {
+    file = null;
+  }
+  // The catalog's own dotenv read has filled process.env by now, and it
+  // stays: the catalog reads that file once per process, so a later
+  // `blobRoot()` here needs its `GNOSIA_HOME` still in place.
+  if (file !== null) process.env.CATALOG_DB = file;
+  return file;
+}
+
+/**
+ * The environment a launcher hands every service it spawns (S9-08): the
+ * web's (`loadSidecarEnv`) with the catalog's file pinned (`pinCatalogFile`).
+ * The desktop shell and the macOS app both take it from `child-env.ts`
+ * rather than each re-deriving it, so the web, the studio runner, the
+ * sidecar and the snapshot script cannot open two different databases or
+ * run under two different spend caps.
+ */
+export async function childEnvironment(options: { appDir?: string; dev?: boolean } = {}): Promise<Record<string, string>> {
+  await loadSidecarEnv(options);
+  const web = Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined);
+  const file = await pinCatalogFile();
+  // Only the pin comes out of services/catalog/.env: every catalog process
+  // reads the rest of that file itself.
+  return { ...Object.fromEntries(web), ...(file === null ? {} : { CATALOG_DB: file }) };
 }

@@ -3,15 +3,14 @@
 import { useEffect, useState } from "react";
 
 import { useStudioPath } from "@/components/studio/panel-host";
+import { CancelJobButton, Elapsed, JobDot } from "@/components/studio/job-bits";
 import { PanelLink } from "@/components/studio/PanelLink";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
 import { Button } from "@/components/ui/Button";
-import { cx } from "@/components/ui/classes";
 import { Collapse } from "@/components/ui/Collapse";
 import {
   failureReport,
   finishedHeadline,
-  formatDuration,
   isActive,
   phaseWords,
   stepLabel,
@@ -20,7 +19,6 @@ import {
 import { jobStateLabel } from "@/lib/studio-job-state";
 import { asVideoJob, videoFailureLine, videoPhaseWords, videoStepCount, readyHeadline } from "@/lib/studio-video";
 import { panelHref } from "@/lib/studio-view";
-import { useElapsed } from "@/lib/use-elapsed";
 
 /**
  * The 32px job strip, under the studio strip and above the content.
@@ -48,8 +46,7 @@ import { useElapsed } from "@/lib/use-elapsed";
 export function JobStrip({ path: drawnFor, stream = true }: { path: string; stream?: boolean }) {
   // The address bar's view on `/studio`, which can move on from the server's.
   const path = useStudioPath(drawnFor);
-  const { active, lastWatched, jobs, dismissed, dismiss, connection, post, setStreamEnabled } =
-    useStudioJobs();
+  const { active, lastWatched, jobs, dismissed, dismiss, connection, setStreamEnabled } = useStudioJobs();
 
   // `?stream=off` is read by the page and lands here, because a layout — where
   // the provider is mounted, so that it survives navigation — is not given the
@@ -70,7 +67,7 @@ export function JobStrip({ path: drawnFor, stream = true }: { path: string; stre
 
   return (
     <Collapse open={current !== null}>
-      {job !== null && <Strip job={job} path={path} connection={connection} post={post} dismiss={dismiss} />}
+      {job !== null && <Strip job={job} path={path} connection={connection} dismiss={dismiss} />}
     </Collapse>
   );
 }
@@ -79,18 +76,16 @@ function Strip({
   job,
   path,
   connection,
-  post,
   dismiss,
 }: {
   job: Job;
   path: string;
   connection: ReturnType<typeof useStudioJobs>["connection"];
-  post: ReturnType<typeof useStudioJobs>["post"];
   dismiss: ReturnType<typeof useStudioJobs>["dismiss"];
 }) {
   return (
     <div className="flex h-8 shrink-0 items-center gap-3 border-b border-border bg-surface px-3 text-xs">
-      <Dot job={job} />
+      <JobDot job={job} />
       <PanelLink
         href={panelHref(path, { job: job.jobId })}
         scroll={false}
@@ -108,16 +103,7 @@ function Strip({
               polling
             </span>
           )}
-          {job.state !== "awaiting_review" && (
-            <Button
-              variant="secondary"
-              size="xs"
-              onClick={() => void post(`/studio/api/jobs/${encodeURIComponent(job.jobId)}/cancel`)}
-              disabled={job.cancelRequestedAt !== null}
-            >
-              {job.cancelRequestedAt === null ? "Cancel" : "Stopping"}
-            </Button>
-          )}
+          {job.state !== "awaiting_review" && <CancelJobButton key={job.jobId} job={job} path={path} />}
         </>
       ) : (
         <>
@@ -179,65 +165,5 @@ function VideoWords({ job }: { job: NonNullable<ReturnType<typeof asVideoJob>> }
         </span>
       )}
     </>
-  );
-}
-
-function Dot({ job }: { job: Job }) {
-  const tone =
-    job.state === "failed" || job.state === "interrupted"
-      ? "bg-danger"
-      : job.state === "awaiting_review" || job.state === "accepted"
-        ? "bg-ok"
-        : job.state === "cancelled" || job.state === "discarded"
-          ? "bg-text2"
-          : "bg-accent";
-  const pulse = job.state === "running" ? "animate-pulse motion-reduce:animate-none" : "";
-  return <span aria-hidden className={cx("h-2 w-2 shrink-0 rounded-full transition-colors duration-200 motion-reduce:transition-none", tone, pulse)} />;
-}
-
-/**
- * Elapsed, counting up, from the record's own timestamps.
- *
- * The clock ticks in the browser and the start comes from the runner, so a tab
- * left open overnight is right when it comes back rather than however many
- * seconds it managed to stay awake for.
- */
-export function Elapsed({ job }: { job: Job }) {
-  const ms = useElapsed(job);
-  return (
-    <span className="shrink-0 text-text2">
-      <Duration ms={ms} live={job.finished === null} />
-    </span>
-  );
-}
-
-/**
- * A duration as text, or the room for one.
- *
- * A running job has no figure on the server or in the browser's first pass
- * (`useElapsed`), so `ms` is `null` there and the text is held back. `live`
- * keeps five characters of width under it, tabular so each second is as wide as
- * the last, which fits `12:30`; whatever sits beside the figure does not move
- * when it arrives. A finished job's figure is there from the first render and
- * takes only the room it needs.
- */
-export function Duration({ ms, live }: { ms: number | null; live: boolean }) {
-  return (
-    <span className={cx("inline-block tabular-nums", live ? "min-w-[5ch]" : "")}>
-      {/* A no-break space, so the empty box keeps a line's height and baseline. */}
-      {ms === null ? "\u00a0" : formatDuration(ms)}
-    </span>
-  );
-}
-
-/** No number on it, ever. It says "something is happening" and nothing more. */
-export function IndeterminateBar() {
-  return (
-    <span
-      aria-hidden
-      className="h-1 w-24 shrink-0 overflow-hidden rounded-full bg-surface2"
-    >
-      <span className="block h-full w-1/3 animate-[studio-slide_1.6s_ease-in-out_infinite] rounded-full bg-accent" />
-    </span>
   );
 }

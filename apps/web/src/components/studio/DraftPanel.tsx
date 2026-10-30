@@ -1,25 +1,30 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 
-import { PanelLink } from "@/components/studio/PanelLink";
-import { usePanelHost } from "@/components/studio/panel-host";
-import { NoteProse } from "@/components/NoteProse";
-import { ConfirmCard, type SaveOutcome } from "@/components/studio/ConfirmCard";
-import { ConfirmCardVideo } from "@/components/studio/ConfirmCardVideo";
-import { JobPanel } from "@/components/studio/JobPanel";
-import { MadeCard, MadeList, useConversationMade } from "@/components/studio/MadeCard";
-import { askToNotify, useStudioJobs } from "@/components/studio/JobsProvider";
-import { PinnedConcept, PinnedDiagram, PinnedVideo } from "@/components/studio/PinnedDiagram";
-import { PANE_GUTTER, usePaneLayout } from "@/components/studio/pane-context";
-import { Sentence } from "@/components/studio/Sentence";
-import { useStartDraft } from "@/components/studio/useStartDraft";
-import { focusIsStill } from "@/components/studio/dialog-focus";
+import { DraftJobView } from "@/components/studio/draft/DraftJobView";
+import { DraftStatus } from "@/components/studio/draft/DraftStatus";
+import { Entry, MadeArrival, type EntryActions, type EntryThread } from "@/components/studio/draft/Entry";
+import { Failure, Problem, Streaming } from "@/components/studio/draft/ThreadFoot";
+import { problemKindOf, topSeq, type Value } from "@/components/studio/draft/thread";
+import { useDraftRecord } from "@/components/studio/draft/use-draft-record";
+import { useDraftVerbs } from "@/components/studio/draft/use-draft-verbs";
+import { useFocusWhenReady } from "@/components/studio/draft/use-focus-when-ready";
+import { useOpener } from "@/components/studio/draft/use-opener";
+import { useOptimisticPick } from "@/components/studio/draft/use-optimistic-pick";
+import { useStudioHealth } from "@/components/studio/draft/use-studio-health";
+import { HarnessPicker } from "@/components/studio/HarnessPicker";
+import { JobCost } from "@/components/studio/JobCost";
+import { useStudioJobs } from "@/components/studio/JobsProvider";
+import { MadeList, useConversationMade } from "@/components/studio/MadeCard";
 import { ENTER, FADE_IN } from "@/components/studio/motion";
 import { Arrive } from "@/components/studio/motion-parts";
+import { PANE_GUTTER, usePaneLayout } from "@/components/studio/pane-context";
+import { PinnedConcept, PinnedDiagram, PinnedVideo } from "@/components/studio/PinnedDiagram";
+import { Sentence } from "@/components/studio/Sentence";
 import { DialogHeader } from "@/components/studio/StudioDialog";
 import { MentionComposer } from "@/components/studio/StudioComposer";
+import { useStartDraft } from "@/components/studio/useStartDraft";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { Chip } from "@/components/ui/Chip";
@@ -28,126 +33,48 @@ import { FilterMenu } from "@/components/ui/FilterMenu";
 import { Glyph } from "@/components/ui/Glyph";
 import { InlineConfirm } from "@/components/ui/InlineConfirm";
 import type { MentionComposerHandle } from "@/components/ui/MentionComposer";
-import { useFollowFoot } from "@/components/ui/use-follow-foot";
-import {
-  EMPTY_MENTION_VALUE,
-  isEmptyValue,
-  prependValue,
-  trimValue,
-  valueOf,
-  type MentionValue,
-} from "@/lib/mentions";
+import { EMPTY_MENTION_VALUE, isEmptyValue } from "@/lib/mentions";
 import { TutorMessage, UserMessage } from "@/components/ui/Message";
 import { TextLink } from "@/components/ui/TextLink";
-import { TypingDots } from "@/components/ui/TypingDots";
+import { useFollowFoot } from "@/components/ui/use-follow-foot";
 import type { TopicOption } from "@/data/topics";
+import { conversationTitle } from "@/lib/conversation-title";
+import { placeMade } from "@/lib/conversation-made";
+import { harnessModelOptions } from "@/lib/studio-agent-settings";
 import {
   askAgainValue,
-  entryBriefs,
-  entryValue,
-  jobKind,
-  KIND_NAME,
-  kindCardStatus,
-  kindDrawKey,
-  kindPendingTopic,
-  kindUnavailable,
-  lastPersonValue,
-  liveCards,
-  openerSend,
-  openerValue,
-  makeBoth,
-  MENTION_HINT,
   CHANGE_OPENING_TURN,
   conceptOpeningTurn,
+  KIND_NAME,
+  lastPersonValue,
+  liveCards,
+  makeBoth,
+  MENTION_HINT,
   MENTION_OPENING_TURN,
   mentionOptions,
   modEnterPlan,
-  pressUnderWay,
-  suggestionCost,
   suggestionsFor,
-  suggestionTitle,
   topicSuggestionValue,
   TWO_READY,
-  valueBack,
   valueSendBlock,
   waitingKinds,
   waitingLine,
-  type KindCardStatus,
-  type LiveCard,
 } from "@/lib/studio-cards";
 import {
-  capFrom,
-  CHECKING_BRIEF,
   composerState,
   costLabel,
-  drawRefusal,
   EDITING_BRIEF,
-  GONE,
   isEmptyConversation,
-  jobPatch,
-  refusalNoted,
-  sendRefusal,
-  splitReply,
-  startOverStep,
-  STILL_ANSWERING,
-  THINKING,
   threadProblem,
   turnIndicator,
   visibleEntries,
   type CapStatus,
-  type DrawBlock,
-  type DrawRefusal,
   type Suggestion,
-  type ThreadProblem,
 } from "@/lib/studio-chat";
-import {
-  abandonDraft,
-  declineSuggestion,
-  drawBoth,
-  drawDraft,
-  getDraft,
-  getByokSettings,
-  BYOK_SETTINGS_CHANGED,
-  isDraftKind,
-  openDraftEvents,
-  readStudioHealth,
-  refusalReason,
-  saveBrief,
-  sendMessage,
-  setDraftModel,
-  setDraftHarness,
-  setDraftTrust,
-  stopWaiting,
-  releaseHold,
-  videoAvailability,
-  diagramAvailability,
-  type DraftKind,
-  type DraftView,
-  type TagKind,
-  type TranscriptBrief,
-  type TranscriptEntry,
-  type VideoAvailability,
-} from "@/lib/studio-drafts";
-import { HarnessPicker } from "@/components/studio/HarnessPicker";
+import { setDraftHarness, setDraftModel, type VideoAvailability } from "@/lib/studio-drafts";
+import { arrivingPurpose, arrivingSource, EXTEND_OPENING_TURN, MAKE_VIDEO_OPENING_TURN, makeVideoTitle } from "@/lib/studio-extend";
 import type { HarnessValue } from "@/lib/studio-harness";
-import { harnessModelOptions, runnerSettings, type AgentDefaults, type ModelChoice, type RunnerResolved } from "@/lib/studio-agent-settings";
-import { switchedTool, type VideoToolOption } from "@/lib/studio-brief-video";
-import {
-  arrivingPurpose,
-  arrivingSource,
-  EXTEND_OPENING_TURN,
-  forgetExtendKey,
-  MAKE_VIDEO_OPENING_TURN,
-  makeVideoTitle,
-  OPENER_EVENT,
-  sessionStore,
-  takeOpener,
-} from "@/lib/studio-extend";
-import { isTerminal, type Brief, type Job } from "@/lib/studio-jobs";
-import { conversationTitle } from "@/lib/conversation-title";
-import { placeMade, type MadeItem } from "@/lib/conversation-made";
-import { announceDraftChange } from "@/lib/studio-draft-list";
-import { panelHref, titleOf } from "@/lib/studio-view";
+import { titleOf } from "@/lib/studio-view";
 
 /**
  * The conversation, in the studio's panel (docs/STUDIO-CHAT-FIRST.md, "UI",
@@ -155,8 +82,9 @@ import { panelHref, titleOf } from "@/lib/studio-view";
  *
  * Two bodies under one header, and the URL says which: the chat
  * (`?draft=`), and the job a press started with a bar back to the chat
- * (`?draft=&job=`). One component holds both so the conversation's state and
- * its event stream live through the trip to the job and back.
+ * (`?draft=&job=`, `DraftJobView`). One component holds both so the
+ * conversation's state and its event stream live through the trip to the job
+ * and back.
  *
  * An extend conversation (a draft with `source`) pins the diagram at the top
  * of the thread, and on arrival from Extend sends the opening message
@@ -174,30 +102,12 @@ import { panelHref, titleOf } from "@/lib/studio-view";
  * a newer brief greys only the older card of its kind. A diagram and a video
  * asked for in one message get Make both under the later of the two.
  *
- * **The runner owns the draft; this is a cache of it**, as `JobsProvider` is
- * of the jobs. `GET /api/drafts/{id}` is the record. The event stream adds
- * the one thing the record cannot, a reply growing as it is written (`delta`),
- * and every other event is a cue to read the record again, so a missed event
- * or a dropped stream costs a moment and nothing else. Every call goes
- * through `studio-drafts.ts`; every judgement about what to show is in
- * `studio-chat.ts` and `studio-cards.ts`.
+ * This file is the composition. The record and its stream are
+ * `draft/use-draft-record.ts`, health and the cap `draft/use-studio-health.ts`,
+ * the verbs `draft/use-draft-verbs.ts`, and the thread's pieces sit beside
+ * them. Every call goes through `studio-drafts.ts`; every judgement about what
+ * to show is in `studio-chat.ts` and `studio-cards.ts`.
  */
-
-/** The polled record while a turn is in flight, for when the stream is down. */
-const POLL_IN_FLIGHT_MS = 4_000;
-/**
- * How often focus may re-read health. `/api/health` runs `doctor`, which the
- * runner caches for 30 seconds, and `claude --version`, so this is the
- * cheapest rate at which each read can still be new.
- */
-const CAP_READ_MS = 30_000;
-type Status = "loading" | "ready" | "gone" | "down";
-type Value = MentionValue<TagKind>;
-/** A card's identity: its reply and its kind. */
-type CardKey = `${number}:${DraftKind}`;
-
-const cardKey = (seq: number, kind: DraftKind): CardKey => `${seq}:${kind}`;
-
 export function DraftPanel({
   draftId,
   jobId,
@@ -231,56 +141,20 @@ export function DraftPanel({
   /** Health's `diagramAgent` at render time (#206): whether Draw can queue a job at all. */
   diagramAgent?: VideoAvailability | null;
 }) {
-  const router = useRouter();
-  const host = usePanelHost();
   const { jobs, refresh: refreshJobs } = useStudioJobs();
-  const [view, setView] = useState<DraftView | null>(null);
-  const [status, setStatus] = useState<Status>("loading");
-  const [downReason, setDownReason] = useState<string | null>(null);
-  /** The reply being written, as the last `delta` had it. */
-  const [stream, setStream] = useState<{ turn: number; text: string } | null>(null);
-  /** The person's turn between Send and the record having it. */
-  const [pending, setPending] = useState<{ value: Value; seq: number | null } | null>(null);
-  const [sendError, setSendError] = useState<string | null>(null);
-  /** A kind whose Always-allow write failed after its consent send landed: the error line's retry. */
-  const [trustRetry, setTrustRetry] = useState<DraftKind | null>(null);
-  const [value, setValue] = useState<Value>(EMPTY_MENTION_VALUE);
-  const [cap, setCap] = useState<CapStatus | null>(initialCap);
-  const [video, setVideo] = useState<VideoAvailability | null>(initialVideo);
-  const [diagramAgent, setDiagramAgent] = useState<VideoAvailability | null>(initialDiagram);
-  /** The picker's list and the Claude Code defaults, from health's `agent` (D90). */
-  const [agentMenu, setAgentMenu] = useState<{ models: ModelChoice[] | null; defaults: AgentDefaults | null; resolved: RunnerResolved | null; byokModel: string | null; byokTiers: { default?: string; lite?: string; max?: string } | null }>({
-    models: null,
-    defaults: null,
-    resolved: null,
-    byokModel: null,
-    byokTiers: null,
+  const { view, status, ready, downReason, stream, pending, setPending, baseline, load } = useDraftRecord(draftId, refreshJobs);
+  const { cap, video, diagramAgent, agentMenu, capRefused } = useStudioHealth({
+    cap: initialCap,
+    video: initialVideo,
+    diagramAgent: initialDiagram,
+    byok: view?.harness === "byok",
   });
-  /** The pick sent to the runner and not yet seen in the record. */
-  const [modelPick, setModelPick] = useState<string | null>(null);
-  const [modelError, setModelError] = useState<string | null>(null);
-  /** The harness pick sent to the runner and not yet seen in the record, as the model pick's is. */
-  const [harnessPick, setHarnessPick] = useState<string | null>(null);
-  const [harnessError, setHarnessError] = useState<string | null>(null);
-  /** The cards whose press is under way, each with its kind's job before the press. */
-  const [pressing, setPressing] = useState<ReadonlyMap<DraftKind, string | null>>(new Map());
-  const [refused, setRefused] = useState<Partial<Record<CardKey, DrawRefusal & { seq: number }>>>({});
-  const [bothError, setBothError] = useState<string | null>(null);
-  const [confirmStartOver, setConfirmStartOver] = useState(false);
-  const [startOverError, setStartOverError] = useState<string | null>(null);
-  const [waitError, setWaitError] = useState<string | null>(null);
+  const [value, setValue] = useState<Value>(EMPTY_MENTION_VALUE);
   const [announce, setAnnounce] = useState("");
   /** A card is being edited: its press and Send wait. */
   const [editing, setEditing] = useState(false);
-  /**
-   * The newest seq the first read of the record held. Entries after it are
-   * new while the panel is open and animate in; the ones it opened with do
-   * not, so reopening a conversation does not replay it. Null until read.
-   */
-  const [baseline, setBaseline] = useState<number | null>(null);
   const composer = useRef<MentionComposerHandle | null>(null);
   const thread = useRef<HTMLDivElement | null>(null);
-  const focused = useRef(false);
   const { start: startDraft, busy: starting, error: startError } = useStartDraft(path);
   const { inline } = usePaneLayout();
   // Full screen, the thread and the composer keep to a column in the middle.
@@ -291,246 +165,12 @@ export function DraftPanel({
   // opening turn speak of the video, not of extending the diagram.
   const forVideo = arrivingPurpose(draftId) === "video";
 
-  // The sidebar lists this conversation by its name, its title, its first
-  // message and its state, so each change to those is news to it (`ChatHistory`).
-  const listed = view === null ? null : `${view.state}|${view.name ?? ""}|${view.title ?? ""}|${view.transcript.length}`;
-  useEffect(() => {
-    if (listed !== null) announceDraftChange(draftId);
-  }, [draftId, listed]);
-
-  /**
-   * Focus the composer once it is on screen: it loads lazily, and is not
-   * rendered while the panel shows a job, so this tries for a couple of
-   * seconds' worth of frames rather than once.
-   */
-  const focusComposerSoon = useCallback(() => {
-    let frames = 0;
-    const attempt = () => {
-      if (composer.current !== null) {
-        composer.current.focus();
-        return;
-      }
-      if ((frames += 1) < 120) requestAnimationFrame(attempt);
-    };
-    requestAnimationFrame(attempt);
-  }, []);
-
-  /* ---------------------------------------------------------------- */
-  /* The record                                                        */
-  /* ---------------------------------------------------------------- */
-
-  /**
-   * Reads can overlap (an event, the poll, focus), and an older answer
-   * landing after a newer one would put the thread back a step. Each read
-   * takes a number, and an answer older than the last one shown is dropped.
-   */
-  const issued = useRef(0);
-  const shown = useRef(0);
-  const load = useCallback(async (): Promise<DraftView | null> => {
-    issued.current += 1;
-    const ticket = issued.current;
-    const result = await getDraft(draftId);
-    if (ticket < shown.current) return null;
-    shown.current = ticket;
-    if (!result.ok) {
-      if (result.status === 404) setStatus("gone");
-      else {
-        // A runner that went away mid-conversation keeps what is on screen
-        // and says so; a first read that failed has nothing to keep.
-        setDownReason(result.refusal.error);
-        setStatus((held) => (held === "ready" ? held : "down"));
-      }
-      return null;
-    }
-    const fresh = result.data;
-    setView(fresh);
-    setBaseline((held) => held ?? topSeq(fresh.transcript));
-    setStatus("ready");
-    setDownReason(null);
-    if (!fresh.inFlight) setStream(null);
-    setPending((held) => {
-      if (held === null) return null;
-      if (held.seq !== null && fresh.transcript.some((entry) => entry.seq === held.seq)) return null;
-      return held;
-    });
-    return fresh;
-  }, [draftId]);
-
-  // Several events in one burst (a reply, its briefs, the state) are one read.
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const reload = useCallback(() => {
-    if (timer.current !== null) clearTimeout(timer.current);
-    timer.current = setTimeout(() => {
-      timer.current = null;
-      void load();
-    }, 60);
-  }, [load]);
-
-  useEffect(() => {
-    // The first read runs from an effect because the record lives on the
-    // runner, reached through the browser's proxy; the page cannot read it
-    // for the first paint without a second implementation of this panel.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load();
-    return () => {
-      if (timer.current !== null) clearTimeout(timer.current);
-    };
-  }, [load]);
-
-  /* ---------------------------------------------------------------- */
-  /* The stream                                                        */
-  /* ---------------------------------------------------------------- */
-
-  const ready = status === "ready";
-  const lastSeq = useRef(0);
-  useEffect(() => {
-    lastSeq.current = view === null ? 0 : topSeq(view.transcript);
-  }, [view]);
-
-  useEffect(() => {
-    if (!ready) return;
-    return openDraftEvents(draftId, () => lastSeq.current, {
-      // The browser gave up on the stream and it was opened again: whatever
-      // happened meanwhile is in the record.
-      onReopen: () => void load(),
-      onEvent: (event) => {
-        if (event.type === "delta") {
-          setStream({ turn: event.data.turn, text: event.data.text });
-          return;
-        }
-        // A reply that ended, or one the runner refused and is retrying, is
-        // no longer the text being written: the retry's deltas start again.
-        if (event.type === "reply" || event.type === "brief-invalid" || event.type === "error") setStream(null);
-        if (event.type === "state" && (event.data.state === "drawing" || event.data.jobId !== null || event.data.slots !== undefined)) {
-          void refreshJobs();
-        }
-        reload();
-      },
-    });
-  }, [draftId, ready, reload, refreshJobs, load]);
-
-  // The record is the truth, so a turn in flight is also polled: with the
-  // stream down, the reply still arrives, only without growing on screen.
-  const inFlight = (view?.inFlight ?? false) || pending !== null;
-  useEffect(() => {
-    if (!inFlight) return;
-    const every = setInterval(() => void load(), POLL_IN_FLIGHT_MS);
-    return () => clearInterval(every);
-  }, [inFlight, load]);
-
-  // The presses' disabled reasons are re-checked when the panel regains
-  // focus: a job held elsewhere may have been accepted meanwhile, the day's
-  // spend may have aged out, and the video doctor may have recovered.
-  const capReadAt = useRef(0);
-  // The harness, read when an answer lands rather than when the read was
-  // made: a callback over `view?.harness` changed identity as the record
-  // landed, and every effect below read health a second time (S1-11).
-  const harness = useRef(view?.harness);
-  useEffect(() => {
-    harness.current = view?.harness;
-  }, [view?.harness]);
-  // The BYOK tier models, read fresh — health's copy can be older than a
-  // Connect that just wrote them.
-  const readByokTiers = useCallback(async () => {
-    const result = await getByokSettings();
-    // A read that says nothing is configured clears what an earlier one
-    // found — a removed provider's tiers go with it.
-    if (!result.ok) return;
-    if (!result.data.configured) {
-      setAgentMenu((held) => ({ ...held, byokModel: null, byokTiers: null }));
-      return;
-    }
-    const entry = result.data.providers.find((provider) => provider.provider === result.data.active);
-    if (entry !== undefined) {
-      setAgentMenu((held) => ({ ...held, byokModel: result.data.model, byokTiers: entry.models }));
-    }
-  }, []);
-  const readHealth = useCallback(async () => {
-    capReadAt.current = Date.now();
-    const health = await readStudioHealth();
-    if (health === null) return;
-    const next = capFrom(health.dailyCap);
-    if (next !== null) setCap(next);
-    setVideo(videoAvailability(health.video));
-    setDiagramAgent(diagramAvailability(health.diagramAgent));
-    setAgentMenu(runnerSettings(health.agent));
-    // After health's copy, so the fresh tiers are the ones kept.
-    if (harness.current === "byok") await readByokTiers();
-  }, [readByokTiers]);
-  // A conversation whose record says BYOK (on opening, or a switch to it)
-  // reads the tiers once, without asking health again.
-  const byok = view?.harness === "byok";
-  useEffect(() => {
-    if (!byok) return;
-    const timer = setTimeout(() => void readByokTiers(), 0);
-    return () => clearTimeout(timer);
-  }, [byok, readByokTiers]);
-  // A BYOK write from the dialog or Settings re-reads the tiers at once
-  // (D94), so a tier just configured is pickable without a health refresh.
-  useEffect(() => {
-    const on = () => void readHealth();
-    window.addEventListener(BYOK_SETTINGS_CHANGED, on);
-    return () => window.removeEventListener(BYOK_SETTINGS_CHANGED, on);
-  }, [readHealth]);
-  // Once on opening too: the page that drew the grid read health, and a
-  // conversation opened in the browser (`PanelHost`) can be minutes
-  // younger than that read.
-  useEffect(() => {
-    const timer = setTimeout(() => void readHealth(), 0);
-    return () => clearTimeout(timer);
-  }, [readHealth]);
-  useEffect(() => {
-    const wake = () => {
-      void refreshJobs();
-      void load();
-      if (Date.now() - capReadAt.current >= CAP_READ_MS) void readHealth();
-    };
-    window.addEventListener("focus", wake);
-    return () => window.removeEventListener("focus", wake);
-  }, [refreshJobs, load, readHealth]);
-
-  // A spent cap frees when its oldest spend leaves the 24-hour window, which
-  // the runner names; read it again then rather than waiting for a focus.
-  const freesAt = cap?.exceeded ? Date.parse(cap.oldestAgesOutAt ?? "") : Number.NaN;
-  useEffect(() => {
-    if (!Number.isFinite(freesAt)) return;
-    const wait = Math.max(1_000, Math.min(freesAt - Date.now() + 1_000, 2 ** 31 - 1));
-    const timer = setTimeout(() => void readHealth(), wait);
-    return () => clearTimeout(timer);
-  }, [freesAt, readHealth]);
-
   /* ---------------------------------------------------------------- */
   /* Focus and scroll                                                  */
   /* ---------------------------------------------------------------- */
 
   const mode: "chat" | "job" = jobId !== null ? "job" : "chat";
-
-  // Where focus was when the panel opened. The panel is keyed by its draft,
-  // so mounting is opening.
-  const openedWith = useRef<Element | null>(null);
-  useEffect(() => {
-    openedWith.current = document.activeElement;
-  }, []);
-
-  useEffect(() => {
-    // Opening focuses the composer, once it exists. It loads lazily, so the
-    // first try may find nothing, and the next frames try again. By then the
-    // person may have clicked somewhere else, such as the sidebar's search,
-    // and typing there must not land in the composer.
-    if (!ready || mode !== "chat" || focused.current) return;
-    let frames = 0;
-    let handle = 0;
-    const attempt = () => {
-      if (composer.current !== null) {
-        focused.current = true;
-        if (focusIsStill(document.activeElement, openedWith.current)) composer.current.focus();
-        return;
-      }
-      if ((frames += 1) < 120) handle = requestAnimationFrame(attempt);
-    };
-    attempt();
-    return () => cancelAnimationFrame(handle);
-  }, [ready, mode]);
+  const focusComposerSoon = useFocusWhenReady(composer, ready && mode === "chat");
 
   const entries = useMemo(() => (view === null ? [] : visibleEntries(view.transcript)), [view]);
   // What the conversation made, from the catalog (D89): read on opening and
@@ -544,6 +184,27 @@ export function DraftPanel({
           .join(",")}`;
   const { made, seen: madeSeen } = useConversationMade(draftId, madeVersion);
   const placed = useMemo(() => placeMade(entries, made), [entries, made]);
+  const cards = useMemo(
+    () => (view === null ? [] : liveCards(view, jobs, cap, video, diagramAgent)),
+    [view, jobs, cap, video, diagramAgent],
+  );
+  const both = useMemo(() => (editing ? null : makeBoth(cards)), [cards, editing]);
+  const verbs = useDraftVerbs({
+    draftId,
+    path,
+    view,
+    load,
+    setPending,
+    setValue,
+    cards,
+    both,
+    editing,
+    capRefused,
+    thread,
+    refreshJobs,
+    startDraft,
+  });
+  const { send, press, sendError } = verbs;
   // What sits at the thread's foot besides the entries: the reply being
   // written, and a problem or refusal in its place when a turn fails
   // without adding an entry.
@@ -565,357 +226,125 @@ export function DraftPanel({
   }, [streamText]);
 
   /* ---------------------------------------------------------------- */
-  /* Verbs                                                             */
+  /* The model pick (D90) and the harness pick (the pane picker's)     */
   /* ---------------------------------------------------------------- */
 
-  /**
-   * One person turn. `keepComposer` is for a turn that was not typed in the
-   * composer (the opener an Extend press hands over, a Try again, a consent
-   * card's Allow), whose composer may hold a second message that sending this
-   * one must not clear. `make` is the consent card's mark: the briefs this
-   * turn earns start drawing themselves once they land (D107).
-   */
-  async function send(raw: Value, { keepComposer = false, make = false }: { keepComposer?: boolean; make?: boolean } = {}): Promise<boolean> {
-    const body = trimValue(raw);
-    if (isEmptyValue(body) || view === null) return false;
-    setSendError(null);
-    setTrustRetry(null);
-    setPending({ value: body, seq: null });
-    if (!keepComposer) setValue(EMPTY_MENTION_VALUE);
-    const result = await sendMessage(draftId, make ? { ...body, make: true } : body);
-    if (!result.ok) {
-      setPending(null);
-      // Give the words and the chips back: a refused turn should not cost the typing (T17).
-      setValue((held) => valueBack(held, body, keepComposer));
-      if (result.status === 429) setCap(capFrom({ ...(result.refusal.detail as object), exceeded: true }) ?? cap);
-      setSendError(sendRefusal(result.status, result.refusal));
-      void load();
-      return false;
-    }
-    setPending({ value: body, seq: result.data.seq });
-    void load();
-    return true;
-  }
-
-  // The opener effect below is a callback made once per draft, so it reaches
-  // `send` through this, which always holds the latest render's (whose
-  // `view` is the record, not the first render's null).
-  const sendRef = useRef(send);
-  useEffect(() => {
-    sendRef.current = send;
-  });
-
-  /**
-   * The consent card's answers (D106–D109). Allow once and Always allow both
-   * send a message that is only the kind's chip — what the person would have
-   * typed, so the transcript reads the same — marked `make` so the brief it
-   * earns starts drawing itself. Always then trusts the kind on this
-   * conversation; Deny tells the runner the offer was refused, so the card
-   * collapses and the planner is told not to make it again. False on a
-   * refused step, so the card re-arms instead of sticking on an answer that
-   * never landed.
-   */
-  async function allowOffer(kind: TagKind, always: boolean): Promise<boolean> {
-    // Send before trusting: awaiting the trust write first leaves a window
-    // where another send takes the turn and the consent message is refused
-    // while the kind was already allowed (the Greptile review). The mark on
-    // the message is what launches this one; trust is for the turns after.
-    const sent = await send(valueOf<TagKind>([{ type: "mention", kind }]), { keepComposer: true, make: true });
-    if (!sent) return false;
-    if (always) {
-      if (!isDraftKind(kind)) return false;
-      const result = await setDraftTrust(draftId, kind, true);
-      if (!result.ok) {
-        // The send landed, so the card is gone — the owed write gets a retry
-        // of its own on the error line instead of another make request.
-        setTrustRetry(kind);
-        setSendError(sendRefusal(result.status, result.refusal));
-        void load();
-        return false;
-      }
-      void load();
-    }
-    return true;
-  }
-
-  /** The owed trust write's own press: no new send, just the permission. */
-  async function retryTrust() {
-    const kind = trustRetry;
-    if (kind === null) return;
-    setSendError(null);
-    const result = await setDraftTrust(draftId, kind, true);
-    if (!result.ok) {
-      setSendError(sendRefusal(result.status, result.refusal));
-      void load();
-      return;
-    }
-    setTrustRetry(null);
-    void load();
-  }
-
-  async function declineOffer(replySeq: number, kind: TagKind): Promise<boolean> {
-    const result = await declineSuggestion(draftId, replySeq, [kind]);
-    if (!result.ok) setSendError(sendRefusal(result.status, result.refusal));
-    void load();
-    return result.ok;
-  }
-
-  /** Take back an always-allowed kind (D108): later offers ask again. */
-  async function revokeTrust(kind: DraftKind) {
-    const result = await setDraftTrust(draftId, kind, false);
-    if (!result.ok) setSendError(sendRefusal(result.status, result.refusal));
-    void load();
-  }
-
-  /**
-   * The cost note under a brief card's press (D107): what finished jobs of
-   * the kind have cost on this machine, while there are enough to say.
-   */
-  function costNote(kind: DraftKind): string | null {
-    const band = view?.estimates?.[kind];
-    if (band === null || band === undefined) return null;
-    return `Past ${kind === "video" ? "videos" : "diagrams"} here ran $${band.low.toFixed(2)}–$${band.high.toFixed(2)}.`;
-  }
-
-  const cards = useMemo(
-    () => (view === null ? [] : liveCards(view, jobs, cap, video, diagramAgent)),
-    [view, jobs, cap, video, diagramAgent],
-  );
-  const both = useMemo(() => (editing ? null : makeBoth(cards)), [cards, editing]);
-
-  /** One card's press: Draw, or Make video. */
-  async function press(card: LiveCard) {
-    if (view === null || card.block !== null || pressing.has(card.kind) || editing) return;
-    // The notification prompt rides on the press that starts a job: a browser
-    // will not show one without a gesture, and the job's ending is what it is
-    // for. Not awaited, so the press does not wait on the person answering it.
-    void askToNotify();
-    const key = cardKey(card.seq, card.kind);
-    const previous = view.slots?.[card.kind]?.jobId ?? (view.slots === undefined ? view.jobId : null);
-    setPressing((held) => new Map(held).set(card.kind, previous));
-    setRefused((held) => ({ ...held, [key]: undefined }));
-    const others = cards.filter((other) => other.kind !== card.kind);
-    const result = await drawDraft(draftId, kindDrawKey(draftId, card.seq, card.kind, previous), card.kind);
-    setPressing((held) => {
-      const next = new Map(held);
-      next.delete(card.kind);
-      return next;
-    });
-    if (!result.ok) {
-      setRefused((held) => ({ ...held, [key]: { seq: card.seq, ...drawRefusal(result.status, result.refusal) } }));
-      if (result.status === 429) setCap(capFrom({ ...(result.refusal.detail as object), exceeded: true }) ?? cap);
-      void load();
-      return;
-    }
-    await refreshJobs();
-    // With another card still live, the panel stays on the conversation, so
-    // the second card is not hidden behind the first job (D60).
-    if (others.length === 0) {
-      const href = panelHref(path, { job: result.data.jobId, draft: draftId });
-      if (host === null || !host.navigate(href)) router.push(href, { scroll: false });
-    }
-    void load();
-  }
-
-  /** Make both: one press, each card started or refused on its own (D60, T26). */
-  async function pressBoth() {
-    if (view === null || both === null || pressing.size > 0) return;
-    void askToNotify();
-    setBothError(null);
-    const [first, second] = both.cards;
-    setPressing(new Map(both.cards.map((card) => [card.kind, view.slots?.[card.kind]?.jobId ?? null] as const)));
-    setRefused((held) => ({ ...held, [cardKey(first.seq, first.kind)]: undefined, [cardKey(second.seq, second.kind)]: undefined }));
-    const items = both.cards.map((card) => ({
-      kind: card.kind,
-      idempotencyKey: kindDrawKey(draftId, card.seq, card.kind, view.slots?.[card.kind]?.jobId ?? null),
-    }));
-    const result = await drawBoth(draftId, items);
-    setPressing(new Map());
-    if (!result.ok) {
-      setBothError(drawRefusal(result.status, result.refusal).text);
-      if (result.status === 429) setCap(capFrom({ ...(result.refusal.detail as object), exceeded: true }) ?? cap);
-      void load();
-      return;
-    }
-    const byKind = new Map(both.cards.map((card) => [card.kind, card]));
-    const next: Partial<Record<CardKey, DrawRefusal & { seq: number }>> = {};
-    for (const item of result.data.results) {
-      const card = byKind.get(item.kind);
-      if (card === undefined || "jobId" in item) continue;
-      next[cardKey(card.seq, card.kind)] = { seq: card.seq, ...drawRefusal(item.status, item.refusal) };
-    }
-    setRefused((held) => ({ ...held, ...next }));
-    await refreshJobs();
-    void load();
-  }
-
-  async function startOver() {
-    setConfirmStartOver(false);
-    setStartOverError(null);
-    const step = view === null ? "skip" : startOverStep(view.state, view.slots !== undefined);
-    if (step === "refuse") {
-      setStartOverError("A diagram from this conversation is drawing. Cancel or review it first, then start over.");
-      return;
-    }
-    if (step === "abandon") {
-      const closed = await abandonDraft(draftId);
-      if (!closed.ok) {
-        setStartOverError(`This conversation could not be closed: ${closed.refusal.error}`);
-        return;
-      }
-    }
-    // A done draft is left as it is: it made something and stays findable.
-    await startDraft();
-  }
-
-  /**
-   * The person's edit of a brief (phase 3), or a brief put back in force as
-   * it is. Resolves once the record holds the result, so the card leaves
-   * editing as the stored brief appears under the runner's note. Focus then
-   * goes to the new card's press, the next thing to press.
-   *
-   * `base` is the seq of the entry carrying the edited brief, so the runner
-   * refuses an edit of a brief that is no longer that kind's brief in force.
-   */
-  const saveEdit = useCallback(
-    async (brief: Brief | TranscriptBrief["brief"], base: number, kind: DraftKind): Promise<SaveOutcome> => {
-      const result = await saveBrief(draftId, brief, base, kind);
-      if (!result.ok) {
-        if (refusalReason(result.refusal) === "brief-changed") void load();
-        return { ok: false, status: result.status, refusal: result.refusal };
-      }
-      await load();
-      // The live one: a card that has just stopped being live keeps its
-      // press for the moment its footer takes to fold shut, inert.
-      requestAnimationFrame(() =>
-        [...(thread.current?.querySelectorAll<HTMLElement>(`[data-studio-draw][data-card-kind="${kind}"]`) ?? [])]
-          .find((press) => press.closest("[inert]") === null)
-          ?.focus(),
-      );
-      return { ok: true };
-    },
-    [draftId, load],
-  );
-
-  /** Use this brief on a card the planner put on hold: no turn (D60). */
-  const takeOffHold = useCallback(
-    async (kind: DraftKind, base: number): Promise<string | null> => {
-      const result = await releaseHold(draftId, kind, base);
-      await load();
-      if (result.ok) return null;
-      if (refusalReason(result.refusal) === "brief-changed") return "A newer brief replaced this one. The newest is below.";
-      return `It could not be put back: ${result.refusal.error}`;
-    },
-    [draftId, load],
-  );
-
-  async function stopWaitingFor(kind: DraftKind) {
-    setWaitError(null);
-    const result = await stopWaiting(draftId, kind);
-    if (!result.ok) setWaitError(`It is still waiting: ${result.refusal.error}`);
-    void load();
-  }
-
-  /* ---------------------------------------------------------------- */
-  /* The model pick (D90)                                              */
-  /* ---------------------------------------------------------------- */
-
-  // The chip shows the pick at once; the record's own value lands on the
-  // state event's reload. The render below clears the stand-in as soon as
-  // the record shows it, and `pickModel` clears it when its request settles,
-  // so a record set elsewhere never leaves a stale pick standing in.
-  const shownModel = modelPick ?? view?.model ?? "default";
-  if (modelPick !== null && (view?.model ?? "default") === modelPick) {
-    setModelPick(null);
-  }
-
-  async function pickModel(next: string) {
-    setModelPick(next);
-    setModelError(null);
+  const model = useOptimisticPick<string>(view?.model ?? "default", async (next) => {
     const result = await setDraftModel(draftId, next === "default" ? null : next);
-    if (!result.ok) {
-      setModelError(`The model could not be set: ${result.refusal.error}`);
-    }
-    // Settled: the record's own value takes over on the next reload, whatever
-    // it now is, so a pick that never matched it does not stand in forever.
-    // A pick made since is newer; this request may not clear it.
-    setModelPick((held) => (held === next ? null : held));
-  }
-
-  /* ---------------------------------------------------------------- */
-  /* The harness pick (the pane picker's)                              */
-  /* ---------------------------------------------------------------- */
-
+    return result.ok ? null : `The model could not be set: ${result.refusal.error}`;
+  });
   // Same optimistic shape as the model pick: the chip shows it at once, the
   // record's own `harness` clears the stand-in, and a refusal is said under
   // the composer. A harness moves only before the first turn, so the common
   // refusal is `harness-locked`.
-  const shownHarness = harnessPick ?? view?.harness ?? "claude";
-  if (harnessPick !== null && (view?.harness ?? "claude") === harnessPick) {
-    setHarnessPick(null);
-  }
-
-  async function pickHarness(next: HarnessValue) {
-    setHarnessPick(next);
-    setHarnessError(null);
+  const harness = useOptimisticPick<HarnessValue>(view?.harness ?? "claude", async (next) => {
     const result = await setDraftHarness(draftId, next);
-    if (!result.ok) {
-      setHarnessError(`The harness could not be set: ${result.refusal.error}`);
-    }
-    setHarnessPick((held) => (held === next ? null : held));
+    return result.ok ? null : `The harness could not be set: ${result.refusal.error}`;
+  });
+
+  useOpener({ draftId, ready, view, send, setValue, focusSoon: focusComposerSoon });
+
+  /* ---------------------------------------------------------------- */
+  /* Render                                                            */
+  /* ---------------------------------------------------------------- */
+
+  if (status !== "ready" || view === null) {
+    const arrivingTitle = arriving === null ? null : (titleOf(titles, arriving) ?? arriving);
+    return (
+      <DraftStatus
+        status={status}
+        arriving={arriving === null || arrivingTitle === null ? null : { name: arriving, title: arrivingTitle }}
+        forVideo={forVideo}
+        onNewConversation={() => void startDraft()}
+        starting={starting}
+        startError={startError}
+        downReason={downReason}
+        onRetry={() => void load()}
+      />
+    );
   }
 
-  // Arriving from Extend, from Talk it through on a failed job, or from a
-  // video's Change: the opener left for this draft, taken once so a reload
-  // never sends it again, and sent only into a conversation that is still
-  // empty. A page that leaves one while this conversation is already open
-  // says so with `OPENER_EVENT`, and it is taken then.
-  const takeWaitingOpener = useCallback(
-    (current: DraftView) => {
-      const store = sessionStore();
-      const opener = takeOpener(store, draftId);
-      if (opener === null) return;
-      // Arrived: a reload of the press that made this draft may now mint a new one.
-      if (opener.source !== null) forgetExtendKey(store, opener.source);
-      const composed = openerValue(opener);
-      if (composed !== null) {
-        // The composer first, chips ahead of the words, and a send that leaves
-        // it alone: a message queued during the read and a second one still
-        // being typed both survive. The composer may not be on screen yet (the
-        // panel is showing a job, or the field is still loading); it builds
-        // itself from this value when it mounts.
-        // In front of anything already typed, never over it.
-        setValue((held) => prependValue(composed, held));
-        focusComposerSoon();
-      }
-      const first = openerSend(opener);
-      if (first !== null && isEmptyConversation(current.transcript) && !current.inFlight) {
-        void sendRef.current(first, { keepComposer: true });
-      }
-    },
-    [draftId, focusComposerSoon],
-  );
+  const diagramSource = view.sourceKind === undefined || view.sourceKind === "diagram";
+  const sourceTitle =
+    view.source === null ? null : ((diagramSource ? titleOf(titles, view.source) : titleOf(videoTitles, view.source)) ?? view.source);
+  const newestTitle = cards.at(-1)?.brief.title ?? null;
+  // The owner's name, the planner's title or the concept, as every other page
+  // calls the conversation (`conversationTitle`); the first message is the
+  // thread's own first line, so the header does not repeat it.
+  const title =
+    conversationTitle({ name: view.name, title: view.title ?? newestTitle, concept: view.concept })?.text ??
+    (sourceTitle === null
+      ? "New conversation"
+      : diagramSource
+        ? forVideo
+          ? makeVideoTitle(sourceTitle)
+          : `Extending ${sourceTitle}`
+        : `Changing ${sourceTitle}`);
 
-  const opened = useRef(false);
-  useEffect(() => {
-    if (!ready || view === null || opened.current) return;
-    opened.current = true;
-    takeWaitingOpener(view);
-  }, [ready, view, takeWaitingOpener]);
+  if (mode === "job" && jobId !== null) {
+    return (
+      <DraftJobView
+        jobId={jobId}
+        jobs={jobs}
+        path={path}
+        title={title}
+        inline={inline}
+        onNewConversation={() => void startDraft()}
+        starting={starting}
+        startError={startError}
+      />
+    );
+  }
 
-  const viewRef = useRef<DraftView | null>(null);
-  useEffect(() => {
-    viewRef.current = view;
-  }, [view]);
-  useEffect(() => {
-    const onOpener = (event: Event) => {
-      const detail = (event as CustomEvent<{ draftId?: unknown }>).detail;
-      if (detail?.draftId !== draftId || viewRef.current === null) return;
-      takeWaitingOpener(viewRef.current);
-    };
-    window.addEventListener(OPENER_EVENT, onOpener);
-    return () => window.removeEventListener(OPENER_EVENT, onOpener);
-  }, [draftId, takeWaitingOpener]);
+  const problem = threadProblem(view);
+  const problemKind = problemKindOf(view);
+  const empty = isEmptyConversation(view.transcript) && pending === null;
+  const composing = composerState(view, cap, pending !== null, empty, editing);
+  const concept = view.concept ?? null;
+  // H8: a conversation opened on a concept takes a bare tag, which means "of this concept".
+  const valueBlock = valueSendBlock(value, empty && concept === null);
+  const busy = view.inFlight || pending !== null;
+  // A turn taken since the panel opened: what it brings (the reply being
+  // written, a problem, the turn limit) arrives as news. On opening they are
+  // part of the conversation as it stood, and stand still.
+  const liveTurn = baseline !== null && (pending !== null || topSeq(view.transcript) > baseline);
+  const lastPerson = pending?.value ?? lastPersonValue(view.transcript);
+  const waiting = waitingKinds(view);
+  const suggested = suggestionsFor(view);
+  const options = mentionOptions(view, video);
+  const kinds = view.slots !== undefined;
+  const opening =
+    concept !== null
+      ? conceptOpeningTurn(concept.title)
+      : kinds
+        ? MENTION_OPENING_TURN
+        : view.source === null
+          ? MENTION_OPENING_TURN
+          : EXTEND_OPENING_TURN;
+  const entryThread: EntryThread = {
+    view,
+    topics,
+    jobs,
+    cards,
+    makeBothLive: both !== null,
+    pressing: verbs.pressing,
+    refused: verbs.refused,
+    entries,
+    answering: busy,
+    bothError: verbs.bothError,
+    waiting,
+    path,
+    video,
+  };
+  const entryActions: EntryActions = {
+    save: verbs.saveEdit,
+    use: verbs.takeOffHold,
+    editingChange: setEditing,
+    press: (card) => void press(card),
+    pressBoth: () => void verbs.pressBoth(),
+    allow: verbs.allowOffer,
+    decline: verbs.declineOffer,
+  };
 
   /**
    * Cmd or Ctrl+Enter (T9). From inside a card it presses that card. From
@@ -956,166 +385,14 @@ export function DraftPanel({
     modEnter(event.target);
   }
 
-  /* ---------------------------------------------------------------- */
-  /* Render                                                            */
-  /* ---------------------------------------------------------------- */
-
-  const cost = view === null ? null : costLabel(view.costUsd, view.costSource);
-  const costTitle =
-    view?.costSource === "stream"
-      ? "What this conversation has cost so far. A turn cut off before it reported is rebuilt from its stream, which runs low."
-      : "What this conversation has cost so far";
-
-  if (status === "gone") {
-    return (
-      <>
-        <DialogHeader title="New conversation" />
-        <Empty>
-          <p className="text-[15px] text-text">{GONE}</p>
-          <Button onClick={() => void startDraft()} disabled={starting}>
-            New conversation
-          </Button>
-          <Failure text={startError} />
-        </Empty>
-      </>
-    );
-  }
-
-  if (status === "loading" && arriving !== null) {
-    // Straight from Extend: the picture and the header stay where they were
-    // while the record is read, rather than blinking to a blank panel.
-    const arrivingTitle = titleOf(titles, arriving) ?? arriving;
-    return (
-      <>
-        <DialogHeader title={forVideo ? makeVideoTitle(arrivingTitle) : `Extending ${arrivingTitle}`} />
-        <div className="flex min-h-0 flex-1 flex-col gap-5 px-5 py-5">
-          <PinnedDiagram name={arriving} title={arrivingTitle} />
-          <p className="text-center text-[13px] text-text3" role="status">
-            Opening the conversation…
-          </p>
-        </div>
-      </>
-    );
-  }
-
-  if (status !== "ready" || view === null) {
-    return (
-      <>
-        <DialogHeader title="New conversation" />
-        <Empty>
-          {status === "loading" ? (
-            <p className="text-[14px] text-text3" role="status">
-              Opening the conversation…
-            </p>
-          ) : (
-            <>
-              <p className="text-[15px] text-text">The studio runner did not answer, so this conversation cannot be read.</p>
-              {downReason !== null && <p className="text-[13px] text-text2">{downReason}</p>}
-              <Button variant="secondary" onClick={() => void load()}>
-                Try again
-              </Button>
-            </>
-          )}
-        </Empty>
-      </>
-    );
-  }
-
-  const diagramSource = view.sourceKind === undefined || view.sourceKind === "diagram";
-  const sourceTitle =
-    view.source === null ? null : ((diagramSource ? titleOf(titles, view.source) : titleOf(videoTitles, view.source)) ?? view.source);
-  const newestTitle = cards.at(-1)?.brief.title ?? null;
-  // The owner's name, the planner's title or the concept, as every other page
-  // calls the conversation (`conversationTitle`); the first message is the
-  // thread's own first line, so the header does not repeat it.
-  const title =
-    conversationTitle({ name: view.name, title: view.title ?? newestTitle, concept: view.concept })?.text ??
-    (sourceTitle === null
-      ? "New conversation"
-      : diagramSource
-        ? forVideo
-          ? makeVideoTitle(sourceTitle)
-          : `Extending ${sourceTitle}`
-        : `Changing ${sourceTitle}`);
-
-  if (mode === "job" && jobId !== null) {
-    const job = jobs.find((entry) => entry.jobId === jobId) ?? null;
-    const settled = job !== null && (isTerminal(job.state) || job.state === "awaiting_review");
-    const ended = job !== null && isTerminal(job.state);
-    const kind = job === null ? "diagram" : jobKind(job);
-    return (
-      <>
-        {/* No cost here: the job's own line under it carries the job's, and the
-            conversation's beside it read as one confusing total (phase 2). The
-            conversation's cost is in the conversation. */}
-        <DialogHeader title={job?.title ?? title} />
-        <BackBar href={panelHref(path, { job: null })} />
-        <div className={cx("min-h-0 flex-1 overflow-y-auto", FADE_IN)}>
-          {ended && (
-            <div className="flex flex-wrap items-center gap-3 border-b border-hair px-5 py-3">
-              <p className="min-w-0 flex-1 text-[14px] text-text2">
-                {job.state === "accepted"
-                  ? "Accepted. Ask for a change or something new in the same conversation."
-                  : job.state === "failed" || job.state === "interrupted"
-                    ? `${kind === "video" ? "The video" : "The drawing"} did not pass. What the checks found is in the conversation.`
-                    : "Ask for a change, or start something new."}
-              </p>
-              <Button size="sm" href={panelHref(path, { job: null })}>
-                Back to the conversation
-              </Button>
-              <Button size="sm" variant="secondary" onClick={() => void startDraft()} disabled={starting}>
-                New conversation
-              </Button>
-              <Failure text={startError} className="basis-full" />
-            </div>
-          )}
-          <div className={inline ? "mx-auto w-full max-w-4xl" : undefined}>
-            <JobPanel jobId={jobId} path={path} embedded inConversation />
-          </div>
-          {settled && !ended && (
-            <p className="px-5 pb-5 text-[13px] text-text3">
-              Accept or Discard above. Either way, the conversation is where the next one starts.
-            </p>
-          )}
-        </div>
-      </>
-    );
-  }
-
-  const problem = threadProblem(view);
-  const problemKind = problemKindOf(view);
-  const empty = isEmptyConversation(view.transcript) && pending === null;
-  const composing = composerState(view, cap, pending !== null, empty, editing);
-  const concept = view.concept ?? null;
-  // H8: a conversation opened on a concept takes a bare tag, which means "of this concept".
-  const valueBlock = valueSendBlock(value, empty && concept === null);
-  const busy = view.inFlight || pending !== null;
-  // A turn taken since the panel opened: what it brings (the reply being
-  // written, a problem, the turn limit) arrives as news. On opening they are
-  // part of the conversation as it stood, and stand still.
-  const liveTurn = baseline !== null && (pending !== null || topSeq(view.transcript) > baseline);
-  const lastPerson = pending?.value ?? lastPersonValue(view.transcript);
-  const waiting = waitingKinds(view);
-  const suggested = suggestionsFor(view);
-  const options = mentionOptions(view, video);
-  const kinds = view.slots !== undefined;
-  const opening =
-    concept !== null
-      ? conceptOpeningTurn(concept.title)
-      : kinds
-        ? MENTION_OPENING_TURN
-        : view.source === null
-          ? MENTION_OPENING_TURN
-          : EXTEND_OPENING_TURN;
-
   return (
     <div className="flex min-h-0 flex-1 flex-col" onKeyDown={onKeyDown}>
       <DialogHeader
         title={title}
-        meta={cost === null ? undefined : <span title={costTitle}>{cost}</span>}
+        meta={costLabel(view.costUsd, view.costSource) === null ? undefined : <JobCost usd={view.costUsd} source={view.costSource} subject="conversation" />}
         // The harness picker bound to this conversation: its own `harness`,
-        // and picks written through `PUT .../harness` (`pickHarness`).
-        leading={<HarnessPicker value={shownHarness} onPick={(next) => void pickHarness(next)} />}
+        // and picks written through `PUT .../harness` (`harness.pick`).
+        leading={<HarnessPicker value={harness.shown} onPick={(next) => void harness.pick(next)} />}
       />
 
       <div
@@ -1158,33 +435,10 @@ export function DraftPanel({
           <Arrive key={entry.seq} animate={baseline !== null && entry.seq > baseline && entry.role !== "person"}>
             <Entry
               entry={entry}
-              view={view}
-              topics={topics}
-              jobs={jobs}
-              cards={cards}
               both={both !== null && both.seq === entry.seq ? both : null}
-              makeBothLive={both !== null}
-              pressing={pressing}
-              refused={refused}
-              entries={entries}
-              answering={view.inFlight || pending !== null}
-              onSave={saveEdit}
-              onUse={takeOffHold}
-              onEditingChange={setEditing}
-              onPress={(card) => void press(card)}
-              onPressBoth={() => void pressBoth()}
-              bothError={bothError}
-              waiting={waiting}
-              path={path}
               suggestion={suggested !== null && suggested.seq === entry.seq ? suggested : null}
-              estimates={view.estimates}
-              unavailable={(kind) => kindUnavailable(kind, view, video)}
-              onAllow={(kind, always) => allowOffer(kind, always)}
-              onDecline={(kind) => declineOffer(entry.seq, kind)}
-              costNote={costNote}
-              singleCard={cards.length <= 1}
-              videoTools={video?.tools ?? []}
-              charsPerSecond={video?.charsPerSecond}
+              thread={entryThread}
+              on={entryActions}
             />
           </Arrive>,
           // Where the job's story ended: what it made, as a card (D89).
@@ -1218,7 +472,7 @@ export function DraftPanel({
               onRetry={lastPerson === null ? null : () => void send(lastPerson, { keepComposer: true })}
               onAskAgain={problem.case === "E6" ? () => void send(askAgainValue(problem, kinds ? problemKind : null), { keepComposer: true }) : null}
               blocked={editing ? EDITING_BRIEF : null}
-              onStartOver={() => setConfirmStartOver(true)}
+              onStartOver={() => verbs.setConfirmStartOver(true)}
               cutOffShown={entries.at(-1)?.interrupted === true}
             />
           </Arrive>
@@ -1229,8 +483,8 @@ export function DraftPanel({
             role="alert"
             className={ENTER}
             actions={
-              trustRetry !== null ? (
-                <Button size="sm" variant="secondary" onClick={() => void retryTrust()}>
+              verbs.trustRetry !== null ? (
+                <Button size="sm" variant="secondary" onClick={() => void verbs.retryTrust()}>
                   Save always-allow
                 </Button>
               ) : undefined
@@ -1272,12 +526,12 @@ export function DraftPanel({
             {waiting.map((item) => (
               <p key={item.kind} className="flex flex-wrap items-center gap-x-3 text-[12px] leading-4 text-text2">
                 <span className="font-semibold">{waitingLine(item.kind)}</span>
-                <TextLink onClick={() => void stopWaitingFor(item.kind)}>Stop waiting</TextLink>
+                <TextLink onClick={() => void verbs.stopWaitingFor(item.kind)}>Stop waiting</TextLink>
               </p>
             ))}
-            {waitError !== null && (
+            {verbs.waitError !== null && (
               <p role="alert" className="text-[12px] text-danger">
-                {waitError}
+                {verbs.waitError}
               </p>
             )}
           </div>
@@ -1304,11 +558,11 @@ export function DraftPanel({
           <FilterMenu
             label="Model"
             bare
-            options={harnessModelOptions(shownHarness, shownModel, agentMenu.resolved, agentMenu.byokTiers)}
-            value={shownModel}
+            options={harnessModelOptions(harness.shown, model.shown, agentMenu.resolved, agentMenu.byokTiers)}
+            value={model.shown}
             defaultValue="default"
-            busy={modelPick !== null}
-            onChange={(next) => void pickModel(next)}
+            busy={model.busy}
+            onChange={(next) => void model.pick(next)}
           />
           {/* The kinds always allowed here (D108): each a chip whose press
               takes the trust back, so the next offer asks again. */}
@@ -1316,7 +570,7 @@ export function DraftPanel({
             <button
               key={kind}
               type="button"
-              onClick={() => void revokeTrust(kind)}
+              onClick={() => void verbs.revokeTrust(kind)}
               title={`The planner may start ${KIND_NAME[kind].toLowerCase()} makes here without asking — press to ask again`}
               className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[12px] text-text3 transition-colors hover:text-text"
             >
@@ -1327,21 +581,21 @@ export function DraftPanel({
           ))}
           {/* The question and the press swap in place, each fading in. The
               problem card's Start over opens the question too. */}
-          {(confirmStartOver || view.transcript.length > 0) && (
+          {(verbs.confirmStartOver || view.transcript.length > 0) && (
             <InlineConfirm
               size="text"
               label="Start over"
               question="Close this conversation for good?"
               confirmLabel="Start over"
-              onConfirm={() => void startOver()}
-              open={confirmStartOver}
-              onOpenChange={setConfirmStartOver}
+              onConfirm={() => void verbs.startOver()}
+              open={verbs.confirmStartOver}
+              onOpenChange={verbs.setConfirmStartOver}
             />
           )}
           {downReason !== null && <span className="text-danger">The runner stopped answering: {downReason}</span>}
           <Failure
             text={
-              modelError ?? harnessError ?? startOverError ?? (startError === null ? null : `A new conversation could not start: ${startError}`)
+              model.error ?? harness.error ?? verbs.startOverError ?? (startError === null ? null : `A new conversation could not start: ${startError}`)
             }
             className="basis-full"
           />
@@ -1352,515 +606,4 @@ export function DraftPanel({
       </div>
     </div>
   );
-}
-
-/* -------------------------------------------------------------------------- */
-
-/**
- * A card for something the conversation made. One the panel opened with
- * stands still; one that lands while it is open rises in, as a new turn does.
- */
-function MadeArrival({ item, seen, path }: { item: MadeItem; seen: ReadonlySet<string> | null; path: string }) {
-  return (
-    <Arrive animate={seen !== null && !seen.has(item.id)} className="px-1.5">
-      <MadeCard item={item} path={path} />
-    </Arrive>
-  );
-}
-
-/** The newest seq in a transcript, or 0 for an empty one. */
-function topSeq(transcript: readonly Pick<TranscriptEntry, "seq">[]): number {
-  return transcript.reduce((max, entry) => Math.max(max, entry.seq), 0);
-}
-
-/** The kind E6 is about: the refused brief's own, when the runner names one. */
-function problemKindOf(view: Pick<DraftView, "transcript" | "error">): DraftKind | null {
-  if (view.error?.briefKind !== undefined) return view.error.briefKind;
-  const last = visibleEntries(view.transcript).at(-1);
-  const kind = last?.briefInvalid?.kind ?? last?.briefsInvalid?.find((item) => !item.retried)?.kind;
-  return kind ?? null;
-}
-
-function Entry({
-  entry,
-  view,
-  topics,
-  jobs,
-  cards,
-  both,
-  makeBothLive,
-  pressing,
-  refused,
-  entries,
-  answering,
-  onSave,
-  onUse,
-  onEditingChange,
-  onPress,
-  onPressBoth,
-  bothError,
-  waiting,
-  path,
-  suggestion,
-  estimates,
-  unavailable,
-  onAllow,
-  onDecline,
-  costNote,
-  singleCard,
-  videoTools,
-  charsPerSecond,
-}: {
-  entry: TranscriptEntry;
-  view: DraftView;
-  topics: readonly TopicOption[];
-  jobs: readonly Job[];
-  cards: readonly LiveCard[];
-  /** Make both, on the entry it sits under. */
-  both: ReturnType<typeof makeBoth>;
-  /** Whether Make both is shown anywhere in the thread. */
-  makeBothLive: boolean;
-  pressing: ReadonlyMap<DraftKind, string | null>;
-  refused: Partial<Record<CardKey, DrawRefusal & { seq: number }>>;
-  entries: readonly TranscriptEntry[];
-  /** A person turn is in flight: sent, or being answered. */
-  answering: boolean;
-  onSave: (brief: Brief | TranscriptBrief["brief"], base: number, kind: DraftKind) => Promise<SaveOutcome>;
-  onUse: (kind: DraftKind, base: number) => Promise<string | null>;
-  onEditingChange: (editing: boolean) => void;
-  onPress: (card: LiveCard) => void;
-  onPressBoth: () => void;
-  bothError: string | null;
-  waiting: readonly { kind: DraftKind; requestSeq: number }[];
-  path: string;
-  /** The newest reply's offer, on that reply only: kinds, pitch, declines (D106). */
-  suggestion: { seq: number; kinds: TagKind[]; pitch: string | null; declined: TagKind[] } | null;
-  /** What finished jobs of each kind have cost here, for the card's estimate (D107). */
-  estimates: DraftView["estimates"];
-  unavailable: (kind: TagKind) => string | null;
-  /** Allow once or Always allow on a paid kind's consent card (D106). */
-  onAllow: (kind: TagKind, always: boolean) => Promise<boolean>;
-  /** Deny an offered kind: the runner keeps the refusal (D109). */
-  onDecline: (kind: TagKind) => Promise<boolean>;
-  /** The cost note under a brief card's press, or null before enough history. */
-  costNote: (kind: DraftKind) => string | null;
-  /** Whether at most one card is live, so Cmd+Enter presses it. */
-  singleCard: boolean;
-  /** Health's `video.tools`, for the video card's tool row (D73). */
-  videoTools: readonly VideoToolOption[];
-  /** Health's `video.narration.charsPerSecond`, for the video card's predicted lengths. */
-  charsPerSecond: number | undefined;
-}) {
-  if (entry.role === "person") {
-    const tagged = waiting.filter((item) => item.requestSeq === entry.seq).map((item) => item.kind);
-    return (
-      <UserMessage>
-        <Sentence value={entryValue(entry)} waiting={tagged} />
-      </UserMessage>
-    );
-  }
-
-  const briefs = entryBriefs(entry);
-  // With a pair live, Make both is the press the person most likely wants, so
-  // it is the one primary button and each card's own press steps back.
-  const pairedHere = cards.length === 2 && makeBothLive;
-  const renderCard = (item: TranscriptBrief) => {
-    const status: KindCardStatus = kindCardStatus(view, entry.seq, item.kind, jobs);
-    const live = cards.find((card) => card.kind === item.kind && card.seq === entry.seq) ?? null;
-    const block: DrawBlock | null = live?.block ?? null;
-    const key = cardKey(entry.seq, item.kind);
-    const refusal = refused[key];
-    const shownRefusal =
-      refusal === undefined ? null : { text: refusalNoted(refusal, entries) ? null : refusal.text, holder: refusal.holder };
-    const slot = view.slots?.[item.kind] ?? null;
-    const jobIdOf = slot?.jobId ?? (view.slots === undefined ? view.jobId : null);
-    const job = jobIdOf === null ? undefined : jobs.find((candidate) => candidate.jobId === jobIdOf);
-    const jobHref = jobIdOf === null ? null : panelHref(path, { job: jobIdOf });
-    const running = job !== undefined && !isTerminal(job.state);
-    const pendingTopic = kindPendingTopic(status, item.kind, entry, view);
-    const holdReason = slot?.held?.reason ?? null;
-    const underWay = pressUnderWay(pressing, view, item.kind);
-    const editBlock = answering ? STILL_ANSWERING : underWay ? "The press is under way." : null;
-    const paired = pairedHere;
-    const holderHref = (holder: string) => panelHref(path, jobPatch(holder, { draftId: view.draftId, jobId: jobIdOf }, jobs));
-    const inner =
-      item.kind === "diagram" ? (
-        <ConfirmCard
-          brief={item.brief}
-          pendingTopic={pendingTopic}
-          status={status}
-          topics={topics}
-          block={block}
-          busy={underWay}
-          refusal={shownRefusal}
-          onDraw={() => live !== null && onPress(live)}
-          onSave={(brief) => onSave(brief, entry.seq, "diagram")}
-          onEditingChange={onEditingChange}
-          editBlock={editBlock}
-          jobHref={jobHref}
-          jobRunning={running}
-          holderHref={holderHref}
-          sourceChanged={view.sourceChanged === true}
-          holdReason={holdReason}
-          onUse={() => onUse("diagram", entry.seq)}
-          paired={paired}
-          keyShortcut={singleCard}
-          costNote={costNote("diagram")}
-        />
-      ) : (
-        <ConfirmCardVideo
-          brief={item.brief}
-          pendingTopic={pendingTopic}
-          status={status}
-          topics={topics}
-          block={block}
-          busy={underWay}
-          refusal={shownRefusal}
-          onPress={() => live !== null && onPress(live)}
-          onUse={() => onUse("video", entry.seq)}
-          onPutBack={async () => {
-            const outcome = await onSave(item.brief, entry.seq, "video");
-            return outcome.ok ? null : `It could not be put back: ${outcome.refusal.error}`;
-          }}
-          holdReason={holdReason}
-          jobHref={jobHref}
-          jobRunning={running}
-          holderHref={holderHref}
-          runnerAbbreviations={item.abbreviations}
-          keyShortcut={singleCard}
-          editBlock={editBlock}
-          paired={paired}
-          replacing={live?.replaces != null}
-          tools={videoTools}
-          charsPerSecond={charsPerSecond}
-          costNote={costNote("video")}
-          onSwitchTool={async (tool) => {
-            const outcome = await onSave(switchedTool(item.brief, tool), entry.seq, "video");
-            return outcome.ok ? null : `The tool could not be switched: ${outcome.refusal.error}`;
-          }}
-        />
-      );
-    return (
-      <div key={item.kind} data-card={item.kind} data-seq={entry.seq}>
-        {inner}
-      </div>
-    );
-  };
-
-  // A partly refused reply: the kind being retried shows where its card will be.
-  const retrying = view.inFlight
-    ? [...(entry.briefsInvalid ?? []), ...(entry.briefInvalid !== undefined ? [entry.briefInvalid] : [])]
-        .filter((item) => item.retried && item.kind !== undefined && !briefs.some((brief) => brief.kind === item.kind))
-        .map((item) => item.kind as DraftKind)
-    : [];
-  const cardsHere =
-    briefs.length === 0 && retrying.length === 0 && both === null ? null : (
-      <div className="flex flex-col gap-3">
-        {briefs.map(renderCard)}
-        {both !== null && (
-          <MakeBothButton
-            label={both.label}
-            busy={both.cards.some((card) => pressUnderWay(pressing, view, card.kind))}
-            error={bothError}
-            onPress={onPressBoth}
-          />
-        )}
-        {retrying.map((kind) => (
-          <p key={kind} className="flex items-center gap-2 rounded-xl border-2 border-dashed border-border px-4 py-3 text-[14px] text-text3" role="status">
-            Checking the {kind} brief
-            <TypingDots />
-          </p>
-        ))}
-      </div>
-    );
-
-  if (entry.role === "studio") {
-    // The runner speaking: a centred line, not a bubble and not a third voice.
-    // A person's own edit of a brief is one of these, and carries the stored
-    // brief as the card under it (phase 3).
-    return (
-      <div className="flex flex-col gap-3">
-        {/* An edit's note lists its changes one to a line, which reads as a
-            list only when the lines start together. */}
-        <p
-          className={cx(
-            "mx-auto max-w-[56ch] whitespace-pre-wrap text-[13px] leading-5 text-text3",
-            cardsHere === null ? "text-center" : "w-fit text-left",
-          )}
-        >
-          <span className="sr-only">Studio: </span>
-          {entry.text}
-        </p>
-        {cardsHere !== null && <div className="px-1.5">{cardsHere}</div>}
-      </div>
-    );
-  }
-  const reply = splitReply(entry.text);
-  return (
-    <TutorMessage label="Planner">
-      {reply.prose !== "" && <NoteProse source={reply.prose} idPrefix={`p${entry.seq}-`} images="link" />}
-      {entry.interrupted === true && <p className="mt-2 text-[13px] text-text3">The reply was cut off.</p>}
-      {cardsHere !== null && <div className="mt-3">{cardsHere}</div>}
-      {suggestion !== null && suggestion.kinds.length > 0 && (
-        <div className="mt-3 flex flex-col gap-2" aria-label="Suggested">
-          {suggestion.kinds.map((kind) => (
-            <ConsentCard
-              key={kind}
-              kind={kind}
-              pitch={suggestion.pitch}
-              declined={suggestion.declined.includes(kind)}
-              cost={suggestionCost(kind, isDraftKind(kind) ? estimates?.[kind] : undefined)}
-              unavailable={unavailable(kind)}
-              onAllow={(always) => onAllow(kind, always)}
-              onDecline={() => onDecline(kind)}
-            />
-          ))}
-        </div>
-      )}
-    </TutorMessage>
-  );
-}
-
-/**
- * The consent card (D106): the planner's offer of a make — what it would
- * show, what the kind has cost here — with the answers: Allow once, Always
- * allow (this conversation, paid kinds only), Deny. An svg offer is the
- * same card minus the spend: it costs nothing, so there is no band and
- * nothing to always-allow (D110). A declined offer collapses to a quiet
- * line; the runner was told and the planner will not re-offer.
- */
-function ConsentCard({
-  kind,
-  pitch,
-  declined,
-  cost,
-  unavailable,
-  onAllow,
-  onDecline,
-}: {
-  kind: TagKind;
-  pitch: string | null;
-  declined: boolean;
-  cost: string | null;
-  unavailable: string | null;
-  onAllow: (always: boolean) => Promise<boolean>;
-  onDecline: () => Promise<boolean>;
-}) {
-  const [answering, setAnswering] = useState<"once" | "always" | "deny" | null>(null);
-  if (declined) {
-    return (
-      <p className="text-[12px] text-text3" data-consent="declined">
-        <Glyph name={kind} size={14} className="mr-1 inline-block align-[-2px]" />
-        {KIND_NAME[kind]} declined — the planner will not offer it again.
-      </p>
-    );
-  }
-  const press = (answer: "once" | "always" | "deny") => {
-    setAnswering(answer);
-    const done = answer === "deny" ? onDecline() : onAllow(answer === "always");
-    // A refused step re-arms the card: a card stuck disabled on an answer
-    // that never landed reads as consent given when none was.
-    void done.then((ok) => {
-      if (!ok) setAnswering(null);
-    });
-  };
-  return (
-    <div className="rounded-xl border border-border bg-surface px-4 py-3" data-consent={kind}>
-      <p className="flex items-center gap-2 text-[13px] font-medium text-text">
-        <Glyph name={kind} size={16} className="text-accent-text" />
-        {suggestionTitle(kind)}
-      </p>
-      {pitch !== null && <p className="mt-1 text-[13px] leading-5 text-text2">{pitch}</p>}
-      {cost !== null && <p className="mt-1 text-[12px] leading-4 text-text3">A make of this kind {cost}.</p>}
-      {unavailable !== null && <p className="mt-1 text-[12px] leading-4 text-text3">{unavailable}</p>}
-      <div className="mt-2.5 flex flex-wrap gap-2">
-        <Button size="sm" onClick={() => press("once")} disabled={answering !== null || unavailable !== null} title={unavailable ?? undefined}>
-          {answering === "once" ? "Sending…" : "Allow once"}
-        </Button>
-        {kind !== "svg" && (
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => press("always")}
-            disabled={answering !== null || unavailable !== null}
-            title={unavailable ?? "Let the planner start this kind on its own, on this conversation only"}
-          >
-            {answering === "always" ? "Allowing…" : "Always allow here"}
-          </Button>
-        )}
-        <Button size="sm" variant="ghost" onClick={() => press("deny")} disabled={answering !== null}>
-          {answering === "deny" ? "Noting…" : "Deny"}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-/** Make both: a primary button under the later card of a pair asked for together (D60). */
-function MakeBothButton({ label, busy, error, onPress }: { label: string; busy: boolean; error: string | null; onPress: () => void }) {
-  return (
-    <div className="flex flex-col gap-1.5 pt-1">
-      <div>
-        <Button onClick={onPress} disabled={busy} data-make-both>
-          {busy ? "Queuing both…" : label}
-        </Button>
-      </div>
-      {error === null ? (
-        <p className="text-[12px] leading-4 text-text3">Starts the diagram and the video together. Nothing is spent until you press it.</p>
-      ) : (
-        <p role="alert" className="text-[13px] leading-5 text-text">
-          {error}
-        </p>
-      )}
-    </div>
-  );
-}
-
-/**
- * A reply being written: "The planner is thinking" until the first words
- * arrive, and "Checking the brief" once a reply has landed while the turn is
- * still open, as the runner validates its brief (and may ask for a fix).
- */
-function Streaming({ text, checking }: { text: string | null; checking: boolean }) {
-  const reply = text === null ? null : splitReply(text, true);
-  if (reply === null && checking) {
-    return (
-      <p className="flex items-center gap-2 rounded-xl border-2 border-dashed border-border px-4 py-3 text-[14px] text-text3" role="status">
-        {CHECKING_BRIEF}
-        <TypingDots />
-      </p>
-    );
-  }
-  if (reply === null || (reply.prose === "" && !reply.checking)) {
-    return (
-      <TutorMessage label="Planner">
-        <p className="flex items-center gap-2 text-[14px] text-text3" role="status">
-          {THINKING}
-          <TypingDots />
-        </p>
-      </TutorMessage>
-    );
-  }
-  return (
-    <TutorMessage label="Planner">
-      {reply.prose !== "" && <NoteProse source={reply.prose} idPrefix="streaming-" images="link" />}
-      {reply.checking && (
-        <p className="mt-3 flex items-center gap-2 rounded-xl border-2 border-dashed border-border px-4 py-3 text-[14px] text-text3" role="status">
-          {CHECKING_BRIEF}
-          <TypingDots />
-        </p>
-      )}
-    </TutorMessage>
-  );
-}
-
-/** E1, E2 and E6: a `--warn-tint` card at the foot of the thread, with what to do. */
-function Problem({
-  problem,
-  kind = null,
-  onRetry,
-  onAskAgain,
-  onStartOver,
-  cutOffShown,
-  blocked,
-}: {
-  problem: ThreadProblem;
-  /** The kind E6's refused brief was, when the runner names it. */
-  kind?: DraftKind | null;
-  /**
-   * Why a paid resend waits, or null: the brief is being edited, and a reply
-   * may carry a new brief that retires the card with the edits on it.
-   */
-  blocked: string | null;
-  /** The cut-off reply already says so under its text: E2 is then only Try again. */
-  cutOffShown: boolean;
-  onRetry: (() => void) | null;
-  onAskAgain: (() => void) | null;
-  onStartOver: () => void;
-}) {
-  if (problem.case === "E2" && cutOffShown) {
-    return onRetry === null ? null : (
-      <div className="-mt-3 px-1.5">
-        <Button size="sm" variant="secondary" onClick={onRetry} disabled={blocked !== null} disabledReason={blocked ?? undefined}>
-          Try again
-        </Button>
-      </div>
-    );
-  }
-  const title =
-    problem.case === "E1" ? (
-      <>The planner&apos;s request was refused.</>
-    ) : problem.case === "E6" ? (
-      <>The planner&apos;s {kind === null ? "" : `${kind} `}brief did not pass the studio&apos;s checks twice.</>
-    ) : undefined;
-  return (
-    <Callout
-      role="alert"
-      title={title}
-      actions={
-        problem.case !== "E6" && onRetry === null ? undefined : (
-          <>
-            {problem.case !== "E6" && onRetry !== null && (
-              <Button size="sm" variant="secondary" onClick={onRetry} disabled={blocked !== null} disabledReason={blocked ?? undefined}>
-                Try again
-              </Button>
-            )}
-            {problem.case === "E6" && (
-              <>
-                {onAskAgain !== null && (
-                  <Button size="sm" variant="secondary" onClick={onAskAgain} disabled={blocked !== null} disabledReason={blocked ?? undefined}>
-                    Ask again
-                  </Button>
-                )}
-                <Button size="sm" variant="ghost" onClick={onStartOver}>
-                  Start over
-                </Button>
-              </>
-            )}
-          </>
-        )
-      }
-    >
-      {problem.case === "E1" && (
-        <>
-          <p>{problem.text}</p>
-          <p className="mt-1">
-            The planner runs on this machine&apos;s <span className="font-mono">claude</span> login. Check it with{" "}
-            <span className="font-mono">claude doctor</span>, then try again.
-          </p>
-        </>
-      )}
-      {problem.case === "E2" && <p>{problem.text}</p>}
-      {problem.case === "E6" && <p className="font-mono text-[12px]">{problem.text}</p>}
-    </Callout>
-  );
-}
-
-/** Why New conversation or Start over did nothing, where the press was. */
-function Failure({ text, className }: { text: string | null; className?: string }) {
-  if (text === null) return null;
-  return (
-    <p role="alert" className={cx("text-[13px] text-danger", className)}>
-      {text}
-    </p>
-  );
-}
-
-function BackBar({ href }: { href: string }) {
-  return (
-    <div className="flex h-10 shrink-0 items-center border-b border-hair bg-surface2 px-3">
-      <PanelLink
-        href={href}
-        scroll={false}
-        className="inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[13px] font-medium text-text2 transition-colors hover:bg-surface hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-      >
-        <Glyph name="previous" size={16} />
-        From your conversation
-      </PanelLink>
-    </div>
-  );
-}
-
-function Empty({ children }: { children: React.ReactNode }) {
-  return <div className="flex min-h-[240px] flex-1 flex-col items-center justify-center gap-4 p-8 text-center">{children}</div>;
 }

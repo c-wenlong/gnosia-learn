@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { FadeImg } from "@/components/studio/motion-parts";
-import { useStudioJobs } from "@/components/studio/JobsProvider";
+import { useJobVerb } from "@/components/studio/use-job-verb";
 import { Mono, PanelHeading } from "@/components/studio/StudioChrome";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -56,9 +56,8 @@ import { panelHref } from "@/lib/studio-view";
 type Which = "before" | "after";
 
 export function ComparisonPanel({ job, path }: { job: Job; path: string }) {
-  const { post, refresh } = useStudioJobs();
+  const { run, busy, refresh } = useJobVerb(path);
   const router = useRouter();
-  const [busy, setBusy] = useState<string | null>(null);
   const [said, setSaid] = useState<{ ok: boolean; text: string; recompare?: boolean } | null>(null);
   // Discard asks first, as a video's does: the candidate goes for good.
   const [confirmDiscard, setConfirmDiscard] = useState(false);
@@ -75,18 +74,10 @@ export function ComparisonPanel({ job, path }: { job: Job; path: string }) {
   const reviewable = job.state === "awaiting_review";
 
   const act = async (verb: string): Promise<void> => {
-    setBusy(verb);
-    const result = await post(`/studio/api/jobs/${encodeURIComponent(job.jobId)}/${verb}`);
-    setBusy(null);
+    const result = await run(job.jobId, verb);
     setConfirmDiscard(false);
-    const note = typeof result.data.note === "string" ? result.data.note : null;
-    const error = typeof result.data.error === "string" ? result.data.error : null;
     const detail = (result.data.detail ?? {}) as { recompare?: boolean };
-    setSaid({
-      ok: result.ok,
-      text: note ?? error ?? `${verb} returned ${result.status}`,
-      recompare: detail.recompare === true,
-    });
+    setSaid({ ok: result.ok, text: result.text, recompare: detail.recompare === true });
     await refresh();
     // The canvas this accept closed (A6) is reopened by the server render, and
     // an accepted job's panel is a different screen from the one that was here.

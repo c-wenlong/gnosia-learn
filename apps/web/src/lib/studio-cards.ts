@@ -1,13 +1,14 @@
 import type { MentionOption, MentionValue } from "@/lib/mentions";
 import { inlinePieces, isBareTag, isEmptyValue, prependValue, validMentions, valueOf } from "@/lib/mentions";
 import type { Brief, Job } from "@/lib/studio-jobs";
-import { isActive, isTerminal } from "@/lib/studio-jobs";
+import { isActive, isTerminal, jobKindOf } from "@/lib/studio-jobs";
+import { sentence } from "@/lib/sentence";
+import { posterHref, videoAssetId } from "@/lib/studio-video-job";
 import { briefTool, isVideoBrief, type VideoBrief } from "@/lib/studio-brief-video";
 import {
   capSentence,
   cardStatus,
   drawLabel,
-  sentence,
   STILL_ANSWERING,
   targetSlug,
   visibleEntries,
@@ -62,7 +63,7 @@ export const CHANGE_OPENING_TURN = "I've read this video's brief. Tell me what i
  * Change conversation pins, as Extend pins a diagram's SVG.
  */
 export function videoPosterHref(slug: string): string {
-  return `/api/assets/${encodeURIComponent(`video:${slug}`)}/poster`;
+  return posterHref(videoAssetId(slug));
 }
 /**
  * A conversation the concept tutor opened (H14 of docs/STUDIO-TUTOR-HANDOFF.md):
@@ -84,7 +85,6 @@ export function tutorTurnsWords(turns: number): string | null {
   return exchanges === 1 ? "and your last exchange with the tutor" : `and your last ${exchanges} exchanges with the tutor`;
 }
 
-export const MENTION_PLACEHOLDER = "Ask about an idea, or type @ to make something";
 /** The menu's foot line: the one thing a person cannot see from the entries. */
 export const MENTION_HINT = "Tag as many as fit";
 /** T15: a bare tag in an empty conversation gives the planner nothing to go on. */
@@ -282,9 +282,9 @@ export function requestSeqOf(view: Pick<DraftView, "slots">, kind: DraftKind, it
 /* Whether a card can be pressed                                              */
 /* -------------------------------------------------------------------------- */
 
-/** A video job's target: `videos/<slug>.mp4`. A diagram's is `learn/assets/<slug>.tldr`. */
-export function jobKind(job: Pick<Job, "target">): DraftKind {
-  return /(^|\/)videos\/[^/]+\.mp4$/.test(job.target) || job.target.endsWith(".mp4") ? "video" : "diagram";
+/** A job's kind as a card files it (`jobKindOf`): a video, or else a diagram. */
+export function jobKind(job: Pick<Job, "target"> & Partial<Pick<Job, "kind">>): DraftKind {
+  return jobKindOf(job) === "video" ? "video" : "diagram";
 }
 
 function videoSlug(target: string): string {
@@ -682,4 +682,3 @@ export function openerSend(opener: { send: string | null; sendMentions?: readonl
   if (opener.send === null) return null;
   return { text: opener.send, mentions: validMentions(opener.send, [...(opener.sendMentions ?? [])]) };
 }
-
