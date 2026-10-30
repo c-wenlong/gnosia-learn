@@ -12,6 +12,14 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
  * as "the video is gone".
  */
 
+// Signed in, so what is under test is the catalog being down. Without a
+// session the routes answer 401 before reading anything.
+const signedIn = vi.hoisted(() => ({ value: true }));
+vi.mock("@/lib/auth/session", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/session")>()),
+  isSignedIn: async () => signedIn.value,
+}));
+
 // The handlers run outside the request scope Next sets up, where
 // `connection()` throws; inside a real request it resolves at once.
 vi.mock("next/server", async (importOriginal) => ({
@@ -53,6 +61,21 @@ describe("the asset routes with no catalog", () => {
     ] as const) {
       expect(response.status, name).toBe(503);
       expect(((await response.json()) as { code: string }).code, name).toBe("catalog-unreachable");
+    }
+  });
+
+  it("answers 401 with no session, before the catalog is asked", async () => {
+    signedIn.value = false;
+    try {
+      for (const [name, response] of [
+        ["file", await file(at("file"), params)],
+        ["poster", await poster(at("poster"), params)],
+        ["status", await status(at("status"), params)],
+      ] as const) {
+        expect(response.status, name).toBe(401);
+      }
+    } finally {
+      signedIn.value = true;
     }
   });
 

@@ -10,6 +10,7 @@ import {
   type AssetStored,
 } from "@/lib/asset-files";
 import { assetBlobStore, SIGNED_URL_TTL_SECONDS } from "@/lib/blob-store";
+import { refuseWithoutOwner } from "@/lib/learner-api";
 import { withLearnerStore } from "@/lib/learner-store";
 
 /**
@@ -36,6 +37,8 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
+  const anonymous = await refuseWithoutOwner();
+  if (anonymous !== null) return anonymous;
   const { id } = await params;
 
   let target;

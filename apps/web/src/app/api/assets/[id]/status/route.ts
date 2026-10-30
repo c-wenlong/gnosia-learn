@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { posterSource, resolveAsset, type AssetSourceResult } from "@/lib/asset-files";
 import type { RouteProblemCode } from "@/lib/asset-problems";
+import { refuseWithoutOwner } from "@/lib/learner-api";
 import { withLearnerStore } from "@/lib/learner-store";
 
 /**
@@ -43,6 +44,8 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
+  const anonymous = await refuseWithoutOwner();
+  if (anonymous !== null) return anonymous;
   const { id } = await params;
   const forPoster = new URL(request.url).searchParams.get("for") === "poster";
 

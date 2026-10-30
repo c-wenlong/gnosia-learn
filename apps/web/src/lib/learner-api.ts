@@ -20,7 +20,7 @@ import { currentOwner, NoOwnerError } from "@/lib/owner";
  *      Honest about what it buys: a `curl` with a forged `Origin` header walks
  *      through it. It stops a cross-site page from ticking someone's
  *      checkboxes, and nothing more.
- *   2. **A rate limit.** Generous — a fast typist writing a note fires one
+ *   2. **The owner, then a rate limit keyed by them.** Generous — a fast typist writing a note fires one
  *      request per keystroke pause — and there to bound a loop, not a user.
  *   3. **Validation and clamping, server-side.** The browser clamps a recap
  *      too, but the browser is not the authority; the same constants and the
@@ -39,7 +39,7 @@ import { currentOwner, NoOwnerError } from "@/lib/owner";
  */
 
 /**
- * 60 writes a minute per IP. A note field posts on blur rather than per
+ * 60 writes a minute per owner. A note field posts on blur rather than per
  * keystroke, and a checklist is a handful of clicks, so this is well past
  * anything the UI produces and well short of a loop.
  */
@@ -71,6 +71,17 @@ export async function requestOwner(): Promise<string | NextResponse> {
   }
 }
 
+/**
+ * The 401 for a request with no session, or null when it has one. For a route
+ * whose reader resolves the owner itself: deciding it here first means a
+ * request that got past the proxy is a 401, not the reader's `NoOwnerError`
+ * surfacing as a 500 or as "the catalog is unreachable".
+ */
+export async function refuseWithoutOwner(): Promise<NextResponse | null> {
+  const owner = await requestOwner();
+  return owner instanceof NextResponse ? owner : null;
+}
+
 export function badRequest(message: string): NextResponse {
   return NextResponse.json({ ok: false, error: message, code: "BAD_REQUEST" }, { status: 400 });
 }
@@ -88,14 +99,59 @@ export function unavailable(message: string): NextResponse {
   );
 }
 
-async function readBody(req: Request): Promise<unknown> {
-  const declared = Number(req.headers.get("content-length") ?? "0");
-  if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) {
-    throw new BadRequest(`Body too large (${declared} bytes; limit ${MAX_BODY_BYTES}).`);
+/** A body past the reader's byte limit. */
+export class BodyTooLarge extends Error {
+  constructor(readonly limit: number) {
+    super(`Body too large (limit ${limit} bytes).`);
+    this.name = "BodyTooLarge";
   }
-  const text = await req.text();
-  if (text.length > MAX_BODY_BYTES) {
-    throw new BadRequest(`Body too large (${text.length} bytes; limit ${MAX_BODY_BYTES}).`);
+}
+
+/**
+ * The request body as text, read no further than `maxBytes` UTF-8 bytes.
+ *
+ * A declared `Content-Length` past the limit is refused before anything is
+ * read. A chunked body declares none, so the stream itself is counted and
+ * cancelled as soon as it passes the limit, rather than buffered whole and
+ * measured after (S7-15 of the 2026-10 audit). The limit is bytes, not
+ * UTF-16 units: 64,000 characters of CJK is three times the bytes.
+ *
+ * Throws `BodyTooLarge`; a body that cannot be read throws whatever the
+ * stream threw.
+ */
+export async function readBodyText(req: Request, maxBytes: number): Promise<string> {
+  const declared = Number(req.headers.get("content-length") ?? "");
+  if (Number.isFinite(declared) && declared > maxBytes) throw new BodyTooLarge(maxBytes);
+  if (req.body === null) return "";
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      throw new BodyTooLarge(maxBytes);
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(total);
+  let at = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, at);
+    at += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
+}
+
+async function readBody(req: Request): Promise<unknown> {
+  let text: string;
+  try {
+    text = await readBodyText(req, MAX_BODY_BYTES);
+  } catch (error) {
+    if (error instanceof BodyTooLarge) throw new BadRequest(`Body too large (limit ${MAX_BODY_BYTES} bytes).`);
+    throw error;
   }
   if (text.trim() === "") return {};
   try {
@@ -117,11 +173,10 @@ export function handler<T>(
   return async (req: Request) => {
     const origin = enforceSameOrigin(req);
     if (origin !== null) return origin;
-    const limited = enforceRateLimit(req, `learner:${bucket}`, LEARNER_RATE_LIMIT);
-    if (limited !== null) return limited;
-
     const owner = await requestOwner();
     if (owner instanceof NextResponse) return owner;
+    const limited = enforceRateLimit(owner, `learner:${bucket}`, LEARNER_RATE_LIMIT);
+    if (limited !== null) return limited;
 
     let input: T;
     try {

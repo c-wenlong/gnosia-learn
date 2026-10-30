@@ -1,6 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/core";
+import { recordSignInFailure, resetSignInLimits, SIGN_IN_CLIENT_RULE, SIGN_IN_FAILURE_RULE } from "@/lib/auth/sign-in-limit";
 
 import { GET as localAuth } from "./local/route";
 import { POST as signIn } from "./sign-in/route";
@@ -27,10 +28,13 @@ describe("POST /api/auth/sign-in", () => {
   beforeEach(() => {
     process.env.OWNER_PASSWORD = "correct horse battery staple";
     process.env.AUTH_SECRET = SECRET;
+    resetSignInLimits();
   });
   afterEach(() => {
     process.env.OWNER_PASSWORD = saved.password;
     process.env.AUTH_SECRET = saved.secret;
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
   });
 
   it("sets a verifiable session cookie and lands on next", async () => {
@@ -104,6 +108,54 @@ describe("POST /api/auth/sign-in", () => {
       headers: { host: "gnosia.example", "x-forwarded-proto": "https", origin: "https://gnosia.example" },
     });
     expect((await signOut(request)).status).toBe(303);
+  });
+
+  it("waits before answering a wrong password", async () => {
+    const started = Date.now();
+    await signIn(post("/api/auth/sign-in", { password: "wrong" }));
+    expect(Date.now() - started).toBeGreaterThanOrEqual(550);
+  });
+
+  it("stops taking attempts from one client past the limit, the right password included", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    for (let i = 0; i < SIGN_IN_CLIENT_RULE.limit; i += 1) {
+      const ok = await signIn(post("/api/auth/sign-in", { password: "correct horse battery staple" }));
+      expect(ok.headers.get("location"), `attempt ${i}`).toBe("/home");
+    }
+    const refused = await signIn(post("/api/auth/sign-in", { password: "correct horse battery staple" }));
+    expect(refused.status).toBe(303);
+    expect(refused.headers.get("location")).toMatch(/^\/sign-in\?error=throttled&retry=\d+$/);
+    expect(Number(refused.headers.get("retry-after"))).toBeGreaterThan(0);
+    expect(cookieOf(refused)).toBe("");
+    // A new X-Forwarded-For per request is not a new client on a server no proxy fronts.
+    const rotated = await signIn(post("/api/auth/sign-in", { password: "correct horse battery staple" }, { "x-forwarded-for": "10.9.0.1" }));
+    expect(rotated.headers.get("location")).toMatch(/error=throttled/);
+    // The window ends.
+    vi.setSystemTime(Date.now() + SIGN_IN_CLIENT_RULE.windowMs + 1);
+    expect((await signIn(post("/api/auth/sign-in", { password: "correct horse battery staple" }))).headers.get("location")).toBe("/home");
+  });
+
+  it("closes sign-in for everyone after too many wrong passwords from all clients together", async () => {
+    vi.stubEnv("TRUST_PROXY", "1");
+    // A wrong password counts against everyone's window; the per-client
+    // limit and the wait are covered above, so the failures are recorded
+    // directly rather than waited out fifty times.
+    const wrong = await signIn(post("/api/auth/sign-in", { password: "guess" }, { "x-forwarded-for": "203.0.113.1" }));
+    expect(wrong.headers.get("location")).toBe("/sign-in?error=password");
+    for (let i = 1; i < SIGN_IN_FAILURE_RULE.limit; i += 1) recordSignInFailure();
+    const owner = await signIn(post("/api/auth/sign-in", { password: "correct horse battery staple" }, { "x-forwarded-for": "198.51.100.1" }));
+    expect(owner.headers.get("location")).toMatch(/error=throttled/);
+    expect(cookieOf(owner)).toBe("");
+  });
+
+  it("refuses a sibling subdomain and an Origin of null", async () => {
+    expect((await signIn(post("/api/auth/sign-in", { password: "x" }, { "sec-fetch-site": "same-site" }))).status).toBe(403);
+    const nullOrigin = new Request(`${ORIGIN}/api/auth/sign-in`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded", host: "localhost:3000", origin: "null" },
+      body: new URLSearchParams({ password: "correct horse battery staple" }),
+    });
+    expect((await signIn(nullOrigin)).status).toBe(403);
   });
 
   it("refuses a cross-site post before reading the body", async () => {

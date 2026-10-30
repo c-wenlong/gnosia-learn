@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 
 import {
-  constantTimeEqual,
   LOCAL_TOKEN_VAR,
   readAuthConfig,
   SESSION_COOKIE,
   SESSION_TTL_SECONDS,
+  secretsEqual,
   signSession,
 } from "@/lib/auth/core";
 import { redirectTo, sessionCookie } from "../shared";
@@ -34,7 +34,7 @@ import { redirectTo, sessionCookie } from "../shared";
 export async function GET(request: Request) {
   const expected = process.env[LOCAL_TOKEN_VAR];
   const token = new URL(request.url).searchParams.get("token") ?? "";
-  if (!expected || !constantTimeEqual(token, expected)) {
+  if (!expected || !(await secretsEqual(token, expected))) {
     return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   }
 
