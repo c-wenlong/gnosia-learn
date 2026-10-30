@@ -169,7 +169,7 @@ struct ReviewView: View {
                     .padding(.horizontal, 28)
                     .padding(.top, 4)
                     .padding(.bottom, 40)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: .infinity)
             }
             .animation(.easeOut(duration: 0.2), value: stepKey)
             // The answer panel, verdict and rating row rise in when the

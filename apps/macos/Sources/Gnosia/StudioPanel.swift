@@ -103,9 +103,6 @@ struct StudioPanel: View {
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(G.border, lineWidth: 1))
                     .disabled(w.checks.isEmpty)
                     .opacity(w.checks.isEmpty ? 0.5 : 1)
-                Text("Answered state is matched by question text — the mirrored observations name no concept.")
-                    .font(.caption2)
-                    .foregroundStyle(G.text3)
             }
             .accessibilityLabel("Checks")
 

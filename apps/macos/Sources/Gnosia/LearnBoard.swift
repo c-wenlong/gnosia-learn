@@ -108,7 +108,7 @@ struct LearnBoardView: View {
                 ContentUnavailableView(
                     "No concepts",
                     systemImage: "brain",
-                    description: Text("The catalog is reachable and holds no concepts — index your notes and snapshot again.")
+                    description: Text("The catalog is reachable and holds no concepts. Index your notes and snapshot again.")
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -178,6 +178,11 @@ struct LearnBoardView: View {
                 }
             }
             .font(.callout)
+            // The label draws its own chevrons; the default style would add
+            // a bezel and a second indicator around it.
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .menuIndicator(.hidden)
             .fixedSize()
 
             Spacer()
@@ -394,6 +399,10 @@ private struct ClusterCard: View {
                         Rectangle().fill(Color.masteryMid)
                             .frame(width: geo.size.width * share(domain.counts[.learning] ?? 0))
                     }
+                    // The track spans the card; the HStack alone is only as
+                    // wide as its fills, which drew a 2-of-2 domain and a
+                    // 2-of-7 one as the same bar with nothing left to fill.
+                    .frame(width: geo.size.width, alignment: .leading)
                     .background(G.surface2)
                     .clipShape(Capsule())
                 }

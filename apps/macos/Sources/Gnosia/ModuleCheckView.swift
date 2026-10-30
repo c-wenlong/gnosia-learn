@@ -404,7 +404,8 @@ struct ModuleCheckView: View {
                 .padding(.horizontal, 28)
                 .padding(.top, 10)
                 .padding(.bottom, 48)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                // The web's FocusFrame: the 720 column centred.
+                .frame(maxWidth: .infinity)
             }
         }
     }

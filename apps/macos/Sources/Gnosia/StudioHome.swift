@@ -782,6 +782,10 @@ struct StudioHomeComposer: View {
             } label: {
                 composerPill(label: options.first(where: { $0.value == studio.harness })?.label ?? studio.harness)
             }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .menuIndicator(.hidden)
+            .fixedSize()
         }
     }
 
@@ -810,14 +814,14 @@ struct StudioHomeComposer: View {
             case "codex":
                 return [
                     Tier(value: "default", label: "Default", detail: "the model your codex login runs", enabled: true),
-                    Tier(value: "gpt-6-luna", label: "Lite", detail: "GPT-6 Luna — fast, for everyday asks", enabled: true),
-                    Tier(value: "gpt-6-astra", label: "Max", detail: "GPT-6 Astra — frontier, for the hard ones", enabled: true),
+                    Tier(value: "gpt-6-luna", label: "Lite", detail: "GPT-6 Luna: fast, for everyday asks", enabled: true),
+                    Tier(value: "gpt-6-astra", label: "Max", detail: "GPT-6 Astra: frontier, for the hard ones", enabled: true),
                 ]
             default:
                 return [
                     Tier(value: "default", label: "Default", detail: defaultDetail, enabled: true),
-                    Tier(value: "sonnet", label: "Lite", detail: "Sonnet — fast, for everyday asks", enabled: true),
-                    Tier(value: "fable", label: "Max", detail: "Fable — the strongest, for hard ones", enabled: true),
+                    Tier(value: "sonnet", label: "Lite", detail: "Sonnet: fast, for everyday asks", enabled: true),
+                    Tier(value: "fable", label: "Max", detail: "Fable: the strongest, for hard ones", enabled: true),
                 ]
             }
         }
@@ -859,6 +863,10 @@ struct StudioHomeComposer: View {
             } label: {
                 composerPill(label: currentLabel)
             }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .menuIndicator(.hidden)
+            .fixedSize()
         }
     }
 
@@ -1182,6 +1190,10 @@ private struct DisplayMenu: View {
         } label: {
             menuPill("Display")
         }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
     }
 
     private func menuItem(_ label: String, on: Bool, action: @escaping () -> Void) -> some View {
@@ -1215,6 +1227,10 @@ private struct SortMenu: View {
         } label: {
             menuPill("Sort")
         }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
     }
 
     private func menuItem(_ label: String, on: Bool, action: @escaping () -> Void) -> some View {
@@ -1289,7 +1305,7 @@ private struct TileJobStrip: View {
             .background(G.surface2, in: Capsule())
         }
         .buttonStyle(.plain)
-        .help("\(job.state.replacingOccurrences(of: "_", with: " ")) — open the job")
+        .help("\(job.state.replacingOccurrences(of: "_", with: " ")). Open the job")
     }
 }
 

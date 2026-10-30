@@ -47,7 +47,7 @@ struct HomeView: View {
             ContentUnavailableView(
                 "Nothing to learn from yet",
                 systemImage: "sparkles",
-                description: Text("The catalog holds no concepts — index your notes and snapshot again.")
+                description: Text("The catalog holds no concepts. Index your notes and snapshot again.")
             )
         }
 

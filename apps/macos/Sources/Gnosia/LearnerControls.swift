@@ -72,7 +72,7 @@ struct MarkDoneButton: View {
                   systemImage: done ? "checkmark.circle.fill" : "checkmark.circle")
                 .font(.callout)
         }
-        .help(done ? "Marked \(verb) — pressing again updates the time" : "Mark \(verb)")
+        .help(done ? "Marked \(verb). Pressing again updates the time" : "Mark \(verb)")
     }
 }
 

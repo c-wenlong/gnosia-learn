@@ -130,7 +130,7 @@ struct NoteSourcesPanel: View {
                         .accessibilityHidden(!noteOpen)
                     }
                 } else {
-                    Text("The concept row was mirrored without a note body — an older snapshot, or a note never indexed.")
+                    Text("The concept row was mirrored without a note body: an older snapshot, or a note never indexed.")
                         .font(.callout)
                         .foregroundStyle(G.text3)
                 }

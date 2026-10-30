@@ -125,7 +125,9 @@ final class SvgRasterizer {
     /// The markup as a full page, on the tldraw canvas's own white, a
     /// diagram is drawn dark-on-light, and a transparent snapshot in the
     /// app's dark navy would read as ink on ink. `contain` so whatever the
-    /// export's pixel size is, it fits the tile.
+    /// export's pixel size is, it fits the tile. One with a viewBox and no
+    /// width (what a planner's picture usually is) has no size of its own,
+    /// and as a flex item it shrank to nothing, so it is given the box.
     private static func page(for svg: String) -> String {
         """
         <!doctype html><html><head><meta charset="utf-8">
@@ -134,6 +136,7 @@ final class SvgRasterizer {
         html,body{margin:0;height:100%;background:#fdfcf8;display:flex;
                   align-items:center;justify-content:center}
         svg{max-width:96vw;max-height:96vh}
+        svg:not([width]){width:96vw;height:96vh}
         </style></head><body>\(svg)</body></html>
         """
     }

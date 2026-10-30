@@ -364,7 +364,7 @@ final class StudioManager {
     func launch() {
         guard !launching else { return }
         guard let root = Self.repoRoot() else {
-            launchNote = "No checkout found — set GNOSIA_REPO to the repository root."
+            launchNote = "No checkout found. Set GNOSIA_REPO to the repository root."
             return
         }
         let studioHome = root.appending(path: ".studio")
@@ -380,7 +380,7 @@ final class StudioManager {
             try? await Task.sleep(for: .seconds(150))
             guard let self, self.launching else { return }
             self.launching = false
-            self.launchNote = "still not answering after 2½ minutes — see .studio/runner.log"
+            self.launchNote = "still not answering after 2½ minutes; see .studio/runner.log"
         }
     }
 
@@ -405,7 +405,7 @@ final class StudioManager {
                 guard let self else { return }
                 if p.terminationStatus != 0 {
                     self.launching = false
-                    self.launchNote = "the launch failed (exit \(p.terminationStatus)) — npm may be missing from PATH"
+                    self.launchNote = "the launch failed (exit \(p.terminationStatus)); npm may be missing from PATH"
                 }
                 await self.refresh()
             }

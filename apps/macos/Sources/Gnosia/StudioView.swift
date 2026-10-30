@@ -166,7 +166,7 @@ struct StudioView: View {
                 .font(.title3)
                 .foregroundStyle(G.accentText)
             VStack(alignment: .leading, spacing: 2) {
-                Text(studio.health?.note ?? "everything is answering")
+                Text(studio.health?.note ?? "Everything is answering")
                     .font(.callout)
                     .foregroundStyle(G.text)
                 Text(statusLine)
@@ -507,7 +507,7 @@ struct StudioBlockedCard: View {
                 }
             }
             if launching {
-                Text("Detached — it keeps running after Gnosia quits. The first minute runs checks before it answers.")
+                Text("Detached: it keeps running after Gnosia quits. The first minute runs checks before it answers.")
                     .font(.caption)
                     .foregroundStyle(G.text3)
             }

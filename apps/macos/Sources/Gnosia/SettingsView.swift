@@ -24,7 +24,7 @@ struct SettingsView: View {
             Section("Catalog") {
                 TextField("Catalog SQLite file:", text: $catalogPath)
                     .textFieldStyle(.roundedBorder)
-                Text("Leave empty for the default: <data home>/app-catalog.db — " +
+                Text("Leave empty for the default: <data home>/app-catalog.db, where the data home is " +
                      "$GNOSIA_HOME, then ~/.gnosia. GNOSIA_CATALOG overrides it.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
