@@ -14,7 +14,8 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Textarea } from "@/components/ui/Textarea";
 import { cx, LABEL, TRACK } from "@/components/ui/classes";
 import { TextLink } from "@/components/ui/TextLink";
-import { CONFIDENCE_STOPS, DEFAULT_CONFIDENCE } from "@/lib/check-block";
+import { DEFAULT_CONFIDENCE } from "@/lib/check-block";
+import { STOP_ITEMS } from "@/components/workspace/ChoiceCheckCard";
 import {
   feedbackNote,
   newSessionId,
@@ -40,6 +41,7 @@ import {
 } from "@/lib/week-check";
 import { scrollBehavior } from "@/lib/motion";
 import { quizKey } from "@/lib/quiz-keys";
+import { randomToken } from "@/lib/random-token";
 
 import { SessionClose } from "./SessionClose";
 
@@ -105,7 +107,6 @@ interface Attempt {
   thinking: string | null;
 }
 
-const STOP_ITEMS = CONFIDENCE_STOPS.map((stop) => ({ id: String(stop), label: `${stop}%` }));
 
 interface Graded {
   picked: number | null;
@@ -117,14 +118,6 @@ interface ObserveReply {
   ok?: boolean;
   error?: string;
   result?: RecordedAnswer;
-}
-
-function randomToken(): string {
-  // `randomUUID` needs a secure context; a LAN address over http is not one.
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID().replace(/-/g, "");
-  }
-  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}`;
 }
 
 function modelProblem(code: string | undefined, error: string | undefined, status: number): string {

@@ -22,7 +22,7 @@ export class InvalidPreference extends Error {}
 /**
  * How the tutor talks. Stored as the `id`; the concept tutor and the session's
  * question writer read it (`TUTOR_STYLE_INSTRUCTIONS` in `@/lib/agent/prompt`,
- * `SESSION_EXPLANATION_RULES` in `@/lib/agent/session`).
+ * `SESSION_EXPLANATION_RULES` in `./session-question`).
  */
 export const TUTOR_STYLES = [
   { id: "guide-concise", label: "Learning guide · concise" },

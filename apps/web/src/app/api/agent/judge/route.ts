@@ -2,11 +2,8 @@ import { NextResponse } from "next/server";
 
 import { tutorDeps, turnResponse } from "@/lib/agent/env";
 import { CHAT_RATE_LIMIT, enforceRateLimit, enforceSameOrigin } from "@/lib/agent/guard";
-import { isConceptSlug } from "@/lib/concept-workspace-core";
 import { requestOwner } from "@/lib/learner-api";
-import { COMMITMENT_RULE, isCommitment } from "@/lib/agent/judge";
-import { CHAT_ANSWER_LIMIT, CHECK_QUESTION_LIMIT } from "@/lib/tutor-check";
-import { judgeTurn } from "@gnosia/tutor/server/turns";
+import { judgeTurn, validateJudgeBody } from "@gnosia/tutor/server/turns";
 
 export const runtime = "nodejs";
 
@@ -24,8 +21,8 @@ export const runtime = "nodejs";
  *
  * The turn itself — the workspace read, the judge prompt, the model chain and
  * the reply shape — is `judgeTurn` in `@gnosia/tutor/server`. This file
- * keeps the request-side guards and the validation that must answer before
- * the limiter is touched.
+ * keeps the request-side guards, and answers the turn's own validation
+ * (`validateJudgeBody`) before the limiter is touched.
  */
 export async function POST(req: Request) {
   const crossOrigin = enforceSameOrigin(req);
@@ -39,16 +36,9 @@ export async function POST(req: Request) {
   } catch {
     return bad("Invalid JSON body");
   }
-  if (body === null || typeof body !== "object" || Array.isArray(body)) return bad("The body must be a JSON object");
-  const { conceptSlug, question, answer, commitment } = body as Record<string, unknown>;
-  if (!isConceptSlug(conceptSlug)) return bad("conceptSlug must be a concept id (lowercase letters, digits and hyphens)");
-  if (typeof question !== "string" || question.trim() === "" || question.length > CHECK_QUESTION_LIMIT) {
-    return bad(`question must be the check the tutor asked, 1 to ${CHECK_QUESTION_LIMIT} characters`);
-  }
-  if (typeof answer !== "string" || answer.trim() === "" || answer.length > CHAT_ANSWER_LIMIT) {
-    return bad(`answer must be the learner's reply, 1 to ${CHAT_ANSWER_LIMIT} characters`);
-  }
-  if (!isCommitment(commitment)) return bad(COMMITMENT_RULE);
+  // The turn's own rules, before the limiter: a malformed body spends no token.
+  const refused = validateJudgeBody(body);
+  if (refused) return turnResponse(refused);
 
   // Before the read, so an unknown slug is not a free way to spin the limiter.
   const limited = enforceRateLimit(owner, "judge", CHAT_RATE_LIMIT);

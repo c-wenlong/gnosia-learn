@@ -15,9 +15,9 @@ import {
   EXPLANATION_TARGET,
   QUESTION_LIMITS,
   SESSION_EXPLANATION_RULES,
-} from "@/lib/agent/session";
+} from "@gnosia/tutor/session-question";
 import { TUTOR_STYLES } from "@/lib/preferences";
-import { buildLearningObjectives } from "@/lib/agent/objectives";
+import { buildLearningObjectives } from "@gnosia/tutor/objectives";
 import { findTopicBySlugs } from "@/lib/agent/lookup";
 
 // The app reads courses from the database only; this suite tests logic over

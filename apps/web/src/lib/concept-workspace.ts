@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { connection } from "next/server";
 import { ownerScope } from "@gnosia/schema/shared";
 import {
@@ -36,8 +37,13 @@ export async function readConceptWorkspace(slug: string, owner?: string): Promis
   );
 }
 
-/** The workspace for this request. */
-export async function loadConceptWorkspace(slug: string): Promise<ConceptWorkspaceRead> {
+/**
+ * The workspace for this request, read once however many times the render
+ * asks: `generateMetadata` and the page both want it, and each read is the
+ * knowledge base, the owner's event log, the review cards and the courses.
+ * React's `cache` keeps the answer for one server render, keyed by the slug.
+ */
+export const loadConceptWorkspace = cache(async (slug: string): Promise<ConceptWorkspaceRead> => {
   await connection();
   return readConceptWorkspace(slug);
-}
+});
