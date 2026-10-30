@@ -10,9 +10,11 @@
  *   ribbon so they never sit directly on a cream ground;
  * - the star, `--brand-gold`.
  *
- * Sized with `size`, or with a class (`size-[1.9em]`), which wins over the
- * attributes. Construction notes: docs/design/BRAND.md. No hooks: safe in a
- * server component.
+ * The paths only: the landing page draws the star, and the preview kit's
+ * `docs/design/kit/gen-icons.mjs` reads all three from this file's source,
+ * so their names and string form are its contract. The interface itself
+ * shows the logo art (`GnosiaWordmark`), not this reduction. Construction
+ * notes: docs/design/BRAND.md.
  */
 
 /**
@@ -32,34 +34,3 @@ export const MARK_BOOK =
   "M32 53C40.5 47.5 49 44 56 43.5L55.5 47.5C48 48.5 40 51.5 32 55.5Z";
 /** The star: four points, concave sides, centred in the counter at (32, 29). */
 export const MARK_STAR = "M32 19Q33.8 27.3 41.5 29Q33.8 30.7 32 39Q30.2 30.7 22.5 29Q30.2 27.3 32 19Z";
-
-export function GnosiaMark({
-  size = 32,
-  className,
-  title,
-}: {
-  size?: number;
-  className?: string;
-  /** An accessible name. Without it the mark is decorative and hidden. */
-  title?: string;
-}) {
-  const a11y = title
-    ? ({ role: "img", "aria-label": title } as const)
-    : ({ "aria-hidden": true, focusable: "false" } as const);
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 64 64"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className={className}
-      {...a11y}
-    >
-      {title ? <title>{title}</title> : null}
-      <path d={MARK_G} fill="currentColor" />
-      <path d={MARK_BOOK} fill="var(--brand-cream)" />
-      <path d={MARK_STAR} fill="var(--brand-gold)" />
-    </svg>
-  );
-}

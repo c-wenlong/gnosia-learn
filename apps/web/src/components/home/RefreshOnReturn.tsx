@@ -37,6 +37,7 @@ export function RefreshOnReturn({ asOf }: { asOf: string }) {
   }, [asOf]);
 
   useEffect(() => {
+    let release: number | undefined;
     const check = () => {
       const go = shouldRefresh({
         visible: document.visibilityState === "visible",
@@ -50,7 +51,8 @@ export function RefreshOnReturn({ asOf }: { asOf: string }) {
       router.refresh();
       // A refresh that never lands (the network dropped) must not block the
       // next return for good; one that lands resets this through `asOf`.
-      window.setTimeout(() => {
+      window.clearTimeout(release);
+      release = window.setTimeout(() => {
         pending.current = false;
       }, PENDING_MS);
     };
@@ -59,6 +61,8 @@ export function RefreshOnReturn({ asOf }: { asOf: string }) {
     return () => {
       document.removeEventListener("visibilitychange", check);
       window.removeEventListener("focus", check);
+      // Gone with the page: nothing is left to release.
+      window.clearTimeout(release);
     };
   }, [router]);
   return null;

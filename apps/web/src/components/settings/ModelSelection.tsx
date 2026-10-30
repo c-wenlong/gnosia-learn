@@ -19,6 +19,7 @@ import type { ProvidersView } from "@/lib/providers/view";
 import { sendJson } from "@/lib/send-json";
 
 import { usePreference } from "./SettingsForm";
+import { failure, textOf, tone, type Reply, type Status } from "./status";
 
 /**
  * The Model selection card: what the saved providers run. The tutor's side
@@ -32,27 +33,10 @@ import { usePreference } from "./SettingsForm";
  * picker would say Loading for good.
  */
 
-type Status = { kind: "idle" } | { kind: "busy"; text: string } | { kind: "done"; text: string } | { kind: "error"; text: string };
-
-interface Reply {
-  ok?: boolean;
-  error?: string;
-  chain?: ChainEntry[];
-  models?: { id: string; free?: boolean }[];
-  message?: string;
-  served?: string;
-  status?: number | null;
-}
-
 type ListState =
   | { state: "loading" }
   | { state: "ready"; models: { id: string; free?: boolean }[] }
   | { state: "error"; message: string };
-
-const tone = (s: Status) => (s.kind === "done" ? "ok" : s.kind === "error" ? "danger" : "muted");
-const textOf = (s: Status) => (s.kind === "idle" ? null : s.text);
-const failure = (what: string, reply: { status: number; data: Reply } | null) =>
-  reply === null ? `Not ${what}: the server did not answer.` : (reply.data.error ?? `Not ${what} (HTTP ${reply.status}).`);
 
 export function ModelSelection({
   view,
