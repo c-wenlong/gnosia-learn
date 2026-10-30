@@ -3,8 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { useAssetFailure } from "@/components/use-asset-failure";
-import { CARD_TITLE, cardClasses, chipClasses, cx } from "@/components/ui/classes";
-import { TextLink } from "@/components/ui/TextLink";
+import { cardClasses, chipClasses, cx } from "@/components/ui/classes";
 import { WidgetFailure } from "@/components/WidgetFailure";
 
 /**
@@ -47,23 +46,14 @@ export function DiagramView({
   src,
   statusHref,
   title,
-  caption,
-  heading = true,
   failureHeadline = "This diagram did not load.",
 }: {
   /** Already resolved by the caller. */
   src: string;
   /** Where to ask why `src` failed. Without one a failure says it has no reason. */
   statusHref?: string;
-  /** The alt text and the visible heading. */
+  /** The alt text. The page names the diagram already, under it. */
   title: string;
-  caption?: string;
-  /**
-   * Draw the title bar. Off where the page names the diagram already (the
-   * library asset page, whose title sits under it), and then "Full size" is a
-   * small link in the corner of the mat instead.
-   */
-  heading?: boolean;
   /** What the failure panel says, for a picture that is not a diagram (a video's poster). */
   failureHeadline?: string;
 }) {
@@ -81,8 +71,8 @@ export function DiagramView({
   //
   // Set during render rather than in an effect so the swapped-in diagram is
   // never painted through the previous file's status, and kept inside the
-  // component rather than pushed onto callers as a `key`: the diagram studio
-  // renders this from another route, and the next caller would have to know.
+  // component rather than pushed onto callers as a `key`, so the next caller
+  // does not have to know.
   const [renderedSrc, setRenderedSrc] = useState(src);
   if (renderedSrc !== src) {
     setRenderedSrc(src);
@@ -100,25 +90,16 @@ export function DiagramView({
 
   return (
     <figure className={cardClasses({ flush: true, className: "relative" })}>
-      {heading ? (
-        <div className="flex items-center justify-between gap-3 border-b border-hair px-4 py-3">
-          <h3 className={cx(CARD_TITLE, "truncate")}>{title}</h3>
-          <TextLink href={src} external size="sm" className="shrink-0 px-1.5 py-0.5">
-            Full size
-          </TextLink>
-        </div>
-      ) : (
-        // Kept when the picture fails too: opening the file itself is then
-        // the one way left to see it, or to see why not.
-        <a
-          href={src}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={chipClasses({ size: "sm", tone: "overlay", className: "absolute top-3 right-3 z-10" })}
-        >
-          Full size
-        </a>
-      )}
+      {/* Kept when the picture fails too: opening the file itself is then
+          the one way left to see it, or to see why not. */}
+      <a
+        href={src}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={chipClasses({ size: "sm", tone: "overlay", className: "absolute top-3 right-3 z-10" })}
+      >
+        Full size
+      </a>
 
       {failure !== null ? (
         <WidgetFailure
@@ -169,11 +150,6 @@ export function DiagramView({
         </div>
       )}
 
-      {caption && (
-        <figcaption className="border-t border-hair px-4 py-2.5 text-[12px] text-text2">
-          {caption}
-        </figcaption>
-      )}
     </figure>
   );
 }

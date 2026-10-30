@@ -205,7 +205,7 @@ export default async function AssetPage({
           played here has nothing to mark. */}
       {asset.kind !== "video" && (
         // Details says when it was last read, so the button does not.
-        <MarkWatched assetId={asset.id} verb="read" lastWatchedDay={null} />
+        <MarkWatched assetId={asset.id} />
       )}
       <FavoriteButton assetId={asset.id} initial={favorite !== null} />
     </>

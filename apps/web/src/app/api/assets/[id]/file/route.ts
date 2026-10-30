@@ -114,7 +114,7 @@ export const runtime = "nodejs";
  * an SVG whatever the policy says. Direct navigation to the URL is the case
  * this protects, and `sandbox` is the directive that protects it.
  */
-export const ASSET_CSP =
+const ASSET_CSP =
   "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; " +
   "font-src data:; img-src data:; sandbox";
 
