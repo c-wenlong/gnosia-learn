@@ -2,15 +2,21 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 
-import { FADE_IN, POP_IN } from "@/components/studio/motion";
+import {
+  JobRowWords,
+  JobTileFrame,
+  JobTileHeldPicture,
+  jobTileLabel,
+  jobTileLayer,
+  JobTileStatus,
+  JobTileVeil,
+  NewJobCard,
+  NewJobRow,
+} from "@/components/studio/job-tile";
+import { FADE_IN } from "@/components/studio/motion";
 import { PanelLink } from "@/components/studio/PanelLink";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
-import { Duration } from "@/components/studio/JobStrip";
-import { KindBadge } from "@/components/studio/KindBadge";
-import { JOB_BAR, JOB_CONTROL, TILE, TILE_LIFT } from "@/components/studio/surfaces";
-import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
-import { buttonClasses, cx } from "@/components/ui/classes";
+import { cx } from "@/components/ui/classes";
 import { useImageReveal } from "@/components/ui/use-image-reveal";
 import { finishedHeadline, type Job } from "@/lib/studio-jobs";
 import {
@@ -34,8 +40,8 @@ import {
   type LivePictures,
   type TileStage,
 } from "@/lib/studio-tile-jobs";
-import { conversationHref, panelHref } from "@/lib/studio-view";
-import { useElapsed } from "@/lib/use-elapsed";
+import { panelHref } from "@/lib/studio-view";
+import { useOnScreen } from "@/lib/use-on-screen";
 import { usePageVisible } from "@/lib/use-page-visible";
 import { prefersReducedMotion } from "@/lib/motion";
 
@@ -142,47 +148,16 @@ export function NewDiagramJobs({
   const drawing = newDiagramJobs(jobs, existing, ended, dismissed);
   return drawing.map((job) =>
     layout === "grid" ? (
-      <NewDiagramCard key={job.jobId} job={job} path={path} />
+      <NewJobCard
+        key={job.jobId}
+        job={job}
+        kind="diagram"
+        title={job.title ?? "New diagram"}
+        stage={<JobStage job={job} title={job.title ?? "New diagram"} thumbnail={null} path={path} isNew />}
+      />
     ) : (
-      <NewDiagramRow key={job.jobId} job={job} path={path} />
+      <NewJobRow key={job.jobId} job={job} kind="diagram" title={job.title ?? "New diagram"} path={path} words={<RowWords job={job} />} />
     ),
-  );
-}
-
-function NewDiagramCard({ job, path }: { job: Job; path: string }) {
-  const title = job.title ?? "New diagram";
-  return (
-    <div className={cx(TILE, TILE_LIFT, POP_IN)}>
-      <div className="relative aspect-[4/3] overflow-hidden border-b border-border">
-        <JobStage job={job} title={title} thumbnail={null} path={path} isNew />
-        <KindBadge kind="diagram" />
-      </div>
-      <div className="flex min-w-0 flex-col gap-1.5 p-3">
-        <span className="line-clamp-2 text-sm font-medium">{title}</span>
-        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-          <Badge>{job.topic}</Badge>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function NewDiagramRow({ job, path }: { job: Job; path: string }) {
-  return (
-    <PanelLink
-      href={panelHref(path, { job: job.jobId })}
-      scroll={false}
-      className={cx("flex h-8 min-w-0 items-center gap-2 rounded-md px-2 text-xs transition-colors hover:bg-surface2", FADE_IN)}
-    >
-      <span className="flex h-6 w-12 shrink-0 items-center justify-center overflow-hidden rounded border border-border bg-surface2">
-        <Dot stage={tileStage(job)} />
-      </span>
-      <KindBadge kind="diagram" inline />
-      <span className="min-w-[5rem] flex-1 truncate font-medium">{job.title ?? "New diagram"}</span>
-      <span className="flex min-w-0 max-w-[45%]">
-        <RowWords job={job} />
-      </span>
-    </PanelLink>
   );
 }
 
@@ -207,26 +182,27 @@ function JobStage({
   const frame = useRef<HTMLDivElement>(null);
   const { pictures: live, settle } = useLivePicture(job, frame);
   const headline = loaderHeadline(job);
-  const label =
-    stage === "review"
-      ? isNew
-        ? `Review ${title}`
-        : `Review the new version of ${title}`
-      : stage === "failed"
-        ? `${title}: ${failureLine(job)}. Open the job`
-        : `${title}: ${headline}. Open the job`;
+  const failure = failureLine(job);
 
   return (
-    <div ref={frame} className="relative h-full w-full bg-surface2">
-      <Backdrop job={job} stage={stage} live={live} settle={settle} thumbnail={thumbnail} />
-      <PanelLink
-        href={panelHref(path, { job: job.jobId })}
-        scroll={false}
-        aria-label={label}
-        className="absolute inset-0 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
-      />
-      <Status job={job} stage={stage} headline={headline} path={path} />
-    </div>
+    <JobTileFrame
+      ref={frame}
+      job={job}
+      label={jobTileLabel({ stage, isNew, title, headline, failure })}
+      path={path}
+      backdrop={<Backdrop job={job} stage={stage} live={live} settle={settle} thumbnail={thumbnail} />}
+      status={
+        <JobTileStatus
+          job={job}
+          stage={stage}
+          headline={headline}
+          reviewLine={capitalise(finishedHeadline(job))}
+          failure={failure}
+          step={{ words: loaderStep(job), timed: true }}
+          path={path}
+        />
+      }
+    />
   );
 }
 
@@ -269,15 +245,7 @@ function Backdrop({
     return (
       <div className="absolute inset-0">
         {src !== null && <div aria-hidden className={MAT} />}
-        {/* Until the candidate's picture has loaded (a canvas shot can be a
-            3000px PNG), the last picture stays, blurred, rather than a blank. */}
-        {!afterShown && fallback !== null && (
-          <div aria-hidden className="absolute inset-0 overflow-hidden">
-            {/* eslint-disable-next-line @next/next/no-img-element -- see Thumbnail. */}
-            <img src={fallback} alt="" className="absolute inset-0 h-full w-full object-contain p-2 blur-[3px]" />
-            <div className="studio-veil absolute inset-0" />
-          </div>
-        )}
+        {!afterShown && fallback !== null && <JobTileHeldPicture src={fallback} padded />}
         {src !== null && (
           // eslint-disable-next-line @next/next/no-img-element -- a runner file behind the proxy, see Thumbnail.
           <img
@@ -295,20 +263,14 @@ function Backdrop({
     );
   }
 
-  const blur = stage === "failed" ? "blur-[6px]" : "blur-[3px]";
   // Contained, and framed as the tile's own thumbnail is, never cropped to
   // fill: the first real run added a note in the bottom corner of a nearly
   // square drawing, and a cover-cropped backdrop cut exactly that change off.
   // Framed the same, the thumbnail blurs in place when a job starts.
-  // The blur deepens, and the veil thickens, as a job fails: a change, not a cut.
-  const layer = cx(
-    "absolute inset-0 h-full w-full object-contain p-2",
-    blur,
-    "transition-[filter] duration-300 ease-out motion-reduce:transition-none",
-  );
+  const layer = jobTileLayer(stage, true);
   const thumbnailShown = thumbnail !== null && showsThumbnail(live);
   return (
-    <div aria-hidden className="absolute inset-0 overflow-hidden">
+    <JobTileVeil stage={stage}>
       {(thumbnailShown || live.current !== null) && <div className={MAT} />}
       {thumbnailShown && (
         // eslint-disable-next-line @next/next/no-img-element -- see Thumbnail.
@@ -328,138 +290,14 @@ function Backdrop({
           className={cx(layer, live.settled ? "" : "studio-fade-in")}
         />
       )}
-      <div
-        className={cx(
-          "absolute inset-0 transition-[background-color] duration-300 ease-out motion-reduce:transition-none",
-          stage === "failed" ? "studio-veil-strong" : "studio-veil",
-        )}
-      />
-      {stage === "working" && <div className="studio-shimmer absolute inset-0 overflow-hidden" />}
-    </div>
-  );
-}
-
-/**
- * The bar at the foot of the picture (`JOB_BAR`): what the job is doing and
- * the one control that belongs here, a secondary kit `Button` at `xs` with
- * its pointer events back on.
- */
-function Status({
-  job,
-  stage,
-  headline,
-  path,
-}: {
-  job: Job;
-  stage: TileStage;
-  headline: string;
-  path: string;
-}) {
-  const { post, dismiss } = useStudioJobs();
-  const [cancelling, setCancelling] = useState(false);
-
-  if (stage === "review") {
-    return (
-      <div className={JOB_BAR}>
-        <Dot stage={stage} />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate font-medium text-text">{headline}</span>
-          <span className="block truncate text-text2">{capitalise(finishedHeadline(job))}</span>
-        </span>
-        {/* Not a control: the whole picture is the link to the review. */}
-        <span className={buttonClasses({ size: "xs" })}>Review</span>
-      </div>
-    );
-  }
-
-  if (stage === "failed") {
-    return (
-      <div className={cx(JOB_BAR, "flex-wrap")}>
-        <Dot stage={stage} />
-        <span className="min-w-0 flex-1 truncate font-medium text-danger">{failureLine(job)}</span>
-        <span className="flex w-full justify-end gap-1.5">
-          {typeof job.draftId === "string" && (
-            <PanelLink href={conversationHref(path, job.draftId)} scroll={false} className={JOB_CONTROL}>
-              Talk it through
-            </PanelLink>
-          )}
-          <Button variant="secondary" size="xs" onClick={() => dismiss(job.jobId)} className="pointer-events-auto">
-            Dismiss
-          </Button>
-        </span>
-      </div>
-    );
-  }
-
-  const stopping = cancelling || job.cancelRequestedAt !== null;
-  return (
-    <>
-      <div className={JOB_BAR}>
-        <Dot stage={stage} />
-        <span className="min-w-0 flex-1">
-          <span role="status" className="block truncate font-medium text-text">
-            {headline}
-          </span>
-          <StepAndTime job={job} />
-        </span>
-        <Button
-          variant="secondary"
-          size="xs"
-          disabled={stopping}
-          onClick={async () => {
-            setCancelling(true);
-            const result = await post(`/studio/api/jobs/${encodeURIComponent(job.jobId)}/cancel`);
-            if (!result.ok) setCancelling(false);
-          }}
-          className="pointer-events-auto"
-        >
-          {stopping ? "Stopping" : "Cancel"}
-        </Button>
-      </div>
-      {/* The only motion that says "running" without the light: a strip along
-          the picture's foot, indeterminate like the panel's bar (D23). */}
-      <span aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 overflow-hidden bg-surface2">
-        <span className="block h-full w-1/3 animate-[studio-slide_1.6s_ease-in-out_infinite] bg-accent" />
-      </span>
-    </>
-  );
-}
-
-function StepAndTime({ job }: { job: Job }) {
-  const ms = useElapsed(job);
-  const step = loaderStep(job);
-  const time = <Duration ms={ms} live={job.finished === null} />;
-  return (
-    <span className="block truncate tabular-nums text-text2">
-      {step === null ? time : <>{step} · {time}</>}
-    </span>
+    </JobTileVeil>
   );
 }
 
 /** The list row's version: a dot, the words, the time. */
 function RowWords({ job }: { job: Job }) {
   const stage = tileStage(job);
-  const ms = useElapsed(job);
-  // The words truncate first; the dot and the time never do.
-  return (
-    <span
-      className={cx("flex min-w-0 max-w-full items-center gap-1.5", stage === "failed" ? "text-danger" : "text-text2")}
-    >
-      <Dot stage={stage} />
-      <span className="min-w-0 truncate">{rowWords(job)}</span>
-      {stage === "working" && (
-        <span className="shrink-0 text-text2">
-          <Duration ms={ms} live={job.finished === null} />
-        </span>
-      )}
-    </span>
-  );
-}
-
-function Dot({ stage }: { stage: TileStage }) {
-  const tone =
-    stage === "failed" ? "bg-danger" : stage === "review" ? "bg-ok" : "bg-accent studio-breathe";
-  return <span aria-hidden className={cx("h-2 w-2 shrink-0 rounded-full transition-colors duration-200 motion-reduce:transition-none", tone)} />;
+  return <JobRowWords job={job} stage={stage} words={rowWords(job)} timed={stage === "working"} />;
 }
 
 function capitalise(text: string): string {
@@ -563,20 +401,4 @@ function useLivePicture(
 
   const settle = useCallback(() => setPictures(settlePicture), []);
   return { pictures, settle };
-}
-
-/** Whether the element is on screen, or within a screen's margin of it. */
-function useOnScreen(ref: RefObject<HTMLElement | null>): boolean {
-  const [on, setOn] = useState(false);
-  useEffect(() => {
-    const element = ref.current;
-    if (element === null || typeof IntersectionObserver === "undefined") return;
-    const observer = new IntersectionObserver(
-      (entries) => setOn(entries.some((entry) => entry.isIntersecting)),
-      { rootMargin: "200px" },
-    );
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [ref]);
-  return on;
 }

@@ -55,9 +55,11 @@ never had, are measured in [BRAND.md](BRAND.md#contrast-checked).
 the brand's light theme and `.gnosia.dark` the brand's dark one, each
 selected by the theme classes on `<html>`. A component never branches on the
 class or writes a `.gnosia` selector for a colour: it reads tokens, and the
-classes decide what they resolve to. `.gnosia` redefines only the tokens that
-differ from `:root`; `.gnosia.dark` declares every token `.dark` or `.gnosia`
-sets, so it never depends on which of the two comes later. Their values, the
+classes decide what they resolve to. Every block declares every palette
+token, those whose value is `:root`'s included, so a `:root` edit never moves
+another palette by inheritance; only the mode-independent tokens
+(`--font-display`, `--shell-row*`) live in `:root` alone. `.gnosia.dark`
+never depends on which of `.dark` and `.gnosia` comes later. Their values, the
 reason for each and the contrast table are in
 [BRAND.md](BRAND.md#the-gnosia-theme-inside-the-app).
 
@@ -70,10 +72,10 @@ reason for each and the contrast table are in
 | Correct | `--ok` (fill), `--ok-lip`, `--ok-text`, `--ok-tint` |
 | Not quite | `--warn` (fill), `--warn-lip`, `--warn-text`, `--warn-tint` |
 | Error | `--danger` (a text colour) |
-| Habit | `--streak` (the fill: discs, rings, the dot, the big number), `--streak-text` (the streak as small text, at 4.5:1 on the card) |
+| Habit | `--streak` (the stat tile's streak tone) |
 | Primary button | `--btn-face`, `--btn-lip`, `--btn-text` |
 | Mastery | `--m-hi` (mastered), `--m-mid` (learning), `--m-lo` (untouched), `--lip-shade` (under an untouched path node) |
-| Named kit literals | `--accent-lip`, `--ok-on`, `--warn-on` (labels on the green and yellow faces), `--m-hi-lip`, `--m-mid-lip` (path-node lips), `--violet` (the review-cards stat tile), `--on-tone` (small text on a saturated fill, black in every palette), `--streak-on`, `--m-hi-on` (the check on a done streak day and the mark on a mastered path node: white in the light palettes, the page colour in the dark ones), `--diagram-matte` (the ground behind an exported diagram, `bg-diagram-matte`: the same light grey in all four palettes, since diagrams are drawn for a light ground) |
+| Named kit literals | `--accent-lip`, `--ok-on`, `--warn-on` (labels on the green and yellow faces), `--violet` (the review-cards stat tile), `--on-tone` (small text on a saturated fill, black in every palette), `--m-hi-on` (the mark on a mastered path node: white in the light palettes, the page colour in the dark ones), `--diagram-matte` (the ground behind an exported diagram, `bg-diagram-matte`: the same light grey in all four palettes, since diagrams are drawn for a light ground) |
 
 Colours are tokens only: the lint rule `gnosia/theme-tokens` fails on a hex, `rgb(`-style or raw Tailwind palette colour (`red-600`) in `components/` or `app/`, bar the public `(site)` pages and the avatar sprites. `black` and `white` stay for video chrome over a picture.
 
@@ -444,9 +446,9 @@ Motion select (`reducedMotion`, `system` or `always`) writes the
 `gnosia-motion` cookie and sets `data-motion="reduce"` on `<html>` at
 once, before the save lands; the root layout reads the cookie, so the next
 page is still from its first paint (`lib/motion.ts`). The `(app)` layout
-reads the stored row only for a browser with no cookie yet, and `MotionSeed`
-writes it; Settings brings a cookie that disagrees with the row it read back
-in line. `globals.css` redefines Tailwind's `motion-reduce:` and
+reads the stored row on every render, and `MotionSeed` brings a cookie that
+is missing or disagrees in line with it: the row wins whenever the database
+answers, as it does for the theme. `globals.css` redefines Tailwind's `motion-reduce:` and
 `motion-safe:` to read `data-motion` beside the media query, and repeats the
 global rule (and the brand's and the studio's looping animations) under
 `:root[data-motion="reduce"]`. A theme change crossfades for 200ms

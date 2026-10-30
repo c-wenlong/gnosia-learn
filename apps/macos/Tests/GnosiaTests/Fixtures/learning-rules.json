@@ -1,0 +1,1336 @@
+{
+  "constants": {
+    "params": {
+      "pL0": 0.25,
+      "pT": 0.15,
+      "pG": 0.2,
+      "pS": 0.1
+    },
+    "propagationDecay": 0.4,
+    "propagationCeiling": 0.9,
+    "lowConfidence": 30,
+    "minEase": 1.3,
+    "defaultEase": 2.5,
+    "passGrade": 3,
+    "leechThreshold": 4,
+    "maxIntervalDays": 36500
+  },
+  "update": [
+    {
+      "prior": 0,
+      "correct": true,
+      "opportunity": true,
+      "expect": 0.15
+    },
+    {
+      "prior": 0,
+      "correct": true,
+      "opportunity": false,
+      "expect": 0
+    },
+    {
+      "prior": 0,
+      "correct": false,
+      "opportunity": true,
+      "expect": 0.15
+    },
+    {
+      "prior": 0,
+      "correct": false,
+      "opportunity": false,
+      "expect": 0
+    },
+    {
+      "prior": 0.05,
+      "correct": true,
+      "opportunity": true,
+      "expect": 0.3127659574468085
+    },
+    {
+      "prior": 0.05,
+      "correct": true,
+      "opportunity": false,
+      "expect": 0.19148936170212766
+    },
+    {
+      "prior": 0.05,
+      "correct": false,
+      "opportunity": true,
+      "expect": 0.15555555555555556
+    },
+    {
+      "prior": 0.05,
+      "correct": false,
+      "opportunity": false,
+      "expect": 0.006535947712418302
+    },
+    {
+      "prior": 0.25,
+      "correct": true,
+      "opportunity": true,
+      "expect": 0.6599999999999999
+    },
+    {
+      "prior": 0.25,
+      "correct": true,
+      "opportunity": false,
+      "expect": 0.6
+    },
+    {
+      "prior": 0.25,
+      "correct": false,
+      "opportunity": true,
+      "expect": 0.184
+    },
+    {
+      "prior": 0.25,
+      "correct": false,
+      "opportunity": false,
+      "expect": 0.039999999999999994
+    },
+    {
+      "prior": 0.5,
+      "correct": true,
+      "opportunity": true,
+      "expect": 0.8454545454545455
+    },
+    {
+      "prior": 0.5,
+      "correct": true,
+      "opportunity": false,
+      "expect": 0.8181818181818181
+    },
+    {
+      "prior": 0.5,
+      "correct": false,
+      "opportunity": true,
+      "expect": 0.24444444444444446
+    },
+    {
+      "prior": 0.5,
+      "correct": false,
+      "opportunity": false,
+      "expect": 0.11111111111111112
+    },
+    {
+      "prior": 0.7,
+      "correct": true,
+      "opportunity": true,
+      "expect": 0.9260869565217391
+    },
+    {
+      "prior": 0.7,
+      "correct": true,
+      "opportunity": false,
+      "expect": 0.9130434782608695
+    },
+    {
+      "prior": 0.7,
+      "correct": false,
+      "opportunity": true,
+      "expect": 0.34193548387096767
+    },
+    {
+      "prior": 0.7,
+      "correct": false,
+      "opportunity": false,
+      "expect": 0.22580645161290316
+    },
+    {
+      "prior": 0.89,
+      "correct": true,
+      "opportunity": true,
+      "expect": 0.9772782503037667
+    },
+    {
+      "prior": 0.89,
+      "correct": true,
+      "opportunity": false,
+      "expect": 0.9732685297691372
+    },
+    {
+      "prior": 0.89,
+      "correct": false,
+      "opportunity": true,
+      "expect": 0.5774011299435029
+    },
+    {
+      "prior": 0.89,
+      "correct": false,
+      "opportunity": false,
+      "expect": 0.5028248587570622
+    },
+    {
+      "prior": 0.9,
+      "correct": true,
+      "opportunity": true,
+      "expect": 0.9795180722891567
+    },
+    {
+      "prior": 0.9,
+      "correct": true,
+      "opportunity": false,
+      "expect": 0.9759036144578314
+    },
+    {
+      "prior": 0.9,
+      "correct": false,
+      "opportunity": true,
+      "expect": 0.6000000000000001
+    },
+    {
+      "prior": 0.9,
+      "correct": false,
+      "opportunity": false,
+      "expect": 0.5294117647058825
+    },
+    {
+      "prior": 0.95,
+      "correct": true,
+      "opportunity": true,
+      "expect": 0.9901734104046243
+    },
+    {
+      "prior": 0.95,
+      "correct": true,
+      "opportunity": false,
+      "expect": 0.9884393063583815
+    },
+    {
+      "prior": 0.95,
+      "correct": false,
+      "opportunity": true,
+      "expect": 0.748148148148148
+    },
+    {
+      "prior": 0.95,
+      "correct": false,
+      "opportunity": false,
+      "expect": 0.7037037037037035
+    },
+    {
+      "prior": 1,
+      "correct": true,
+      "opportunity": true,
+      "expect": 1
+    },
+    {
+      "prior": 1,
+      "correct": true,
+      "opportunity": false,
+      "expect": 1
+    },
+    {
+      "prior": 1,
+      "correct": false,
+      "opportunity": true,
+      "expect": 1
+    },
+    {
+      "prior": 1,
+      "correct": false,
+      "opportunity": false,
+      "expect": 1
+    }
+  ],
+  "propagate": [
+    {
+      "prior": 0,
+      "hops": 0,
+      "expect": 0
+    },
+    {
+      "prior": 0,
+      "hops": 1,
+      "expect": 0
+    },
+    {
+      "prior": 0,
+      "hops": 2,
+      "expect": 0
+    },
+    {
+      "prior": 0,
+      "hops": 3,
+      "expect": 0
+    },
+    {
+      "prior": 0.05,
+      "hops": 0,
+      "expect": 0.05
+    },
+    {
+      "prior": 0.05,
+      "hops": 1,
+      "expect": 0.10659574468085108
+    },
+    {
+      "prior": 0.05,
+      "hops": 2,
+      "expect": 0.07263829787234044
+    },
+    {
+      "prior": 0.05,
+      "hops": 3,
+      "expect": 0.05905531914893618
+    },
+    {
+      "prior": 0.25,
+      "hops": 0,
+      "expect": 0.25
+    },
+    {
+      "prior": 0.25,
+      "hops": 1,
+      "expect": 0.39
+    },
+    {
+      "prior": 0.25,
+      "hops": 2,
+      "expect": 0.306
+    },
+    {
+      "prior": 0.25,
+      "hops": 3,
+      "expect": 0.2724
+    },
+    {
+      "prior": 0.5,
+      "hops": 0,
+      "expect": 0.5
+    },
+    {
+      "prior": 0.5,
+      "hops": 1,
+      "expect": 0.6272727272727272
+    },
+    {
+      "prior": 0.5,
+      "hops": 2,
+      "expect": 0.5509090909090909
+    },
+    {
+      "prior": 0.5,
+      "hops": 3,
+      "expect": 0.5203636363636364
+    },
+    {
+      "prior": 0.7,
+      "hops": 0,
+      "expect": 0.7
+    },
+    {
+      "prior": 0.7,
+      "hops": 1,
+      "expect": 0.7852173913043478
+    },
+    {
+      "prior": 0.7,
+      "hops": 2,
+      "expect": 0.734086956521739
+    },
+    {
+      "prior": 0.7,
+      "hops": 3,
+      "expect": 0.7136347826086956
+    },
+    {
+      "prior": 0.89,
+      "hops": 0,
+      "expect": 0.89
+    },
+    {
+      "prior": 0.89,
+      "hops": 1,
+      "expect": 0.9
+    },
+    {
+      "prior": 0.89,
+      "hops": 2,
+      "expect": 0.9
+    },
+    {
+      "prior": 0.89,
+      "hops": 3,
+      "expect": 0.8953291859052248
+    },
+    {
+      "prior": 0.9,
+      "hops": 0,
+      "expect": 0.9
+    },
+    {
+      "prior": 0.9,
+      "hops": 1,
+      "expect": 0.9
+    },
+    {
+      "prior": 0.9,
+      "hops": 2,
+      "expect": 0.9
+    },
+    {
+      "prior": 0.9,
+      "hops": 3,
+      "expect": 0.9
+    },
+    {
+      "prior": 0.95,
+      "hops": 0,
+      "expect": 0.95
+    },
+    {
+      "prior": 0.95,
+      "hops": 1,
+      "expect": 0.95
+    },
+    {
+      "prior": 0.95,
+      "hops": 2,
+      "expect": 0.95
+    },
+    {
+      "prior": 0.95,
+      "hops": 3,
+      "expect": 0.95
+    },
+    {
+      "prior": 1,
+      "hops": 0,
+      "expect": 1
+    },
+    {
+      "prior": 1,
+      "hops": 1,
+      "expect": 1
+    },
+    {
+      "prior": 1,
+      "hops": 2,
+      "expect": 1
+    },
+    {
+      "prior": 1,
+      "hops": 3,
+      "expect": 1
+    }
+  ],
+  "grade": [
+    {
+      "correct": true,
+      "pL": 0,
+      "expect": 3
+    },
+    {
+      "correct": false,
+      "pL": 0,
+      "expect": 1
+    },
+    {
+      "correct": true,
+      "pL": 0.05,
+      "expect": 3
+    },
+    {
+      "correct": false,
+      "pL": 0.05,
+      "expect": 1
+    },
+    {
+      "correct": true,
+      "pL": 0.25,
+      "expect": 3
+    },
+    {
+      "correct": false,
+      "pL": 0.25,
+      "expect": 1
+    },
+    {
+      "correct": true,
+      "pL": 0.5,
+      "expect": 3
+    },
+    {
+      "correct": false,
+      "pL": 0.5,
+      "expect": 1
+    },
+    {
+      "correct": true,
+      "pL": 0.7,
+      "expect": 4
+    },
+    {
+      "correct": false,
+      "pL": 0.7,
+      "expect": 1
+    },
+    {
+      "correct": true,
+      "pL": 0.89,
+      "expect": 4
+    },
+    {
+      "correct": false,
+      "pL": 0.89,
+      "expect": 2
+    },
+    {
+      "correct": true,
+      "pL": 0.9,
+      "expect": 5
+    },
+    {
+      "correct": false,
+      "pL": 0.9,
+      "expect": 2
+    },
+    {
+      "correct": true,
+      "pL": 0.95,
+      "expect": 5
+    },
+    {
+      "correct": false,
+      "pL": 0.95,
+      "expect": 2
+    },
+    {
+      "correct": true,
+      "pL": 1,
+      "expect": 5
+    },
+    {
+      "correct": false,
+      "pL": 1,
+      "expect": 2
+    }
+  ],
+  "confidence": [
+    {
+      "correct": true,
+      "confidence": null,
+      "pL": 0.2,
+      "expect": 3
+    },
+    {
+      "correct": true,
+      "confidence": 0,
+      "pL": 0.2,
+      "expect": 3
+    },
+    {
+      "correct": true,
+      "confidence": 30,
+      "pL": 0.2,
+      "expect": 3
+    },
+    {
+      "correct": true,
+      "confidence": 31,
+      "pL": 0.2,
+      "expect": 3
+    },
+    {
+      "correct": true,
+      "confidence": 100,
+      "pL": 0.2,
+      "expect": 3
+    },
+    {
+      "correct": false,
+      "confidence": null,
+      "pL": 0.2,
+      "expect": 1
+    },
+    {
+      "correct": false,
+      "confidence": 0,
+      "pL": 0.2,
+      "expect": 1
+    },
+    {
+      "correct": false,
+      "confidence": 30,
+      "pL": 0.2,
+      "expect": 1
+    },
+    {
+      "correct": false,
+      "confidence": 31,
+      "pL": 0.2,
+      "expect": 1
+    },
+    {
+      "correct": false,
+      "confidence": 100,
+      "pL": 0.2,
+      "expect": 1
+    },
+    {
+      "correct": true,
+      "confidence": null,
+      "pL": 0.75,
+      "expect": 4
+    },
+    {
+      "correct": true,
+      "confidence": 0,
+      "pL": 0.75,
+      "expect": 3
+    },
+    {
+      "correct": true,
+      "confidence": 30,
+      "pL": 0.75,
+      "expect": 3
+    },
+    {
+      "correct": true,
+      "confidence": 31,
+      "pL": 0.75,
+      "expect": 4
+    },
+    {
+      "correct": true,
+      "confidence": 100,
+      "pL": 0.75,
+      "expect": 4
+    },
+    {
+      "correct": false,
+      "confidence": null,
+      "pL": 0.75,
+      "expect": 2
+    },
+    {
+      "correct": false,
+      "confidence": 0,
+      "pL": 0.75,
+      "expect": 2
+    },
+    {
+      "correct": false,
+      "confidence": 30,
+      "pL": 0.75,
+      "expect": 2
+    },
+    {
+      "correct": false,
+      "confidence": 31,
+      "pL": 0.75,
+      "expect": 2
+    },
+    {
+      "correct": false,
+      "confidence": 100,
+      "pL": 0.75,
+      "expect": 2
+    },
+    {
+      "correct": true,
+      "confidence": null,
+      "pL": 0.95,
+      "expect": 5
+    },
+    {
+      "correct": true,
+      "confidence": 0,
+      "pL": 0.95,
+      "expect": 3
+    },
+    {
+      "correct": true,
+      "confidence": 30,
+      "pL": 0.95,
+      "expect": 3
+    },
+    {
+      "correct": true,
+      "confidence": 31,
+      "pL": 0.95,
+      "expect": 5
+    },
+    {
+      "correct": true,
+      "confidence": 100,
+      "pL": 0.95,
+      "expect": 5
+    },
+    {
+      "correct": false,
+      "confidence": null,
+      "pL": 0.95,
+      "expect": 2
+    },
+    {
+      "correct": false,
+      "confidence": 0,
+      "pL": 0.95,
+      "expect": 2
+    },
+    {
+      "correct": false,
+      "confidence": 30,
+      "pL": 0.95,
+      "expect": 2
+    },
+    {
+      "correct": false,
+      "confidence": 31,
+      "pL": 0.95,
+      "expect": 2
+    },
+    {
+      "correct": false,
+      "confidence": 100,
+      "pL": 0.95,
+      "expect": 2
+    }
+  ],
+  "review": [
+    {
+      "card": null,
+      "grade": 0,
+      "expect": {
+        "repetitions": 0,
+        "ease": 2.5,
+        "intervalDays": 1,
+        "lapses": 1,
+        "leech": false
+      }
+    },
+    {
+      "card": null,
+      "grade": 1,
+      "expect": {
+        "repetitions": 0,
+        "ease": 2.5,
+        "intervalDays": 1,
+        "lapses": 1,
+        "leech": false
+      }
+    },
+    {
+      "card": null,
+      "grade": 2,
+      "expect": {
+        "repetitions": 0,
+        "ease": 2.5,
+        "intervalDays": 1,
+        "lapses": 1,
+        "leech": false
+      }
+    },
+    {
+      "card": null,
+      "grade": 3,
+      "expect": {
+        "repetitions": 1,
+        "ease": 2.36,
+        "intervalDays": 1,
+        "lapses": 0,
+        "leech": false
+      }
+    },
+    {
+      "card": null,
+      "grade": 4,
+      "expect": {
+        "repetitions": 1,
+        "ease": 2.5,
+        "intervalDays": 1,
+        "lapses": 0,
+        "leech": false
+      }
+    },
+    {
+      "card": null,
+      "grade": 5,
+      "expect": {
+        "repetitions": 1,
+        "ease": 2.6,
+        "intervalDays": 1,
+        "lapses": 0,
+        "leech": false
+      }
+    },
+    {
+      "card": {
+        "repetitions": 0,
+        "ease": 2.5,
+        "intervalDays": 0,
+        "lapses": 0
+      },
+      "grade": 0,
+      "expect": {
+        "repetitions": 0,
+        "ease": 2.5,
+        "intervalDays": 1,
+        "lapses": 1,
+        "leech": false
+      }
+    },
+    {
+      "card": {
+        "repetitions": 0,
+        "ease": 2.5,
+        "intervalDays": 0,
+        "lapses": 0
+      },
+      "grade": 1,
+      "expect": {
+        "repetitions": 0,
+        "ease": 2.5,
+        "intervalDays": 1,
+        "lapses": 1,
+        "leech": false
+      }
+    },
+    {
+      "card": {
+        "repetitions": 0,
+        "ease": 2.5,
+        "intervalDays": 0,
+        "lapses": 0
+      },
+      "grade": 2,
+      "expect": {
+        "repetitions": 0,
+        "ease": 2.5,
+        "intervalDays": 1,
+        "lapses": 1,
+        "leech": false
+      }
+    },
+    {
+      "card": {
+        "repetitions": 0,
+        "ease": 2.5,
+        "intervalDays": 0,
+        "lapses": 0
+      },
+      "grade": 3,
+      "expect": {
+        "repetitions": 1,
+        "ease": 2.36,
+        "intervalDays": 1,
+        "lapses": 0,
+        "leech": false
+      }
+    },
+    {
+      "card": {
+        "repetitions": 0,
+        "ease": 2.5,
+        "intervalDays": 0,
+        "lapses": 0
+      },
+      "grade": 4,
+      "expect": {
+        "repetitions": 1,
+        "ease": 2.5,
+        "intervalDays": 1,
+        "lapses": 0,
+        "leech": false
+      }
+    },
+    {
+      "card": {
+        "repetitions": 0,
+        "ease": 2.5,
+        "intervalDays": 0,
+        "lapses": 0
+      },
+      "grade": 5,
+      "expect": {
+        "repetitions": 1,
+        "ease": 2.6,
+        "intervalDays": 1,
+        "lapses": 0,
+        "leech": false
+      }
+    },
+    {
+      "card": {
+        "repetitions": 1,
+        "ease": 2.5,
+        "intervalDays": 1,
+        "lapses": 0
+      },
+      "grade": 0,
+      "expect": {
+        "repetitions": 0,
+        "ease": 2.5,
+        "intervalDays": 1,
+        "lapses": 1,
+        "leech": false
+      }
+    },
+    {
+      "card": {
+        "repetitions": 1,
+        "ease": 2.5,
+        "intervalDays": 1,
+        "lapses": 0
+      },
+      "grade": 1,
+      "expect": {
+        "repetitions": 0,
+        "ease": 2.5,
+        "intervalDays": 1,
+        "lapses": 1,
+        "leech": false
+      }
+    },
+    {
+      "card": {
+        "repetitions": 1,
+        "ease": 2.5,
+        "intervalDays": 1,
+        "lapses": 0
+      },
+      "grade": 2,
+      "expect": {
+        "repetitions": 0,
+        "ease": 2.5,
+        "intervalDays": 1,
+        "lapses": 1,
+        "leech": false
+      }
+    },
+    {
+      "card": {
+        "repetitions": 1,
+        "ease": 2.5,
+        "intervalDays": 1,
+        "lapses": 0
+      },
+      "grade": 3,
+      "expect": {
+        "repetitions": 2,
+        "ease": 2.36,
+        "intervalDays": 6,
+        "lapses": 0,
+        "leech": false
+      }
+    },
+    {
+      "card": {
+        "repetitions": 1,
+        "ease": 2.5,
+        "intervalDays": 1,
+        "lapses": 0
+      },
+      "grade": 4,
+      "expect": {
+        "repetitions": 2,
+        "ease": 2.5,
+        "intervalDays": 6,
+        "lapses": 0,
+        "leech": false
+      }
+    },
+    {
+      "card": {
+        "repetitions": 1,
+        "ease": 2.5,
+        "intervalDays": 1,
+        "lapses": 0
+      },
+      "grade": 5,
+      "expect": {
+        "repetitions": 2,
+        "ease": 2.6,
+        "intervalDays": 6,
+        "lapses": 0,
+        "leech": false
+      }
+    },
+    {
+      "card": {
+        "repetitions": 2,
+        "ease": 2.36,
+        "intervalDays": 6,
+        "lapses": 1
+      },
+      "grade": 0,
+      "expect": {
+        "repetitions": 0,
+        "ease": 2.36,
+        "intervalDays": 1,
+        "lapses": 2,
+        "leech": false
+      }
+    },
+    {
+      "card": {
+        "repetitions": 2,
+        "ease": 2.36,
+        "intervalDays": 6,
+        "lapses": 1
+      },
+      "grade": 1,
+      "expect": {
+        "repetitions": 0,
+        "ease": 2.36,
+        "intervalDays": 1,
+        "lapses": 2,
+        "leech": false
+      }
+    },
+    {
+      "card": {
+        "repetitions": 2,
+        "ease": 2.36,
+        "intervalDays": 6,
+        "lapses": 1
+      },
+      "grade": 2,
+      "expect": {
+        "repetitions": 0,
+        "ease": 2.36,
+        "intervalDays": 1,
+        "lapses": 2,
+        "leech": false
+      }
+    },
+    {
+      "card": {
+        "repetitions": 2,
+        "ease": 2.36,
+        "intervalDays": 6,
+        "lapses": 1
+      },
+      "grade": 3,
+      "expect": {
+        "repetitions": 3,
+        "ease": 2.2199999999999998,
+        "intervalDays": 14,
+        "lapses": 1,
+        "leech": false
+      }
+    },
+    {
+      "card": {
+        "repetitions": 2,
+        "ease": 2.36,
+        "intervalDays": 6,
+        "lapses": 1
+      },
+      "grade": 4,
+      "expect": {
+        "repetitions": 3,
+        "ease": 2.36,
+        "intervalDays": 13,
+        "lapses": 1,
+        "leech": false
+      }
+    },
+    {
+      "card": {
+        "repetitions": 2,
+        "ease": 2.36,
+        "intervalDays": 6,
+        "lapses": 1
+      },
+      "grade": 5,
+      "expect": {
+        "repetitions": 3,
+        "ease": 2.46,
+        "intervalDays": 15,
+        "lapses": 1,
+        "leech": false
+      }
+    },
+    {
+      "card": {
+        "repetitions": 2,
+        "ease": 2.5,
+        "intervalDays": 0,
+        "lapses": 0
+      },
+      "grade": 0,
+      "expect": {
+        "repetitions": 0,
+        "ease": 2.5,
+        "intervalDays": 1,
+        "lapses": 1,
+        "leech": false
+      }
+    },
+    {
+      "card": {
+        "repetitions": 2,
+        "ease": 2.5,
+        "intervalDays": 0,
+        "lapses": 0
+      },
+      "grade": 1,
+      "expect": {
+        "repetitions": 0,
+        "ease": 2.5,
+        "intervalDays": 1,
+        "lapses": 1,
+        "leech": false
+      }
+    },
+    {
+      "card": {
+        "repetitions": 2,
+        "ease": 2.5,
+        "intervalDays": 0,
+        "lapses": 0
+      },
+      "grade": 2,
+      "expect": {
+        "repetitions": 0,
+        "ease": 2.5,
+        "intervalDays": 1,
+        "lapses": 1,
+        "leech": false
+      }
+    },
+    {
+      "card": {
+        "repetitions": 2,
+        "ease": 2.5,
+        "intervalDays": 0,
+        "lapses": 0
+      },
+      "grade": 3,
+      "expect": {
+        "repetitions": 3,
+        "ease": 2.36,
+        "intervalDays": 2,
+        "lapses": 0,
+        "leech": false
+      }
+    },
+    {
+      "card": {
+        "repetitions": 2,
+        "ease": 2.5,
+        "intervalDays": 0,
+        "lapses": 0
+      },
+      "grade": 4,
+      "expect": {
+        "repetitions": 3,
+        "ease": 2.5,
+        "intervalDays": 3,
+        "lapses": 0,
+        "leech": false
+      }
+    },
+    {
+      "card": {
+        "repetitions": 2,
+        "ease": 2.5,
+        "intervalDays": 0,
+        "lapses": 0
+      },
+      "grade": 5,
+      "expect": {
+        "repetitions": 3,
+        "ease": 2.6,
+        "intervalDays": 3,
+        "lapses": 0,
+        "leech": false
+      }
+    },
+    {
+      "card": {
+        "repetitions": 5,
+        "ease": 1.3,
+        "intervalDays": 40,
+        "lapses": 3
+      },
+      "grade": 0,
+      "expect": {
+        "repetitions": 0,
+        "ease": 1.3,
+        "intervalDays": 1,
+        "lapses": 4,
+        "leech": true
+      }
+    },
+    {
+      "card": {
+        "repetitions": 5,
+        "ease": 1.3,
+        "intervalDays": 40,
+        "lapses": 3
+      },
+      "grade": 1,
+      "expect": {
+        "repetitions": 0,
+        "ease": 1.3,
+        "intervalDays": 1,
+        "lapses": 4,
+        "leech": true
+      }
+    },
+    {
+      "card": {
+        "repetitions": 5,
+        "ease": 1.3,
+        "intervalDays": 40,
+        "lapses": 3
+      },
+      "grade": 2,
+      "expect": {
+        "repetitions": 0,
+        "ease": 1.3,
+        "intervalDays": 1,
+        "lapses": 4,
+        "leech": true
+      }
+    },
+    {
+      "card": {
+        "repetitions": 5,
+        "ease": 1.3,
+        "intervalDays": 40,
+        "lapses": 3
+      },
+      "grade": 3,
+      "expect": {
+        "repetitions": 6,
+        "ease": 1.3,
+        "intervalDays": 55,
+        "lapses": 3,
+        "leech": false
+      }
+    },
+    {
+      "card": {
+        "repetitions": 5,
+        "ease": 1.3,
+        "intervalDays": 40,
+        "lapses": 3
+      },
+      "grade": 4,
+      "expect": {
+        "repetitions": 6,
+        "ease": 1.3,
+        "intervalDays": 55,
+        "lapses": 3,
+        "leech": false
+      }
+    },
+    {
+      "card": {
+        "repetitions": 5,
+        "ease": 1.3,
+        "intervalDays": 40,
+        "lapses": 3
+      },
+      "grade": 5,
+      "expect": {
+        "repetitions": 6,
+        "ease": 1.4000000000000001,
+        "intervalDays": 56,
+        "lapses": 3,
+        "leech": false
+      }
+    },
+    {
+      "card": {
+        "repetitions": 9,
+        "ease": 2.9,
+        "intervalDays": 20000,
+        "lapses": 0
+      },
+      "grade": 0,
+      "expect": {
+        "repetitions": 0,
+        "ease": 2.9,
+        "intervalDays": 1,
+        "lapses": 1,
+        "leech": false
+      }
+    },
+    {
+      "card": {
+        "repetitions": 9,
+        "ease": 2.9,
+        "intervalDays": 20000,
+        "lapses": 0
+      },
+      "grade": 1,
+      "expect": {
+        "repetitions": 0,
+        "ease": 2.9,
+        "intervalDays": 1,
+        "lapses": 1,
+        "leech": false
+      }
+    },
+    {
+      "card": {
+        "repetitions": 9,
+        "ease": 2.9,
+        "intervalDays": 20000,
+        "lapses": 0
+      },
+      "grade": 2,
+      "expect": {
+        "repetitions": 0,
+        "ease": 2.9,
+        "intervalDays": 1,
+        "lapses": 1,
+        "leech": false
+      }
+    },
+    {
+      "card": {
+        "repetitions": 9,
+        "ease": 2.9,
+        "intervalDays": 20000,
+        "lapses": 0
+      },
+      "grade": 3,
+      "expect": {
+        "repetitions": 10,
+        "ease": 2.76,
+        "intervalDays": 36500,
+        "lapses": 0,
+        "leech": false
+      }
+    },
+    {
+      "card": {
+        "repetitions": 9,
+        "ease": 2.9,
+        "intervalDays": 20000,
+        "lapses": 0
+      },
+      "grade": 4,
+      "expect": {
+        "repetitions": 10,
+        "ease": 2.9,
+        "intervalDays": 36500,
+        "lapses": 0,
+        "leech": false
+      }
+    },
+    {
+      "card": {
+        "repetitions": 9,
+        "ease": 2.9,
+        "intervalDays": 20000,
+        "lapses": 0
+      },
+      "grade": 5,
+      "expect": {
+        "repetitions": 10,
+        "ease": 3,
+        "intervalDays": 36500,
+        "lapses": 0,
+        "leech": false
+      }
+    }
+  ]
+}

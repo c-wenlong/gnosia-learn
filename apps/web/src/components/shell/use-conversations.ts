@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { LIST_LIMIT, LISTED_STATES, readHistory } from "@/lib/studio-draft-list";
-import { listDrafts, type DraftSummary } from "@/lib/studio-drafts";
+import { listDrafts, runnerDown, type DraftSummary } from "@/lib/studio-drafts";
 import { useDraftsWake } from "@/lib/use-drafts-wake";
 
 import type { StudioChats } from "./shell-context";
@@ -17,6 +17,15 @@ export interface Conversations {
   showOlder: () => Promise<boolean>;
   /** Every page shown, read again now (after a rename); false when the runner did not answer. */
   refresh: () => Promise<boolean>;
+  /**
+   * True when the last read found the runner not answering (nothing
+   * listening, or no list has landed yet whatever the failure): the sidebar
+   * then shows the conversations the catalog's `draft` mirror holds, and
+   * pages that, rather than a list the runner may never page again. Any
+   * other refusal keeps the list shown. A later read that lands puts the
+   * runner's list back.
+   */
+  failed: boolean;
 }
 
 /**
@@ -41,6 +50,7 @@ export interface Conversations {
 export function useConversations(enabled: boolean, chats: StudioChats | null): Conversations {
   const active = chats?.active ?? null;
   const [list, setList] = useState<{ drafts: DraftSummary[]; more: boolean } | null>(null);
+  const [failed, setFailed] = useState(false);
   // The page's own read stands until a read here replaces it, and a page
   // that reads something different (a server render) replaces that in turn.
   const seed = chats?.initial ?? null;
@@ -49,6 +59,8 @@ export function useConversations(enabled: boolean, chats: StudioChats | null): C
   if (seed !== null && seedSignature !== seen) {
     setSeen(seedSignature);
     setList({ drafts: seed, more: seed.length >= LIST_LIMIT });
+    // The page read the runner's list just now: it is answering.
+    setFailed(false);
   }
   /** Whether a page has handed a list over, which makes the first read here moot. */
   const adopted = useRef(false);
@@ -67,21 +79,30 @@ export function useConversations(enabled: boolean, chats: StudioChats | null): C
   const issued = useRef(0);
   const landed = useRef(0);
   // A list the page hands over is newer than any read still in flight here.
+  /** Whether any list has landed, here or from the page. */
+  const listed = useRef(false);
   useEffect(() => {
-    if (seen !== "none") landed.current = issued.current + 1;
+    if (seen === "none") return;
+    landed.current = issued.current + 1;
+    listed.current = true;
   }, [seen]);
   const read = useCallback(async (count: number) => {
     issued.current += 1;
     const ticket = issued.current;
+    let down = false;
     const result = await readHistory(count, async (before) => {
       const answer = await listDrafts({ state: LISTED_STATES, nonEmpty: true, limit: LIST_LIMIT, ...(before === undefined ? {} : { before }) });
+      if (!answer.ok && runnerDown(answer.status, answer.refusal)) down = true;
       return answer.ok && Array.isArray(answer.data.drafts) ? answer.data.drafts : null;
     });
     if (ticket < landed.current) return result !== null;
-    // A failed read keeps what is shown: an empty list would read as "no
-    // conversations" when the truth is a runner that stopped answering.
+    // A failed read keeps what is shown, rather than an empty list that
+    // would read as "no conversations"; a runner that is down hands over to
+    // the catalog's mirror (`failed`).
+    setFailed(result === null && (down || !listed.current));
     if (result === null) return false;
     landed.current = ticket;
+    listed.current = true;
     setList(result);
     return true;
   }, []);
@@ -118,7 +139,7 @@ export function useConversations(enabled: boolean, chats: StudioChats | null): C
     return ok;
   }, [read]);
 
-  return { list: enabled ? list : null, titles, showOlder, refresh: reread };
+  return { list: enabled ? list : null, titles, showOlder, refresh: reread, failed: enabled && failed };
 }
 
 function signature(drafts: readonly DraftSummary[] | null): string {

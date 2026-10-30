@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useStudioJobs } from "@/components/studio/JobsProvider";
+import { useJobEventStream } from "@/components/studio/use-job-events";
 import type { TranscriptCue, VideoChapter } from "@/components/media";
+import { getJob } from "@/lib/studio-job-read";
 import { isActive, type StudioEvent } from "@/lib/studio-jobs";
 import { usePageVisible } from "@/lib/use-page-visible";
 import {
@@ -50,18 +52,20 @@ export function useVideoJob(
     let alive = true;
     let timer: ReturnType<typeof setInterval> | null = null;
     const load = async (): Promise<void> => {
-      try {
-        const response = await fetch(`/studio/api/jobs/${encodeURIComponent(jobId)}`, { cache: "no-store" });
-        const body = response.ok ? asVideoJob((await response.json()) as { kind?: string }) : null;
-        if (!alive) return;
-        setDetail({ id: jobId, job: body });
-        // A job that has stopped has nothing more to say.
-        if (timer !== null && (body === null || !isActive(body.state))) {
-          clearInterval(timer);
-          timer = null;
-        }
-      } catch {
-        if (alive) setDetail((held) => (held?.id === jobId ? held : { id: jobId, job: null }));
+      const lookup = await getJob(jobId);
+      if (!alive) return;
+      // A read that failed says nothing about the job: what is held stays,
+      // and the next poll asks again.
+      if (lookup.kind === "failed") {
+        setDetail((held) => (held?.id === jobId ? held : { id: jobId, job: null }));
+        return;
+      }
+      const body = lookup.kind === "found" ? asVideoJob(lookup.body) : null;
+      setDetail({ id: jobId, job: body });
+      // A job that has stopped has nothing more to say.
+      if (timer !== null && (body === null || !isActive(body.state))) {
+        clearInterval(timer);
+        timer = null;
       }
     };
     if (skipFirst.current) skipFirst.current = false;
@@ -96,42 +100,16 @@ export function useJobEvents(job: VideoJob | null): StudioEvent[] {
   const jobId = job?.jobId ?? null;
   const own = jobId !== null && watching !== jobId;
   const live = job !== null && isActive(job.state) && job.state !== "awaiting_review";
-  const [held, setHeld] = useState<{ job: string; events: StudioEvent[] }>({ job: "", events: [] });
-
-  useEffect(() => {
-    if (!own || jobId === null) return;
-    // A finished job's stream replays its buffer and then stays open with
-    // nothing to say, so it is read only while there is more to come, plus
-    // once for a job that has stopped, for its log.
-    const source = new EventSource(`/studio/api/jobs/${encodeURIComponent(jobId)}/events`);
-    const receive = (message: MessageEvent<string>): void => {
-      let event: StudioEvent;
-      try {
-        event = JSON.parse(message.data) as StudioEvent;
-      } catch {
-        return;
-      }
-      setHeld((prev) => {
-        if (prev.job !== jobId) return { job: jobId, events: [event] };
-        if (prev.events.some((seen) => seen.seq === event.seq)) return prev;
-        return { job: jobId, events: [...prev.events, event].sort((a, b) => a.seq - b.seq) };
-      });
-    };
-    for (const type of EVENT_TYPES) source.addEventListener(type, receive as EventListener);
-    const closer = live ? null : setTimeout(() => source.close(), 3_000);
-    return () => {
-      if (closer !== null) clearTimeout(closer);
-      for (const type of EVENT_TYPES) source.removeEventListener(type, receive as EventListener);
-      source.close();
-    };
-  }, [own, jobId, live]);
+  // A finished job's stream replays its buffer and then stays open with
+  // nothing to say, so it is read only while there is more to come, plus
+  // once for a job that has stopped, for its log.
+  const { events: held } = useJobEventStream(jobId, { enabled: own, closeAfterMs: live ? undefined : 3_000 });
 
   if (jobId === null) return EMPTY;
   if (!own) return events;
-  return held.job === jobId ? held.events : EMPTY;
+  return held;
 }
 
-const EVENT_TYPES = ["phase", "step", "gate", "done", "error"] as const;
 const EMPTY: StudioEvent[] = [];
 
 /**

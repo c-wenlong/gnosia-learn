@@ -20,6 +20,13 @@ function answer(status: number, body: string) {
   return fetchMock;
 }
 
+/** A `fetch` that answers nothing, and rejects as a browser does once its signal aborts. */
+function hangUntilAborted(_url: string, init?: RequestInit): Promise<Response> {
+  return new Promise((_, reject) => {
+    init?.signal?.addEventListener("abort", () => reject(init.signal?.reason ?? new DOMException("aborted", "AbortError")));
+  });
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -35,13 +42,14 @@ describe("sendJson", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ provider: "groq" }),
       cache: "no-store",
+      signal: expect.any(AbortSignal),
     });
   });
 
   it("sends no body, and no content type, when given none", async () => {
     const fetchMock = answer(200, "{}");
     await sendJson("GET", "/api/x");
-    expect(fetchMock).toHaveBeenCalledWith("/api/x", { method: "GET", cache: "no-store" });
+    expect(fetchMock).toHaveBeenCalledWith("/api/x", { method: "GET", cache: "no-store", signal: expect.any(AbortSignal) });
   });
 
   it("says a refusal's status, and reads its body", async () => {
@@ -65,6 +73,26 @@ describe("sendJson", () => {
     const spies = (["log", "info", "warn", "error", "debug"] as const).map((level) => vi.spyOn(console, level).mockImplementation(() => undefined));
     expect(await sendJson("POST", "/api/learner/provider-key", { provider: "groq", key: "gsk_secret" })).toBeNull();
     for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("gives up on a server that never answers, so nothing waits on it for good", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal("fetch", vi.fn(hangUntilAborted));
+      const reply = sendJson("POST", "/api/learner/preference", {}, { timeoutMs: 1_000 });
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(await reply).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("is null once the caller's signal aborts it", async () => {
+    vi.stubGlobal("fetch", vi.fn(hangUntilAborted));
+    const controller = new AbortController();
+    const reply = sendJson("GET", "/api/learner/recent", undefined, { signal: controller.signal });
+    controller.abort();
+    expect(await reply).toBeNull();
   });
 
   it("has no console call to grow one later", () => {

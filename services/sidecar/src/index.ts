@@ -1,7 +1,7 @@
 import { createApi } from "./api";
 import { HOST, port } from "./config";
 import { tutorDeps } from "./deps";
-import { loadSidecarEnv } from "./env";
+import { loadSidecarEnv, pinCatalogFile } from "./env";
 
 /**
  * `npm run sidecar`: the process.
@@ -16,6 +16,8 @@ async function main(): Promise<void> {
   // The web's environment first (AUTH_SECRET above all, which opens the
   // saved provider keys), so the deps below read what the web reads.
   await loadSidecarEnv();
+  // The file the desktop shell's web and the studio open: the launchers' shared rule (S9-08).
+  await pinCatalogFile();
   const runtime = tutorDeps();
   const server = createApi(runtime.deps);
   const listenPort = port();

@@ -30,7 +30,13 @@ struct GnosiaWebApp: App {
                 // first minute is heavy and the window should not hold its
                 // own server start behind it, nor vice versa.
                 .task { await server.start() }
-                .task { await studio.start() }
+                // Only when the web serves the studio (S9-15): without
+                // STUDIO_ENABLED /studio 404s, and a runner booted anyway
+                // would hold port 7250 for nothing.
+                .task {
+                    await Checkout.prepare()
+                    if Checkout.studioEnabled(Checkout.childEnv()) { await studio.start() }
+                }
         }
         .windowToolbarStyle(.unified)
         .commands { AppCommands() }
@@ -43,7 +49,7 @@ private struct ContentView: View {
     var body: some View {
         switch server.status {
         case .running(let url):
-            WebView(url: url)
+            WebView(url: url, token: server.launchToken)
         case .failed(let message):
             ContentUnavailableView {
                 Label("The web app did not start", systemImage: "server.rack")
@@ -78,6 +84,14 @@ private struct AppCommands: Commands {
                 NotificationCenter.default.post(name: .gnosiaWebReload, object: nil)
             }
             .keyboardShortcut("r")
+            Button("Back") {
+                NotificationCenter.default.post(name: .gnosiaWebBack, object: nil)
+            }
+            .keyboardShortcut("[")
+            Button("Forward") {
+                NotificationCenter.default.post(name: .gnosiaWebForward, object: nil)
+            }
+            .keyboardShortcut("]")
         }
     }
 

@@ -10,7 +10,6 @@ import { chipClasses, cx, FOCUS } from "@/components/ui/classes";
 import { FilterMenu } from "@/components/ui/FilterMenu";
 import { useStoredHarness } from "@/components/studio/HarnessPicker";
 import type { HarnessValue } from "@/lib/studio-harness";
-import { BYOK_SETTINGS_CHANGED, getByokSettings } from "@/lib/studio-drafts";
 import { Glyph, type GlyphName } from "@/components/ui/Glyph";
 import type { MentionComposerHandle } from "@/components/ui/MentionComposer";
 import {
@@ -25,6 +24,7 @@ import {
 } from "@/lib/mentions";
 import { MENTION_HINT, mentionOptions, valueSendBlock } from "@/lib/studio-cards";
 import { harnessModelOptions, type RunnerResolved } from "@/lib/studio-agent-settings";
+import { useByokTiers } from "@/lib/use-byok-tiers";
 import { TAG_KINDS, type TagKind, type VideoAvailability } from "@/lib/studio-drafts";
 
 type Value = MentionValue<TagKind>;
@@ -72,24 +72,10 @@ export function HomeComposer({
   const model = picks[harness] ?? "default";
   const setModel = (next: string) => setPicks((held) => ({ ...held, [harness]: next }));
   // The BYOK tiers the active provider configured (D94), read when BYOK is
-  // the pick — fresher than health's, since Connect may have just written it —
-  // and again whenever a BYOK write lands (`BYOK_SETTINGS_CHANGED`), so tiers
-  // set in the dialog or Settings are enabled at once.
-  const [byokTiers, setByokTiers] = useState<{ default?: string; lite?: string; max?: string } | null>(null);
-  useEffect(() => {
-    if (harness !== "byok") return;
-    const read = async () => {
-      const result = await getByokSettings();
-      // A read that says nothing is configured clears what an earlier one
-      // found — a removed provider's tiers go with it.
-      if (!result.ok) return;
-      const entry = result.data.providers.find((provider) => provider.provider === result.data.active);
-      setByokTiers(result.data.configured ? (entry?.models ?? null) : null);
-    };
-    void read();
-    window.addEventListener(BYOK_SETTINGS_CHANGED, read);
-    return () => window.removeEventListener(BYOK_SETTINGS_CHANGED, read);
-  }, [harness]);
+  // the pick (fresher than health's, since Connect may have just written it)
+  // and again whenever a BYOK write lands, so tiers set in the dialog or
+  // Settings are enabled at once (`useByokTiers`).
+  const byokTiers = useByokTiers(harness === "byok")?.tiers ?? null;
   const composer = useRef<MentionComposerHandle | null>(null);
 
   useEffect(() => {

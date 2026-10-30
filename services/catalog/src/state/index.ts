@@ -65,6 +65,12 @@ export { contentOwnership } from "../content/ownership";
  */
 export { blobRoot } from "../env";
 /**
+ * The catalog's file as every catalog command resolves it (`CATALOG_DB`,
+ * `services/catalog/.env`, `DATABASE_URL`, the data home), for the launchers
+ * that hand one resolved path to the web, the studio and the macOS sidecar.
+ */
+export { databasePath } from "../env";
+/**
  * Which blob serves an asset or a video's poster, for the asset routes, and the
  * poster recipe, shared with `catalog asset upload` so the web app's ffmpeg
  * fallback cuts the same picture the upload stored.

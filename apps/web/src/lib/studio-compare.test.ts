@@ -4,7 +4,6 @@ import {
   catalogErrorLine,
   countRows,
   emptyLintLine,
-  formatBytes,
   gitAddLine,
   lintLine,
   missingShotReason,
@@ -77,11 +76,13 @@ describe("the counts table", () => {
 });
 
 describe("formatting", () => {
-  it("prints bytes the way a file manager does", () => {
-    expect(formatBytes(940)).toBe("940 B");
-    expect(formatBytes(213_000)).toBe("213 kB");
-    expect(formatBytes(1_400_000)).toBe("1.4 MB");
-    expect(formatBytes(null)).toBe("—");
+  it("sizes the SVG as the inspector and the library do, decimal", () => {
+    const row = (before: number | null, after: number | null) =>
+      countRows(comparison({ before: side({ svgBytes: before }), after: side({ svgBytes: after }) })).find((entry) => entry.label === "SVG bytes");
+    // 213,962 bytes is "214 kB" here and in the inspector, where the inspector once said "209 kB".
+    expect(row(213_962, 1_400_000)).toMatchObject({ before: "214 kB", after: "1.4 MB" });
+    expect(row(940, 5_400)).toMatchObject({ before: "940 B", after: "5.4 kB", delta: "+4.5 kB" });
+    expect(row(null, 940)).toMatchObject({ before: "—", after: "940 B", delta: null });
   });
 
   it("uses a real minus sign on a decrease", () => {

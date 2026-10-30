@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
+import { useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 
 import type { HistorySearch } from "@/components/studio/history-search";
 import { TextLink } from "@/components/ui/TextLink";
@@ -12,6 +12,7 @@ import { Collapse } from "@/components/ui/Collapse";
 import { Glyph } from "@/components/ui/Glyph";
 import { Menu, MenuItem } from "@/components/ui/Menu";
 import { isCurrentRow } from "@/lib/nav";
+import { recentGlyph } from "@/lib/recent-glyphs";
 import type { RecentChange } from "@/lib/recent-client";
 import {
   cleanTitle,
@@ -28,9 +29,9 @@ import { renameDraft } from "@/lib/studio-drafts";
 import { conversationHref } from "@/lib/studio-view";
 
 import { SearchResults } from "./ChatSearch";
-import { FADE, FADE_IN } from "./motion";
+import { LABEL_FADE, LABEL_SHOWN } from "./motion";
 import { rowClick } from "./row-click";
-import { recentGlyph, ROW, ROW_TWO_LINE, rowFill } from "./rows";
+import { ROW, ROW_TWO_LINE, rowFill } from "./rows";
 import { useShell } from "./shell-context";
 import { useConversations } from "./use-conversations";
 import { useRecent } from "./use-recent";
@@ -47,7 +48,9 @@ import { useRecent } from "./use-recent";
  * the runner (`useConversations`), which names a conversation from its first
  * message before it has a title. `mergeStreams` holds back what a list that
  * has more could still outrank, so Show older is never wrong about order.
- * Without a studio the catalog's read is the whole list.
+ * Without a studio the catalog's read is the whole list, and so it is while
+ * the runner is not answering: the catalog's `draft` mirror then brings the
+ * conversations, as the runner last told it of them.
  *
  * Rename keeps the name on the conversation's draft, through the runner
  * (`renameDraft`), so the studio's own pages, Home and the runner's search
@@ -76,8 +79,11 @@ export function Sections({ rail, onPick, search }: { rail: boolean; onPick: () =
   const studio = shell?.studio ?? false;
   const chats = shell?.chats ?? null;
   const pathname = usePathname();
-  const recent = useRecent(studio);
-  const conversations = useConversations(studio, chats);
+  const conversations = useConversations(shell?.runner ?? false, chats);
+  // The runner's conversations while it answers for them; the catalog's
+  // mirror of them otherwise, so a runner that is down hides none.
+  const fromRunnerLive = (shell?.runner ?? false) && !conversations.failed;
+  const recent = useRecent(!fromRunnerLive);
   const model = recent.model;
   const path = chats?.path ?? "/studio";
   const active = chats?.active ?? null;
@@ -110,13 +116,19 @@ export function Sections({ rail, onPick, search }: { rail: boolean; onPick: () =
   }
 
   // The runner's conversations as Recent's rows, called as `conversationTitle` calls them.
-  const fromRunner =
-    conversations.list === null
-      ? null
-      : draftRows(
-          conversations.list.drafts.map((draft) => (draft.draftId in renames ? { ...draft, name: renames[draft.draftId] } : draft)),
-          conversations.titles,
-        ).map(
+  // Everything derived from the two reads is memoised on them: the sidebar
+  // draws again on every hover of the rail and drawer change, and the merge,
+  // the sort and the day groups over a few pages of rows need not run each time.
+  const runnerList = fromRunnerLive ? conversations.list : null;
+  const titles = conversations.titles;
+  const fromRunner = useMemo(
+    () =>
+      runnerList === null
+        ? null
+        : draftRows(
+            runnerList.drafts.map((draft) => (draft.draftId in renames ? { ...draft, name: renames[draft.draftId] } : draft)),
+            titles,
+          ).map(
           (row): RecentItem => ({
             key: `draft:${row.draftId}`,
             kind: "draft",
@@ -128,15 +140,25 @@ export function Sections({ rail, onPick, search }: { rail: boolean; onPick: () =
             quoted: row.quoted,
             briefed: row.briefed,
           }),
-        );
-  const streams = [
-    ...(model === null ? [] : [{ items: model.items, more: model.more }]),
-    ...(fromRunner === null || conversations.list === null ? [] : [{ items: fromRunner, more: conversations.list.more }]),
-  ];
-  const merged = mergeStreams(streams);
-  // Titles for the pins from every row read, renames included, so a pinned
-  // conversation the merge held back still shows its name now.
-  const { pinned, recent: rows } = splitPinned(merged.items, model?.pinned ?? [], streams.flatMap((s) => s.items));
+        ),
+    [runnerList, renames, titles],
+  );
+  const { merged, pinned, rows } = useMemo(() => {
+    const streams = [
+      // While the runner's list is used, the catalog's conversations are left
+      // out: a read from before the runner answered may still carry the mirror's.
+      ...(model === null ? [] : [{ items: runnerList === null ? model.items : model.items.filter((item) => item.kind !== "draft"), more: model.more }]),
+      ...(fromRunner === null || runnerList === null ? [] : [{ items: fromRunner, more: runnerList.more }]),
+    ];
+    const merged = mergeStreams(streams);
+    // Titles for the pins from every row read, renames included, so a pinned
+    // conversation the merge held back still shows its name now.
+    const { pinned, recent } = splitPinned(merged.items, model?.pinned ?? [], streams.flatMap((s) => s.items));
+    return { merged, pinned, rows: recent };
+  }, [model, fromRunner, runnerList]);
+  const timeZone = shell?.timeZone;
+  // The day headings move at midnight; a sidebar left open across one is put right on its next read.
+  const groups = useMemo(() => recentGroups(rows, new Date(), timeZone), [rows, timeZone]);
   const unlisted = studio && (pending !== null || (active !== null && !merged.items.some((item) => item.draftId === active)));
   const loaded = model !== null || fromRunner !== null;
 
@@ -148,7 +170,7 @@ export function Sections({ rail, onPick, search }: { rail: boolean; onPick: () =
     setOlderError(null);
     const [server, runner] = await Promise.all([
       model?.more === true ? recent.showOlder() : Promise.resolve(true),
-      conversations.list?.more === true ? conversations.showOlder() : Promise.resolve(true),
+      fromRunner !== null && conversations.list?.more === true ? conversations.showOlder() : Promise.resolve(true),
     ]);
     setLoadingOlder(false);
     if (!server || !runner) setOlderError("Older rows could not be read. Try again in a moment.");
@@ -186,7 +208,7 @@ export function Sections({ rail, onPick, search }: { rail: boolean; onPick: () =
       {/* Shown once Recent has answered, empty or not, so its add button
           to /courses is there for someone who has opened no course yet. */}
       <Collapse open={model?.reachable === true} className="min-w-0">
-        <CoursesSection courses={courses} rail={rail} pathname={pathname} onPick={onPick} />
+        <CoursesSection courses={courses} unavailable={model?.coursesUnavailable ?? null} rail={rail} pathname={pathname} onPick={onPick} />
       </Collapse>
 
       <Collapse open={pinned.length > 0} className="min-w-0">
@@ -206,7 +228,7 @@ export function Sections({ rail, onPick, search }: { rail: boolean; onPick: () =
           <div inert={rail}>
             <SearchResults
               search={search}
-              studio={studio}
+              studio={fromRunnerLive}
               path={path}
               active={active}
               navigate={chats?.navigate ?? null}
@@ -221,20 +243,20 @@ export function Sections({ rail, onPick, search }: { rail: boolean; onPick: () =
                 <li>
                   <span aria-current="page" className={cx(ROW, rowFill(true))}>
                     <Glyph name="compose" size={18} className="text-text2" />
-                    <span className={cx("min-w-0 flex-1 truncate", FADE, rail ? "opacity-0" : FADE_IN)}>{pending ?? "New conversation"}</span>
+                    <span className={cx("min-w-0 flex-1 truncate", LABEL_FADE, rail ? "opacity-0" : LABEL_SHOWN)}>{pending ?? "New conversation"}</span>
                   </span>
                 </li>
               </ul>
             )}
-            {recentGroups(rows, new Date()).map((group) => (
+            {groups.map((group) => (
               <section key={group.label} aria-label={group.label} className="mb-1">
-                <h3 className={cx("px-2 pb-1 pt-2 text-[12px] leading-4 text-text3", FADE, rail ? "opacity-0" : FADE_IN)}>{group.label}</h3>
+                <h3 className={cx("px-2 pb-1 pt-2 text-[12px] leading-4 text-text3", LABEL_FADE, rail ? "opacity-0" : LABEL_SHOWN)}>{group.label}</h3>
                 <ul className="flex flex-col gap-px">{group.rows.map((item) => <li key={item.key}>{row(item, false)}</li>)}</ul>
               </section>
             ))}
             {/* Whenever there is more, even with every row on screen pinned. */}
             {merged.more && (
-              <div inert={rail} className={cx("px-0.5 pt-1", FADE, rail ? "opacity-0" : FADE_IN)}>
+              <div inert={rail} className={cx("px-0.5 pt-1", LABEL_FADE, rail ? "opacity-0" : LABEL_SHOWN)}>
                 <TextLink onClick={() => void showOlder()} pending={loadingOlder} size="sm" className="px-1.5 py-1">
                   {loadingOlder ? "Reading older rows…" : "Show older"}
                 </TextLink>
@@ -246,7 +268,7 @@ export function Sections({ rail, onPick, search }: { rail: boolean; onPick: () =
               </div>
             )}
             {loaded && rows.length === 0 && !unlisted && !merged.more && (
-              <p className={cx("px-2 pt-1 text-[13px] leading-5 text-text3", FADE, rail ? "opacity-0" : FADE_IN)}>
+              <p className={cx("px-2 pt-1 text-[13px] leading-5 text-text3", LABEL_FADE, rail ? "opacity-0" : LABEL_SHOWN)}>
                 {model?.reachable === false && fromRunner === null
                   ? "Recent could not be read."
                   : "Modules, videos, conversations and concepts you open show here."}
@@ -274,7 +296,7 @@ function courseOf(key: string): string | null {
 function SectionLabel({ id, rail, action, children }: { id: string; rail: boolean; action?: ReactNode; children: ReactNode }) {
   return (
     <div className="group/label sticky top-0 z-10 flex h-[var(--shell-row,36px)] items-center justify-between bg-surface ps-2">
-      <h2 id={id} className={cx("text-[13px] font-medium text-text3", FADE, rail ? "opacity-0" : FADE_IN)}>
+      <h2 id={id} className={cx("text-[13px] font-medium text-text3", LABEL_FADE, rail ? "opacity-0" : LABEL_SHOWN)}>
         {children}
       </h2>
       {action}
@@ -288,11 +310,14 @@ function SectionLabel({ id, rail, action, children }: { id: string; rail: boolea
 
 function CoursesSection({
   courses,
+  unavailable,
   rail,
   pathname,
   onPick,
 }: {
   courses: readonly SidebarCourse[];
+  /** Why the catalog has no courses to give, when it is the owner's to fix. */
+  unavailable: string | null;
   rail: boolean;
   pathname: string | null;
   onPick: () => void;
@@ -322,7 +347,9 @@ function CoursesSection({
         Courses
       </SectionLabel>
       {courses.length === 0 && (
-        <p className={cx("px-2 pb-1 text-[13px] leading-5 text-text3", FADE, rail ? "opacity-0" : FADE_IN)}>Courses you open show here.</p>
+        <p className={cx("px-2 pb-1 text-[13px] leading-5 text-text3", LABEL_FADE, rail ? "opacity-0" : LABEL_SHOWN)}>
+          {unavailable ?? "Courses you open show here."}
+        </p>
       )}
       <ul className="flex flex-col gap-px">
         {courses.map((course) => {
@@ -347,7 +374,7 @@ function CoursesSection({
                 )}
               >
                 <Glyph name="folder" size={18} className="text-text2" />
-                <span className={cx("flex min-w-0 flex-1 flex-col", FADE, rail ? "opacity-0" : FADE_IN)}>
+                <span className={cx("flex min-w-0 flex-1 flex-col", LABEL_FADE, rail ? "opacity-0" : LABEL_SHOWN)}>
                   <span className="truncate">
                     <span className="text-text2">{course.code}</span> {course.title}
                   </span>
@@ -431,11 +458,11 @@ function RecentRow({
         )}
       >
         <Glyph name={kind.glyph} size={18} className="text-text2" />
-        <span className={cx("min-w-0 flex-1 truncate", quoted && !current && "text-text2", FADE, rail ? "opacity-0" : FADE_IN)}>
+        <span className={cx("min-w-0 flex-1 truncate", quoted && !current && "text-text2", LABEL_FADE, rail ? "opacity-0" : LABEL_SHOWN)}>
           <span className="sr-only">{kind.word}: </span>
           {item.title}
         </span>
-        {briefed && <span aria-hidden className={cx("size-1.5 shrink-0 rounded-full bg-accent", FADE, rail ? "opacity-0" : FADE_IN)} />}
+        {briefed && <span aria-hidden className={cx("size-1.5 shrink-0 rounded-full bg-accent", LABEL_FADE, rail ? "opacity-0" : LABEL_SHOWN)} />}
       </Link>
       <div inert={rail} className="absolute inset-y-0 right-1 flex items-center">
         {/* The kit menu button, as the Library's rows have: its clicks and keys

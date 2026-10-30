@@ -14,8 +14,10 @@ import {
   idempotencyKey,
   listDrafts,
   openDraftEvents,
-  readDailyCap,
+  readStudioHealth,
   reconnectDelay,
+  RUNNER_DOWN,
+  runnerDown,
   refusalNumber,
   refusalReason,
   refusalString,
@@ -135,11 +137,28 @@ describe("the calls", () => {
     expect(idempotencyKey("draft")).toMatch(/^studio-ui:draft:/);
   });
 
-  it("reads the daily cap from health, or nothing", async () => {
+  it("reads the parts of health the conversation acts on, or nothing", async () => {
     answer(200, { ok: true, dailyCap: { capUsd: 5, totalUsd: 1, exceeded: false } });
-    expect(await readDailyCap()).toEqual({ capUsd: 5, totalUsd: 1, exceeded: false });
+    expect(await readStudioHealth()).toEqual({ dailyCap: { capUsd: 5, totalUsd: 1, exceeded: false }, video: null, diagramAgent: null, agent: null });
     answer(502, { error: "down" });
-    expect(await readDailyCap()).toBeNull();
+    expect(await readStudioHealth()).toBeNull();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("not json", { status: 200 })));
+    expect(await readStudioHealth()).toBeNull();
+  });
+
+  it("reads a body cut off by the deadline as a runner that stopped answering, not a success", async () => {
+    const cut = { ok: true, status: 201, text: () => Promise.reject(new DOMException("The operation timed out.", "TimeoutError")) };
+    vi.stubGlobal("fetch", vi.fn(async () => cut));
+    const result = await createDraft({ idempotencyKey: "k" });
+    expect(result).toEqual({ ok: false, status: 0, refusal: { error: RUNNER_DOWN, detail: "The operation timed out." } });
+    expect(result.ok === false && runnerDown(result.status, result.refusal)).toBe(true);
+  });
+
+  it("gives every call a deadline, so a runner that hangs does not leave a press spinning", async () => {
+    const fetchMock = answer(200, {});
+    await getDraft("d1");
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(init.signal).toBeInstanceOf(AbortSignal);
   });
 });
 

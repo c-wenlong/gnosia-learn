@@ -8,11 +8,6 @@ import {
   DEFAULT_VIEW,
   NO_TOPIC,
   canvasHref,
-  displayTitle,
-  filterDiagrams,
-  formatBytes,
-  freshness,
-  groupDiagrams,
   panelHref,
   browserMove,
   browserPanelMove,
@@ -23,20 +18,27 @@ import {
   parsePanel,
   parseView,
   rawParamsOf,
-  showsKind,
   withoutOutcome,
-  dayAndTime,
-  dayText,
-  relativeTime,
-  sortDiagrams,
   studioHref,
   thumbnailHref,
   titleOf,
   toggleTopic,
+  type StudioView,
+} from "./studio-url";
+import {
+  displayTitle,
+  filterDiagrams,
+  formatBytes,
+  freshness,
+  groupDiagrams,
+  showsKind,
+  dayAndTime,
+  dayText,
+  relativeTime,
+  sortDiagrams,
   topicChips,
   type Diagram,
-  type StudioView,
-} from "./studio-view";
+} from "./studio-grid";
 
 /**
  * The browser screen's decisions, tested where they live.
@@ -334,8 +336,9 @@ describe("the words", () => {
   it.each([
     [null, null],
     [512, "512 B"],
-    [213_962, "209 kB"],
-    [3_500_000, "3.3 MB"],
+    // Decimal, as the comparison panel and the library size the same file.
+    [213_962, "214 kB"],
+    [3_500_000, "3.5 MB"],
   ])("formats %s bytes as %s", (bytes, expected) => {
     expect(formatBytes(bytes)).toBe(expected);
   });

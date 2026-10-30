@@ -200,6 +200,16 @@ describe("pages and day headings", () => {
     ]);
   });
 
+  it("counts the days in the zone it is given, as Home does, whatever the browser's zone", () => {
+    // 22:00 UTC on 9 Oct is 06:00 on 10 Oct in Singapore.
+    const now = new Date(Date.UTC(2026, 9, 10, 1));
+    const row = { at: new Date(Date.UTC(2026, 9, 9, 22)).toISOString() };
+    expect(recentGroups([row], now, "Asia/Singapore").map((g) => g.label)).toEqual(["Today"]);
+    expect(recentGroups([row], now, "UTC").map((g) => g.label)).toEqual(["Yesterday"]);
+    // An instant that does not parse is Older, never dropped.
+    expect(recentGroups([{ at: "not a time" }], now, "UTC").map((g) => g.label)).toEqual(["Older"]);
+  });
+
   it("merges two paged lists without showing a row the unread page of the other could outrank", () => {
     const row = (key: string, day: number): RecentItem => ({ key, kind: "concept", title: key, detail: null, href: "/", at: AT(day) });
     const merged = mergeStreams([
@@ -470,6 +480,19 @@ describe("readRecent", () => {
 
     state.catalogDatabase.mockRejectedValue(new Error("connect ECONNREFUSED"));
     expect(await readRecent()).toEqual({ reachable: false, items: [], more: false, pinned: [], courses: [] });
+  });
+
+  it("says why there are no courses when nobody flipped them, as Home's error boundary does", async () => {
+    const { ContentUnavailableError } = await import("@/data/source");
+    state.getCourses.mockRejectedValue(new ContentUnavailableError("not-flipped", "courses", "Run `npm run catalog -- flip courses`."));
+    const { readRecent } = await import("./recent");
+    const recent = await readRecent();
+    expect(recent.reachable).toBe(true);
+    expect(recent.courses).toEqual([]);
+    expect(recent.coursesUnavailable).toBe("Run `npm run catalog -- flip courses`.");
+    // Any other failure costs the courses quietly, as before.
+    state.getCourses.mockRejectedValue(new Error("boom"));
+    expect((await readRecent()).coursesUnavailable).toBeUndefined();
   });
 });
 

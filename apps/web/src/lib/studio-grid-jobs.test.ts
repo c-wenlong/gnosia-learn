@@ -19,7 +19,7 @@ import {
   shownOnGrid,
   tileStage,
   wantsLivePicture,
-} from "./studio-tile-jobs";
+} from "./studio-grid-jobs";
 
 /**
  * Where the grid shows a job, and what the loader over it says.

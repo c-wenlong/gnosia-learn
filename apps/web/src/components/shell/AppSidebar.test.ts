@@ -22,8 +22,8 @@ const mocks = vi.hoisted(() => ({
   renameDraft: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({ usePathname: () => mocks.pathname }));
-vi.mock("@/lib/studio-drafts", () => ({ listDrafts: mocks.listDrafts, renameDraft: mocks.renameDraft }));
-vi.mock("@/lib/recent-client", () => ({ fetchRecent: mocks.fetchRecent, changeRecent: mocks.changeRecent }));
+vi.mock("@/lib/studio-drafts", async (importOriginal) => ({ runnerDown: (await importOriginal<typeof import("@/lib/studio-drafts")>()).runnerDown, listDrafts: mocks.listDrafts, renameDraft: mocks.renameDraft }));
+vi.mock("@/lib/recent-client", () => ({ fetchRecent: mocks.fetchRecent, changeRecent: mocks.changeRecent, VISIT_STORED_EVENT: "gnosia:visit-stored" }));
 vi.mock("next/image", () => ({ default: () => null }));
 vi.mock("@/components/brand", () => ({ GnosiaWordmark: () => createElement("span", null, "Gnosia") }));
 vi.mock("@/components/ThemeSwitch", () => ({ ThemeSwitch: () => null }));
@@ -70,14 +70,14 @@ afterEach(() => {
   while (mounted.length) mounted.pop()?.();
 });
 
-async function mount(studio: boolean, page: () => null = () => null) {
+async function mount(studio: boolean, page: () => null = () => null, runner: boolean = studio) {
   const container = document.createElement("div");
   document.body.append(container);
   const root: Root = createRoot(container);
   await act(async () => {
     // Children as an argument, as the lint rule wants; the props type
     // requires them, hence the cast.
-    root.render(createElement(ShellFrame, { studio, initialCollapsed: false } as ComponentProps<typeof ShellFrame>, createElement(page)));
+    root.render(createElement(ShellFrame, { studio, runner, initialCollapsed: false } as ComponentProps<typeof ShellFrame>, createElement(page)));
   });
   // The sidebar's first read waits a task for a page's list.
   await act(async () => {
@@ -411,6 +411,92 @@ describe("the sections", () => {
     expect(mocks.listDrafts).not.toHaveBeenCalled();
   });
 
+  it("asks nothing of a runner the server found stopped, and shows the catalog's mirror of the conversations", async () => {
+    const MIRRORED = item({ key: "draft:d9", kind: "draft", title: "Mirrored chat", href: "/studio?draft=d9", draftId: "d9" });
+    withRows({ items: [MIRRORED, VIDEO] });
+    const container = await mount(true, () => null, false);
+    expect(mocks.listDrafts).not.toHaveBeenCalled();
+    expect(mocks.fetchRecent).toHaveBeenCalledWith({ pages: 1, drafts: true });
+    expect(recentRows(container)).toEqual(["Conversation: Mirrored chat", "Video: Master theorem"]);
+    // Focus wakes the catalog's read, never the runner's.
+    await act(async () => void window.dispatchEvent(new Event("focus")));
+    expect(mocks.listDrafts).not.toHaveBeenCalled();
+  });
+
+  it("asks the runner again once the studio page has read its list, whatever the server's look found", async () => {
+    function Studio() {
+      usePublishStudioChats({ active: null, pending: null, newChat: () => undefined, navigate: () => true, path: "/studio", initial: [DRAFT], titles: {} });
+      return null;
+    }
+    const container = await mount(true, Studio, false);
+    expect(recentRows(container)).toContain("Conversation: TCP vs UDP");
+    await vi.waitFor(() => expect(mocks.fetchRecent).toHaveBeenLastCalledWith({ pages: 1, drafts: false }));
+  });
+
+  it("leaves the catalog's conversations out while the runner's list is shown, so none appears twice", async () => {
+    const MIRRORED = item({ key: "draft:d1", kind: "draft", title: "TCP vs UDP (mirror)", href: "/studio?draft=d1", draftId: "d1" });
+    // A catalog read from before the runner answered, still carrying the mirror's rows.
+    withRows({ items: [MIRRORED, VIDEO] });
+    const container = await mount(true);
+    expect(recentRows(container)).toEqual(["Conversation: TCP vs UDP", "Video: Master theorem"]);
+  });
+
+  it("keeps asking the runner after leaving the studio page that heard it answer", async () => {
+    function Studio() {
+      usePublishStudioChats({ active: null, pending: null, newChat: () => undefined, navigate: () => true, path: "/studio", initial: [DRAFT], titles: {} });
+      return null;
+    }
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root: Root = createRoot(container);
+    const draw = (page: () => null) =>
+      act(async () => {
+        root.render(createElement(ShellFrame, { studio: true, runner: false, initialCollapsed: false } as ComponentProps<typeof ShellFrame>, createElement(page)));
+      });
+    mounted.push(() => {
+      act(() => root.unmount());
+      container.remove();
+    });
+    await draw(Studio);
+    // Off the studio: the page's list is taken back, and the runner is still the source.
+    await draw(() => null);
+    mocks.listDrafts.mockClear();
+    await act(async () => void window.dispatchEvent(new Event("focus")));
+    expect(mocks.listDrafts).toHaveBeenCalled();
+  });
+
+  it("falls back to the catalog's conversations when the runner stops answering before any list landed", async () => {
+    mocks.listDrafts.mockResolvedValue({ ok: false, status: 502, refusal: { error: "the studio runner is not answering", detail: null } });
+    await mount(true);
+    expect(mocks.listDrafts).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(mocks.fetchRecent).toHaveBeenLastCalledWith({ pages: 1, drafts: true }));
+  });
+
+  it("switches to the catalog's mirror when the runner stops answering after its list landed", async () => {
+    const MIRRORED = item({ key: "draft:d9", kind: "draft", title: "Mirrored chat", href: "/studio?draft=d9", draftId: "d9" });
+    const container = await mount(true);
+    expect(recentRows(container)).toContain("Conversation: TCP vs UDP");
+    mocks.listDrafts.mockResolvedValue({ ok: false, status: 502, refusal: { error: "the studio runner is not answering", detail: null } });
+    withRows({ items: [MIRRORED] });
+    await act(async () => void window.dispatchEvent(new Event("focus")));
+    await vi.waitFor(() => expect(mocks.fetchRecent).toHaveBeenLastCalledWith({ pages: 1, drafts: true }));
+    await vi.waitFor(() => expect(recentRows(container)).toEqual(["Conversation: Mirrored chat"]));
+  });
+
+  it("says in Courses why there are none when nobody flipped them", async () => {
+    withRows({ courses: [], coursesUnavailable: "Run `npm run catalog -- flip courses`." });
+    const container = await mount(false);
+    expect(section(container, "sidebar-courses").textContent).toContain("Run `npm run catalog -- flip courses`.");
+    expect(section(container, "sidebar-courses").textContent).not.toContain("Courses you open show here.");
+  });
+
+  it("reads Recent again once a module visit is stored, the module just opened in it", async () => {
+    await mount(false);
+    const reads = mocks.fetchRecent.mock.calls.length;
+    await act(async () => void window.dispatchEvent(new Event("gnosia:visit-stored")));
+    expect(mocks.fetchRecent.mock.calls.length).toBe(reads + 1);
+  });
+
   it("merges the catalog's rows with the runner's conversations, newest first under day headings, each with its kind", async () => {
     withRows();
     const container = await mount(true);
@@ -690,7 +776,8 @@ describe("the sections", () => {
 
   it("keeps a saved name shown when the read after it fails, rather than the old title", async () => {
     const container = await mount(true);
-    mocks.listDrafts.mockResolvedValue({ ok: false, status: 502, refusal: { error: "the studio runner is not answering", detail: null } });
+    // A refusal from a runner that answers; one that is down hands over to the catalog's mirror.
+    mocks.listDrafts.mockResolvedValue({ ok: false, status: 503, refusal: { error: "the catalog did not answer", detail: null } });
     mocks.renameDraft.mockResolvedValue({ ok: true, status: 200, data: { draftId: "d1", name: "Transport layer", title: "TCP vs UDP", changed: true, note: "" } });
     await renameTo(container, "Transport layer");
     await act(async () => {

@@ -5,14 +5,15 @@
 //  The studio surface's view of `services/studio`, and the boundary's
 //  lifecycle story.
 //
-//  **Connect-only, deliberately.** The runner binds a fixed loopback port
-//  (7250) rather than printing a `listening <port>` line the way the
-//  sidecar does, so there is no spawn contract to follow, the web app does
-//  the same thing (`studioOrigin()`), and its blocked screen's remedy is
-//  the command a person runs, `npm run studio`. Starting this runner is an
-//  owner's call: it launches paid agent sessions, its first minute runs
-//  heavy doctor and manual work, and a child process killed with the app
-//  would mark in-flight jobs `interrupted`, which is exactly the state the
+//  **Connects first, starts only when asked.** The runner binds a fixed
+//  loopback port (7250) rather than printing a `listening <port>` line the
+//  way the sidecar does, so the app adopts whatever runner answers there,
+//  as the web app does (`studioOrigin()`). Starting one is an owner's
+//  call: it launches paid agent sessions and its first minute runs heavy
+//  doctor and manual work. So the app never starts it on its own; the
+//  studio screen's "Launch studio" button calls `launch()`, which runs `npm run
+//  studio` detached (`nohup`), because a child killed with the app would
+//  mark in-flight jobs `interrupted`, which is exactly the state the
 //  runner's own reconcile pass is careful to leave for a person to resume.
 //
 //  So this type owns the port probe, the five reads the surface draws
@@ -371,12 +372,32 @@ final class StudioManager {
 
         launching = true
         launchNote = nil
-        // A login shell so nvm/volta/homebrew PATH reaches npm, as with the
-        // sidecar; nohup + & detach the runner from this process entirely.
+        Task { [weak self] in
+            let env = await ChildEnvironment.resolve(root: root)
+            self?.spawnRunner(root: root, env: env)
+        }
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(150))
+            guard let self, self.launching else { return }
+            self.launching = false
+            self.launchNote = "still not answering after 2½ minutes — see .studio/runner.log"
+        }
+    }
+
+    /// The detached `npm run studio` itself, once the environment is known.
+    private func spawnRunner(root: URL, env: [String: String]?) {
+        // The resolved environment under a plain shell, or a login shell when
+        // there is none (ChildEnvironment.shell); nohup + & detach the runner.
         let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        proc.arguments = ["-lc", "nohup npm run studio >> .studio/runner.log 2>&1 &"]
+        let shell = ChildEnvironment.shell("nohup npm run studio >> .studio/runner.log 2>&1 &", env: env)
+        proc.executableURL = shell.executable
+        proc.arguments = shell.arguments
         proc.currentDirectoryURL = root
+        // The launchers' shared environment (S9-08): the data home's
+        // STUDIO_DAILY_USD, STUDIO_OWNER and the pinned catalog, as the
+        // desktop shell's runner gets them. Without it, whichever app
+        // started the runner first decided its spend cap and owner.
+        if let env { proc.environment = env }
         proc.standardOutput = FileHandle.nullDevice
         proc.standardError = FileHandle.nullDevice
         proc.terminationHandler = { [weak self] p in
@@ -394,13 +415,6 @@ final class StudioManager {
         } catch {
             launching = false
             launchNote = "Could not launch npm: \(error.localizedDescription)"
-            return
-        }
-        Task { [weak self] in
-            try? await Task.sleep(for: .seconds(150))
-            guard let self, self.launching else { return }
-            self.launching = false
-            self.launchNote = "still not answering after 2½ minutes — see .studio/runner.log"
         }
     }
 

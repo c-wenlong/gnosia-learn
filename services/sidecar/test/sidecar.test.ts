@@ -4,7 +4,6 @@ import type { AddressInfo } from "node:net";
 
 import {
   readAssetNaming,
-  readDisplayName,
   readEvents,
   readModel,
   readPreference,
@@ -322,7 +321,6 @@ describe("the learner state writes, database down", () => {
       ["/api/learner/progress", { curriculumItemId: "fx-m1-t1" }],
       ["/api/learner/asset-name", { assetId: "fx:video", name: 42 }],
       ["/api/learner/note", { curriculumItemId: "fx-m1-t1", note: "x".repeat(20_001) }],
-      ["/api/learner/name", { name: 42 }],
       ["/api/learner/observe", { conceptSlug: "UPPER", correct: true, source: "probe", requestId: "r1" }],
       ["/api/learner/observe", { conceptSlug: "alpha", correct: true, source: "review", requestId: "r1" }],
       ["/api/learner/observe", { conceptSlug: "alpha", correct: true, source: "teach" }],
@@ -351,7 +349,6 @@ describe("the learner state writes, database down", () => {
       ["/api/learner/progress", { curriculumItemId: "fx-m1-t1", completed: true }],
       ["/api/learner/asset-name", { assetId: "fx:video", name: "x" }],
       ["/api/learner/note", { curriculumItemId: "fx-m1-t1", note: "x" }],
-      ["/api/learner/name", { name: "Ada" }],
       ["/api/learner/observe", { conceptSlug: "alpha", correct: true, source: "teach", requestId: "r1" }],
       ["/api/review/grade", { conceptId: "alpha", grade: 2, requestId: "r1" }],
       ["/api/learner/session/close", { sessionId: "s1" }],
@@ -687,15 +684,6 @@ describe.skipIf(!reachable.ok)("the learner write routes, against a scratch data
       const cleared = await call2("/api/learner/asset-name", "POST", { assetId: ASSETS.link, name: null });
       expect((await cleared.json()).result).toEqual({ title: "Somebody else's alpha", name: null, original: "Somebody else's alpha" });
       expect((await call2("/api/learner/asset-name", "POST", { assetId: "fx:missing", name: "x" })).status).toBe(400);
-    });
-
-    it("stores the display name cleaned and clears it with null", async () => {
-      const named = await call2("/api/learner/name", "POST", { name: "  Ada   Lovelace " });
-      expect(named.status).toBe(200);
-      expect((await named.json()).result).toBe("Ada Lovelace");
-      expect(await readDisplayName(scratch.db, "local")).toBe("Ada Lovelace");
-      await call2("/api/learner/name", "POST", { name: null });
-      expect(await readDisplayName(scratch.db, "local")).toBeNull();
     });
 
     it("records an answer: the event, the session, the mastery spread and the card", async () => {

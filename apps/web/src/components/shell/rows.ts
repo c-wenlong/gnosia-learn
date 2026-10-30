@@ -1,6 +1,4 @@
 import { cx } from "@/components/ui/classes";
-import type { GlyphName } from "@/components/ui/Glyph";
-import { isCourseVisit, type RecentKind } from "@/lib/recent-core";
 
 /**
  * One row of the sidebar: New chat, a destination, a course, a pinned or a
@@ -33,23 +31,4 @@ export const ROW_TWO_LINE = cx(
 /** The current row rests on `--surface2`; any other takes the translucent fill on hover. */
 export function rowFill(current: boolean): string {
   return current ? "bg-surface2 font-medium" : "hover:bg-surface2/60";
-}
-
-/**
- * Each Recent kind's 18px glyph, Home's thread glyphs where Home has one,
- * and the word a screen reader hears before the title. A conversation is the
- * studio's compose glyph, as New chat is; a tutor session is the chat glyph.
- */
-export const RECENT_GLYPHS: Record<RecentKind, { glyph: GlyphName; word: string }> = {
-  module: { glyph: "book", word: "Course module" },
-  video: { glyph: "video", word: "Video" },
-  draft: { glyph: "compose", word: "Conversation" },
-  concept: { glyph: "concepts", word: "Concept" },
-  session: { glyph: "chat", word: "Tutor session" },
-};
-
-/** A row's glyph and word: a course page visited with no module open is a "Course" (`isCourseVisit`). */
-export function recentGlyph(item: { kind: RecentKind; key: string }): { glyph: GlyphName; word: string } {
-  const kind = RECENT_GLYPHS[item.kind];
-  return isCourseVisit(item) ? { ...kind, word: "Course" } : kind;
 }

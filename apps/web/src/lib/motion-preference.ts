@@ -8,9 +8,9 @@ import { currentOwner } from "@/lib/owner";
 import { parseMotionMode, type MotionMode } from "@/lib/preferences";
 
 /**
- * The stored motion mode, for a browser with no `gnosia-motion` cookie
- * yet (`@/lib/motion`). The `(app)` layout asks only then, so it costs one
- * read in a new browser and nothing after the cookie is written.
+ * The stored motion mode, which the `(app)` layout reads beside the learner
+ * snapshot on every render and `MotionSeed` brings the `gnosia-motion`
+ * cookie (`@/lib/motion`) in line with.
  *
  * Null when the row could not be read: a cookie written from a guess would
  * hide an "Always reduce motion" the database still holds, so nothing is

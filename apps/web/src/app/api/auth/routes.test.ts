@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/core";
 import { admitSignIn, resetSignInLimits, SIGN_IN_CLIENT_RULE, SIGN_IN_FAILURE_RULE } from "@/lib/auth/sign-in-limit";
 
+import { LOCAL_TOKEN_HEADER, resetLocalTokenForTests } from "./local-token";
 import { GET as localAuth } from "./local/route";
 import { POST as signIn } from "./sign-in/route";
 import { POST as signOut } from "./sign-out/route";
@@ -191,6 +192,7 @@ describe("POST /api/auth/sign-in", () => {
 });
 
 describe("GET /api/auth/local", () => {
+  const TOKEN = "launch-secret-0123456789abcdef-0123456789";
   const saved = {
     secret: process.env.AUTH_SECRET,
     password: process.env.OWNER_PASSWORD,
@@ -199,7 +201,8 @@ describe("GET /api/auth/local", () => {
   beforeEach(() => {
     process.env.AUTH_SECRET = SECRET;
     process.env.OWNER_PASSWORD = "correct horse battery staple";
-    process.env.GNOSIA_LOCAL_TOKEN = "launch-secret";
+    process.env.GNOSIA_LOCAL_TOKEN = TOKEN;
+    resetLocalTokenForTests();
   });
   afterEach(() => {
     process.env.AUTH_SECRET = saved.secret;
@@ -207,12 +210,12 @@ describe("GET /api/auth/local", () => {
     process.env.GNOSIA_LOCAL_TOKEN = saved.local;
   });
 
-  function get(path: string): Request {
-    return new Request(`${ORIGIN}${path}`);
+  function get(token?: string, path = "/api/auth/local"): Request {
+    return new Request(`${ORIGIN}${path}`, token === undefined ? {} : { headers: { [LOCAL_TOKEN_HEADER]: token } });
   }
 
   it("redeems the launch token for a real session cookie and lands on /home", async () => {
-    const response = await localAuth(get("/api/auth/local?token=launch-secret"));
+    const response = await localAuth(get(TOKEN));
     expect(response.status).toBe(303);
     expect(response.headers.get("location")).toBe("/home");
     const cookie = cookieOf(response);
@@ -223,22 +226,42 @@ describe("GET /api/auth/local", () => {
   });
 
   it("refuses a wrong, absent or extra-character token", async () => {
-    for (const path of ["/api/auth/local?token=wrong", "/api/auth/local", "/api/auth/local?token=launch-secret-x"]) {
-      const response = await localAuth(get(path));
-      expect(response.status, path).toBe(403);
-      expect(cookieOf(response), path).toBe("");
+    for (const token of ["wrong", undefined, `${TOKEN}-x`]) {
+      const response = await localAuth(get(token));
+      expect(response.status, String(token)).toBe(403);
+      expect(cookieOf(response), String(token)).toBe("");
     }
   });
 
-  it("refuses everyone when the variable was never set — the deployed case", async () => {
+  it("reads the token from the header only, never the URL (S7-09)", async () => {
+    const response = await localAuth(get(undefined, `/api/auth/local?token=${TOKEN}`));
+    expect(response.status).toBe(403);
+  });
+
+  it("treats a token shorter than the secret floor as unset (S7-09)", async () => {
+    process.env.GNOSIA_LOCAL_TOKEN = "dev";
+    const response = await localAuth(get("dev"));
+    expect(response.status).toBe(403);
+    expect(cookieOf(response)).toBe("");
+  });
+
+  it("mints one cookie per process; the right token again just goes home (S7-09)", async () => {
+    expect(cookieOf(await localAuth(get(TOKEN)))).not.toBe("");
+    const again = await localAuth(get(TOKEN));
+    expect(again.status).toBe(303);
+    expect(again.headers.get("location")).toBe("/home");
+    expect(cookieOf(again)).toBe("");
+  });
+
+  it("refuses everyone when the variable was never set: the deployed case", async () => {
     delete process.env.GNOSIA_LOCAL_TOKEN;
-    const response = await localAuth(get("/api/auth/local?token=launch-secret"));
+    const response = await localAuth(get(TOKEN));
     expect(response.status).toBe(403);
   });
 
   it("names the missing configuration instead of minting nothing silently", async () => {
     delete process.env.AUTH_SECRET;
-    const response = await localAuth(get("/api/auth/local?token=launch-secret"));
+    const response = await localAuth(get(TOKEN));
     expect(response.status).toBe(303);
     expect(response.headers.get("location")).toBe("/sign-in?error=unconfigured");
     expect(cookieOf(response)).toBe("");

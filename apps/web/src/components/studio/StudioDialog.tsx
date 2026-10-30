@@ -32,13 +32,10 @@ import { prefersReducedMotion } from "@/lib/motion";
  *
  * Motion: the kit's rise and fade in. An in-app close (Close, Escape, a press
  * on the backdrop) fades the dialog and its backdrop out first and navigates
- * once they have gone (`CLOSE_MS`); the person's choice counts at once
+ * once they have gone (`DIALOG_CLOSE_MS`); the person's choice counts at once
  * (`isClosing`), so a panel about to hand over elsewhere does not undo it
  * meanwhile. Browser Back is not in-app: the dialog goes as the URL does.
  */
-
-/** How long the dialog takes to fade out before Close navigates: the kit's beat. */
-export const CLOSE_MS = DIALOG_CLOSE_MS;
 
 interface DialogControls {
   /** Close the dialog, which navigates to its `closeHref`. */
@@ -133,7 +130,7 @@ export function StudioDialog({
       return;
     }
     setLeaving(true);
-    leaveTimer.current = setTimeout(go, CLOSE_MS);
+    leaveTimer.current = setTimeout(go, DIALOG_CLOSE_MS);
   }, []);
   const isClosing = useCallback(() => closing.current, []);
 

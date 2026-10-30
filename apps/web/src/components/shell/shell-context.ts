@@ -32,6 +32,20 @@ export interface StudioChats {
 export interface ShellControls {
   /** Whether this deployment has a studio. Only the server can know (D11). */
   studio: boolean;
+  /**
+   * Whether the studio's runner is worth asking: it was listening when the
+   * server drew the page, or the studio page has read its list since. While
+   * it is not, nothing in the shell asks it (each request would fail, and say
+   * so in the console), and Recent shows the conversations the catalog's
+   * `draft` mirror holds. False without a studio.
+   */
+  runner: boolean;
+  /**
+   * The zone a day is counted in (`appTimeZone()`, else the server's own),
+   * so Recent's Today and Yesterday are Home's. Undefined outside the app's
+   * frame, where the browser's own zone is used.
+   */
+  timeZone?: string;
   /** The phone's drawer. */
   drawer: boolean;
   openDrawer: () => void;

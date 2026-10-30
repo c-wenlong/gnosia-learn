@@ -78,7 +78,7 @@ const { PanelHost, historyOf } = await import("./PanelHost");
 const { VideoRow, VideoTile } = await import("./video/VideoGridJob");
 const { DiagramRow, DiagramTile } = await import("./DiagramTile");
 const { usePanelHost } = await import("./panel-host");
-const { CLOSE_MS } = await import("./StudioDialog");
+const { DIALOG_CLOSE_MS: CLOSE_MS } = await import("@/components/ui/Dialog");
 const { PanelLink } = await import("./PanelLink");
 
 type Controls = NonNullable<ReturnType<typeof usePanelHost>>;

@@ -3,14 +3,14 @@
 import { useId, useState } from "react";
 
 import { Reveal } from "@/components/studio/motion-parts";
-import { PanelLink } from "@/components/studio/PanelLink";
+import { FooterError, FOOTER, LiveFooter, MadeFooter, OnHoldFooter, useHoldAction } from "@/components/studio/brief-card-footers";
 import { ProposedTopic } from "@/components/studio/ConfirmCard";
 import { Collapse } from "@/components/ui/Collapse";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
 import { FilterMenu } from "@/components/ui/FilterMenu";
-import { CARD_TITLE, cx, linkClasses } from "@/components/ui/classes";
+import { CARD_TITLE, cx } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
 import { Callout } from "@/components/ui/Callout";
 import type { TopicOption } from "@/data/topics";
@@ -29,7 +29,7 @@ import {
   type VideoToolName,
   type VideoToolOption,
 } from "@/lib/studio-brief-video";
-import { madeLine, pressBusyLabel, pressLabel, type KindCardStatus } from "@/lib/studio-cards";
+import { pressBusyLabel, pressLabel, type KindCardStatus } from "@/lib/studio-cards";
 import type { DrawBlock } from "@/lib/studio-chat";
 import type { PendingTopic } from "@/lib/studio-drafts";
 
@@ -113,8 +113,7 @@ export function ConfirmCardVideo({
   /** What past makes of this kind cost here (D107), under the press. */
   costNote?: string | null;
 }) {
-  const [using, setUsing] = useState(false);
-  const [useError, setUseError] = useState<string | null>(null);
+  const { using, useError, use } = useHoldAction();
   const live = status === "live";
   const onHold = status === "onHold";
   const topicMap = new Map(topics.map((topic) => [topic.slug, topic]));
@@ -123,15 +122,6 @@ export function ConfirmCardVideo({
   const mode = videoModeLine(brief);
   const warning = abbreviationWarning(runnerAbbreviations ?? abbreviations(brief));
   const holder = block?.holder ?? refusal?.holder ?? null;
-
-  async function use(action: (() => Promise<string | null>) | undefined) {
-    if (action === undefined || using) return;
-    setUsing(true);
-    setUseError(null);
-    const error = await action();
-    setUsing(false);
-    setUseError(error);
-  }
 
   return (
     <Card
@@ -181,17 +171,14 @@ export function ConfirmCardVideo({
           {warning !== null && <Callout>{warning}</Callout>}
         </div>
 
-        <Reveal open={onHold}>
-          <div className={FOOTER}>
-            <p className="text-[13px] leading-5 text-text">On hold: {holdReason ?? "the conversation contradicted this brief"}</p>
-            <div>
-              <Button size="sm" variant="secondary" onClick={() => void use(onUse)} disabled={using || editBlock !== null} title={editBlock ?? undefined}>
-                {using ? "Saving…" : "Use this brief"}
-              </Button>
-            </div>
-            <UseError text={useError} />
-          </div>
-        </Reveal>
+        <OnHoldFooter
+          open={onHold}
+          reason={holdReason}
+          using={using}
+          error={useError}
+          editBlock={editBlock}
+          onUse={() => void use(onUse)}
+        />
 
         <Reveal open={status === "held" && onPutBack !== undefined}>
           <div className={FOOTER}>
@@ -205,67 +192,31 @@ export function ConfirmCardVideo({
                 The conversation moved on after this brief, so Make video would not use it. Use it as it is, or ask for a change.
               </p>
             ) : (
-              <UseError text={useError} />
+              <FooterError text={useError} />
             )}
           </div>
         </Reveal>
 
-        <Reveal open={live}>
-          <div className={FOOTER}>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <Button
-                variant={paired ? "secondary" : "primary"}
-                onClick={onPress}
-                disabled={busy || block !== null}
-                aria-keyshortcuts={keyShortcut ? "Meta+Enter Control+Enter" : undefined}
-                data-studio-draw
-                data-card-kind="video"
-              >
-                {busy ? pressBusyLabel("video", proposed) : pressLabel("video", proposed, replacing)}
-              </Button>
-            </div>
-            {block !== null && <p className="text-[12px] leading-4 text-text2">{block.reason}</p>}
-            {refusal !== null && refusal.text !== null && block === null && (
-              <p role="alert" className="text-[13px] leading-5 text-text">
-                {refusal.text}
-              </p>
-            )}
-            {holder !== null && (
-              <PanelLink href={holderHref(holder)} scroll={false} className={linkClasses({ size: "sm", className: "w-fit" })}>
-                Open that job
-              </PanelLink>
-            )}
-            {block === null && refusal === null && (
-              <p className="text-[12px] text-text3">
-                Nothing is made or spent until you press it.
-                {costNote !== null && <> {costNote}</>}
-                {keyShortcut && (
-                  <span className="max-md:hidden">
-                    {" "}
-                    <kbd className="font-sans">⌘</kbd>/Ctrl+Enter works too.
-                  </span>
-                )}
-              </p>
-            )}
-          </div>
-        </Reveal>
+        <LiveFooter
+          open={live}
+          kind="video"
+          label={busy ? pressBusyLabel("video", proposed) : pressLabel("video", proposed, replacing)}
+          busy={busy}
+          block={block}
+          refusal={refusal}
+          holder={holder}
+          holderHref={holderHref}
+          paired={paired}
+          keyShortcut={keyShortcut}
+          costNote={costNote}
+          onPress={onPress}
+        />
 
-        <Reveal open={status === "drawn" && jobHref !== null}>
-          <div className="mt-3.5 border-t border-hair pt-3">
-            {jobHref !== null && (
-              <PanelLink href={jobHref} scroll={false} className={linkClasses({ size: "sm" })}>
-                {madeLine("video", jobRunning)}. Open the job
-              </PanelLink>
-            )}
-          </div>
-        </Reveal>
+        <MadeFooter open={status === "drawn"} kind="video" jobHref={jobHref} jobRunning={jobRunning} />
       </div>
     </Card>
   );
 }
-
-/** A footer: its rule, and the card's 14px above it, inside its own fold (`ConfirmCard`'s `FOOTER`). */
-const FOOTER = "mt-3.5 flex flex-col gap-2 border-t border-hair pt-3.5";
 
 /** One collapsed row per scene; open, every beat as it will be spoken and shown. */
 function Storyboard({ brief, charsPerSecond }: { brief: VideoBrief; charsPerSecond: number | undefined }) {
@@ -389,16 +340,7 @@ function ToolRow({
         {row.line !== null && row.line !== "" && <span className="min-w-0 text-[13px] leading-5 text-text2">{row.line}</span>}
       </div>
       {row.stop !== null && <p className="text-[12px] leading-4 text-text2">{row.stop}</p>}
-      <UseError text={error} />
+      <FooterError text={error} />
     </div>
-  );
-}
-
-function UseError({ text }: { text: string | null }) {
-  if (text === null) return null;
-  return (
-    <p role="alert" className="text-[13px] leading-5 text-danger">
-      {text}
-    </p>
   );
 }

@@ -19,6 +19,7 @@ import {
 } from "@gnosia/catalog/state";
 
 import { getCourses } from "@/data/courses";
+import { ContentUnavailableError } from "@/data/source";
 import { conceptTouches } from "@/lib/home-core";
 import { catalogDatabase } from "@/lib/learner-store";
 import { bucketOf } from "@/lib/mastery-bucket";
@@ -292,13 +293,13 @@ export async function readRecent(options: RecentOptions = {}): Promise<RecentMod
       readLearnerSnapshot(db, owner),
       wantDrafts ? orNone("drafts", recentDrafts(db, owner, limit)) : Promise.resolve([]),
       orNone("tutor sessions", recentTutorSessions(db, owner, limit)),
-      orNone("courses", getCourses()),
+      coursesOrWhy(),
     ]);
     // A conversation is called by its name, else its title (`recentItems`),
     // so a search here finds a renamed one by its name; with a studio, the
     // sidebar asks the runner instead, which matches the name too.
     const concepts = await recentConcepts(db, owner, conceptsNamed(events, sessions));
-    const sources = await recentSources(db, { events, preferences, drafts, sessions, concepts, courses }, scope);
+    const sources = await recentSources(db, { events, preferences, drafts, sessions, concepts, courses: courses.courses }, scope);
     const all = recentItems(sources);
     const page = q === "" ? recentPage(all, pages) : recentPage(all.filter((item) => rowMatches(item, q)), 1);
     return {
@@ -306,7 +307,8 @@ export async function readRecent(options: RecentOptions = {}): Promise<RecentMod
       items: page.items,
       more: page.more,
       pinned: asPinned(preferences[PREFERENCE_KEYS.pinned]),
-      courses: sidebarCourses(courses, sources.modules, snapshot),
+      courses: sidebarCourses(courses.courses, sources.modules, snapshot),
+      ...(courses.unavailable === null ? {} : { coursesUnavailable: courses.unavailable }),
     };
   } catch (error) {
     console.warn(`recent: unavailable, ${error instanceof Error ? error.message : String(error)}`);
@@ -320,6 +322,22 @@ export function conceptsNamed(events: readonly EventRecord[], sessions: readonly
   for (const e of events) if (e.type === "observation" && typeof e.concept === "string" && e.concept !== "") ids.add(e.concept);
   for (const s of sessions) if (s.goal !== null && s.goal !== "") ids.add(s.goal);
   return [...ids];
+}
+
+/**
+ * The courses, or none. A courses type nobody flipped is not an outage the
+ * sidebar can stay quiet about: Home sends it to the error boundary, which
+ * names the flip, and the sidebar says the same sentence where its courses
+ * would be rather than reading as a learner with none.
+ */
+async function coursesOrWhy(): Promise<{ courses: Course[]; unavailable: string | null }> {
+  try {
+    return { courses: await getCourses(), unavailable: null };
+  } catch (error) {
+    if (error instanceof ContentUnavailableError && error.reason === "not-flipped") return { courses: [], unavailable: error.message };
+    console.warn(`recent: courses unavailable, ${error instanceof Error ? error.message : String(error)}`);
+    return { courses: [], unavailable: null };
+  }
 }
 
 async function orNone<T>(what: string, read: Promise<T[]>): Promise<T[]> {

@@ -21,6 +21,8 @@
  */
 
 import { conversationTitle } from "@/lib/conversation-title";
+import { dayDiff } from "@/lib/day-groups";
+import { dayKey } from "@/lib/days";
 import type { MasteryBucket } from "@/lib/mastery-bucket";
 import { resumeAt } from "@/lib/playback";
 
@@ -138,7 +140,8 @@ export function clock(seconds: number): string {
   return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${rest}` : `${m}:${rest}`;
 }
 
-function time(at: string): number {
+/** An instant's milliseconds, 0 when it does not parse: how every list here compares times, never as strings. */
+export function time(at: string): number {
   const ms = new Date(at).getTime();
   return Number.isNaN(ms) ? 0 : ms;
 }
@@ -320,6 +323,8 @@ export interface RecentModel {
   more: boolean;
   pinned: PinnedRow[];
   courses: SidebarCourse[];
+  /** Why there are no courses when the reason is the owner's to fix (a courses type nobody flipped), in a sentence that names the fix. */
+  coursesUnavailable?: string;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -378,20 +383,22 @@ export interface RecentGroup<T> {
 /**
  * The rows under the day headings the Chats list used (`historyGroups` in
  * `studio-draft-list.ts`): Today, Yesterday, the previous 7 days, the
- * previous 30, and Older, by the local calendar day of `at` against `now`.
- * Keeps the rows' order; an empty group is left out.
+ * previous 30, and Older, by the calendar day of `at` against `now` in
+ * `timeZone`: the zone Home counts its days in (`appTimeZone()`, handed to
+ * the shell by the server), so a row is "Today" in both places. Without one,
+ * the zone of whatever runs it. Keeps the rows' order; an empty group is
+ * left out, and a row whose `at` does not parse is Older.
  */
-export function recentGroups<T extends { at: string }>(rows: readonly T[], now: Date): RecentGroup<T>[] {
-  const DAY = 86_400_000;
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+export function recentGroups<T extends { at: string }>(rows: readonly T[], now: Date, timeZone?: string): RecentGroup<T>[] {
+  const today = dayKey(now, timeZone);
   const groups = new Map<string, T[]>();
   for (const row of rows) {
-    const at = new Date(row.at);
-    const day = new Date(at.getFullYear(), at.getMonth(), at.getDate()).getTime();
-    // Calendar days, rounded: a day across a clock change is 23 or 25 hours.
-    const ago = Number.isNaN(day) ? Infinity : Math.round((today - day) / DAY);
+    const ms = Date.parse(row.at);
+    const ago = Number.isNaN(ms) ? Infinity : dayDiff(dayKey(new Date(ms), timeZone), today);
     const label = ago <= 0 ? DAY_GROUPS[0] : ago === 1 ? DAY_GROUPS[1] : ago <= 7 ? DAY_GROUPS[2] : ago <= 30 ? DAY_GROUPS[3] : DAY_GROUPS[4];
-    groups.set(label, [...(groups.get(label) ?? []), row]);
+    const list = groups.get(label);
+    if (list === undefined) groups.set(label, [row]);
+    else list.push(row);
   }
   return DAY_GROUPS.flatMap((label) => {
     const grouped = groups.get(label);
