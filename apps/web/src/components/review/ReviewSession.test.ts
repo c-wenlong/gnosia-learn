@@ -67,6 +67,8 @@ const CHECK = card({
   why: null,
 });
 
+const NOTE = "Options made without the tutor, from related notes.";
+
 const graded: unknown[] = [];
 
 beforeAll(() => {
@@ -264,5 +266,19 @@ describe("ReviewSession reading the state again", () => {
     vi.stubGlobal("location", { ...window.location, assign });
     await settle(() => button(host, "Review the next batch").click());
     expect(assign).toHaveBeenCalledWith("/review");
+  });
+});
+
+describe("ReviewSession wrong-option line", () => {
+  it("says the options were not the tutor's when they came from the notes", async () => {
+    const host = await mount([{ ...CHECK, wrong: "notes" }]);
+    expect(host.textContent).toContain(NOTE);
+  });
+
+  it("draws nothing for the tutor's own options or an unmarked card", async () => {
+    const tutor = await mount([{ ...CHECK, wrong: "tutor" }]);
+    expect(tutor.textContent).not.toContain("Options made without the tutor");
+    const plain = await mount([CHECK]);
+    expect(plain.textContent).not.toContain("Options made without the tutor");
   });
 });
