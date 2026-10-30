@@ -10,6 +10,8 @@ import { POST as signOut } from "./sign-out/route";
 
 const ORIGIN = "http://localhost:3000";
 const SECRET = "0123456789abcdef0123456789abcdef";
+const PASSWORD = "correct horse battery staple";
+const CONFIG = { secret: SECRET, password: PASSWORD, epoch: "" };
 
 function post(path: string, fields: Record<string, string>, headers: Record<string, string> = {}): Request {
   const body = new URLSearchParams(fields);
@@ -19,6 +21,17 @@ function post(path: string, fields: Record<string, string>, headers: Record<stri
     body,
   });
 }
+
+// A SESSION_EPOCH exported by the shell would sign every cookie below under
+// an epoch the assertions do not use; each test starts with none.
+const shellEpoch = process.env.SESSION_EPOCH;
+beforeEach(() => {
+  delete process.env.SESSION_EPOCH;
+});
+afterEach(() => {
+  if (shellEpoch === undefined) delete process.env.SESSION_EPOCH;
+  else process.env.SESSION_EPOCH = shellEpoch;
+});
 
 function cookieOf(response: Response): string {
   return response.headers.get("set-cookie") ?? "";
@@ -48,7 +61,7 @@ describe("POST /api/auth/sign-in", () => {
     expect(cookie).toContain("SameSite=lax");
     expect(cookie).not.toContain("Secure");
     const token = decodeURIComponent(cookie.split(";")[0].slice(SESSION_COOKIE.length + 1));
-    await expect(verifySession(SECRET, token, Math.floor(Date.now() / 1000))).resolves.toBe(true);
+    await expect(verifySession(CONFIG, token, Math.floor(Date.now() / 1000))).resolves.toBe(true);
   });
 
   it("marks the cookie Secure over https", async () => {
@@ -222,7 +235,7 @@ describe("GET /api/auth/local", () => {
     expect(cookie).toMatch(new RegExp(`^${SESSION_COOKIE}=`));
     expect(cookie).toContain("HttpOnly");
     const token = decodeURIComponent(cookie.split(";")[0].slice(SESSION_COOKIE.length + 1));
-    await expect(verifySession(SECRET, token, Math.floor(Date.now() / 1000))).resolves.toBe(true);
+    await expect(verifySession(CONFIG, token, Math.floor(Date.now() / 1000))).resolves.toBe(true);
   });
 
   it("refuses a wrong, absent or extra-character token", async () => {
@@ -265,6 +278,67 @@ describe("GET /api/auth/local", () => {
     expect(response.status).toBe(303);
     expect(response.headers.get("location")).toBe("/sign-in?error=unconfigured");
     expect(cookieOf(response)).toBe("");
+  });
+});
+
+describe("ending every session (S7-03)", () => {
+  const saved = { password: process.env.OWNER_PASSWORD, secret: process.env.AUTH_SECRET, epoch: process.env.SESSION_EPOCH };
+  beforeEach(() => {
+    process.env.OWNER_PASSWORD = PASSWORD;
+    process.env.AUTH_SECRET = SECRET;
+    delete process.env.SESSION_EPOCH;
+    resetSignInLimits();
+  });
+  afterEach(() => {
+    for (const [name, value] of [["OWNER_PASSWORD", saved.password], ["AUTH_SECRET", saved.secret], ["SESSION_EPOCH", saved.epoch]] as const) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  });
+
+  async function sessionToken(): Promise<string> {
+    const response = await signIn(post("/api/auth/sign-in", { password: PASSWORD }));
+    const cookie = cookieOf(response);
+    return decodeURIComponent(cookie.split(";")[0].slice(SESSION_COOKIE.length + 1));
+  }
+
+  it("a SESSION_EPOCH bump ends a session and leaves the saved provider keys readable", async () => {
+    const { sealKey, openKey } = await import("@gnosia/tutor/server/seal");
+    const sealed = sealKey("sk-or-v1-a-saved-provider-key-0001", { secret: SECRET, owner: "local", provider: "openrouter" });
+    const token = await sessionToken();
+    const now = Math.floor(Date.now() / 1000);
+    await expect(verifySession(CONFIG, token, now)).resolves.toBe(true);
+    process.env.SESSION_EPOCH = "1";
+    await expect(verifySession({ ...CONFIG, epoch: "1" }, token, now)).resolves.toBe(false);
+    // The sign-in that follows works under the new epoch.
+    await expect(verifySession({ ...CONFIG, epoch: "1" }, await sessionToken(), now)).resolves.toBe(true);
+    // AUTH_SECRET did not move, so the key sealed under it still opens.
+    expect(openKey(sealed, { secret: SECRET, owner: "local", provider: "openrouter" })).toBe("sk-or-v1-a-saved-provider-key-0001");
+  });
+
+  it("a new password ends a session; signing in with it starts one", async () => {
+    const token = await sessionToken();
+    process.env.OWNER_PASSWORD = "a brand new password";
+    const now = Math.floor(Date.now() / 1000);
+    await expect(verifySession({ ...CONFIG, password: "a brand new password" }, token, now)).resolves.toBe(false);
+    const response = await signIn(post("/api/auth/sign-in", { password: "a brand new password" }));
+    const fresh = decodeURIComponent(cookieOf(response).split(";")[0].slice(SESSION_COOKIE.length + 1));
+    await expect(verifySession({ ...CONFIG, password: "a brand new password" }, fresh, now)).resolves.toBe(true);
+  });
+
+  it("the desktop shell's launch token signs under the current epoch", async () => {
+    process.env.SESSION_EPOCH = "7";
+    process.env.GNOSIA_LOCAL_TOKEN = "launch-secret-0123456789abcdef-0123456789";
+    resetLocalTokenForTests();
+    try {
+      const response = await localAuth(new Request(`${ORIGIN}/api/auth/local`, { headers: { [LOCAL_TOKEN_HEADER]: "launch-secret-0123456789abcdef-0123456789" } }));
+      const token = decodeURIComponent(cookieOf(response).split(";")[0].slice(SESSION_COOKIE.length + 1));
+      const now = Math.floor(Date.now() / 1000);
+      await expect(verifySession({ ...CONFIG, epoch: "7" }, token, now)).resolves.toBe(true);
+      await expect(verifySession(CONFIG, token, now)).resolves.toBe(false);
+    } finally {
+      delete process.env.GNOSIA_LOCAL_TOKEN;
+    }
   });
 });
 

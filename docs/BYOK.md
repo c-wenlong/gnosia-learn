@@ -186,7 +186,7 @@ What each kind of attacker gets.
 | --- | --- | --- |
 | A database dump alone (a backup, flip day's `pg_dump`, a leaked replica, a read-only SQL injection) | Which providers each owner saved a key for, the last four characters, the dates | Any key. AES-256-GCM under a 256-bit key derived from a secret that is not in the database |
 | Write access to the database alone | The power to delete or corrupt rows, which reads as "re-enter this key" | A key, or the use of one owner's key for another (D7), or a key of their own choosing slipped in (they cannot seal one) |
-| The environment alone (`AUTH_SECRET`, as in a leaked Vercel variable or `.env.local`) | A forged session, so the use of the owner's keys through the tutor and Test, bounded by the rate limits; and the server's fallback keys, which sit in the environment in the clear as they always have | The stored keys. The app never returns one, and without the database there is no ciphertext |
+| The environment alone (`AUTH_SECRET`, as in a leaked Vercel variable or `.env.local`) | A forged session when `OWNER_PASSWORD` sits beside it, as it does in `.env.local` and the Vercel project (the session key needs both, DEPLOYMENT.md "Signing in"), so the use of the owner's keys through the tutor and Test, bounded by the rate limits; and the server's fallback keys, which sit in the environment in the clear as they always have | The stored keys. The app never returns one, and without the database there is no ciphertext |
 | Write access to the environment (a Vercel project member, a tampered `.env.local`) | Every owner's decrypted key, on their next tutor turn: setting `NVIDIA_BASE_URL`, `GEMINI_BASE_URL` or `OPENROUTER_BASE_URL` to a host of their own makes the server send each saved key there as the `Authorization` header | Nothing, beyond what the next rows grant. **Accepted while there is one owner**, who is also the only person who can write the environment. **Revisit before accounts arrive**, for example by pinning the base URLs used with saved keys to the providers' own hosts, so an operator's environment cannot redirect an owner's key |
 | Both the database and the environment | Every stored key, decrypted | Nothing more to protect. This is where the keys were before this change, when they sat in `.env` in the clear |
 | Code running on the server | Every key it touches, in memory | Out of scope: no design that lets the server call a provider can hide the key from the server |
@@ -225,7 +225,10 @@ Things that could leak a key, and what stops each:
 ## Rotation
 
 **Rotating `AUTH_SECRET`** signs every browser out (docs/DEPLOYMENT.md,
-"Signing in") and makes every stored key unreadable. Settings then shows each
+"Signing in") and makes every stored key unreadable. It is not the way to
+sign everyone out: changing `OWNER_PASSWORD` or bumping `SESSION_EPOCH` does
+that and leaves the keys readable, since the session key is derived from all
+three and the keys from the secret alone (audit finding S7-03). Settings then shows each
 one as "Your saved key can no longer be read ... Re-enter this key", and until
 it is re-entered the tutor uses the server's key for that provider, if there
 is one. Nothing re-encrypts the rows, since that would need the old secret

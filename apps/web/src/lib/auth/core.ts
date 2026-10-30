@@ -3,9 +3,12 @@
  *
  * Gnosia has one learner and no accounts, so signing in is proving you hold
  * the owner's password. The proof is a cookie carrying an HMAC over its own
- * issue time, signed with `AUTH_SECRET`; nothing is stored server-side, which
- * is what lets the check run in the proxy before any page renders and keeps
- * Postgres out of the request path. When accounts arrive this module is the
+ * issue time, signed with a key derived from `AUTH_SECRET`, the password and
+ * `SESSION_EPOCH` (`sessionKey`); nothing is stored server-side, which is
+ * what lets the check run in the proxy before any page renders and keeps
+ * Postgres out of the request path. Changing the password or the epoch ends
+ * every session; `AUTH_SECRET`, which also seals the saved provider keys
+ * (docs/BYOK.md), does not have to move for that (audit finding S7-03). When accounts arrive this module is the
  * thing that gets replaced (Auth.js reads the same `AUTH_SECRET` name), and
  * `isSignedIn` in `./session.ts` is the seam every caller goes through.
  *
@@ -25,7 +28,6 @@ const FUTURE_SKEW_SECONDS = 60;
 /** Where a sign-in lands when the form carries no usable `next`. */
 export const HOME_PATH = "/home";
 
-/** The variables a deployment has to set before anyone can sign in. */
 /**
  * The deployment secrets' environment names. The constants live in
  * `@gnosia/schema/shared` so the BYOK seal in `@gnosia/tutor` reads
@@ -34,10 +36,21 @@ export const HOME_PATH = "/home";
 export { OWNER_PASSWORD_VAR, AUTH_SECRET_VAR, LOCAL_TOKEN_VAR, MIN_SECRET_LENGTH } from "@gnosia/schema/shared";
 import { AUTH_SECRET_VAR, MIN_SECRET_LENGTH, OWNER_PASSWORD_VAR } from "@gnosia/schema/shared";
 
+/**
+ * Optional. Any value; change it (`1`, `2`, ...) to end every session without
+ * changing the password or `AUTH_SECRET` (docs/DEPLOYMENT.md, "Signing in").
+ */
+export const SESSION_EPOCH_VAR = "SESSION_EPOCH";
+
 export interface AuthConfig {
   password: string;
   secret: string;
+  /** `SESSION_EPOCH`, trimmed; empty when unset. */
+  epoch: string;
 }
+
+/** What a session's signing key is derived from. */
+export type SessionKeyInputs = Pick<AuthConfig, "secret" | "password" | "epoch">;
 
 export type AuthConfigResult = { ok: true; config: AuthConfig } | { ok: false; missing: string[] };
 
@@ -52,7 +65,8 @@ export function readAuthConfig(env: Record<string, string | undefined>): AuthCon
   const missing: string[] = [];
   if (password.length === 0) missing.push(OWNER_PASSWORD_VAR);
   if (secret.length < MIN_SECRET_LENGTH) missing.push(AUTH_SECRET_VAR);
-  return missing.length > 0 ? { ok: false, missing } : { ok: true, config: { password, secret } };
+  const epoch = env[SESSION_EPOCH_VAR]?.trim() ?? "";
+  return missing.length > 0 ? { ok: false, missing } : { ok: true, config: { password, secret, epoch } };
 }
 
 const encoder = new TextEncoder();
@@ -125,15 +139,57 @@ export async function passwordMatches(input: string, expected: string): Promise<
   return secretsEqual(input, expected);
 }
 
-async function signature(secret: string, issuedAt: number): Promise<string> {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
+/** PBKDF2 rounds over the password; paid once per process per configuration (`sessionKey` keeps the result). */
+const PASSWORD_ROUNDS = 100_000;
+
+let heldKey: { inputs: SessionKeyInputs; key: Promise<CryptoKey> } | null = null;
+
+/**
+ * The key sessions are signed with: HMAC-SHA256 under `AUTH_SECRET` over a
+ * PBKDF2 digest of the owner's password and `SESSION_EPOCH`. So a session
+ * ends when any of the three changes, and the two an owner can change
+ * without losing anything (the password and the epoch) are enough to end
+ * every session: rotating `AUTH_SECRET`, which also seals the saved
+ * provider keys, is no longer the only lever (S7-03).
+ *
+ * The password goes through PBKDF2 (salted with the secret) rather than a
+ * plain hash so that whoever holds `AUTH_SECRET` and one cookie cannot test
+ * password guesses at hash speed; a reused password is the owner's to lose
+ * elsewhere. The derived key is kept for the process, so the rounds are paid
+ * once per configuration, not per request.
+ */
+export function sessionKey(inputs: SessionKeyInputs): Promise<CryptoKey> {
+  const held = heldKey;
+  if (held !== null && held.inputs.secret === inputs.secret && held.inputs.password === inputs.password && held.inputs.epoch === inputs.epoch) {
+    return held.key;
+  }
+  const key = deriveSessionKey(inputs);
+  heldKey = { inputs: { secret: inputs.secret, password: inputs.password, epoch: inputs.epoch }, key };
+  key.catch(() => {
+    if (heldKey?.key === key) heldKey = null;
+  });
+  return key;
+}
+
+async function deriveSessionKey({ secret, password, epoch }: SessionKeyInputs): Promise<CryptoKey> {
+  const base = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, ["deriveBits"]);
+  const digest = await crypto.subtle.deriveBits(
+    { name: "PBKDF2", hash: "SHA-256", salt: encoder.encode(`gnosia/session-password/v1\u0000${secret}`), iterations: PASSWORD_ROUNDS },
+    base,
+    256,
   );
-  const mac = await crypto.subtle.sign("HMAC", key, encoder.encode(`gnosia-session:${issuedAt}`));
+  const outer = await crypto.subtle.importKey("raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  // JSON, so no epoch can forge a separator between the parts.
+  const material = await crypto.subtle.sign(
+    "HMAC",
+    outer,
+    encoder.encode(JSON.stringify(["gnosia/session-key", 1, toBase64Url(new Uint8Array(digest)), epoch])),
+  );
+  return crypto.subtle.importKey("raw", material, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+}
+
+async function signature(inputs: SessionKeyInputs, issuedAt: number): Promise<string> {
+  const mac = await crypto.subtle.sign("HMAC", await sessionKey(inputs), encoder.encode(`gnosia-session:${issuedAt}`));
   return toBase64Url(new Uint8Array(mac));
 }
 
@@ -141,24 +197,26 @@ async function signature(secret: string, issuedAt: number): Promise<string> {
  * A session token: `<issuedAt>.<base64url HMAC-SHA256>`. `issuedAt` is whole
  * seconds since the epoch and is the only claim; the cookie's own `Max-Age`
  * is a courtesy to the browser, the expiry that counts is checked in
- * `verifySession` against this number.
+ * `verifySession` against this number. Signed with `sessionKey(config)`.
  */
-export async function signSession(secret: string, issuedAt: number): Promise<string> {
+export async function signSession(config: SessionKeyInputs, issuedAt: number): Promise<string> {
   if (!Number.isInteger(issuedAt) || issuedAt < 0) throw new RangeError("issuedAt must be a non-negative integer of seconds");
-  return `${issuedAt}.${await signature(secret, issuedAt)}`;
+  if (config.secret.length === 0 || config.password.length === 0) throw new RangeError("a session needs AUTH_SECRET and OWNER_PASSWORD");
+  return `${issuedAt}.${await signature(config, issuedAt)}`;
 }
 
 /**
- * True for a token this secret signed, issued no more than `SESSION_TTL_SECONDS`
- * ago and not in the future. Anything malformed is simply false: the caller
- * only ever asks "is this visitor the owner", never "why not".
+ * True for a token signed under this configuration (the same secret,
+ * password and epoch), issued no more than `SESSION_TTL_SECONDS` ago and not
+ * in the future. Anything malformed is simply false: the caller only ever
+ * asks "is this visitor the owner", never "why not".
  */
 export async function verifySession(
-  secret: string,
+  config: SessionKeyInputs,
   token: string | undefined | null,
   nowSeconds: number,
 ): Promise<boolean> {
-  if (!token || secret.length === 0) return false;
+  if (!token || config.secret.length === 0 || config.password.length === 0) return false;
   const dot = token.indexOf(".");
   if (dot <= 0) return false;
   const issuedAtText = token.slice(0, dot);
@@ -166,7 +224,7 @@ export async function verifySession(
   const issuedAt = Number(issuedAtText);
   if (issuedAt > nowSeconds + FUTURE_SKEW_SECONDS) return false;
   if (nowSeconds - issuedAt > SESSION_TTL_SECONDS) return false;
-  const expected = await signature(secret, issuedAt);
+  const expected = await signature(config, issuedAt);
   return constantTimeEqual(token.slice(dot + 1), expected);
 }
 
