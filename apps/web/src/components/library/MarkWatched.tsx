@@ -5,53 +5,33 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { cx, STATUS_TEXT } from "@/components/ui/classes";
-import { sendJson } from "@/lib/send-json";
+import { markWatched } from "@/lib/asset-actions";
 
 type State = { kind: "idle" } | { kind: "saving" } | { kind: "saved" } | { kind: "failed"; message: string };
 
 /**
- * The asset page's primary action (hi-fi 11): append a `watched` event through
- * `POST /api/learner/watched`.
+ * The asset page's primary action for anything but a video (hi-fi 11),
+ * "Mark read": append a `watched` event through `POST /api/learner/watched`.
+ * A video records its own progress as it plays and has no such button; the
+ * event kind is the same, since the log records that the learner spent time
+ * with the asset and the difference is only the word.
  *
- * `verb` is "watched" for a video and "read" for anything else; both write the
- * same event kind, because the log records that the learner spent time with
- * the asset and the difference is only the word on the button.
- *
- * **It calls `router.refresh()` after a write**, so the server-rendered "Last
- * watched" line picks up the new event.
+ * **It calls `router.refresh()` after a write**, so the server-rendered
+ * "Read" line in the page's Details picks up the new event.
  *
  * Pressing it again after a save appends again, which is honest (a second
- * viewing is a second event), so the button stays enabled and only its label
- * says the first one landed. The "Last watched" line stays visible after a
- * save: the refresh hands it the new day, so it confirms the write rather than
- * disappearing.
+ * reading is a second event), so the button stays enabled and only its label
+ * says the first one landed.
  */
-export function MarkWatched({
-  assetId,
-  verb,
-  lastWatchedDay,
-}: {
-  assetId: string;
-  verb: "watched" | "read";
-  /**
-   * The day of the last `watched` event for this asset (`2026-09-26`), or null.
-   * A day key made on the server in the app's time zone, not an instant, so
-   * the server and the browser print the same text and hydration agrees.
-   */
-  lastWatchedDay: string | null;
-}) {
+export function MarkWatched({ assetId }: { assetId: string }) {
   const router = useRouter();
   const [state, setState] = useState<State>({ kind: "idle" });
 
   async function mark() {
     setState({ kind: "saving" });
-    const reply = await sendJson<{ ok?: boolean; error?: string }>("POST", "/api/learner/watched", { assetId });
-    if (reply === null) {
-      setState({ kind: "failed", message: "Not saved: the server could not be reached." });
-      return;
-    }
-    if (!reply.ok || reply.data.ok === false) {
-      setState({ kind: "failed", message: reply.data.error ?? `Not saved (HTTP ${reply.status}).` });
+    const answer = await markWatched(assetId);
+    if (!answer.ok) {
+      setState({ kind: "failed", message: answer.message });
       return;
     }
     setState({ kind: "saved" });
@@ -59,22 +39,18 @@ export function MarkWatched({
   }
 
   const label =
-    state.kind === "saving" ? "Saving…" : state.kind === "saved" ? `Marked ${verb}` : `Mark ${verb}`;
+    state.kind === "saving" ? "Saving…" : state.kind === "saved" ? "Marked read" : "Mark read";
 
   return (
     <div className="flex flex-col gap-1">
       <Button size="sm" onClick={mark} disabled={state.kind === "saving"} aria-live="polite">
         {label}
       </Button>
-      {state.kind === "failed" ? (
+      {state.kind === "failed" && (
         <p role="alert" className={cx(STATUS_TEXT, "text-danger")}>
           {state.message}
         </p>
-      ) : lastWatchedDay !== null ? (
-        <p className="text-[12px] text-text3">
-          Last {verb} {lastWatchedDay}
-        </p>
-      ) : null}
+      )}
     </div>
   );
 }

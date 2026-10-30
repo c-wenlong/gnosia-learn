@@ -118,7 +118,6 @@ sidecar adds the two read routes the native pane needs.
 | `GET /api/assets/[id]/poster` | — | The poster frame `catalog asset upload` stored, `etag`/`304` aware; a video with none is `404 not-uploaded`, a non-video `404 not-a-video` |
 | `GET /api/assets/[id]/pdf` | — | The video's pages-as-PDF the same way, `inline` so the browser's viewer opens it |
 | `GET /api/assets/[id]/status` | `?for=poster` | `{ ok: true }` or `{ ok: false, code }` with the status the byte route would have used — a post-`onError` probe, never a pre-render one |
-| `GET /api/concepts/[slug]` | — | The `ConceptWorkspace` object; 400/404/503 by name |
 | `GET /api/courses/[slug]/cover` | `?v=` the cover version | The course's cover from the blob store, through the session check on purpose — a path ending in an image extension would sail past `proxy.ts` unsigned-out |
 
 ### The studio, from the web app

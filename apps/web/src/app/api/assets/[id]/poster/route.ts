@@ -53,7 +53,7 @@ export const runtime = "nodejs";
  * direct navigation into an opaque origin, which costs an `<img>` embed nothing
  * because an image never consults this header at all.
  */
-export const POSTER_CSP = "default-src 'none'; script-src 'none'; sandbox";
+const POSTER_CSP = "default-src 'none'; script-src 'none'; sandbox";
 
 export async function GET(
   request: Request,

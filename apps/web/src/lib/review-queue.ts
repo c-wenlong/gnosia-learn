@@ -100,11 +100,18 @@ export function toReviewItem(
   };
 }
 
+/**
+ * The most cards one session asks. A long backlog renders, and reads a note
+ * for, only this many; the close screen says more are due.
+ */
+export const REVIEW_SESSION_LIMIT = 50;
+
 /** The session, without the request marker. For route handlers and tests. */
 export async function readReviewSession(
   focus: string | null = null,
   now: Date = new Date(),
   only: readonly string[] | null = null,
+  limit: number = REVIEW_SESSION_LIMIT,
 ): Promise<ReviewSessionData> {
   let queue: Awaited<ReturnType<typeof reviewQueue>>;
   let summaries: ConceptSummary[];
@@ -114,7 +121,9 @@ export async function readReviewSession(
     [queue, summaries] = await Promise.all([
       // `only` asks due cards and nothing else, so a focus beside it, which
       // can bring in a card that is not due, is not applied.
-      reviewQueue(db, { now, focus: only === null ? focus : null, learnerId: owner }),
+      // One past the limit, so a cut queue is told from one that fits exactly.
+      // `only` names at most `MAX_ONLY` cards and is read whole.
+      reviewQueue(db, { now, focus: only === null ? focus : null, learnerId: owner, ...(only === null ? { limit: limit + 1 } : {}) }),
       conceptSummaries(db, ownerScope(owner)),
     ]);
   } catch (error) {
@@ -129,6 +138,9 @@ export async function readReviewSession(
     const due = new Map(queue.items.map((item) => [item.conceptId, item]));
     queue = { ...queue, items: only.map((id) => due.get(id)).filter((item) => item !== undefined) };
   }
+
+  const more = queue.items.length > limit;
+  if (more) queue = { ...queue, items: queue.items.slice(0, limit) };
 
   // A note that cannot be read costs its checks, not the card: it is asked as
   // recall from the summary the catalog already has.
@@ -146,6 +158,7 @@ export async function readReviewSession(
       toReviewItem(item, checks[i] ?? [], distractorPool(item, answers, summaries)),
     ),
     nextDue: queue.nextDue,
+    ...(more ? { more } : {}),
   };
 }
 

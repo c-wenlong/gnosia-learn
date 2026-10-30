@@ -38,12 +38,13 @@ export const TILE_LIFT =
 /**
  * The row of actions over a tile's thumbnail, top right: Open canvas and
  * Extend on a diagram, Change on a video. Shown on hover, on keyboard focus
- * anywhere in the tile so Tab reaches them, and while Extend is opening
- * (`data-pending`); invisible controls take no clicks. The tile carries
+ * anywhere in the tile so Tab reaches them, while Extend is opening
+ * (`data-pending`), and while a refusal is shown (`data-problem`); invisible
+ * controls take no clicks. The tile carries
  * `group`. Each control is an `overlay` `Button` at `xs`.
  */
 export const TILE_ACTIONS =
-  "pointer-events-none absolute top-2 right-2 flex gap-1.5 opacity-0 transition-opacity duration-100 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 has-[[data-pending]]:pointer-events-auto has-[[data-pending]]:opacity-100 motion-reduce:transition-none";
+  "pointer-events-none absolute top-2 right-2 flex gap-1.5 opacity-0 transition-opacity duration-100 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 has-[[data-pending]]:pointer-events-auto has-[[data-pending]]:opacity-100 has-[[data-problem]]:pointer-events-auto has-[[data-problem]]:opacity-100 motion-reduce:transition-none";
 
 /**
  * The bar at the foot of a job's picture, a diagram's or a video's: what the

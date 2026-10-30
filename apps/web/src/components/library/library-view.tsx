@@ -25,7 +25,6 @@ import {
   sortKeyOf,
   sortRows,
   type LibraryCourse,
-  type LibraryFilters,
 } from "@/lib/library";
 import {
   conversationGroups,
@@ -38,12 +37,26 @@ import {
 import { pageOf, type LibraryPage, type PageCursor, type StalePage } from "@/lib/library-pages";
 import { conceptOrder, latestConversation, orderedConcepts, rowSource } from "@/lib/library-source";
 import { bucketOf, type MasteryBucket } from "@/lib/mastery-bucket";
+import { currentOwner } from "@/lib/owner";
 import { ownValue } from "@/lib/own-key";
 import { rowMenuItems } from "@/lib/row-menu";
 import { appTimeZone } from "@/lib/time-zone";
 
 /** The Library's URL parameters, as a page or `URLSearchParams` hands them over. */
 export type LibraryParams = { [key: string]: string | string[] | undefined };
+
+/**
+ * How long the server function behind scrolling may reuse the view the page
+ * (or an earlier page of it) worked out, and how many views it keeps.
+ */
+const VIEW_REUSE_MS = 60_000;
+const VIEWS_KEPT = 8;
+
+/** Views worked out lately, by owner and filters, oldest first. */
+const recentViews = new Map<string, { at: number; read: number; view: LibraryView }>();
+
+/** Reads started, so a slower read begun earlier never replaces a newer one's view. */
+let readsStarted = 0;
 
 /**
  * What the Library shows for one URL, read and worked out once: the rows that
@@ -53,19 +66,59 @@ export type LibraryParams = { [key: string]: string | string[] | undefined };
  * page, so the two cannot draw a row differently (L9 of
  * docs/proposals/library-by-type-and-day.md).
  *
+ * **The page reads; scrolling reuses.** Working a view out reads every row
+ * the owner holds, their parents, the knowledge base, the courses and, for a
+ * search, the words of every note and transcript, and a page of it draws
+ * about fifty rows. So each view is kept for `VIEW_REUSE_MS`, by owner and
+ * filters, and `{ reuse: true }` (the scroll's next page, and each of the
+ * pages a back navigation asks for again) takes it rather than reading the
+ * catalog once a page. The page itself never reuses: every render, a
+ * `router.refresh()` after a star or a rename included, reads afresh and
+ * replaces the kept view, so the pages after it agree with it.
+ *
  * Every read is the owner's: the loaders scope themselves to
  * `currentOwner()`, as they do for the page.
  */
-export async function loadLibraryView(params: LibraryParams) {
-  const kind = firstParam(params.kind);
-  const topic = firstParam(params.topic);
-  const course = firstParam(params.course);
-  const q = firstParam(params.q)?.trim() || null;
-  const sort = parseSort(firstParam(params.sort));
-  const view = parseView(firstParam(params.view));
-  const favorites = firstParam(params.favorites) === "1";
-  const group = parseGroup(firstParam(params.group));
-  const filters: LibraryFilters = { kind, topic, course, q, sort, view, favorites, group };
+export async function loadLibraryView(params: LibraryParams, { reuse = false }: { reuse?: boolean } = {}) {
+  const filters = libraryFilters(params);
+  const key = `${await currentOwner()}\n${JSON.stringify(filters)}`;
+  const kept = recentViews.get(key);
+  if (reuse && kept !== undefined && Date.now() - kept.at < VIEW_REUSE_MS) return kept.view;
+
+  const at = Date.now();
+  const read = ++readsStarted;
+  const view = await workOutView(filters);
+  // A read begun after this one (a refresh after a rename, say) finished
+  // first: its view is the newer, and the pages after it go on from it.
+  if ((recentViews.get(key)?.read ?? 0) > read) return view;
+  recentViews.delete(key);
+  // An unreachable catalog is asked again next time rather than remembered.
+  if (view.library.reachable) {
+    recentViews.set(key, { at, read, view });
+    for (const old of recentViews.keys()) {
+      if (recentViews.size <= VIEWS_KEPT) break;
+      recentViews.delete(old);
+    }
+  }
+  return view;
+}
+
+/** The view's filters from its URL, in one fixed shape, so one view has one key. */
+function libraryFilters(params: LibraryParams) {
+  return {
+    kind: firstParam(params.kind),
+    topic: firstParam(params.topic),
+    course: firstParam(params.course),
+    q: firstParam(params.q)?.trim() || null,
+    sort: parseSort(firstParam(params.sort)),
+    view: parseView(firstParam(params.view)),
+    favorites: firstParam(params.favorites) === "1",
+    group: parseGroup(firstParam(params.group)),
+  };
+}
+
+async function workOutView(filters: ReturnType<typeof libraryFilters>) {
+  const { kind, topic, course, q, sort, view, favorites, group } = filters;
 
   const [library, { kb }, courses, starred, vocabulary] = await Promise.all([
     loadLibrary(),
@@ -249,7 +302,7 @@ export async function loadLibraryView(params: LibraryParams) {
   };
 }
 
-export type LibraryView = Awaited<ReturnType<typeof loadLibraryView>>;
+export type LibraryView = Awaited<ReturnType<typeof workOutView>>;
 
 /** A page of the Library drawn: its pieces' rows as list items, ready for the client to fold. */
 export type RenderedPage = LibraryPage<ReactNode>;

@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { cx } from "./classes";
+import { cx, FOCUS } from "./classes";
 
 /**
  * Kit `Cite`: the citation chip under a tutor turn and under a review
@@ -26,7 +26,7 @@ export function Cite({
 }) {
   const classes = cx(
     "inline-flex h-[26px] max-w-full min-w-0 items-center gap-1.5 rounded-full border border-border bg-surface pr-2.5 pl-[3px] text-[12px] text-text2",
-    href && "transition-colors duration-100 hover:bg-surface2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+    href && cx("transition-colors duration-100 hover:bg-surface2", FOCUS),
     className,
   );
   const body = (

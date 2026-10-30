@@ -30,6 +30,13 @@ vi.mock("@/lib/agent/credentials", () => ({ tutorCredentials }));
 // whose DATABASE_URL is a postgres:// tripwire the catalog refuses. Nothing
 // this route reads here goes through the handle, so a stand-in will do.
 vi.mock("@/lib/learner-store", () => ({ catalogDatabase: async () => ({}) }));
+// The limiter, watched: a body the turn refuses must not spend a token.
+const enforceRateLimit = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/agent/guard", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/agent/guard")>();
+  enforceRateLimit.mockImplementation(real.enforceRateLimit);
+  return { ...real, enforceRateLimit };
+});
 vi.mock("@/lib/auth/session", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth/session")>()),
   isSignedIn: async () => signedIn.value,
@@ -124,6 +131,14 @@ describe("POST /api/agent/session", () => {
     expect(json.code).toBe("BAD_REQUEST");
     expect(readConceptWorkspace).not.toHaveBeenCalled();
     expect(completeWithFallback).not.toHaveBeenCalled();
+  });
+
+  it("refuses more questions to avoid than the turn takes, with the turn's own limit, before the limiter", async () => {
+    enforceRateLimit.mockClear();
+    const { status, json } = await call({ conceptSlug: "dot-product", step: "check", avoid: ["a", "b", "c", "d", "e"] });
+    expect(status).toBe(400);
+    expect(json.error).toBe("avoid must be a list of at most 4 questions");
+    expect(enforceRateLimit).not.toHaveBeenCalled();
   });
 
   it("builds the prompt on the server from the concept and returns a shuffled question", async () => {

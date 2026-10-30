@@ -30,7 +30,7 @@ import { VideoPreview } from "@/components/studio/video/VideoPreview";
 import { PANE_GUTTER } from "@/components/studio/pane-context";
 import { cx } from "@/components/ui/classes";
 import { Skeleton } from "@/components/ui/Skeleton";
-import type { MentionValue } from "@/components/ui/mention-text";
+import type { MentionValue } from "@/lib/mentions";
 import { UserMessage } from "@/components/ui/Message";
 import { TextLink } from "@/components/ui/TextLink";
 import type { AgentKind } from "@/lib/studio-agent-settings";

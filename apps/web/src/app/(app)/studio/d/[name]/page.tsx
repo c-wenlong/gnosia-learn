@@ -21,8 +21,10 @@ import { BackToStudio, StudioStrip, VerbNotice } from "@/components/studio/Studi
 import { openShot, requireStudio, studioApi } from "@/lib/studio";
 import { videoAvailability } from "@/lib/studio-drafts";
 import { vocabularyBanner, type VocabularyState } from "@/lib/studio-vocabulary";
+import { appTimeZone } from "@/lib/time-zone";
 import {
   canvasHref,
+  dayAndTime,
   displayTitle,
   extendHref,
   freshness,
@@ -72,8 +74,11 @@ export async function generateMetadata({
 }: {
   params: Promise<{ name: string }>;
 }): Promise<Metadata> {
+  // Gated like the page, and decoded the same forgiving way: a malformed
+  // escape is the page's 404, not a 500 from the title.
+  requireStudio();
   const { name } = await params;
-  return { title: `${decodeURIComponent(name)} · Studio`, robots: { index: false, follow: false } };
+  return { title: `${safeDecode(name)} · Studio`, robots: { index: false, follow: false } };
 }
 
 interface Mirror {
@@ -119,8 +124,23 @@ export default async function CanvasPage({
   const name = safeDecode(raw);
   const path = canvasHref(name);
 
-  const health = await studioApi<Health>("/api/health", { timeoutMs: 150_000 });
+  // Health, the listing and the jobs all start now, as on the grid, so a load
+  // costs the slowest of them rather than their sum. The listing and the jobs
+  // answer from the runner's memory most of the time; a blocked screen aborts
+  // them all the same.
+  const moot = new AbortController();
+  const { signal } = moot;
+  const healthCall = studioApi<Health>("/api/health", { timeoutMs: 150_000 });
+  const listCall = studioApi<DiagramListing>("/api/diagrams", { timeoutMs: 120_000, signal });
+  const jobsCall = studioApi<{ jobs: JobRow[] }>("/api/jobs?limit=200", { signal });
+  // Left unawaited on a blocked screen: a rejection there must not surface as
+  // an unhandled one. The awaits below still throw it where it is used.
+  listCall.catch(() => undefined);
+  jobsCall.catch(() => undefined);
+
+  const health = await healthCall;
   if (!health.ok) {
+    moot.abort();
     return (
       <Shell>
         <BlockedCard
@@ -133,6 +153,7 @@ export default async function CanvasPage({
     );
   }
   if (!health.data.tldrawkc) {
+    moot.abort();
     return (
       <Shell>
         <BlockedCard
@@ -149,7 +170,7 @@ export default async function CanvasPage({
     );
   }
 
-  const listed = await studioApi<DiagramListing>("/api/diagrams", { timeoutMs: 120_000 });
+  const listed = await listCall;
   if (!listed.ok) {
     return (
       <Shell>
@@ -183,12 +204,13 @@ export default async function CanvasPage({
   });
 
   const [jobList, one] = await Promise.all([
-    studioApi<{ jobs: JobRow[] }>("/api/jobs?limit=200"),
+    jobsCall,
     // After the mirror start, which brought the checkout up to date: whether
     // the canvas now holds edits nobody committed.
     studioApi<Diagram>(`/api/diagrams/${encodeURIComponent(name)}`),
   ]);
-  const staleVocabulary = vocabularyBanner(health.data.vocabulary);
+  const zone = appTimeZone();
+  const staleVocabulary = vocabularyBanner(health.data.vocabulary, (iso) => dayAndTime(iso, undefined, zone) || iso);
   const checkout = one.ok ? (one.data.checkout ?? null) : null;
   // Only on the render that shows a picture: `GET /api/jobs` carries neither
   // the brief nor the comparison, and the full-width view needs both to say why
@@ -251,13 +273,25 @@ export default async function CanvasPage({
             />
           )}
         </div>
-        <aside className="hidden w-80 shrink-0 border-l border-border lg:block">
-          {panel.job !== null ? (
+        {panel.job !== null ? (
+          // Beside the canvas from 1024px; under that, a sheet over its foot,
+          // so a job the strip links to (`?job=`) opens on a phone too.
+          <aside
+            aria-label="Job"
+            className="fixed inset-x-0 bottom-0 z-30 max-h-[70dvh] overflow-y-auto border-t border-border bg-surface pb-[env(safe-area-inset-bottom,0px)] shadow-lg lg:static lg:z-auto lg:block lg:max-h-none lg:w-80 lg:shrink-0 lg:overflow-visible lg:border-t-0 lg:border-l lg:bg-transparent lg:pb-0 lg:shadow-none"
+          >
+            <div className="flex justify-end px-3 pt-2 lg:hidden">
+              <Button href={path} variant="secondary" size="xs" scroll={false}>
+                Close
+              </Button>
+            </div>
             <JobPanel jobId={panel.job} path={path} />
-          ) : (
+          </aside>
+        ) : (
+          <aside className="hidden w-80 shrink-0 border-l border-border lg:block">
             <DiagramInspector listing={listed.data} diagram={diagram} jobs={jobs} path={path} />
-          )}
-        </aside>
+          </aside>
+        )}
       </div>
     </Shell>
   );
