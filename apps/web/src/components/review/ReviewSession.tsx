@@ -9,6 +9,7 @@ import { Cite } from "@/components/ui/Cite";
 import { Collapse } from "@/components/ui/Collapse";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { MathText } from "@/components/Math";
+import { WrongSourceNote } from "@/components/WrongSourceNote";
 import { FeedbackBar } from "@/components/ui/FeedbackBar";
 import { FocusFrame } from "@/components/session/FocusFrame";
 import { RatingButton } from "@/components/ui/RatingButton";
@@ -586,6 +587,7 @@ function CheckBody({
           </ChoiceRow>
         ))}
       </div>
+      <WrongSourceNote source={item.wrong} />
       {answered && suggested !== null && (
         <FeedbackBar
           ok={right}
