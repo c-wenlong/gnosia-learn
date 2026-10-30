@@ -1,7 +1,8 @@
-import { PROVIDER_IDS, providerLabel, type ProviderName } from "@gnosia/schema/shared";
+import { providerLabel, type ProviderName } from "@gnosia/schema/shared";
 import { NextResponse } from "next/server";
 
 import { keyFor } from "@gnosia/tutor/providers";
+import { echoesKey } from "@gnosia/tutor/server/key-echo";
 import { answer, guard, readBody, readProvider, refuse } from "@/lib/provider-keys/requests";
 import { failureCode, openSavedKeys } from "@/lib/provider-keys/store";
 import { CHAIN_WRITE_RATE_LIMIT, chainFailed, readModel } from "@/lib/tutor-models/requests";
@@ -93,26 +94,13 @@ async function keyGate(
   }
   // A key pasted into the model field would be stored in the clear and
   // exported (T11). `checkModelId` refuses anything shaped like a key; this
-  // refuses the owner's own keys, saved or server, for every provider,
-  // whatever their shape. Neither answer repeats what was sent.
+  // refuses an id holding one of the owner's whole keys, saved or server,
+  // for every provider, whatever its shape, and never a part of one, which
+  // would answer guesses at a key. Neither answer repeats what was sent.
   if (echoesKey(model, saved)) {
     return refuse("That is one of your API keys, not a model id. Keys go in a provider's API key field.");
   }
   return { serverKey: keyFor(provider, {}) !== null };
-}
-
-/** Whether `model` is, holds, or is a long part of any key the tutor could call with. */
-function echoesKey(model: string, saved: Partial<Record<ProviderName, string>>): boolean {
-  // The server's keys come through `keyFor`; every saved key is checked as
-  // well, a custom provider's included, which `PROVIDER_IDS` does not name.
-  const keys = [
-    ...PROVIDER_IDS.flatMap((id) => {
-      const key = keyFor(id, saved);
-      return key === null ? [] : [key.apiKey];
-    }),
-    ...Object.values(saved).filter((key): key is string => typeof key === "string" && key !== ""),
-  ];
-  return keys.some((key) => model.includes(key) || (model.length >= 12 && key.includes(model)));
 }
 
 export async function DELETE(req: Request): Promise<NextResponse> {

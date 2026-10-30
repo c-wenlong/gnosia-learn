@@ -459,12 +459,17 @@ describe.skipIf(!reachable.ok)("the learner write routes, against a scratch data
     await call2("/api/learner/provider-key", "POST", { provider: "openai", key: KEY2 });
 
     // A model id that echoes a saved key is refused without repeating it
-    // (T11). The key's own shape dodges `looksLikeKey` — short runs only — so
+    // (T11). The key's own shape dodges `looksLikeKey` (short runs only), so
     // it is `echoesKey`, not `checkModelId`, that catches this.
     await call2("/api/learner/provider-key", "POST", { provider: "glm", key: "glm-aaaa-bbbb-cccc-dddd-eeee" });
     const echoed = await call2("/api/learner/tutor-model", "POST", { provider: "openai", model: "m/glm-aaaa-bbbb-cccc-dddd-eeee" });
     expect(echoed.status).toBe(400);
     expect(await echoed.json()).toMatchObject({ ok: false, code: "BAD_REQUEST" });
+    // A part of a saved key gets the answer any id gets, or refused versus
+    // accepted would answer guesses at the key one character at a time.
+    const part = await call2("/api/learner/tutor-model", "POST", { provider: "openai", model: "glm-aaaa-bbbb-cccc" });
+    expect(part.status).toBe(200);
+    expect((await call2("/api/learner/tutor-model", "DELETE", { provider: "openai", model: "glm-aaaa-bbbb-cccc" })).status).toBe(200);
 
     const first = await call2("/api/learner/tutor-model", "POST", { provider: "nvidia", model: MODEL_A });
     expect(await first.json()).toMatchObject({ ok: true, chain: [{ provider: "nvidia", model: MODEL_A }] });
