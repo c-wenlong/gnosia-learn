@@ -15,7 +15,7 @@ import type { Course } from "@gnosia/tutor/types";
  * browser bundle.
  *
  * **Where a topic's concepts come from.** A course topic (`cp4284-m1-t1`) is
- * not an entry in `content/topics.yaml`: that file's `maps.courses` names
+ * not a topic row: a topic's `maps.courses` names
  * modules, not topics, so it can say which concepts a module is about but not
  * which of the module's topics each one belongs to. The per-topic link is the
  * course row's own `concepts:` list, which `catalog index` writes into
@@ -67,8 +67,8 @@ export interface TopicMastery {
  *
  * The order is the row's `position`. A concept the row has not placed (a link
  * indexed before positions existed reads as 0) goes after every placed one,
- * ranked by `authored`, the module's `maps.concepts` from
- * `content/topics.yaml`, and then by title, so nothing is ever unordered.
+ * ranked by `authored`, the module topic's `maps.concepts` from its topic
+ * row, and then by title, so nothing is ever unordered.
  */
 export function conceptsForTopic(
   concepts: readonly KbConceptLike[],

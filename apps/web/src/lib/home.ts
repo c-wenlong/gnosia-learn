@@ -20,7 +20,7 @@ import { getTopics } from "@/data/topics";
 import { ContentUnavailableError } from "@/data/source";
 import { findTopicAcrossCourses } from "@gnosia/tutor/lookup";
 import type { Course } from "@gnosia/tutor/types";
-import { continueHref, conceptsForTopic, itemDoneWith, itemStanding, resolveTopicMastery } from "@/lib/course-path";
+import { conceptsByItem, continueHref, conceptsForTopic, itemDoneWith, itemStanding, resolveTopicMastery } from "@/lib/course-path";
 import { activeOnly } from "@/lib/course-summary";
 import { dayKey } from "@gnosia/tutor/days";
 import {
@@ -112,6 +112,8 @@ export async function readHome(now: Date = new Date()): Promise<HomeModel> {
       topics: m.topics.map((t) => ({ id: t.id, title: t.title })),
     })),
   }));
+  // Each item's concepts, grouped once rather than filtered from the whole knowledge base per step.
+  const byItem = conceptsByItem(kb.concepts);
   const next = nextFromHere(threads, {
     concepts: kb.concepts,
     frontier: kb.frontier,
@@ -123,7 +125,7 @@ export async function readHome(now: Date = new Date()): Promise<HomeModel> {
     topicHref: (course, moduleSlug, topicId) => {
       const vocabulary = active.find((c) => c.slug === course.slug)?.modules.find((m) => m.slug === moduleSlug)?.topic;
       const authored = topics.find((t) => t.slug === vocabulary)?.maps.concepts ?? [];
-      const mastery = resolveTopicMastery(conceptsForTopic(kb.concepts, topicId, authored), kb.frontier);
+      const mastery = resolveTopicMastery(conceptsForTopic(byItem.get(topicId) ?? [], topicId, authored), kb.frontier);
       return continueHref(course.slug, moduleSlug, topicId, mastery);
     },
   });
