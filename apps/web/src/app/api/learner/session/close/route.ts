@@ -1,7 +1,6 @@
-import { closeTutorSession } from "@gnosia/catalog/state";
+import { sessionCloseTurn } from "@gnosia/tutor/server/learner-writes";
 
-import { BadRequest, handler } from "@/lib/learner-api";
-import { isSessionToken } from "@/lib/session-core";
+import { turnRoute } from "@/lib/learner-api";
 
 /**
  * `POST /api/learner/session/close` with `{ sessionId }`: the close screen's
@@ -16,14 +15,8 @@ import { isSessionToken } from "@/lib/session-core";
  * Idempotent: a session that is already closed, or that no answer ever opened,
  * writes nothing and answers `closed: false` with the counts. So the page can
  * send it on every arrival at the close screen without a second event.
+ *
+ * The parse and the write are `sessionCloseTurn` in
+ * `@gnosia/tutor/server/learner-writes`, which the sidecar runs too.
  */
-export const POST = handler(
-  "session-close",
-  (body) => {
-    if (!isSessionToken(body.sessionId)) {
-      throw new BadRequest(`"sessionId" is required: a short token of letters, digits, "-" and "_".`);
-    }
-    return { sessionId: body.sessionId };
-  },
-  async (db, { sessionId }: { sessionId: string }, owner) => closeTutorSession(db, sessionId, { learnerId: owner }),
-);
+export const POST = turnRoute("session-close", sessionCloseTurn);
