@@ -900,7 +900,11 @@ func sm2Review(card: CatalogReview?, grade: Int, now: Date = Date())
         repetitions += 1
         if repetitions == 1 { intervalDays = 1 }
         else if repetitions == 2 { intervalDays = 6 }
-        else { intervalDays = Int((Double(card?.intervalDays ?? 1) * ease).rounded()) }
+        else {
+            // `card.intervalDays || 1` in schedule.mjs: a zero interval grows from one day.
+            let prior = card?.intervalDays ?? 0
+            intervalDays = Int((Double(prior == 0 ? 1 : prior) * ease).rounded())
+        }
     } else {
         repetitions = 0
         lapses += 1

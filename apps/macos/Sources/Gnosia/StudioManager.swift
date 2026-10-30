@@ -5,14 +5,15 @@
 //  The studio surface's view of `services/studio`, and the boundary's
 //  lifecycle story.
 //
-//  **Connect-only, deliberately.** The runner binds a fixed loopback port
-//  (7250) rather than printing a `listening <port>` line the way the
-//  sidecar does, so there is no spawn contract to follow, the web app does
-//  the same thing (`studioOrigin()`), and its blocked screen's remedy is
-//  the command a person runs, `npm run studio`. Starting this runner is an
-//  owner's call: it launches paid agent sessions, its first minute runs
-//  heavy doctor and manual work, and a child process killed with the app
-//  would mark in-flight jobs `interrupted`, which is exactly the state the
+//  **Connects first, starts only when asked.** The runner binds a fixed
+//  loopback port (7250) rather than printing a `listening <port>` line the
+//  way the sidecar does, so the app adopts whatever runner answers there,
+//  as the web app does (`studioOrigin()`). Starting one is an owner's
+//  call: it launches paid agent sessions and its first minute runs heavy
+//  doctor and manual work. So the app never starts it on its own; the
+//  studio screen's "Launch studio" button calls `launch()`, which runs `npm run
+//  studio` detached (`nohup`), because a child killed with the app would
+//  mark in-flight jobs `interrupted`, which is exactly the state the
 //  runner's own reconcile pass is careful to leave for a person to resume.
 //
 //  So this type owns the port probe, the five reads the surface draws

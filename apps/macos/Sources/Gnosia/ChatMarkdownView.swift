@@ -125,21 +125,17 @@ struct ChatMarkdownView: View {
                 "accent": "#0a1621", "danger": "#8f1d1d", "sel": "rgba(10,22,33,.28)",
                 "ok": "#005c18", "warn": "#6d4e00", "violet": "#6d28d9", "matte": "#f7f6f3",
             ]
-        case (.assistant, false):
+        case (.assistant, let dark):
+            // The page palette, from G's table (the web's tokens), never a copy.
+            let t = { (name: String) in G.hex(name, dark: dark) }
             return [
-                "bg": "#fffdf8", "stroke": "#e6dfd0", "line": "1px",
-                "fg": "#15283a", "muted": "#605b54", "faint": "#878276",
-                "border": "#e6dfd0", "codebg": "#f3eee1",
-                "accent": "#0f5f61", "danger": "#c43939", "sel": "rgba(20,130,133,.25)",
-                "ok": "#008024", "warn": "#8c6800", "violet": "#8b5cf6", "matte": "#f7f6f3",
-            ]
-        case (.assistant, true):
-            return [
-                "bg": "#102131", "stroke": "#3d4c5b", "line": "1px",
-                "fg": "#eee8dc", "muted": "#a3b2bf", "faint": "#74828f",
-                "border": "#3d4c5b", "codebg": "#1b2c3c",
-                "accent": "#5cbab3", "danger": "#ff8585", "sel": "rgba(92,186,179,.3)",
-                "ok": "#4ade80", "warn": "#eab308", "violet": "#a78bfa", "matte": "#f7f6f3",
+                "bg": t("surface"), "stroke": t("border"), "line": "1px",
+                "fg": t("text"), "muted": t("text2"), "faint": t("text3"),
+                "border": t("border"), "codebg": t("surface2"),
+                "accent": t("accent-text"), "danger": t("danger"),
+                "sel": dark ? "rgba(92,186,179,.3)" : "rgba(20,130,133,.25)",
+                "ok": t("ok-text"), "warn": t("warn-text"),
+                "violet": dark ? "#a78bfa" : "#8b5cf6", "matte": "#f7f6f3",
             ]
         }
     }
