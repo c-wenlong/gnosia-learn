@@ -173,6 +173,14 @@ describe("images as links", () => {
     expect(host.querySelector("img")).not.toBeNull();
   });
 
+  it("links an off-site image even under images=show, since the CSP would block it", () => {
+    const host = render("![a diagram](https://upload.wikimedia.org/a.png)", { images: "show" });
+    expect(host.querySelector("img")).toBeNull();
+    const link = host.querySelector("a")!;
+    expect(link.getAttribute("href")).toBe("https://upload.wikimedia.org/a.png");
+    expect(link.textContent).toBe("a diagram");
+  });
+
   it("still draws an embed the caller resolved, by default", () => {
     const host = render("![[vector.svg]]", { resolveEmbed: (name: string) => `/api/assets/${name}/file` });
     expect(host.querySelector("img")?.getAttribute("src")).toBe("/api/assets/vector.svg/file");

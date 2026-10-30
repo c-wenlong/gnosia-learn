@@ -22,6 +22,8 @@ import {
   makeBoth,
   mentionOptions,
   modEnterPlan,
+  TWO_READY,
+  TWO_READY_APART,
   openerSend,
   openerValue,
   newestBriefSeq,
@@ -349,8 +351,24 @@ describe("Cmd+Enter (T9)", () => {
   it("sends words, presses the one live card, and with two only announces: focus never moves to a paid button", () => {
     expect(modEnterPlan(false, cards)).toEqual({ action: "send" });
     expect(modEnterPlan(true, cards.slice(0, 1))).toEqual({ action: "press", card: cards[0] });
-    expect(modEnterPlan(true, cards)).toEqual({ action: "announce" });
+    expect(modEnterPlan(true, cards)).toEqual({ action: "announce", text: TWO_READY });
     expect(modEnterPlan(true, [])).toEqual({ action: "none" });
+  });
+
+  it("announces only what is on screen when a card is held (R2-1-08)", () => {
+    const held = { reason: "The diagram is still being drawn.", holder: "j1" };
+    const [first, second] = cards;
+    // One of two held: no Make both is drawn, and the one ready card is pressed.
+    expect(modEnterPlan(true, [{ ...first!, block: held }, second!])).toEqual({ action: "press", card: second });
+    // Both held: why, never "Press Make both".
+    expect(modEnterPlan(true, [{ ...first!, block: held }, { ...second!, block: held }])).toEqual({ action: "announce", text: held.reason });
+    // Two ready from different messages: no Make both to press.
+    expect(modEnterPlan(true, [first!, { ...second!, requestSeq: 99 }])).toEqual({ action: "announce", text: TWO_READY_APART });
+    // A card being edited: no press runs and Make both is hidden, so the reason is said.
+    expect(modEnterPlan(true, cards, "Save or cancel your edits to the brief first.")).toEqual({
+      action: "announce",
+      text: "Save or cancel your edits to the brief first.",
+    });
   });
 });
 

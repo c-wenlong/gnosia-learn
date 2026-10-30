@@ -72,7 +72,7 @@ function stubFetch(answers: Array<"network" | { status: number; body: unknown }>
   return reads;
 }
 
-async function mount(): Promise<HTMLElement> {
+async function mount(embedded = true): Promise<HTMLElement> {
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
@@ -82,7 +82,7 @@ async function mount(): Promise<HTMLElement> {
         // Its `children` prop is required in its type; here it is the third argument.
         JobsProvider as unknown as (props: { initialJobs: never[]; streamEnabled: boolean }) => ReactElement,
         { initialJobs: [], streamEnabled: false },
-        createElement(JobPanel, { jobId: "old-1", path: "/studio", embedded: true }),
+        createElement(JobPanel, { jobId: "old-1", path: "/studio", embedded }),
       ),
     );
   });
@@ -193,6 +193,26 @@ describe("the phase list, read aloud (S1-10)", () => {
     expect(words).toContain("Done: ");
     expect(words).toContain("Failed: ");
     expect(words).toContain("Not started: ");
+  });
+});
+
+describe("a video job beside the canvas (R2-1-22)", () => {
+  it("has a title and a Close, as a diagram job there does", async () => {
+    // The video view follows its job's stream; jsdom has none.
+    vi.stubGlobal(
+      "EventSource",
+      class {
+        addEventListener() {}
+        removeEventListener() {}
+        close() {}
+      },
+    );
+    stubFetch([{ status: 200, body: { ...DIAGRAM, kind: "video", slug: "old", title: "An old video job", steps: [], classes: [], lineChanges: [], brief: { title: "An old video job", topic: "networking", slug: "old", mode: "new", idea: "x", audience: "new", targetSeconds: 60, voice: "none", scenes: [], concepts: [] } } }]);
+    const host = await mount(false);
+    await settle();
+    expect([...host.querySelectorAll("h2")].map((heading) => heading.textContent)).toContain("An old video job");
+    const close = [...host.querySelectorAll("a")].find((link) => link.textContent === "Close");
+    expect(close?.getAttribute("href")).toBe("/studio");
   });
 });
 

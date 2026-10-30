@@ -39,9 +39,16 @@ function whenReady<T>(ref: RefObject<T | null>, take: (handle: T) => void, now: 
  * panel is keyed by its draft, so mounting is opening), and only once.
  *
  * The returned `focusSoon` focuses the composer once it is on screen, for a
- * press that has just put something in it (an opener, a suggestion).
+ * press that has just put something in it (a suggestion, an opener handed
+ * over while the panel is open). `{ ifStill: true }` is for what arrives with
+ * the panel itself (the opener an Extend, a Talk it through or a Change left
+ * for it): it holds to the opening guard, so focus the person moved
+ * elsewhere while the conversation loaded stays there (R2-1-13).
  */
-export function useFocusWhenReady(ref: RefObject<{ focus: () => void } | null>, open: boolean): () => void {
+export function useFocusWhenReady(
+  ref: RefObject<{ focus: () => void } | null>,
+  open: boolean,
+): (options?: { ifStill?: boolean }) => void {
   // Where focus was when the panel opened.
   const openedWith = useRef<Element | null>(null);
   useEffect(() => {
@@ -61,7 +68,16 @@ export function useFocusWhenReady(ref: RefObject<{ focus: () => void } | null>, 
     );
   }, [open, ref]);
 
-  return useCallback(() => {
-    whenReady(ref, (handle) => handle.focus(), false);
-  }, [ref]);
+  return useCallback(
+    ({ ifStill = false }: { ifStill?: boolean } = {}) => {
+      whenReady(
+        ref,
+        (handle) => {
+          if (!ifStill || focusIsStill(document.activeElement, openedWith.current)) handle.focus();
+        },
+        false,
+      );
+    },
+    [ref],
+  );
 }

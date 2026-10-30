@@ -115,3 +115,59 @@ describe("Ask's answer", () => {
     expect(document.querySelector('a[href^="https://attacker.example/"]')?.textContent).toBe("chart");
   });
 });
+
+describe("Ask's request", () => {
+  async function send(field: HTMLTextAreaElement, text: string) {
+    type(field, text);
+    await act(async () => {
+      field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  }
+
+  it("is aborted when the panel goes away, so a reply nobody sees is not paid for to the end", async () => {
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_url: string, init?: RequestInit) => {
+        signal = init?.signal ?? undefined;
+        return new Promise<Response>(() => {});
+      }),
+    );
+    const { ask, field } = mount();
+    act(() => ask.click());
+    await send(field, "What is the TLB?");
+    expect(signal?.aborted).toBe(false);
+
+    act(() => root?.unmount());
+    root = null;
+    expect(signal?.aborted).toBe(true);
+  });
+
+  it("sends a question asked after a failed one in its place, never two of the learner's turns in a row", async () => {
+    const bodies: Array<{ messages: Array<{ role: string; content: string }> }> = [];
+    let status = 504;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        bodies.push(JSON.parse(String(init?.body)));
+        return status === 200
+          ? new Response(JSON.stringify({ message: { role: "assistant", content: "A cache of translations." } }), { status })
+          : new Response(JSON.stringify({ error: "The tutor took too long" }), { status });
+      }),
+    );
+    const { ask, field } = mount();
+    act(() => ask.click());
+    await send(field, "What is the TLB?");
+    expect(document.querySelector('[role="alert"]')).not.toBeNull();
+
+    status = 200;
+    await send(field, "What does the TLB cache?");
+    expect(bodies[1].messages).toEqual([{ role: "user", content: "What does the TLB cache?" }]);
+    expect(document.body.textContent).not.toContain("What is the TLB?");
+    expect(document.body.textContent).toContain("A cache of translations.");
+  });
+});

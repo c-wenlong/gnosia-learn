@@ -159,8 +159,10 @@ function Thumbnail({ diagram }: { diagram: Diagram }) {
           <span className="text-xs">{diagram.shapes} shapes</span>
         </div>
       )}
+      {/* Bottom left: the top right is where the hover actions appear, and
+          they covered both warnings on hover and on focus (R2-1-26). */}
       {badges.length > 0 && (
-        <div className="absolute right-2 top-2 flex flex-col items-end gap-1">
+        <div data-tile-warnings className="absolute bottom-2 left-2 flex flex-col items-start gap-1">
           {badges.map((badge) => (
             <Badge key={badge.key} tone="warn">
               {badge.label}

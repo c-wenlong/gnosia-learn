@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { commitDiagram, exportSvg, inspectDiagram, restartMirror, verifySvg } from "@/app/(app)/studio/actions";
@@ -8,6 +9,7 @@ import { JobPanel } from "@/components/studio/JobPanel";
 import { JobStrip } from "@/components/studio/JobStrip";
 import { MirrorKeepAlive } from "@/components/studio/MirrorKeepAlive";
 import { FADE_IN } from "@/components/studio/motion";
+import { SheetFocus } from "@/components/studio/SheetFocus";
 import { ShotView } from "@/components/studio/ShotView";
 import { Badge } from "@/components/ui/Badge";
 import { Banner } from "@/components/ui/Banner";
@@ -107,6 +109,9 @@ export default async function CanvasPage({
   // The canvas route has no view — no filters, no sort, no selection — but it
   // has the same right panel, so it reads the same panel parameters.
   const panel = parsePanel(query);
+  // The inspector as a sheet below 1024px, where it has no column beside the
+  // canvas: the strip's More menu opens it (R2-1-23).
+  const inspecting = query.inspect === "1";
 
   // A page's `params` are not URL-decoded, unlike a route handler's. The two
   // sides of the same URL disagree and nothing in the type says which you have,
@@ -279,8 +284,31 @@ export default async function CanvasPage({
             <JobPanel jobId={panel.job} path={path} />
           </aside>
         ) : (
-          <aside className="hidden w-80 shrink-0 border-l border-border lg:block">
-            <DiagramInspector listing={listed.data} diagram={diagram} jobs={jobs} path={path} />
+          // Beside the canvas from 1024px. Under that it is hidden until the
+          // strip's More menu asks for it, and then a sheet over the canvas's
+          // foot, with its own Close, as a job's panel is.
+          <aside
+            aria-label="Diagram details"
+            className={cx(
+              "w-80 shrink-0 border-l border-border lg:block",
+              inspecting
+                ? "fixed inset-x-0 bottom-0 z-30 max-h-[70dvh] w-auto overflow-y-auto border-t border-l-0 bg-surface pb-[env(safe-area-inset-bottom,0px)] shadow-lg lg:static lg:z-auto lg:max-h-none lg:w-80 lg:overflow-visible lg:border-t-0 lg:border-l lg:bg-transparent lg:pb-0 lg:shadow-none"
+                : "hidden",
+            )}
+          >
+            {inspecting ? (
+              // Focus moves into the sheet as it opens, and back to More as it closes.
+              <SheetFocus label="Diagram details" returnTo='button[aria-label="More actions"]' className="outline-none">
+                <div className="flex justify-end px-3 pt-2 lg:hidden">
+                  <Button href={path} variant="secondary" size="xs" scroll={false}>
+                    Close
+                  </Button>
+                </div>
+                <DiagramInspector listing={listed.data} diagram={diagram} jobs={jobs} path={path} />
+              </SheetFocus>
+            ) : (
+              <DiagramInspector listing={listed.data} diagram={diagram} jobs={jobs} path={path} />
+            )}
           </aside>
         )}
       </div>
@@ -382,6 +410,10 @@ function Strip({ diagram, path, uncommitted, videos }: { diagram: Diagram; path:
                 {videos && (
                   <ExtendLink href={extendHref(diagram.name, { video: true })} label="Make a video" className={menuRowClasses()} />
                 )}
+                {/* Below 1024px the inspector has no column: this opens it as a sheet. */}
+                <Link href={`${path}?inspect=1`} scroll={false} className={menuRowClasses({ className: "lg:hidden" })}>
+                  Details
+                </Link>
               </StripMenu>
             </div>
             {/* A change is asked for in a conversation on the grid, which opens on

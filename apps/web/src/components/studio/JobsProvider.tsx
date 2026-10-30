@@ -135,6 +135,16 @@ export async function postJob(path: string, body?: unknown): Promise<PostResult>
   }
 }
 
+/**
+ * Whether two reads of the list say the same thing, row for row. Compared as
+ * JSON, every field included: a row's cost, phase or comparison can move
+ * without its state moving, and fifty rows a few seconds apart are cheap to
+ * write out.
+ */
+function sameJobs(held: readonly Job[], next: readonly Job[]): boolean {
+  return held.length === next.length && JSON.stringify(held) === JSON.stringify(next);
+}
+
 /** Every ten seconds even with a live stream: the record reconciles the cache. */
 const POLL_LIVE_MS = 10_000;
 /** The fallback, when the stream is off or gone and something is running. */
@@ -195,8 +205,12 @@ export function JobsProvider({
           return now !== undefined && !isActive(now.state);
         })
         .map((before) => before.jobId);
-      previous.current = next;
-      setJobs(next);
+      // A poll that read the same list keeps the array the context already
+      // holds, so every `useStudioJobs` and `usePanelHost` reader (each tile's
+      // links, the strip, the search) does not draw again on every tick.
+      const kept = sameJobs(previous.current, next) ? previous.current : next;
+      previous.current = kept;
+      setJobs(kept);
       if (stopped.length > 0) {
         setEnded((held) => [...held, ...stopped.filter((id) => !held.includes(id))]);
       }

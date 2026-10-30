@@ -33,6 +33,12 @@ afterEach(() => {
   else process.env.SESSION_EPOCH = shellEpoch;
 });
 
+/** Put an environment variable back as it was: unset when it was unset, since assigning `undefined` stores the string "undefined". */
+function restoreEnv(name: string, value: string | undefined): void {
+  if (value === undefined) delete process.env[name];
+  else process.env[name] = value;
+}
+
 function cookieOf(response: Response): string {
   return response.headers.get("set-cookie") ?? "";
 }
@@ -45,8 +51,8 @@ describe("POST /api/auth/sign-in", () => {
     resetSignInLimits();
   });
   afterEach(() => {
-    process.env.OWNER_PASSWORD = saved.password;
-    process.env.AUTH_SECRET = saved.secret;
+    restoreEnv("OWNER_PASSWORD", saved.password);
+    restoreEnv("AUTH_SECRET", saved.secret);
     vi.useRealTimers();
     vi.unstubAllEnvs();
   });
@@ -218,9 +224,9 @@ describe("GET /api/auth/local", () => {
     resetLocalTokenForTests();
   });
   afterEach(() => {
-    process.env.AUTH_SECRET = saved.secret;
-    process.env.OWNER_PASSWORD = saved.password;
-    process.env.GNOSIA_LOCAL_TOKEN = saved.local;
+    restoreEnv("AUTH_SECRET", saved.secret);
+    restoreEnv("OWNER_PASSWORD", saved.password);
+    restoreEnv("GNOSIA_LOCAL_TOKEN", saved.local);
   });
 
   function get(token?: string, path = "/api/auth/local"): Request {
@@ -290,10 +296,9 @@ describe("ending every session (S7-03)", () => {
     resetSignInLimits();
   });
   afterEach(() => {
-    for (const [name, value] of [["OWNER_PASSWORD", saved.password], ["AUTH_SECRET", saved.secret], ["SESSION_EPOCH", saved.epoch]] as const) {
-      if (value === undefined) delete process.env[name];
-      else process.env[name] = value;
-    }
+    restoreEnv("OWNER_PASSWORD", saved.password);
+    restoreEnv("AUTH_SECRET", saved.secret);
+    restoreEnv("SESSION_EPOCH", saved.epoch);
   });
 
   async function sessionToken(): Promise<string> {

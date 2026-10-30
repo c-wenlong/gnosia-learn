@@ -581,4 +581,46 @@ describe("VideoPlayer", () => {
       vi.useRealTimers();
     }
   });
+
+  it("plays once on a double-click, leaving the second click to the double-click", () => {
+    const host = mount(createElement(VideoPlayer, { src: "/v.mp4", chapters }));
+    const el = video(host);
+    let paused = true;
+    Object.defineProperty(el, "paused", { get: () => paused, configurable: true });
+    const play = vi.fn(() => {
+      paused = false;
+      el.dispatchEvent(new Event("play"));
+      return Promise.resolve();
+    });
+    const pause = vi.fn(() => {
+      paused = true;
+      el.dispatchEvent(new Event("pause"));
+    });
+    el.play = play;
+    el.pause = pause;
+    act(() => {
+      el.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
+      el.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 2 }));
+      el.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, detail: 2 }));
+    });
+    expect(play).toHaveBeenCalledTimes(1);
+    expect(pause).not.toHaveBeenCalled();
+  });
+
+  it("drops the scrub preview when the source changes under a kept player", () => {
+    const host = mount(createElement(VideoPlayer, { src: "/v.mp4", chapters }));
+    const el = video(host);
+    Object.defineProperty(el, "duration", { get: () => 30, configurable: true });
+    act(() => el.dispatchEvent(new Event("loadedmetadata")));
+    const bar = slider(host);
+    bar.getBoundingClientRect = () => ({ left: 0, top: 0, right: 300, bottom: 8, width: 300, height: 8, x: 0, y: 0, toJSON: () => ({}) });
+    act(() => bar.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 150 })));
+    const previews = () => [...host.querySelectorAll("video")].filter((v) => v !== video(host));
+    expect(previews().map((v) => v.getAttribute("src"))).toEqual(["/v.mp4"]);
+
+    // A query-only navigation keeps the player and hands it the next video;
+    // the reader has not hovered it, so nothing of it is fetched for a preview.
+    rerender(host, createElement(VideoPlayer, { src: "/w.mp4", chapters }));
+    expect(previews()).toEqual([]);
+  });
 });
