@@ -189,9 +189,7 @@ struct ModuleView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
-            // Its place in the list, not its authored `order`: a course
-            // whose modules are numbered 1 and 3 read "Module 3 of 2".
-            Text("Module \((course.modules.firstIndex { $0.id == module.id } ?? 0) + 1) of \(course.modules.count)")
+            Text(course.place(of: module))
                 .font(.callout)
                 .foregroundStyle(.secondary)
             Text(module.title)
@@ -260,7 +258,7 @@ struct ModuleView: View {
                 let previous = course.modules[index - 1]
                 Button { onNavigate(index - 1) } label: {
                     Label("Previous module", systemImage: "chevron.left")
-                    Text("\(previous.order). \(previous.title)").lineLimit(1)
+                    Text(previous.numberedTitle).lineLimit(1)
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
@@ -269,7 +267,7 @@ struct ModuleView: View {
             if index + 1 < course.modules.count {
                 let next = course.modules[index + 1]
                 Button { onNavigate(index + 1) } label: {
-                    Text("\(next.order). \(next.title)").lineLimit(1)
+                    Text(next.numberedTitle).lineLimit(1)
                     Label("Next module", systemImage: "chevron.right")
                         .labelStyle(.titleAndIcon)
                 }

@@ -73,39 +73,51 @@ struct CourseDetailView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(course.code)
                     .font(.callout)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(G.text2)
                 Text(course.title)
                     .font(.title3).bold()
+                    .foregroundStyle(G.text)
             }
             .padding(14)
 
             Text("Course material")
                 .font(.headline)
+                .foregroundStyle(G.text)
                 .padding(.horizontal, 14)
                 .padding(.bottom, 4)
 
-            List(selection: $selected) {
+            // The web's CourseSidebar: a `surface` panel whose current
+            // module sits on `tint`, the same fill under the pointer.
+            PaletteList(selection: selectedRow, order: Array(course.modules.indices)) {
                 ForEach(Array(course.modules.enumerated()), id: \.element.id) { index, m in
                     let done = store.itemsDone(in: m)
-                    HStack(spacing: 8) {
-                        Image(systemName: done == m.items.count && done > 0
-                              ? "checkmark.circle.fill"
-                              : done > 0 ? "circle.lefthalf.filled" : "circle")
-                            .foregroundStyle(done > 0 ? Color.accentColor : Color(.tertiaryLabelColor))
-                            .font(.callout)
-                        Text("\(m.order). \(m.title)")
-                            .lineLimit(2)
-                        Spacer()
-                        Text(m.items.isEmpty ? "0" : "\(done)/\(m.items.count)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
+                    PaletteRow(id: index, selection: selectedRow, fill: G.tint) {
+                        HStack(spacing: 8) {
+                            Image(systemName: done == m.items.count && done > 0
+                                  ? "checkmark.circle.fill"
+                                  : done > 0 ? "circle.lefthalf.filled" : "circle")
+                                .foregroundStyle(done > 0 ? G.accent : G.text3)
+                                .font(.callout)
+                            Text(m.numberedTitle)
+                                .lineLimit(2)
+                            Spacer()
+                            Text(m.items.isEmpty ? "0" : "\(done)/\(m.items.count)")
+                                .font(.caption)
+                                .fontWeight(.regular)
+                                .foregroundStyle(G.text2)
+                                .monospacedDigit()
+                        }
                     }
-                    .tag(index)
                 }
             }
-            .listStyle(.sidebar)
         }
+        .background(G.surface)
+    }
+
+    /// `selected` as the palette list's optional selection; a nil (which
+    /// the list never sets) keeps the module on screen.
+    private var selectedRow: Binding<Int?> {
+        Binding(get: { selected }, set: { if let at = $0 { selected = at } })
     }
 
     /// The right rail: "About this course" (the course file's notes, track,
