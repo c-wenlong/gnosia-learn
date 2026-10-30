@@ -19,6 +19,7 @@ import {
   type Job,
   type StudioEvent,
 } from "@/lib/studio-jobs";
+import { useJobEventStream } from "@/components/studio/use-job-events";
 import { asVideoJob, videoAnnouncement } from "@/lib/studio-video";
 
 /**
@@ -141,11 +142,6 @@ const POLL_FALLBACK_MS = 2_500;
 /** Nothing is running, so this is only here to notice a job started elsewhere. */
 const POLL_IDLE_MS = 15_000;
 
-const EVENT_TYPES = ["phase", "step", "gate", "done", "error"] as const;
-
-/** One array, so "no events for this job" is the same value on every render. */
-const EMPTY: StudioEvent[] = [];
-
 export function JobsProvider({
   initialJobs,
   streamEnabled: initialStream,
@@ -160,33 +156,8 @@ export function JobsProvider({
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [lastWatched, setLastWatched] = useState<string | null>(null);
   const [ended, setEnded] = useState<string[]>([]);
-  /**
-   * The events, tagged with the job they belong to.
-   *
-   * Tagged rather than cleared when the watched job changes, because clearing
-   * them would mean setting state from inside the effect that opens the stream,
-   * and state set synchronously in an effect is a cascading render — the thing
-   * React's own lint rule is about. Tagging makes "whose events are these"
-   * something a render can answer instead.
-   */
-  const [stream, setStream] = useState<{ job: string; events: StudioEvent[] }>({
-    job: "",
-    events: [],
-  });
-  /** The job whose stream is currently open. Set only from the source's own callbacks. */
-  const [liveFor, setLiveFor] = useState<string | null>(null);
-
   const active = useMemo(() => activeJob(jobs), [jobs]);
   const watching = active?.jobId ?? null;
-  const events = useMemo(
-    () => (stream.job === watching ? stream.events : EMPTY),
-    [stream, watching],
-  );
-  // Derived, not stored: nothing to watch is `off`, an open stream for *this*
-  // job is `live`, and everything else — not yet open, dropped, turned off — is
-  // the polling fallback, which is the state the screen is still correct in.
-  const connection: Connection =
-    watching === null ? "off" : liveFor === watching && streamEnabled ? "live" : "polling";
 
   /**
    * The last list this tab saw, so a transition can be noticed in a callback.
@@ -255,50 +226,20 @@ export function JobsProvider({
   /* The stream                                                        */
   /* ---------------------------------------------------------------- */
 
-  useEffect(() => {
-    // Nothing to watch, or `?stream=off`: no connection opens and the poll
-    // below is the whole mechanism. `connection` says `polling` on its own,
-    // because it is derived rather than assigned here.
-    if (watching === null || !streamEnabled) return;
-
-    // `EventSource` reconnects by itself and re-sends `Last-Event-ID` when it
-    // does, which is what the runner replays from — so the reconnect contract
-    // is the browser's own and not a timer written here. What is written here
-    // is what happens *while* it is down: `onerror` drops `liveFor`, the poll
-    // below speeds up, and the next `onopen` puts it back.
-    const job = watching;
-    const source = new EventSource(`/studio/api/jobs/${encodeURIComponent(job)}/events`);
-    source.onopen = () => setLiveFor(job);
-    source.onerror = () => setLiveFor(null);
-
-    const receive = (message: MessageEvent<string>): void => {
-      let event: StudioEvent;
-      try {
-        event = JSON.parse(message.data) as StudioEvent;
-      } catch {
-        return;
-      }
-      setLiveFor(job);
-      setStream((held) => {
-        // A reconnect replays from the last id that connection saw, and a
-        // fresh one replays the runner's whole buffer, so the same seq can
-        // arrive twice. Keyed by seq, in seq order.
-        if (held.job !== job) return { job, events: [event] };
-        if (held.events.some((seen) => seen.seq === event.seq)) return held;
-        return { job, events: [...held.events, event].sort((a, b) => a.seq - b.seq) };
-      });
-      if (event.type === "done" || event.type === "error" || event.type === "gate") {
-        // The stream said the job ended; the record says what it ended as.
-        void refresh();
-      }
-    };
-    for (const type of EVENT_TYPES) source.addEventListener(type, receive as EventListener);
-
-    return () => {
-      for (const type of EVENT_TYPES) source.removeEventListener(type, receive as EventListener);
-      source.close();
-    };
-  }, [watching, streamEnabled, refresh]);
+  // Nothing to watch, or `?stream=off`: no connection opens and the poll
+  // below is the whole mechanism. While the stream is down (`open` false)
+  // the poll speeds up, and the next reconnect puts it back.
+  const { events, open } = useJobEventStream(watching, {
+    enabled: streamEnabled,
+    onEvent: (event) => {
+      // The stream said the job ended; the record says what it ended as.
+      if (event.type === "done" || event.type === "error" || event.type === "gate") void refresh();
+    },
+  });
+  // Derived, not stored: nothing to watch is `off`, an open stream for *this*
+  // job is `live`, and everything else (not yet open, dropped, turned off) is
+  // the polling fallback, which is the state the screen is still correct in.
+  const connection: Connection = watching === null ? "off" : open && streamEnabled ? "live" : "polling";
 
   /* ---------------------------------------------------------------- */
   /* The poll, which is the record                                     */

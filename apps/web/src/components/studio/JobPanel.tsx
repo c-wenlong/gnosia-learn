@@ -1,16 +1,18 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 
 import { PanelLink } from "@/components/studio/PanelLink";
 import { Collapse } from "@/components/ui/Collapse";
 import { useFollowFoot } from "@/components/ui/use-follow-foot";
 import { ComparisonPanel } from "@/components/studio/ComparisonPanel";
-import { Elapsed, IndeterminateBar } from "@/components/studio/JobStrip";
+import { CancelJobButton, Elapsed, IndeterminateBar } from "@/components/studio/job-bits";
+import { JobCost } from "@/components/studio/JobCost";
+import { useJobVerb } from "@/components/studio/use-job-verb";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
 import { VideoJobPanel } from "@/components/studio/video/VideoJobPanel";
-import { readJobLookup, type JobLookup } from "@/lib/studio-video";
+import { getJob } from "@/lib/studio-job-read";
+import type { JobLookup } from "@/lib/studio-video";
 import { Mono, PanelHeading } from "@/components/studio/StudioChrome";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -24,7 +26,6 @@ import {
   phaseRows,
   stepLabel,
   type Brief,
-  type FailureAction,
   type FailureReport,
   type Job,
   type PhaseRow,
@@ -69,17 +70,9 @@ export function JobPanel(props: Omit<Parameters<typeof DiagramJobPanel>[0], "ini
   useEffect(() => {
     if (row !== undefined) return;
     let alive = true;
-    void (async () => {
-      let lookup: JobLookup;
-      try {
-        const response = await fetch(`/studio/api/jobs/${encodeURIComponent(props.jobId)}`, { cache: "no-store" });
-        const body: unknown = await response.json().catch(() => null);
-        lookup = readJobLookup({ status: response.status, body });
-      } catch (error) {
-        lookup = readJobLookup({ error: (error as Error).message });
-      }
+    void getJob(props.jobId).then((lookup) => {
       if (alive) setProbed({ id: props.jobId, attempt, lookup });
-    })();
+    });
     return () => {
       alive = false;
     };
@@ -129,7 +122,9 @@ export function JobPanel(props: Omit<Parameters<typeof DiagramJobPanel>[0], "ini
     );
   }
   // Here the read answered: the job (a diagram's), or a 404, which is `null`.
-  return <DiagramJobPanel {...props} initial={row === undefined ? ((found as Job | null) ?? null) : undefined} />;
+  return (
+    <DiagramJobPanel key={props.jobId} {...props} initial={row === undefined ? ((found as Job | null) ?? null) : undefined} />
+  );
 }
 
 function DiagramJobPanel({
@@ -143,7 +138,8 @@ function DiagramJobPanel({
   path: string;
   /**
    * The job as `JobPanel` already read it, when the provider did not list it:
-   * null for a job the runner does not have. Undefined means not read.
+   * null for a job the runner does not have. Undefined when the provider
+   * lists it, which `JobPanel` waits for or reads before drawing this.
    */
   initial?: Job | null;
   /**
@@ -157,61 +153,19 @@ function DiagramJobPanel({
    */
   embedded?: boolean;
 }) {
-  const { jobs, watching, events, connection, post, refresh } = useStudioJobs();
-  const router = useRouter();
-  const cached = jobs.find((entry) => entry.jobId === jobId) ?? null;
-  const [busy, setBusy] = useState(false);
+  const { jobs, watching, events, connection } = useStudioJobs();
+  const verbs = useJobVerb(path);
+  const busy = verbs.busy !== null;
   const [said, setSaid] = useState<{ ok: boolean; text: string } | null>(null);
-  /**
-   * The job, when it is older than the fifty this tab keeps.
-   *
-   * The inspector's history lists two hundred and the provider caches fifty, so
-   * clicking the fifty-first row said "no such job" about a job the runner
-   * would have answered for. `GET /api/jobs/{id}` is that answer, and a panel
-   * opened on a link from anywhere else lands in the same place.
-   */
-  const [fetched, setFetched] = useState<{ id: string; job: Job | null } | null>(
-    initial === undefined ? null : { id: jobId, job: initial },
-  );
-  const job = cached ?? (fetched?.id === jobId ? fetched.job : null);
-  const looking = cached === null && fetched?.id !== jobId;
+  // The provider's row, or, for a job older than the fifty it keeps, the read
+  // `JobPanel` made (null for a job the runner does not have). The inspector's
+  // history lists two hundred, so the fifty-first row is a real job.
+  const job = jobs.find((entry) => entry.jobId === jobId) ?? initial ?? null;
 
-  useEffect(() => {
-    if (cached !== null || initial !== undefined) return;
-    let alive = true;
-    void (async () => {
-      try {
-        const response = await fetch(`/studio/api/jobs/${encodeURIComponent(jobId)}`, {
-          cache: "no-store",
-        });
-        const body = response.ok ? ((await response.json()) as Job) : null;
-        if (alive) setFetched({ id: jobId, job: body });
-      } catch {
-        if (alive) setFetched({ id: jobId, job: null });
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [jobId, cached, initial]);
-
-  /** Cancel, Resume: one POST, and whatever the runner said about it. */
-  const act = async (verb: string, body?: unknown): Promise<void> => {
-    setBusy(true);
-    const result = await post(`/studio/api/jobs/${encodeURIComponent(jobId)}/${verb}`, body);
-    setBusy(false);
-    const note = typeof result.data.note === "string" ? result.data.note : null;
-    const error = typeof result.data.error === "string" ? result.data.error : null;
-    setSaid({ ok: result.ok, text: note ?? error ?? `${verb} returned ${result.status}` });
-    // Resume queues a *new* job that continues this one's session, so the
-    // panel follows it. Staying on the parent would leave a person watching
-    // the record of the job that died while the one they just started ran
-    // behind it.
-    const next = typeof result.data.jobId === "string" ? result.data.jobId : null;
-    if (result.ok && next !== null && next !== jobId) {
-      router.push(panelHref(path, { job: next }), { scroll: false });
-      router.refresh();
-    }
+  /** Resume queues a *new* job that continues this one's session, and the panel follows it. */
+  const resume = async (): Promise<void> => {
+    const result = await verbs.run(jobId, "resume", { follow: true });
+    setSaid({ ok: result.ok, text: result.text });
   };
 
   const shell = embedded
@@ -223,16 +177,8 @@ function DiagramJobPanel({
       <div className={shell}>
         <PanelHeading>Job</PanelHeading>
         <p className="text-xs text-text2">
-          {looking ? (
-            <>
-              Looking up <Mono>{jobId}</Mono>…
-            </>
-          ) : (
-            <>
-              The runner does not have a job <Mono>{jobId}</Mono>. It may have been pruned, or this
-              link may be from another machine&apos;s studio.
-            </>
-          )}
+          The runner does not have a job <Mono>{jobId}</Mono>. It may have been pruned, or this
+          link may be from another machine&apos;s studio.
         </p>
         <div className="mt-3">
           <PanelLink href={panelHref(path, { job: null })} scroll={false} className="text-xs underline underline-offset-2">
@@ -283,19 +229,8 @@ function DiagramJobPanel({
           </>
         )}
         {job.costUsd !== null && (
-          // A cancelled, timed-out or interrupted job now carries a figure
-          // where it used to carry nothing — and that figure is the runner's
-          // accumulation from the stream, which runs low. The tilde and the
-          // tooltip are the whole of saying so; a bare number would read as
-          // the bill.
-          <Badge
-            title={
-              job.costSource === "stream"
-                ? "an estimate: this job was stopped before the agent reported a final cost, so the runner accumulated it from the session's usage events. It runs low."
-                : "what this job cost, as the agent reported it"
-            }
-          >
-            {job.costSource === "stream" ? "~" : ""}${job.costUsd.toFixed(3)}
+          <Badge>
+            <JobCost usd={job.costUsd} source={job.costSource} />
           </Badge>
         )}
         {job.turns !== null && <Badge>{job.turns} turns</Badge>}
@@ -305,8 +240,8 @@ function DiagramJobPanel({
 
       {/* The comparison replaces nothing: it goes above the phase list, which
           is still how a person checks what the job actually did on its way
-          here. `accepted` and `discarded` keep it too — after an accept it is
-          the record of what was compared, and the `git add` line lives in it. */}
+          here. `accepted` keeps it too: after an accept it is the record of
+          what was compared. */}
       {reviewing && <ComparisonPanel job={job} path={path} />}
       {job.state === "discarded" && (
         <div className="mb-3 rounded-md border border-border bg-surface2 p-2 text-xs text-text2">
@@ -324,36 +259,16 @@ function DiagramJobPanel({
       <JobLog jobId={job.jobId} openByDefault={failed} live={isActive(job.state) && job.state !== "awaiting_review"} />
 
       <div className="mt-4 flex flex-wrap gap-1.5">
-        {job.state === "running" && (
-          <Button
-            variant="secondary"
-            size="xs"
-            disabled={busy || job.cancelRequestedAt !== null}
-            onClick={() => void act("cancel")}
-          >
-            {job.cancelRequestedAt === null ? "Cancel" : "Stopping"}
-          </Button>
-        )}
-        {job.state === "queued" && (
-          <Button variant="secondary" size="xs" disabled={busy} onClick={() => void act("cancel")}>
-            Cancel
-          </Button>
+        {(job.state === "running" || job.state === "queued") && (
+          <CancelJobButton job={job} path={path} onDone={(result) => setSaid({ ok: result.ok, text: result.text })} />
         )}
         {report?.actions.includes("resume") === true && (
-          <Button size="xs" disabled={busy} onClick={() => void act("resume")}>
+          <Button size="xs" disabled={busy} onClick={() => void resume()}>
             Resume
           </Button>
         )}
         {report?.actions.includes("retry") === true && (
-          <RetryButton
-            job={job}
-            disabled={busy}
-            onDone={(text, ok) => setSaid({ ok, text })}
-            onQueued={(next) => {
-              router.push(panelHref(path, { job: next }), { scroll: false });
-              router.refresh();
-            }}
-          />
+          <RetryButton job={job} disabled={busy} send={verbs.send} onDone={(text, ok) => setSaid({ ok, text })} />
         )}
         {report?.actions.includes("talk") === true &&
           !inConversation &&
@@ -366,10 +281,10 @@ function DiagramJobPanel({
               Tell the planner what to change
             </PanelLink>
           ) : (
-            <TalkItThrough job={job} path={path} failure={report} onFailed={(text) => setSaid({ ok: false, text })} />
+            <TalkItThrough job={job} path={path} failure={report} go={verbs.go} onFailed={(text) => setSaid({ ok: false, text })} />
           ))}
         {report?.actions.includes("doctor") === true && (
-          <Button variant="secondary" size="xs" disabled={busy} onClick={() => void refresh()} title="The studio checks doctor on every render of this screen">
+          <Button variant="secondary" size="xs" disabled={busy} onClick={() => void verbs.refresh()} title="The studio checks doctor on every render of this screen">
             Recheck
           </Button>
         )}
@@ -606,16 +521,15 @@ function FailureMessage({ job, report }: { job: Job; report: ReturnType<typeof f
 function RetryButton({
   job,
   disabled,
+  send,
   onDone,
-  onQueued,
 }: {
   job: Job;
   disabled: boolean;
+  /** The panel's `useJobVerb` send, which follows the job a retry queued. */
+  send: ReturnType<typeof useJobVerb>["send"];
   onDone: (text: string, ok: boolean) => void;
-  /** The new job a retry queued, so the panel can follow it. */
-  onQueued: (jobId: string) => void;
 }) {
-  const { post } = useStudioJobs();
   const [busy, setBusy] = useState(false);
   return (
     <Button
@@ -626,27 +540,23 @@ function RetryButton({
         void (async () => {
           setBusy(true);
           try {
-            const detail = await fetch(`/studio/api/jobs/${encodeURIComponent(job.jobId)}`, {
-              cache: "no-store",
-            });
-            const body = (await detail.json()) as { brief?: Record<string, unknown> };
-            if (body.brief === undefined) {
+            const lookup = await getJob(job.jobId);
+            if (lookup.kind === "failed") {
+              onDone(`could not read this job's brief: ${lookup.reason}`, false);
+              return;
+            }
+            const held = lookup.kind === "found" ? lookup.body.brief : undefined;
+            if (held === null || typeof held !== "object") {
               onDone("the runner did not return this job's brief, so there is nothing to retry", false);
               return;
             }
-            const brief = { ...body.brief };
+            const brief = { ...(held as Record<string, unknown>) };
             // Dropped on purpose: keeping it would resolve straight back to
             // the job that just failed, which is what an idempotency key is
             // for and exactly wrong for a retry.
             delete brief.idempotencyKey;
-            const result = await post("/studio/api/jobs", brief);
-            const note = typeof result.data.note === "string" ? result.data.note : null;
-            const error = typeof result.data.error === "string" ? result.data.error : null;
-            onDone(note ?? error ?? `the runner answered ${result.status}`, result.ok);
-            const next = typeof result.data.jobId === "string" ? result.data.jobId : null;
-            if (result.ok && next !== null) onQueued(next);
-          } catch (error) {
-            onDone((error as Error).message, false);
+            const result = await send("/studio/api/jobs", { body: brief, label: "retry", follow: { from: null } });
+            onDone(result.text, result.ok);
           } finally {
             setBusy(false);
           }
@@ -670,14 +580,16 @@ function TalkItThrough({
   job,
   path,
   failure,
+  go,
   onFailed,
 }: {
   job: Job;
   path: string;
   failure: FailureReport;
+  /** The panel's way to another panel: through the host, a router push when it does not draw it. */
+  go: (href: string) => void;
   onFailed: (text: string) => void;
 }) {
-  const router = useRouter();
   const [busy, setBusy] = useState(false);
   return (
     <Button
@@ -688,9 +600,9 @@ function TalkItThrough({
         void (async () => {
           setBusy(true);
           try {
-            const detail = await fetch(`/studio/api/jobs/${encodeURIComponent(job.jobId)}`, { cache: "no-store" });
-            const body = (await detail.json().catch(() => ({}))) as { brief?: Brief };
-            if (!detail.ok || body.brief === undefined) {
+            const lookup = await getJob(job.jobId);
+            const body = (lookup.kind === "found" ? lookup.body : {}) as { brief?: Brief };
+            if (body.brief === undefined) {
               onFailed("the runner did not return this job's brief, so there is nothing to talk through");
               return;
             }
@@ -707,7 +619,7 @@ function TalkItThrough({
               leavePrefill(sessionStore(), target, words);
               // `talk` in the URL is what stops the opener: storage may be
               // unavailable, and then the prefill is lost but no turn is paid.
-              router.push(extendFromHref(path, target, { talk: true }), { scroll: false });
+              go(extendFromHref(path, target, { talk: true }));
               return;
             }
             const made = await createDraft({ idempotencyKey: idempotencyKey(`talk:${job.jobId}`) });
@@ -716,7 +628,7 @@ function TalkItThrough({
               return;
             }
             leaveOpener(sessionStore(), made.data.draftId, { send: null, compose: words, source: null });
-            router.push(conversationHref(path, made.data.draftId), { scroll: false });
+            go(conversationHref(path, made.data.draftId));
           } catch (error) {
             onFailed((error as Error).message);
           } finally {
@@ -730,4 +642,3 @@ function TalkItThrough({
   );
 }
 
-export type { FailureAction };

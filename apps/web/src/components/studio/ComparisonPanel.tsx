@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { FadeImg } from "@/components/studio/motion-parts";
-import { useStudioJobs } from "@/components/studio/JobsProvider";
+import { useJobVerb } from "@/components/studio/use-job-verb";
 import { Mono, PanelHeading } from "@/components/studio/StudioChrome";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -17,7 +17,6 @@ import {
   catalogErrorLine,
   countRows,
   emptyLintLine,
-  gitAddLine,
   lintLine,
   missingShotReason,
   shotSrc,
@@ -56,9 +55,8 @@ import { panelHref } from "@/lib/studio-view";
 type Which = "before" | "after";
 
 export function ComparisonPanel({ job, path }: { job: Job; path: string }) {
-  const { post, refresh } = useStudioJobs();
+  const { run, busy, refresh } = useJobVerb(path);
   const router = useRouter();
-  const [busy, setBusy] = useState<string | null>(null);
   const [said, setSaid] = useState<{ ok: boolean; text: string; recompare?: boolean } | null>(null);
   // Discard asks first, as a video's does: the candidate goes for good.
   const [confirmDiscard, setConfirmDiscard] = useState(false);
@@ -75,18 +73,10 @@ export function ComparisonPanel({ job, path }: { job: Job; path: string }) {
   const reviewable = job.state === "awaiting_review";
 
   const act = async (verb: string): Promise<void> => {
-    setBusy(verb);
-    const result = await post(`/studio/api/jobs/${encodeURIComponent(job.jobId)}/${verb}`);
-    setBusy(null);
+    const result = await run(job.jobId, verb);
     setConfirmDiscard(false);
-    const note = typeof result.data.note === "string" ? result.data.note : null;
-    const error = typeof result.data.error === "string" ? result.data.error : null;
     const detail = (result.data.detail ?? {}) as { recompare?: boolean };
-    setSaid({
-      ok: result.ok,
-      text: note ?? error ?? `${verb} returned ${result.status}`,
-      recompare: detail.recompare === true,
-    });
+    setSaid({ ok: result.ok, text: result.text, recompare: detail.recompare === true });
     await refresh();
     // The canvas this accept closed (A6) is reopened by the server render, and
     // an accepted job's panel is a different screen from the one that was here.
@@ -187,9 +177,8 @@ export function ComparisonPanel({ job, path }: { job: Job; path: string }) {
  *
  * What landed (the diagram's logical names, stored in the database since
  * Track D of docs/CONTENT-MIGRATION.md). Whether the job row recorded it,
- * which is a banner with Reindex when it did not. And a `git add` line only
- * for the files the put also wrote into the tree while the files still owned
- * diagrams; after the flip there are none and nothing to commit.
+ * which is a banner with Reindex when it did not. Nothing to commit: since
+ * the cut-over a put writes rows and a blob, no file in the tree.
  */
 function Accepted({
   job,
@@ -200,7 +189,6 @@ function Accepted({
   busy: boolean;
   onReindex: () => void;
 }) {
-  const line = gitAddLine(job.files ?? []);
   const lastCatalogError = catalogErrorLine(job.catalogErrors);
   return (
     <div className="mb-3 space-y-2">
@@ -232,21 +220,6 @@ function Accepted({
             </p>
           )}
         </Callout>
-      )}
-
-      {line !== null && (
-        <div className="rounded-md border border-border bg-surface p-2 text-xs">
-          <p className="text-text2">
-            The files still own diagrams until the flip, so the accept wrote these too.
-            Committing them is yours: the studio never runs <Mono>git add</Mono>.
-          </p>
-          {/* Wrapped, not scrolled. Two repo-relative paths do not fit a 320px
-              column, and a line that runs off the edge is one a person copies
-              half of — which is the one mistake this box exists to prevent. */}
-          <pre className="mt-1.5 rounded-md bg-surface2 p-2 font-mono text-xs break-all whitespace-pre-wrap text-text">
-            {line}
-          </pre>
-        </div>
       )}
     </div>
   );

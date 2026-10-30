@@ -3,7 +3,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
-import { cx, LABEL } from "@/components/ui/classes";
+import { LABEL } from "@/components/ui/classes";
 import { Combobox } from "@/components/ui/Combobox";
 import { Glyph } from "@/components/ui/Glyph";
 import { IconButton } from "@/components/ui/IconButton";
@@ -450,7 +450,7 @@ export function ByokConfig({
               spellCheck={false}
             />
             {modelsNote !== null && <p className="text-[12px] leading-4 text-text3">{modelsNote}</p>}
-            <p className={cx("text-[12px] leading-4 text-text3", tier !== "default" && "")}>
+            <p className="text-[12px] leading-4 text-text3">
               {tier === "default"
                 ? "A BYOK turn's model when the conversation picks Default — required to run."
                 : `Runs when the conversation picks ${tier === "lite" ? "Lite" : "Max"}; blank means the Default model.`}
