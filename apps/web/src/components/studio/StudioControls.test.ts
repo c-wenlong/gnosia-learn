@@ -23,7 +23,7 @@ vi.mock("next/link", () => ({
   },
 }));
 
-const { DisplayMenu, SortMenu, StripMenu, TopicChips } = await import("./StudioControls");
+const { DisplayMenu, SortMenu, StripMenu, StudioSearch, TopicChips } = await import("./StudioControls");
 
 beforeAll(() => {
   (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -125,3 +125,45 @@ describe("the studio's strip menus", () => {
   });
 });
 
+describe("the studio search (R2-1-14)", () => {
+  it("keeps focus in the field when the query moves, and follows a query changed elsewhere", () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    mounted.push(() => {
+      act(() => root.unmount());
+      container.remove();
+    });
+    act(() => root.render(createElement(StudioSearch, { view: { ...DEFAULT_VIEW, query: "" } })));
+    const input = container.querySelector("input")!;
+    input.focus();
+    input.value = "tcp";
+    // Enter moved the URL, so the view arrives with the query.
+    act(() => root.render(createElement(StudioSearch, { view: { ...DEFAULT_VIEW, query: "tcp" } })));
+    expect(container.querySelector("input")).toBe(input);
+    expect(document.activeElement).toBe(input);
+    // Back to an older query, with focus elsewhere: the field follows.
+    input.blur();
+    act(() => root.render(createElement(StudioSearch, { view: { ...DEFAULT_VIEW, query: "udp" } })));
+    expect(container.querySelector("input")!.value).toBe("udp");
+  });
+
+  it("applies a query that changed while it had focus once it loses it", () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    mounted.push(() => {
+      act(() => root.unmount());
+      container.remove();
+    });
+    act(() => root.render(createElement(StudioSearch, { view: { ...DEFAULT_VIEW, query: "udp" } })));
+    const input = container.querySelector("input")!;
+    input.focus();
+    // Back, with the field still focused: what is typed is left alone...
+    act(() => root.render(createElement(StudioSearch, { view: { ...DEFAULT_VIEW, query: "tcp" } })));
+    expect(input.value).toBe("udp");
+    // ...until the person leaves it.
+    act(() => input.blur());
+    expect(input.value).toBe("tcp");
+  });
+});

@@ -29,7 +29,7 @@ export function useOpener({
   view: DraftView | null;
   send: (value: Value, options: { keepComposer: boolean }) => Promise<boolean>;
   setValue: Dispatch<SetStateAction<Value>>;
-  focusSoon: () => void;
+  focusSoon: (options?: { ifStill?: boolean }) => void;
 }) {
   // The opener effect below is a callback made once per draft, so it reaches
   // `send` through this, which always holds the latest render's (whose
@@ -40,7 +40,8 @@ export function useOpener({
   });
 
   const takeWaitingOpener = useCallback(
-    (current: DraftView) => {
+    /** `arriving`: taken as the panel opens, so it focuses only if the person has not moved focus away. */
+    (current: DraftView, arriving: boolean) => {
       const store = sessionStore();
       const opener = takeOpener(store, draftId);
       if (opener === null) return;
@@ -55,7 +56,7 @@ export function useOpener({
         // itself from this value when it mounts.
         // In front of anything already typed, never over it.
         setValue((held) => prependValue(composed, held));
-        focusSoon();
+        focusSoon({ ifStill: arriving });
       }
       const first = openerSend(opener);
       if (first !== null && isEmptyConversation(current.transcript) && !current.inFlight) {
@@ -69,7 +70,7 @@ export function useOpener({
   useEffect(() => {
     if (!ready || view === null || opened.current) return;
     opened.current = true;
-    takeWaitingOpener(view);
+    takeWaitingOpener(view, true);
   }, [ready, view, takeWaitingOpener]);
 
   const viewRef = useRef<DraftView | null>(null);
@@ -80,7 +81,7 @@ export function useOpener({
     const onOpener = (event: Event) => {
       const detail = (event as CustomEvent<{ draftId?: unknown }>).detail;
       if (detail?.draftId !== draftId || viewRef.current === null) return;
-      takeWaitingOpener(viewRef.current);
+      takeWaitingOpener(viewRef.current, false);
     };
     window.addEventListener(OPENER_EVENT, onOpener);
     return () => window.removeEventListener(OPENER_EVENT, onOpener);

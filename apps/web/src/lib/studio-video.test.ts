@@ -35,6 +35,7 @@ import {
   type VideoStep,
 } from "./studio-video-job";
 import { chapterTitle, type VideoBrief } from "@/lib/studio-brief-video";
+import { videoRowJobLabel } from "@/lib/studio-grid-jobs";
 import {
   filterVideos,
   gridSections,
@@ -733,5 +734,14 @@ describe("what is said when a video job stops unwatched", () => {
   it("uses the diagram job's title shape", () => {
     expect(videoAnnouncement(job({ state: "cancelled", title: "Attention", note: "stopped" }))).toEqual({ title: "✕ Attention: cancelled", body: "stopped" });
     expect(videoAnnouncement(job({ state: "running" }))).toBeNull();
+  });
+});
+
+describe("a video row's job link (R2-1-24)", () => {
+  it("is named for what it shows and the video it opens the job of", () => {
+    expect(videoRowJobLabel(job(), "Attention weights")).toBe(`${videoHeadline(job())}: open the job on Attention weights`);
+    const failed = job({ state: "failed", finished: at(90) });
+    expect(videoRowJobLabel(failed, "Attention weights")).toMatch(/: open the job on Attention weights$/);
+    expect(videoRowJobLabel(failed, "Attention weights")).not.toContain(videoHeadline(failed));
   });
 });
