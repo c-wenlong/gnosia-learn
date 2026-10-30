@@ -1,13 +1,9 @@
-import { createElement, type ComponentProps } from "react";
+import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { Chip } from "./Chip";
 import { IconButton, type IconButtonProps } from "./IconButton";
 import { TextLink, type TextLinkProps } from "./TextLink";
-
-// Children as an argument, as the lint rule wants; the props type requires them, hence the cast.
-type ChipProps = ComponentProps<typeof Chip>;
 
 /** `Omit` over each member of the union, so a link's anchor attributes stay in the type. */
 type Without<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
@@ -71,18 +67,5 @@ describe("TextLink", () => {
     expect(pending).toContain('disabled=""');
     expect(pending).toContain("disabled:cursor-progress");
     expect(link({ pending: false })).not.toContain('disabled=""');
-  });
-});
-
-describe("Chip", () => {
-  it("disables its toggle, and dims it", () => {
-    const html = renderToStaticMarkup(createElement(Chip, { onClick: () => undefined, disabled: true } as unknown as ChipProps, "Add"));
-    expect(html).toContain('disabled=""');
-    expect(html).toContain("disabled:opacity-50");
-  });
-
-  it("draws a dashed chip", () => {
-    const html = renderToStaticMarkup(createElement(Chip, { onClick: () => undefined, dashed: true } as unknown as ChipProps, "Add"));
-    expect(html).toContain("border-dashed");
   });
 });

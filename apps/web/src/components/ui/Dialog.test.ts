@@ -1,8 +1,4 @@
 // @vitest-environment jsdom
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join, relative } from "node:path";
-import { fileURLToPath } from "node:url";
-
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -270,27 +266,5 @@ describe("Dialog in motion", () => {
       const classes = dialogClasses({ size }).split(" ");
       expect(classes).toEqual(expect.arrayContaining(["h-dvh", "w-full", "rounded-none", "md:rounded-2xl"]));
     }
-  });
-});
-
-/**
- * Every modal is the kit's. Two hand-written ones had drifted apart in their
- * backdrop, border, radius, motion and close beat before this (#359).
- */
-describe("dialogs", () => {
-  it("leaves no <dialog> element outside the kit", () => {
-    const src = join(dirname(fileURLToPath(import.meta.url)), "../..");
-    const offenders: string[] = [];
-    const walk = (dir: string) => {
-      for (const name of readdirSync(dir)) {
-        const path = join(dir, name);
-        if (statSync(path).isDirectory()) walk(path);
-        else if (/\.tsx$/.test(name) && !/\.test\.tsx$/.test(name) && /^\s*<dialog\b/m.test(readFileSync(path, "utf8"))) {
-          offenders.push(relative(src, path));
-        }
-      }
-    };
-    walk(src);
-    expect(offenders).toEqual(["components/ui/Dialog.tsx"]);
   });
 });

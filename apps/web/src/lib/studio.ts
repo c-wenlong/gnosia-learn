@@ -17,8 +17,8 @@ import type { Comparison } from "@/lib/studio-compare";
  * Next app duplicating `AppShell`, `Sidebar` and `globals.css`, every studio
  * route calls `requireStudio()` first and production — where `STUDIO_ENABLED`
  * is unset — serves a 404 for all of them. That is only true if the call is
- * actually there, which is why `studio-gate.test.ts` walks the route directory
- * and fails when a new file forgets.
+ * actually there, which is why the `gnosia/studio-gate` lint rule reads every
+ * entry point under the route directory and fails when a new file forgets.
  *
  * `notFound()` rather than a 403 or an explanatory page: an unset variable
  * means this deployment has no studio, and "there is a studio here and you may

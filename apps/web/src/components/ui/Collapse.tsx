@@ -42,7 +42,7 @@ import { Glyph } from "./Glyph";
  * **No padding on `className`.** The inner box cannot be shorter than its own
  * padding, so a fold with `pt-4` there keeps 16px open while it is shut. The
  * space a fold carries (the gap above it, say) goes on its content instead,
- * which folds away with it; `collapse-padding.test.ts` holds that.
+ * which folds away with it; the lint rule `gnosia/kit-collapse-padding` holds that.
  */
 export function Collapse({
   open,

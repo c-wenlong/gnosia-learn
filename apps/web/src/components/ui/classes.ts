@@ -56,8 +56,9 @@ export const LABEL = "text-[12px] font-semibold leading-4 text-text2";
  * page to page, so a page title is the same size on every page. The sizes
  * are DESIGN.md's (the hi-fi and what changed on top of it); the table, with
  * the exceptions and their reasons, is "Type roles" in IMPLEMENTATION.md.
- * `type-roles.test.ts` fails an `<h1>` that takes none of the title roles
- * and is not one of its named exceptions, and any text under 12px, the floor.
+ * The lint rules `gnosia/h1-role` and `gnosia/type-size` fail an `<h1>` that
+ * takes none of the title roles and is not one of its named exceptions, and
+ * any text under 12px, the floor.
  *
  * Each is a whole class string (family, size, weight, leading and, for the
  * titles and the note, colour), so a call site adds only its own spacing,
@@ -466,7 +467,7 @@ export function linkClasses({
  * phone held in landscape is wider than 768px, so the width alone cannot say
  * "phone": the pointer does. The pixel size goes in the name, written out so
  * Tailwind finds each class. Every field takes its size from here; a bare
- * `text-sm` on an `<input>` brings the zoom back (`composer-keys.test.ts`).
+ * `text-sm` on an `<input>` brings the zoom back (the lint rule `gnosia/field-text`).
  */
 export const FIELD_TEXT = {
   xs: "text-base md:pointer-fine:text-xs",
@@ -549,8 +550,8 @@ export function textareaClasses({ className }: { className?: string } = {}): str
  * account menu, the studio's menus, and the lists that keep the focus in
  * their own field (Home's Ask box, the @ menu). Width is the caller's:
  * a list as wide as its words (`w-max`), a field's list as wide as the field,
- * a suggestion list as wide as its box. `menu-kit.test.ts` fails a second
- * copy drawn by hand.
+ * a suggestion list as wide as its box. The lint rule `gnosia/kit-menu-box`
+ * fails a second copy drawn by hand.
  */
 export const MENU_PANEL = cx(
   "flex flex-col gap-0.5 overflow-y-auto overscroll-contain max-h-[min(30rem,70vh)]",

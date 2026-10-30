@@ -880,8 +880,9 @@ not have to be worked out again.
   status or a place; a one-off convention nobody else uses (a mono caps
   kicker, internal jargon) does not count. The contract is
   [docs/design/DESIGN.md](docs/design/DESIGN.md#sentence-case-2026-09-29), and
-  `apps/web/src/lib/sentence-case.test.ts` fails the build of an `uppercase`
-  class, wide tracking, or JSX text typed in capitals.
+  the lint rule `gnosia/sentence-case` (eslint-rules/gnosia.mjs) fails an
+  `uppercase` class, wide tracking, or JSX text typed in capitals, and
+  `apps/web/src/app/stylesheets.test.ts` does the same for the stylesheet.
 - **The OG image is declared by hand in `apps/web/src/app/layout.tsx`.** Next 16 builds
   with Turbopack, which ignores the documented `app/opengraph-image.alt.txt`
   sidecar, so the file convention would ship a social card with no alt text.

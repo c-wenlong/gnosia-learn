@@ -385,8 +385,8 @@ record of what was designed; this is what changed on top of it.
   teaching" to the same page.
 
 The list of every label removed or restyled is in the pull request that made
-the change. `apps/web/src/lib/sentence-case.test.ts` fails the build of an
-`uppercase` class, wide tracking, or JSX text typed in capitals.
+the change. The lint rule `gnosia/sentence-case` fails an `uppercase` class,
+wide tracking, or JSX text typed in capitals.
 
 ### What the references could not give us
 

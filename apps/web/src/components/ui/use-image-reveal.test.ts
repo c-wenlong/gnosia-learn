@@ -1,8 +1,4 @@
 // @vitest-environment jsdom
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join, relative } from "node:path";
-import { fileURLToPath } from "node:url";
-
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
@@ -123,39 +119,5 @@ describe("useImageReveal", () => {
     const html = renderToString(createElement(Picture, { src: "/a.webp" }));
     expect(html).toContain("opacity-100");
     expect(html).not.toContain("data-loaded");
-  });
-});
-
-/**
- * The "already complete before onLoad" check is written once, here. A
- * component that writes it again by hand (as the studio's tiles and `FadeImg`
- * each did) drifts: one checked `naturalWidth`, another did not.
- * `DiagramView` keeps its own, for a skeleton with three states; and
- * `use-asset-failure` asks the opposite question, whether a complete picture
- * failed.
- *
- * Only a picture's `complete` counts: one read off an image-named element or
- * a ref's `current`, or one checked against `naturalWidth`, so a
- * `job.complete` elsewhere is not mistaken for it. A bare `element.complete`
- * with neither is the one form it cannot tell from any other property.
- */
-describe("image reveal", () => {
-  it("leaves no hand-written complete-before-onLoad check outside use-image-reveal", () => {
-    const src = join(dirname(fileURLToPath(import.meta.url)), "../..");
-    const allowed = new Set(["components/ui/use-image-reveal.ts", "components/DiagramView.tsx", "components/use-asset-failure.ts"]);
-    const pictureComplete = /\b(?:\w*(?:img|image|picture|poster|thumb|cover|photo)\w*|current)\??\.complete\b|\.complete\b[^;]*?\bnaturalWidth\b/i;
-    const offenders: string[] = [];
-    const walk = (dir: string) => {
-      for (const name of readdirSync(dir)) {
-        const path = join(dir, name);
-        if (statSync(path).isDirectory()) walk(path);
-        else if (/\.tsx?$/.test(name) && !/\.test\.tsx?$/.test(name) && pictureComplete.test(readFileSync(path, "utf8"))) {
-          const at = relative(src, path);
-          if (!allowed.has(at)) offenders.push(at);
-        }
-      }
-    };
-    walk(src);
-    expect(offenders).toEqual([]);
   });
 });

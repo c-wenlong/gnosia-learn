@@ -5,8 +5,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 
 /**
  * The store banner folds in and out with its last words and sends focus to
- * the page on Dismiss; a course's Reset asks in place, not in a browser
- * dialog, and gives focus back to Reset.
+ * the page on Dismiss.
  */
 
 const learner = vi.hoisted(() => ({
@@ -17,8 +16,7 @@ const learner = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/learner-context", () => ({ useLearner: () => learner }));
 
-const { StoreBanner } = await import("./shell/StoreBanner");
-const { ResetCourseButton } = await import("./ResetCourseButton");
+const { StoreBanner } = await import("./StoreBanner");
 
 beforeAll(() => {
   (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -53,7 +51,8 @@ function mount(element: () => ReactElement) {
 describe("StoreBanner", () => {
   it("folds open with the message, keeps it while it folds shut, and focuses the page on Dismiss", () => {
     const { container, main, draw } = mount(() => createElement(StoreBanner));
-    const fold = container.querySelector(".grid")!;
+    // The fold is the Collapse after the live region.
+    const fold = container.querySelector('[role="status"]')!.nextElementSibling!;
     expect(fold.hasAttribute("inert")).toBe(true);
 
     learner.saveError = "Not saved: the database did not answer.";
@@ -71,25 +70,5 @@ describe("StoreBanner", () => {
     expect(fold.hasAttribute("inert")).toBe(true);
     expect(fold.textContent).toContain("Not saved: the database did not answer.");
     expect(container.querySelector('[role="status"]')?.textContent).toBe("");
-  });
-});
-
-describe("ResetCourseButton", () => {
-  it("asks in place rather than in a browser dialog, and gives focus back to Reset", () => {
-    const confirm = vi.spyOn(window, "confirm");
-    const { container } = mount(() => createElement(ResetCourseButton, { topicIds: ["a", "b"], size: "sm" }));
-    const reset = [...container.querySelectorAll("button")].find((b) => b.textContent === "Reset")!;
-    const fold = document.getElementById(reset.getAttribute("aria-controls")!)!;
-    expect(fold.hasAttribute("inert")).toBe(true);
-
-    act(() => reset.click());
-    expect(fold.hasAttribute("inert")).toBe(false);
-    const go = [...fold.querySelectorAll("button")].find((b) => b.textContent === "Reset course")!;
-    act(() => go.click());
-    expect(learner.resetCourse).toHaveBeenCalledWith(["a", "b"]);
-    expect(fold.hasAttribute("inert")).toBe(true);
-    expect(document.activeElement).toBe(reset);
-    expect(confirm).not.toHaveBeenCalled();
-    confirm.mockRestore();
   });
 });

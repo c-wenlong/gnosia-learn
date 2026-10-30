@@ -46,7 +46,8 @@ import { checkHandoffInput, type ConceptConversation } from "@/lib/tutor-handoff
  * endpoint with a stable id, so an ungated one is a way into the runner on a
  * deployment that has no studio — and a gate reached only through a helper is a
  * gate the next action added to this file can silently miss. Spelled out per
- * endpoint, it is something `studio-gate.test.ts` can check per endpoint.
+ * endpoint, it is something the `gnosia/studio-gate` lint rule can check per
+ * endpoint (and app/(app)/studio/gate.test.ts calls each one with the studio off).
  */
 
 export interface VerbOutcome {

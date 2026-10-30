@@ -26,8 +26,8 @@ import { RUNNER_DOWN } from "@/lib/studio-client";
  * The second reason is D11. `STUDIO_ENABLED` has to be read at request time so
  * one build can be the deployed encyclopedia and a local studio; `rewrites()`
  * is evaluated when the config is loaded. A route handler calls the same
- * `requireStudio()` every page calls, which is also what makes the gate test a
- * real test — it walks this directory and would fail if this file forgot.
+ * `requireStudio()` every page calls, first in each handler, which the lint
+ * rule `gnosia/studio-gate` holds every entry point under this directory to.
  *
  * What is forwarded: the method, the path under `/api`, the query string, the
  * body (at most `MAX_BODY_BYTES`, the runner's own limit) and the few request
@@ -227,6 +227,7 @@ export async function GET(
   request: NextRequest,
   context: { params: Promise<{ segments: string[] }> },
 ): Promise<Response> {
+  requireStudio();
   return proxy(request, (await context.params).segments);
 }
 
@@ -234,6 +235,7 @@ export async function POST(
   request: NextRequest,
   context: { params: Promise<{ segments: string[] }> },
 ): Promise<Response> {
+  requireStudio();
   return proxy(request, (await context.params).segments);
 }
 
@@ -241,6 +243,7 @@ export async function PUT(
   request: NextRequest,
   context: { params: Promise<{ segments: string[] }> },
 ): Promise<Response> {
+  requireStudio();
   return proxy(request, (await context.params).segments);
 }
 
@@ -248,5 +251,6 @@ export async function DELETE(
   request: NextRequest,
   context: { params: Promise<{ segments: string[] }> },
 ): Promise<Response> {
+  requireStudio();
   return proxy(request, (await context.params).segments);
 }

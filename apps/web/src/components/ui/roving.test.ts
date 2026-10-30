@@ -1,7 +1,3 @@
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-
 import { describe, expect, it } from "vitest";
 
 import { moveActive, tabIds, tabKeyIndex } from "./roving";
@@ -47,14 +43,6 @@ describe("tabKeyIndex", () => {
     expect(tabKeyIndex("ArrowRight", 0, 0, "both", true)).toBe(-1);
   });
 
-  it("is what the tab row and the segmented control move by", () => {
-    const src = join(dirname(fileURLToPath(import.meta.url)), "../..");
-    for (const file of ["components/ui/TabList.tsx", "components/ui/SegmentedControl.tsx"]) {
-      const text = readFileSync(join(src, file), "utf8");
-      expect(text, file).toContain("tabKeyIndex(");
-      expect(text, file).not.toMatch(/\+ 1\) % |- 1 \+ [a-z.]+\.length\) %/);
-    }
-  });
 });
 
 describe("tabIds", () => {

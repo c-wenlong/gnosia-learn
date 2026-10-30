@@ -21,7 +21,8 @@ import type { Job } from "@/lib/studio-jobs";
  * the blocked screens; a layout that threw would take those screens with it.
  *
  * `requireStudio()` is here as well as in every page, because this is an entry
- * point Next invokes on its own — `studio-gate.test.ts` walks for exactly that.
+ * point Next invokes on its own, and the `gnosia/studio-gate` lint rule holds
+ * every such file to it.
  */
 
 export const dynamic = "force-dynamic";

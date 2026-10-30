@@ -1,6 +1,3 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
-
 import { describe, expect, it } from "vitest";
 
 import { studioCanTag } from "@/lib/tutor-studio";
@@ -39,39 +36,5 @@ describe("whether a health answer lets the tutor tag", () => {
 
   it("says yes with the day's cap spent: the menu shows, both entries disabled with the reason", () => {
     expect(studioCanTag({ ...good, dailyCap: { totalUsd: 12, capUsd: 10, exceeded: true } })).toBe(true);
-  });
-});
-
-/**
- * D68: a concept page without a studio pays only for `TutorChat`'s own lines
- * and the loader. Anything of the studio's that `TutorChat` imports as a
- * value is on every concept page's first load, so only types may be imported
- * from it, and the chunk with Lexical and the hand-off only through `import()`.
- */
-describe("the concept page's first load", () => {
-  const source = readFileSync(path.resolve(import.meta.dirname, "..", "components", "workspace", "TutorChat.tsx"), "utf8");
-  const imports = [...source.matchAll(/^import\s+(type\s+)?[^;]*?from\s+"([^"]+)";/gm)].map((match) => ({
-    typeOnly: match[1] !== undefined,
-    from: match[2]!,
-  }));
-
-  it("takes nothing of the studio's but types", () => {
-    // `tutor-studio` is this file's subject, the small reader the page does load.
-    const studio = imports.filter(({ from }) => /\/(studio|MentionComposer$|mention-text$|TutorStudioKit)/.test(from));
-    expect(studio.length).toBeGreaterThan(0);
-    for (const { typeOnly, from } of studio) expect({ from, typeOnly }).toEqual({ from, typeOnly: true });
-  });
-
-  it("fetches the composer's chunk only with a dynamic import", () => {
-    expect(source).toMatch(/await import\("\.\/TutorStudioKit"\)/);
-    expect(imports.some(({ from }) => from.endsWith("TutorStudioKit"))).toBe(false);
-  });
-
-  it("never sends a hand-off's marker to the tutor's route", () => {
-    // `requestTurns` is the tutor's turns (markers out, role and words only,
-    // a card check's block put back), the recall seed, then `trimForRequest`;
-    // tutor-thread.test.ts pins each.
-    expect(source).toContain("messages: requestTurns(");
-    expect(source).not.toMatch(/messages:\s*(?:next|turns|history)\b/);
   });
 });

@@ -6,7 +6,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { sheenDelay, SHEEN_STAGGER_MS, Skeleton, SkeletonCard, SkeletonRow } from "./Skeleton";
+import { sheenDelay, SHEEN_STAGGER_MS, Skeleton, SKELETON, SkeletonCard, SkeletonRow } from "./Skeleton";
 
 /**
  * The kit `Skeleton` and its two Library shapes (L9 of
@@ -72,5 +72,17 @@ describe("Skeleton", () => {
     expect(css).toMatch(/--animate-sheen: sheen 2\.4s ease-in-out var\(--skeleton-delay, 0ms\) infinite;/);
     expect(css).toMatch(/@keyframes sheen \{\s*0% \{\s*background-position: 100% 0;\s*\}\s*50%,\s*100% \{\s*background-position: 0% 0;/);
     expect(css).toMatch(/\.skeleton \{[^}]*background-position: 0% 0;/);
+  });
+
+  it("is one block at one radius, sized by its className", () => {
+    const [block] = blocks(renderToStaticMarkup(createElement(Skeleton, { className: "h-4 w-20" })));
+    expect(block.split(" ")).toEqual(expect.arrayContaining(["skeleton", "rounded-md", "h-4", "w-20"]));
+    expect(SKELETON.split(" ")).toEqual(expect.arrayContaining(["skeleton", "rounded-md"]));
+  });
+
+  it("drops the radius when it fills a frame that clips it", () => {
+    const classes = blocks(renderToStaticMarkup(createElement(Skeleton, { fill: true, className: "flex-1" })))[0]!.split(" ");
+    expect(classes.some((c) => c.startsWith("rounded"))).toBe(false);
+    expect(classes).toContain("motion-reduce:animate-none");
   });
 });

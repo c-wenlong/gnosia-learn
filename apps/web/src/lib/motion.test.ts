@@ -104,34 +104,3 @@ describe("scrollBehavior", () => {
     expect(scrollBehavior()).toBe("smooth");
   });
 });
-
-describe("one place asks whether to keep still", () => {
-  it("leaves no script reading the device's setting alone, which would ignore Settings' Always", async () => {
-    const { readdirSync, readFileSync, statSync } = await import("node:fs");
-    const { fileURLToPath } = await import("node:url");
-    const { dirname, join, relative } = await import("node:path");
-    const src = join(dirname(fileURLToPath(import.meta.url)), "..");
-    const offenders: string[] = [];
-    const walk = (dir: string) => {
-      for (const name of readdirSync(dir)) {
-        const path = join(dir, name);
-        if (statSync(path).isDirectory()) walk(path);
-        else if (/\.tsx?$/.test(name) && !/\.test\.tsx?$/.test(name)) {
-          const text = readFileSync(path, "utf8");
-          const rel = relative(src, path);
-          // The query as a string anywhere, so one kept in a variable is caught too.
-          if (rel !== join("lib", "motion.ts") && /["'`]\(\s*prefers-reduced-motion/.test(text)) offenders.push(rel);
-          // `scrollBehavior` itself is the one place allowed to choose between the two.
-          const chooses = rel !== join("lib", "motion.ts") && /["']auto["']\s*:\s*["']smooth["']/.test(text);
-          if (/behavior:\s*["']smooth["']/.test(text) || chooses) {
-            offenders.push(`${rel} (a hard-coded smooth scroll; use scrollBehavior())`);
-          }
-          // A wrapper over prefersReducedMotion is a second name for one question.
-          if (/(?:function|const)\s+reducedMotion\b/.test(text)) offenders.push(`${rel} (a reducedMotion wrapper; call prefersReducedMotion())`);
-        }
-      }
-    };
-    walk(src);
-    expect(offenders).toEqual([]);
-  });
-});
