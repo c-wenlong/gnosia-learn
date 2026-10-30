@@ -30,7 +30,7 @@
  * packages/schema.
  */
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -276,8 +276,17 @@ export function migrateTarget(target) {
  * when the rows would break a CHECK or a foreign key.
  */
 export async function port({ client, target, migrate = migrateTarget, log = console.log }) {
-  if (existsSync(target)) throw new PortRefused(`${target} already exists; the port writes a fresh file, it does not merge`);
   mkdirSync(path.dirname(target), { recursive: true });
+  // Reserve the target with an exclusive create before anything opens it, so
+  // two ports aimed at one file cannot both pass a check and share it: the
+  // second is refused here, and the cleanup below only ever removes a file
+  // this run made. SQLite takes the empty file as a new database.
+  try {
+    closeSync(openSync(target, "wx"));
+  } catch (error) {
+    if (error?.code === "EEXIST") throw new PortRefused(`${target} already exists; the port writes a fresh file, it does not merge`);
+    throw error;
+  }
   let sqlite = null;
   try {
     await migrate(target);

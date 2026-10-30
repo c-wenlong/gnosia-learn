@@ -43,8 +43,15 @@ place still ports: `RENAMES` in the script maps the old value on the way.
 Today that is `asset.source_repo = 'self-learn'`, from before the gnosia
 rename (`drizzle/0032_gnosia.sql`), which ports as `gnosia`.
 
-The blob store is not in the database; `blobs/` keeps its `.owner` marker,
-which the new database claims on first write the way the old one did.
+The blob store is not in the database, and the port leaves it alone,
+`.owner` marker included. That marker names the Postgres database, while the
+new file is known by its resolved path (`ownerIdentity` in
+`services/catalog/src/content/blob-owner.ts`), and a marker is never
+replaced, so the new catalog refuses to upload until the root is claimed
+again: with nothing writing to either database, move `blobs/.owner` aside,
+run `npm run catalog -- blob audit` until it is clean, then
+`npm run catalog -- blob audit --fix`, which writes the marker for the new
+file (step 9 of [HOMESERVER.md](HOMESERVER.md) is the same claim).
 
 ## What changed under the same API
 

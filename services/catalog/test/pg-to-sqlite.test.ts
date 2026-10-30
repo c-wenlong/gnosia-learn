@@ -137,6 +137,24 @@ describe("pg-to-sqlite", () => {
     expect(existsSync(`${target}-wal`)).toBe(false);
   });
 
+  it("lets one of two ports aimed at one file have it, so the loser's cleanup cannot delete the winner's", async () => {
+    const target = targetFile("raced");
+    const good: Fixture = { asset: { columns: ASSET_COLUMNS, rows: [asset("kept", "gnosia")] } };
+    const bad: Fixture = { asset: { columns: ASSET_COLUMNS, rows: [asset("refused", "elsewhere")] } };
+
+    const [first, second] = await Promise.allSettled([runPort(good, target), runPort(bad, target)]);
+
+    expect(first.status).toBe("fulfilled");
+    expect(second.status).toBe("rejected");
+    expect(String((second as PromiseRejectedResult).reason)).toMatch(/already exists/);
+    const db = new Database(target, { readonly: true });
+    try {
+      expect(db.prepare("select id from asset").all()).toEqual([{ id: "kept" }]);
+    } finally {
+      db.close();
+    }
+  });
+
   it("refuses a target that already exists, and leaves it alone", async () => {
     const target = targetFile("existing");
     await copyDatabase(template.url, target);
