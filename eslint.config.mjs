@@ -102,9 +102,8 @@ const houseRules = [
   { files: [ui("TabList.tsx"), ui("SegmentedControl.tsx")], rules: { "gnosia/roving-keys": "error" } },
   {
     files: WEB,
-    // save-status.ts is the mapper. The Provider keys card and the model
-    // selection still have their own, and adopt SaveStatus in their own change.
-    ignores: [...WEB_IGNORES, ui("save-status.ts"), src("components/settings/Providers.tsx"), src("components/settings/ModelSelection.tsx")],
+    // save-status.ts is the mapper.
+    ignores: [...WEB_IGNORES, ui("save-status.ts")],
     rules: { "gnosia/save-status": "error" },
   },
   {
