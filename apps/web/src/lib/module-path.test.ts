@@ -416,6 +416,29 @@ describe("modulePath: the week check", () => {
     expect(weekCheckMeta({ concepts: 1, questions: 3 })).toBe("1 concept · up to 3 questions");
   });
 
+  it("draws a module whose concepts are named like Object.prototype's members, with no asset or check for them", () => {
+    // Kebab slugs admit `constructor`; a record read with `[slug]` used to reach the Object function and throw.
+    const named = ["constructor", "to-string", "toString", "__proto__", "valueOf"];
+    const mod = week({ topics: [lesson("constructor", named), lesson("m1-t2", ["theta"])] });
+    const concepts = [...knowledgeBase(), ...named.map((id) => concept(id, { items: ["constructor"], positions: { constructor: 1 } }))];
+    const path = modulePath(
+      input({
+        module: mod,
+        concepts,
+        mastery: {},
+        completed: {},
+        assets: noAssets({ byConcept: { theta: [diagram("diagram:theta")] } }),
+        checks: { theta: 2 },
+      }),
+    );
+    const steps = path.lessons[0]!.concepts;
+    expect(steps.map((c) => [c.slug, c.assets, c.checks, c.quizHref])).toEqual(named.map((slug) => [slug, [], 0, null]));
+    expect(path.lessons[0]?.done).toBe(false);
+    expect(path.lessons[1]?.concepts[0]?.assets.map((a) => a.id)).toEqual(["diagram:theta"]);
+    const listing = week({ videos: ["constructor", "toString"] });
+    expect(modulePath(input({ module: listing })).watch).toEqual([]);
+  });
+
   it("has no week check when the module names no concept it can read", () => {
     const path = modulePath(input({ module: week({ topics: [lesson("m1-t1", [])] }) }));
     expect(path.check).toBeNull();

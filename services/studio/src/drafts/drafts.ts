@@ -396,6 +396,8 @@ export interface TranscriptEntry {
   at: string;
   /** A person's message: its chips, where they were. */
   mentions?: Mention[];
+  /** A person's message: the idempotency key it was sent with, when it had one. */
+  key?: string;
   /** Every brief the entry carries, one per kind. */
   briefs?: EntryBrief[];
   /** The last of `briefs`, kept one release for the web app from before (D61). */
@@ -775,6 +777,12 @@ export class Drafts {
   private draining = false;
   /** Creates in progress, by idempotency key, so two posts of one key make one draft. */
   private readonly creating = new Map<string, Promise<{ record: DraftRecord; created: boolean }>>();
+  /**
+   * Messages whose write is queued but not yet on disk, by draft and key, so
+   * a resend of one key before its message lands joins it rather than being
+   * refused as a turn in flight. Once on disk, the transcript answers.
+   */
+  private readonly sending = new Map<string, Promise<{ seq: number }>>();
   /** Drafts the pruner has taken (D40): gone to `get`, `require` and `list` from that moment. */
   private readonly pruning = new Set<string>();
   /** Workspaces of pruned drafts that did not all go, removed by the next pass. */
@@ -1636,8 +1644,34 @@ export class Drafts {
    * cap, and 503 when every planner slot is busy. Accepted while a job of any
    * kind runs (C14 lifted by D60). Otherwise the message is on disk before this
    * returns, and the turn runs on.
+   *
+   * `idempotencyKey` makes a resend safe: a message already sent with the key
+   * is answered with its own seq (`replayed`) and starts no second turn, so a
+   * browser that gave up waiting can send the same words again without paying
+   * for them twice.
    */
-  async send(id: string, rawText: unknown, rawMentions?: unknown, options: { make?: boolean } = {}): Promise<{ seq: number }> {
+  async send(
+    id: string,
+    rawText: unknown,
+    rawMentions?: unknown,
+    options: { make?: boolean; idempotencyKey?: unknown } = {},
+  ): Promise<{ seq: number; replayed?: true }> {
+    this.require(id);
+    const key = typeof options.idempotencyKey === "string" && options.idempotencyKey.trim() !== "" ? options.idempotencyKey.trim() : null;
+    if (key !== null && key.length > 200) {
+      throw new JobRefused(400, `"idempotencyKey" is over 200 characters`, { field: "idempotencyKey" });
+    }
+    if (key !== null) {
+      // Before every check below, which a resend of a landed message would
+      // fail (its own turn is in flight), and before the synchronous run from
+      // the checks to `turnsInFlight` that keeps two messages from racing.
+      const sent = (await this.events(id)).find((event) => event.type === "message" && event.key === key);
+      if (sent !== undefined) return { seq: sent.seq, replayed: true };
+      // After the read, which a second post of the key may have spent
+      // waiting while the first was queued.
+      const joined = this.sending.get(`${id}\n${key}`);
+      if (joined !== undefined) return { seq: (await joined).seq, replayed: true };
+    }
     const record = this.require(id);
     const raw = typeof rawText === "string" ? rawText : "";
     const parsed = parseMentions(raw, rawMentions);
@@ -1695,6 +1729,7 @@ export class Drafts {
         type: "message",
         text,
         ...(mentions.length === 0 ? {} : { mentions, tags }),
+        ...(key === null ? {} : { key }),
       });
       seq = message.seq;
       const current = this.require(id);
@@ -1741,12 +1776,22 @@ export class Drafts {
         this.live.delete(id);
         await this.write(id, () => this.save(id, { inFlight: null })).catch(() => undefined);
         this.turnsInFlight.delete(id);
+        // Held to the turn's end, past the message landing, so no resend
+        // falls between the transcript read and this entry going.
+        if (key !== null) this.sending.delete(`${id}\n${key}`);
         // D107: consent and trust spend on landing — the briefs this turn
         // earned a launch for draw now that `inFlight` is cleared.
         await this.flushLaunch(id, seq);
         this.maybeCapTurns(id);
       });
     this.turnsInFlight.set(id, whole);
+    if (key !== null) {
+      const landed = turn.then(() => ({ seq }));
+      // A failed write rejects whoever joined it; with nobody joined it is
+      // the turn's own error, recorded above, not an unhandled one.
+      landed.catch(() => undefined);
+      this.sending.set(`${id}\n${key}`, landed);
+    }
     await turn;
     return { seq };
   }
@@ -4578,6 +4623,9 @@ function entryOf(event: TranscriptEvent): TranscriptEntry | null {
         text,
         at: event.at,
         ...(Array.isArray(event.mentions) && event.mentions.length > 0 ? { mentions: event.mentions as Mention[] } : {}),
+        // The browser's own idempotency key, so a send that timed out can
+        // find its own turn rather than another tab's with the same words.
+        ...(typeof event.key === "string" ? { key: event.key } : {}),
       };
     case "reply":
       return {

@@ -200,13 +200,12 @@ export function VideoChangeButton({
           setPending(true);
           setProblem(null);
           const store = sessionStore();
-          const made = await createDraft({
-            source: slug,
-            sourceKind: "video",
-            idempotencyKey: extendKey(store, name, () => idempotencyKey(`change:${slug}`)),
-          });
+          const key = extendKey(store, name, () => idempotencyKey(`change:${slug}`));
+          const made = await createDraft({ source: slug, sourceKind: "video", idempotencyKey: key });
           const outcome = changeDraftOutcome(made);
           if ("problem" in outcome) {
+            // Stamped again as the attempt ends, so Try again joins it.
+            extendKey(store, name, () => key);
             setPending(false);
             setProblem(outcome.problem);
             return;

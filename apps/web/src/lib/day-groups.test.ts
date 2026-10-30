@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { dayGroups, dayLabel, editedLabel, EDITED_AFTER_MS, timeOfDay } from "./day-groups";
+import { dayDiff, dayGroups, dayLabel, editedLabel, EDITED_AFTER_MS, timeOfDay, weekdayName } from "./day-groups";
 
 const NOW = new Date("2026-10-04T10:00:00Z");
 const SG = "Asia/Singapore";
@@ -50,6 +50,17 @@ describe("dayGroups", () => {
   it("answers no groups for no rows, and keys a group by its date", () => {
     expect(dayGroups([], at, { now: NOW })).toEqual([]);
     expect(dayGroups([rows[0]], at, { now: NOW, timeZone: SG })[0]?.key).toBe("2026-10-04");
+  });
+});
+
+describe("weekdayName and dayDiff", () => {
+  it("names a day key's weekday short, whatever the machine's zone", () => {
+    expect(["2026-10-04", "2026-10-05", "2026-10-10"].map(weekdayName)).toEqual(["Sun", "Mon", "Sat"]);
+  });
+
+  it("counts whole calendar days, negative backwards, across a year end", () => {
+    expect(dayDiff("2026-12-30", "2027-01-02")).toBe(3);
+    expect(dayDiff("2026-10-05", "2026-10-04")).toBe(-1);
   });
 });
 

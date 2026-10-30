@@ -6,6 +6,8 @@
  * `domain-map.ts`, which only the server runs.
  */
 
+import { ownValue } from "@gnosia/tutor/own-key";
+
 /** Half the width a concept takes: its dot and up to two lines of label centred under it. */
 export const NODE_HALF_WIDTH = 56;
 /** Room kept above a dot, for the hover ring. */
@@ -75,7 +77,8 @@ const padded = (b: Box): Box => ({ x: b.x - VIEW_PAD, y: b.y - VIEW_PAD, width: 
  * largest, so a smaller one leaves the top row's boxes lower by the
  * difference, and the frame starts there rather than over an empty strip.
  * Only the height depends on `band`, so the scale measured from the width
- * does not.
+ * does not. `moved` is read by own key: it is `{}` by default, and
+ * `constructor` is a concept slug.
  */
 export function viewBoxFor(
   layout: {
@@ -88,12 +91,12 @@ export function viewBoxFor(
   moved: Readonly<Record<string, { x: number; y: number }>> = {},
   band = GROUP_TITLE,
 ): Box {
-  const at = (id: string) => moved[id] ?? layout.positions[id];
+  const at = (id: string) => ownValue(moved, id) ?? layout.positions[id];
   const group = topic === null ? undefined : layout.groups.find((g) => g.topic === topic);
   if (group !== undefined) return padded(groupBox(group.concepts.map(at), titleWidth(group.title), band));
   const trim = layout.height > 0 ? Math.max(0, TITLE_RESERVE - band) : 0;
   const whole: Box = { x: 0, y: trim, width: layout.width, height: layout.height - trim };
-  const ids = Object.keys(moved).filter((id) => id in layout.positions);
+  const ids = Object.keys(moved).filter((id) => Object.hasOwn(layout.positions, id));
   if (ids.length === 0) return padded(whole);
   const reach = groupBox(ids.map(at), 0, band);
   const x = Math.min(whole.x, reach.x);

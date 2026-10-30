@@ -467,7 +467,7 @@ describe("readRecent", () => {
   });
 
   it("loses only the rows a failed read held, and is the empty answer when the database cannot be reached", async () => {
-    state.recentTutorSessions.mockRejectedValue(new Error('relation "session" does not exist'));
+    state.recentTutorSessions.mockRejectedValue(new Error("no such table: session"));
     state.getCourses.mockRejectedValue(new Error("not flipped"));
     const { readRecent } = await import("./recent");
     const partial = await readRecent();

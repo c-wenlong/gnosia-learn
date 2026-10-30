@@ -17,7 +17,9 @@ import { videoAvailability, diagramAvailability, readStudioHealth } from "@/lib/
 import {
   idempotencyKey,
   RUNNER_DOWN,
+  RUNNER_SLOW,
   runnerDown,
+  runnerSlow,
   refusalNumber,
   refusalReason,
   refusalString,
@@ -144,12 +146,48 @@ describe("the calls", () => {
     expect(await readStudioHealth()).toBeNull();
   });
 
-  it("reads a body cut off by the deadline as a runner that stopped answering, not a success", async () => {
+  it("reads a body cut off by the deadline as a runner that did not answer in time, not a success", async () => {
     const cut = { ok: true, status: 201, text: () => Promise.reject(new DOMException("The operation timed out.", "TimeoutError")) };
     vi.stubGlobal("fetch", vi.fn(async () => cut));
     const result = await createDraft({ idempotencyKey: "k" });
-    expect(result).toEqual({ ok: false, status: 0, refusal: { error: RUNNER_DOWN, detail: "The operation timed out." } });
-    expect(result.ok === false && runnerDown(result.status, result.refusal)).toBe(true);
+    expect(result).toEqual({ ok: false, status: 0, refusal: { error: RUNNER_SLOW, detail: "The operation timed out." } });
+    // A body cut off any other way is a runner that stopped answering.
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 201, text: () => Promise.reject(new Error("socket hang up")) })));
+    expect(await createDraft({ idempotencyKey: "k" })).toEqual({ ok: false, status: 0, refusal: { error: RUNNER_DOWN, detail: "socket hang up" } });
+  });
+
+  it("tells a call past its deadline from a runner that is down (R2-1-01)", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new DOMException("The operation timed out.", "TimeoutError"))));
+    const slow = await getDraft("d1");
+    expect(slow).toMatchObject({ ok: false, status: 0, refusal: { error: RUNNER_SLOW } });
+    // Slow is not down: the runner took the request and may still finish it.
+    expect(slow.ok === false && runnerSlow(slow.status, slow.refusal)).toBe(true);
+    expect(slow.ok === false && runnerDown(slow.status, slow.refusal)).toBe(false);
+    vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new TypeError("fetch failed"))));
+    const down = await getDraft("d1");
+    expect(down.ok === false && runnerDown(down.status, down.refusal)).toBe(true);
+    expect(down.ok === false && runnerSlow(down.status, down.refusal)).toBe(false);
+  });
+
+  it("gives a create opened on a diagram its own, longer deadline, and none of the rest", async () => {
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    answer(201, { draftId: "d1", state: "open", note: "" });
+    await createDraft({ source: "tcp-handshake", idempotencyKey: "k" });
+    expect(timeout).toHaveBeenCalledWith(240_000);
+    timeout.mockClear();
+    await createDraft({ idempotencyKey: "k2" });
+    expect(timeout).not.toHaveBeenCalledWith(240_000);
+    timeout.mockRestore();
+  });
+
+  it("sends a message's idempotency key when it has one", async () => {
+    const fetchMock = answer(202, { draftId: "d1", seq: 3, note: "" });
+    await sendMessage("d1", { text: "hi" }, "studio-ui:message:abc");
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toEqual({ text: "hi", idempotencyKey: "studio-ui:message:abc" });
+    await sendMessage("d1", { text: "hi" });
+    const [, bare] = fetchMock.mock.calls[1] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(bare.body))).toEqual({ text: "hi" });
   });
 
   it("gives every call a deadline, so a runner that hangs does not leave a press spinning", async () => {
