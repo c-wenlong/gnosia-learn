@@ -33,6 +33,7 @@ import {
   useMemoryThread,
   type SlotOptions,
 } from "@/components/workspace/use-check-thread";
+import { takeUnanswered } from "@/components/workspace/unanswered";
 import {
   restoreCardCheck,
   type ChoiceAnswer,
@@ -86,17 +87,9 @@ export function AgentSession({
 
   // Snapshot the recap on mount, then hold it: the session resumes from what
   // was known when it opened, so saving a recap mid-session doesn't rewrite
-  // the tutor's premise underneath it.
-  const [priorKnowledge, setPriorKnowledge] = useState<
-    TopicKnowledge | undefined
-  >(undefined);
-  const priorFrozen = useRef(false);
-
-  useEffect(() => {
-    if (priorFrozen.current) return;
-    priorFrozen.current = true;
-    setPriorKnowledge(storedKnowledge);
-  }, [storedKnowledge]);
+  // the tutor's premise underneath it. The provider starts from the server's
+  // snapshot, so the recap is there on the first render, server HTML included.
+  const [priorKnowledge] = useState<TopicKnowledge | undefined>(() => storedKnowledge);
 
   const session = useMemo(
     () =>
@@ -333,6 +326,15 @@ export function AgentSession({
     await callAgent(history);
   }
 
+  /** Send the unanswered turn again after a failure: the same turn, verdict and request id included, never a second copy. */
+  async function retry() {
+    const unanswered = takeUnanswered(store.read());
+    if (unanswered === null || busy) return;
+    const history = [...unanswered.rest, unanswered.turn];
+    setMessages(history);
+    await callAgent(history);
+  }
+
   const backHref = `/courses/${course.slug}/${module.slug}`;
 
   const slot: SlotOptions<UiMessage> = {
@@ -473,7 +475,19 @@ export function AgentSession({
             </p>
           )}
           {error && (
-            <Callout tone="danger" role="alert" className="animate-fade-in motion-reduce:animate-none">
+            <Callout
+              tone="danger"
+              role="alert"
+              className="animate-fade-in motion-reduce:animate-none"
+              actions={
+                // The learner's turn went unanswered: send it again, rather than typing it twice.
+                takeUnanswered(messages) !== null ? (
+                  <Button variant="secondary" size="sm" onClick={() => void retry()}>
+                    Try again
+                  </Button>
+                ) : undefined
+              }
+            >
               {error}
             </Callout>
           )}
@@ -585,8 +599,8 @@ export function AgentSession({
         )}
 
         <p className={NOTE}>
-          Recaps live in this browser and survive a progress reset. Use{" "}
-          <strong className="font-semibold">Copy as Markdown</strong> to keep one outside it.
+          Recaps are saved with your progress and survive a progress reset. Use{" "}
+          <strong className="font-semibold">Copy as Markdown</strong> to keep a copy outside the app.
         </p>
       </Card>
     </div>
