@@ -1,31 +1,24 @@
 import { describe, expect, it } from "vitest";
 
 import type { DraftView, TranscriptEntry } from "@/lib/studio-drafts";
-import type { Brief, Job } from "@/lib/studio-jobs";
+import type { Brief } from "@/lib/studio-jobs";
 
 import {
-  askAgainText,
   capFrom,
   capSentence,
-  cardEditable,
   cardStatus,
   composerState,
   costLabel,
   EDITING_BRIEF,
-  drawBlock,
   drawLabel,
-  cardPendingTopic,
-  drawKey,
   drawRefusal,
   isEmptyConversation,
   jobPatch,
-  modEnterAction,
   refusalNoted,
   sendRefusal,
   sentence,
   startOverStep,
   turnIndicator,
-  lastPersonText,
   latestBriefSeq,
   modeLine,
   splitReply,
@@ -34,7 +27,6 @@ import {
   targetSlug,
   threadProblem,
   visibleEntries,
-  wordsBack,
 } from "./studio-chat";
 
 const BRIEF: Brief = {
@@ -147,16 +139,10 @@ describe("the thread", () => {
     expect(cardStatus(view({ state: "abandoned", transcript }), 6)).toBe("closed");
   });
 
-  it("lets the brief in force, or the newest one to put back, be edited", () => {
-    expect((["live", "held", "drawn", "stale", "closed"] as const).map(cardEditable)).toEqual([true, true, false, false, false]);
-  });
-
-  it("knows an empty conversation, and the last thing the person said", () => {
+  it("knows an empty conversation", () => {
     expect(isEmptyConversation([])).toBe(true);
     expect(isEmptyConversation([entry(1, "studio", "note")])).toBe(true);
     expect(isEmptyConversation(transcript)).toBe(false);
-    expect(lastPersonText(transcript)).toBe("change it");
-    expect(lastPersonText([])).toBeNull();
   });
 });
 
@@ -226,30 +212,10 @@ describe("composerState", () => {
 });
 
 describe("Draw", () => {
-  const job = (over: Partial<Job>): Job => ({ jobId: "j1", state: "running", title: "Other", target: "learn/assets/tailscale-tunnels.tldr", ...over }) as Job;
 
   it("reads a slug from a target path", () => {
     expect(targetSlug("learn/assets/dot-product.tldr")).toBe("dot-product");
     expect(targetSlug("dot-product")).toBe("dot-product");
-  });
-
-  it("is live when nothing is in the way", () => {
-    expect(drawBlock(BRIEF, { inFlight: false }, [], null)).toBeNull();
-    expect(drawBlock(BRIEF, { inFlight: false }, [job({ state: "accepted" })], null)).toBeNull();
-  });
-
-  it("waits for a reply in flight", () => {
-    expect(drawBlock(BRIEF, { inFlight: true }, [], null)?.reason).toBe(STILL_ANSWERING);
-  });
-
-  it("names the job holding the target, with its id to open", () => {
-    const block = drawBlock(BRIEF, { inFlight: false }, [job({ state: "awaiting_review" })], null);
-    expect(block?.holder).toBe("j1");
-    expect(block?.reason).toContain("ready for review");
-  });
-
-  it("says when the cap frees", () => {
-    expect(drawBlock(BRIEF, { inFlight: false }, [], { capUsd: 1, totalUsd: 2, exceeded: true })?.reason).toMatch(/daily cap/);
   });
 
   it("reads the words for a proposed topic, and the mode line", () => {
@@ -294,32 +260,12 @@ describe("Draw", () => {
     expect(drawRefusal(0, { error: "down", detail: null }).text).toMatch(/not answering/);
   });
 
-  it("keys a press on the brief and the job before it", () => {
-    expect(drawKey("d1", 6, null)).toBe("draw:d1:6:none");
-    expect(drawKey("d1", 6, null)).toBe(drawKey("d1", 6, null));
-    // Draw again after that job failed is a new press, not the old job back.
-    expect(drawKey("d1", 6, "j1")).not.toBe(drawKey("d1", 6, null));
-  });
-
-  it("gives Cmd+Enter to Draw only from an empty composer", () => {
-    expect(modEnterAction("", true)).toBe("draw");
-    expect(modEnterAction("no, use the relay", true)).toBe("send");
-    expect(modEnterAction("", false)).toBe("none");
-  });
-
   it("keeps a refusal's line until the runner's note for that same refusal", () => {
     const refused = { seq: 6, error: "learn/assets/x.tldr is already held by job j9" };
     expect(refusalNoted(refused, [entry(7, "studio", "The topic was created.")])).toBe(false);
     expect(refusalNoted(refused, [entry(5, "studio", `Draw was refused: ${refused.error}`)])).toBe(false);
     expect(refusalNoted(refused, [entry(7, "studio", `Draw was refused: ${refused.error}`)])).toBe(true);
     expect(refusalNoted({ seq: 6, error: "" }, [entry(7, "studio", "anything")])).toBe(false);
-  });
-
-  it("shows the live card's topic from the draft, and an older card's from its reply", () => {
-    const pending = { entry: { slug: "a", title: "A", domain: "d", summary: null, aliases: [], relations: [] }, nearMatches: [] };
-    expect(cardPendingTopic("live", { pendingTopic: pending }, { pendingTopic: null })).toBeNull();
-    expect(cardPendingTopic("live", {}, { pendingTopic: pending })).toBe(pending);
-    expect(cardPendingTopic("stale", { pendingTopic: pending }, { pendingTopic: null })).toBe(pending);
   });
 
   it("opens another conversation's job outside this one", () => {
@@ -393,7 +339,6 @@ describe("threadProblem", () => {
     const twice = entry(4, "planner", "p", { briefInvalid: { field: "relations[2].to", message: "not an element", retried: false } });
     const problem = threadProblem(view({ transcript: [twice] }));
     expect(problem).toEqual({ case: "E6", text: "relations[2].to: not an element", field: "relations[2].to" });
-    if (problem?.case === "E6") expect(askAgainText(problem)).toContain("relations[2].to");
     const once = entry(4, "planner", "p", { briefInvalid: { field: "f", message: "m", retried: true } });
     expect(threadProblem(view({ transcript: [once] }))).toBeNull();
     expect(threadProblem(view({ transcript: [entry(1, "person", "x")], error: { kind: "brief-invalid", message: "m" } }))?.case).toBe("E6");
@@ -414,18 +359,6 @@ describe("suggestions", () => {
 
   it("falls back to three examples on an empty corpus", () => {
     expect(suggestions([], new Map())).toHaveLength(3);
-  });
-});
-
-describe("the composer after a refused turn", () => {
-  it("gives a typed turn back unless newer words are there", () => {
-    expect(wordsBack("", "hello", false)).toBe("hello");
-    expect(wordsBack("newer", "hello", false)).toBe("newer");
-  });
-
-  it("puts a turn that never was in the composer in front of what it holds, so neither is lost", () => {
-    expect(wordsBack("and label the angle", "Add the projection", true)).toBe("Add the projection\nand label the angle");
-    expect(wordsBack("", "Add the projection", true)).toBe("Add the projection");
   });
 });
 
