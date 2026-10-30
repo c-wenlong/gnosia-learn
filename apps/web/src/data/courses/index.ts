@@ -14,7 +14,7 @@ import type { Course, Module, Topic } from "@/lib/types";
  * boundary says so.
  *
  * **Async, and once per request.** The list used to be a module-level
- * constant, read once per process. That cannot be served from Postgres, so it
+ * constant, read once per process. That cannot be served from the database, so it
  * is `getCourses()` now, through the content seam (`@/data/source`), and
  * wrapped in React's `cache()` so one render asks once however many
  * components want it. Pages hold the list and pass it on; the lookups below
@@ -23,7 +23,7 @@ import type { Course, Module, Topic } from "@/lib/types";
  *
  * **Server only.** Reading content reaches the database, and `server-only`
  * makes a `"use client"` module that reaches it fail at build time rather
- * than shipping a Postgres driver to the browser. Client components take the course, module and topic they need as
+ * than shipping a database driver to the browser. Client components take the course, module and topic they need as
  * props; the pure helpers they still want are in `@/lib/curriculum`.
  */
 export const getCourses = cache(async (): Promise<Course[]> => contentSource().courses());

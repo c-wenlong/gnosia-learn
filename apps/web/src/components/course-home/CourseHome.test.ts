@@ -170,6 +170,8 @@ describe("CourseHome", () => {
     const { host } = render("m1");
     const toggle = topicToggle(host, "m1-a");
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    // The region the toggle controls is there before the first open, so aria-controls never names nothing.
+    expect(host.querySelector(`#${CSS.escape(toggle.getAttribute("aria-controls")!)}`)).not.toBeNull();
     expect(host.textContent).not.toContain("Mark done");
     act(() => toggle.click());
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
@@ -395,6 +397,19 @@ describe("CourseHome: the module as one path", () => {
     const group = [...main(host).querySelectorAll("section")].find((s) => s.querySelector("h2")?.textContent === "Read alongside")!;
     expect([...group.querySelectorAll("a")].map((a) => a.textContent)).toEqual(["The textbookBook · example.com", "My own linkYours · example.com"]);
     expect(group.textContent).toContain("Add a resource");
+  });
+
+  it("shows a resource whose URL is no http(s) link or path on this site as text, never as a link", () => {
+    learner.state.userResources = {
+      p1: [
+        { id: "u1", title: "Script", url: "javascript:alert(1)" },
+        { id: "u2", title: "Tabbed", url: "/\t/evil.example" },
+      ],
+    };
+    const host = renderPath();
+    const group = [...main(host).querySelectorAll("section")].find((s) => s.querySelector("h2")?.textContent === "Read alongside")!;
+    expect(group.textContent).toContain("ScriptYours · javascript:alert(1)");
+    expect([...group.querySelectorAll("a")].map((a) => a.getAttribute("href"))).toEqual(["https://example.com/book"]);
   });
 
   it("says the catalog did not answer, and still draws the lessons and readings", () => {

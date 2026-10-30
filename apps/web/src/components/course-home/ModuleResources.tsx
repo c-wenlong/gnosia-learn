@@ -27,7 +27,8 @@ const TYPE_LABEL: Record<Resource["type"], string> = {
 /**
  * An outside link opens a new tab. A link into this app goes through `Link`,
  * so the page stays alive: a full reload could cancel a learner-state write
- * still in flight and lose an optimistic edit.
+ * still in flight and lose an optimistic edit. A URL that is neither
+ * (`resourceLink` gives it no `href`) is shown as text, never as a link.
  */
 function ResourceAnchor({
   href,
@@ -35,11 +36,12 @@ function ResourceAnchor({
   className,
   children,
 }: {
-  href: string;
+  href: string | null;
   internal: boolean;
   className: string;
   children: ReactNode;
 }) {
+  if (href === null) return <span className={className}>{children}</span>;
   if (internal) {
     return (
       <Link href={href} className={className}>
@@ -63,7 +65,7 @@ export function ResourceRow({ resource: r }: { resource: Resource }) {
   const link = resourceLink(r.url);
   return (
     <li>
-      <ResourceAnchor href={r.url} internal={link.internal} className={cx(ROW, ROW_HOVER, FOCUS)}>
+      <ResourceAnchor href={link.href} internal={link.internal} className={link.href === null ? ROW : cx(ROW, ROW_HOVER, FOCUS)}>
         <Glyph name={RESOURCE_GLYPH[r.type] ?? "link"} className="text-text2" />
         <span className="min-w-0 flex-1 pl-1">
           <span className={cx(ROW_TITLE, "break-words")}>{r.title}</span>
@@ -128,7 +130,7 @@ export function ModuleResources({ moduleId, curated }: { moduleId: string; curat
     }
     try {
       const parsed = new URL(u);
-      if (!parsed.protocol.startsWith("http")) {
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
         setError("Enter a valid URL (including https://).");
         return;
       }
@@ -153,7 +155,7 @@ export function ModuleResources({ moduleId, curated }: { moduleId: string; curat
             <Collapse open={!leaving}>
               <div className={cx(ROW, ROW_HOVER)}>
                 <ResourceAnchor
-                  href={r.url}
+                  href={link.href}
                   internal={link.internal}
                   className={cx("flex min-w-0 flex-1 items-center gap-2", STRETCHED)}
                 >

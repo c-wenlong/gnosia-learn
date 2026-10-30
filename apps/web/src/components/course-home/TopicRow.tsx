@@ -91,14 +91,15 @@ export function TopicRow({
         <CollapseChevron open={open} className="col-start-2 row-start-1 shrink-0 text-text2 sm:col-start-3" />
       </div>
       {/* The panel glides open and shut; it is mounted on first open and then
-          kept, so closing it keeps the note's pending keystrokes. */}
-      <Collapse open={open}>
+          kept, so closing it keeps the note's pending keystrokes. The id is on
+          the wrapper, which is always there, so aria-controls never names a
+          missing element. */}
+      <Collapse open={open} id={panelId}>
         {opened && (
           <TopicPanel
             // A reset clears the notes on the server; a new epoch remounts the
             // panel so the draft does not write the old note straight back.
             key={state.epoch}
-            id={panelId}
             course={course}
             module={module}
             topic={topic}
@@ -111,13 +112,11 @@ export function TopicRow({
 }
 
 function TopicPanel({
-  id,
   course,
   module,
   topic,
   mastery,
 }: {
-  id: string;
   course: Course;
   module: Module;
   topic: Topic;
@@ -167,7 +166,7 @@ function TopicPanel({
   const hasRecap = Boolean(state.knowledge[topic.id]);
 
   return (
-    <div id={id} className="mb-2 ml-[40px] mr-2 mt-1 flex flex-col gap-4 rounded-xl bg-surface2 p-4 text-[14px]">
+    <div className="mb-2 ml-[40px] mr-2 mt-1 flex flex-col gap-4 rounded-xl bg-surface2 p-4 text-[14px]">
       {topic.subtopics.length > 0 && (
         <section>
           <h3 className={LABEL}>Covers</h3>

@@ -78,6 +78,14 @@ describe("TabList, as the server draws it", () => {
     expect(html).toContain("<svg");
   });
 
+  it("keeps the first tab in the tab order while the value is none of the tabs", () => {
+    const html = renderToStaticMarkup(
+      createElement(TabList<string>, { label: "Sections", items: ITEMS, value: "gone", idBase: "t", onChange: () => {} }),
+    );
+    expect(html.match(/tabindex="0"/g)).toHaveLength(1);
+    expect(html).toContain(`id="${tabIds("t", "a").tab}" aria-selected="false" aria-controls="${tabIds("t", "a").panel}" tabindex="0"`);
+  });
+
   it("draws the rail's look only for a responsive row", () => {
     const row = renderToStaticMarkup(createElement(TabList<string>, { label: "S", items: ITEMS, value: "a", idBase: "t", onChange: () => {} }));
     const rail = renderToStaticMarkup(
