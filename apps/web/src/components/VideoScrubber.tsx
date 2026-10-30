@@ -158,9 +158,11 @@ export function VideoScrubber({
       role="slider"
       tabIndex={0}
       aria-label={label}
-      aria-valuemin={0}
-      aria-valuemax={known ? Math.round(duration) : 0}
-      aria-valuenow={Math.round(time)}
+      // No range until the length is known: a max of 0 under a resume point
+      // is an invalid slider, so the time is told by aria-valuetext alone.
+      aria-valuemin={known ? 0 : undefined}
+      aria-valuemax={known ? Math.round(duration) : undefined}
+      aria-valuenow={known ? Math.round(time) : undefined}
       aria-valuetext={`${formatTimecode(time)}${known ? ` of ${formatTimecode(duration)}` : ""}${
         chapterName ? `, ${chapterName}` : ""
       }`}
