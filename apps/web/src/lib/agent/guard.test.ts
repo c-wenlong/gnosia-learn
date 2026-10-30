@@ -6,7 +6,6 @@ import {
   enforcePayloadBounds,
   enforceRateLimit,
   enforceSameOrigin,
-  isSameOrigin,
   MAX_TRACKED_CLIENTS,
   measurePayload,
   PAYLOAD_LIMITS,
@@ -23,68 +22,16 @@ const turns = (count: number, chars = 1) =>
     content: "x".repeat(chars),
   }));
 
-describe("isSameOrigin", () => {
-  it("passes when the Origin host matches the Host header", () => {
-    expect(isSameOrigin("https://study.test", "study.test")).toBe(true);
-  });
-
-  it("passes on localhost with a port, which is how the dev server is reached", () => {
-    expect(isSameOrigin("http://localhost:3131", "localhost:3131")).toBe(true);
-  });
-
-  it("ignores Host casing, since host names are case-insensitive", () => {
-    expect(isSameOrigin("https://study.test", " STUDY.TEST ")).toBe(true);
-  });
-
-  it("fails on a different host", () => {
-    expect(isSameOrigin("https://evil.test", "study.test")).toBe(false);
-  });
-
-  it("fails when only the port differs", () => {
-    expect(isSameOrigin("http://localhost:3000", "localhost:3131")).toBe(false);
-  });
-
-  it("fails when Origin is missing, which is the plain curl case", () => {
-    expect(isSameOrigin(null, "study.test")).toBe(false);
-  });
-
-  it("fails when Host is missing", () => {
-    expect(isSameOrigin("https://study.test", null)).toBe(false);
-  });
-
-  it("fails on a malformed Origin instead of throwing", () => {
-    expect(isSameOrigin("not a url", "study.test")).toBe(false);
-    expect(isSameOrigin("", "study.test")).toBe(false);
-  });
-
-  it('fails on the literal "null" origin a sandboxed iframe sends', () => {
-    expect(isSameOrigin("null", "study.test")).toBe(false);
-  });
-
-  it("fails on an origin with no host, such as a file or data URL", () => {
-    expect(isSameOrigin("file:///tmp/page.html", "study.test")).toBe(false);
-  });
-});
-
 describe("enforceSameOrigin", () => {
   it("lets a matching request through", () => {
-    expect(
-      enforceSameOrigin(
-        post({ origin: "http://study.test", host: "study.test" }),
-      ),
-    ).toBeNull();
+    expect(enforceSameOrigin(post({ origin: "http://study.test", host: "study.test" }))).toBeNull();
+    expect(enforceSameOrigin(post({ origin: "http://localhost:3131", host: "localhost:3131" }))).toBeNull();
   });
 
-  it("prefers x-forwarded-host, which survives a proxy that rewrote Host", () => {
+  it("never takes X-Forwarded-Host, which a client can send to a directly exposed server", () => {
     expect(
-      enforceSameOrigin(
-        post({
-          origin: "https://study.test",
-          host: "internal-1.local",
-          "x-forwarded-host": "study.test",
-        }),
-      ),
-    ).toBeNull();
+      enforceSameOrigin(post({ origin: "https://evil.test", host: "study.test", "x-forwarded-host": "evil.test" }))?.status,
+    ).toBe(403);
   });
 
   it("answers 403 ORIGIN_MISMATCH with no Origin header", async () => {
@@ -95,11 +42,19 @@ describe("enforceSameOrigin", () => {
     });
   });
 
-  it("answers 403 for a cross-site Origin", () => {
-    expect(
-      enforceSameOrigin(post({ origin: "https://evil.test", host: "study.test" }))
-        ?.status,
-    ).toBe(403);
+  it("answers 403 for a cross-site Origin, a port that differs, null, and nonsense", () => {
+    for (const origin of ["https://evil.test", "http://study.test:4000", "null", "not a url", "file:///tmp/page.html"]) {
+      expect(enforceSameOrigin(post({ origin, host: "study.test" }))?.status, origin).toBe(403);
+    }
+  });
+
+  it("answers 403 when the browser says the request is cross-site or same-site, whatever Origin says", () => {
+    for (const site of ["cross-site", "same-site"]) {
+      expect(
+        enforceSameOrigin(post({ origin: "http://study.test", host: "study.test", "sec-fetch-site": site }))?.status,
+        site,
+      ).toBe(403);
+    }
   });
 });
 
@@ -249,6 +204,20 @@ describe("checkRateLimit", () => {
     expect(store.size).toBe(1);
   });
 
+  it("sweeps at most once a second, yet never counts a window that has ended", () => {
+    const short = { limit: 1, windowMs: 100 };
+    const store: RateLimitStore = new Map();
+    expect(checkRateLimit(store, "x", short, 0).allowed).toBe(true);
+    checkRateLimit(store, "old", short, 0);
+    expect(checkRateLimit(store, "x", short, 50).allowed).toBe(false);
+    // 200 ms on: no sweep yet, so the ended window is still in the map...
+    expect(checkRateLimit(store, "x", short, 200).allowed).toBe(true);
+    expect(store.has("old")).toBe(true);
+    // ...until a second has passed since the last sweep.
+    checkRateLimit(store, "y", short, 1_000);
+    expect(store.has("old")).toBe(false);
+  });
+
   it("stays under the tracked-client cap when a caller rotates its IP", () => {
     const store: RateLimitStore = new Map();
     // Pre-fill to the cap with entries that are still inside their window, so
@@ -264,51 +233,32 @@ describe("checkRateLimit", () => {
 });
 
 describe("clientIp", () => {
-  it("takes the first x-forwarded-for entry, which is the client", () => {
-    expect(
-      clientIp(new Headers({ "x-forwarded-for": "203.0.113.7, 10.0.0.1" })),
-    ).toBe("203.0.113.7");
+  const proxied = { VERCEL: "1" };
+
+  it("takes the first x-forwarded-for entry behind a trusted proxy", () => {
+    expect(clientIp(new Headers({ "x-forwarded-for": "203.0.113.7, 10.0.0.1" }), proxied)).toBe("203.0.113.7");
+    expect(clientIp(new Headers({ "x-forwarded-for": "  203.0.113.7  " }), { TRUST_PROXY: "1" })).toBe("203.0.113.7");
   });
 
-  it("trims whitespace around the entry", () => {
-    expect(clientIp(new Headers({ "x-forwarded-for": "  203.0.113.7  " }))).toBe(
-      "203.0.113.7",
-    );
+  it("falls back to x-real-ip behind a trusted proxy", () => {
+    expect(clientIp(new Headers({ "x-real-ip": "203.0.113.8" }), proxied)).toBe("203.0.113.8");
+    expect(clientIp(new Headers({ "x-forwarded-for": " , ", "x-real-ip": "203.0.113.9" }), proxied)).toBe("203.0.113.9");
   });
 
-  it("falls back to x-real-ip", () => {
-    expect(clientIp(new Headers({ "x-real-ip": "203.0.113.8" }))).toBe(
-      "203.0.113.8",
-    );
-  });
-
-  it("falls back to x-real-ip when x-forwarded-for is empty", () => {
-    expect(
-      clientIp(
-        new Headers({ "x-forwarded-for": " , ", "x-real-ip": "203.0.113.9" }),
-      ),
-    ).toBe("203.0.113.9");
-  });
-
-  it("shares one bucket when no proxy header is present, as on a local start", () => {
-    expect(clientIp(new Headers())).toBe("unknown");
+  it("ignores the forwarded headers when nothing says a proxy set them, so rotating them changes nothing", () => {
+    for (let i = 0; i < 5; i += 1) {
+      expect(clientIp(new Headers({ "x-forwarded-for": `10.9.0.${i}`, "x-real-ip": `10.8.0.${i}` }), {})).toBe("direct");
+    }
+    expect(clientIp(new Headers(), {})).toBe("direct");
   });
 });
 
 describe("enforceRateLimit", () => {
   it("allows the first calls and then answers 429 with Retry-After", async () => {
-    const headers = { "x-forwarded-for": "198.51.100.4" };
     for (let i = 0; i < SUMMARIZE_RATE_LIMIT.limit; i += 1) {
-      expect(
-        enforceRateLimit(post(headers), "test-summarize", SUMMARIZE_RATE_LIMIT, 0),
-      ).toBeNull();
+      expect(enforceRateLimit("owner-a", "test-summarize", SUMMARIZE_RATE_LIMIT, 0)).toBeNull();
     }
-    const res = enforceRateLimit(
-      post(headers),
-      "test-summarize",
-      SUMMARIZE_RATE_LIMIT,
-      15_000,
-    );
+    const res = enforceRateLimit("owner-a", "test-summarize", SUMMARIZE_RATE_LIMIT, 15_000);
     expect(res?.status).toBe(429);
     expect(res?.headers.get("Retry-After")).toBe("45");
     await expect(res?.json()).resolves.toMatchObject({
@@ -318,16 +268,18 @@ describe("enforceRateLimit", () => {
   });
 
   it("keeps the chat and summarize buckets independent", () => {
-    const headers = { "x-forwarded-for": "198.51.100.5" };
     for (let i = 0; i < SUMMARIZE_RATE_LIMIT.limit; i += 1) {
-      enforceRateLimit(post(headers), "split-summarize", SUMMARIZE_RATE_LIMIT, 0);
+      enforceRateLimit("owner-b", "split-summarize", SUMMARIZE_RATE_LIMIT, 0);
     }
-    expect(
-      enforceRateLimit(post(headers), "split-summarize", SUMMARIZE_RATE_LIMIT, 0)
-        ?.status,
-    ).toBe(429);
-    expect(
-      enforceRateLimit(post(headers), "split-chat", CHAT_RATE_LIMIT, 0),
-    ).toBeNull();
+    expect(enforceRateLimit("owner-b", "split-summarize", SUMMARIZE_RATE_LIMIT, 0)?.status).toBe(429);
+    expect(enforceRateLimit("owner-b", "split-chat", CHAT_RATE_LIMIT, 0)).toBeNull();
+  });
+
+  it("gives each owner their own window", () => {
+    for (let i = 0; i < SUMMARIZE_RATE_LIMIT.limit; i += 1) {
+      enforceRateLimit("owner-c", "per-owner", SUMMARIZE_RATE_LIMIT, 0);
+    }
+    expect(enforceRateLimit("owner-c", "per-owner", SUMMARIZE_RATE_LIMIT, 0)?.status).toBe(429);
+    expect(enforceRateLimit("owner-d", "per-owner", SUMMARIZE_RATE_LIMIT, 0)).toBeNull();
   });
 });

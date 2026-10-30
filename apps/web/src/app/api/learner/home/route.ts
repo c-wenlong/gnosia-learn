@@ -20,12 +20,12 @@ import { readHome } from "@/lib/home";
  * same-origin `GET` and every page already renders this data into its HTML;
  * the rate limit bounds a loop.
  */
-export async function GET(req: Request): Promise<NextResponse> {
-  const limited = enforceRateLimit(req, "learner:home", LEARNER_RATE_LIMIT);
-  if (limited !== null) return limited;
-  // A 401 for a request with no owner, before the read that would need one.
+export async function GET(_req: Request): Promise<NextResponse> {
+  // A 401 for a request with no owner, before the limiter and the read.
   const owner = await requestOwner();
   if (owner instanceof NextResponse) return owner;
+  const limited = enforceRateLimit(owner, "learner:home", LEARNER_RATE_LIMIT);
+  if (limited !== null) return limited;
   let home;
   try {
     home = await readHome();

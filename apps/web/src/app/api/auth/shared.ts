@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { originFromHeaders } from "@/lib/auth/core";
+import { requestIsSameOrigin } from "@/lib/auth/core";
 
 /**
  * What the two auth routes share: the same-origin check and the cookie
@@ -12,29 +12,14 @@ import { originFromHeaders } from "@/lib/auth/core";
 export const WRONG_PASSWORD_DELAY_MS = 600;
 
 /**
- * True when the browser says the request came from this site. Modern browsers
- * send `Sec-Fetch-Site`; older ones send `Origin` on a form post. A request
- * with neither header is a non-browser client (curl, a test) and is allowed
- * through: the check is against cross-site *browsers*, which always send at
- * least one of the two.
+ * True when the browser says the request came from this site:
+ * `requestIsSameOrigin` in `@/lib/auth/core`, the rule every guarded route
+ * shares. A request with neither `Sec-Fetch-Site` nor `Origin` is a
+ * non-browser client (curl, a test) and is allowed through here: the check is
+ * against cross-site *browsers*, which always send at least one of the two.
  */
 export function sameOrigin(request: Request): boolean {
-  const site = request.headers.get("sec-fetch-site");
-  if (site !== null) return site === "same-origin" || site === "none";
-  const origin = request.headers.get("origin");
-  if (origin === null) return true;
-  // Compare against the host the browser addressed (`originFromHeaders`),
-  // never `request.url`: under `next start` that URL says `localhost`
-  // whatever the page was opened on, so a sign-in from a phone on the LAN
-  // (`192.168.x.x:3000`) would be refused as cross-site. The scheme is left
-  // out of the comparison: behind a proxy that terminated TLS the page is
-  // https and the hop to Node is http, and the host is what identifies the
-  // site.
-  try {
-    return new URL(origin).host === new URL(originFromHeaders(request.headers, request.url)).host;
-  } catch {
-    return false;
-  }
+  return requestIsSameOrigin(request, { allowMissing: true });
 }
 
 /**
