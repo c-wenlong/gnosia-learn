@@ -16,6 +16,12 @@ function get(path: string, cookie?: string): NextRequest {
   return new NextRequest(`${ORIGIN}${path}`, { headers });
 }
 
+/** Put an environment variable back as it was: unset when it was unset, since assigning `undefined` stores the string "undefined". */
+function restoreEnv(name: string, value: string | undefined): void {
+  if (value === undefined) delete process.env[name];
+  else process.env[name] = value;
+}
+
 describe("proxy", () => {
   const saved = { secret: process.env.AUTH_SECRET, password: process.env.OWNER_PASSWORD, epoch: process.env.SESSION_EPOCH };
   let token: string;
@@ -26,10 +32,9 @@ describe("proxy", () => {
     token = await signSession(CONFIG, Math.floor(Date.now() / 1000));
   });
   afterEach(() => {
-    process.env.AUTH_SECRET = saved.secret;
-    process.env.OWNER_PASSWORD = saved.password;
-    if (saved.epoch === undefined) delete process.env.SESSION_EPOCH;
-    else process.env.SESSION_EPOCH = saved.epoch;
+    restoreEnv("AUTH_SECRET", saved.secret);
+    restoreEnv("OWNER_PASSWORD", saved.password);
+    restoreEnv("SESSION_EPOCH", saved.epoch);
   });
 
   it("lets an anonymous visitor see the landing page, sign-in and the auth routes", async () => {
