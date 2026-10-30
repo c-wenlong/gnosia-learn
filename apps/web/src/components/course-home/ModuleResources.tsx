@@ -17,6 +17,7 @@ import { Glyph } from "@/components/ui/Glyph";
 import { RESOURCE_GLYPH } from "./icons";
 import { resourceLink } from "./resource-link";
 import { ROW, ROW_HOVER, ROW_LIST, ROW_META, ROW_TITLE, STRETCHED } from "./rows";
+import { ownValue } from "@gnosia/tutor/own-key";
 
 const TYPE_LABEL: Record<Resource["type"], string> = {
   paper: "Paper",
@@ -107,7 +108,7 @@ export function ResourceRow({ resource: r }: { resource: Resource }) {
  */
 export function ModuleResources({ moduleId, curated }: { moduleId: string; curated: readonly Resource[] }) {
   const { state, addResource, removeResource } = useLearner();
-  const yours = state.userResources[moduleId] ?? [];
+  const yours = ownValue(state.userResources, moduleId) ?? [];
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
   const [url, setUrl] = useState("");

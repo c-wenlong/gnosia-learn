@@ -40,6 +40,17 @@ beforeAll(async () => {
   db.run(sql`INSERT INTO event (learner_id, type, payload) VALUES ('someone', 'visit', '{}')`);
   // A link from `local`'s module to the other owner's asset: one end is out of scope.
   db.run(sql`INSERT INTO collection_item (collection_id, position, asset_id) VALUES ('fx-m1', 0, ${ASSETS.link})`);
+  // The tutor's wrong options: `local`'s for its own note, the other
+  // learner's for the same note, and `local`'s for a note it cannot read.
+  // Only the first may land.
+  db.run(sql`INSERT INTO concept (slug, title, topic_slug, path, owner_id) VALUES ('their-note', 'Theirs', 'their-topic', 'learn/concepts/fixtures/their-note.md', 'someone')`);
+  const options = JSON.stringify(["Wrong one.", "Wrong two.", "Wrong three."]);
+  db.run(sql`INSERT INTO check_distractor (learner_id, concept_slug, check_id, check_hash, options)
+    VALUES ('local', 'alpha', 'c1', ${"a".repeat(64)}, ${options})`);
+  db.run(sql`INSERT INTO check_distractor (learner_id, concept_slug, check_id, check_hash, options)
+    VALUES ('someone', 'alpha', 'c2', ${"b".repeat(64)}, ${options})`);
+  db.run(sql`INSERT INTO check_distractor (learner_id, concept_slug, check_id, check_hash, options)
+    VALUES ('local', 'their-note', 'c1', ${"c".repeat(64)}, ${options})`);
 
   dir = mkdtempSync(join(tmpdir(), "gnosia-snapshot-"));
   out = join(dir, "app-catalog.db");
@@ -82,6 +93,36 @@ describe("the macOS catalog snapshot", () => {
     expect(rows("SELECT asset_id FROM collection_item").map((r) => r.asset_id)).not.toContain(ASSETS.link);
   });
 
+  it("mirrors this learner's stored wrong options for its notes only", () => {
+    expect(rows("SELECT learner_id, concept_slug, check_id, check_hash, options FROM check_distractor")).toEqual([
+      {
+        learner_id: "local",
+        concept_slug: "alpha",
+        check_id: "c1",
+        check_hash: "a".repeat(64),
+        options: JSON.stringify(["Wrong one.", "Wrong two.", "Wrong three."]),
+      },
+    ]);
+  });
+
+  it("mirrors no wrong options from a catalog behind migration 0003", async () => {
+    const behind = await migratedScratchDatabase();
+    try {
+      behind.db.run(sql`DROP TABLE check_distractor`);
+      const target = join(dir, "behind.db");
+      const { counts } = await snapshot(behind.url, target, "local");
+      expect(counts.checkDistractors).toBe(0);
+      const file = new Database(target, { readonly: true });
+      try {
+        expect(file.prepare("SELECT count(*) AS n FROM check_distractor").get()).toEqual({ n: 0 });
+      } finally {
+        file.close();
+      }
+    } finally {
+      await behind.drop();
+    }
+  });
+
   it("says when the mirror is behind, and why", async () => {
     expect(staleness(scratch.url, out, "local")).toBeNull();
     expect(staleness(scratch.url, out, "someone")).toMatch(/made for local/);
@@ -102,5 +143,8 @@ describe("the macOS catalog snapshot", () => {
       expect.arrayContaining(["id", "kind", "learner_id", "state", "title", "goal", "started_at", "updated_at"]),
     );
     expect(columns("concept")).toEqual(expect.arrayContaining(["slug", "title", "topic_slug", "body", "owner_id"]));
+    expect(columns("check_distractor")).toEqual(
+      expect.arrayContaining(["learner_id", "concept_slug", "check_id", "check_hash", "options"]),
+    );
   });
 });

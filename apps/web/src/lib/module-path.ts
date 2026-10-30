@@ -7,6 +7,7 @@ import {
   type TopicMastery,
 } from "@/lib/course-path";
 import { bucketOf, masteryCaption, type MasteryBucket } from "@gnosia/tutor/mastery-bucket";
+import { ownValue } from "@gnosia/tutor/own-key";
 import type { Module, Resource, Topic } from "@gnosia/tutor/types";
 import { weekCheckBound } from "@/lib/week-check";
 
@@ -199,7 +200,7 @@ export function modulePath(input: ModulePathInput): ModulePath {
   const resolve = (ids: readonly string[] | undefined): PathAsset[] => {
     const out: PathAsset[] = [];
     for (const id of ids ?? []) {
-      const found = assets?.listed[id];
+      const found = assets ? ownValue(assets.listed, id) : undefined;
       if (found === undefined || placed.has(found.id)) continue;
       placed.add(found.id);
       out.push(found);
@@ -229,28 +230,33 @@ export function modulePath(input: ModulePathInput): ModulePath {
   }
 
   // Lessons, one step per concept; a concept-linked asset on the first step that names it.
+  // Every record here is read with `ownValue`: a slug or an id is the course's
+  // to choose, and `constructor` is a kebab slug that `[slug]` answers with
+  // the Object function.
+  const checkCount = (slug: string): number | null => (checks === null ? null : (ownValue(checks, slug) ?? 0));
   const lessons = module.topics.map(
     (item, i): PathLesson => ({
       item,
-      done: topicDone(mastery[item.id], Boolean(completed[item.id])),
+      done: topicDone(ownValue(mastery, item.id), Boolean(ownValue(completed, item.id))),
       videos: lessonVideos[i] ?? [],
       concepts: item.concepts.map((slug): ConceptStep => {
         const kb = byId.get(slug);
         const own: PathAsset[] = [];
-        for (const asset of assets?.byConcept[slug] ?? []) {
+        for (const asset of (assets ? ownValue(assets.byConcept, slug) : undefined) ?? []) {
           if (placed.has(asset.id)) continue;
           placed.add(asset.id);
           own.push(asset);
         }
+        const count = checkCount(slug);
         return {
           slug,
           title: kb?.title ?? slug,
           bucket: kb ? bucketOf(kb) : "untouched",
           href: conceptHref(slug),
           assets: own,
-          checks: checks === null ? null : (checks[slug] ?? 0),
+          checks: count,
           pL: kb?.pL ?? null,
-          quizHref: checks !== null && (checks[slug] ?? 0) > 0 ? quizHref(slug) : null,
+          quizHref: count !== null && count > 0 ? quizHref(slug) : null,
         };
       }),
       readings: [...(lessonReadings[i] ?? []), ...(closing[i] ?? [])],

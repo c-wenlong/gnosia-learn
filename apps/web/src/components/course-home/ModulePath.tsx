@@ -27,6 +27,7 @@ import { ModuleResources, ResourceRow } from "./ModuleResources";
 import { ROW, ROW_BOX, ROW_HOVER, ROW_LIST, ROW_META, ROW_TITLE, STRETCHED } from "./rows";
 import { TopicRow } from "./TopicRow";
 import type { ModuleData } from "./types";
+import { ownValue } from "@gnosia/tutor/own-key";
 
 /**
  * A module's material as one ordered path (`@/lib/module-path`), drawn as
@@ -113,9 +114,9 @@ export function ModulePath({
                   course={course}
                   module={module}
                   topic={lesson.item}
-                  mastery={mastery[lesson.item.id]}
+                  mastery={ownValue(mastery, lesson.item.id)}
                   active={lesson.item.id === activeTopicId}
-                  continueHref={continueHref(course.slug, module.slug, lesson.item.id, mastery[lesson.item.id])}
+                  continueHref={continueHref(course.slug, module.slug, lesson.item.id, ownValue(mastery, lesson.item.id))}
                 />
               </ul>
               {(lesson.videos.length > 0 || lesson.concepts.length > 0 || lesson.readings.length > 0) && (

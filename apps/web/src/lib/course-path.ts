@@ -1,6 +1,7 @@
 import type { MasteryLabel } from "@gnosia/catalog/state";
 
 import { bucketOf, MASTERY_BUCKET_LABEL, type MasteryBucket } from "@gnosia/tutor/mastery-bucket";
+import { ownValue } from "@gnosia/tutor/own-key";
 import type { Course } from "@gnosia/tutor/types";
 
 /**
@@ -270,7 +271,7 @@ export function pathStatus(
   for (const [i, mod] of modules.entries()) {
     let moduleDone = 0;
     for (const topic of mod.topics) {
-      const d = topicDone(topic.mastery, Boolean(completed[topic.id]));
+      const d = topicDone(topic.mastery, Boolean(ownValue(completed, topic.id)));
       done[topic.id] = d;
       if (d) moduleDone += 1;
     }
