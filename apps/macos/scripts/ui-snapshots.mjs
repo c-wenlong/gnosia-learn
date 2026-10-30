@@ -5,7 +5,10 @@
 //
 // 1. Builds a catalog from seed/ in DIR/fixture (migrate, import, the six
 //    flips: the e2e --seed build), records a few answers through the learn
-//    CLI so mastery and review cards exist, and makes two cards due.
+//    CLI so mastery and review cards exist, makes two cards due, and stores
+//    the tutor's wrong options for the second (ui-fixture-options.ts), so
+//    Review draws one card asked with the notes' options and one with the
+//    tutor's.
 // 2. Mirrors it with catalog-snapshot.mjs into DIR/fixture/app-catalog.db,
 //    the file the app reads.
 // 3. Runs the UISnapshots suite (Tests/GnosiaTests/UISnapshotTests.swift),
@@ -71,7 +74,15 @@ for (const [concept, correct] of [
 ]) {
   await npmScript(ROOT, env, 'learn', ['observe', '--concept', concept, '--correct', String(correct)]);
 }
-markDue(db, 2);
+const due = markDue(db, 2);
+// The second card, which `review-tutor` draws, asks with the tutor's
+// options; the first keeps the notes' and the line that says so.
+const tutored = spawnSync('node', ['--import', 'tsx', join(APP, 'scripts/ui-fixture-options.ts'), due[1]], {
+  cwd: ROOT,
+  env,
+  stdio: 'inherit',
+});
+if (tutored.status !== 0) process.exit(tutored.status ?? 1);
 
 const mirror = join(FIXTURE, 'app-catalog.db');
 const snap = spawnSync('node', [join(APP, 'scripts/catalog-snapshot.mjs'), '--out', mirror], { env, stdio: 'inherit' });
@@ -111,21 +122,25 @@ function inside(root, path) {
 }
 
 /**
- * The `count` earliest review cards made due a minute ago. A throwaway
- * file, so rewriting rows of a projection is harmless; `catalog_copy_ok`
- * because the bare handle has none of `connect`'s functions (scripts/e2e.mjs
- * does the same).
+ * The `count` earliest review cards made due, a minute apart and the last a
+ * minute ago, so the queue's most-overdue-first order is fixed; their
+ * concepts in that order. A throwaway file, so rewriting rows of a
+ * projection is harmless; `catalog_copy_ok` because the bare handle has none
+ * of `connect`'s functions (scripts/e2e.mjs does the same).
  */
 function markDue(file, count) {
   const handle = openDatabase(file);
   try {
     handle.function('catalog_copy_ok', () => 1);
-    handle
-      .prepare(
-        `update review set due = cast(unixepoch('subsec') * 1000 as integer) - 60000
-          where (learner_id, concept_slug) in (select learner_id, concept_slug from review order by due limit ?)`,
-      )
-      .run(count);
+    const picked = handle
+      .prepare('select learner_id, concept_slug from review order by due, concept_slug limit ?')
+      .all(count);
+    const update = handle.prepare(
+      `update review set due = cast(unixepoch('subsec') * 1000 as integer) - 60000 * ?
+        where learner_id = ? and concept_slug = ?`,
+    );
+    picked.forEach((row, i) => update.run(count - i, row.learner_id, row.concept_slug));
+    return picked.map((row) => row.concept_slug);
   } finally {
     handle.close();
   }
