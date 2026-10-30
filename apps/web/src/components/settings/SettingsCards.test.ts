@@ -251,6 +251,31 @@ describe("the Providers card", () => {
     expect(JSON.parse(String(write[1].body))).toEqual({ label: "My gateway", baseUrl: "https://gw.example/v1", key: "gw-key-0123456789abcdef" });
   });
 
+  it("puts focus in the key field when Add custom provider is refused, with the key emptied", async () => {
+    const container = mount(createElement(Providers, { studio: true, view: view() }));
+    act(() => button(container, "Add custom provider").click());
+    const form = container.querySelector<HTMLFormElement>('form[aria-label="Add a custom provider"]')!;
+    const set = (input: HTMLInputElement, value: string) => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+    const inputs = [...form.querySelectorAll("input")];
+    act(() => {
+      set(inputs.find((i) => i.placeholder === "My gateway")!, "My gateway");
+      set(inputs.find((i) => i.type === "url")!, "https://gw.example/v1");
+      set(inputs.find((i) => i.type === "password")!, "gw-key-0123456789abcdef");
+    });
+    const answer = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation((url, init) =>
+      String(url) === "/api/learner/custom-provider" ? Promise.resolve(new Response(JSON.stringify({ error: "refused" }), { status: 400 })) : answer(url, init),
+    );
+    act(() => button(container, "Add provider").focus());
+    await act(async () => form.requestSubmit());
+    const key = form.querySelector<HTMLInputElement>('input[type="password"]')!;
+    expect(key.value).toBe("");
+    expect(document.activeElement).toBe(key);
+  });
+
   it("shows a custom provider's base URL, and its Edit takes the name and the URL with the key optional", () => {
     const container = mount(
       createElement(Providers, {
@@ -314,6 +339,22 @@ describe("the Model selection card", () => {
     const writes = chainWrites("PUT");
     expect(writes).toHaveLength(1);
     expect(JSON.parse(String((writes[0]?.[1] as RequestInit).body))).toEqual({ provider: "openrouter", model: "m-9" });
+  });
+
+  it("keeps focus on Test while it runs and after it answers", async () => {
+    const container = mount(selection());
+    await act(async () => {});
+    const test = button(container, "Test");
+    test.focus();
+    // A browser drops focus from a button that becomes disabled; jsdom does not, so say it.
+    const answer = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation((url, init) => {
+      if (String(url).endsWith("/tutor-model/test")) (document.activeElement as HTMLElement | null)?.blur();
+      return answer(url, init);
+    });
+    await act(async () => test.click());
+    expect(container.textContent).toContain("Works");
+    expect(document.activeElement).toBe(button(container, "Test"));
   });
 
   it("asks before Remove model deletes anything", async () => {

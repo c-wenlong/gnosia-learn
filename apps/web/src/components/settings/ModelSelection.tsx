@@ -188,13 +188,15 @@ function TutorPick({ view, chain }: { view: ProvidersView; chain: ChainEntry[] }
   const unchanged = chain.length === 1 && already;
 
   const save = async () => {
+    // The pressed button is disabled while the request runs, which drops its
+    // focus; it goes to the model field, which stays.
+    focusNext.current = `${base}-model`;
     setStatus({ kind: "busy", text: "Saving…" });
     setError(null);
     // One write for the whole chain (`PUT`): a refused save keeps the chain
     // it would have replaced.
     const reply = await sendJson<Reply>("PUT", "/api/learner/tutor-model", picked);
     if (reply === null || reply.status !== 200 || reply.data.ok !== true) {
-      focusNext.current = `${base}-model`;
       setStatus({ kind: "idle" });
       return setError(failure("saved", reply));
     }
@@ -203,6 +205,7 @@ function TutorPick({ view, chain }: { view: ProvidersView; chain: ChainEntry[] }
   };
 
   const test = async () => {
+    focusNext.current = `${base}-test`;
     setStatus({ kind: "busy", text: `Testing ${picked.model}…` });
     const reply = await sendJson<Reply>("POST", "/api/learner/tutor-model/test", picked);
     if (reply === null) setStatus({ kind: "error", text: "Not tested: the server did not answer." });
@@ -309,7 +312,7 @@ function TutorPick({ view, chain }: { view: ProvidersView; chain: ChainEntry[] }
           Use this model
         </Button>
         {already && (
-          <Button variant="secondary" size="sm" disabled={disabled || busy} onClick={() => void test()}>
+          <Button id={`${base}-test`} variant="secondary" size="sm" disabled={disabled || busy} onClick={() => void test()}>
             Test
           </Button>
         )}

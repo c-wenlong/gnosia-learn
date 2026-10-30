@@ -1,7 +1,7 @@
 "use client";
 
 import { PROVIDER_KEY_LIMITS } from "@gnosia/schema/shared";
-import { useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { FormRow } from "@/components/ui/FormRow";
@@ -28,8 +28,8 @@ export function AddProvider({
   open: boolean;
   onSaving: (saving: boolean) => void;
   onClose: () => void;
-  /** A provider went on the card. `text` overrides the stock message when only part of the ask landed. */
-  onAdded: (label: string, text?: string) => void;
+  /** A provider went on the card. */
+  onAdded: (label: string) => void;
   /** The Add custom provider button, which the dialog returns focus to. */
   opener: () => HTMLElement | null;
 }) {
@@ -54,7 +54,7 @@ function AddProviderForm({
   leaving: boolean;
   onSaving: (saving: boolean) => void;
   onClose: () => void;
-  onAdded: (label: string, text?: string) => void;
+  onAdded: (label: string) => void;
   opener: () => HTMLElement | null;
 }) {
   const [draft, setDraft] = useState("");
@@ -62,6 +62,15 @@ function AddProviderForm({
   const [url, setUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const keyId = useId();
+  // The submit button is disabled while the request runs, which drops its
+  // focus; a refusal puts it in the key field, emptied for the retype.
+  const refocus = useRef(false);
+  useEffect(() => {
+    if (saving || !refocus.current) return;
+    refocus.current = false;
+    document.getElementById(keyId)?.focus();
+  }, [saving, keyId]);
 
   const save = async (event: FormEvent) => {
     event.preventDefault();
@@ -73,7 +82,10 @@ function AddProviderForm({
     const reply = await sendJson<Reply>("POST", "/api/learner/custom-provider", { label: name, baseUrl: url, key });
     setSaving(false);
     onSaving(false);
-    if (reply === null || reply.status !== 200 || reply.data.ok !== true) return setError(failure("added", reply));
+    if (reply === null || reply.status !== 200 || reply.data.ok !== true) {
+      refocus.current = true;
+      return setError(failure("added", reply));
+    }
     const label = name.trim();
     setName("");
     setUrl("");
@@ -115,6 +127,7 @@ function AddProviderForm({
           )}
         </FormRow>
         <FormRow
+          id={keyId}
           label="API key"
           hint="Sent once and stored encrypted. Only its last four characters are shown again. For a local server that needs no key, type any 16 characters."
         >
