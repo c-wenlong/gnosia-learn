@@ -49,6 +49,18 @@ function mount(element: () => ReactElement) {
 }
 
 describe("StoreBanner", () => {
+  it("says the database is not connected when it is down, with no Dismiss since nothing the person did can clear it", () => {
+    learner.reachable = false;
+    const { container } = mount(() => createElement(StoreBanner));
+    expect(container.querySelector('[role="status"]')?.textContent).toBe("Not connected to the database. Nothing you change here will be saved.");
+    expect(container.querySelector('button[aria-label="Dismiss this message"]')).toBeNull();
+    // A save that failed on top of it shows its own words, and can be dismissed.
+    learner.saveError = "Not saved: the database did not answer.";
+    const again = mount(() => createElement(StoreBanner));
+    expect(again.container.querySelector('[role="status"]')?.textContent).toBe(learner.saveError);
+    expect(again.container.querySelector('button[aria-label="Dismiss this message"]')).not.toBeNull();
+  });
+
   it("folds open with the message, keeps it while it folds shut, and focuses the page on Dismiss", () => {
     const { container, main, draw } = mount(() => createElement(StoreBanner));
     // The fold is the Collapse after the live region.

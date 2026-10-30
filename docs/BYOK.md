@@ -60,7 +60,11 @@ with Replace, Remove and Test. Test makes one minimal call (a one-token
 completion) and reports "works", or the provider's error text with any echo
 of the key taken out. Keys never go into logs, error messages,
 `catalog export`, the nightly export, `learn vault pull`, the learner export
-or any client bundle.
+or any client bundle. No answer depends on a part of a key either: a route
+that compared what it was sent with a fragment of a key, and refused or
+accepted on the result, would let a caller guess the key one character at a
+time. The model chain's key check compares whole keys only
+([TUTOR-MODELS.md](TUTOR-MODELS.md), T11), and until 2026-10-30 it did not.
 
 **D4. Resolved per request, for the signed-in owner.** (Since the model
 chain, this is the order for an owner with no chain; an owner with one gets

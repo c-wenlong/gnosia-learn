@@ -12,7 +12,7 @@ export type Status = { kind: "idle" } | { kind: "busy"; text: string } | { kind:
 export interface Reply {
   ok?: boolean;
   error?: string;
-  /** The mirrored `byok.json` write's answer on preset providers: false when the runner did not take it (D95). */
+  /** The studio's provider list edit on preset providers: false when the runner did not take it (D95). */
   byok?: boolean;
   chain?: ChainEntry[];
   models?: { id: string; free?: boolean }[];

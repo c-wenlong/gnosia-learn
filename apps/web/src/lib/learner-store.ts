@@ -48,9 +48,13 @@ import { currentOwner } from "@/lib/owner";
  *
  * Next reuses the module across requests, so this is per server instance
  * rather than per render. A SQLite file is one handle per connect, and its
- * writes are serialised by the file, not by a pool.
+ * writes are serialised by the file, not by a pool. The open itself is what
+ * is kept, not only its result: the first page after a start asks from
+ * several reads at once, and each one that saw no handle yet used to open
+ * its own, leaving all but the last open for good. An open that fails is
+ * forgotten, so the next call tries again.
  */
-let handle: { db: CatalogDatabase; close: () => Promise<void> } | null = null;
+let opening: Promise<CatalogDatabase> | null = null;
 
 /**
  * The connection itself, for a read that lives in another module.
@@ -67,15 +71,20 @@ export async function catalogDatabase(): Promise<CatalogDatabase> {
   return database();
 }
 
-async function database(): Promise<CatalogDatabase> {
-  if (handle === null) {
-    // Imported lazily so nothing is opened during a build, even if something
-    // imports this module for its types. `connectionTimeoutMillis` is how long
-    // a read waits on a file another process is writing.
-    const { connect } = await import("@gnosia/catalog/state");
-    handle = connect({ connectionTimeoutMillis: 3_000 });
-  }
-  return handle.db;
+function database(): Promise<CatalogDatabase> {
+  // Imported lazily so nothing is opened during a build, even if something
+  // imports this module for its types. `connectionTimeoutMillis` is how long
+  // a read waits on a file another process is writing.
+  opening ??= open().catch((error: unknown) => {
+    opening = null;
+    throw error;
+  });
+  return opening;
+}
+
+async function open(): Promise<CatalogDatabase> {
+  const { connect } = await import("@gnosia/catalog/state");
+  return connect({ connectionTimeoutMillis: 3_000 }).db;
 }
 
 export interface Snapshot {
