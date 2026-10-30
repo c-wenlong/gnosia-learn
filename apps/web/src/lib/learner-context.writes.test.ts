@@ -239,6 +239,32 @@ describe("two pages loading at once", () => {
   });
 });
 
+describe("an edit made while the outbox waits for its lock", () => {
+  it("wins over the saved write on its key, which is skipped, while a saved write on another key is sent", async () => {
+    let grant: () => void = () => undefined;
+    const granted = new Promise<void>((resolve) => (grant = resolve));
+    const request = vi.fn((_name: string, take: () => unknown) => granted.then(take));
+    Object.defineProperty(window.navigator, "locks", { value: { request }, configurable: true });
+    try {
+      window.localStorage.setItem(
+        `${OUTBOX_KEY}:a`,
+        JSON.stringify({ at: Date.now() - 1_000, writes: [{ kind: "note", topicId: "t1", note: "saved" }, { kind: "progress", topicId: "t2", done: true }] }),
+      );
+      const { calls, container } = mount(ok);
+      act(() => held.learner!.updateNote("t1", "typed now"));
+      await act(async () => grant());
+      await vi.waitFor(() => expect(calls()).toHaveLength(2));
+      expect(calls().map(([, init]) => JSON.parse(init.body as string))).toEqual([
+        { curriculumItemId: "t1", note: "typed now" },
+        { curriculumItemId: "t2", completed: true },
+      ]);
+      expect(container.textContent).toBe("note=typed now tick=false");
+    } finally {
+      delete (window.navigator as { locks?: unknown }).locks;
+    }
+  });
+});
+
 describe("a kept recap", () => {
   it("is drawn again as the write made it, without counting another session each time", async () => {
     const { draw } = mount(() => Promise.resolve(new Response("{}", { status: 503 })));

@@ -159,6 +159,12 @@ type Outbound =
   | { kind: "recap"; topicId: string; input: KnowledgeInput; countSession: boolean; requestId?: string }
   | { kind: "theme"; theme: ThemeMode };
 
+/** The write queue's key for a kept write, as the action that made it commits it. */
+function outboundKey(write: Outbound): string {
+  if (write.kind === "theme") return "preference:theme";
+  return `${write.kind}:${write.topicId}`;
+}
+
 /** A write worth keeping: how to draw it again, and the same write as data. */
 interface Keep {
   replay: Replay;
@@ -439,6 +445,12 @@ export function LearnerProvider({
    */
   const unsaved = useRef(new Map<string, Kept>());
   /**
+   * Every key this page has written, so the outbox replay, which waits for
+   * a lock (`takeOutboxesLocked`), skips a saved write on a key the learner
+   * changed in the meantime: the saved value is the older one.
+   */
+  const changed = useRef(new Set<string>());
+  /**
    * Writes queued behind another on their key that have not started, with
    * the write as data when it is one worth keeping. On `pagehide` those go
    * to the outbox (`OUTBOX_KEY`) rather than out of turn: the page may never
@@ -550,7 +562,10 @@ export function LearnerProvider({
       current.current = next;
       setState(next);
       const keys = typeof key === "string" ? [key] : key;
-      for (const k of keys) unsaved.current.delete(k);
+      for (const k of keys) {
+        unsaved.current.delete(k);
+        changed.current.add(k);
+      }
       const record = (response: ApiResponse, newest: boolean) => {
         if (response.ok === false) {
           // Only the newest write on its key is kept: a newer one is on its
@@ -925,7 +940,10 @@ export function LearnerProvider({
     if (resent.current) return;
     resent.current = true;
     void takeOutboxesLocked().then((writes) => {
+      // Keys written on this page while the lock was awaited hold a newer value.
+      const newer = new Set(changed.current);
       for (const write of writes) {
+        if (newer.has(outboundKey(write))) continue;
         if (write.kind === "note") updateNote(write.topicId, write.note);
         else if (write.kind === "progress") setCompleted(write.topicId, write.done);
         // An outbox from before request ids carries none, so it gets one here.
