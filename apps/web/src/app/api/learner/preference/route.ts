@@ -1,14 +1,6 @@
 import { asThemeMode, isUserResourceUrl, PREFERENCE_KEYS, THEME_MODES, USER_RESOURCE_LIMITS, type ThemeMode } from "@gnosia/schema/shared";
-import {
-  appendEvent,
-  asLastVisited,
-  asRecentModules,
-  readPreference,
-  withLearnerLock,
-  withRecentModule,
-  writePreference,
-  type CatalogDatabase,
-} from "@gnosia/catalog/state";
+import { writePreference } from "@gnosia/catalog/state";
+import { lastVisitedValue, rememberVisit } from "@gnosia/tutor/server/learner-writes";
 
 import { BadRequest, handler, MAX_ID_CHARS } from "@/lib/learner-api";
 import {
@@ -32,13 +24,13 @@ import {
  * thing that has a reason to. `bktParams` is not here either — that belongs to
  * the `learn` CLI, and a browser has no business retuning the BKT model.
  * `recentModules` is not here because the route keeps it itself, beside every
- * `lastVisited` write (below). `dailyTarget` and `dailyLeeway` went with the
+ * `lastVisited` write (`rememberVisit`, shared with the sidecar). `dailyTarget` and `dailyLeeway` went with the
  * habit layer (H1 of docs/proposals/home-page.md): their rows stay, and nothing
  * writes them.
  */
 const WRITABLE = {
   [PREFERENCE_KEYS.theme]: theme,
-  [PREFERENCE_KEYS.lastVisited]: lastVisited,
+  [PREFERENCE_KEYS.lastVisited]: lastVisitedValue,
   [PREFERENCE_KEYS.userResources]: userResources,
   [PREFERENCE_KEYS.inactiveCourses]: inactiveCourses,
   // The Settings page's keys. Their validators are pure and live in
@@ -84,77 +76,12 @@ export const POST = handler(
   },
 );
 
-/**
- * Write `lastVisited`, put the same visit at the front of `recentModules`, and
- * append a `visit` event, in one transaction under the learner's row lock so
- * two module pages opened together cannot drop each other's entry.
- *
- * The event is what the sidebar's Recent and Home read from now on
- * (`apps/web/src/lib/recent.ts`, L7 of
- * docs/proposals/library-by-type-and-day.md): one row per visit, so a visit
- * older than the preference's five survives. The preference is still written
- * for one release, as the proposal says, so a deployment rolled back past
- * this change still finds its list current; after that it is left unread, as
- * H1 left the streak's rows. Recent reads both meanwhile and merges them by
- * course and module, which is what keeps the five modules a list held before
- * the first event on Home and in the sidebar.
- *
- * Before the first such write an owner has `lastVisited` and no list, so the
- * list starts from the visit `lastVisited` held until now: a module opened
- * before `recentModules` existed is still on Home after the next visit.
- */
-async function rememberVisit(db: CatalogDatabase, value: unknown, owner: string): Promise<void> {
-  const visit = asLastVisited(value);
-  await withLearnerLock(db, owner, async (tx) => {
-    if (visit !== undefined) {
-      // Stamped by the server, as `watched` is: the log orders by it, and a
-      // browser's clock is not the log's. A write that fails fails the whole
-      // visit, so a log that has stopped taking visits is a 503 someone sees,
-      // not a quiet gap in Recent.
-      await appendEvent(
-        tx,
-        { type: "visit", course: visit.courseSlug, ...(visit.moduleSlug === undefined ? {} : { module: visit.moduleSlug }) },
-        owner,
-      );
-      const stored = asRecentModules(await readPreference(tx, PREFERENCE_KEYS.recentModules, owner));
-      const previous = asLastVisited(await readPreference(tx, PREFERENCE_KEYS.lastVisited, owner));
-      const list = stored ?? (previous !== undefined ? [previous] : []);
-      await writePreference(tx, PREFERENCE_KEYS.recentModules, withRecentModule(list, visit), owner);
-    }
-    await writePreference(tx, PREFERENCE_KEYS.lastVisited, value, owner);
-  });
-}
-
 function theme(value: unknown): ThemeMode {
   const mode = asThemeMode(value);
   if (mode === null) {
     throw new BadRequest(`"value" must be one of ${THEME_MODES.map((m) => `"${m}"`).join(", ")}.`);
   }
   return mode;
-}
-
-function lastVisited(value: unknown): {
-  courseSlug: string;
-  moduleSlug?: string;
-  at: string;
-} {
-  const raw = object(value);
-  const courseSlug = raw.courseSlug;
-  if (typeof courseSlug !== "string" || courseSlug === "" || courseSlug.length > MAX_ID_CHARS) {
-    throw new BadRequest(`"value.courseSlug" must be a non-empty slug.`);
-  }
-  const moduleSlug = raw.moduleSlug;
-  if (
-    moduleSlug !== undefined &&
-    (typeof moduleSlug !== "string" || moduleSlug.length > MAX_ID_CHARS)
-  ) {
-    throw new BadRequest(`"value.moduleSlug" must be a slug.`);
-  }
-  return {
-    courseSlug,
-    ...(typeof moduleSlug === "string" ? { moduleSlug } : {}),
-    at: typeof raw.at === "string" ? raw.at : new Date().toISOString(),
-  };
 }
 
 /** More than any catalog holds; a cap so the value stays a short list. */

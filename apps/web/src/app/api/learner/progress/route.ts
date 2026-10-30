@@ -1,16 +1,11 @@
-import { setProgress } from "@gnosia/catalog/state";
+import { progressTurn } from "@gnosia/tutor/server/learner-writes";
 
-import { handler, requireBoolean, requireId } from "@/lib/learner-api";
+import { turnRoute } from "@/lib/learner-api";
 
-/** Tick or untick one curriculum item. */
-export const POST = handler(
-  "progress",
-  (body) => ({
-    curriculumItemId: requireId(body, "curriculumItemId"),
-    completed: requireBoolean(body, "completed"),
-  }),
-  async (db, { curriculumItemId, completed }, owner) => {
-    await setProgress(db, curriculumItemId, completed, { learnerId: owner });
-    return { curriculumItemId, completed };
-  },
-);
+/**
+ * Tick or untick one curriculum item.
+ *
+ * The parse and the write are `progressTurn` in
+ * `@gnosia/tutor/server/learner-writes`, which the sidecar runs too.
+ */
+export const POST = turnRoute("progress", progressTurn);
