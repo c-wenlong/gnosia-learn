@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { Fragment, useId, useRef, useState, type ReactNode } from "react";
 
 import { formatTimecode, type TranscriptCue, type VideoChapter } from "@gnosia/tutor/media";
-import { JobLog } from "@/components/studio/JobPanel";
+import { JobLog } from "@/components/studio/job-log";
 import { CancelJobButton, Duration, JobDot } from "@/components/studio/job-bits";
 import { JobCost } from "@/components/studio/JobCost";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
@@ -18,6 +18,7 @@ import { Callout } from "@/components/ui/Callout";
 import { buttonClasses, cx, LABEL } from "@/components/ui/classes";
 import { composerKey } from "@/components/ui/composer-keys";
 import { Collapse } from "@/components/ui/Collapse";
+import { Disclosure } from "@/components/ui/Disclosure";
 import { Glyph } from "@/components/ui/Glyph";
 import { InlineConfirm } from "@/components/ui/InlineConfirm";
 import { Textarea } from "@/components/ui/Textarea";
@@ -37,7 +38,6 @@ import {
   childJob,
   changeWord,
   CHANGE_LIMIT,
-  formatSize,
   gateStepLabel,
   uniqueWarnings,
   libraryHref,
@@ -49,7 +49,6 @@ import {
   sceneTitle,
   sheetSrc,
   sheetsInOrder,
-  spokenLength,
   stepRows,
   storyboard,
   videoFailure,
@@ -59,7 +58,8 @@ import {
   type StepRow,
   type VideoJob,
 } from "@/lib/studio-video-job";
-import { type VideoBrief } from "@/lib/studio-brief-video";
+import { shortLength, type VideoBrief } from "@/lib/studio-brief-video";
+import { formatBytes } from "@gnosia/tutor/asset-meta";
 import { conversationHref, panelHref } from "@/lib/studio-url";
 import { scrollBehavior } from "@/lib/motion";
 
@@ -588,21 +588,17 @@ function HowItWasMade({
   sheets: ContactSheet[];
   chapters: VideoChapter[] | null;
 }) {
-  const [open, setOpen] = useState(false);
-  const id = useId();
   return (
     <section className="min-w-0 border-t border-hair pt-4">
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-controls={id}
-        onClick={() => setOpen((was) => !was)}
+      <Disclosure
         className="flex w-full items-center justify-between rounded-md text-left text-[13px] font-semibold text-text2 hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        summary={(open) => (
+          <>
+            <span>How it was made</span>
+            <span className="font-normal text-text3">{open ? "Hide" : "Show"}</span>
+          </>
+        )}
       >
-        <span>How it was made</span>
-        <span className="font-normal text-text3">{open ? "Hide" : "Show"}</span>
-      </button>
-      <Collapse open={open} id={id}>
         <div className="flex flex-col gap-5 pt-4">
           <SheetStrip job={job} sheets={sheets} loaded running={false} chapters={chapters} />
           <div className="grid min-w-0 gap-5 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)]">
@@ -610,7 +606,7 @@ function HowItWasMade({
             <MakingLog job={job} events={events} chapters={chapters} />
           </div>
         </div>
-      </Collapse>
+      </Disclosure>
     </section>
   );
 }
@@ -779,8 +775,8 @@ function Checks({ job }: { job: VideoJob }) {
         <h3 className={LABEL}>Checks</h3>
         <span className="text-[12px] text-text3">
           {passed} of {gate.steps.length} passed
-          {length !== null && ` · ${spokenLength(length.durationSeconds)} against ${spokenLength(length.predictedSeconds)} predicted`}
-          {length !== null && length.bytes > 0 && ` · ${formatSize(length.bytes)}`}
+          {length !== null && ` · ${shortLength(length.durationSeconds)} against ${shortLength(length.predictedSeconds)} predicted`}
+          {length !== null && length.bytes > 0 && ` · ${formatBytes(length.bytes) ?? ""}`}
         </span>
         <TextLink aria-expanded={open} aria-controls={id} onClick={() => setOpen((was) => !was)} size="xs" className="ml-auto">
           {open ? "Hide each check" : "Show each check"}

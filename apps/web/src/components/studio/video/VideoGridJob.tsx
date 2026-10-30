@@ -39,13 +39,13 @@ import {
   newestSheet,
   posterHref,
   sheetSrc,
-  spokenLength,
   videoFailureLine,
   videoHeadline,
   videoStepCount,
   type VideoJob,
 } from "@/lib/studio-video-job";
-import { newVideoJobs, videoJobForSlug, videoRowJobLabel, videoRowWords, videoTileStage, type VideoTileStage } from "@/lib/studio-grid-jobs";
+import { newVideoJobs, videoJobForSlug, videoRowJobLabel, videoRowWords, tileStage, type TileStage } from "@/lib/studio-grid-jobs";
+import { shortLength } from "@/lib/studio-brief-video";
 import { type StudioVideo } from "@/lib/studio-video-grid";
 import { conversationHref, gridHref, panelHref } from "@/lib/studio-url";
 
@@ -141,7 +141,7 @@ export function VideoRow({ video, path }: { video: StudioVideo; path: string }) 
         </JobRowLink>
       )}
       <span className="hidden shrink-0 text-text2 sm:inline">{video.topic ?? ""}</span>
-      <span className="w-24 shrink-0 text-right tabular-nums text-text2">{spokenLength(video.durationSeconds)}</span>
+      <span className="w-24 shrink-0 text-right tabular-nums text-text2">{shortLength(video.durationSeconds)}</span>
       <span className="relative z-10 shrink-0">
         <VideoChangeButton slug={slug} title={title} path={path} className={linkClasses({ pending: true, className: "px-1.5 py-0.5" })} />
       </span>
@@ -293,7 +293,7 @@ function VideoStage({
   path: string;
   isNew: boolean;
 }) {
-  const stage = videoTileStage(job);
+  const stage = tileStage(job);
   const frame = useRef<HTMLDivElement>(null);
   const visible = useOnScreen(frame);
   // While this job's own panel is open it asks for the same sheets, and the
@@ -318,7 +318,7 @@ function VideoStage({
           job={job}
           stage={stage}
           headline={headline}
-          reviewLine={seconds === null ? "Built and checked" : `${spokenLength(seconds)}, built and checked`}
+          reviewLine={seconds === null ? "Built and checked" : `${shortLength(seconds)}, built and checked`}
           failure={failure}
           step={{ words: videoStepCount(job), timed: job.state !== "queued", idle: "Video" }}
           path={path}
@@ -342,7 +342,7 @@ function Backdrop({
   backdrop,
 }: {
   job: VideoJob;
-  stage: VideoTileStage;
+  stage: TileStage;
   live: { current: string | null; previous: string | null };
   backdrop: string | null;
 }) {
@@ -397,7 +397,7 @@ function Backdrop({
 }
 
 function RowWords({ job }: { job: VideoJob }) {
-  const stage = videoTileStage(job);
+  const stage = tileStage(job);
   return (
     <JobRowWords
       job={job}

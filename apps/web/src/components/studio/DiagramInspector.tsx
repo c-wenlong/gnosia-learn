@@ -11,7 +11,8 @@ import { Glyph } from "@/components/ui/Glyph";
 import { buttonClasses, cx } from "@/components/ui/classes";
 import { jobStateLabel } from "@/lib/studio-job-state";
 import { canvasHref, panelHref, thumbnailHref } from "@/lib/studio-url";
-import { displayTitle, formatBytes, freshness, type Diagram, type DiagramListing } from "@/lib/studio-grid";
+import { formatBytes } from "@gnosia/tutor/asset-meta";
+import { displayTitle, freshness, type Diagram, type DiagramListing } from "@/lib/studio-grid";
 
 /**
  * The right panel: 320px, its own scroll, and the properties of one thing.

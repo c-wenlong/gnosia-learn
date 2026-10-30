@@ -17,7 +17,6 @@ import {
   landedTurn,
   refusalNoted,
   sendRefusal,
-  sentence,
   startOverStep,
   turnIndicator,
   turnKey,
@@ -304,12 +303,6 @@ describe("sendRefusal", () => {
     expect(sendRefusal(0, slow)).toMatch(/may have gone through.*will not send it twice/);
     expect(sendRefusal(0, slow, "change")).toMatch(/the change may still land/);
     expect(say(400, null, "text is over 8000 characters")).toBe("Text is over 8000 characters.");
-  });
-
-  it("makes a sentence of the runner's words", () => {
-    expect(sentence("held")).toBe("Held.");
-    expect(sentence("Done!")).toBe("Done!");
-    expect(sentence("  ")).toBe("");
   });
 });
 

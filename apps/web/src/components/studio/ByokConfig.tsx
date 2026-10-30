@@ -589,7 +589,8 @@ export function ByokConfig({
             </Button>
             {note !== null && <p className="text-[12px] leading-4 text-text3">{note}</p>}
             {/* Asks first, as every other press that cannot be undone here
-                does: the key, the tiers and the pick all leave at once. */}
+                does: the tiers and the pick leave at once. The key stays
+                saved in Settings (D94), which the question says. */}
             {manageKeys && selected !== null && (
               // Keyed by provider: a question opened for one key is put
               // away when the pick moves, so it never removes another.
