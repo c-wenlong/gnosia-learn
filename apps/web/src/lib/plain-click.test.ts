@@ -1,7 +1,3 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join, relative } from "node:path";
-import { fileURLToPath } from "node:url";
-
 import { describe, expect, it } from "vitest";
 
 import { isPlainClick } from "./plain-click";
@@ -19,19 +15,4 @@ describe("isPlainClick", () => {
     expect(click({ button: 2 })).toBe(false);
   });
 
-  it("is the one test of a modified click: no component spells it out", () => {
-    const src = join(dirname(fileURLToPath(import.meta.url)), "..");
-    const offenders: string[] = [];
-    const walk = (dir: string) => {
-      for (const name of readdirSync(dir)) {
-        const path = join(dir, name);
-        if (statSync(path).isDirectory()) walk(path);
-        else if (/\.tsx?$/.test(name) && !/\.test\.tsx?$/.test(name)) {
-          if (/\.button\s*!==\s*0\s*\|\|[^;]*\.metaKey/.test(readFileSync(path, "utf8"))) offenders.push(relative(src, path));
-        }
-      }
-    };
-    walk(src);
-    expect(offenders).toEqual([]);
-  });
 });

@@ -1,7 +1,3 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join, relative } from "node:path";
-import { fileURLToPath } from "node:url";
-
 import { describe, expect, it } from "vitest";
 
 import {
@@ -51,25 +47,6 @@ describe("composerKey takes a native event whole", () => {
     expect(composerKey({ ...native, metaKey: false, altKey: true })).toBe("newline");
   });
 
-  it("is the one place the IME is asked about: no component tests isComposing or 229 itself", () => {
-    const src = join(dirname(fileURLToPath(import.meta.url)), "../..");
-    const offenders: string[] = [];
-    const walk = (dir: string) => {
-      for (const name of readdirSync(dir)) {
-        const path = join(dir, name);
-        if (statSync(path).isDirectory()) walk(path);
-        else if (/\.tsx?$/.test(name) && !/\.test\.tsx?$/.test(name)) {
-          const rel = relative(src, path);
-          if (rel === join("components", "ui", "composer-keys.ts")) continue;
-          const text = readFileSync(path, "utf8");
-          // The event's flag, not Lexical's `editor.isComposing()`.
-          if (/\.isComposing\b(?!\()|keyCode\s*===\s*229/.test(text)) offenders.push(rel);
-        }
-      }
-    };
-    walk(src);
-    expect(offenders).toEqual([]);
-  });
 });
 
 describe("modEnterTarget", () => {

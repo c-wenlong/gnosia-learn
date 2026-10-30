@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { createElement, type ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -15,6 +16,17 @@ import { Notice } from "./Notice";
 type BannerProps = ComponentProps<typeof Banner>;
 const html = (element: ReturnType<typeof createElement>) => renderToStaticMarkup(element);
 
+/** The markup parsed, so a test asks for a heading, a role or an attribute rather than a class string. */
+function dom(markup: string): HTMLElement {
+  const host = document.createElement("div");
+  host.innerHTML = markup;
+  return host;
+}
+
+const tokens = (element: Element | null) => (element?.getAttribute("class") ?? "").split(" ");
+/** Whether `a` comes before `b` in the document. */
+const before = (a: Node, b: Node) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+
 describe("Notice", () => {
   it("is a card with a heading, its words, the command to copy and its actions", () => {
     const out = html(
@@ -29,27 +41,35 @@ describe("Notice", () => {
         "Nothing has been lost.",
       ),
     );
-    expect(out).toMatch(/^<section role="alert" class="[^"]*rounded-\[20px\][^"]*p-5/);
-    expect(out).toContain(`<h2 class="${CARD_TITLE}">The catalog is unreachable</h2>`);
-    expect(out).toContain("Nothing has been lost.");
-    expect(out).toMatch(/<code class="[^"]*select-all[^"]*">npm run catalog -- status<\/code>/);
-    expect(out.indexOf("<code")).toBeLessThan(out.indexOf("Try again"));
+    const notice = dom(out).firstElementChild!;
+    expect(notice.tagName).toBe("SECTION");
+    expect(notice.getAttribute("role")).toBe("alert");
+    const heading = notice.querySelector("h2")!;
+    expect(heading.textContent).toBe("The catalog is unreachable");
+    expect(tokens(heading)).toEqual(CARD_TITLE.split(" "));
+    expect(notice.textContent).toContain("Nothing has been lost.");
+    const code = notice.querySelector("code")!;
+    expect(code.textContent).toBe("npm run catalog -- status");
+    // The command selects whole with one click.
+    expect(tokens(code)).toContain("select-all");
+    expect(before(code, notice.querySelector("button")!)).toBe(true);
   });
 
   it("prints several commands one block each, keeping a command's own line breaks", () => {
-    const out = html(createElement(Notice, { title: "t", commands: ["one", "two \\\n  --flag"] }));
-    expect(out.match(/<code/g)).toHaveLength(2);
-    expect(out).toContain("whitespace-pre");
-    expect(out).toContain("two \\\n  --flag");
+    const codes = dom(html(createElement(Notice, { title: "t", commands: ["one", "two \\\n  --flag"] }))).querySelectorAll("code");
+    expect([...codes].map((code) => code.textContent)).toEqual(["one", "two \\\n  --flag"]);
+    expect(tokens(codes[1]!)).toContain("whitespace-pre");
   });
 
   it("draws the dense form tight, at the level asked, and leaves out what it was not given", () => {
-    const out = html(createElement(Notice, { title: "Blocked", dense: true, level: 1 }));
-    expect(out).toContain("p-3.5");
-    expect(out).toContain('<h1 class="text-[14px] leading-5 font-bold text-text">Blocked</h1>');
-    expect(out).not.toContain("<code");
-    expect(out).not.toContain("role=");
-    expect(out).not.toContain("max-w-prose");
+    const notice = dom(html(createElement(Notice, { title: "Blocked", dense: true, level: 1 }))).firstElementChild!;
+    expect(tokens(notice)).toContain("p-3.5");
+    expect(notice.querySelector("h1")?.textContent).toBe("Blocked");
+    expect(notice.querySelector("h2")).toBeNull();
+    expect(notice.querySelector("code")).toBeNull();
+    expect(notice.querySelector("[role]")).toBeNull();
+    expect(notice.hasAttribute("role")).toBe(false);
+    expect(notice.querySelector(".max-w-prose")).toBeNull();
   });
 });
 
@@ -66,9 +86,11 @@ describe("Callout", () => {
   });
 
   it("says a verdict in --text, and a title's detail in --text2, with its actions under the words", () => {
-    const plain = html(createElement(Callout, { role: "alert" }, "The tutor could not answer."));
-    expect(plain).toMatch(/^<div role="alert" class="[^"]*bg-warn-tint/);
-    expect(plain).toContain('<div class="min-w-0 break-words">The tutor could not answer.</div>');
+    const plain = dom(html(createElement(Callout, { role: "alert" }, "The tutor could not answer."))).firstElementChild!;
+    expect(plain.getAttribute("role")).toBe("alert");
+    expect(tokens(plain)).toContain("bg-warn-tint");
+    const verdict = [...plain.querySelectorAll("div")].find((div) => div.textContent === "The tutor could not answer.")!;
+    expect(tokens(verdict)).not.toContain("text-text2");
 
     const titled = html(
       createElement(
@@ -77,9 +99,13 @@ describe("Callout", () => {
         "The model is not available.",
       ),
     );
-    expect(titled).toContain('<p class="text-[14px] font-semibold text-text">No question for this step</p>');
-    expect(titled).toContain('<div class="min-w-0 break-words text-text2">The model is not available.</div>');
-    expect(titled.indexOf("The model is not available.")).toBeLessThan(titled.indexOf("Ask again"));
+    const callout = dom(titled);
+    const title = [...callout.querySelectorAll("p")].find((p) => p.textContent === "No question for this step")!;
+    expect(tokens(title)).toContain("text-text");
+    const detail = [...callout.querySelectorAll("div")].find((div) => div.textContent === "The model is not available.")!;
+    expect(tokens(detail)).toContain("text-text2");
+    expect(before(title, detail)).toBe(true);
+    expect(before(detail, callout.querySelector("button")!)).toBe(true);
   });
 
   it("draws no empty body when it has nothing but a title", () => {
@@ -90,17 +116,21 @@ describe("Callout", () => {
 
 describe("Banner", () => {
   it("is a status strip with a dot in its tone and no dismiss unless asked", () => {
-    const out = html(createElement(Banner, null, "Not connected to the catalog."));
-    expect(out).toMatch(/^<div role="status" class="[^"]*border-b-2[^"]*border-warn bg-warn-tint/);
-    expect(out).toContain('<span aria-hidden="true" class="mt-1.5 size-2 shrink-0 rounded-full bg-warn-lip"></span>');
-    expect(out).not.toContain("Dismiss");
+    const banner = dom(html(createElement(Banner, null, "Not connected to the catalog."))).firstElementChild!;
+    expect(banner.getAttribute("role")).toBe("status");
+    expect(tokens(banner)).toEqual(expect.arrayContaining(["border-warn", "bg-warn-tint"]));
+    const dot = banner.querySelector('[aria-hidden="true"]')!;
+    expect(dot.textContent).toBe("");
+    expect(tokens(dot)).toEqual(expect.arrayContaining(["rounded-full", "bg-warn-lip"]));
+    expect(banner.querySelector("a, button")).toBeNull();
   });
 
   it("dismisses through a link that keeps the scroll, for a message carried in the URL", () => {
-    const out = html(createElement(Banner, { tone: "danger", dismissHref: "/studio" } as BannerProps, "Accept: refused"));
-    expect(out).toContain('href="/studio"');
-    expect(out).toContain(">Dismiss</a>");
-    expect(out).toContain("bg-danger/8");
+    const banner = dom(html(createElement(Banner, { tone: "danger", dismissHref: "/studio" } as BannerProps, "Accept: refused"))).firstElementChild!;
+    const dismiss = banner.querySelector("a")!;
+    expect(dismiss.textContent).toBe("Dismiss");
+    expect(dismiss.getAttribute("href")).toBe("/studio");
+    expect(tokens(banner)).toContain("bg-danger/8");
   });
 
   it("dismisses through a button, named for what goes, and can leave the announcing to its caller", () => {
@@ -111,8 +141,12 @@ describe("Banner", () => {
         "Not saved.",
       ),
     );
-    expect(out).not.toContain("role=");
-    expect(out).toMatch(/<button type="button" class="[^"]*" aria-label="Dismiss this message">Dismiss<\/button>/);
+    const banner = dom(out).firstElementChild!;
+    expect(banner.hasAttribute("role")).toBe(false);
+    const dismiss = banner.querySelector("button")!;
+    expect(dismiss.textContent).toBe("Dismiss");
+    expect(dismiss.getAttribute("aria-label")).toBe("Dismiss this message");
+    expect(dismiss.getAttribute("type")).toBe("button");
   });
 
   it("takes a wider gutter from its caller", () => {

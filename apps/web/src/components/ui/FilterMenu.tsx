@@ -44,7 +44,7 @@ export const LIST_PANEL = cx(MENU_PANEL, "w-max max-w-[min(22rem,calc(100vw-2rem
  * never filled, and its list is at least as wide as the field. `Select` is
  * that face with a form's props. Every dropdown in the app is one of the two, never a
  * native `<select>`, whose list the platform draws in its own style
- * (`select-kit.test.ts`).
+ * (the lint rule `gnosia/kit-select`).
  *
  * A client component (it has open state and listeners), unlike the rest of
  * the kit. Its option model is the React-free `./filter-menu`.

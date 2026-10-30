@@ -1,17 +1,32 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+
+import { Card } from "./Card";
 
 import {
   badgeClasses,
   buttonClasses,
+  CARD_TITLE,
   cardClasses,
   chipClasses,
+  CLOSE_TITLE,
+  COLUMN_TITLE,
+  CONCEPT_TITLE,
   cx,
+  FIELD_TEXT,
   FOCUS,
   iconButtonClasses,
   inputClasses,
   linkClasses,
+  NOTE,
+  PAGE_TITLE,
+  PANEL_TITLE,
+  SECTION_TITLE,
   textareaClasses,
 } from "./classes";
+
+const classesOf = (html: string) => (html.match(/class="([^"]*)"/)?.[1] ?? "").split(" ");
 
 /** The hover and press tokens of a class string, each of which must be scoped to an enabled control. */
 const reactive = (c: string) => c.split(" ").filter((t) => /(^|:)(hover|active):/.test(t));
@@ -299,5 +314,63 @@ describe("inputClasses and cardClasses", () => {
   it("pads a card 20px, or 14 when tight", () => {
     expect(cardClasses()).toContain("p-5");
     expect(cardClasses({ tight: true })).toContain("p-3.5");
+  });
+});
+
+/**
+ * The type roles (IMPLEMENTATION.md, "Type roles"). The lint rules
+ * `gnosia/h1-role` and `gnosia/type-size` hold the pages to them; this holds
+ * each role to one whole class string.
+ */
+describe("the type roles", () => {
+  it("keeps every role a whole class string with one size", () => {
+    for (const role of [PAGE_TITLE, CONCEPT_TITLE, CLOSE_TITLE, COLUMN_TITLE, SECTION_TITLE, CARD_TITLE, PANEL_TITLE, NOTE]) {
+      expect(role).toMatch(/\bfont-(sans|display)\b/);
+      expect(role).toMatch(/\bleading-/);
+      expect(role).toMatch(/\bfont-(normal|semibold|bold)\b/);
+      // One base size; a role may step up at a breakpoint, never down.
+      expect(role.split(" ").filter((c) => /^text-\[\d+px\]$/.test(c))).toHaveLength(1);
+    }
+  });
+});
+
+/**
+ * A form field's text is 16px on anything touched: iOS Safari zooms the page
+ * when it focuses a field under 16px and leaves it zoomed. A phone held in
+ * landscape is wider than 768px, so the pointer, not the width, says
+ * "desktop". The lint rule `gnosia/field-text` keeps a field from setting a
+ * smaller size of its own.
+ */
+describe("FIELD_TEXT", () => {
+  for (const [name, classes] of Object.entries(FIELD_TEXT)) {
+    it(`${name} is 16px with no variant, and smaller only for a fine pointer from md`, () => {
+      const tokens = classes.split(/\s+/);
+      expect(tokens.filter((t) => !t.includes(":"))).toEqual(["text-base"]);
+      for (const t of tokens.filter((t) => t.includes(":"))) expect(t.startsWith("md:pointer-fine:text-")).toBe(true);
+    });
+  }
+});
+
+describe("cardClasses", () => {
+  it("is the shell alone when flush: no padding, no gap, its children clipped", () => {
+    const classes = cardClasses({ flush: true }).split(" ");
+    expect(classes).toEqual(expect.arrayContaining(["overflow-hidden", "rounded-[20px]", "border-2", "border-border", "bg-surface"]));
+    expect(classes.filter((c) => /^(p[xytrblse]?|gap)-/.test(c))).toEqual([]);
+  });
+
+  it("takes the gap as an option, so there is only ever one gap class", () => {
+    // One gap class whichever way it is asked for: the option, or a
+    // `className` gap that `cx` keeps over the card's own.
+    expect(cardClasses({ gap: 2 }).split(" ").filter((c) => c.startsWith("gap-"))).toEqual(["gap-2"]);
+    expect(cardClasses({ gap: 4, tight: true }).split(" ").filter((c) => c.startsWith("gap-"))).toEqual(["gap-4"]);
+    expect(cardClasses({ flush: true, gap: 1.5 }).split(" ").filter((c) => c.startsWith("gap-"))).toEqual(["gap-1.5"]);
+    expect(cardClasses({ className: "gap-2" }).split(" ").filter((c) => c.startsWith("gap-"))).toEqual(["gap-2"]);
+  });
+
+  it("is what Card renders, flush included", () => {
+    const html = renderToStaticMarkup(createElement(Card, { flush: true, as: "div", "aria-label": "Graph" }, "x"));
+    expect(html.startsWith("<div")).toBe(true);
+    expect(classesOf(html)).toContain("overflow-hidden");
+    expect(classesOf(html)).not.toContain("p-5");
   });
 });

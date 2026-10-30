@@ -13,6 +13,7 @@ export default defineConfig({
       "scripts/**/*.test.mjs",
       "services/**/*.test.ts",
       "packages/**/*.test.ts",
+      "eslint-rules/**/*.test.mjs",
     ],
     // Test files run in parallel workers against one checkout, so a fixture a
     // suite writes into the tree is visible to every other suite while it is
@@ -38,7 +39,17 @@ export default defineConfig({
       // not the whole tree.
       // vitest 4 dropped coverage.all, so a file not matched here does not
       // show up at all. That is what we want.
-      include: ["apps/web/src/lib/**", "apps/web/src/data/**", "scripts/learn/**"],
+      include: [
+        "apps/web/src/lib/**",
+        "apps/web/src/data/**",
+        "scripts/learn/**",
+        // The tutor's logic moved out of apps/web/src/lib into this package
+        // (prompt, providers, the check block, the session core), so the gate
+        // follows it; content and blob are the libraries the app reads through.
+        "packages/tutor/src/**",
+        "packages/content/src/**",
+        "packages/blob/src/**",
+      ],
       // cli.mjs is the process entrypoint. cli.test.mjs exercises it by
       // spawning `node cli.mjs ...` with execFileSync, and v8 coverage only
       // sees the test runner's own process, so the file would read as 0%
@@ -50,12 +61,12 @@ export default defineConfig({
       // points under what the suite measures today, so a run goes red when
       // coverage drops rather than every time it fails to climb. Raise these
       // when the real number moves up.
-      // services/ and packages/ are deliberately absent. They were left out
-      // while the catalog's tests needed a running Postgres and skipped
-      // themselves without one, so the number swung with the environment; on
-      // SQLite they always run, and bringing them into scope is a decision of
-      // its own, with floors measured for it. The schema package is
-      // declarations, with nothing to execute.
+      // services/ is deliberately absent: it was left out while the catalog's
+      // tests needed a running Postgres and skipped themselves without one, so
+      // the number swung with the environment; on SQLite they always run, and
+      // bringing them into scope is a decision of its own, with floors
+      // measured for it. Of packages/, tutor, content and blob are in; the
+      // schema package is declarations, with nothing to execute.
       // Measured 2026-09-12: statements 58, branches 54, functions 51, lines 60.
       // Measured 2026-09-13 with Postgres up: statements 71, branches 64,
       // functions 64, lines 74. The floors deliberately do not move to meet
@@ -65,11 +76,15 @@ export default defineConfig({
       // without one, so the measured number moved with the environment even
       // though the code did not. The numbers below still clear such a run;
       // on SQLite those suites always run.
+      // Measured 2026-10-30, with packages/tutor, content and blob brought in
+      // and the source-grepping tests moved to ESLint: statements 91.0,
+      // branches 86.9, functions 89.7, lines 92.1 (packages/tutor/src alone
+      // 98, 92, 99, 99). Each floor sits three points under.
       thresholds: {
-        statements: 55,
-        branches: 50,
-        functions: 45,
-        lines: 55,
+        statements: 88,
+        branches: 84,
+        functions: 86,
+        lines: 89,
       },
     },
   },

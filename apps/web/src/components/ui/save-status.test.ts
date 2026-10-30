@@ -1,8 +1,4 @@
 // @vitest-environment jsdom
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join, relative } from "node:path";
-import { fileURLToPath } from "node:url";
-
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
@@ -128,38 +124,5 @@ describe("useSaveStatus", () => {
     await save.settle(() => fourth.resolve("Not saved."));
     await save.settle(() => third.resolve(null));
     expect(save.status()).toEqual({ kind: "error", message: "Not saved." });
-  });
-});
-
-/**
- * One mapper from a save's state to `LiveStatus`'s words and tone. The
- * Provider keys card still has its own (`textOf` and `tone`), and adopts
- * `SaveStatus` in its own change.
- *
- * Only files that draw a status line (`LiveStatus`, or a `FormRow`'s
- * `status`) are read, and a mapper is a state's `kind` tied to a tone, as a
- * ternary or as a `case` returning one, whatever the states are called.
- */
-describe("status mappers", () => {
-  it("leaves no second hand-written mapper to LiveStatus's tones", () => {
-    const src = join(dirname(fileURLToPath(import.meta.url)), "../..");
-    const allowed = new Set(["components/ui/save-status.ts", "components/settings/Providers.tsx", "components/settings/ModelSelection.tsx"]);
-    const drawsStatus = /\bLiveStatus\b|\bFormRow\b/;
-    const mapper = /\.kind\b[^;]*?"(?:ok|danger)"|case "\w+":\s*return \{[^}]*\btone:/;
-    const offenders: string[] = [];
-    const walk = (dir: string) => {
-      for (const name of readdirSync(dir)) {
-        const path = join(dir, name);
-        if (statSync(path).isDirectory()) walk(path);
-        else if (/\.tsx?$/.test(name) && !/\.test\.tsx?$/.test(name)) {
-          const text = readFileSync(path, "utf8");
-          if (!drawsStatus.test(text) || !mapper.test(text)) continue;
-          const at = relative(src, path);
-          if (!allowed.has(at)) offenders.push(at);
-        }
-      }
-    };
-    walk(src);
-    expect(offenders).toEqual([]);
   });
 });

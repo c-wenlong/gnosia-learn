@@ -108,6 +108,7 @@ there.
 | `packages/content/` | The parsers the catalog imports an export's `content/` with, and the reader seam (`ContentSource`, `fileSource`, `selectSource`) the app and the studio read through; the app composes it with no file reader |
 | `packages/schema/` | The Drizzle table definitions: the single source of the catalog's row shapes |
 | `packages/blob/` | The blob store: one interface for where binaries live, and the `fs` adapter under `~/.gnosia/blobs` ([README](packages/blob/README.md)) |
+| `eslint-rules/` | The web app's house rules as ESLint rules (`gnosia/*`: one kit piece per control, class lists through `cx`, sentence case, theme tokens, the studio's gate), each with the files it allows in `eslint.config.mjs` and its cases in `gnosia.test.mjs`. A rule about source text goes here, not into a test that walks the tree |
 | `services/catalog/` | Migrations, the database connection and the `catalog` CLI ([SCHEMA.md](services/catalog/SCHEMA.md)) |
 | `scripts/learn/` | The `learn` pipeline's entry point and its pure maths modules; the command itself is `services/catalog/src/learn/` |
 | `tools/manimkc/` | Submodule for narrated animation videos, with its own repo and `AGENTS.md` |
