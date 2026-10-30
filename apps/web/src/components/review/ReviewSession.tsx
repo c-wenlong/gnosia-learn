@@ -256,7 +256,7 @@ export function ReviewSession({
       <Frame percent={0} label="Review" exit={exit} stepKey="empty" columnRef={columnRef}>
         <Closing
           title="Reviews are unavailable"
-          lead="The database could not be reached, so there is no queue to show and nothing could be graded. Start Postgres and reload."
+          lead="The catalog could not be read, so there is no queue to show and nothing could be graded. Check it with npm run catalog -- status, then reload."
         />
       </Frame>
     );

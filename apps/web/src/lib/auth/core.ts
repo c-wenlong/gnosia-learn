@@ -64,26 +64,65 @@ function toBase64Url(bytes: Uint8Array): string {
 }
 
 /**
- * Byte-wise comparison whose duration does not depend on where the inputs
- * differ. Web Crypto has no `timingSafeEqual`, so this is the loop the Node
- * one runs, over the UTF-8 bytes of both strings. Unequal lengths still walk
- * the longer input so the length is not what leaks.
+ * Byte-wise comparison of two values of the same, public length (a session
+ * signature against the one it should be). Its time does not depend on where
+ * they differ. Unequal lengths are simply unequal: this is not for secrets
+ * whose length is itself worth hiding, which go through `secretsEqual`.
  */
 export function constantTimeEqual(a: string, b: string): boolean {
   const x = encoder.encode(a);
   const y = encoder.encode(b);
-  const length = Math.max(x.length, y.length);
-  let diff = x.length ^ y.length;
-  for (let i = 0; i < length; i += 1) {
-    diff |= (x[i] ?? 0) ^ (y[i] ?? 0);
-  }
+  return equalBytes(x, y);
+}
+
+function equalBytes(x: Uint8Array, y: Uint8Array): boolean {
+  if (x.length !== y.length) return false;
+  let diff = 0;
+  for (let i = 0; i < x.length; i += 1) diff |= x[i] ^ y[i];
   return diff === 0;
 }
 
+/**
+ * A key made once per process, only ever used to blind the two sides of a
+ * `secretsEqual`. Nobody outside the process knows it, so nobody can work out
+ * a digest ahead of time.
+ */
+let blindingKey: Promise<CryptoKey> | null = null;
+
+function blinding(): Promise<CryptoKey> {
+  blindingKey ??= crypto.subtle.importKey(
+    "raw",
+    crypto.getRandomValues(new Uint8Array(32)),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  return blindingKey;
+}
+
+/**
+ * Whether a typed secret equals the real one, without its length or its
+ * contents showing in the time taken.
+ *
+ * A byte loop over the raw strings walks `max(len(input), len(expected))`, so
+ * an attacker growing the input sees the time stay flat until it passes the
+ * real length: the length leaks. Both sides go through HMAC-SHA256 under a
+ * per-process key first, and the loop compares two 32-byte digests, so every
+ * comparison does the same work whatever was typed.
+ */
+export async function secretsEqual(input: string, expected: string): Promise<boolean> {
+  const key = await blinding();
+  const [x, y] = await Promise.all([
+    crypto.subtle.sign("HMAC", key, encoder.encode(input)),
+    crypto.subtle.sign("HMAC", key, encoder.encode(expected)),
+  ]);
+  return equalBytes(new Uint8Array(x), new Uint8Array(y));
+}
+
 /** Whether the typed password is the owner's. Constant-time; never trims. */
-export function passwordMatches(input: string, expected: string): boolean {
+export async function passwordMatches(input: string, expected: string): Promise<boolean> {
   if (expected.length === 0) return false;
-  return constantTimeEqual(input, expected);
+  return secretsEqual(input, expected);
 }
 
 async function signature(secret: string, issuedAt: number): Promise<string> {
@@ -170,6 +209,43 @@ export function originFromHeaders(headers: Headers, fallback: string): string {
     return new URL(`${proto}://${host}`).origin;
   } catch {
     return fallback;
+  }
+}
+
+/**
+ * Whether a request came from a page on this site, or from no page at all.
+ *
+ * The one same-origin rule every guarded route uses: the auth routes, the
+ * learner and agent routes (`enforceSameOrigin` in `@/lib/agent/guard`) and
+ * the studio proxy. In order:
+ *
+ * 1. `Sec-Fetch-Site`, which a browser always sends and a page cannot forge:
+ *    anything but `same-origin` or `none` (a typed address) is refused. A
+ *    sibling subdomain is `same-site`, and is refused too.
+ * 2. `Origin`, when present, must name the host the browser addressed
+ *    (`originFromHeaders`: `Host`, never `X-Forwarded-Host`, which a client
+ *    can send to a directly exposed `next start`). The literal `null` a
+ *    sandboxed frame, a `data:` page or a cross-site redirect sends is refused.
+ *    The scheme is left out: behind a proxy that terminated TLS the page is
+ *    https and the hop to Node is http.
+ * 3. With no `Origin`, the request passes when the browser said
+ *    `same-origin` (a same-origin GET carries no `Origin`), or when the caller
+ *    opts in with `allowMissing` for clients that send neither header (curl,
+ *    a test). Without the opt-in, a request with neither is refused.
+ *
+ * None of this stops a program, which can send any header it likes. It stops
+ * a page on another site from acting with this browser's cookie.
+ */
+export function requestIsSameOrigin(request: Request, options: { allowMissing?: boolean } = {}): boolean {
+  const site = request.headers.get("sec-fetch-site");
+  if (site !== null && site !== "same-origin" && site !== "none") return false;
+  const origin = request.headers.get("origin");
+  if (origin === null || origin === "") return site === "same-origin" || options.allowMissing === true;
+  if (origin === "null") return false;
+  try {
+    return new URL(origin).host === new URL(originFromHeaders(request.headers, request.url)).host;
+  } catch {
+    return false;
   }
 }
 

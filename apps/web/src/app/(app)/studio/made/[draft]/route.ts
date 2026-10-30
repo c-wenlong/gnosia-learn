@@ -23,12 +23,12 @@ import { requireStudio } from "@/lib/studio";
  * reached is a 200 with `reachable: false` and no items, so the panel draws
  * the conversation without its cards rather than an error.
  */
-export async function GET(req: Request, { params }: { params: Promise<{ draft: string }> }): Promise<NextResponse> {
+export async function GET(_req: Request, { params }: { params: Promise<{ draft: string }> }): Promise<NextResponse> {
   requireStudio();
-  const limited = enforceRateLimit(req, "studio:made", LEARNER_RATE_LIMIT);
-  if (limited !== null) return limited;
   const owner = await requestOwner();
   if (owner instanceof NextResponse) return owner;
+  const limited = enforceRateLimit(owner, "studio:made", LEARNER_RATE_LIMIT);
+  if (limited !== null) return limited;
   const { draft } = await params;
   if (!isDraftId(draft)) {
     return NextResponse.json({ ok: false, error: "Not a conversation id.", code: "BAD_REQUEST" }, { status: 400 });

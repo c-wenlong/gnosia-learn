@@ -4,7 +4,7 @@ import {
   LOCAL_LEARNER_ID,
   type EventType,
 } from "@gnosia/schema";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray, or } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
 import { ensureLearner } from "./learner";
@@ -145,6 +145,30 @@ export async function readEvents(
     // observation and its propagation in the same millisecond), and replay has
     // to be deterministic. `id` is a generated identity, so it is insertion
     // order, which is the tie-break the file's line order used to provide.
+    .orderBy(asc(event.at), asc(event.id));
+  return rows.map(toRecord);
+}
+
+/**
+ * The observations of `concepts`, and every `void` (which can retract any of
+ * them), oldest first: what a page reading a few concepts' history needs,
+ * without the learner's whole event log, which only grows.
+ */
+export async function readConceptObservations(
+  db: CatalogDatabase,
+  learnerId: string,
+  concepts: readonly string[],
+): Promise<EventRecord[]> {
+  if (concepts.length === 0) return [];
+  const rows = await db
+    .select()
+    .from(event)
+    .where(
+      and(
+        eq(event.learnerId, learnerId),
+        or(eq(event.type, "void"), and(eq(event.type, "observation"), inArray(event.conceptSlug, [...concepts]))),
+      ),
+    )
     .orderBy(asc(event.at), asc(event.id));
   return rows.map(toRecord);
 }

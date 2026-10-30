@@ -34,7 +34,10 @@ let package = Package(
         .testTarget(
             name: "GnosiaTests",
             dependencies: ["Gnosia", "CSQLite3"],
-            path: "Tests/GnosiaTests"
+            path: "Tests/GnosiaTests",
+            // JSON the TypeScript side writes and both suites read by path
+            // (#filePath), not a bundle resource.
+            exclude: ["Fixtures"]
         ),
     ]
 )

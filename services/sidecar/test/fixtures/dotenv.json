@@ -1,0 +1,18 @@
+{
+  "text": "# a comment\nA=plain\nB=\"quoted\"\nC='single'\nD=\"quoted with # hash\" # comment\nE=unquoted # comment\nF = spaced \nAUTH_SECRET=\"0123456789abcdef0123456789abcdef\" # local\nH=a=b\nI=\nexport J=exported\nK=\"a\\nb\"\nL=x#y\nM=crlf\r\n",
+  "expected": {
+    "A": "plain",
+    "AUTH_SECRET": "0123456789abcdef0123456789abcdef",
+    "B": "quoted",
+    "C": "single",
+    "D": "quoted with # hash",
+    "E": "unquoted",
+    "F": "spaced",
+    "H": "a=b",
+    "I": "",
+    "J": "exported",
+    "K": "a\nb",
+    "L": "x",
+    "M": "crlf"
+  }
+}

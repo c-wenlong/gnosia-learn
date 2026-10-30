@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useMemo, useState } from "react";
 
 import { cx } from "@/components/ui/classes";
 import { MasteryDot } from "@/components/ui/MasteryDot";
@@ -26,8 +26,11 @@ export function useLegendPreview() {
   const [pointer, setPointer] = useState<LegendGroup | null>(null);
   const [focus, setFocus] = useState<LegendGroup | null>(null);
   const [last, setLast] = useState<"pointer" | "focus">("pointer");
-  return {
-    group: last === "focus" ? (focus ?? pointer) : (pointer ?? focus),
+  // One object while the preview stands still, so a chip row that is memoised
+  // is not redrawn by every frame of a drag in the picture beside it.
+  const group = last === "focus" ? (focus ?? pointer) : (pointer ?? focus);
+  return useMemo(() => ({
+    group,
     enter: (group: LegendGroup) => {
       setPointer(group);
       setLast("pointer");
@@ -42,7 +45,7 @@ export function useLegendPreview() {
       setPointer(null);
       setFocus(null);
     },
-  };
+  }), [group]);
 }
 
 export type LegendPreview = ReturnType<typeof useLegendPreview>;
@@ -56,7 +59,7 @@ function ReadyRing() {
   );
 }
 
-export function LegendChips({
+export const LegendChips = memo(function LegendChips({
   counts,
   filter,
   preview,
@@ -108,4 +111,4 @@ export function LegendChips({
       })}
     </div>
   );
-}
+});

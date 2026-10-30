@@ -17,6 +17,7 @@ import {
   emptyReviews,
   importLegacyState,
   listAssets,
+  readConceptObservations,
   readEvents,
   readLearnerSnapshot,
   readModel,
@@ -300,6 +301,17 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
         grade: 3,
         propagated: [{ concept: "beta", hops: 1 }],
       });
+    });
+
+    it("reads a few concepts' observations and every void, not the whole log", async () => {
+      await appendEvent(scratch.db, { at: "2026-08-01T00:00:00.000Z", type: "observation", concept: "alpha", correct: true });
+      await appendEvent(scratch.db, { at: "2026-08-01T00:01:00.000Z", type: "observation", concept: "beta", correct: false });
+      await appendEvent(scratch.db, { at: "2026-08-01T00:02:00.000Z", type: "void", session: "bad", reason: "x" });
+      await appendEvent(scratch.db, { at: "2026-08-01T00:03:00.000Z", type: "review", concept: "alpha", grade: 3 });
+      const read = await readConceptObservations(scratch.db, "local", ["alpha"]);
+      expect(read.map((e) => `${e.type}:${e.concept ?? e.session}`)).toEqual(["observation:alpha", "void:bad"]);
+      expect(await readConceptObservations(scratch.db, "local", [])).toEqual([]);
+      expect(await readConceptObservations(scratch.db, "someone-else", ["alpha"])).toEqual([]);
     });
 
     it("orders by instant then by insertion", async () => {

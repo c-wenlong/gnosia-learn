@@ -103,6 +103,28 @@ export function conceptsForTopic(
 }
 
 /**
+ * Each curriculum item's concepts, in one pass over the knowledge base, so a
+ * page resolving every item of every course hands `conceptsForTopic` only the
+ * item's own concepts rather than scanning all of them per item.
+ */
+export function conceptsByItem<C extends Pick<KbConceptLike, "topics">>(concepts: readonly C[]): ReadonlyMap<string, C[]> {
+  const byItem = new Map<string, C[]>();
+  for (const c of concepts) {
+    for (const item of new Set(c.topics)) {
+      const list = byItem.get(item);
+      if (list === undefined) byItem.set(item, [c]);
+      else list.push(c);
+    }
+  }
+  return byItem;
+}
+
+/** A share of done as a whole percent, 0 when there is nothing to do: one rounding for the path and the cards. */
+export function percentOf(done: number, total: number): number {
+  return total === 0 ? 0 : Math.round((done / total) * 100);
+}
+
+/**
  * A topic's bucket, p(L) and next concept, or null when no concept is mapped.
  *
  * - **Bucket.** Mastered only when every mapped concept is; untouched only
@@ -171,8 +193,9 @@ export function itemStanding(
 ): ItemStanding {
   const mastered: string[] = [];
   const withConcepts: string[] = [];
+  const byItem = conceptsByItem(concepts);
   for (const id of itemIds) {
-    const mastery = resolveTopicMastery(conceptsForTopic(concepts, id));
+    const mastery = resolveTopicMastery(conceptsForTopic(byItem.get(id) ?? [], id));
     if (mastery === null) continue;
     withConcepts.push(id);
     if (mastery.bucket === "mastered") mastered.push(id);
@@ -274,7 +297,7 @@ export function pathStatus(
     active,
     doneCount,
     total,
-    percent: total === 0 ? 0 : Math.round((doneCount / total) * 100),
+    percent: percentOf(doneCount, total),
     conceptBacked: statuses.length > 0 && statuses.every((s) => s.total === 0 || s.conceptBacked),
   };
 }

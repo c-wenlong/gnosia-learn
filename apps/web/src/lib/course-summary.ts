@@ -1,5 +1,5 @@
 import type { FilterOption } from "@/components/ui/filter-menu";
-import { EMPTY_STANDING, itemDoneWith, type ItemStanding } from "@/lib/course-path";
+import { EMPTY_STANDING, itemDoneWith, percentOf, type ItemStanding } from "@/lib/course-path";
 import type { Course, TagMeta } from "@/lib/types";
 
 /**
@@ -95,6 +95,13 @@ export interface CourseStatus {
   label: string;
 }
 
+/**
+ * The card's standing: the path's rule (`itemDoneWith`) over the summary's
+ * topics in course order. Its `next` is the first topic not done, which is
+ * always `pathStatus`'s `active`: every topic before it is done, so the
+ * module holding it cannot be locked (`isLocked` needs a previous module
+ * with none done). `course-summary.test.ts` holds the two together.
+ */
 export function courseStatus(
   summary: CourseSummary,
   completed: Readonly<Record<string, true>>,
@@ -104,7 +111,7 @@ export function courseStatus(
   const total = summary.topics.length;
   const done = summary.topics.filter((t) => isDone(t.id)).length;
   const next = summary.topics.find((t) => !isDone(t.id)) ?? null;
-  const percent = total === 0 ? 0 : Math.round((done / total) * 100);
+  const percent = percentOf(done, total);
   let label: string;
   if (total > 0 && next === null) label = "Completed";
   else if (done === 0) label = "Not started";

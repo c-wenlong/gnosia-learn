@@ -7,6 +7,8 @@ import {
   isPublicPath,
   originFromHeaders,
   passwordMatches,
+  requestIsSameOrigin,
+  secretsEqual,
   readAuthConfig,
   safeNextPath,
   SESSION_TTL_SECONDS,
@@ -54,22 +56,60 @@ describe("signSession / verifySession", () => {
   });
 });
 
-describe("passwordMatches / constantTimeEqual", () => {
-  it("matches only the exact string", () => {
-    expect(passwordMatches("correct horse", "correct horse")).toBe(true);
-    expect(passwordMatches("correct horse ", "correct horse")).toBe(false);
-    expect(passwordMatches("Correct horse", "correct horse")).toBe(false);
-    expect(passwordMatches("", "correct horse")).toBe(false);
+describe("passwordMatches / secretsEqual / constantTimeEqual", () => {
+  it("matches only the exact string", async () => {
+    await expect(passwordMatches("correct horse", "correct horse")).resolves.toBe(true);
+    await expect(passwordMatches("correct horse ", "correct horse")).resolves.toBe(false);
+    await expect(passwordMatches("Correct horse", "correct horse")).resolves.toBe(false);
+    await expect(passwordMatches("", "correct horse")).resolves.toBe(false);
+    await expect(passwordMatches("correct horsf", "correct horse")).resolves.toBe(false);
   });
 
-  it("never matches an empty expected password", () => {
-    expect(passwordMatches("", "")).toBe(false);
+  it("never matches an empty expected password", async () => {
+    await expect(passwordMatches("", "")).resolves.toBe(false);
     expect(constantTimeEqual("", "")).toBe(true);
   });
 
-  it("compares by bytes, so multibyte text works", () => {
+  it("compares by bytes, so multibyte text works", async () => {
     expect(constantTimeEqual("γνῶσις", "γνῶσις")).toBe(true);
     expect(constantTimeEqual("γνῶσις", "γνῶσιs")).toBe(false);
+    await expect(secretsEqual("γνῶσις", "γνῶσις")).resolves.toBe(true);
+    await expect(secretsEqual("γνῶσις", "γνῶσιs")).resolves.toBe(false);
+  });
+
+  it("treats a prefix or an extension of the secret as wrong", async () => {
+    await expect(secretsEqual("launch", "launch-secret")).resolves.toBe(false);
+    await expect(secretsEqual("launch-secret-x", "launch-secret")).resolves.toBe(false);
+    expect(constantTimeEqual("abc", "abcd")).toBe(false);
+  });
+});
+
+describe("requestIsSameOrigin", () => {
+  const at = (headers: Record<string, string>) =>
+    new Request("http://localhost:3000/api/x", { method: "POST", headers: { host: "gnosia.example", ...headers } });
+
+  it("takes this site, by Sec-Fetch-Site or by an Origin naming the host the browser addressed", () => {
+    expect(requestIsSameOrigin(at({ "sec-fetch-site": "same-origin" }))).toBe(true);
+    expect(requestIsSameOrigin(at({ origin: "https://gnosia.example" }))).toBe(true);
+    expect(requestIsSameOrigin(at({ origin: "http://gnosia.example", "sec-fetch-site": "same-origin" }))).toBe(true);
+  });
+
+  it("refuses another site, a sibling subdomain, null, nonsense, and a forwarded host the client chose", () => {
+    expect(requestIsSameOrigin(at({ "sec-fetch-site": "cross-site" }))).toBe(false);
+    expect(requestIsSameOrigin(at({ "sec-fetch-site": "same-site", origin: "https://gnosia.example" }))).toBe(false);
+    expect(requestIsSameOrigin(at({ origin: "https://evil.example" }))).toBe(false);
+    expect(requestIsSameOrigin(at({ origin: "https://evil.example", "x-forwarded-host": "evil.example" }))).toBe(false);
+    expect(requestIsSameOrigin(at({ origin: "null" }), { allowMissing: true })).toBe(false);
+    expect(requestIsSameOrigin(at({ origin: "not a url" }), { allowMissing: true })).toBe(false);
+    // Sec-Fetch-Site says same-origin and Origin says otherwise: both must hold.
+    expect(requestIsSameOrigin(at({ "sec-fetch-site": "same-origin", origin: "https://evil.example" }))).toBe(false);
+  });
+
+  it("takes a request with neither header only when the caller opts in", () => {
+    expect(requestIsSameOrigin(at({}))).toBe(false);
+    expect(requestIsSameOrigin(at({}), { allowMissing: true })).toBe(true);
+    expect(requestIsSameOrigin(at({ "sec-fetch-site": "none" }))).toBe(false);
+    expect(requestIsSameOrigin(at({ "sec-fetch-site": "none" }), { allowMissing: true })).toBe(true);
   });
 });
 
