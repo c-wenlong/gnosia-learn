@@ -16,7 +16,6 @@ import { unservedRows } from "@/lib/asset-library";
 import {
   filesNoun,
   isCompanionKind,
-  isOtherKind,
   libraryHref,
   libraryTabs,
   OTHERS_KIND,
@@ -148,7 +147,7 @@ export default async function LibraryPage({
     kind === null
       ? facets.standalone
       : kind === OTHERS_KIND
-        ? counts.filter((c) => isOtherKind(c.kind)).reduce((sum, c) => sum + c.count, 0)
+        ? counts.filter((c) => isCompanionKind(c.kind)).reduce((sum, c) => sum + c.count, 0)
         : (counts.find((c) => c.kind === kind)?.count ?? 0);
   const plural = (n: number) => (n === 1 ? "asset" : "assets");
   const conditions = [
