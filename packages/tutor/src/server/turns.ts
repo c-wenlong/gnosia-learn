@@ -95,6 +95,7 @@ import {
 import { svgText } from "../svg-text";
 import { parseTranscript } from "../transcript";
 import { measurePayload, PAYLOAD_LIMITS } from "../guards";
+import { pointsAtThisApp, SELF_ADDRESS_REASON } from "./self-address";
 import { checkModelId, KNOWLEDGE_LIMITS, providerLabel } from "@gnosia/schema/shared";
 
 /**
@@ -1360,6 +1361,7 @@ function customProviderFailed(what: string, error: unknown): TurnReply {
 export async function customProviderAddTurn(deps: TutorDeps, body: unknown): Promise<TurnReply> {
   const read = writeRecord(body);
   if ("refused" in read) return read.refused;
+  if (pointsAtThisApp(read.record.baseUrl, deps.env)) return writeRefuse(SELF_ADDRESS_REASON);
   const shape = checkKeyShape(read.record.key);
   if (!shape.ok) return writeRefuse(shape.reason);
   // As `providerKeySaveTurn`: on the web's path the sealer runs before the
@@ -1400,6 +1402,7 @@ export async function customProviderChangeTurn(deps: TutorDeps, body: unknown): 
   if (label === undefined && baseUrl === undefined && key === undefined) {
     return writeRefuse("Send a new name, a new base URL, a new key, or any of them.");
   }
+  if (pointsAtThisApp(baseUrl, deps.env)) return writeRefuse(SELF_ADDRESS_REASON);
   let checked: string | undefined;
   if (key !== undefined) {
     const shape = checkKeyShape(key);

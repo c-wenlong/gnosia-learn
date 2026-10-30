@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { MIN_SECRET_LENGTH } from "@/lib/auth/core";
-import { checkKeyShape, CURRENT_KEY_VERSION, openKey, sealKey, type Sealed } from "@/lib/provider-keys/seal";
+import { MIN_SECRET_LENGTH } from "@gnosia/schema/shared";
+
+import { checkKeyShape, CURRENT_KEY_VERSION, openKey, sealKey, type Sealed } from "../src/server/seal";
 
 /**
  * The seal around an owner's provider key (docs/BYOK.md, decision 2):
@@ -9,6 +10,9 @@ import { checkKeyShape, CURRENT_KEY_VERSION, openKey, sealKey, type Sealed } fro
  * and version. Every way a stored key can fail to open must come back as
  * null, the "treat it as missing" the tutor and Settings act on, and never
  * as a throw.
+ *
+ * This is the copy that runs: the web routes, the sidecar and
+ * `provider-keys.ts` all seal and open through `src/server/seal.ts`.
  */
 
 const SECRET = "a-test-secret-that-is-at-least-thirty-two-characters";
