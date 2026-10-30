@@ -136,13 +136,16 @@ export function SegmentedControl<T extends string>(props: SegmentedControlProps<
   );
 
   // The chosen option's face: one segment's width, moved by whole segments
-  // and gaps. Absent while no segment is current, as a link row can be.
+  // and gaps. Absent while no segment is current, as a link row can be. Its
+  // fill is about 1.1:1 on the track in every palette, so a 1px ring in
+  // `--text3` draws its edge; the chosen option is told by its outline as
+  // well as by its words' colour.
   const thumb =
     index < 0 ? null : (
       <span
         aria-hidden
         data-segment-thumb=""
-        className="pointer-events-none absolute inset-y-0.5 left-0.5 rounded-[10px] bg-surface shadow-[0_1px_0_var(--lip-shade)] transition-[translate] duration-200 ease-soft motion-reduce:transition-none"
+        className="pointer-events-none absolute inset-y-0.5 left-0.5 rounded-[10px] bg-surface shadow-[0_1px_0_var(--lip-shade)] ring-1 ring-text3 transition-[translate] duration-200 ease-soft motion-reduce:transition-none"
         style={{
           width: `calc((100% - 4px - ${s.px * (count - 1)}px) / ${count})`,
           translate: `calc(${index} * (100% + ${s.px}px)) 0`,

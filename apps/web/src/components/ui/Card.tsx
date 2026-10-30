@@ -11,6 +11,8 @@ import { TextLink } from "./TextLink";
  * `flush` drops the padding and the gap and clips the children to the
  * corners, for a card whose content runs to its edges; `gap` sets the space
  * between children (`cardClasses` says why these are options, not classes).
+ * `level` is the title's heading level, 2 unless the card sits under an `h2`
+ * of its own (a dialog's header, a section's heading).
  */
 export function Card({
   title,
@@ -18,6 +20,7 @@ export function Card({
   tight = false,
   flush = false,
   gap,
+  level = 2,
   as: Tag = "section",
   className,
   children,
@@ -31,18 +34,21 @@ export function Card({
   flush?: boolean;
   /** The space between children: 12 by default, none when `flush`. */
   gap?: CardGap;
+  /** The title's heading level. */
+  level?: 2 | 3 | 4;
   as?: "section" | "div" | "article" | "li";
   className?: string;
   children?: ReactNode;
   "aria-label"?: string;
   id?: string;
 }) {
+  const Heading = `h${level}` as const;
   return (
     <Tag className={cardClasses({ tight, flush, gap, className })} {...rest}>
       {(title !== undefined || action !== undefined) && (
         <div className="flex items-center gap-3">
           {title !== undefined && (
-            <h2 className={cx(CARD_TITLE, "min-w-0 flex-1")}>{title}</h2>
+            <Heading className={cx(CARD_TITLE, "min-w-0 flex-1")}>{title}</Heading>
           )}
           {action !== undefined && <div className="ml-auto shrink-0">{action}</div>}
         </div>

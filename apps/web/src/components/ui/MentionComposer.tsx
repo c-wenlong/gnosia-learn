@@ -623,9 +623,14 @@ function Field<K extends string>({
   /* Keys                                                              */
   /* ---------------------------------------------------------------- */
 
+  // What is in the field now: the value the editor last reported, which the
+  // update listener sets as it happens. `latest.current.value` waits for the
+  // parent's render and this component's effects, and a key the editor
+  // handles natively (Enter after an autocorrect or a paste) can come first.
   const submit = useCallback((event?: FormEvent) => {
     event?.preventDefault();
-    const { value: now, disabled: off, sendDisabled: held, onSubmit: send } = latest.current;
+    const { disabled: off, sendDisabled: held, onSubmit: send } = latest.current;
+    const now = emitted.current;
     if (off || held || isEmptyValue(now)) return;
     send(now);
   }, []);
@@ -688,7 +693,8 @@ function Field<K extends string>({
           }
           if (meaning === "mod-send") {
             event.preventDefault();
-            const { value: now, onModEnter: mod } = latest.current;
+            const { onModEnter: mod } = latest.current;
+            const now = emitted.current;
             // After the key's own update commits: a command listener runs
             // inside one, and its commit puts the DOM selection (and so the
             // focus) back in the field, which would undo a caller moving

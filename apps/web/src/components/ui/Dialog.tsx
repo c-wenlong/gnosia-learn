@@ -122,7 +122,9 @@ export type DialogProps = DialogName & {
  *
  * What is written here is the rest, the same for every dialog in the app:
  * Escape (the `cancel` event, prevented so the caller's state and the
- * element cannot disagree) and a press on the backdrop ask `onClose`; a
+ * element cannot disagree; when the browser will not let it be prevented,
+ * the element is shown again after it closes, while the caller keeps it
+ * mounted) and a press on the backdrop ask `onClose`; a
  * press only counts as on the backdrop when it started there too, so a text
  * selection dragged out of the content does not close it. On open it
  * remembers where focus was and moves it to a `[data-autofocus]` inside, if
@@ -156,6 +158,14 @@ export function Dialog({
   const inner = useRef<HTMLDialogElement | null>(null);
   useImperativeHandle(ref, () => inner.current as HTMLDialogElement, []);
   const pressedOnBackdrop = useRef(false);
+  /**
+   * An Escape the browser would not let the page refuse (a second one with
+   * no press or key between, under Chrome's close-watcher rules): its
+   * `cancel` is not cancelable, and the dialog closes itself next. What had
+   * focus then, to put back once it is shown again.
+   */
+  const forced = useRef<{ focused: Element | null } | null>(null);
+  const alive = useRef(false);
 
   // The latest of each, for the handlers and the effect's cleanup, which
   // outlive the render that set them.
@@ -173,6 +183,7 @@ export function Dialog({
   useEffect(() => {
     const dialog = inner.current;
     if (dialog === null) return;
+    alive.current = true;
     const focused = rememberFocus();
     if (!dialog.open) dialog.showModal();
     dialog.querySelector<HTMLElement>("[data-autofocus]")?.focus();
@@ -181,6 +192,7 @@ export function Dialog({
     const locked = lock.current;
     if (locked) root.style.overflow = "hidden";
     return () => {
+      alive.current = false;
       if (locked) root.style.overflow = overflow;
       if (dialog.open) dialog.close();
       const named = latest.current.opener?.() ?? null;
@@ -198,7 +210,24 @@ export function Dialog({
       onCancel={(event) => {
         // Escape. The dialog would close itself, behind the caller's back.
         event.preventDefault();
+        const focused = document.activeElement;
         ask();
+        // Unless the caller already shut it through `ref` while asked.
+        if (!event.cancelable && event.currentTarget.open) forced.current = { focused };
+      }}
+      onClose={(event) => {
+        // Closed by the browser after an Escape it would not let us prevent.
+        // The caller has been asked; while it keeps the dialog mounted the
+        // element is shown again, so its state and the element agree. A close
+        // of the caller's own, through `ref`, is left alone.
+        const was = forced.current;
+        forced.current = null;
+        const dialog = event.currentTarget;
+        if (was === null || !alive.current || dialog.open) return;
+        dialog.showModal();
+        if (was.focused instanceof HTMLElement && was.focused.isConnected && dialog.contains(was.focused)) {
+          was.focused.focus({ preventScroll: true });
+        }
       }}
       onPointerDown={(event) => {
         pressedOnBackdrop.current = event.target === event.currentTarget;
