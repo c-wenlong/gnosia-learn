@@ -81,20 +81,20 @@ function paletteBlocks(css: string): Map<string, Set<string>> {
   return blocks;
 }
 
-/** Each token a palette block is missing, as `<block> lacks <token>`. */
+/**
+ * Each token a palette block is missing, as `<block> lacks <token>`. The
+ * palette is every token any of the four blocks declares, the shared ones
+ * left out, so a token dropped from `:root` is a gap as well as one a dark
+ * block forgot, and `.gnosia.dark` holds everything `.dark` or `.gnosia` does.
+ */
 function tokenGaps(css: string): string[] {
   const blocks = paletteBlocks(css);
   const missing = PALETTE.filter((name) => !blocks.has(name)).map((name) => `${name} is not there`);
   if (missing.length > 0) return missing;
-  const [root, dark, gnosia, gnosiaDark] = PALETTE.map((name) => blocks.get(name)!);
-  const gaps = (block: string, has: Set<string>, wanted: Iterable<string>) =>
-    [...wanted].filter((token) => !has.has(token)).map((token) => `${block} lacks ${token}`);
-  const palette = [...root].filter((token) => !SHARED(token));
-  return [
-    ...gaps(".dark", dark, palette),
-    ...gaps(".gnosia", gnosia, palette),
-    ...gaps(".gnosia.dark", gnosiaDark, new Set([...palette, ...dark, ...gnosia])),
-  ];
+  const palette = new Set(PALETTE.flatMap((name) => [...blocks.get(name)!]).filter((token) => !SHARED(token)));
+  return PALETTE.flatMap((name) =>
+    [...palette].filter((token) => !blocks.get(name)!.has(token)).map((token) => `${name} lacks ${token}`),
+  );
 }
 
 const GLOBALS = SHEETS.find(({ file }) => file === path.join("app", "globals.css"))!.css;
@@ -139,12 +139,22 @@ describe("the palette check", () => {
     const css = `
       :root { --page: #fff; --ink: #000; --font-display: serif; --shell-row: 2rem; }
       .dark { --page: #111; }
-      .gnosia { --page: #faf6ec; --ink: #15283a; --gnosia-only: red; }
-      .gnosia.dark { --page: #0d1c2b; --ink: #eee; }
+      .gnosia { --page: #faf6ec; --ink: #15283a; }
+      .gnosia.dark { --page: #0d1c2b; }
       @media (min-width: 1px) { .dark { --ink: #fff; } }
       .dark { --ink: #fff; }
     `;
-    expect(tokenGaps(css)).toEqual([".dark lacks --ink", ".gnosia.dark lacks --gnosia-only"]);
+    expect(tokenGaps(css)).toEqual([".dark lacks --ink", ".gnosia.dark lacks --ink"]);
+  });
+
+  it("names a token dropped from :root that the other blocks still declare", () => {
+    const css = `
+      :root { --page: #fff; }
+      .dark { --page: #111; --violet: #a78bfa; }
+      .gnosia { --page: #faf6ec; --violet: #7c3aed; }
+      .gnosia.dark { --page: #0d1c2b; --violet: #c4b5fd; }
+    `;
+    expect(tokenGaps(css)).toEqual([":root lacks --violet"]);
   });
 
   it("says so when a palette block is missing, rather than passing on nothing", () => {

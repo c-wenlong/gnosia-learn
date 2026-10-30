@@ -26,10 +26,9 @@ vi.mock("@/lib/asset-library", () => ({
   readAssetText,
   withCatalog: async <T>(fn: (db: unknown) => Promise<T>) => fn({}),
 }));
-vi.mock("@/lib/asset-files", () => ({
-  storedPosters: async () => reads.posters,
-  storedPdfs: async () => reads.pdfs,
-}));
+const storedPosters = vi.hoisted(() => vi.fn(async () => reads.posters));
+const storedPdfs = vi.hoisted(() => vi.fn(async () => reads.pdfs));
+vi.mock("@/lib/asset-files", () => ({ storedPosters, storedPdfs }));
 
 const row = (over: Partial<AssetRef> & Pick<AssetRef, "id" | "kind">): AssetRef => ({
   path: null,
@@ -53,6 +52,8 @@ beforeEach(() => {
   reads.pdfs.clear();
   readFileProblems.mockClear();
   readAssetText.mockClear();
+  storedPosters.mockClear();
+  storedPdfs.mockClear();
 });
 
 describe("loadAssetBody for a video", () => {
@@ -105,6 +106,8 @@ describe("loadAssetBody for a video", () => {
     const body = await loadAssetBody(VIDEO, [TRANSCRIPT, CHAPTERS]);
     expect(body).toMatchObject({ servable: false, fileProblem: "not-uploaded", sidecars: null, poster: undefined, pdfHref: undefined });
     expect(readAssetText).not.toHaveBeenCalled();
+    expect(storedPosters).not.toHaveBeenCalled();
+    expect(storedPdfs).not.toHaveBeenCalled();
   });
 });
 
