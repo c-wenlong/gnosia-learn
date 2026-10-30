@@ -61,4 +61,18 @@ describe("downloadName and titleStem", () => {
   it("caps a long title", () => {
     expect(downloadName("a.mp4", "x".repeat(400))).toBe(`${"x".repeat(120)}.mp4`);
   });
+
+  it("caps by characters, so an emoji at the cut is kept whole or dropped, never split", () => {
+    // 119 letters then an emoji: the 120th character is the emoji's two halves.
+    const title = `${"x".repeat(119)}\u{1F600}${"y".repeat(10)}`;
+    expect(titleStem(title)).toBe(`${"x".repeat(119)}\u{1F600}`);
+    expect(titleStem(title).isWellFormed()).toBe(true);
+    expect(() => contentDisposition("attachment", "a.mp4", title)).not.toThrow();
+  });
+
+  it("names a download whose title holds a lone surrogate, rather than throwing", () => {
+    // A learner's own name for an asset can carry one: JSON.parse accepts "\ud83c".
+    const header = contentDisposition("attachment", "a.mp4", "Lone \ud83c half");
+    expect(header).toBe(`attachment; filename="Lone _ half.mp4"; filename*=UTF-8''Lone%20%EF%BF%BD%20half.mp4`);
+  });
 });
