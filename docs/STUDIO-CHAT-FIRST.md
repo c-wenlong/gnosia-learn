@@ -1665,6 +1665,10 @@ and the spawn's `HOME` pointed at the draft's `tmp` so the owner's own
 resume looks. Jobs a byok draft draws still run on `claude`: the job spawn's
 hooks and Bash guard are a claude surface.
 
+(Amended 2026-10-30 by D12 of [BYOK.md](BYOK.md): the runner keeps no key.
+`byok.json` is deleted at start, the picks and tiers live in
+`byok-settings.json`, and a spawn opens the key saved in Settings. The
+paragraph below is the design as first built.)
 `byok.json` (`$STUDIO_HOME`, mode 0600) is what `PUT /api/settings/byok`
 writes and the picker's Connect dialog sends: `{ provider, apiKey, model }`,
 the provider naming a fixed endpoint preset (`BYOK_PROVIDERS`), so a key
@@ -1767,6 +1771,10 @@ credentials live where the other providers' already did; the dialog keeps a
 Connect affordance because a picker row is where the want starts.
 
 ### D95. The provider key is one key in two stores
+
+(Amended 2026-10-30 by D12 of [BYOK.md](BYOK.md): one key in one store. The
+web app no longer sends the key to the runner; it tells the runner which
+provider joined, and the runner opens the sealed row when a turn spawns.)
 
 **Verdict (2026-10-09):** the Settings Providers card and the BYOK harness
 share credentials — `/api/learner/provider-key` writes the sealed row and

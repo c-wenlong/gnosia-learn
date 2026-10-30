@@ -1,6 +1,8 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 
+import { migrateLegacyByok } from "./agent/byok";
+import { closeKeys, fromWebEnv, hasKeySecret, setCatalogFile, setKeySecret, takeKeySecret } from "./agent/byok-keys";
 import { agentSettingsView, createApi } from "./api";
 import type { SpendEntry } from "./cost";
 import { Drafts } from "./drafts/drafts";
@@ -85,7 +87,40 @@ async function main(): Promise<void> {
   process.on("SIGINT", () => onSignal("SIGINT"));
   process.on("SIGTERM", () => onSignal("SIGTERM"));
 
+  // AUTH_SECRET opens the provider keys saved in Settings for a BYOK turn
+  // (docs/BYOK.md, D12). It is taken out of the environment before anything
+  // is spawned, with the session's own inputs, so no agent, render or CLI
+  // inherits it; a runner started without it (`npm run dev:up`) asks the
+  // web app's own environment once, for the secret and the catalog file the
+  // web opens, so both read the same rows. Without one, BYOK is off and says
+  // why in /api/health, and every other harness runs as before.
+  if (takeKeySecret() === null) {
+    const web = await fromWebEnv();
+    setKeySecret(web.secret);
+    if (web.secret !== null) setCatalogFile(web.catalog);
+  }
+  process.stdout.write(hasKeySecret() ? "provider keys: opened from the catalog with AUTH_SECRET when a BYOK turn runs\n" : "provider keys: no AUTH_SECRET, so BYOK chats are off\n");
+
   await mkdir(path.join(studioHome(), "jobs"), { recursive: true });
+
+  // The first start after the upgrade: the plaintext byok.json an older
+  // runner kept goes, its picks and tiers carried over without the keys.
+  const migrated = await migrateLegacyByok().catch((error: unknown) => {
+    process.stderr.write(`could not remove ${path.join(studioHome(), "byok.json")}: ${(error as Error).message}\n`);
+    return null;
+  });
+  if (migrated?.removed === true) {
+    process.stdout.write(
+      `removed ${path.join(studioHome(), "byok.json")}, the plaintext copy of provider keys; BYOK now reads the keys saved in Settings` +
+        (migrated.carried.length > 0 ? ` (kept the picks and tiers of ${migrated.carried.join(", ")})` : "") +
+        "\n" +
+        (migrated.keyless === null
+          ? "  could not check which of its keys are saved in Settings: enter any that are missing under Settings, Providers\n"
+          : migrated.keyless.length > 0
+            ? `  no key saved in Settings for ${migrated.keyless.join(", ")}: enter it under Settings, Providers\n`
+            : ""),
+    );
+  }
 
   const store = new JobStore();
   await store.load();
@@ -241,6 +276,7 @@ async function main(): Promise<void> {
         ),
       )
       .then(() => videoRunner.drain())
+      .then(() => closeKeys())
       .finally(() => {
         server.close(() => process.exit(0));
         // A stream that is still open would hold the process forever, and the

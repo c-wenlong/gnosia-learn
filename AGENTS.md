@@ -492,7 +492,9 @@ Rules of engagement:
   root for code, not content; `STUDIO_REPO_ROOT` overrides it for the tests.
 - The studio reads the topic vocabulary only through
   `npm run --silent catalog -- topic ls --owner <STUDIO_OWNER> --json`, and
-  opens no database connection of its own. `topic ls` without `--owner` is
+  opens no database connection of its own for it. (Its one in-process read
+  is the BYOK harness opening the owner's sealed provider keys, D12 of
+  [docs/BYOK.md](docs/BYOK.md); it keeps no copy of them.) `topic ls` without `--owner` is
   the operator's listing of every owner's topics, which is why it is never
   called bare. Every good read is cached in
   `$STUDIO_HOME/cache/topics.<owner>.json` (the old `topics.json` was
