@@ -105,16 +105,18 @@ export function useDraftVerbs({
     setPending({ value: body, seq: null });
     if (!keepComposer) setValue(EMPTY_MENTION_VALUE);
     const message = make ? { ...body, make: true } : body;
-    const print = JSON.stringify(message);
+    // The words and chips, not the `make` mark: a consent send that timed out
+    // gives its chip back to the composer, and sending it from there is the
+    // same message, so it must reuse the key rather than pay twice.
+    const print = JSON.stringify(body);
     const key = turnKey(unanswered.current, print, () => idempotencyKey("message"));
-    const after = view.transcript.reduce((latest, entry) => Math.max(latest, entry.seq), 0);
     const result = await sendMessage(draftId, message, key);
     if (!result.ok && runnerSlow(result.status, result.refusal)) {
       unanswered.current = { print, key };
       // The runner may have taken it: the proxy neither times out nor passes
       // the abort on. When the record shows the turn, it was sent.
       const fresh = await load();
-      const seq = fresh === null ? null : landedTurn(fresh.transcript, after, body.text);
+      const seq = fresh === null ? null : landedTurn(fresh.transcript, key);
       if (seq !== null) {
         unanswered.current = null;
         setPending({ value: body, seq });

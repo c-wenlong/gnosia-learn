@@ -997,14 +997,44 @@ describe("a send the runner did not answer in time (R2-1-01)", () => {
   it("finds the turn in the record when the runner took it, and gives nothing back", async () => {
     const view = draft({ transcript: [entry(1, "studio", "Opened.")] });
     await mount(view);
-    mocks.sendMessage.mockResolvedValueOnce(slow);
-    // The record read after the timeout shows the message landed.
-    mocks.getDraft.mockResolvedValue({ ok: true, status: 200, data: { ...view, inFlight: true, transcript: [...view.transcript, entry(2, "person", "and make it blue")] } });
+    // The record read after the timeout shows the message landed, under the key it was sent with.
+    mocks.sendMessage.mockImplementationOnce(async (_id: string, _body: unknown, key: string) => {
+      mocks.getDraft.mockResolvedValue({ ok: true, status: 200, data: { ...view, inFlight: true, transcript: [...view.transcript, { ...entry(2, "person", "and make it blue"), key }] } });
+      return slow;
+    });
     await submit({ text: "and make it blue", mentions: [] });
     const host = document.body;
     expect(mocks.sendMessage).toHaveBeenCalledTimes(1);
     expect(mocks.composer!.value).toEqual({ text: "", mentions: [] });
     expect(host.textContent).not.toContain("did not answer in time");
+  });
+
+  it("does not take another tab's message with the same words for this one", async () => {
+    const view = draft({ transcript: [entry(1, "studio", "Opened.")] });
+    const host = await mount(view);
+    mocks.sendMessage.mockResolvedValueOnce(slow);
+    mocks.getDraft.mockResolvedValue({ ok: true, status: 200, data: { ...view, transcript: [...view.transcript, { ...entry(2, "person", "and make it blue"), key: "another-tab" }] } });
+    await submit({ text: "and make it blue", mentions: [] });
+    expect(mocks.composer!.value).toEqual({ text: "and make it blue", mentions: [] });
+    expect(host.textContent).toContain("sending it again will not send it twice");
+  });
+
+  it("reuses an Allow's key when its chip is sent again from the composer", async () => {
+    const host = await mount(
+      draft({
+        turns: 1,
+        transcript: [entry(1, "person", "how does TCP back off?"), entry(2, "planner", "A video would show it.", { suggest: ["video"], pitch: "the window" })],
+      }),
+    );
+    mocks.sendMessage.mockResolvedValueOnce(slow);
+    const allow = [...host.querySelectorAll("button")].find((candidate) => candidate.textContent?.includes("Allow once"))!;
+    await act(async () => allow.click());
+    await settle();
+    // The chip came back to the composer; sending it from there is the same message.
+    await submit(mocks.composer!.value);
+    const [first, second] = mocks.sendMessage.mock.calls as unknown as [string, { make?: boolean }, string][];
+    expect(first[1].make).toBe(true);
+    expect(second[2]).toBe(first[2]);
   });
 
   it("gives the words back when the record does not show them, and a resend of them reuses the key", async () => {

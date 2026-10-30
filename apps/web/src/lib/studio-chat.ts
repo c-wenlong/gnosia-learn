@@ -441,7 +441,8 @@ export function sendRefusal(status: number, refusal: Refusal, what: "message" | 
 
 /**
  * The idempotency key for a person turn: the one held from a send that timed
- * out (`RUNNER_SLOW`) when these are the same words and chips, else a new one.
+ * out (`RUNNER_SLOW`) when these are the same words and chips (sent from the
+ * composer or from the consent card's Allow alike), else a new one.
  * The runner answers a held key with the message it already took, so sending
  * the given-back words again cannot pay for a second turn; changed words are
  * a new message and get their own key.
@@ -451,17 +452,13 @@ export function turnKey(held: { print: string; key: string } | null, print: stri
 }
 
 /**
- * The seq of a person turn that landed after `after` with `text`, or null:
- * how a send that timed out finds out, from the record read after it, that
- * the runner took it after all.
+ * The seq of the person turn sent with `key`, or null: how a send that timed
+ * out finds out, from the record read after it, that the runner took it after
+ * all. By key, never by words: another tab's message with the same words is
+ * not this one.
  */
-export function landedTurn(
-  transcript: readonly Pick<TranscriptEntry, "seq" | "role" | "text">[],
-  after: number,
-  text: string,
-): number | null {
-  const words = text.trim();
-  return transcript.find((entry) => entry.role === "person" && entry.seq > after && entry.text.trim() === words)?.seq ?? null;
+export function landedTurn(transcript: readonly Pick<TranscriptEntry, "seq" | "role" | "key">[], key: string): number | null {
+  return transcript.find((entry) => entry.role === "person" && entry.key === key)?.seq ?? null;
 }
 
 /**

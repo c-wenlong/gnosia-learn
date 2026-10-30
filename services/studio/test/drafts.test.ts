@@ -543,6 +543,8 @@ describe("the limits", () => {
     expect(await again.send(record.id, "first", undefined, { idempotencyKey: "k1" })).toEqual({ seq: first.seq, replayed: true });
     expect(await fake.argvs()).toHaveLength(1);
     expect(drafts.get(record.id)?.turns).toBe(1);
+    // The view carries the key, so a browser finds its own turn by it.
+    expect((await drafts.view(record.id)).transcript.find((entry) => entry.seq === first.seq)).toMatchObject({ role: "person", key: "k1" });
     // Another key is another message.
     await fake.script([{ text: "again" }]);
     const other = await drafts.send(record.id, "first", undefined, { idempotencyKey: "k2" });

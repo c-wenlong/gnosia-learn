@@ -180,6 +180,8 @@ export interface TranscriptEntry {
   briefs?: TranscriptBrief[];
   /** On a person's message: its chips (D57). */
   mentions?: DraftMention[];
+  /** On a person's message: the idempotency key it was sent with, when it had one. */
+  key?: string;
   /** On a planner reply: the kinds it offers as suggestion buttons (D58, D105). */
   suggest?: TagKind[];
   /** On a planner reply with a suggestion: the pitch line its consent card shows (D106). */

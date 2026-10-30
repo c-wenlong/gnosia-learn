@@ -220,10 +220,12 @@ export function talkItThroughText(
 /* -------------------------------------------------------------------------- */
 
 /**
- * How long a pending press's idempotency key is reused. A reload while the
- * diagram is being read posts again, and the same key makes the runner answer
- * with the draft the first post made rather than a second one. Past this, a
- * key left behind by a panel closed mid-read is not reused for a new press.
+ * How long a pending press's idempotency key is reused, from its last use. A
+ * reload while the diagram is being read posts again, and the same key makes
+ * the runner answer with the draft the first post made rather than a second
+ * one. Past this, a key left behind by a panel closed mid-read is not reused
+ * for a new press. A press that ends without a draft stamps its key again
+ * (`extendKey` once more), so its Try again has the whole window.
  */
 export const EXTEND_KEY_TTL_MS = 5 * 60_000;
 
@@ -252,6 +254,11 @@ export function extendKey(storage: Storage | null, name: string, fresh: () => st
       now - parsed.at < EXTEND_KEY_TTL_MS &&
       (parsed.print ?? undefined) === print
     ) {
+      // Stamped again on every use, so the key lives five minutes past the
+      // last press or attempt, not the first: an Extend now waits up to four
+      // minutes (`SOURCE_CREATE_TIMEOUT_MS`), and a Try again after it must
+      // still join the same create.
+      safely(() => storage.setItem(KEY_PREFIX + name, JSON.stringify(print === undefined ? { key: parsed.key, at: now } : { key: parsed.key, at: now, print })), undefined);
       return parsed.key;
     }
   }

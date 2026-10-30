@@ -425,11 +425,14 @@ describe("a send that timed out (R2-1-01)", () => {
     expect(turnKey({ print: "a", key: "held" }, "b", fresh)).toBe("k2");
   });
 
-  it("finds the person turn that landed after the send began, and nothing older", () => {
-    const transcript = [entry(1, "person", "make it blue"), entry(2, "planner", "Done."), entry(3, "person", " make it blue ")];
-    expect(landedTurn(transcript, 2, "make it blue")).toBe(3);
-    expect(landedTurn(transcript, 3, "make it blue")).toBeNull();
-    expect(landedTurn(transcript, 0, "make it red")).toBeNull();
+  it("finds the person turn sent with the key, never another with the same words", () => {
+    const transcript = [
+      { ...entry(1, "person", "make it blue"), key: "other-tab" },
+      entry(2, "planner", "Done."),
+      { ...entry(3, "person", "make it blue"), key: "mine" },
+    ];
+    expect(landedTurn(transcript, "mine")).toBe(3);
+    expect(landedTurn(transcript.slice(0, 2), "mine")).toBeNull();
   });
 });
 

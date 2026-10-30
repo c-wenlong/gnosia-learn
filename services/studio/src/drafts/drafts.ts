@@ -396,6 +396,8 @@ export interface TranscriptEntry {
   at: string;
   /** A person's message: its chips, where they were. */
   mentions?: Mention[];
+  /** A person's message: the idempotency key it was sent with, when it had one. */
+  key?: string;
   /** Every brief the entry carries, one per kind. */
   briefs?: EntryBrief[];
   /** The last of `briefs`, kept one release for the web app from before (D61). */
@@ -4621,6 +4623,9 @@ function entryOf(event: TranscriptEvent): TranscriptEntry | null {
         text,
         at: event.at,
         ...(Array.isArray(event.mentions) && event.mentions.length > 0 ? { mentions: event.mentions as Mention[] } : {}),
+        // The browser's own idempotency key, so a send that timed out can
+        // find its own turn rather than another tab's with the same words.
+        ...(typeof event.key === "string" ? { key: event.key } : {}),
       };
     case "reply":
       return {
