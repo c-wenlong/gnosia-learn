@@ -49,6 +49,7 @@ export function DiagramView({
   title,
   caption,
   heading = true,
+  failureHeadline = "This diagram did not load.",
 }: {
   /** Already resolved by the caller. */
   src: string;
@@ -63,6 +64,8 @@ export function DiagramView({
    * small link in the corner of the mat instead.
    */
   heading?: boolean;
+  /** What the failure panel says, for a picture that is not a diagram (a video's poster). */
+  failureHeadline?: string;
 }) {
   const imgRef = useRef<HTMLImageElement>(null);
   const [status, setStatus] = useState<"loading" | "ready">("loading");
@@ -119,7 +122,7 @@ export function DiagramView({
 
       {failure !== null ? (
         <WidgetFailure
-          headline="This diagram did not load."
+          headline={failureHeadline}
           code={failure.code}
           onRetry={() => {
             setStatus("loading");
