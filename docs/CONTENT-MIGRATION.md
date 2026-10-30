@@ -1958,7 +1958,15 @@ then ported to a SQLite file with `services/catalog/scripts/pg-to-sqlite.mjs`
 ([SQLITE-MIGRATION.md](SQLITE-MIGRATION.md)), and step 4 names that file
 (`--database ~/.gnosia/catalog.db`), backing up to
 `~/catalog-precutover-<UTC>.db` and saving
-`~/catalog-cutover-<UTC>.parity.json`.
+`~/catalog-cutover-<UTC>.parity.json`. The port leaves the blob store's
+`.owner` marker naming the Postgres database, and the SQLite catalog is
+known by its file's path (`ownerIdentity` in
+`services/catalog/src/content/blob-owner.ts`), so it refuses to upload
+there until the marker is replaced: with nothing writing to either
+database, move `$GNOSIA_HOME/blobs/.owner` aside, run
+`npm run catalog -- blob audit` until it is clean, then
+`npm run catalog -- blob audit --fix`, which writes the new marker (the
+same claim as step 9 of [HOMESERVER.md](HOMESERVER.md)).
 
 **Built** (branch `p3/cutover`, #159, merged before flip day at the owner's
 call; the operator half is #157):

@@ -347,11 +347,13 @@ and points there.
   machine are the readable record of each. When a sync is wanted, copy the
   file of the side with the history you want to keep (`sqlite3 ... .backup`,
   step 1) and put it in place of the other's: stop everything on the
-  receiving side that opens the file first (`sudo systemctl stop gnosia
-  gnosia-studio gnosia-export.timer` on the server; on the Mac,
+  receiving side that opens the file first (on the server, `sudo systemctl
+  stop gnosia gnosia-studio gnosia-export.timer` and then step 14's `while`
+  until no `gnosia-export.service` is still running, since stopping the
+  timer does not stop an export already under way; on the Mac,
   `npm run dev:down` or quitting Gnosia Web.app, and the native macOS app,
-  away from the nightly export's 03:00), since each holds the file open and keeps its
-  `-wal` and `-shm` beside it; take a `.backup` of the receiving side's own
+  away from the nightly export's 03:00), since each holds the file open and
+  keeps its `-wal` and `-shm` beside it; take a `.backup` of the receiving side's own
   file too, since its history is what the sync gives up; then delete its
   `catalog.db` with its `-wal` and `-shm`, as `dropDatabase` in
   [scripts/lib/sqlite.mjs](../scripts/lib/sqlite.mjs) does, because a
