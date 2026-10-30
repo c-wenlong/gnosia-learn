@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { progressWord } from "./studio-job-state";
+
 import {
   activeJob,
   announcement,
@@ -16,6 +18,7 @@ import {
   narration,
   PHASES,
   phaseRows,
+  phaseWords,
   stepLabel,
   type GateResult,
   type GateStep,
@@ -120,6 +123,17 @@ describe("the phase list", () => {
   it("shows an interrupted job discarded mid-phase as stopped there, not done", () => {
     const rows = phaseRows(job({ state: "discarded", phase: "drawing" }), []);
     expect(rows.map((row) => row.status)).toEqual(["done", "done", "failed", "pending", "pending", "pending", "pending"]);
+  });
+
+  it("words a state it does not know through the state table, every underscore (R2-1-28)", () => {
+    expect(phaseWords(job({ state: "waiting_on_gpu_slot" as Job["state"], phase: null }))).toBe("waiting on gpu slot");
+    expect(phaseWords(job({ state: "queued", phase: null }))).toBe("waiting for the runner");
+  });
+
+  it("marks where a cancelled job stopped as stopped, not failed (R2-1-11)", () => {
+    const rows = phaseRows(job({ state: "cancelled", phase: "drawing" }), []);
+    expect(rows.map((row) => row.status)).toEqual(["done", "done", "stopped", "pending", "pending", "pending", "pending"]);
+    expect(progressWord("stopped")).toBe("Stopped: ");
   });
 
   it("shows all seven from the first second, with the current one marked", () => {

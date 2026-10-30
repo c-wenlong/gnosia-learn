@@ -56,6 +56,11 @@ export function useJobEventStream(
     const source = new EventSource(`/studio/api/jobs/${encodeURIComponent(job)}/events`);
     source.onopen = () => setLiveFor(job);
     source.onerror = () => setLiveFor(null);
+    // The seqs this stream has passed on. A reconnect replays from
+    // `Last-Event-ID` and a fresh connection replays the whole buffer, so
+    // without this the listener heard a `done` twice and the provider read
+    // the job list again for each replay (R2-1-21).
+    const heard = new Set<number>();
 
     const receive = (message: MessageEvent<string>): void => {
       let event: StudioEvent;
@@ -65,6 +70,8 @@ export function useJobEventStream(
         return;
       }
       setLiveFor(job);
+      if (heard.has(event.seq)) return;
+      heard.add(event.seq);
       setHeld((prev) => {
         if (prev.job !== job) return { job, events: [event] };
         if (prev.events.some((seen) => seen.seq === event.seq)) return prev;

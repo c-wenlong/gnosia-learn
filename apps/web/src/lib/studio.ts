@@ -159,7 +159,33 @@ export async function studioApi<T>(
     };
   }
 
-  const body: unknown = await response.json().catch(() => null);
+  // The deadline covers the body too. A body cut off mid-read is a runner
+  // that stopped answering, and a 2xx that is not JSON is not a success with
+  // nothing in it: either read as `ok: true, data: null` and threw on the
+  // first field a page read (R2-1-05). The browser's `call` already says so.
+  let text: string;
+  try {
+    text = await response.text();
+  } catch (error) {
+    return {
+      ok: false,
+      reason: "down",
+      status: response.status,
+      undelivered: false,
+      headline: "The studio runner stopped answering.",
+      detail: `It began to answer and did not finish. (${(error as Error).message})`,
+    };
+  }
+  const body = parsedJson(text);
+  if (response.ok && body === undefined) {
+    return {
+      ok: false,
+      reason: "refused",
+      status: response.status,
+      headline: "The studio runner answered with something that is not JSON.",
+      detail: text.slice(0, 200),
+    };
+  }
   if (!response.ok) {
     const refusal = asRefusal(response.status, body);
     return {
@@ -167,11 +193,21 @@ export async function studioApi<T>(
       reason: "refused",
       status: response.status,
       headline: refusal.error,
-      detail: typeof refusal.detail === "string" ? refusal.detail : JSON.stringify(refusal.detail ?? {}),
+      // No detail is no text: `{}` under a verb's banner read as a broken answer.
+      detail: typeof refusal.detail === "string" ? refusal.detail : refusal.detail == null ? "" : JSON.stringify(refusal.detail),
       refusal,
     };
   }
   return { ok: true, data: body as T };
+}
+
+/** A body as JSON, or `undefined` when it is not JSON (`null` is JSON). */
+function parsedJson(text: string): unknown {
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return undefined;
+  }
 }
 
 /**

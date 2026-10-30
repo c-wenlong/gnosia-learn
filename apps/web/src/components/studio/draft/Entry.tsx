@@ -28,7 +28,7 @@ import {
   type LiveCard,
   type makeBoth,
 } from "@/lib/studio-cards";
-import { jobPatch, refusalNoted, splitReply, STILL_ANSWERING, type DrawBlock } from "@/lib/studio-chat";
+import { EDITING_BRIEF, jobPatch, refusalNoted, splitReply, STILL_ANSWERING, type DrawBlock } from "@/lib/studio-chat";
 import {
   isDraftKind,
   type DraftKind,
@@ -60,6 +60,11 @@ export interface EntryThread {
   path: string;
   /** Health's video doctor: whether Video can be made, its tools (D73) and narration speed. */
   video: VideoAvailability | null;
+  /**
+   * A brief card is being edited: the consent card's Allow waits, as Send
+   * does, since the turn it sends can retire the card holding the edits.
+   */
+  editing: boolean;
 }
 
 /** What an entry's cards can do, each a verb of the panel's. */
@@ -96,7 +101,7 @@ export function Entry({
   thread: EntryThread;
   on: EntryActions;
 }) {
-  const { view, topics, jobs, cards, makeBothLive, pressing, refused, entries, answering, bothError, waiting, path, video } = thread;
+  const { view, topics, jobs, cards, makeBothLive, pressing, refused, entries, answering, bothError, waiting, path, video, editing } = thread;
   if (entry.role === "person") {
     const tagged = waiting.filter((item) => item.requestSeq === entry.seq).map((item) => item.kind);
     return (
@@ -259,6 +264,7 @@ export function Entry({
               declined={suggestion.declined.includes(kind)}
               cost={suggestionCost(kind, isDraftKind(kind) ? view.estimates?.[kind] : undefined)}
               unavailable={kindUnavailable(kind, view, video)}
+              held={editing ? EDITING_BRIEF : null}
               onAllow={(always) => on.allow(kind, always)}
               onDecline={() => on.decline(entry.seq, kind)}
             />

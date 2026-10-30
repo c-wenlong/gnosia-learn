@@ -195,3 +195,48 @@ describe("the phase list, read aloud (S1-10)", () => {
     expect(words).toContain("Not started: ");
   });
 });
+
+describe("a failed job's buttons", () => {
+  const button = (host: HTMLElement, label: string) => [...host.querySelectorAll("button")].find((candidate) => candidate.textContent === label);
+
+  it("Recheck says what doctor says now, not nothing (R2-1-19)", async () => {
+    const reads: string[] = [];
+    const spawnFailed = { ...DIAGRAM, state: "failed", phase: "drawing", errorKind: "spawn", error: "claude: command not found" };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string) => {
+        reads.push(input);
+        if (input.startsWith("/studio/api/jobs?")) return new Response(JSON.stringify({ jobs: [] }), { status: 200 });
+        if (input === "/studio/api/health") return new Response(JSON.stringify({ ok: true, tldrawkc: true, checks: [{ name: "claude", status: "pass", detail: "" }] }), { status: 200 });
+        return new Response(JSON.stringify(spawnFailed), { status: 200 });
+      }),
+    );
+    const host = await mount();
+    await settle();
+    await act(async () => button(host, "Recheck")!.click());
+    await settle();
+    expect(reads).toContain("/studio/api/health");
+    expect(host.textContent).toContain("Doctor passes now. Press Retry to run it again.");
+  });
+
+  it("Talk it through says a read that failed, not a job with no brief (R2-1-20)", async () => {
+    let reads = 0;
+    const threw = { ...DIAGRAM, state: "failed", phase: "drawing", exitCode: 2, error: "the snippet threw" };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string) => {
+        if (input.startsWith("/studio/api/jobs?")) return new Response(JSON.stringify({ jobs: [] }), { status: 200 });
+        reads += 1;
+        // The panel's own read answers; Talk it through's read finds the runner down.
+        if (reads === 1) return new Response(JSON.stringify(threw), { status: 200 });
+        throw new TypeError("fetch failed");
+      }),
+    );
+    const host = await mount();
+    await settle();
+    await act(async () => button(host, "Talk it through")!.click());
+    await settle();
+    expect(host.textContent).toContain("this job's brief could not be read: the runner did not answer");
+    expect(host.textContent).not.toContain("did not return this job's brief");
+  });
+});

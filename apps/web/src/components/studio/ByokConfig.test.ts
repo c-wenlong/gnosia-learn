@@ -9,7 +9,23 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
  * cannot be undone, it asks first (S1-27 of the web audit).
  */
 
-const mocks = vi.hoisted(() => ({ getByokSettings: vi.fn(), removeByokProvider: vi.fn(), listByokModels: vi.fn(), saveByokModels: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  getByokSettings: vi.fn(),
+  removeByokProvider: vi.fn(),
+  listByokModels: vi.fn(),
+  saveByokModels: vi.fn(),
+  sendJson: vi.fn(),
+  selects: [] as { label?: string; options: { value: string; label: string }[]; onChange: (next: string) => void }[],
+}));
+
+vi.mock("@/lib/send-json", () => ({ sendJson: mocks.sendJson }));
+// The provider menu as its option labels, with its onChange kept for a test to call.
+vi.mock("@/components/ui/Select", () => ({
+  Select: (props: (typeof mocks.selects)[number]) => {
+    mocks.selects.push(props);
+    return createElement("div", { "data-select": props.label }, props.options.map((option) => option.label).join(" "));
+  },
+}));
 
 vi.mock("@/lib/studio-byok", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/studio-byok")>()),
@@ -99,6 +115,20 @@ describe("ByokConfig's Remove", () => {
     await act(async () => named(host, "Remove it")!.click());
     expect(mocks.removeByokProvider).toHaveBeenCalledTimes(1);
     expect(mocks.removeByokProvider).toHaveBeenCalledWith("openrouter");
+  });
+
+  it("reads the settings once after a Remove, on the write's own announcement (R2-1-17)", async () => {
+    const host = await mountConnected();
+    // The real `removeByokProvider` announces its own write.
+    mocks.removeByokProvider.mockImplementation(async () => {
+      window.dispatchEvent(new Event("gnosia:byok-settings"));
+      return { ok: true, status: 200, data: {} };
+    });
+    const before = mocks.getByokSettings.mock.calls.length;
+    await act(async () => named(host, "Remove")!.click());
+    await act(async () => named(host, "Remove it")!.click());
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(mocks.getByokSettings.mock.calls.length - before).toBe(1);
   });
 });
 
@@ -192,5 +222,88 @@ describe("ByokConfig with the runner down", () => {
     const host = await mount({});
     expect(host.textContent).toContain("The studio runner is not answering");
     expect(named(host, "Try again")).toBeDefined();
+  });
+});
+
+describe("ByokConfig's errors (R2-1-10)", () => {
+  async function mount(props: Parameters<typeof ByokConfig>[0]): Promise<HTMLElement> {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    await act(async () => root.render(createElement(ByokConfig, props)));
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    mounted.push(() => {
+      act(() => root.unmount());
+      host.remove();
+    });
+    return host;
+  }
+  const up = (error: string | null = null) => ({ ok: true, status: 200, data: { configured: false, active: null, model: null, providers: [], error } });
+
+  it("does not call a running runner that cannot open the saved key down", async () => {
+    mocks.selects.length = 0;
+    mocks.getByokSettings.mockReset().mockResolvedValue(up());
+    mocks.sendJson.mockReset().mockResolvedValue({ status: 200, data: { ok: true, synced: false } });
+    const host = await mount({ manageKeys: false, savedForTutor: ["openrouter"] });
+    mocks.getByokSettings.mockResolvedValue(up("AUTH_SECRET is not set for the runner"));
+    const provider = mocks.selects.filter((select) => select.label === "Provider").at(-1)!;
+    await act(async () => provider.onChange("saved:openrouter"));
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(host.textContent).not.toContain("not answering");
+    expect(host.textContent).toContain("could not open the key saved in Settings (AUTH_SECRET is not set for the runner)");
+  });
+
+  it("says the runner is not answering when that is what the read finds", async () => {
+    mocks.selects.length = 0;
+    mocks.getByokSettings.mockReset().mockResolvedValue(up());
+    mocks.sendJson.mockReset().mockResolvedValue({ status: 200, data: { ok: true, synced: false } });
+    const host = await mount({ manageKeys: false, savedForTutor: ["openrouter"] });
+    mocks.getByokSettings.mockResolvedValue({ ok: false, status: 502, refusal: { error: "the studio runner is not answering", detail: null } });
+    const provider = mocks.selects.filter((select) => select.label === "Provider").at(-1)!;
+    await act(async () => provider.onChange("saved:openrouter"));
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(host.textContent).toContain("Not connected: the studio runner is not answering.");
+  });
+
+  it("says a read that timed out as no answer, not as a key the runner cannot open", async () => {
+    mocks.selects.length = 0;
+    mocks.getByokSettings.mockReset().mockResolvedValue(up());
+    mocks.sendJson.mockReset().mockResolvedValue({ status: 200, data: { ok: true, synced: false } });
+    const host = await mount({ manageKeys: false, savedForTutor: ["openrouter"] });
+    mocks.getByokSettings.mockResolvedValue({ ok: false, status: 0, refusal: { error: "the studio runner did not answer in time", detail: null } });
+    const provider = mocks.selects.filter((select) => select.label === "Provider").at(-1)!;
+    await act(async () => provider.onChange("saved:openrouter"));
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(host.textContent).toContain("Not connected: the studio runner did not answer in time.");
+    expect(host.textContent).not.toContain("could not open the key");
+  });
+
+  it("keeps a write's error through a later good read, even with the read's words", async () => {
+    const host = await mountConnected();
+    const connected = mocks.getByokSettings.getMockImplementation();
+    // A read the runner refuses puts its words up...
+    mocks.getByokSettings.mockResolvedValue({ ok: false, status: 403, refusal: { error: "this runner serves another owner", detail: null } });
+    await act(async () => window.dispatchEvent(new Event("gnosia:byok-settings")));
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    // ...then a Remove fails with the same words.
+    mocks.removeByokProvider.mockResolvedValue({ ok: false, status: 403, refusal: { error: "this runner serves another owner", detail: null } });
+    await act(async () => named(host, "Remove")!.click());
+    await act(async () => named(host, "Remove it")!.click());
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    // A good read now answers the read, not the Remove, which was never retried.
+    if (connected !== undefined) mocks.getByokSettings.mockImplementation(connected);
+    await act(async () => window.dispatchEvent(new Event("gnosia:byok-settings")));
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(host.textContent).toContain("this runner serves another owner");
+  });
+
+  it("clears a refusal its own read put up once a later read answers", async () => {
+    mocks.getByokSettings.mockReset().mockResolvedValue({ ok: false, status: 403, refusal: { error: "this runner serves another owner", detail: null } });
+    const host = await mount({});
+    expect(host.textContent).toContain("this runner serves another owner");
+    mocks.getByokSettings.mockResolvedValue(up());
+    await act(async () => window.dispatchEvent(new Event("gnosia:byok-settings")));
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(host.textContent).not.toContain("this runner serves another owner");
   });
 });
