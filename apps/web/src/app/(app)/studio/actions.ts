@@ -5,7 +5,7 @@ import type { StudioAgentPreference } from "@gnosia/schema/shared";
 import { redirect } from "next/navigation";
 
 import type { AgentRow } from "@/components/studio/StudioSettings";
-import { noteBody } from "@/lib/concept-workspace-core";
+import { noteBody } from "@gnosia/tutor/concept-workspace-core";
 import { readConceptWorkspace } from "@/lib/concept-workspace";
 import { catalogDatabase, withLearnerStore } from "@/lib/learner-store";
 import { currentOwner } from "@/lib/owner";

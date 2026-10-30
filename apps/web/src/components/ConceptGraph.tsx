@@ -1,8 +1,8 @@
 import Link from "next/link";
 
 import { cx } from "@/components/ui/classes";
-import { layoutGraph, wrapLabel, type GraphEdge, type GraphNode } from "@/lib/concept-graph";
-import { MASTERY_BUCKET_LABEL, type MasteryBucket } from "@/lib/mastery-bucket";
+import { layoutGraph, wrapLabel, type GraphEdge, type GraphNode } from "@gnosia/tutor/concept-graph";
+import { MASTERY_BUCKET_LABEL, type MasteryBucket } from "@gnosia/tutor/mastery-bucket";
 
 /**
  * A layered prerequisite graph in plain SVG, coloured by mastery bucket.

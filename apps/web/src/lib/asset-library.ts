@@ -19,13 +19,13 @@ import {
 } from "@gnosia/catalog/state";
 
 import { resolveAsset, seams, servedAssets, storedPosters } from "@/lib/asset-files";
-import type { RouteProblemCode } from "@/lib/asset-problems";
+import type { RouteProblemCode } from "@gnosia/tutor/asset-problems";
 import { catalogDatabase } from "@/lib/learner-store";
 import { compareByKindThenId, isCompanionKind, searchableText } from "@/lib/library";
 import type { AssetAccess } from "@/lib/library-thumbnails";
 import { currentOwner, currentScope, NoOwnerError, type OwnerScope } from "@/lib/owner";
-import { FAVORITE_PREFIX, favoriteKey, parseFavorite, type Favorite } from "@/lib/favorite";
-import { parsePlayback, playbackKey, type Playback } from "@/lib/playback";
+import { FAVORITE_PREFIX, favoriteKey, parseFavorite, type Favorite } from "@gnosia/tutor/favorite";
+import { parsePlayback, playbackKey, type Playback } from "@gnosia/tutor/playback";
 import {
   optionalParents,
   optionalTitles,
@@ -36,7 +36,6 @@ import {
   type AssetDetail,
 } from "@gnosia/tutor/server/asset-detail";
 
-export type { AssetDetail };
 
 /**
  * The library's door to the catalog, shaped exactly like

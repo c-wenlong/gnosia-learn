@@ -12,8 +12,8 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { buttonClasses, cx } from "@/components/ui/classes";
 import type { Job } from "@/lib/studio-jobs";
-import type { TileStage } from "@/lib/studio-tile-jobs";
-import { conversationHref, panelHref } from "@/lib/studio-view";
+import type { TileStage } from "@/lib/studio-grid-jobs";
+import { conversationHref, panelHref } from "@/lib/studio-url";
 import { useElapsed } from "@/lib/use-elapsed";
 
 /**

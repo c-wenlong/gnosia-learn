@@ -8,19 +8,7 @@ import {
 
 import { requestIsSameOrigin } from "@/lib/auth/core";
 
-export {
-  CHAT_RATE_LIMIT,
-  checkRateLimit,
-  clientIp,
-  MAX_TRACKED_CLIENTS,
-  measurePayload,
-  PAYLOAD_LIMITS,
-  resetRateLimits,
-  SUMMARIZE_RATE_LIMIT,
-  type RateLimitRule,
-  type RateLimitStore,
-  type RateLimitVerdict,
-} from "@gnosia/tutor/guards";
+export { CHAT_RATE_LIMIT, SUMMARIZE_RATE_LIMIT, type RateLimitRule } from "@gnosia/tutor/guards";
 
 /**
  * Abuse prevention for the `/api/agent/*` routes. Payload measurement and

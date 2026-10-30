@@ -13,7 +13,8 @@ import { isCurrentRow } from "@/lib/nav";
 import { recentGlyph } from "@/lib/recent-glyphs";
 import { matchedTitle, time, type RecentItem } from "@/lib/recent-core";
 import { matchParts, searchRows, type SearchRow } from "@/lib/studio-draft-list";
-import { conversationHref, relativeTime } from "@/lib/studio-view";
+import { conversationHref } from "@/lib/studio-url";
+import { relativeTime } from "@/lib/studio-grid";
 
 import { LABEL_FADE, LABEL_SHOWN } from "./motion";
 import { rowClick } from "./row-click";

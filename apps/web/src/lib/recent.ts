@@ -21,9 +21,9 @@ import {
 import { getCourses } from "@/data/courses";
 import { ContentUnavailableError } from "@/data/source";
 import { catalogDatabase } from "@/lib/learner-store";
-import { bucketOf } from "@/lib/mastery-bucket";
+import { bucketOf } from "@gnosia/tutor/mastery-bucket";
 import { currentOwner, ownerScope, type OwnerScope } from "@/lib/owner";
-import { parsePlayback } from "@/lib/playback";
+import { parsePlayback } from "@gnosia/tutor/playback";
 import {
   asPinned,
   conceptTouches,
@@ -41,7 +41,7 @@ import {
   type VideoProgress,
 } from "@/lib/recent-core";
 import { studioEnabled } from "@/lib/studio";
-import type { Course } from "@/lib/types";
+import type { Course } from "@gnosia/tutor/types";
 
 /**
  * Recent, read from the catalog (L7 of

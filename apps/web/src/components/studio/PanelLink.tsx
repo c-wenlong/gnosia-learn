@@ -7,7 +7,7 @@ import type { ComponentProps, ReactNode } from "react";
 import { usePanelHost } from "@/components/studio/panel-host";
 import { cx } from "@/components/ui/classes";
 import { isPlainClick } from "@/lib/plain-click";
-import { browserMove } from "@/lib/studio-view";
+import { browserMove } from "@/lib/studio-url";
 
 /**
  * A link that opens, closes or swaps a panel on `/studio`: a `Link`, except

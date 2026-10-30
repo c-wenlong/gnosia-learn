@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { CatalogDatabase } from "@gnosia/catalog/state";
 import { ownerScope } from "@gnosia/schema/shared";
 import type { TutorDeps } from "@gnosia/tutor/server/deps";
-import { BadRequest, MAX_ID_CHARS, MAX_NOTE_CHARS } from "@gnosia/tutor/server/learner-writes";
+import { BadRequest, MAX_ID_CHARS } from "@gnosia/tutor/server/learner-writes";
 import { failureCode } from "@gnosia/tutor/server/provider-keys";
 import type { TurnReply } from "@gnosia/tutor/server/turns";
 
@@ -60,7 +60,7 @@ export const MAX_BODY_BYTES = 64_000;
  * `cs4263-m1-t1`, so short). One copy, in the learner writes the sidecar
  * shares.
  */
-export { MAX_ID_CHARS, MAX_NOTE_CHARS };
+export { MAX_ID_CHARS };
 
 /** A payload's fault: a 400. The learner writes' own class, so a shared validator's refusal is caught here too. */
 export { BadRequest };

@@ -6,7 +6,7 @@ import { useCallback, useState } from "react";
 import { postJob, useStudioJobs } from "@/components/studio/JobsProvider";
 import { usePanelHost } from "@/components/studio/panel-host";
 import { jobVerbPath, verbOutcome, type VerbOutcome } from "@/lib/studio-job-verb";
-import { panelHref } from "@/lib/studio-view";
+import { panelHref } from "@/lib/studio-url";
 
 export interface SendOptions {
   body?: unknown;

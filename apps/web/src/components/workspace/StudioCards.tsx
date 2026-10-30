@@ -1,15 +1,15 @@
 import Link from "next/link";
 import { useId, type ReactNode } from "react";
 
-import { assetDisplayTitle, assetKindLabel } from "@/components/asset-meta";
+import { assetDisplayTitle, assetKindLabel } from "@gnosia/tutor/asset-meta";
 import { ConceptGraph } from "@/components/ConceptGraph";
 import { MathText } from "@/components/Math";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { cx } from "@/components/ui/classes";
 import { AssetThumb } from "@/components/workspace/AssetThumb";
-import type { CheckStatus, ConceptWorkspace } from "@/lib/concept-workspace-core";
-import { historyBars } from "@/lib/concept-workspace-core";
+import type { CheckStatus, ConceptWorkspace } from "@gnosia/tutor/concept-workspace-core";
+import { historyBars } from "@gnosia/tutor/concept-workspace-core";
 import { conceptMapHref } from "@/lib/learn-index";
 import { assetHref } from "@/lib/library";
 

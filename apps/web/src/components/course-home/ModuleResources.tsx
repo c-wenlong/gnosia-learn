@@ -9,9 +9,11 @@ import { Collapse } from "@/components/ui/Collapse";
 import { Input } from "@/components/ui/Input";
 import { useLearner } from "@/lib/learner-context";
 import { prefersReducedMotion } from "@/lib/motion";
-import type { Resource } from "@/lib/types";
+import type { Resource } from "@gnosia/tutor/types";
 
-import { Glyph, RESOURCE_GLYPH } from "./icons";
+import { Glyph } from "@/components/ui/Glyph";
+
+import { RESOURCE_GLYPH } from "./icons";
 import { resourceLink } from "./resource-link";
 import { ROW, ROW_HOVER, ROW_LIST, ROW_META, ROW_TITLE, STRETCHED } from "./rows";
 

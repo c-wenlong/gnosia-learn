@@ -3,8 +3,8 @@
 import { Button } from "@/components/ui/Button";
 import { cx, linkClasses, STATUS_TEXT } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
-import { formatInterval } from "@/lib/review-core";
-import { recordedCard, recordedLine, type RecordedResult, type Verdict } from "@/lib/tutor-check";
+import { formatInterval } from "@gnosia/tutor/review-core";
+import { recordedCard, recordedLine, type RecordedResult, type Verdict } from "@gnosia/tutor/tutor-check";
 
 /**
  * The row under a check the learner answered in the tutor chat (R2 of

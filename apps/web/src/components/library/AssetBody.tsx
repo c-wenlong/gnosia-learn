@@ -7,19 +7,19 @@ import { ExpandablePanel } from "@/components/library/ExpandablePanel";
 import { LibraryVideo } from "@/components/library/LibraryVideo";
 import { Notice } from "@/components/ui/Notice";
 import { NoteProse } from "@/components/NoteProse";
-import { safeHref } from "@/components/markdown";
-import { formatTimecode } from "@/components/media";
+import { safeHref } from "@gnosia/tutor/markdown";
+import { formatTimecode } from "@gnosia/tutor/media";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import type { TabItem } from "@/components/ui/Tabs";
 import { TextLink } from "@/components/ui/TextLink";
 import { WidgetFailure } from "@/components/WidgetFailure";
-import { assetKindLabel } from "@/components/asset-meta";
-import type { RouteProblemCode } from "@/lib/asset-problems";
+import { assetKindLabel } from "@gnosia/tutor/asset-meta";
+import type { RouteProblemCode } from "@gnosia/tutor/asset-problems";
 import { assetFileHref, assetHref, assetStatusHref } from "@/lib/library";
-import { ownValue } from "@/lib/own-key";
-import type { Playback } from "@/lib/playback";
-import { parseChapters, parseTranscript } from "@/lib/transcript";
+import { ownValue } from "@gnosia/tutor/own-key";
+import type { Playback } from "@gnosia/tutor/playback";
+import { parseChapters, parseTranscript } from "@gnosia/tutor/transcript";
 
 /** What a servable video's player needs beyond the body's data: its playback, its star, and the page's slots. */
 export interface AssetBodyVideo {

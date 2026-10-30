@@ -9,13 +9,13 @@ import {
 } from "@gnosia/catalog/state";
 import { connection } from "next/server";
 
-import { assetDisplayTitle, assetKindLabel, familyOf } from "@/components/asset-meta";
-import { parseChecks } from "@/lib/concept-note-core";
+import { assetDisplayTitle, assetKindLabel, familyOf } from "@gnosia/tutor/asset-meta";
+import { parseChecks } from "@gnosia/tutor/concept-note-core";
 import { withCatalog } from "@/lib/asset-library";
 import { assetHref, isCompanionKind, libraryHref } from "@/lib/library";
 import type { ModulePathAssets, PathAsset } from "@/lib/module-path";
 import { currentScope } from "@/lib/owner";
-import type { Course } from "@/lib/types";
+import type { Course } from "@gnosia/tutor/types";
 
 /**
  * What a course page reads from the catalog per module, for its meta row and

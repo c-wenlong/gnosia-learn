@@ -24,7 +24,9 @@ import {
 import { UserMessage } from "@/components/ui/Message";
 import { TypingDots } from "@/components/ui/TypingDots";
 import { MENTION_HINT, mentionOptions, valueSendBlock } from "@/lib/studio-cards";
-import { createDraft, idempotencyKey, TAG_KINDS, type TagKind, type VideoAvailability } from "@/lib/studio-drafts";
+import { createDraft, TAG_KINDS, type TagKind } from "@/lib/studio-drafts";
+import { idempotencyKey } from "@/lib/studio-client";
+import { type VideoAvailability } from "@/lib/studio-health";
 import {
   carryOpener,
   firstTurn,
@@ -40,7 +42,7 @@ import {
   takePrefill,
   type ExtendRefusal,
 } from "@/lib/studio-extend";
-import { canvasHref, panelHref } from "@/lib/studio-view";
+import { canvasHref, panelHref } from "@/lib/studio-url";
 
 type Value = MentionValue<TagKind>;
 

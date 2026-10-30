@@ -4,14 +4,6 @@ import type { VideoBrief } from "@/lib/studio-brief-video";
 import { asRefusal, call, DRAFTS_BASE as BASE, draftPath, type Refusal } from "@/lib/studio-client";
 import type { Brief } from "@/lib/studio-jobs";
 
-export type { VideoAudience, VideoBeat, VideoBrief, VideoScene } from "@/lib/studio-brief-video";
-// The client, the BYOK calls, the stream and the health reads each have a
-// module of their own now; these keep the `@/lib/studio-drafts` imports working.
-export * from "@/lib/studio-client";
-export * from "@/lib/studio-byok";
-export * from "@/lib/studio-events";
-export * from "@/lib/studio-health";
-
 /**
  * Every call the web app makes to the runner's draft routes, and the shapes
  * they carry. The routes (phase 1a of docs/STUDIO-CHAT-FIRST.md) were built

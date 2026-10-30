@@ -23,7 +23,8 @@ import {
   type MadeItem,
 } from "@/lib/conversation-made";
 import { scrollBehavior } from "@/lib/motion";
-import { dayAndTime, extendFromHref } from "@/lib/studio-view";
+import { dayAndTime } from "@/lib/studio-grid";
+import { extendFromHref } from "@/lib/studio-url";
 
 /**
  * What a conversation made, in its thread (D89 of docs/STUDIO-CHAT-FIRST.md):

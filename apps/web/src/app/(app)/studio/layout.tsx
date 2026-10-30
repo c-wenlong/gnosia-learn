@@ -1,6 +1,6 @@
 import { JobsProvider } from "@/components/studio/JobsProvider";
 import { StudioZone } from "@/components/studio/StudioZone";
-import { appTimeZone } from "@/lib/time-zone";
+import { appTimeZone } from "@gnosia/tutor/server/time-zone";
 import { requireStudio, studioApi } from "@/lib/studio";
 import type { Job } from "@/lib/studio-jobs";
 

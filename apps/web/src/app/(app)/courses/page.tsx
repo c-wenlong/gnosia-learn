@@ -7,7 +7,7 @@ import { getCourseCovers } from "@/data/course-covers";
 import { getCourses } from "@/data/courses";
 import { itemStanding } from "@/lib/course-path";
 import { toCourseSummary, usedTags } from "@/lib/course-summary";
-import { loadKnowledgeBase } from "@/lib/kb/load";
+import { loadKnowledgeBase } from "@/lib/learner-store";
 
 export const metadata: Metadata = { title: "Courses" };
 

@@ -9,7 +9,7 @@ import { COLUMN_TITLE, cx } from "@/components/ui/classes";
 import { continueHref, defaultModuleIndex, pathStatus, type TopicMastery } from "@/lib/course-path";
 import { libraryHref } from "@/lib/library";
 import { useLearner } from "@/lib/learner-context";
-import type { Course } from "@/lib/types";
+import type { Course } from "@gnosia/tutor/types";
 
 import { CourseRail } from "./CourseRail";
 import { CourseSidebar } from "./CourseSidebar";

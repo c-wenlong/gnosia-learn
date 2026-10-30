@@ -3,7 +3,7 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-import type { Course } from "@/lib/types";
+import type { Course } from "@gnosia/tutor/types";
 
 // The learner's ticks decide the current module; none ticked is a new course.
 const learner = {

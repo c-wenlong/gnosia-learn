@@ -39,8 +39,8 @@ import {
   wantsLivePicture,
   type LivePictures,
   type TileStage,
-} from "@/lib/studio-tile-jobs";
-import { panelHref } from "@/lib/studio-view";
+} from "@/lib/studio-grid-jobs";
+import { panelHref } from "@/lib/studio-url";
 import { useOnScreen } from "@/lib/use-on-screen";
 import { usePageVisible } from "@/lib/use-page-visible";
 import { prefersReducedMotion } from "@/lib/motion";
@@ -57,7 +57,7 @@ import { prefersReducedMotion } from "@/lib/motion";
  * sharp. Clicking either opens the job in the panel, where Accept and Discard
  * are.
  *
- * Everything this decides is in `studio-tile-jobs.ts`, which is tested; this
+ * Everything this decides is in `studio-grid-jobs.ts`, which is tested; this
  * file is the markup and the polling.
  */
 

@@ -32,7 +32,8 @@ import {
 import { composerKey } from "@/components/ui/composer-keys";
 import { kindCardEditable, pressLabel, type KindCardStatus } from "@/lib/studio-cards";
 import { modeLine, type DrawBlock } from "@/lib/studio-chat";
-import type { PendingTopic, Refusal } from "@/lib/studio-drafts";
+import type { PendingTopic } from "@/lib/studio-drafts";
+import type { Refusal } from "@/lib/studio-client";
 import type { Brief } from "@/lib/studio-jobs";
 
 /** What a save came back with: the card places a refusal on its field. */

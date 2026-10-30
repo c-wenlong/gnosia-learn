@@ -1,14 +1,10 @@
 import type { MentionOption, MentionValue } from "@/lib/mentions";
-import { isConceptSlug } from "@/lib/concept-workspace-core";
+import { isConceptSlug } from "@gnosia/tutor/concept-workspace-core";
 import { mentionOptions } from "@/lib/studio-cards";
 import { capFrom } from "@/lib/studio-chat";
-import {
-  diagramAvailability,
-  RUNNER_DOWN,
-  TAG_KINDS,
-  videoAvailability,
-  type TagKind,
-} from "@/lib/studio-drafts";
+import { TAG_KINDS, type TagKind } from "@/lib/studio-drafts";
+import { diagramAvailability, videoAvailability } from "@/lib/studio-health";
+import { RUNNER_DOWN } from "@/lib/studio-client";
 import { extendRefusal } from "@/lib/studio-extend";
 import { chatTurns, type ThreadItem, type TutorTurn } from "@/lib/tutor-thread";
 

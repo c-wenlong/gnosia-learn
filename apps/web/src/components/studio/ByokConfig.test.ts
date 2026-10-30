@@ -11,8 +11,8 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ getByokSettings: vi.fn(), removeByokProvider: vi.fn(), listByokModels: vi.fn(), saveByokModels: vi.fn() }));
 
-vi.mock("@/lib/studio-drafts", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/studio-drafts")>()),
+vi.mock("@/lib/studio-byok", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/studio-byok")>()),
   getByokSettings: mocks.getByokSettings,
   removeByokProvider: mocks.removeByokProvider,
   listByokModels: mocks.listByokModels,

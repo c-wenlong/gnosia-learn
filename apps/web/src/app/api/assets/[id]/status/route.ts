@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { posterSource, resolveAsset, type AssetSourceResult } from "@/lib/asset-files";
-import type { RouteProblemCode } from "@/lib/asset-problems";
+import type { RouteProblemCode } from "@gnosia/tutor/asset-problems";
 import { unauthenticated } from "@/lib/learner-api";
 import { withLearnerStore } from "@/lib/learner-store";
 import { NoOwnerError } from "@/lib/owner";

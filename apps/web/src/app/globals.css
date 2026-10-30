@@ -176,7 +176,8 @@
    * `.dark` and `.gnosia.dark` point it at `--surface2`. The one name left of
    * the pre-redesign palette, kept because it is a different token per
    * palette and so has no single token to be replaced by; the others went on
-   * 2026-10-05 (#359) and `theme-tokens.test.ts` fails one coming back.
+   * 2026-10-05 (#359); `stylesheets.test.ts` and the `gnosia/theme-tokens` lint
+   * rule fail one coming back.
    */
   --surface-raised: var(--surface);
 }

@@ -71,10 +71,17 @@ import {
   type CapStatus,
   type Suggestion,
 } from "@/lib/studio-chat";
-import { setDraftHarness, setDraftModel, type VideoAvailability } from "@/lib/studio-drafts";
-import { arrivingPurpose, arrivingSource, EXTEND_OPENING_TURN, MAKE_VIDEO_OPENING_TURN, makeVideoTitle } from "@/lib/studio-extend";
+import { setDraftHarness, setDraftModel } from "@/lib/studio-drafts";
+import { type VideoAvailability } from "@/lib/studio-health";
+import {
+  arrivingPurpose,
+  arrivingSource,
+  EXTEND_OPENING_TURN,
+  MAKE_VIDEO_OPENING_TURN,
+  makeVideoTitle,
+} from "@/lib/studio-extend";
 import type { HarnessValue } from "@/lib/studio-harness";
-import { titleOf } from "@/lib/studio-view";
+import { titleOf } from "@/lib/studio-url";
 
 /**
  * The conversation, in the studio's panel (docs/STUDIO-CHAT-FIRST.md, "UI",

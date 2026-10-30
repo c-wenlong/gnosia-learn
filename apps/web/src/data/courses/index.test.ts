@@ -9,7 +9,7 @@ import {
 } from "@/data/courses";
 import { courseTopicIds } from "@/lib/course-path";
 import { getTags, tagFor, tagsFor } from "@/data/content";
-import type { Course } from "@/lib/types";
+import type { Course } from "@gnosia/tutor/types";
 
 // The app reads courses from the database only; this suite tests logic over
 // real course data, so it reads the export tree instead (`@/test/content-files`).

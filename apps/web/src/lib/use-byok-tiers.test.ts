@@ -12,12 +12,12 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 
 const mocks = vi.hoisted(() => ({ getByokSettings: vi.fn() }));
 
-vi.mock("@/lib/studio-drafts", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/studio-drafts")>()),
+vi.mock("@/lib/studio-byok", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/studio-byok")>()),
   getByokSettings: mocks.getByokSettings,
 }));
 
-const { BYOK_SETTINGS_CHANGED } = await import("@/lib/studio-drafts");
+const { BYOK_SETTINGS_CHANGED } = await import("@/lib/studio-byok");
 const { useByokTiers } = await import("./use-byok-tiers");
 
 type Read = ReturnType<typeof useByokTiers>;

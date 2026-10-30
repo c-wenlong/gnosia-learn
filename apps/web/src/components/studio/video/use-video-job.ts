@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useStudioJobs } from "@/components/studio/JobsProvider";
 import { useJobEventStream } from "@/components/studio/use-job-events";
-import type { TranscriptCue, VideoChapter } from "@/components/media";
+import type { TranscriptCue, VideoChapter } from "@gnosia/tutor/media";
 import { getJob } from "@/lib/studio-job-read";
 import { isActive, type StudioEvent } from "@/lib/studio-jobs";
 import { usePageVisible } from "@/lib/use-page-visible";
@@ -12,15 +12,14 @@ import {
   asVideoJob,
   mediaFiles,
   mediaHref,
-  parseVtt,
   readSheets,
-  readTranscript,
   sheetsHref,
   SHEETS_POLL_MS,
   type ContactSheet,
-  type VideoBrief,
   type VideoJob,
-} from "@/lib/studio-video";
+} from "@/lib/studio-video-job";
+import { type VideoBrief } from "@/lib/studio-brief-video";
+import { parseVtt, readTranscript } from "@/lib/captions";
 
 /**
  * The video job view's reads, each an HTTP call to the runner through the

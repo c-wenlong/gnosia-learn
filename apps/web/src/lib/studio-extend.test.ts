@@ -21,7 +21,7 @@ import {
   makeVideoValue,
 } from "./studio-extend";
 import { openerValue } from "./studio-cards";
-import { RUNNER_DOWN } from "./studio-drafts";
+import { RUNNER_DOWN } from "@/lib/studio-client";
 
 /** A `Storage` in memory, and one whose every call throws like a blocked one. */
 function memory(): Storage {

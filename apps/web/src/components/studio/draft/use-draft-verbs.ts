@@ -16,7 +16,6 @@ import {
   drawBoth,
   drawDraft,
   isDraftKind,
-  refusalReason,
   releaseHold,
   saveBrief,
   sendMessage,
@@ -27,8 +26,9 @@ import {
   type TagKind,
   type TranscriptBrief,
 } from "@/lib/studio-drafts";
+import { refusalReason } from "@/lib/studio-client";
 import type { Brief } from "@/lib/studio-jobs";
-import { panelHref } from "@/lib/studio-view";
+import { panelHref } from "@/lib/studio-url";
 
 /** A card's refused press, kept against its card until the record says why. */
 export type CardRefusals = Partial<Record<CardKey, DrawRefusal & { seq: number }>>;

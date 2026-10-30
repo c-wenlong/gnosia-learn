@@ -21,7 +21,6 @@ import { currentOwner } from "@/lib/owner";
  */
 
 export { courseSlugsOf, placeOf };
-export type { ConceptWorkspaceRead };
 
 /**
  * The read without the request marker, for a route handler, a server action

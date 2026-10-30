@@ -3,7 +3,8 @@ import { act, createElement, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { DraftView, TranscriptEntry, VideoBrief } from "@/lib/studio-drafts";
+import type { DraftView, TranscriptEntry } from "@/lib/studio-drafts";
+import type { VideoBrief } from "@/lib/studio-brief-video";
 import type { Brief } from "@/lib/studio-jobs";
 
 /**
@@ -87,10 +88,16 @@ vi.mock("@/lib/studio-drafts", async (importOriginal) => ({
   drawBoth: mocks.drawBoth,
   setDraftTrust: mocks.setDraftTrust,
   declineSuggestion: mocks.declineSuggestion,
+}));
+vi.mock("@/lib/studio-events", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/studio-events")>()),
   openDraftEvents: (_id: string, _after: unknown, handlers: NonNullable<typeof mocks.events>) => {
     mocks.events = handlers;
     return () => {};
   },
+}));
+vi.mock("@/lib/studio-health", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/studio-health")>()),
   readStudioHealth: mocks.readStudioHealth,
 }));
 

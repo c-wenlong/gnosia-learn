@@ -5,10 +5,8 @@ import type { VideoChapter } from "@gnosia/tutor/media";
 import { assetFileHref, assetStatusHref } from "@/lib/library";
 import { capitalised } from "@/lib/sentence";
 import { chapterTitle, isNarrated as briefIsNarrated, shortLength, type VideoBrief } from "@/lib/studio-brief-video";
-import { announceStop, jobKindOf, type Announcement, type GateStep, type Job } from "@/lib/studio-jobs";
+import { announceStop, jobKindOf, type Announcement, type GateStep } from "@/lib/studio-jobs";
 
-export type { VideoBeat, VideoBrief, VideoScene } from "@/lib/studio-brief-video";
-export { chapterTitle } from "@/lib/studio-brief-video";
 
 /**
  * What a video job looks like to the studio, decided here and nowhere else.
@@ -150,9 +148,6 @@ export interface ContactSheet {
   round: number;
 }
 
-/** A job row of either kind, as the list mixes them. */
-export type AnyJob = Job | VideoJob;
-
 export function isVideoJob(job: { kind?: string; target?: string } | null | undefined): job is VideoJob {
   return job != null && jobKindOf(job) === "video";
 }
@@ -236,11 +231,6 @@ export function videoStatusHref(slug: string): string {
 export function libraryHref(slug: string, from?: string): string {
   const page = `/library/${encodeURIComponent(videoAssetId(slug))}`;
   return from === undefined ? page : `${page}?${new URLSearchParams({ from })}`;
-}
-
-/** The logical name a video job holds its lease on. */
-export function videoTarget(slug: string): string {
-  return `videos/${slug}.mp4`;
 }
 
 /* -------------------------------------------------------------------------- */

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 
-import type { Verdict } from "@/lib/tutor-check";
+import type { Verdict } from "@gnosia/tutor/tutor-check";
 
 import { slotPlan, type CheckItem } from "./use-check-thread";
 

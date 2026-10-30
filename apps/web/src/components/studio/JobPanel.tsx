@@ -12,7 +12,7 @@ import { useJobVerb } from "@/components/studio/use-job-verb";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
 import { VideoJobPanel } from "@/components/studio/video/VideoJobPanel";
 import { getJob } from "@/lib/studio-job-read";
-import type { JobLookup } from "@/lib/studio-video";
+import type { JobLookup } from "@/lib/studio-video-job";
 import { Mono, PanelHeading } from "@/components/studio/StudioChrome";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -32,9 +32,10 @@ import {
   type StudioEvent,
 } from "@/lib/studio-jobs";
 import { jobStateLabel, progressWord } from "@/lib/studio-job-state";
-import { createDraft, idempotencyKey } from "@/lib/studio-drafts";
+import { createDraft } from "@/lib/studio-drafts";
+import { idempotencyKey } from "@/lib/studio-client";
 import { leaveOpener, leavePrefill, sessionStore, talkItThroughText, talkTarget } from "@/lib/studio-extend";
-import { conversationHref, extendFromHref, panelHref } from "@/lib/studio-view";
+import { conversationHref, extendFromHref, panelHref } from "@/lib/studio-url";
 
 /**
  * The right panel while a job is happening, and after it stops.

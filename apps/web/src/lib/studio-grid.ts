@@ -10,7 +10,7 @@
  */
 
 import { dayLabel, timeOfDay } from "@/lib/day-groups";
-import { dayKey } from "@/lib/days";
+import { dayKey } from "@gnosia/tutor/days";
 import { NO_TOPIC, type KindFilter, type StudioView } from "@/lib/studio-url";
 
 export { formatBytes } from "@gnosia/tutor/asset-meta";

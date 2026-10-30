@@ -1,11 +1,11 @@
 import katex from "katex";
 
-import { mathSpanAt } from "@/components/markdown";
+import { mathSpanAt } from "@gnosia/tutor/markdown";
 
 /**
  * LaTeX to typeset HTML, and a plain string split into its prose and its maths.
  *
- * React-free on purpose, like `components/markdown.ts`: the edge cases are in
+ * React-free on purpose, like `@gnosia/tutor/markdown`: the edge cases are in
  * the splitting and the options, and both should be testable without a DOM.
  * `components/Math.tsx` is what puts the result on a page.
  *

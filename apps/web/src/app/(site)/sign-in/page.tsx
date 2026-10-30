@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
-import { GnosiaLockup, GnosiaMascot } from "@/components/brand";
+import { GnosiaLockup } from "@/components/brand/GnosiaWordmark";
+import { GnosiaMascot } from "@/components/brand/GnosiaMascot";
 import { Button } from "@/components/ui/Button";
 import { AUTH_SECRET_VAR, OWNER_PASSWORD_VAR, safeNextPath } from "@/lib/auth/core";
 import { authConfig } from "@/lib/auth/session";

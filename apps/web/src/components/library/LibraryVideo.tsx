@@ -6,11 +6,11 @@ import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 
 import { AskButton, DownloadButton, FavoriteButton, PdfButton } from "@/components/library/AssetActions";
 import { AskPanel } from "@/components/library/AskPanel";
 import { WatchStatusContext, type WatchStatus } from "@/components/library/WatchProgress";
-import type { TranscriptCue, VideoChapter } from "@/components/media";
+import type { TranscriptCue, VideoChapter } from "@gnosia/tutor/media";
 import { Collapse } from "@/components/ui/Collapse";
 import type { TabItem } from "@/components/ui/Tabs";
 import { VideoPlayer, type PlaybackSignal } from "@/components/VideoPlayer";
-import { coverage, MAX_RANGES, mergeRanges, resumeAt, type Playback, type Range } from "@/lib/playback";
+import { coverage, MAX_RANGES, mergeRanges, resumeAt, type Playback, type Range } from "@gnosia/tutor/playback";
 
 /** Save at most this often while a video plays, in milliseconds. */
 const SAVE_EVERY_MS = 15_000;

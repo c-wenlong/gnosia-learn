@@ -7,9 +7,11 @@ import { cx, FOCUS } from "@/components/ui/classes";
 import { CollapseChevron } from "@/components/ui/Collapse";
 import { Panel } from "@/components/ui/Panel";
 import { moduleHref, moduleMark, type PathStatus } from "@/lib/course-path";
-import type { Course } from "@/lib/types";
+import type { Course } from "@gnosia/tutor/types";
 
-import { Glyph, ModuleMarkIcon } from "./icons";
+import { Glyph } from "@/components/ui/Glyph";
+
+import { ModuleMarkIcon } from "./icons";
 import { ROW_HOVER } from "./rows";
 
 /**

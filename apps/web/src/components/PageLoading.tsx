@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { Skeleton, SKELETON } from "@/components/ui/Skeleton";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { cardClasses, cx } from "@/components/ui/classes";
 
 /**
@@ -119,9 +119,6 @@ export function PageLoading({
  * changes height under the learner as the page arrives.
  */
 export const WORKSPACE_ROOT = "flex flex-col gap-4 ws:min-h-0 ws:flex-1";
-
-/** The kit `Skeleton`'s classes, for a page outline whose block is not a `<div>`. */
-export const LOADING_BLOCK = SKELETON;
 
 /** The outline most pages share: a heading, a column of cards beside a narrower one. */
 function AppOutline() {

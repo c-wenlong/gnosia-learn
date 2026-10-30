@@ -1,4 +1,4 @@
-import { masteryCaption, MASTERY_BUCKET_LABEL, type MasteryBucket } from "@/lib/mastery-bucket";
+import { masteryCaption, MASTERY_BUCKET_LABEL, type MasteryBucket } from "@gnosia/tutor/mastery-bucket";
 
 import { cx } from "./classes";
 

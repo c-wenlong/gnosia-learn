@@ -2,17 +2,17 @@ import "server-only";
 
 import type { ReactNode } from "react";
 
-import { assetDisplayTitle, assetKindLabel, familyOf } from "@/components/asset-meta";
+import { assetDisplayTitle, assetKindLabel, familyOf } from "@gnosia/tutor/asset-meta";
 import { FavoriteButton } from "@/components/library/AssetActions";
 import { AssetBody } from "@/components/library/AssetBody";
 import { loadAssetBody } from "@/components/library/asset-body-data";
 import { MarkWatched } from "@/components/library/MarkWatched";
 import { loadAssetDetail, loadAssetParents, loadFavorite, loadPlayback } from "@/lib/asset-library";
-import { dayKey } from "@/lib/days";
+import { dayKey } from "@gnosia/tutor/days";
 import { loadKnowledgeBase } from "@/lib/learner-store";
 import { assetHref, conceptHref, explainedConcepts } from "@/lib/library";
 import { parseOpen, previewConversation, previewDate, type PreviewHeader } from "@/lib/library-preview";
-import { appTimeZone } from "@/lib/time-zone";
+import { appTimeZone } from "@gnosia/tutor/server/time-zone";
 
 /** What the previewer is handed for one asset. */
 export type PreviewAnswer =

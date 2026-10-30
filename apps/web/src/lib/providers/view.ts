@@ -1,4 +1,4 @@
-import type { ChainEntry } from "@/lib/agent/providers";
+import type { ChainEntry } from "@gnosia/tutor/providers";
 import type { ProviderKeyView, ProviderKeysView } from "@/lib/provider-keys/settings";
 
 /**

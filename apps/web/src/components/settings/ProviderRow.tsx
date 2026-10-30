@@ -14,7 +14,7 @@ import { cx } from "@/components/ui/classes";
 import { usePresence } from "@/components/ui/use-presence";
 import type { ProviderRowView } from "@/lib/providers/view";
 import { sendJson } from "@/lib/send-json";
-import { BYOK_SETTINGS_CHANGED } from "@/lib/studio-drafts";
+import { BYOK_SETTINGS_CHANGED } from "@/lib/studio-byok";
 
 import { tone, textOf, failure, type Status, type Reply } from "./status";
 

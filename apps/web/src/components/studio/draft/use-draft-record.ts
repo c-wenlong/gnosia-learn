@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { topSeq, type Value } from "@/components/studio/draft/thread";
-import { getDraft, openDraftEvents, type DraftView } from "@/lib/studio-drafts";
+import { getDraft, type DraftView } from "@/lib/studio-drafts";
+import { openDraftEvents } from "@/lib/studio-events";
 import { announceDraftChange } from "@/lib/studio-draft-list";
 
 /** The polled record while a turn is in flight, for when the stream is down. */

@@ -1,4 +1,4 @@
-import { dayKey } from "@/lib/days";
+import { dayKey } from "@gnosia/tutor/days";
 import { dayLabel, editedLabel } from "@/lib/day-groups";
 import type { AssetParents } from "@gnosia/catalog/state";
 

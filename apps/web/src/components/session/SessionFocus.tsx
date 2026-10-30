@@ -11,7 +11,7 @@ import { MathText } from "@/components/Math";
 import { FeedbackBar } from "@/components/ui/FeedbackBar";
 import { Placeholder } from "@/components/ui/Placeholder";
 import { cx } from "@/components/ui/classes";
-import { DEFAULT_CONFIDENCE } from "@/lib/check-block";
+import { DEFAULT_CONFIDENCE } from "@gnosia/tutor/check-block";
 import { ConfidenceField, ReasoningField } from "@/components/workspace/SurenessFields";
 import { FocusFrame } from "./FocusFrame";
 import {
@@ -28,7 +28,7 @@ import {
   type SessionStep,
   withConsequence,
   canAskAgain,
-} from "@/lib/session-core";
+} from "@gnosia/tutor/session-core";
 import {
   outcomeOf,
   weekCheckLabel,

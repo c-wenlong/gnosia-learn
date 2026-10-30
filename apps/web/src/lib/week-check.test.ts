@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import type { ConceptCheck } from "@/lib/concept-note-core";
-import type { RecordedAnswer, SessionQuestion } from "@/lib/session-core";
+import type { ConceptCheck } from "@gnosia/tutor/concept-note-core";
+import type { RecordedAnswer, SessionQuestion } from "@gnosia/tutor/session-core";
 import {
   checksByLastAsked,
   nextWeekCheckQuestion,

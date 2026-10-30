@@ -1,6 +1,6 @@
 import { Graph, layout as dagreLayout } from "@dagrejs/dagre";
 
-import { reduceEdges, type GraphEdge, type GraphNode } from "@/lib/concept-graph";
+import { reduceEdges, type GraphEdge, type GraphNode } from "@gnosia/tutor/concept-graph";
 import {
   AXES_TOP,
   AXIS_BAND,
@@ -79,7 +79,6 @@ export interface AxesPlacement extends AxesLayout {
   needed: Record<string, number>;
 }
 
-export type { AxesLayout };
 
 /** The box dagre lays out per concept: the dot and two lines of label under it. */
 const NODE_WIDTH = 112;

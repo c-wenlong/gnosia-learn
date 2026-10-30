@@ -4,7 +4,7 @@ import { readConceptObservations } from "@gnosia/catalog/state";
 import { connection } from "next/server";
 
 import { readConceptNote } from "@/lib/concept-note";
-import { observationsOf } from "@/lib/concept-workspace-core";
+import { observationsOf } from "@gnosia/tutor/concept-workspace-core";
 import { moduleConcepts } from "@/lib/module-path";
 import { catalogDatabase, readKb } from "@/lib/learner-store";
 import { currentOwner } from "@/lib/owner";
@@ -15,9 +15,9 @@ import {
   noteQuestion,
   wrongOptionsFor,
   type SessionQuestion,
-} from "@/lib/session-core";
+} from "@gnosia/tutor/session-core";
 import { readSummaries, tutorModelConfigured } from "@/lib/session-page";
-import type { Module } from "@/lib/types";
+import type { Module } from "@gnosia/tutor/types";
 import { checksByLastAsked, weekCheckOrder, type WeekCheckConcept, type WeekCheckPlan } from "@/lib/week-check";
 
 /**

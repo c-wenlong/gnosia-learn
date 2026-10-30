@@ -3,7 +3,7 @@ import { act, createElement, StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
-import type { SessionQuestion, SessionStep } from "@/lib/session-core";
+import type { SessionQuestion, SessionStep } from "@gnosia/tutor/session-core";
 import type { WeekCheckPlan } from "@/lib/week-check";
 
 /**

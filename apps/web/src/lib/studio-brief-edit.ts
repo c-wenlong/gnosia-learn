@@ -1,6 +1,7 @@
 import type { FilterOption } from "@/components/ui/filter-menu";
-import type { PendingTopic, Refusal } from "@/lib/studio-drafts";
-import { refusalReason, refusalString } from "@/lib/studio-drafts";
+import type { PendingTopic } from "@/lib/studio-drafts";
+import type { Refusal } from "@/lib/studio-client";
+import { refusalReason, refusalString } from "@/lib/studio-client";
 import { sentence } from "@/lib/studio-chat";
 import type { Brief } from "@/lib/studio-jobs";
 

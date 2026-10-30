@@ -36,10 +36,10 @@ import {
   type TagKind,
   type TranscriptBrief,
   type TranscriptEntry,
-  type VideoAvailability,
 } from "@/lib/studio-drafts";
+import { type VideoAvailability } from "@/lib/studio-health";
 import { isTerminal, type Brief, type Job } from "@/lib/studio-jobs";
-import { panelHref } from "@/lib/studio-view";
+import { panelHref } from "@/lib/studio-url";
 
 /** What every entry in the thread reads: the record and the card state around it. */
 export interface EntryThread {

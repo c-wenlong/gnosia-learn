@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { LearnIndex } from "./LearnIndex";
-import type { GraphEdge } from "@/lib/concept-graph";
+import type { GraphEdge } from "@gnosia/tutor/concept-graph";
 import { domainLayout, domainTree, type DomainNode, type DomainTopic } from "@/lib/domain-map";
 import { axesViewBox, movedKey } from "@/lib/domain-view";
 import { parseFilter, parseLayout, parseScope, parseView, type IndexRow } from "@/lib/learn-index";

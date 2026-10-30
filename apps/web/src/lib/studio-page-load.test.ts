@@ -32,7 +32,7 @@ vi.mock("@/data/topics", async () => {
 const { default: StudioPage } = await import("@/app/(app)/studio/page");
 const { BlockedCard } = await import("@/components/studio/StudioBlocked");
 const { PanelHost } = await import("@/components/studio/PanelHost");
-const { panelSignature } = await import("@/lib/studio-view");
+const { panelSignature } = await import("@/lib/studio-url");
 
 const calls = mocks.calls as Call[];
 

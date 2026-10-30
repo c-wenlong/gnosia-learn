@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { EMPTY_KNOWLEDGE_BASE } from "@/lib/kb/types";
+import { EMPTY_KNOWLEDGE_BASE } from "@gnosia/catalog/state";
 
 // The app reads courses from the database only; this suite tests logic over
 // real course data, so it reads the export tree instead (`@/test/content-files`).
@@ -39,10 +39,7 @@ vi.mock("@/data/source", async (importOriginal) => {
  */
 const loadKnowledgeBase = vi.hoisted(() => vi.fn());
 
-vi.mock("@/lib/kb/load", () => ({
-  loadKnowledgeBase,
-  dueConcepts: () => [],
-}));
+vi.mock("@/lib/learner-store", () => ({ loadKnowledgeBase }));
 
 // The ready highlight reads the owner's recent courses (G5 of docs/proposals/knowledge-map.md).
 const recentCourses = vi.hoisted(() => vi.fn(async () => [] as string[]));

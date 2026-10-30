@@ -8,7 +8,7 @@ import { cx, FOCUS } from "@/components/ui/classes";
 import { Collapse, CollapseChevron } from "@/components/ui/Collapse";
 import { continueHref, type TopicMastery } from "@/lib/course-path";
 import { useLearner } from "@/lib/learner-context";
-import { MASTERY_BUCKET_LABEL } from "@/lib/mastery-bucket";
+import { MASTERY_BUCKET_LABEL } from "@gnosia/tutor/mastery-bucket";
 import {
   conceptMeta,
   modulePath,
@@ -18,9 +18,11 @@ import {
   type PathAsset,
   type PathPrerequisite,
 } from "@/lib/module-path";
-import type { Course, Module } from "@/lib/types";
+import type { Course, Module } from "@gnosia/tutor/types";
 
-import { FAMILY_GLYPH, Glyph, type GlyphName } from "./icons";
+import { Glyph, type GlyphName } from "@/components/ui/Glyph";
+
+import { FAMILY_GLYPH } from "./icons";
 import { ModuleResources, ResourceRow } from "./ModuleResources";
 import { ROW, ROW_BOX, ROW_HOVER, ROW_LIST, ROW_META, ROW_TITLE, STRETCHED } from "./rows";
 import { TopicRow } from "./TopicRow";

@@ -12,21 +12,17 @@ import { DisplayMenu, KindSegments, SortMenu, StudioSearch, TopicChips } from "@
 import { SettingsLink } from "@/components/studio/StudioSettings";
 import { NewVideoJobs, VideoRow, VideoTile } from "@/components/studio/video/VideoGridJob";
 import { cx, LABEL } from "@/components/ui/classes";
-import { filterVideos, gridSections, sectionItems, sortVideos, type StudioVideo } from "@/lib/studio-video";
+import { filterVideos, gridSections, sectionItems, sortVideos, type StudioVideo } from "@/lib/studio-video-grid";
 import {
   displayTitle,
   filterDiagrams,
   groupDiagrams,
-  panelHref,
-  parseView,
-  rawParamsOf,
   showsKind,
   sortDiagrams,
-  studioHref,
   type Diagram,
-  type StudioView,
   type TopicChip,
-} from "@/lib/studio-view";
+} from "@/lib/studio-grid";
+import { panelHref, parseView, rawParamsOf, studioHref, type StudioView } from "@/lib/studio-url";
 
 /**
  * The strip's controls and the grid, drawn in the browser from the address

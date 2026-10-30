@@ -20,8 +20,8 @@ prefix T to keep them apart from BYOK's D1 to D11.
 | The table | `tutor_model`, migration `0020_tutor_model`, declared in `packages/schema/src/state.ts` |
 | The one module that writes it | `services/catalog/src/state/tutor-models.ts` |
 | The web app's store, per owner | `apps/web/src/lib/tutor-models/store.ts` |
-| The order the tutor tries | `tutorSteps` and `keyFor` in `apps/web/src/lib/agent/providers.ts`, `tutorCredentials` in `apps/web/src/lib/agent/credentials.ts` |
-| A provider's model list | `listProviderModels` in `providers.ts`, cached by `apps/web/src/lib/tutor-models/model-list.ts` |
+| The order the tutor tries | `tutorSteps` and `keyFor` in `packages/tutor/src/providers.ts`, `tutorCredentials` in `apps/web/src/lib/agent/credentials.ts` |
+| A provider's model list | `listProviderModels` in `providers.ts`, cached by `cachedModelList` in `packages/tutor/src/server/model-list.ts` |
 | Add, remove, move | `POST`, `DELETE` and `PATCH /api/learner/tutor-model` |
 | Move or delete a whole provider | `PATCH` and `DELETE /api/learner/tutor-model/provider` (T12) |
 | Test one entry | `POST /api/learner/tutor-model/test` |
@@ -235,7 +235,7 @@ Added on 2026-10-05 at the owner's request, beside NVIDIA, Gemini and
 OpenRouter: OpenAI, Anthropic, DeepSeek, Zhipu GLM, Alibaba Qwen, Moonshot
 Kimi, MiniMax, Xiaomi MiMo, Mistral, Groq and xAI Grok. Each one's endpoint,
 default model, key page and list quirks were read from its own docs that
-day, and are `ADDED_PROVIDERS` in `apps/web/src/lib/agent/providers.ts`.
+day, and are `ADDED_PROVIDERS` in `packages/tutor/src/providers.ts`.
 
 - **All through the OpenAI-compatible chat endpoint, Bearer key.** Anthropic
   through its OpenAI SDK compatibility layer (`https://api.anthropic.com/v1`,

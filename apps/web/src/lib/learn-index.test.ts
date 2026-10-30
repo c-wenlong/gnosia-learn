@@ -4,7 +4,6 @@ import {
   bucketCounts,
   INDEX_FILTERS,
   dueLabel,
-  isLegendGroup,
   LEGEND_GROUPS,
   legendMembers,
   legendPress,
@@ -218,8 +217,6 @@ describe("the map's legend", () => {
       ["ready", "Ready to learn"],
     ]);
     for (const g of LEGEND_GROUPS) expect(INDEX_FILTERS.some((f) => f.key === g.key)).toBe(true);
-    expect(["mastered", "learning", "untouched", "ready"].every((f) => isLegendGroup(parseFilter(f)))).toBe(true);
-    expect(["all", "due", "leeches", "nocourse"].some((f) => isLegendGroup(parseFilter(f)))).toBe(false);
   });
 
   it("puts each concept shown in the groups it matches, ready as well as its bucket", () => {

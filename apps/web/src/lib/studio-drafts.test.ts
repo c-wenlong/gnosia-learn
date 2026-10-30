@@ -8,23 +8,21 @@ import {
   drawResults,
   releaseHold,
   stopWaiting,
-  videoAvailability,
-  diagramAvailability,
   getDraft,
-  idempotencyKey,
   listDrafts,
-  openDraftEvents,
-  readStudioHealth,
-  reconnectDelay,
+  saveBrief,
+  sendMessage,
+} from "./studio-drafts";
+import { videoAvailability, diagramAvailability, readStudioHealth } from "@/lib/studio-health";
+import {
+  idempotencyKey,
   RUNNER_DOWN,
   runnerDown,
   refusalNumber,
   refusalReason,
   refusalString,
-  saveBrief,
-  sendMessage,
-  type DraftEvent,
-} from "./studio-drafts";
+} from "@/lib/studio-client";
+import { openDraftEvents, reconnectDelay, type DraftEvent } from "@/lib/studio-events";
 
 /**
  * The client's contract with the runner's draft routes: the paths, the bodies

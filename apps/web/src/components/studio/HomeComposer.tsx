@@ -25,7 +25,8 @@ import {
 import { MENTION_HINT, mentionOptions, valueSendBlock } from "@/lib/studio-cards";
 import { harnessModelOptions, type RunnerResolved } from "@/lib/studio-agent-settings";
 import { useByokTiers } from "@/lib/use-byok-tiers";
-import { TAG_KINDS, type TagKind, type VideoAvailability } from "@/lib/studio-drafts";
+import { TAG_KINDS, type TagKind } from "@/lib/studio-drafts";
+import { type VideoAvailability } from "@/lib/studio-health";
 
 type Value = MentionValue<TagKind>;
 

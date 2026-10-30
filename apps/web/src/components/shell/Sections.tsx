@@ -26,7 +26,7 @@ import {
 } from "@/lib/recent-core";
 import { announceDraftChange, draftRows } from "@/lib/studio-draft-list";
 import { renameDraft } from "@/lib/studio-drafts";
-import { conversationHref } from "@/lib/studio-view";
+import { conversationHref } from "@/lib/studio-url";
 
 import { SearchResults } from "./ChatSearch";
 import { LABEL_FADE, LABEL_SHOWN } from "./motion";

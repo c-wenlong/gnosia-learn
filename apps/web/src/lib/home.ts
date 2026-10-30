@@ -18,11 +18,11 @@ import {
 import { getCourses } from "@/data/courses";
 import { getTopics } from "@/data/topics";
 import { ContentUnavailableError } from "@/data/source";
-import { findTopicAcrossCourses } from "@/lib/agent/lookup";
-import type { Course } from "@/lib/types";
+import { findTopicAcrossCourses } from "@gnosia/tutor/lookup";
+import type { Course } from "@gnosia/tutor/types";
 import { continueHref, conceptsForTopic, itemDoneWith, itemStanding, resolveTopicMastery } from "@/lib/course-path";
 import { activeOnly } from "@/lib/course-summary";
-import { dayKey } from "@/lib/days";
+import { dayKey } from "@gnosia/tutor/days";
 import {
   coursesInProgress,
   homeThreads,
@@ -38,7 +38,7 @@ import { catalogDatabase } from "@/lib/learner-store";
 import { currentOwner, ownerScope } from "@/lib/owner";
 import { recentSources } from "@/lib/recent";
 import { studioEnabled } from "@/lib/studio";
-import { appTimeZone } from "@/lib/time-zone";
+import { appTimeZone } from "@gnosia/tutor/server/time-zone";
 
 /**
  * Everything Home shows, read in one pass (docs/proposals/home-page.md).

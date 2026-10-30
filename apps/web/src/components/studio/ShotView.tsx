@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { FadeImg } from "@/components/studio/motion-parts";
 import { missingShotReason, shotSrc, type Comparison } from "@/lib/studio-compare";
-import { panelHref } from "@/lib/studio-view";
+import { panelHref } from "@/lib/studio-url";
 
 /**
  * One of a job's two pictures, filling the main area.

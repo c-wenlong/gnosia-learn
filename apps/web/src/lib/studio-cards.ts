@@ -29,8 +29,8 @@ import type {
   TagKind,
   TranscriptBrief,
   TranscriptEntry,
-  VideoAvailability,
 } from "@/lib/studio-drafts";
+import type { VideoAvailability } from "@/lib/studio-health";
 import { isTagKind, TAG_KINDS } from "@/lib/studio-drafts";
 
 /**

@@ -17,7 +17,7 @@ are written down here before anything else.
 | The one module that reads and writes it | `services/catalog/src/state/provider-keys.ts` |
 | Sealing and opening | `packages/tutor/src/server/seal.ts` (tests in `packages/tutor/test/seal.test.ts`) |
 | The web app's store, per owner | `apps/web/src/lib/provider-keys/store.ts` |
-| The order the tutor tries keys in | `orderCredentials` in `apps/web/src/lib/agent/providers.ts`, `tutorCredentials` in `apps/web/src/lib/agent/credentials.ts` |
+| The order the tutor tries keys in | `orderCredentials` in `packages/tutor/src/providers.ts`, `tutorCredentials` in `apps/web/src/lib/agent/credentials.ts` |
 | Save and remove | `POST` and `DELETE /api/learner/provider-key` |
 | Test | `POST /api/learner/provider-key/test` |
 | The Settings card | `apps/web/src/components/settings/ProviderKeys.tsx`, fed by `apps/web/src/lib/provider-keys/settings.ts` |

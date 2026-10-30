@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import type { AssetDerivations, AssetRef, AssetWithTopics } from "@gnosia/catalog/state";
 
-import { assetDisplayTitle, assetKindLabel, formatBytes } from "@/components/asset-meta";
+import { assetDisplayTitle, assetKindLabel, formatBytes } from "@gnosia/tutor/asset-meta";
 import { Button } from "@/components/ui/Button";
 import { CardAction } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
@@ -11,7 +11,7 @@ import { Placeholder } from "@/components/ui/Placeholder";
 import { Tabs, type TabItem } from "@/components/ui/Tabs";
 import { cx, LABEL } from "@/components/ui/classes";
 import { assetHref, conceptHref, libraryHref, type ExplainedConcept } from "@/lib/library";
-import { ownValue } from "@/lib/own-key";
+import { ownValue } from "@gnosia/tutor/own-key";
 
 /**
  * The tabbed card under every asset in the library: Explains, Related, Files

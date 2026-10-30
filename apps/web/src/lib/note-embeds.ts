@@ -1,4 +1,4 @@
-import { parseInline, parseNote, standaloneFigure, type Block } from "@/components/markdown";
+import { parseInline, parseNote, standaloneFigure, type Block } from "@gnosia/tutor/markdown";
 
 /**
  * Every `![[name]]` a note will render as a figure, in order, once each.

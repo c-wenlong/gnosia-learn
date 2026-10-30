@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { itemDoneWith, pathStatus } from "@/lib/course-path";
-import type { Course, TagMeta } from "@/lib/types";
+import type { Course, TagMeta } from "@gnosia/tutor/types";
 
 import {
   activeOnly,
@@ -12,7 +12,6 @@ import {
   coverUrl,
   coverVersion,
   filterCourses,
-  isInProgress,
   splitByActive,
   tagFilterOptions,
   toCourseSummary,
@@ -145,17 +144,6 @@ describe("filterCourses", () => {
     expect(filterCourses(all, "", { tag: "hci" })).toEqual([hci]);
     expect(filterCourses(all, "computer", { tag: "graphics" })).toEqual([graphics]);
     expect(filterCourses(all, "computer", { tag: "hci" })).toEqual([]);
-  });
-});
-
-describe("isInProgress", () => {
-  it("reads in-progress from mastery when a standing is given", () => {
-    // Nothing ticked: only mastery can start a course. CS2111 is complete by
-    // mastery, so it is not in progress; CP4281 has one of three done.
-    const standing = { mastered: ["cs2111-m1-t1", "cp4281-m1-t1"], withConcepts: ["cs2111-m1-t1", "cp4281-m1-t1"] };
-    expect(isInProgress(hci, {}, standing)).toBe(false);
-    expect(isInProgress(graphics, {}, standing)).toBe(true);
-    expect(isInProgress(graphics, {})).toBe(false);
   });
 });
 

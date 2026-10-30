@@ -149,14 +149,14 @@ export type EventType = (typeof EVENT_TYPES)[number];
 
 /**
  * Where a recap came from. Mirrors `KnowledgeSource` in
- * `apps/web/src/lib/types.ts`.
+ * `packages/tutor/src/types.ts`.
  */
 export const RECAP_SOURCES = ["agent", "manual"] as const;
 export type RecapSource = (typeof RECAP_SOURCES)[number];
 
 /**
  * The tutor's model providers, in the order the cascade tries them
- * (`apps/web/src/lib/agent/providers.ts`), and the vocabulary of
+ * (`packages/tutor/src/providers.ts`), and the vocabulary of
  * `provider_key.provider` (docs/BYOK.md).
  */
 export const PROVIDER_IDS = [
@@ -524,7 +524,7 @@ export function clampSummary(value: unknown): string {
 /**
  * What a learner snapshot looks like once it leaves the database.
  *
- * These are declared here rather than in `apps/web/src/lib/types.ts` because
+ * These are declared here rather than in `packages/tutor/src/types.ts` because
  * both sides now need them: `services/catalog/src/state/` builds the snapshot
  * and the web app's provider consumes it. `apps/web/src/lib/types.ts`
  * re-exports them, so components keep importing from where they always did.

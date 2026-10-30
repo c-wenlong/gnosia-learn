@@ -3,7 +3,6 @@ import {
   asThemeMode,
   paletteOf,
   THEME_APPEARANCES,
-  THEME_MODES,
   THEME_PALETTES,
   themeModeFor,
   type ThemeAppearance,
@@ -14,7 +13,7 @@ import {
 import { writeCookie } from "@/lib/client-cookie";
 import { prefersReducedMotion } from "@/lib/motion";
 
-export { appearanceOf, asThemeMode, paletteOf, THEME_APPEARANCES, THEME_MODES, THEME_PALETTES, themeModeFor };
+export { appearanceOf, asThemeMode, paletteOf, THEME_APPEARANCES, THEME_PALETTES, themeModeFor };
 
 /**
  * The theme is the one piece of learner state that is also a cookie.

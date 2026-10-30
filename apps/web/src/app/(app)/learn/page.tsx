@@ -5,18 +5,32 @@ import { Notice } from "@/components/ui/Notice";
 import { getCourses } from "@/data/courses";
 import { unlessUnreachable } from "@/data/source";
 import { getTopics } from "@/data/topics";
-import { defaultSelection } from "@/lib/concept-graph";
-import { cachedDomainLayouts, domainTree, type DomainMapData, type DomainNode, type DomainTopic } from "@/lib/domain-map";
+import { defaultSelection } from "@gnosia/tutor/concept-graph";
+import {
+  cachedDomainLayouts,
+  domainTree,
+  type DomainMapData,
+  type DomainNode,
+  type DomainTopic,
+} from "@/lib/domain-map";
 import { readyConcepts } from "@/lib/map-reading";
 import { currentOwner } from "@/lib/owner";
 import { readRecentCourses } from "@/lib/recent-courses";
 import { courseSlugsOf, placeOf } from "@/lib/concept-workspace";
-import { appTimeZone } from "@/lib/time-zone";
-import { loadKnowledgeBase } from "@/lib/kb/load";
-import type { KbConcept } from "@/lib/kb/types";
-import { dueLabel, lastSeenLabel, parseFilter, parseLayout, parseScope, parseView, type IndexRow } from "@/lib/learn-index";
-import { bucketOf } from "@/lib/mastery-bucket";
-import type { Course } from "@/lib/types";
+import { appTimeZone } from "@gnosia/tutor/server/time-zone";
+import { loadKnowledgeBase } from "@/lib/learner-store";
+import type { KbConcept } from "@gnosia/catalog/state";
+import {
+  dueLabel,
+  lastSeenLabel,
+  parseFilter,
+  parseLayout,
+  parseScope,
+  parseView,
+  type IndexRow,
+} from "@/lib/learn-index";
+import { bucketOf } from "@gnosia/tutor/mastery-bucket";
+import type { Course } from "@gnosia/tutor/types";
 
 export const metadata: Metadata = { title: "Learn" };
 

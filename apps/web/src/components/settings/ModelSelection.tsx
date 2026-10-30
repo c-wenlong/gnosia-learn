@@ -13,8 +13,8 @@ import { FormRow } from "@/components/ui/FormRow";
 import { LiveStatus } from "@/components/ui/LiveStatus";
 import { Select } from "@/components/ui/Select";
 import { statusProps } from "@/components/ui/save-status";
-import type { ChainEntry } from "@/lib/agent/providers";
-import { TUTOR_STYLES, type TutorStyle } from "@/lib/preferences";
+import type { ChainEntry } from "@gnosia/tutor/providers";
+import { TUTOR_STYLES, type TutorStyle } from "@gnosia/tutor/preferences";
 import type { ProvidersView } from "@/lib/providers/view";
 import { sendJson } from "@/lib/send-json";
 

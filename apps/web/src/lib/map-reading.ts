@@ -1,4 +1,4 @@
-import type { GraphEdge, GraphNode } from "@/lib/concept-graph";
+import type { GraphEdge, GraphNode } from "@gnosia/tutor/concept-graph";
 
 /**
  * What the map says about a concept beyond where it sits (phase 3 of

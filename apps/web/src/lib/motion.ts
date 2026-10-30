@@ -1,6 +1,6 @@
 import { readCookie, writeCookie } from "@/lib/client-cookie";
-import type { MotionMode } from "@/lib/preferences";
-import { parseMotionMode } from "@/lib/preferences";
+import type { MotionMode } from "@gnosia/tutor/preferences";
+import { parseMotionMode } from "@gnosia/tutor/preferences";
 
 /**
  * Settings' motion choice, applied the way the theme is (lib/theme-cookie.ts):

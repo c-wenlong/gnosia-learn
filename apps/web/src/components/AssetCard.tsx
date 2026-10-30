@@ -9,7 +9,7 @@ import {
   assetMetaLine,
   familyOf,
   type AssetCardRef,
-} from "@/components/asset-meta";
+} from "@gnosia/tutor/asset-meta";
 import { RowMenu } from "@/components/library/RowMenu";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import { Chip } from "@/components/ui/Chip";
@@ -18,7 +18,7 @@ import { useImageReveal } from "@/components/ui/use-image-reveal";
 import { useAssetFailure } from "@/components/use-asset-failure";
 import { WidgetFailure } from "@/components/WidgetFailure";
 import { conceptIsTitle } from "@/lib/library-source";
-import type { MasteryBucket } from "@/lib/mastery-bucket";
+import type { MasteryBucket } from "@gnosia/tutor/mastery-bucket";
 import type { RowMenuSections } from "@/lib/row-menu";
 
 /**

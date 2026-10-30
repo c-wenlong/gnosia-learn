@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 import { buttonClasses, cx } from "@/components/ui/classes";
-import { assetProblem, type AssetProblemCode } from "@/lib/asset-problems";
+import { assetProblem, type AssetProblemCode } from "@gnosia/tutor/asset-problems";
 
 /**
  * The failure state of the Widget placeholder.

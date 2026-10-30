@@ -28,27 +28,25 @@ import { Glyph } from "@/components/ui/Glyph";
 import { useImageReveal } from "@/components/ui/use-image-reveal";
 import { useSheets } from "@/components/studio/video/use-video-job";
 import { useOnScreen } from "@/lib/use-on-screen";
-import { createDraft, idempotencyKey } from "@/lib/studio-drafts";
+import { createDraft } from "@/lib/studio-drafts";
+import { idempotencyKey } from "@/lib/studio-client";
 import { extendKey, forgetExtendKey, sessionStore } from "@/lib/studio-extend";
 import {
   changeDraftOutcome,
   libraryHref,
   mediaHref,
   newestSheet,
-  newVideoJobs,
   posterHref,
   sheetSrc,
   spokenLength,
   videoFailureLine,
   videoHeadline,
-  videoJobForSlug,
   videoStepCount,
-  videoTileStage,
   type VideoJob,
-  type StudioVideo,
-  type VideoTileStage,
-} from "@/lib/studio-video";
-import { conversationHref, gridHref, panelHref } from "@/lib/studio-view";
+} from "@/lib/studio-video-job";
+import { newVideoJobs, videoJobForSlug, videoTileStage, type VideoTileStage } from "@/lib/studio-grid-jobs";
+import { type StudioVideo } from "@/lib/studio-video-grid";
+import { conversationHref, gridHref, panelHref } from "@/lib/studio-url";
 
 /**
  * Studio videos in the grid, and a video job where its video is (docs/

@@ -60,7 +60,6 @@ export const MODEL_CHOICES: ModelChoice[] = [
 
 // Its own React-free module with no imports, so the video job view (a client
 // component) can name a model without pulling the schema package in with it.
-export { modelName } from "@/lib/model-name";
 
 /**
  * `GET /api/settings/agent` (#207), read defensively: its model list and what

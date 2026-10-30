@@ -1,15 +1,10 @@
+import { clampKnowledgeList, clampSummary } from "@gnosia/schema/shared";
 import {
-  clampKnowledgeList,
-  clampSummary,
-  KNOWLEDGE_LIMITS,
-} from "@gnosia/schema/shared";
-import {
-  emptyLearnerState,
   type KnowledgeInput,
   type LearnerState,
   type ThemeMode,
   type UserResource,
-} from "@/lib/types";
+} from "@gnosia/tutor/types";
 
 /**
  * Pure state transitions for the learner state.
@@ -29,11 +24,6 @@ import {
  * copies of `summaryChars` would eventually disagree, and the way that shows
  * up is a save the learner watches succeed and then fail.
  */
-
-export { KNOWLEDGE_LIMITS };
-
-/** Kept as `defaultState` so existing call sites read the same. */
-export const defaultState = emptyLearnerState;
 
 export function setTheme(state: LearnerState, theme: ThemeMode): LearnerState {
   return { ...state, theme };

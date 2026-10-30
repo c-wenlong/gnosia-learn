@@ -1,14 +1,14 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { assetDisplayTitle, assetKindLabel, familyOf, type AssetRowRef } from "@/components/asset-meta";
+import { assetDisplayTitle, assetKindLabel, familyOf, type AssetRowRef } from "@gnosia/tutor/asset-meta";
 import { RowMenu } from "@/components/library/RowMenu";
 import { Glyph } from "@/components/ui/Glyph";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import { cx } from "@/components/ui/classes";
 import type { LibraryGroup } from "@/lib/library";
 import { conceptIsTitle, type RowSource } from "@/lib/library-source";
-import { masteryCaption } from "@/lib/mastery-bucket";
+import { masteryCaption } from "@gnosia/tutor/mastery-bucket";
 import type { RowMenuSections } from "@/lib/row-menu";
 
 /**

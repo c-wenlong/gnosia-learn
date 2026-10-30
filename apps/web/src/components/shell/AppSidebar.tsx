@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 
-import { GnosiaWordmark } from "@/components/brand";
+import { GnosiaWordmark } from "@/components/brand/GnosiaWordmark";
 import { useHistorySearch } from "@/components/studio/history-search";
 import { cx } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";

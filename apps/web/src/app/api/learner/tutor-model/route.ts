@@ -1,7 +1,7 @@
 import { PROVIDER_IDS, providerLabel, type ProviderName } from "@gnosia/schema/shared";
 import { NextResponse } from "next/server";
 
-import { keyFor } from "@/lib/agent/providers";
+import { keyFor } from "@gnosia/tutor/providers";
 import { answer, guard, readBody, readProvider, refuse } from "@/lib/provider-keys/requests";
 import { failureCode, openSavedKeys } from "@/lib/provider-keys/store";
 import { CHAIN_WRITE_RATE_LIMIT, chainFailed, readModel } from "@/lib/tutor-models/requests";

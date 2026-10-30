@@ -11,7 +11,7 @@ import {
   type ChoiceAnswer,
   type ChoiceCheck,
   type ChoicePick,
-} from "@/lib/check-block";
+} from "@gnosia/tutor/check-block";
 
 import { ConfidenceField, ReasoningField } from "./SurenessFields";
 import { RecordedCard } from "./VerdictRow";

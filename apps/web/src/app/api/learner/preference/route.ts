@@ -1,4 +1,11 @@
-import { asThemeMode, isUserResourceUrl, PREFERENCE_KEYS, THEME_MODES, USER_RESOURCE_LIMITS, type ThemeMode } from "@gnosia/schema/shared";
+import {
+  asThemeMode,
+  isUserResourceUrl,
+  PREFERENCE_KEYS,
+  THEME_MODES,
+  USER_RESOURCE_LIMITS,
+  type ThemeMode,
+} from "@gnosia/schema/shared";
 import { writePreference } from "@gnosia/catalog/state";
 import { lastVisitedValue, rememberVisit } from "@gnosia/tutor/server/learner-writes";
 
@@ -7,7 +14,7 @@ import {
   InvalidPreference,
   validateMotionMode,
   validateTutorStyle,
-} from "@/lib/preferences";
+} from "@gnosia/tutor/preferences";
 
 /**
  * The key/value corner of the learner state: theme, where they were last,

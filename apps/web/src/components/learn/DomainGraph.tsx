@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 
 import { cx } from "@/components/ui/classes";
-import { wrapLabel, type GraphEdge } from "@/lib/concept-graph";
+import { wrapLabel, type GraphEdge } from "@gnosia/tutor/concept-graph";
 import type { DomainLayout } from "@/lib/domain-map";
 import {
   AXES_CAPTIONS,
@@ -44,7 +44,7 @@ import {
 } from "@/lib/domain-view";
 import type { MapLayout } from "@/lib/learn-index";
 import { arcLength } from "@/lib/map-reading";
-import { MASTERY_BUCKET_LABEL, type MasteryBucket } from "@/lib/mastery-bucket";
+import { MASTERY_BUCKET_LABEL, type MasteryBucket } from "@gnosia/tutor/mastery-bucket";
 import { prefersReducedMotion } from "@/lib/motion";
 
 /**

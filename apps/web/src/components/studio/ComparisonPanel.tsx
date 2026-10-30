@@ -25,7 +25,7 @@ import {
   type LintRef,
 } from "@/lib/studio-compare";
 import { finishedHeadline, type Job } from "@/lib/studio-jobs";
-import { panelHref } from "@/lib/studio-view";
+import { panelHref } from "@/lib/studio-url";
 
 /**
  * The comparison, and the only two buttons in the studio that change a

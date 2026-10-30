@@ -3,13 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { capFrom, type CapStatus } from "@/lib/studio-chat";
-import {
-  BYOK_SETTINGS_CHANGED,
-  diagramAvailability,
-  readStudioHealth,
-  videoAvailability,
-  type VideoAvailability,
-} from "@/lib/studio-drafts";
+import { BYOK_SETTINGS_CHANGED } from "@/lib/studio-byok";
+import { diagramAvailability, readStudioHealth, videoAvailability, type VideoAvailability } from "@/lib/studio-health";
 import { runnerSettings } from "@/lib/studio-agent-settings";
 import { useByokTiers } from "@/lib/use-byok-tiers";
 

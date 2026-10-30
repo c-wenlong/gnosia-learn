@@ -17,7 +17,7 @@ interface Call {
 
 const mocks = vi.hoisted(() => ({ calls: [] as unknown[], studioApi: vi.fn(), requireStudio: vi.fn(), openShot: vi.fn() }));
 vi.mock("@/lib/studio", () => ({ studioApi: mocks.studioApi, requireStudio: mocks.requireStudio, openShot: mocks.openShot }));
-vi.mock("@/lib/time-zone", () => ({ appTimeZone: () => "America/New_York" }));
+vi.mock("@gnosia/tutor/server/time-zone", () => ({ appTimeZone: () => "America/New_York" }));
 vi.mock("@/app/(app)/studio/actions", () => ({
   commitDiagram: vi.fn(),
   exportSvg: vi.fn(),

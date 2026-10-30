@@ -2,8 +2,15 @@ import { classifyConnectionFailure, courseCoverBlob, type CourseCoverBlob } from
 import { COURSE_COVER_TYPES } from "@gnosia/schema/shared";
 import { NextResponse } from "next/server";
 
-import { blobStoreProblem, isRangeRefusal, openBlob, parseRange, webStreamFrom, type AssetFileProblem } from "@/lib/asset-files";
-import type { RouteProblemCode } from "@/lib/asset-problems";
+import {
+  blobStoreProblem,
+  isRangeRefusal,
+  openBlob,
+  parseRange,
+  webStreamFrom,
+  type AssetFileProblem,
+} from "@/lib/asset-files";
+import type { RouteProblemCode } from "@gnosia/tutor/asset-problems";
 import { assetBlobStore, SIGNED_URL_TTL_SECONDS } from "@/lib/blob-store";
 import { COVER_VERSION_PARAM, coverVersion } from "@/lib/course-summary";
 import { withLearnerStore } from "@/lib/learner-store";
@@ -49,7 +56,7 @@ import { currentScope, NoOwnerError, type OwnerScope } from "@/lib/owner";
 
 export const runtime = "nodejs";
 
-export const COVER_CSP = "default-src 'none'; script-src 'none'; sandbox";
+const COVER_CSP = "default-src 'none'; script-src 'none'; sandbox";
 
 const IMMUTABLE = "private, max-age=31536000, immutable";
 const REVALIDATE = "private, max-age=0, must-revalidate";

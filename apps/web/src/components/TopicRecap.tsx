@@ -15,9 +15,9 @@ import type {
   Module,
   Topic,
   TopicKnowledge,
-} from "@/lib/types";
+} from "@gnosia/tutor/types";
 import { useLearner } from "@/lib/learner-context";
-import { formatKnowledgeMarkdown } from "@/lib/agent/summary";
+import { formatKnowledgeMarkdown } from "@gnosia/tutor/summary";
 
 function formatDate(iso: string): string {
   const d = new Date(iso);

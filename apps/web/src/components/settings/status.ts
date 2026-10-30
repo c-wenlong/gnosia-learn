@@ -1,4 +1,4 @@
-import type { ChainEntry } from "@/lib/agent/providers";
+import type { ChainEntry } from "@gnosia/tutor/providers";
 
 /**
  * What the Providers and Model selection cards say about a request: the

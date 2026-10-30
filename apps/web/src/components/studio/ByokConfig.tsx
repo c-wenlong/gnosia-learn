@@ -13,7 +13,15 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Select } from "@/components/ui/Select";
 import { BYOK_PROVIDERS, byokToTutor } from "@/lib/byok-providers";
 import { sendJson } from "@/lib/send-json";
-import { BYOK_SETTINGS_CHANGED, getByokSettings, listByokModels, removeByokProvider, saveByokModels, setByokActive, type ByokProviderStatus } from "@/lib/studio-drafts";
+import {
+  BYOK_SETTINGS_CHANGED,
+  getByokSettings,
+  listByokModels,
+  removeByokProvider,
+  saveByokModels,
+  setByokActive,
+  type ByokProviderStatus,
+} from "@/lib/studio-byok";
 
 type Tier = "default" | "lite" | "max";
 

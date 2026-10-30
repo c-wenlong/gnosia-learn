@@ -16,8 +16,15 @@ import {
   type ChoiceAnswer,
   type ChoicePick,
   type RecallPick,
-} from "@/lib/check-block";
-import { checkSource, newVerdict, pendingCheck, settleInterrupted, type TurnCheck, type Verdict } from "@/lib/tutor-check";
+} from "@gnosia/tutor/check-block";
+import {
+  checkSource,
+  newVerdict,
+  pendingCheck,
+  settleInterrupted,
+  type TurnCheck,
+  type Verdict,
+} from "@gnosia/tutor/tutor-check";
 
 import { ChoiceCheckCard } from "./ChoiceCheckCard";
 import { RecallCheckCard } from "./RecallCheckCard";

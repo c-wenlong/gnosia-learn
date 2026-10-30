@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { isCallable } from "@/lib/agent/providers";
+import { isCallable } from "@gnosia/tutor/providers";
 
 import {
   migratedScratchDatabase,

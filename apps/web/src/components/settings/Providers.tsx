@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/Card";
 import { Glyph } from "@/components/ui/Glyph";
 import { LiveStatus } from "@/components/ui/LiveStatus";
 import type { ProvidersView } from "@/lib/providers/view";
-import { BYOK_SETTINGS_CHANGED } from "@/lib/studio-drafts";
+import { BYOK_SETTINGS_CHANGED } from "@/lib/studio-byok";
 
 import { AddProvider } from "./AddProvider";
 import { ProviderRow } from "./ProviderRow";

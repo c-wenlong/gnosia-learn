@@ -6,7 +6,6 @@ import {
   childJob,
   changeHint,
   changeProblem,
-  chapterTitle,
   CHANGE_LIMIT,
   libraryHref,
   logLine,
@@ -32,10 +31,10 @@ import {
   videoFileHref,
   videoStatusHref,
   type ContactSheet,
-  type VideoBrief,
   type VideoJob,
   type VideoStep,
 } from "./studio-video-job";
+import { chapterTitle, type VideoBrief } from "@/lib/studio-brief-video";
 import {
   filterVideos,
   gridSections,

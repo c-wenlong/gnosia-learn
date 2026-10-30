@@ -10,14 +10,21 @@ import { CARD_TITLE, cx, LABEL } from "@/components/ui/classes";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SegmentedControl, type SegmentItem } from "@/components/ui/SegmentedControl";
-import type { GraphEdge, GraphNode } from "@/lib/concept-graph";
-import type { DomainLayout, DomainMapData, DomainSummary } from "@/lib/domain-map";
+import type { GraphEdge, GraphNode } from "@gnosia/tutor/concept-graph";
+import type { DomainLayout, DomainSummary } from "@/lib/domain-map";
 import { domainTitle, movedKey, readMoved } from "@/lib/domain-view";
-import { legendMembers, legendPress, type IndexFilter, type IndexRow, type LegendGroup, type MapLayout } from "@/lib/learn-index";
+import {
+  legendMembers,
+  legendPress,
+  type IndexFilter,
+  type IndexRow,
+  type LegendGroup,
+  type MapLayout,
+} from "@/lib/learn-index";
 import { relatedTo, standingLine } from "@/lib/map-reading";
-import { MASTERY_BUCKET_LABEL } from "@/lib/mastery-bucket";
+import { MASTERY_BUCKET_LABEL } from "@gnosia/tutor/mastery-bucket";
 import { prefersReducedMotion, scrollBehavior } from "@/lib/motion";
-import { LEECH_LABEL } from "@/lib/review-core";
+import { LEECH_LABEL } from "@gnosia/tutor/review-core";
 
 /**
  * The Learn map's two levels (phase 2 of docs/proposals/domain-map.md, D2):
@@ -106,7 +113,7 @@ export function DomainCards({
 }
 
 /** Learn, the domain, the topic: each but the last goes back up (D2). */
-export function Breadcrumb({ domain, topic, onGo }: { domain: DomainSummary; topic: string | null; onGo: (place: Place) => void }) {
+function Breadcrumb({ domain, topic, onGo }: { domain: DomainSummary; topic: string | null; onGo: (place: Place) => void }) {
   const topicTitle = topic === null ? null : (domain.topics.find((t) => t.slug === topic)?.title ?? topic);
   // The separator is drawn, not written, so a screen reader hears the levels and not the arrows.
   const after = "before:mr-1.5 before:text-text3 before:content-['›']";
@@ -666,5 +673,3 @@ export const MapPanel = memo(function MapPanel({
     </section>
   );
 });
-
-export type { DomainMapData };

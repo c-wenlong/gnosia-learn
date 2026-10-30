@@ -3,7 +3,7 @@ import { act, createElement, type ReactElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { ASSET_PROBLEMS, STUDIO_SOURCE } from "@/lib/asset-problems";
+import { ASSET_PROBLEMS, STUDIO_SOURCE } from "@gnosia/tutor/asset-problems";
 
 import { AssetCard } from "./AssetCard";
 import { DiagramView } from "./DiagramView";

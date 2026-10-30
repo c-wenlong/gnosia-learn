@@ -3,7 +3,8 @@ import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { DEFAULT_VIEW, type TopicChip } from "@/lib/studio-view";
+import { DEFAULT_VIEW } from "@/lib/studio-url";
+import { type TopicChip } from "@/lib/studio-grid";
 
 /**
  * The strip's menus, each a kit `Popover` of links: the choice in force is

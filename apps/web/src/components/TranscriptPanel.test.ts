@@ -3,12 +3,12 @@ import { act, createElement, type ReactElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { TranscriptPanel } from "./TranscriptPanel";
-import type { TranscriptCue } from "./media";
+import type { TranscriptCue } from "@gnosia/tutor/media";
 
 // Counts the lines drawn: each line formats its timecode once per render.
 const formatted = vi.hoisted(() => ({ count: 0 }));
-vi.mock("@/components/media", async (importOriginal) => {
-  const media = await importOriginal<typeof import("@/components/media")>();
+vi.mock("@gnosia/tutor/media", async (importOriginal) => {
+  const media = await importOriginal<typeof import("@gnosia/tutor/media")>();
   return {
     ...media,
     formatTimecode: (seconds: number) => {

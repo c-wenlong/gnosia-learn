@@ -1,7 +1,7 @@
 import type { ReviewQueueItem } from "@gnosia/catalog/state";
 import { describe, expect, it } from "vitest";
 
-import type { ConceptCheck } from "./concept-note-core";
+import type { ConceptCheck } from "@gnosia/tutor/concept-note-core";
 import { toReviewItem } from "./review-queue";
 
 /**

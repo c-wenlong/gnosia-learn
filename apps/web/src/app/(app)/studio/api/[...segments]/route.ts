@@ -5,7 +5,7 @@ import { requestIsSameOrigin } from "@/lib/auth/core";
 import { BodyTooLarge, readBodyText } from "@/lib/learner-api";
 import { currentOwner, NoOwnerError } from "@/lib/owner";
 import { requireStudio, studioOrigin } from "@/lib/studio";
-import { RUNNER_DOWN } from "@/lib/studio-drafts";
+import { RUNNER_DOWN } from "@/lib/studio-client";
 
 /**
  * `/studio/api/*` → `127.0.0.1:7250/api/*`.

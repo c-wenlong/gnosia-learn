@@ -6,9 +6,9 @@ import { MathText } from "@/components/Math";
 import { Button } from "@/components/ui/Button";
 import { cx, LABEL, STATUS_TEXT } from "@/components/ui/classes";
 import { Textarea } from "@/components/ui/Textarea";
-import { DEFAULT_CONFIDENCE, type RecallCheck, type RecallPick } from "@/lib/check-block";
-import { SESSION_TEXT_LIMIT } from "@/lib/session-core";
-import type { Verdict } from "@/lib/tutor-check";
+import { DEFAULT_CONFIDENCE, type RecallCheck, type RecallPick } from "@gnosia/tutor/check-block";
+import { SESSION_TEXT_LIMIT } from "@gnosia/tutor/session-core";
+import type { Verdict } from "@gnosia/tutor/tutor-check";
 
 import { ConfidenceField, ReasoningField } from "./SurenessFields";
 import { VerdictRow } from "./VerdictRow";
