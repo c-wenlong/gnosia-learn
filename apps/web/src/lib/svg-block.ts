@@ -15,171 +15,251 @@
  * all.
  *
  * **Safe, by allowlist, not by stripping.** The markup is model output, so
- * nothing reaches the DOM but the set below: no script, no event attribute,
- * no `style`, no `<image>` or `<foreignObject>`, no `href` but a `#` fragment
- * inside the same picture, no `url()` but `url(#id)`. What is not listed
- * falls away, element and subtree together.
+ * nothing reaches the DOM but the elements and attributes listed below: no
+ * script, no event attribute, no `style` or `class`, no `<image>` or
+ * `<foreignObject>`, no `href` but a `#` fragment inside the same picture, no
+ * `url()` but `url(#id)`, no CSS escape and no function in a value but the
+ * colour and transform ones. An animation may only change an attribute the
+ * picture could have written itself, so it cannot bring back an `href` or a
+ * `class` the rules took away. Every `id` is prefixed per picture, and every
+ * reference to one with it, so two pictures in one thread never resolve each
+ * other's `url(#arrow)`. What is not listed falls away, element and subtree
+ * together.
  */
 
 /** One element in the drawn picture, after sanitising. `children` hold elements or text. */
 export interface SvgNode {
   tag: string;
-  /** React-prop names and values: `class` arrives as `className`, `xlink:href` as `href`. */
+  /** React-prop names and values: `stroke-width` arrives as `strokeWidth`, `xlink:href` as `href`, every `id` prefixed. */
   attrs: Record<string, string>;
   children: (SvgNode | string)[];
 }
 
 /** What a `svg` block's text compiles to. */
 export type SvgCompile =
-  | { kind: "figure"; root: SvgNode }
+  /** `prefix` starts every id in `root`, so `SvgBlock` can scope them again per rendered copy. */
+  | { kind: "figure"; root: SvgNode; prefix: string }
   /** It opens `<svg` but nothing has drawn yet: the stream is mid-picture. */
   | { kind: "drawing" }
   /** No `<svg` element in it at all: the caller shows the code. */
   | { kind: "not-svg" };
 
 /** The elements that may draw, read lowercase and spelled back in the casing SVG needs: anything else — its whole subtree — goes. */
-const ELEMENT_CASE: Record<string, string> = {
-  svg: "svg",
-  g: "g",
-  path: "path",
-  rect: "rect",
-  circle: "circle",
-  ellipse: "ellipse",
-  line: "line",
-  polyline: "polyline",
-  polygon: "polygon",
-  text: "text",
-  tspan: "tspan",
-  textpath: "textPath",
-  defs: "defs",
-  marker: "marker",
-  symbol: "symbol",
-  use: "use",
-  clippath: "clipPath",
-  mask: "mask",
-  pattern: "pattern",
-  lineargradient: "linearGradient",
-  radialgradient: "radialGradient",
-  stop: "stop",
-  title: "title",
-  desc: "desc",
-  animate: "animate",
-  animatemotion: "animateMotion",
-  animatetransform: "animateTransform",
-  set: "set",
-  mpath: "mpath",
-};
+const ELEMENT_CASE = new Map<string, string>(
+  [
+    "svg",
+    "g",
+    "path",
+    "rect",
+    "circle",
+    "ellipse",
+    "line",
+    "polyline",
+    "polygon",
+    "text",
+    "tspan",
+    "textPath",
+    "defs",
+    "marker",
+    "symbol",
+    "use",
+    "clipPath",
+    "mask",
+    "pattern",
+    "linearGradient",
+    "radialGradient",
+    "stop",
+    "title",
+    "desc",
+    "animate",
+    "animateMotion",
+    "animateTransform",
+    "set",
+    "mpath",
+  ].map((tag) => [tag.toLowerCase(), tag]),
+);
+
+/** The animation elements whose `attributeName` names what they change. */
+const RETARGETS = new Set(["animate", "animateTransform", "set"]);
 
 /**
- * Attribute names whose spelling SVG and React both read case-sensitively,
- * read against the lowercased, hyphen-less name the markup carried. Model
- * output writes `viewbox`, `view-box` and `marker-width` as often as the
- * camelCase spellings, and a DOM `setAttribute("viewbox")` draws nothing —
- * so every slip lands on the canonical name. The hyphenated presentation
- * attributes map to React's own prop names so dev stays quiet.
+ * The attributes that may stay, keyed by the name lowercased with its
+ * hyphens and colons taken out, and spelled back as the React prop SVG
+ * needs. Model output writes `viewbox`, `view-box` and `marker-width` as
+ * often as the camelCase spellings, and a DOM `setAttribute("viewbox")`
+ * draws nothing, so every slip lands on the canonical name; the hyphenated
+ * presentation attributes map to React's own prop names so dev stays quiet.
+ *
+ * It is an allowlist, as the elements are: geometry, paint, text and
+ * animation timing. Anything else (an event handler, `style`, `class`,
+ * React's own `dangerouslySetInnerHTML`, `ref` or `key`, a `cursor` or a
+ * `filter` that could load a URL) is not on it. `href`, `id`,
+ * `attributeName`, `aria-*` and the timing references are read on their own
+ * rules below.
  */
-const ATTR_CASE: Record<string, string> = {
-  // The camelCase SVG attributes (spec spelling).
-  attributename: "attributeName",
-  attributetype: "attributeType",
-  basefrequency: "baseFrequency",
-  calcmode: "calcMode",
-  clippathunits: "clipPathUnits",
-  gradienttransform: "gradientTransform",
-  gradientunits: "gradientUnits",
-  keypoints: "keyPoints",
-  keysplines: "keySplines",
-  keytimes: "keyTimes",
-  lengthadjust: "lengthAdjust",
-  markerheight: "markerHeight",
-  markerunits: "markerUnits",
-  markerwidth: "markerWidth",
-  maskcontentunits: "maskContentUnits",
-  maskunits: "maskUnits",
-  pathlength: "pathLength",
-  patterncontentunits: "patternContentUnits",
-  patterntransform: "patternTransform",
-  patternunits: "patternUnits",
-  preservealpha: "preserveAlpha",
-  preserveaspectratio: "preserveAspectRatio",
-  refx: "refX",
-  refy: "refY",
-  repeatcount: "repeatCount",
-  repeatdur: "repeatDur",
-  requiredextensions: "requiredExtensions",
-  requiredfeatures: "requiredFeatures",
-  spreadmethod: "spreadMethod",
-  startoffset: "startOffset",
-  systemlanguage: "systemLanguage",
-  textlength: "textLength",
-  viewbox: "viewBox",
-  viewtarget: "viewTarget",
-  // The hyphenated presentation attributes, as React props.
-  alignmentbaseline: "alignmentBaseline",
-  baselineshift: "baselineShift",
-  cliprule: "clipRule",
-  clippath: "clipPath",
-  colorinterpolation: "colorInterpolation",
-  colorrendering: "colorRendering",
-  dominantbaseline: "dominantBaseline",
-  enablebackground: "enableBackground",
-  fillopacity: "fillOpacity",
-  fillrule: "fillRule",
-  floodcolor: "floodColor",
-  floodopacity: "floodOpacity",
-  fontfamily: "fontFamily",
-  fontsize: "fontSize",
-  fontsizeadjust: "fontSizeAdjust",
-  fontstretch: "fontStretch",
-  fontstyle: "fontStyle",
-  fontvariant: "fontVariant",
-  fontweight: "fontWeight",
-  glyphorientationhorizontal: "glyphOrientationHorizontal",
-  glyphorientationvertical: "glyphOrientationVertical",
-  horizadvx: "horizAdvX",
-  imagerendering: "imageRendering",
-  letterspacing: "letterSpacing",
-  lightingcolor: "lightingColor",
-  markerend: "markerEnd",
-  markermid: "markerMid",
-  markerstart: "markerStart",
-  overlineposition: "overlinePosition",
-  overlinethickness: "overlineThickness",
-  paintorder: "paintOrder",
-  pointerevents: "pointerEvents",
-  shaperendering: "shapeRendering",
-  stopcolor: "stopColor",
-  stopopacity: "stopOpacity",
-  strikethroughposition: "strikethroughPosition",
-  strikethroughthickness: "strikethroughThickness",
-  strokedasharray: "strokeDasharray",
-  strokedashoffset: "strokeDashoffset",
-  strokelinecap: "strokeLinecap",
-  strokelinejoin: "strokeLinejoin",
-  strokemiterlimit: "strokeMiterlimit",
-  strokeopacity: "strokeOpacity",
-  strokewidth: "strokeWidth",
-  textanchor: "textAnchor",
-  textdecoration: "textDecoration",
-  textrendering: "textRendering",
-  transformorigin: "transformOrigin",
-  underlineposition: "underlinePosition",
-  underlinethickness: "underlineThickness",
-  unicodebidi: "unicodeBidi",
-  wordspacing: "wordSpacing",
-  writingmode: "writingMode",
-  vectoreffect: "vectorEffect",
-};
+const ATTRS = new Map<string, string>(
+  [
+    // Geometry.
+    "x",
+    "y",
+    "x1",
+    "y1",
+    "x2",
+    "y2",
+    "cx",
+    "cy",
+    "r",
+    "rx",
+    "ry",
+    "fx",
+    "fy",
+    "fr",
+    "dx",
+    "dy",
+    "d",
+    "points",
+    "width",
+    "height",
+    "transform",
+    "viewBox",
+    "preserveAspectRatio",
+    "pathLength",
+    "offset",
+    "rotate",
+    "orient",
+    // Markers, gradients, patterns, clips and masks.
+    "markerHeight",
+    "markerUnits",
+    "markerWidth",
+    "refX",
+    "refY",
+    "gradientTransform",
+    "gradientUnits",
+    "spreadMethod",
+    "patternContentUnits",
+    "patternTransform",
+    "patternUnits",
+    "clipPathUnits",
+    "maskContentUnits",
+    "maskUnits",
+    // Text.
+    "textLength",
+    "lengthAdjust",
+    "startOffset",
+    "method",
+    "spacing",
+    "side",
+    // Animation.
+    "attributeType",
+    "begin",
+    "dur",
+    "end",
+    "min",
+    "max",
+    "restart",
+    "repeatCount",
+    "repeatDur",
+    "calcMode",
+    "values",
+    "keyTimes",
+    "keySplines",
+    "keyPoints",
+    "from",
+    "to",
+    "by",
+    "additive",
+    "accumulate",
+    "path",
+    "type",
+    // Presentation attributes, as React props.
+    "fill",
+    "stroke",
+    "opacity",
+    "color",
+    "display",
+    "visibility",
+    "overflow",
+    "mask",
+    "alignmentBaseline",
+    "baselineShift",
+    "clipRule",
+    "clipPath",
+    "colorInterpolation",
+    "colorRendering",
+    "dominantBaseline",
+    "fillOpacity",
+    "fillRule",
+    "floodColor",
+    "floodOpacity",
+    "fontFamily",
+    "fontSize",
+    "fontSizeAdjust",
+    "fontStretch",
+    "fontStyle",
+    "fontVariant",
+    "fontWeight",
+    "imageRendering",
+    "letterSpacing",
+    "lightingColor",
+    "markerEnd",
+    "markerMid",
+    "markerStart",
+    "paintOrder",
+    "pointerEvents",
+    "shapeRendering",
+    "stopColor",
+    "stopOpacity",
+    "strokeDasharray",
+    "strokeDashoffset",
+    "strokeLinecap",
+    "strokeLinejoin",
+    "strokeMiterlimit",
+    "strokeOpacity",
+    "strokeWidth",
+    "textAnchor",
+    "textDecoration",
+    "textRendering",
+    "transformOrigin",
+    "unicodeBidi",
+    "vectorEffect",
+    "wordSpacing",
+    "writingMode",
+    // Accessibility.
+    "role",
+  ].map((name) => [name.toLowerCase(), name]),
+);
 
-/** A fragment inside the same picture: `use`, `textPath`, `mpath` and nothing else may carry it. */
-const FRAGMENT = /^#[\w.-]+$/;
+/** A name lowercased with its hyphens and colons gone: `xlink:href`, `xlinkHref` and `XLINK-HREF` all read `xlinkhref`. */
+const plain = (name: string) => name.toLowerCase().replace(/[-:]/g, "");
 
-/** `url(#id)` and only that: the fill/clip/marker/mask attributes' one way to name a node. */
-const FRAGMENT_URL = /^\s*url\(\s*['"]?#[\w.-]+['"]?\s*\)\s*$/;
+/** A fragment inside the same picture: `use`, `textPath`, `mpath` and the gradients carry it. */
+const FRAGMENT = /^#([\w.-]+)$/;
+
+/** What an `id` may be: the characters a fragment can name. */
+const ID = /^[\w.-]+$/;
+
+/** `url(#id)` and only that: the fill/clip/marker/mask attributes' one way to name a node. CSS reads function names in any case. */
+const FRAGMENT_URL = /^\s*url\(\s*(['"]?)#([\w.-]+)\1\s*\)\s*$/i;
+
+/**
+ * The functions a value may call. A presentation attribute is read by the
+ * CSS parser, which fetches for `url()`, `image()`, `image-set()` and the
+ * rest; a teaching picture needs a colour, a transform and a timing
+ * `repeat(n)`, and nothing else.
+ */
+const CALLS = new Set(["rgb", "rgba", "hsl", "hsla", "url", "matrix", "translate", "scale", "rotate", "skewx", "skewy", "repeat"]);
+
+/** `begin="a.end+1s; b.click"`: the element ids a timing value waits on, so they move with the prefix. */
+const SYNCBASE = /^(\s*)([A-Za-z_][\w-]*)(\.)/;
 
 /** The deepest a picture may nest and the most markup it may come from, so a runaway reply stays cheap. */
 const MAX_DEPTH = 40;
 const MAX_CHARS = 100_000;
+
+/** A code point `String.fromCodePoint` takes and that is a character: not zero, not a lone surrogate, not past U+10FFFF. */
+function character(code: number): boolean {
+  return Number.isInteger(code) && code > 0 && code <= 0x10ffff && (code < 0xd800 || code > 0xdfff);
+}
 
 /** `&amp;` and friends, numeric entities, and anything else left literal so it shows as typed. */
 function decodeText(text: string): string {
@@ -191,11 +271,11 @@ function decodeText(text: string): string {
     if (body === "apos") return "'";
     if (body.startsWith("#x") || body.startsWith("#X")) {
       const code = Number.parseInt(body.slice(2), 16);
-      return Number.isFinite(code) && code > 0 ? String.fromCodePoint(code) : whole;
+      return character(code) ? String.fromCodePoint(code) : whole;
     }
     if (body.startsWith("#")) {
       const code = Number.parseInt(body.slice(1), 10);
-      return Number.isFinite(code) && code > 0 ? String.fromCodePoint(code) : whole;
+      return character(code) ? String.fromCodePoint(code) : whole;
     }
     return whole;
   });
@@ -331,36 +411,82 @@ function parseRaw(source: string): (RawNode | string)[] {
   return top;
 }
 
+/**
+ * A value the CSS parser cannot turn into a fetch: no backslash (a CSS
+ * escape spells `url` without the letters), every `(` opened by a listed
+ * function, and a `url()` only as the whole `url(#id)`. Returns the value
+ * with its `url(#id)` pointed at the prefixed id, or null.
+ */
+function cleanValue(text: string, prefix: string): string | null {
+  if (text.includes("\\")) return null;
+  for (let at = text.indexOf("("); at !== -1; at = text.indexOf("(", at + 1)) {
+    const before = /([A-Za-z-]*)\s*$/.exec(text.slice(0, at));
+    if (!CALLS.has((before?.[1] ?? "").toLowerCase())) return null;
+  }
+  if (/url\s*\(/i.test(text)) {
+    const fragment = FRAGMENT_URL.exec(text);
+    return fragment === null ? null : `url(#${prefix}${fragment[2]})`;
+  }
+  return text;
+}
+
 /** An attribute's name and value after the rules: the kept prop, or null. */
-function cleanAttr(name: string, value: string): { name: string; value: string } | null {
-  const lower = name.toLowerCase();
-  if (lower.startsWith("on") || lower === "style" || lower === "srcdoc" || lower === "srcset" || lower === "src") return null;
-  if (lower === "xmlns" || lower.startsWith("xmlns:") || lower.startsWith("xml:")) return null;
+function cleanAttr(name: string, value: string, prefix: string): { name: string; value: string } | null {
   // An unquoted `=`-less name cannot smuggle anything either.
   if (!/^[A-Za-z][\w:.-]*$/.test(name)) return null;
-  const text = value.replace(/[-]/g, "");
-  if (lower === "href" || lower === "xlink:href") {
-    return FRAGMENT.test(text.trim()) ? { name: "href", value: text.trim() } : null;
+  const key = plain(name);
+  const text = value.replace(/[\u0000-\u001f]/g, "");
+  if (key === "href" || key === "xlinkhref") {
+    const fragment = FRAGMENT.exec(text.trim());
+    return fragment === null ? null : { name: "href", value: `#${prefix}${fragment[1]}` };
   }
-  if (text.includes("url(") && !FRAGMENT_URL.test(text)) return null;
-  const cased = ATTR_CASE[lower] ?? ATTR_CASE[lower.replace(/-/g, "")];
-  return { name: cased ?? (name === "class" ? "className" : name === "for" ? "htmlFor" : name), value: text };
+  if (key === "id") {
+    return ID.test(text.trim()) ? { name: "id", value: `${prefix}${text.trim()}` } : null;
+  }
+  if (key === "ariadescribedby" || key === "arialabelledby") {
+    const ids = text.trim().split(/\s+/).filter((id) => ID.test(id));
+    return ids.length === 0 ? null : { name: key === "arialabelledby" ? "aria-labelledby" : "aria-describedby", value: ids.map((id) => prefix + id).join(" ") };
+  }
+  // Words a screen reader says, never parsed as CSS: "CPU (core 1)" is a label.
+  if (/^aria-[a-z]+$/i.test(name)) return { name: name.toLowerCase(), value: text };
+  if (key === "attributename") {
+    // Read whole by `cleanNode`, which drops the animation when it names an
+    // attribute the picture could not have written.
+    return { name: "attributeName", value: text.trim() };
+  }
+  const prop = ATTRS.get(key);
+  if (prop === undefined) return null;
+  const kept = cleanValue(text, prefix);
+  if (kept === null) return null;
+  if (prop === "begin" || prop === "end") {
+    return { name: prop, value: kept.split(";").map((part) => part.replace(SYNCBASE, (_, space: string, id: string, dot: string) => `${space}${prefix}${id}${dot}`)).join(";") };
+  }
+  return { name: prop, value: kept };
+}
+
+/** Whether an animation's `attributeName` names something on the allowlist: never `href`, `class`, `style`, an `id` or a handler. */
+function animatable(attributeName: string): boolean {
+  return ATTRS.has(plain(attributeName)) && plain(attributeName) !== "role";
 }
 
 /** The allowlist pass over a raw node, its subtree included; null where it falls away whole. */
-function cleanNode(node: RawNode, depth: number): SvgNode | null {
-  const tag = ELEMENT_CASE[node.tag.toLowerCase()];
+function cleanNode(node: RawNode, depth: number, prefix: string): SvgNode | null {
+  const tag = ELEMENT_CASE.get(node.tag.toLowerCase());
   if (tag === undefined || depth > MAX_DEPTH) return null;
   const attrs: Record<string, string> = {};
   for (const [name, value] of Object.entries(node.attrs)) {
-    const kept = cleanAttr(name, value);
+    const kept = cleanAttr(name, value, prefix);
     if (kept !== null) attrs[kept.name] = kept.value;
+  }
+  if (attrs.attributeName !== undefined && (!RETARGETS.has(tag) || !animatable(attrs.attributeName))) {
+    if (RETARGETS.has(tag)) return null;
+    delete attrs.attributeName;
   }
   const children: (SvgNode | string)[] = [];
   for (const child of node.children) {
     if (typeof child === "string") children.push(child);
     else {
-      const clean = cleanNode(child, depth + 1);
+      const clean = cleanNode(child, depth + 1, prefix);
       if (clean !== null) children.push(clean);
     }
   }
@@ -368,20 +494,58 @@ function cleanNode(node: RawNode, depth: number): SvgNode | null {
 }
 
 /**
- * What one `svg` block's text is: the picture when an `<svg>` element has
- * opened and closed enough to draw, `drawing` while only its opening is in,
- * and `not-svg` when no `<svg` ever arrived (the caller shows the code
- * instead, so nothing a note or a reply meant as text disappears).
+ * The per-picture `id` prefix: a hash of the block's text, so the server
+ * render and the browser's agree, and two different pictures in one thread
+ * never share an id. Two copies of the same text share it, so `SvgBlock`
+ * adds its own `useId` to it per rendered copy. A generated id uses `_` after
+ * it, which a model's (always `<prefix>-<id>`) cannot.
  */
-export function compileSvg(source: string): SvgCompile {
-  const top = parseRaw(source.length > MAX_CHARS ? source.slice(0, MAX_CHARS) : source);
+function idPrefix(source: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < source.length; i += 1) {
+    hash ^= source.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `svg${(hash >>> 0).toString(36)}`;
+}
+
+/** The root's accessible name from its own `<title>`, when the markup gave it none of its own. */
+function nameFromTitle(root: SvgNode, prefix: string): void {
+  if (root.attrs["aria-label"] !== undefined || root.attrs["aria-labelledby"] !== undefined) return;
+  const title = root.children.find((child): child is SvgNode => typeof child !== "string" && child.tag === "title");
+  if (title === undefined) return;
+  title.attrs.id ??= `${prefix}_title`;
+  root.attrs["aria-labelledby"] = title.attrs.id;
+}
+
+function compile(source: string): SvgCompile {
+  const text = source.length > MAX_CHARS ? source.slice(0, MAX_CHARS) : source;
+  const top = parseRaw(text);
   const root = top.find((node) => typeof node !== "string" && node.tag.toLowerCase() === "svg");
   if (root === undefined || typeof root === "string") {
     return /<\s*svg(?=[\s/>]|$)/i.test(source) ? { kind: "drawing" } : { kind: "not-svg" };
   }
-  const clean = cleanNode(root, 0);
+  const prefix = idPrefix(text);
+  const clean = cleanNode(root, 0, `${prefix}-`);
   if (clean === null) return { kind: "not-svg" };
+  nameFromTitle(clean, prefix);
   // A root that opened and saw nothing complete yet draws as it goes, not
   // "not yet": an empty picture is still the picture being drawn.
-  return { kind: "figure", root: clean };
+  return { kind: "figure", root: clean, prefix };
+}
+
+/**
+ * What one `svg` block's text is: the picture when an `<svg>` element has
+ * opened and closed enough to draw, `drawing` while only its opening is in,
+ * and `not-svg` when no `<svg` ever arrived (the caller shows the code
+ * instead, so nothing a note or a reply meant as text disappears). It never
+ * throws: a note or a reply that trips something unforeseen shows its code
+ * rather than taking the page down.
+ */
+export function compileSvg(source: string): SvgCompile {
+  try {
+    return compile(source);
+  } catch {
+    return { kind: "not-svg" };
+  }
 }

@@ -195,6 +195,8 @@ export interface StepPlace {
   of: number;
   /** 1-based: the how-manyth question about this concept. */
   question: number;
+  /** Questions answered before this one, across the whole check. */
+  answered?: number;
 }
 
 /**
