@@ -19,6 +19,11 @@ type Tier = "default" | "lite" | "max";
 
 const ADD_PROVIDER = "__add__";
 
+/** A provider's three tier fields as the form holds them: its saved models, blank where none (or no provider). */
+function tiersOf(entry: ByokProviderStatus | null | undefined): Record<Tier, string> {
+  return { default: entry?.models.default ?? "", lite: entry?.models.lite ?? "", max: entry?.models.max ?? "" };
+}
+
 /**
  * BYOK provider configuration (D94), shared by the picker's dialog and the
  * Models settings card: a provider dropdown listing only the connected
@@ -80,7 +85,7 @@ export function ByokConfig({
         if (!loaded.current) {
           loaded.current = true;
           const entry = result.data.providers.find((entry) => entry.provider === active);
-          setTiers({ default: entry?.models.default ?? "", lite: entry?.models.lite ?? "", max: entry?.models.max ?? "" });
+          setTiers(tiersOf(entry));
           if (active !== null) {
             setProvider(active);
           } else if (manageKeys) {
@@ -95,7 +100,7 @@ export function ByokConfig({
           // The pick itself was deleted: the fallback provider is a
           // different account, so its tiers load and any typed key drops.
           const entry = result.data.providers.find((entry) => entry.provider === active);
-          setTiers({ default: entry?.models.default ?? "", lite: entry?.models.lite ?? "", max: entry?.models.max ?? "" });
+          setTiers(tiersOf(entry));
           setApiKey("");
           return active ?? (manageKeys ? ADD_PROVIDER : "");
         });
@@ -177,7 +182,7 @@ export function ByokConfig({
     setApiKey("");
     setShow(false);
     const entry = connected?.find((held) => held.provider === next);
-    setTiers({ default: entry?.models.default ?? "", lite: entry?.models.lite ?? "", max: entry?.models.max ?? "" });
+    setTiers(tiersOf(entry));
     const result = await setByokActive(next);
     if (!result.ok) {
       setError(result.refusal.error);
@@ -220,7 +225,7 @@ export function ByokConfig({
     setProvider(byokName);
     setApiKey("");
     const entry = fresh.data.providers.find((held) => held.provider === byokName);
-    setTiers({ default: entry?.models.default ?? "", lite: entry?.models.lite ?? "", max: entry?.models.max ?? "" });
+    setTiers(tiersOf(entry));
     onConnected?.();
   }
 
@@ -261,7 +266,7 @@ export function ByokConfig({
     setProvider(newProvider);
     setAdding(false);
     setApiKey("");
-    setTiers({ default: "", lite: "", max: "" });
+    setTiers(tiersOf(null));
     // The provider is connected and active — the picker's pick becomes
     // `byok`, but the dialog stays open for the tier models: a provider
     // with no Default model still cannot run.
