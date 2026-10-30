@@ -14,6 +14,7 @@ import {
 } from "@/lib/course-path";
 import { loadKnowledgeBase } from "@/lib/learner-store";
 import { moduleConcepts, type PathKbConcept } from "@/lib/module-path";
+import { ownValue } from "@gnosia/tutor/own-key";
 import type { Course } from "@gnosia/tutor/types";
 
 /**
@@ -74,10 +75,10 @@ export async function loadCourseHome(course: Course): Promise<CourseHomeData> {
     const taught = moduleConcepts(m);
     modules[m.id] = {
       guidebook: guidebookConcept(resolved, authored, known),
-      assets: assets.byTopic[m.topic] ?? null,
+      assets: ownValue(assets.byTopic, m.topic) ?? null,
       description: entry?.summary?.trim() || null,
       concepts: pathConcepts(taught, kbById),
-      path: assets.paths[m.id] ?? null,
+      path: ownValue(assets.paths, m.id) ?? null,
       checks: assets.checks === null ? null : pick(assets.checks, taught),
     };
   }
@@ -116,5 +117,5 @@ function pathConcepts(
 }
 
 function pick(counts: Readonly<Record<string, number>>, slugs: readonly string[]): Record<string, number> {
-  return Object.fromEntries(slugs.filter((s) => s in counts).map((s) => [s, counts[s]!]));
+  return Object.fromEntries(slugs.filter((s) => Object.hasOwn(counts, s)).map((s) => [s, counts[s]!]));
 }
