@@ -41,13 +41,6 @@ export const PAGE_SIZE = 50;
 /** The most rows a page may hold when it is rounded up to finish its last group. */
 export const PAGE_MAX = 100;
 
-/**
- * A group as the page draws it: a day's (`dayGroups`) or one of
- * `@/lib/library-groups`'. The one shape, `RowGroup`, under the name this
- * module's callers know.
- */
-export type PageGroup<T> = RowGroup<T>;
-
 /** Where the last row drawn sits: its group, its course module when the grouping has them, and its sort key. */
 export interface PageCursor {
   group: string;
@@ -107,7 +100,7 @@ interface Slot<T> {
  * the reader sent the first page's back, puts the groups in that order.
  */
 export function pageOf<T>(
-  given: readonly PageGroup<T>[],
+  given: readonly RowGroup<T>[],
   keyOf: (row: T) => SortKey,
   sort: LibrarySort,
   after: PageCursor | null,
@@ -178,7 +171,7 @@ export function pageOf<T>(
 }
 
 /** `groups` in the order the first page saw them; one it did not see is left out. */
-function inOrder<T>(groups: readonly PageGroup<T>[], order: readonly string[]): PageGroup<T>[] {
+function inOrder<T>(groups: readonly RowGroup<T>[], order: readonly string[]): RowGroup<T>[] {
   const byKey = new Map(groups.map((group) => [group.key, group]));
   return [...new Set(order)].flatMap((key) => {
     const group = byKey.get(key);
@@ -213,7 +206,7 @@ export function parseOrder(value: unknown): string[] | null | undefined {
   return value as string[];
 }
 
-function heading<T>(group: PageGroup<T>): PieceHeading {
+function heading<T>(group: RowGroup<T>): PieceHeading {
   return {
     key: group.key,
     label: group.label,
@@ -223,13 +216,13 @@ function heading<T>(group: PageGroup<T>): PieceHeading {
   };
 }
 
-function sectionKey<T>(groups: readonly PageGroup<T>[], slot: Slot<T>): string | null {
+function sectionKey<T>(groups: readonly RowGroup<T>[], slot: Slot<T>): string | null {
   return slot.section === -1 ? null : (groups[slot.group].sections?.[slot.section]?.key ?? null);
 }
 
 /** The index of the first slot after the cursor's place, or null when its group or module is gone. */
 function startAfter<T>(
-  groups: readonly PageGroup<T>[],
+  groups: readonly RowGroup<T>[],
   slots: readonly Slot<T>[],
   after: PageCursor,
   sort: LibrarySort,

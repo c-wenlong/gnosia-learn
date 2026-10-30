@@ -519,6 +519,8 @@ function StepMark({ status, live }: { status: StepRow["status"]; live: boolean }
     );
   }
   if (status === "failed") return <span aria-hidden className={cx(base, "bg-danger")} />;
+  // Stopped on request: muted, as the dot of a cancelled job is.
+  if (status === "stopped") return <span aria-hidden className={cx(base, "bg-text3")} />;
   if (status === "current") return <span aria-hidden className={cx(base, "bg-accent transition-colors duration-200 motion-reduce:transition-none", live && "studio-breathe")} />;
   return <span aria-hidden className={cx(base, "border-2 border-border")} />;
 }

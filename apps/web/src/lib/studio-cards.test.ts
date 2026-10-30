@@ -546,6 +546,23 @@ describe("a malformed video brief", () => {
     const briefs = entryBriefs({ briefs: [{ kind: "video", brief: { title: "no scenes" } as never, requestSeq: 1 }, { kind: "diagram", brief: DIAGRAM, requestSeq: 1 }] });
     expect(briefs.map((item) => item.kind)).toEqual(["diagram"]);
   });
+
+  it("is left out when a beat is malformed, which would throw while the card is drawn (R2-1-09)", () => {
+    const scene = VIDEO.scenes[0]!;
+    const broken = [
+      { ...VIDEO, scenes: [{ ...scene, beats: [null] }] },
+      { ...VIDEO, scenes: [{ ...scene, beats: [{ show: "A sentence.", labels: [] }] }] },
+      { ...VIDEO, scenes: [{ ...scene, beats: [{ say: "Words.", show: "A sentence." }] }] },
+      { ...VIDEO, concepts: "attention" },
+      { ...VIDEO, voice: "none", scenes: [{ ...scene, beats: [{ ...scene.beats[0]!, seconds: {} }] }] },
+    ];
+    for (const brief of broken) {
+      expect(entryBriefs({ briefs: [{ kind: "video", brief: brief as never, requestSeq: 1 }] })).toEqual([]);
+    }
+    expect(entryBriefs({ briefs: [{ kind: "video", brief: VIDEO, requestSeq: 1 }] }).map((item) => item.kind)).toEqual(["video"]);
+    const silent = { ...VIDEO, voice: "none", scenes: [{ ...scene, beats: [{ ...scene.beats[0]!, seconds: 4 }] }] };
+    expect(entryBriefs({ briefs: [{ kind: "video", brief: silent, requestSeq: 1 }] }).map((item) => item.kind)).toEqual(["video"]);
+  });
 });
 
 describe("the runner's own slot fields (#207)", () => {

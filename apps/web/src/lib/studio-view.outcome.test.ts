@@ -21,7 +21,8 @@ describe("carrying an outcome back to the page", () => {
     expect(readOutcome(paramsOf(href))).toEqual({
       verb: "export",
       ok: true,
-      headline: "export finished",
+      headline: "Export finished.",
+      said: "export finished",
       detail: null,
     });
   });
@@ -33,7 +34,7 @@ describe("carrying an outcome back to the page", () => {
       detail: "x.svg does not exist",
     });
     const read = readOutcome(paramsOf(href));
-    expect(read).toMatchObject({ ok: false, headline: "verify exited 1", detail: "x.svg does not exist" });
+    expect(read).toMatchObject({ ok: false, headline: "Verify did not pass.", said: "verify exited 1", detail: "x.svg does not exist" });
   });
 
   it("keeps the view the person was looking at", () => {
@@ -69,7 +70,7 @@ describe("carrying an outcome back to the page", () => {
 
   it("keeps a headline and a detail whole when either holds the old separator (S2-10)", () => {
     const href = withOutcome("/studio", "export", { ok: false, headline: "export — stopped", detail: "line 1 — line 2 — line 3" });
-    expect(readOutcome(paramsOf(href))).toMatchObject({ headline: "export — stopped", detail: "line 1 — line 2 — line 3" });
+    expect(readOutcome(paramsOf(href))).toMatchObject({ said: "export — stopped", detail: "line 1 — line 2 — line 3" });
   });
 
   it("caps the detail too", () => {
@@ -87,9 +88,22 @@ describe("what a link can put in the banner (S1-21)", () => {
 
   it("caps what it reads, whatever the URL carried", () => {
     expect(readOutcome({ v: "verify", m: "x".repeat(5_000), d: "y".repeat(5_000) })).toMatchObject({
-      headline: "x".repeat(300),
+      said: "x".repeat(300),
       detail: "y".repeat(300),
     });
+  });
+
+  it("never draws a link's words as the studio's headline (R2-1-06)", () => {
+    const read = readOutcome({ v: "export", ok: "0", m: "Your session expired. Sign in again at gnosia-login.example" });
+    expect(read?.headline).toBe("Export did not finish.");
+    expect(read?.said).toBe("Your session expired. Sign in again at gnosia-login.example");
+    expect(readOutcome({ v: "commit", ok: "1" })).toEqual({ verb: "commit", ok: true, headline: "Committed.", said: null, detail: null });
+    // Own keys only: a verb named after an Object method is no verb.
+    expect(readOutcome({ v: "constructor", ok: "1" })).toBeNull();
+  });
+
+  it("carries no runner words when the runner gave none", () => {
+    expect(paramsOf(withOutcome("/studio", "export", { ok: true, headline: "", detail: null }))).not.toHaveProperty("m");
   });
 });
 

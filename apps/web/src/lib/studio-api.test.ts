@@ -65,4 +65,33 @@ describe("studioApi failures", () => {
     expect(seen[0]!.aborted).toBe(true);
     expect(seen[1]!.aborted).toBe(false);
   });
+
+  it("does not read a 2xx that is not JSON as a success with nothing in it (R2-1-05)", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("<html>proxy error</html>", { status: 200 })));
+    expect(await studioApi("/api/jobs")).toMatchObject({ ok: false, reason: "refused", status: 200, detail: "<html>proxy error</html>" });
+  });
+
+  it("reads a body cut off mid-read as a runner that stopped answering, which may have acted", async () => {
+    const cut = { ok: true, status: 200, text: () => Promise.reject(new DOMException("The operation was aborted due to timeout", "TimeoutError")) };
+    vi.stubGlobal("fetch", vi.fn(async () => cut));
+    expect(await studioApi("/api/jobs")).toMatchObject({ ok: false, reason: "down", undelivered: false });
+  });
+
+  it("still reads a refusal with no JSON body as the runner's status", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 503 })));
+    expect(await studioApi("/api/jobs")).toMatchObject({ ok: false, reason: "refused", status: 503, headline: "the runner answered 503", detail: "" });
+  });
+
+  it("names the signed-in owner over any the caller passed", async () => {
+    const seen: Headers[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        seen.push(new Headers(init.headers));
+        return new Response("{}", { status: 200 });
+      }),
+    );
+    await studioApi("/api/x", { headers: { "x-gnosia-owner": "someone-else" } });
+    expect(seen[0]!.get("x-gnosia-owner")).toBe("local");
+  });
 });

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   shotTitle,
@@ -245,6 +245,20 @@ describe("sorting", () => {
     const z = diagram({ name: "z", title: "Zulu" });
     const view = { ...DEFAULT_VIEW, sort: "title" as const, direction: "asc" as const };
     expect(sortDiagrams([z, a], view).map((entry) => entry.title)).toEqual(["Alpha", "Zulu"]);
+  });
+
+  it("orders titles by one fixed collation, whatever the runtime's locale (R2-1-12)", () => {
+    const view = { ...DEFAULT_VIEW, sort: "title" as const, direction: "asc" as const };
+    const titles = ["Banana", "apple", "Étude", "item 10", "item 2"].map((title) => diagram({ name: title, title }));
+    // A runtime whose default locale orders byte-wise, as a server under LANG=C does.
+    const byteWise = vi.spyOn(String.prototype, "localeCompare").mockImplementation(function (this: string, other: string) {
+      return this < other ? -1 : this > other ? 1 : 0;
+    });
+    try {
+      expect(sortDiagrams(titles, view).map((entry) => entry.title)).toEqual(["apple", "Banana", "Étude", "item 2", "item 10"]);
+    } finally {
+      byteWise.mockRestore();
+    }
   });
 
   it("falls back to the filename stem for a document with no stamped title", () => {

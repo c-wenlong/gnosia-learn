@@ -12,6 +12,7 @@ import { useJobVerb } from "@/components/studio/use-job-verb";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
 import { VideoJobPanel } from "@/components/studio/video/VideoJobPanel";
 import { getJob } from "@/lib/studio-job-read";
+import { recheckDoctor } from "@/lib/studio-health";
 import type { JobLookup } from "@/lib/studio-video-job";
 import { Mono, PanelHeading } from "@/components/studio/StudioChrome";
 import { Badge } from "@/components/ui/Badge";
@@ -301,9 +302,10 @@ function DiagramJobPanel({
             <TalkItThrough job={job} path={path} failure={report} go={verbs.go} onFailed={(text) => setSaid({ ok: false, text })} />
           ))}
         {report?.actions.includes("doctor") === true && (
-          <Button variant="secondary" size="xs" disabled={busy} onClick={() => void verbs.refresh()} title="The studio checks doctor on every render of this screen">
-            Recheck
-          </Button>
+          <RecheckButton
+            disabled={busy}
+            onDone={(verdict) => setSaid({ ok: verdict.ok, text: verdict.ok && report.actions.includes("retry") ? `${verdict.text} Press Retry to run it again.` : verdict.text })}
+          />
         )}
       </div>
 
@@ -352,7 +354,7 @@ function PhaseList({ rows, live }: { rows: PhaseRow[]; live: boolean }) {
             )}
           >
             <span aria-hidden className="w-4 shrink-0 text-center">
-              {row.status === "done" ? "✓" : row.status === "failed" ? "✕" : row.status === "current" ? "•" : "·"}
+              {row.status === "done" ? "✓" : row.status === "failed" ? "✕" : row.status === "stopped" ? "■" : row.status === "current" ? "•" : "·"}
             </span>
             <span className="min-w-0 flex-1 truncate">
               <span className="sr-only">{progressWord(row.status)}</span>
@@ -586,6 +588,34 @@ function RetryButton({
 }
 
 /**
+ * Recheck on a failure doctor would explain: reads doctor's verdict from
+ * health and says it beside the buttons. The job's own row cannot change, so
+ * re-reading the job list showed nothing (R2-1-19).
+ */
+function RecheckButton({ disabled, onDone }: { disabled: boolean; onDone: (verdict: { ok: boolean; text: string }) => void }) {
+  const [checking, setChecking] = useState(false);
+  return (
+    <Button
+      variant="secondary"
+      size="xs"
+      disabled={disabled || checking}
+      onClick={() => {
+        void (async () => {
+          setChecking(true);
+          try {
+            onDone(await recheckDoctor());
+          } finally {
+            setChecking(false);
+          }
+        })();
+      }}
+    >
+      {checking ? "Checking" : "Recheck"}
+    </Button>
+  );
+}
+
+/**
  * A failed job with no conversation of its own (the brief form started it,
  * before the form was removed) gets one, opened on the diagram when the job
  * extended one: its composer prefilled, not sent, with what the old brief was
@@ -618,6 +648,11 @@ function TalkItThrough({
           setBusy(true);
           try {
             const lookup = await getJob(job.jobId);
+            // A read that failed is not a job without a brief (R2-1-20).
+            if (lookup.kind === "failed") {
+              onFailed(`this job's brief could not be read: ${lookup.reason}`);
+              return;
+            }
             const body = (lookup.kind === "found" ? lookup.body : {}) as { brief?: Brief };
             if (body.brief === undefined) {
               onFailed("the runner did not return this job's brief, so there is nothing to talk through");

@@ -20,6 +20,7 @@ import { Notice } from "@/components/ui/Notice";
 import { BlockedCard, type DoctorLine } from "@/components/studio/StudioBlocked";
 import { StripMenu } from "@/components/studio/StudioControls";
 import { BackToStudio, StudioStrip, VerbNotice } from "@/components/studio/StudioChrome";
+import { VerbSubmit } from "@/components/studio/VerbSubmit";
 import { openShot, requireStudio, studioApi } from "@/lib/studio";
 import { videoAvailability } from "@/lib/studio-health";
 import { vocabularyBanner, type VocabularyState } from "@/lib/studio-vocabulary";
@@ -339,10 +340,10 @@ function Shell({ children }: { children: React.ReactNode }) {
  */
 function Strip({ diagram, path, uncommitted, videos }: { diagram: Diagram; path: string; uncommitted: boolean; videos: boolean }) {
   const pill = freshness(diagram.svgState);
-  const verbs: Array<{ action: (formData: FormData) => Promise<void>; label: string }> = [
-    { action: exportSvg, label: "Export SVG" },
-    { action: verifySvg, label: "Verify" },
-    { action: inspectDiagram, label: "Inspect" },
+  const verbs: Array<{ action: (formData: FormData) => Promise<void>; verb: string; label: string; pending: string }> = [
+    { action: exportSvg, verb: "export", label: "Export SVG", pending: "Exporting" },
+    { action: verifySvg, verb: "verify", label: "Verify", pending: "Verifying" },
+    { action: inspectDiagram, verb: "inspect", label: "Inspect", pending: "Inspecting" },
   ];
   return (
     <StudioStrip>
@@ -358,10 +359,10 @@ function Strip({ diagram, path, uncommitted, videos }: { diagram: Diagram; path:
             <form action={exportSvg} className="shrink-0">
               <input type="hidden" name="name" value={diagram.name} />
               <input type="hidden" name="path" value={path} />
-              <Button type="submit" variant={pill.tone === "ok" ? "secondary" : "warn"} size="xs" title={`${pill.title} Click to export it again.`}>
+              <VerbSubmit verb="export" pending="Exporting" variant={pill.tone === "ok" ? "secondary" : "warn"} title={`${pill.title} Click to export it again.`}>
                 {pill.tone === "ok" && <span aria-hidden className="size-2 rounded-full bg-ok" />}
                 {pill.label}
-              </Button>
+              </VerbSubmit>
             </form>
             {uncommitted && <Badge tone="warn">Uncommitted edits</Badge>}
           </div>
@@ -380,15 +381,15 @@ function Strip({ diagram, path, uncommitted, videos }: { diagram: Diagram; path:
                 aria-label="Why this change"
                 className="w-full min-w-0 @[48rem]:w-44"
               />
-              <Button type="submit" variant="secondary" size="xs" className="shrink-0">
+              <VerbSubmit verb="commit" pending="Committing" className="shrink-0">
                 Commit
-              </Button>
+              </VerbSubmit>
             </form>
             {/* Inline where the row has room; `contents`, so each form is a
                 flex item of the row as before. */}
             <div className="hidden @[80rem]:contents">
               {verbs.map((verb) => (
-                <VerbForm key={verb.label} action={verb.action} name={diagram.name} path={path} label={verb.label} />
+                <VerbForm key={verb.label} action={verb.action} name={diagram.name} path={path} label={verb.label} verb={verb.verb} pending={verb.pending} />
               ))}
               {/* The same conversation, with the Video chip waiting in its composer
                   (D86). Left out when the video doctor fails: the strip has no room
@@ -404,7 +405,7 @@ function Strip({ diagram, path, uncommitted, videos }: { diagram: Diagram; path:
             <div className="contents @[80rem]:hidden">
               <StripMenu label="More" name="More actions">
                 {verbs.map((verb) => (
-                  <VerbForm key={verb.label} action={verb.action} name={diagram.name} path={path} label={verb.label} row />
+                  <VerbForm key={verb.label} action={verb.action} name={diagram.name} path={path} label={verb.label} verb={verb.verb} pending={verb.pending} row />
                 ))}
                 {videos && (
                   <ExtendLink href={extendHref(diagram.name, { video: true })} label="Make a video" className={menuRowClasses()} />
@@ -432,27 +433,27 @@ function VerbForm({
   name,
   path,
   label,
+  verb,
+  pending,
   row = false,
 }: {
   action: (formData: FormData) => Promise<void>;
   name: string;
   path: string;
   label: string;
+  /** The action's name, shared by every button that runs it (`VerbSubmit`). */
+  verb: string;
+  /** What its button says while the action runs (`VerbSubmit`). */
+  pending: string;
   row?: boolean;
 }) {
   return (
     <form action={action} className={row ? undefined : "shrink-0"}>
       <input type="hidden" name="name" value={name} />
       <input type="hidden" name="path" value={path} />
-      {row ? (
-        <button type="submit" className={menuRowClasses()}>
-          {label}
-        </button>
-      ) : (
-        <Button type="submit" variant="secondary" size="xs">
-          {label}
-        </Button>
-      )}
+      <VerbSubmit verb={verb} pending={pending} row={row}>
+        {label}
+      </VerbSubmit>
     </form>
   );
 }

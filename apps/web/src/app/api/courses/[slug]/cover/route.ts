@@ -11,8 +11,10 @@ import {
   type AssetFileProblem,
 } from "@/lib/asset-files";
 import type { RouteProblemCode } from "@gnosia/tutor/asset-problems";
-import { assetBlobStore, SIGNED_URL_TTL_SECONDS } from "@/lib/blob-store";
+import { matchesEtag, problemResponse, signedRedirect } from "@/lib/asset-response";
+import { assetBlobStore } from "@/lib/blob-store";
 import { COVER_VERSION_PARAM, coverVersion } from "@/lib/course-summary";
+import { unauthenticated } from "@/lib/learner-api";
 import { withLearnerStore } from "@/lib/learner-store";
 import { currentScope, NoOwnerError, type OwnerScope } from "@/lib/owner";
 
@@ -76,9 +78,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   try {
     scope = await currentScope();
   } catch (error) {
-    if (error instanceof NoOwnerError) {
-      return NextResponse.json({ error: "UNAUTHENTICATED", signIn: "/sign-in" }, { status: 401 });
-    }
+    if (error instanceof NoOwnerError) return unauthenticated();
     throw error;
   }
 
@@ -96,12 +96,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
   }
 
   const resolved = await resolveCover(slug, row);
-  if (resolved.ok === false) return problem(resolved);
+  if (resolved.ok === false) return problemResponse(resolved);
   return serve(request, resolved.cover);
-}
-
-function problem(p: AssetFileProblem): Response {
-  return NextResponse.json({ error: p.error, code: p.code, detail: p.detail }, { status: p.status });
 }
 
 const noCover = (code: RouteProblemCode, detail: string): AssetFileProblem => ({
@@ -165,18 +161,13 @@ async function serve(request: Request, cover: CoverServed): Promise<Response> {
     return new Response(null, { status: 304, headers });
   }
 
-  let url: string | null;
+  let redirect: Response | null;
   try {
-    url = await assetBlobStore().signedUrl(cover.key, SIGNED_URL_TTL_SECONDS);
+    redirect = await signedRedirect(cover.key);
   } catch (error) {
-    return problem(blobStoreProblem(error));
+    return problemResponse(blobStoreProblem(error));
   }
-  if (url !== null) {
-    return new Response(null, {
-      status: 302,
-      headers: { Location: url, "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" },
-    });
-  }
+  if (redirect !== null) return redirect;
 
   const range = parseRange(request.headers.get("range"), cover.bytes);
   if (range.kind === "unsatisfiable") {
@@ -203,16 +194,6 @@ async function serve(request: Request, cover: CoverServed): Promise<Response> {
     if (isRangeRefusal(error)) {
       return new Response(null, { status: 416, headers: { ...headers, "Content-Range": `bytes */${cover.bytes}` } });
     }
-    return problem(blobStoreProblem(error));
+    return problemResponse(blobStoreProblem(error));
   }
-}
-
-/** Does `If-None-Match` name this tag? A list, `*`, and weak tags, as the poster route reads it. */
-function matchesEtag(header: string | null, etag: string): boolean {
-  if (header === null) return false;
-  const strip = (tag: string) => (tag.startsWith("W/") ? tag.slice(2) : tag);
-  return header
-    .split(",")
-    .map((tag) => strip(tag.trim()))
-    .some((tag) => tag === "*" || tag === strip(etag));
 }
