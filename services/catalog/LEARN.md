@@ -21,15 +21,18 @@ the schema is [`SCHEMA.md`](SCHEMA.md). This file is only the move.
 
 `event` also holds two types the old file never did, both written by the
 web app and neither of them evidence: `watched` (an asset marked watched or
-read) and `visit` (a course or module page opened, migration 0025). Both
+read) and `visit` (a course or module page opened, migration 0025 of the
+Postgres journal, folded into `0000` of
+[drizzle-sqlite/](drizzle-sqlite/0000_majestic_ronan.sql)). Both
 replays skip them, so `learn model --rebuild` and `learn review rebuild` give
 the same answer with or without them. The table of types is in
 [SCHEMA.md](SCHEMA.md#event-types).
 
 The split used to be the one the rest of the catalog ran on: what a person or
 an agent *wrote* stayed in git, where it could be read, diffed and reverted;
-what the loop *observed* went in Postgres, where it can be joined and
-constrained. Since the cut-over both are in Postgres, and `content_revision`
+what the loop *observed* went in the database (Postgres then), where it can be
+joined and constrained. Since the cut-over both are in the database, now one
+SQLite file ([docs/SQLITE-MIGRATION.md](../../docs/SQLITE-MIGRATION.md)), and `content_revision`
 is where a write is read, diffed (`catalog diff`) and traced to its author
 (`catalog history`).
 

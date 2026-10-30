@@ -1,18 +1,19 @@
 # The Learning Pipeline
 
-A local tutoring loop that runs inside Claude Code, backed by Postgres. It
+A local tutoring loop that runs inside Claude Code, backed by the catalog, one
+SQLite file ([SQLITE-MIGRATION.md](SQLITE-MIGRATION.md)). It
 measures what you know, plans a path from there, teaches one step at a time,
 and schedules what you will forget.
 
 Nothing important is trapped in a chat transcript. What it knows is split in
 two, along one line: what somebody *wrote* is authored content, and what the
-loop *observed* is a row in Postgres. Since the phase 3 cut-over the authored
-half is rows in Postgres as well ([CONTENT-MIGRATION.md](CONTENT-MIGRATION.md)),
+loop *observed* is a row in the catalog. Since the phase 3 cut-over the authored
+half is rows there as well ([CONTENT-MIGRATION.md](CONTENT-MIGRATION.md)),
 and the repository holds no `learn/` folder; how to read and edit the notes and
 logs is under [Where the notes and logs live](#where-the-notes-and-logs-live).
 
 ```
-postgres  (DATABASE_URL, default postgres://localhost:5432/gnosia)
+catalog.db  (CATALOG_DB, else DATABASE_URL, else $GNOSIA_HOME/catalog.db, default ~/.gnosia/catalog.db)
   concept            atomic concept notes: frontmatter as columns, markdown as body
   session_log_entry  one row per append to a session's log, written live
   diagram, asset     diagrams drawn during teaching; the SVG in the blob store
@@ -113,7 +114,10 @@ out of the vault, is never read, so push refuses it by name and pull reports
 it, leaves it alone and removes nothing that run. An edited log goes back to the database's by deleting it and
 pulling. Neither command runs without `catalog flip concepts` and `catalog flip
 sessions` (pull needs both, push needs concepts), which every database set up
-since the cut-over has. A vault pulled from another database (a `createdb -T` copy counts)
+since the cut-over has. A vault pulled from another database (a copy of the file counts, and so does
+the same file moved, since a database is known by its resolved path:
+`databaseIdentity` in
+[import-root.ts](../services/catalog/src/content/import-root.ts))
 refuses to push until a pull adopts the new one. The rules a note's row keeps are in
 [services/catalog/SCHEMA.md](../services/catalog/SCHEMA.md): values, not
 frontmatter layout, and no frontmatter key beyond the eight a note uses.
@@ -495,7 +499,9 @@ reports per concept is always empty now and stays for the plugin's sake.
 
 **Event** — one row of the trajectory, append-only. `at`, `type`,
 `concept_slug` and `session_id` are columns; everything type-specific is in a
-`payload` jsonb, which is what the old JSONL line held at the top level:
+`payload` JSON column (JSON text, read back parsed:
+[state.ts](../packages/schema/src/state.ts)), which is what the old JSONL line
+held at the top level:
 
 ```json
 {"at":"2026-08-18T01:45:58Z","type":"observation","concept":"softmax",
@@ -527,7 +533,8 @@ route needs a `chosen`: an "I don't know" carries no confidence. A bad value
 (not a whole number from 0 to 100) is refused before anything is written.
 
 Append-only is enforced by a trigger, not by discipline. An UPDATE or a DELETE
-raises. The correction path is a new row: `learn void --session S --reason R`
+raises (`event_no_update` and `event_no_delete` in
+[0000_majestic_ronan.sql](../services/catalog/drizzle-sqlite/0000_majestic_ronan.sql)). The correction path is a new row: `learn void --session S --reason R`
 retracts a session's evidence, and the next rebuild skips it while the history
 stays readable.
 
@@ -735,19 +742,27 @@ something concrete to ask:
 ## Setup
 
 ```bash
-createdb gnosia                    # once, against the Homebrew Postgres 17
-npm run catalog -- migrate             # apply every outstanding migration
+npm run catalog -- migrate             # creates the file, or brings its tables up to date
 npm run learn -- init                  # check the store
 ```
 
-`DATABASE_URL` defaults to `postgres://localhost:5432/gnosia`; see
-[services/catalog/.env.example](../services/catalog/.env.example). Nothing
-works with the database down any more: mastery and the schedule are tables,
-and so are the notes and logs. `status`, which both skills run first, has
+There is no server to start. The catalog is one SQLite file: `CATALOG_DB`,
+else `DATABASE_URL` (a path or a `sqlite:` URL), else `$GNOSIA_HOME/catalog.db`, else
+`~/.gnosia/catalog.db` (`databaseUrl()` in
+[env.ts](../services/catalog/src/env.ts)), created on first connect. A
+`postgres://` URL is refused (`databasePath()` in the same file), so a `.env`
+carried over from Postgres needs `CATALOG_DB` set, or its `DATABASE_URL`
+removed or rewritten to a path
+([services/catalog/.env.example](../services/catalog/.env.example) has the
+choices), and an old database comes across with
+`services/catalog/scripts/pg-to-sqlite.mjs`
+([SQLITE-MIGRATION.md](SQLITE-MIGRATION.md)). Nothing works when the file
+cannot be opened: mastery and the schedule are tables, and so are the notes
+and logs. `status`, which both skills run first, has
 always needed it, and says `Knowledge base: the catalog at <db>`.
 
 A fresh clone has no content of its own: build the database from `seed/`
-first, as the README's install does, or point `DATABASE_URL` at one that
+first, as the README's install does, or point `CATALOG_DB` at a file that
 holds yours.
 
 Then in Claude Code:

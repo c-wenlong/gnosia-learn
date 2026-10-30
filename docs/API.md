@@ -22,7 +22,7 @@ Conventions worth knowing before the tables:
   present, name the server itself — DNS rebinding is the attack that shape
   exists for. Their errors are `{ error, code }` and `{ error, detail }`
   respectively.
-- **Both local services write the same Postgres the web app uses.** There is
+- **Both local services write the same catalog file the web app uses.** There is
   no second catalog; the sidecar is another door onto it for one owner, and
   the studio's routes run its runner's own tables and files.
 

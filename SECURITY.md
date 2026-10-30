@@ -44,11 +44,13 @@ target to promise. Reports are acknowledged as soon as I see them.
   bound is a Vercel WAF rate-limit rule on `/api/agent`, which is configured
   on the platform rather than in this repo.
 - **The knowledge base is personal study data.** Concept notes and session logs
-  record what a real person got right and wrong, and they are committed on
-  purpose, which means anyone who can read the repo can read the study history.
-  The event log, the mastery model and the schedule are not committed: they are
-  rows in the learner's own Postgres, which also means they have no backup
-  beyond that machine.
+  record what a real person got right and wrong. They are rows in the catalog,
+  beside the event log, the mastery model and the schedule, and none of it is
+  committed except `seed/`, a small real slice in the export format, which
+  anyone who can read the repo can read. The catalog is the learner's own
+  SQLite file (`~/.gnosia/catalog.db` by default), which also means it has no
+  backup beyond that machine; the nightly export (`npm run export:nightly`)
+  writes its copy under `~/.gnosia/archive/` on the same machine.
 - **Learner progress is written by unauthenticated routes.** Checkboxes, notes
   and recaps go through `POST /api/learner/*`, which are bounded the same way
   the agent routes are and by the same helpers: same-origin (403), a bounded
@@ -58,7 +60,7 @@ target to promise. Reports are acknowledged as soon as I see them.
   radius is a tick and a note on someone's study hub; they would not be enough
   for anything else, and adding authentication is what would change that.
   `preference` takes an allow-list of keys rather than any key, so the route is
-  not an open jsonb store, and a stored resource URL must be `http(s)` so it
+  not an open JSON store, and a stored resource URL must be `http(s)` so it
   cannot come back out as a `javascript:` href.
 - **A recap leaves the deployment only when the agent needs it.** It is
   included in the request body as context for a session, and nowhere else.

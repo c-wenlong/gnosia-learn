@@ -1,7 +1,7 @@
 # Editing the curriculum
 
 Course content is data, not code. The courses are `collection` and
-`curriculum_item` rows in Postgres, and the database is their truth
+`curriculum_item` rows in the catalog, one SQLite file, and the database is their truth
 ([CONTENT-MIGRATION.md](CONTENT-MIGRATION.md), Track B and the phase 3
 cut-over). A course is edited as a file all the same: one YAML file per course,
 the database's export of it, parsed by `parseCourse()` in
