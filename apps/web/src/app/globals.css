@@ -254,8 +254,8 @@
  * to the whole app. Selected by the class `gnosia` on <html> without `.dark`,
  * so it is a light theme and Tailwind's `dark:` variant stays off; Gnosia dark
  * is both classes, the `.gnosia.dark` block below.
- * Only the tokens that change are here; everything else falls through from
- * :root. Literal hex on purpose, so the block is self-contained and greppable;
+ * Every palette token is declared here, the ones that keep :root's value
+ * last; only the mode-independent tokens fall through from :root. Literal hex on purpose, so the block is self-contained and greppable;
  * the values that are brand tokens say which. Every pair is contrast-checked
  * in BRAND.md, "The Gnosia theme inside the app".
  */
