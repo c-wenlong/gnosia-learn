@@ -1,3 +1,4 @@
+import { kindRank } from "@gnosia/tutor/kind-order";
 import { describe, expect, it } from "vitest";
 import {
   assetBackLink,
@@ -8,8 +9,6 @@ import {
   firstParam,
   isCompanionKind,
   kindFacets,
-  kindNoun,
-  kindRank,
   conceptHref,
   courseFacets,
   explainedConcepts,
@@ -24,7 +23,6 @@ import {
   searchTerms,
   sortRows,
   filesNoun,
-  isOtherKind,
   LIBRARY_TABS,
   libraryTabs,
   OTHERS_KIND,
@@ -138,25 +136,6 @@ describe("compareByKindThenId", () => {
       "manimkc:out-a",
       "manimkc:out/b",
     ]);
-  });
-});
-
-describe("kindNoun", () => {
-  it("pluralises a label, except when it already ends in one", () => {
-    expect(kindNoun("Video", 30)).toBe("videos");
-    expect(kindNoun("Session log", 3)).toBe("session logs");
-    expect(kindNoun("Diagram source", 2)).toBe("diagram sources");
-    expect(kindNoun("Captions", 23)).toBe("captions");
-    expect(kindNoun("Chapters", 23)).toBe("chapters");
-  });
-
-  it("leaves a count of one singular", () => {
-    expect(kindNoun("Video", 1)).toBe("video");
-    expect(kindNoun("Session log", 1)).toBe("session log");
-  });
-
-  it("pluralises a zero, which is what an empty filtered view shows", () => {
-    expect(kindNoun("Session log", 0)).toBe("session logs");
   });
 });
 
@@ -306,13 +285,13 @@ describe("type tabs", () => {
     expect(tabOf("transcript")).toBe(OTHERS_KIND);
     expect(tabOf("poster")).toBe(OTHERS_KIND);
     expect(tabOf(OTHERS_KIND)).toBe(OTHERS_KIND);
-    expect(isOtherKind("captions")).toBe(true);
-    expect(isOtherKind("link")).toBe(false);
+    expect(isCompanionKind("captions")).toBe(true);
+    expect(isCompanionKind("link")).toBe(false);
   });
 
   it("keeps a standalone kind with no tab in All and out of Others, so no file is in both", () => {
     expect(tabOf("hologram")).toBe("hologram");
-    expect(isOtherKind("hologram")).toBe(false);
+    expect(isCompanionKind("hologram")).toBe(false);
     expect(libraryTabs([{ kind: "hologram", count: 2 }]).map((t) => t.value)).not.toContain(OTHERS_KIND);
     const rows = [
       { id: "h", kind: "hologram", topics: [] },

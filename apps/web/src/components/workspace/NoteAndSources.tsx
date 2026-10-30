@@ -137,6 +137,7 @@ export function NoteAndSources({
             <NoteProse
               source={w.note.source}
               idPrefix="note-"
+              images="show"
               className="mt-3 text-[14px]"
               resolveNote={resolveNote}
               resolveEmbed={resolveEmbed}

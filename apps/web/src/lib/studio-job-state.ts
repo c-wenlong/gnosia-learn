@@ -72,3 +72,26 @@ export function jobPredicate(kind: JobKind, state: string): string {
 export function jobCardSentence(kind: JobKind, state: string): string {
   return `The ${kind === "video" ? "video" : "diagram"} ${jobPredicate(kind, state)}.`;
 }
+
+/**
+ * The words a screen reader hears before a phase or step row, whose mark
+ * (a tick, a cross, a dot) and colour say it to the eye only. Sentence case,
+ * ending in a colon so the row's own label follows.
+ */
+export function progressWord(status: "done" | "current" | "pending" | "failed"): string {
+  switch (status) {
+    case "done":
+      return "Done: ";
+    case "current":
+      return "In progress: ";
+    case "failed":
+      return "Failed: ";
+    default:
+      return "Not started: ";
+  }
+}
+
+/** The same for a check's row: whether it passed. */
+export function checkWord(ok: boolean): string {
+  return ok ? "Passed: " : "Failed: ";
+}

@@ -3,13 +3,13 @@ import { act, createElement, useEffect, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { emptyLearnerState, LEGACY_STORAGE_KEY, type LearnerState } from "@gnosia/schema/shared";
+import { emptyLearnerState, type LearnerState } from "@gnosia/schema/shared";
 
 /**
  * How a learner write travels: in time-bounded requests, with `keepalive`
  * while small, a reset in batches the route takes, a visit announced once it
- * is stored, and the old localStorage document posted once and dropped when
- * the server refuses it for good.
+ * is stored, and a write queued behind another started out of turn when the
+ * page is left.
  */
 
 const router = vi.hoisted(() => ({ refresh: vi.fn() }));
@@ -20,7 +20,7 @@ vi.mock("@/lib/theme-cookie", () => ({
   writeThemeCookie: vi.fn(),
 }));
 
-const { LearnerProvider, useLearner, POST_TIMEOUT_MS, RESET_BATCH } = await import("./learner-context");
+const { LearnerProvider, useLearner, OUTBOX_KEY, POST_TIMEOUT_MS, RESET_BATCH } = await import("./learner-context");
 const { VISIT_STORED_EVENT } = await import("./recent-client");
 
 beforeAll(() => {
@@ -98,21 +98,42 @@ describe("a write that never answers", () => {
 });
 
 describe("leaving the page", () => {
-  it("starts a write queued behind another on its key at once, so the note typed last leaves the tab", async () => {
+  it("saves a write queued behind one in flight, rather than sending it out of turn, and the next load sends it", async () => {
     const answers: ((response: Response) => void)[] = [];
     const { calls } = mount(() => new Promise<Response>((resolve) => answers.push(resolve)));
     act(() => held.learner!.updateNote("t1", "first"));
     act(() => held.learner!.updateNote("t1", "typed last"));
     await vi.waitFor(() => expect(calls()).toHaveLength(1));
     act(() => void window.dispatchEvent(new Event("pagehide")));
-    expect(calls()).toHaveLength(2);
-    expect(JSON.parse(calls()[1][1].body as string)).toEqual({ curriculumItemId: "t1", note: "typed last" });
-    // The queue's own turn later does not send it again.
-    await act(async () => {
-      answers.shift()!(new Response(JSON.stringify({ ok: true }), { status: 200 }));
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
-    expect(calls()).toHaveLength(2);
+    // Not sent beside "first", which could then land after it.
+    expect(calls()).toHaveLength(1);
+    const box = JSON.parse(window.localStorage.getItem(OUTBOX_KEY)!) as { writes: unknown[] };
+    expect(box.writes).toEqual([{ kind: "note", topicId: "t1", note: "typed last" }]);
+
+    // The next load: a new provider sends it, and empties the outbox.
+    act(() => root?.unmount());
+    root = null;
+    const next = mount(ok);
+    await vi.waitFor(() => expect(next.calls()).toHaveLength(1));
+    expect(JSON.parse(next.calls()[0][1].body as string)).toEqual({ curriculumItemId: "t1", note: "typed last" });
+    expect(window.localStorage.getItem(OUTBOX_KEY)).toBeNull();
+  });
+
+  it("saves a refused write still kept, so closing the tab does not lose it", async () => {
+    mount(() => Promise.resolve(new Response("{}", { status: 503 })));
+    act(() => held.learner!.toggleTopicCompletion("t1"));
+    await vi.waitFor(() => expect(held.learner!.saveError).not.toBeNull());
+    act(() => void window.dispatchEvent(new Event("pagehide")));
+    const box = JSON.parse(window.localStorage.getItem(OUTBOX_KEY)!) as { writes: unknown[] };
+    expect(box.writes).toEqual([{ kind: "progress", topicId: "t1", done: true }]);
+  });
+
+  it("sends nothing from an outbox over a day old", async () => {
+    window.localStorage.setItem(OUTBOX_KEY, JSON.stringify({ at: Date.now() - 25 * 3_600_000, writes: [{ kind: "note", topicId: "t1", note: "old" }] }));
+    const { calls } = mount(ok);
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(calls()).toHaveLength(0);
+    expect(window.localStorage.getItem(OUTBOX_KEY)).toBeNull();
   });
 });
 
@@ -213,41 +234,5 @@ describe("a visit", () => {
     } finally {
       window.removeEventListener(VISIT_STORED_EVENT, heard);
     }
-  });
-});
-
-describe("the old localStorage document", () => {
-  async function importWith(status: number, stored: string = JSON.stringify({ completed: { t1: true } })) {
-    window.localStorage.setItem(LEGACY_STORAGE_KEY, stored);
-    const { calls } = mount(() => Promise.resolve(new Response(JSON.stringify({ ok: status === 200 }), { status })));
-    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
-    return calls();
-  }
-
-  it("is removed once imported", async () => {
-    expect(await importWith(200)).toHaveLength(1);
-    expect(window.localStorage.getItem(LEGACY_STORAGE_KEY)).toBeNull();
-    expect(router.refresh).toHaveBeenCalledTimes(1);
-  });
-
-  it("is removed when the server refuses it for good, rather than posted on every load", async () => {
-    await importWith(400);
-    expect(window.localStorage.getItem(LEGACY_STORAGE_KEY)).toBeNull();
-    await importWith(413);
-    expect(window.localStorage.getItem(LEGACY_STORAGE_KEY)).toBeNull();
-  });
-
-  it("is kept for the next load when the refusal can pass", async () => {
-    await importWith(503);
-    expect(window.localStorage.getItem(LEGACY_STORAGE_KEY)).not.toBeNull();
-    act(() => root?.unmount());
-    root = null;
-    await importWith(429);
-    expect(window.localStorage.getItem(LEGACY_STORAGE_KEY)).not.toBeNull();
-  });
-
-  it("is removed, and not posted, when it is not a document", async () => {
-    expect(await importWith(200, "[1,2]")).toHaveLength(0);
-    expect(window.localStorage.getItem(LEGACY_STORAGE_KEY)).toBeNull();
   });
 });

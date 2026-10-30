@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { JOB_KINDS, JOB_STATES } from "@gnosia/schema/shared";
 import { describe, expect, it } from "vitest";
 
-import { JOB_STATE_LABEL, jobCardSentence, jobPredicate, jobStateInline, jobStateLabel } from "@/lib/studio-job-state";
+import { checkWord, JOB_STATE_LABEL, jobCardSentence, jobPredicate, jobStateInline, jobStateLabel, progressWord } from "@/lib/studio-job-state";
 
 describe("job state labels", () => {
   it("has a label for every state the runner has, and only those", () => {
@@ -69,5 +69,17 @@ describe("no raw job state on screen", () => {
     // `{job.state}` as a child prints the enum. Comparisons and props are fine.
     const offenders = files(studio).filter((file) => /\{\s*(?:job|holder|entry)\.state\s*\}/.test(readFileSync(file, "utf8")));
     expect(offenders).toEqual([]);
+  });
+});
+
+describe("progressWord and checkWord (S1-10)", () => {
+  it("names every row state in sentence case", () => {
+    expect(["done", "current", "pending", "failed"].map((status) => progressWord(status as "done"))).toEqual([
+      "Done: ",
+      "In progress: ",
+      "Not started: ",
+      "Failed: ",
+    ]);
+    expect([checkWord(true), checkWord(false)]).toEqual(["Passed: ", "Failed: "]);
   });
 });

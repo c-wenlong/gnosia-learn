@@ -97,7 +97,7 @@ judge is a second, short model call: the question, the note's matching
 check block if one exists (its `answer:` and `why:`), the learner's words,
 and a request for JSON `{ correct: boolean, feedback: string }`. The
 pattern is the one `POST /api/agent/session` uses for a question
-([session.ts](../../apps/web/src/lib/agent/session.ts)): ask the model for
+([session-question.ts](../../packages/tutor/src/session-question.ts)): ask the model for
 JSON, parse it strictly, refuse what does not parse. The parser is new,
 since `parseSessionQuestion` reads options and a correct index and the
 verdict has neither: a small `parseVerdict` with the same clipping and the

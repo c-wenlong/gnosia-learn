@@ -626,6 +626,43 @@ export interface UserResource {
   url: string;
 }
 
+/** At most 50 modules, 50 links each: a personal reading list, not a mirror. */
+export const USER_RESOURCE_LIMITS = { modules: 50, perModule: 50, chars: 2_000, moduleIdChars: 128 } as const;
+
+/**
+ * Whether a reading-list URL may be stored: http(s) only. The value comes back
+ * out into an href, and a stored `javascript:` URL would be a self-inflicted
+ * XSS on the next render.
+ */
+export function isUserResourceUrl(url: string): boolean {
+  return /^https?:\/\//i.test(url);
+}
+
+/**
+ * A reading list with what the preference route would refuse dropped rather
+ * than refused: a URL that is not http(s), a field past the length cap, a
+ * module id too long, and anything past the module and per-module caps. For
+ * a writer that must not fail on one bad entry (the legacy import), so every
+ * way in is held to the preference route's rules.
+ */
+export function keepValidUserResources(value: Record<string, readonly UserResource[]>): Record<string, UserResource[]> {
+  const out: Record<string, UserResource[]> = {};
+  for (const [moduleId, list] of Object.entries(value)) {
+    if (Object.keys(out).length >= USER_RESOURCE_LIMITS.modules) break;
+    if (moduleId === "" || moduleId.length > USER_RESOURCE_LIMITS.moduleIdChars) continue;
+    const kept = list
+      .filter(
+        (r) =>
+          isUserResourceUrl(r.url) &&
+          [r.id, r.title, r.url].every((text) => typeof text === "string" && text.length <= USER_RESOURCE_LIMITS.chars),
+      )
+      .slice(0, USER_RESOURCE_LIMITS.perModule)
+      .map((r) => ({ id: r.id, title: r.title, url: r.url }));
+    if (kept.length > 0) out[moduleId] = kept;
+  }
+  return out;
+}
+
 export interface LastVisited {
   courseSlug: string;
   moduleSlug?: string;

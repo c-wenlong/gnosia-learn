@@ -1,5 +1,6 @@
 import { newSessionId, SESSION_TEXT_LIMIT } from "@/lib/session-core";
 import { CHAT_ANSWER_LIMIT, type RecordedResult } from "@/lib/tutor-check";
+import { randomToken } from "@/lib/random-token";
 import { sessionKey } from "@/lib/tutor-thread";
 
 /**
@@ -16,11 +17,7 @@ import { sessionKey } from "@/lib/tutor-thread";
 
 /** A request id for one recorded answer, as the session page makes them. */
 export function chatRequestId(): string {
-  // `randomUUID` needs a secure context; a LAN address over http is not one.
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return `chat-${crypto.randomUUID().replace(/-/g, "")}`;
-  }
-  return `chat-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}`;
+  return `chat-${randomToken()}`;
 }
 
 const sessionMemory = new Map<string, string | null>();
@@ -80,6 +77,88 @@ export function closeChatSession(scope: string): void {
   const id = readSession(scope);
   if (id === null) return;
   writeSession(scope, null);
+  sendClose(scope, id);
+}
+
+/**
+ * Close the scope's session and wait for the server to say so, retrying once
+ * after a pause: the session page does this on its close screen, where the
+ * learner sees the result. True once it is closed, or when no answer opened
+ * one; false when both tries failed, which leaves a running row and no lost
+ * evidence, since every answer is already recorded.
+ */
+export function closeSessionNow(scope: string, retryAfterMs = 1_500): Promise<boolean> {
+  const run = closeAndConfirm(scope, retryAfterMs);
+  closing.set(scope, run);
+  void run.finally(() => {
+    if (closing.get(scope) === run) closing.delete(scope);
+  });
+  return run;
+}
+
+/**
+ * Closes the scope's session is waiting on, per scope, so `releaseScope`
+ * keeps the scope until they finish.
+ */
+const closing = new Map<string, Promise<boolean>>();
+
+async function closeAndConfirm(scope: string, retryAfterMs: number): Promise<boolean> {
+  const id = readSession(scope);
+  if (id === null) return true;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const res = await fetch("/api/learner/session/close", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: id }),
+      });
+      if (res.ok) {
+        closedTimes.set(scope, (closedTimes.get(scope) ?? 0) + 1);
+        if (readSession(scope) === id) writeSession(scope, null);
+        return true;
+      }
+    } catch {
+      // Tried once more below.
+    }
+    if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, retryAfterMs));
+  }
+  return false;
+}
+
+/**
+ * Forget a scope once its saves and closes have finished: its session id
+ * (memory and `sessionStorage`), its close count and its pending answer. The
+ * session page makes a scope per visit, so without this every visit would
+ * leave its entries behind for the life of the tab. A scope used again after
+ * this starts afresh, as a new visit would.
+ */
+export function releaseScope(scope: string): void {
+  const pending = [saveQueue.get(scope), closing.get(scope)].filter((p) => p !== undefined);
+  if (pending.length > 0) {
+    void Promise.allSettled(pending).then(() => releaseScope(scope));
+    return;
+  }
+  const k = sessionKey(scope);
+  sessionMemory.delete(k);
+  try {
+    window.sessionStorage.removeItem(k);
+  } catch {
+    // Nothing kept there.
+  }
+  closedTimes.delete(scope);
+  savingAnswer.delete(scope);
+}
+
+/** How many scopes this page still keeps anything for; for tests. */
+export function keptScopes(): number {
+  return new Set([
+    ...[...sessionMemory.keys()],
+    ...[...closedTimes.keys(), ...savingAnswer.keys(), ...saveQueue.keys(), ...closing.keys()].map(sessionKey),
+  ]).size;
+}
+
+/** The close request for a page going away: the answer still saving resent with `closeSession`, else a bare close. */
+function sendClose(scope: string, id: string): void {
   const saving = savingAnswer.get(scope);
   const [url, body] =
     saving !== undefined && saving.sessionId === id
@@ -132,10 +211,18 @@ export async function judgeAnswer(
   return null;
 }
 
+/** What the observe route recorded; the session page shows more of it than a tutor's row does. */
+export interface ObserveResult {
+  correct: boolean;
+  pLBefore: number;
+  pLAfter: number;
+  card: { intervalDays: number } | null;
+}
+
 interface ObserveReply {
   ok?: boolean;
   error?: string;
-  result?: { correct: boolean; pLBefore: number; pLAfter: number; card: { intervalDays: number } | null };
+  result?: ObserveResult;
 }
 
 export interface RecordInput {
@@ -186,20 +273,14 @@ export function sessionRefused(error: string | undefined): boolean {
 }
 
 export async function recordAnswer(input: RecordInput): Promise<RecordedResult> {
-  const session = () => {
-    const held = readSession(input.scope);
-    if (held !== null) return held;
-    const id = newSessionId(input.sessionLabel, new Date(), chatRequestId().slice(5), "chat");
-    writeSession(input.scope, id);
-    return id;
-  };
-  const send = (sessionId: string) => {
-    const payload = {
+  const r = await saveObservation({
+    scope: input.scope,
+    requestId: input.requestId,
+    newSession: () => newSessionId(input.sessionLabel, new Date(), chatRequestId().slice(5), "chat"),
+    fields: {
       conceptSlug: input.conceptSlug,
       correct: input.correct,
       source: input.source,
-      requestId: input.requestId,
-      sessionId,
       question: input.question,
       // `chosen` is what the learner gave; `answer` is the committed one, which only a check card has.
       ...(input.card
@@ -212,7 +293,42 @@ export async function recordAnswer(input: RecordInput): Promise<RecordedResult> 
         : { chosen: input.answer.slice(0, SESSION_TEXT_LIMIT) }),
       ...(input.sessionTitle ? { sessionTitle: input.sessionTitle } : {}),
       ...(input.sessionGoal ? { sessionGoal: input.sessionGoal } : {}),
-    };
+    },
+  });
+  return { correct: r.correct, pLBefore: r.pLBefore, pLAfter: r.pLAfter, intervalDays: r.card?.intervalDays ?? null };
+}
+
+export interface SaveInput {
+  /** The session scope the answer is recorded under (see the module comment). */
+  scope: string;
+  /** The answer's request id: a resend under it is a replay, never a second observation. */
+  requestId: string;
+  /** A new session id, for the first answer in the scope and after a refused session. */
+  newSession: () => string;
+  /** The rest of the observe body; the request id and the session id are added to it. */
+  fields: Record<string, unknown>;
+}
+
+/**
+ * Write one answer through `POST /api/learner/observe` under the scope's
+ * session (R6): the first recorded answer opens it in its own transaction.
+ * Saves in one scope run one at a time and give up after 20 seconds; one
+ * that only gets to send after its scope closed is dropped; an answer
+ * refused because its session was closed elsewhere (another tab,
+ * `learn session close`) wrote nothing, so it is sent once more under a
+ * fresh session. The concept tutors and the session page all write this
+ * way. Resolves with what the catalog recorded; throws with a message to show.
+ */
+export async function saveObservation<R extends ObserveResult = ObserveResult>(input: SaveInput): Promise<R> {
+  const session = () => {
+    const held = readSession(input.scope);
+    if (held !== null) return held;
+    const id = input.newSession();
+    writeSession(input.scope, id);
+    return id;
+  };
+  const send = (sessionId: string) => {
+    const payload = { ...input.fields, requestId: input.requestId, sessionId };
     savingAnswer.set(input.scope, payload);
     return fetch("/api/learner/observe", {
       method: "POST",
@@ -223,6 +339,7 @@ export async function recordAnswer(input: RecordInput): Promise<RecordedResult> 
       signal: AbortSignal.timeout(SAVE_TIMEOUT_MS),
     });
   };
+  const { requestId } = input;
   // One save at a time per scope (see `saveQueue`).
   const closedAtStart = closedTimes.get(input.scope) ?? 0;
   const ahead = saveQueue.get(input.scope);
@@ -252,14 +369,14 @@ export async function recordAnswer(input: RecordInput): Promise<RecordedResult> 
         res.status === 429 ? "Too many answers in a minute." : (data?.error ?? `The answer was not recorded (HTTP ${res.status}).`),
       );
     }
-    const r = data.result;
-    return { correct: r.correct, pLBefore: r.pLBefore, pLAfter: r.pLAfter, intervalDays: r.card?.intervalDays ?? null };
+    // The route's whole result; a caller that shows more of it names its shape.
+    return data.result as R;
   } catch (e) {
     throw e instanceof DOMException && e.name === "TimeoutError" ? new Error("The answer took too long to save.") : e;
   } finally {
     release();
     if (saveQueue.get(input.scope) === mine) saveQueue.delete(input.scope);
-    if (answered && (savingAnswer.get(input.scope) as { requestId?: string } | undefined)?.requestId === input.requestId) {
+    if (answered && (savingAnswer.get(input.scope) as { requestId?: string } | undefined)?.requestId === requestId) {
       savingAnswer.delete(input.scope);
     }
   }

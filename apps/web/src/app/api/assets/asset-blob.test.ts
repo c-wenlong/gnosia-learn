@@ -42,6 +42,8 @@ const VIDEO = Buffer.from(Array.from({ length: 3_000 }, (_, i) => (i % 253) + 1)
 const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 9, 8, 7, 0xff, 0xd9]);
 const VIDEO_ID = "manimkc:out/algorithms/demo/demo.mp4";
 const POSTER_ID = `poster:${VIDEO_ID}`;
+const PDF = Buffer.from("%PDF-1.4\n% demo pages\n%%EOF\n");
+const PDF_ID = `pdf:${VIDEO_ID}`;
 const PENDING_ID = "manimkc:out/algorithms/demo/pending.mp4";
 const LOST_ID = "manimkc:out/algorithms/demo/lost.mp4";
 const SVG_ID = "tldrawkc:learn/assets/demo-diagram.svg";
@@ -60,6 +62,7 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
   let home: string;
   let FILE: Handler;
   let POSTER: Handler;
+  let PDF_ROUTE: Handler;
   let STATUS: Handler;
   let library: typeof import("@/lib/asset-library");
 
@@ -109,11 +112,13 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
     process.env.GNOSIA_HOME = home;
     ({ GET: FILE } = (await import("./[id]/file/route")) as { GET: Handler });
     ({ GET: POSTER } = (await import("./[id]/poster/route")) as { GET: Handler });
+    ({ GET: PDF_ROUTE } = (await import("./[id]/pdf/route")) as { GET: Handler });
     ({ GET: STATUS } = (await import("./[id]/status/route")) as { GET: Handler });
     library = await import("@/lib/asset-library");
 
     const videoKey = await stored(VIDEO, "mp4");
     const posterKey = await stored(JPEG, "jpg");
+    const pdfKey = await stored(PDF, "pdf");
     const pendingBytes = Buffer.from("half an upload");
     const pendingKey = await stored(pendingBytes, "mp4", "pending", false);
     const lostBytes = Buffer.from("the store lost this one");
@@ -155,8 +160,22 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
         sourceRepo: "gnosia",
         blobKey: posterKey,
       },
+      {
+        id: PDF_ID,
+        kind: "pdf",
+        path: null,
+        url: null,
+        contentHash: sha256(PDF),
+        bytes: PDF.length,
+        title: "Demo (PDF)",
+        sourceRepo: "gnosia",
+        blobKey: pdfKey,
+      },
     ]);
-    await scratch.db.insert(assetDerivation).values({ assetId: POSTER_ID, sourceAssetId: VIDEO_ID });
+    await scratch.db.insert(assetDerivation).values([
+      { assetId: POSTER_ID, sourceAssetId: VIDEO_ID },
+      { assetId: PDF_ID, sourceAssetId: VIDEO_ID },
+    ]);
   }, 60_000);
 
   afterAll(async () => {
@@ -173,8 +192,32 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
     expect(response.headers.get("accept-ranges")).toBe("bytes");
     expect(response.headers.get("content-disposition")).toBe('inline; filename="demo.mp4"');
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
-    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(response.headers.get("cache-control")).toBe("private, no-cache");
+    expect(response.headers.get("etag")).toBe(`"${sha256(VIDEO)}"`);
     expect(Buffer.from(await response.arrayBuffer()).equals(VIDEO)).toBe(true);
+  });
+
+  it("answers a 304 with no body when the browser already holds these bytes, a range included", async () => {
+    const tag = `"${sha256(VIDEO)}"`;
+    const asks: Record<string, string>[] = [{ "if-none-match": tag }, { "if-none-match": `W/${tag}` }, { "if-none-match": tag, range: "bytes=0-9" }];
+    for (const headers of asks) {
+      const response = await call(FILE, "file", VIDEO_ID, headers);
+      expect(response.status).toBe(304);
+      expect(response.headers.get("etag")).toBe(tag);
+      expect((await response.arrayBuffer()).byteLength).toBe(0);
+    }
+    // Other bytes than the ones held: the file, as usual.
+    expect((await call(FILE, "file", VIDEO_ID, { "if-none-match": '"something-older"' })).status).toBe(200);
+  });
+
+  it("honours a range only for the bytes it was taken from (If-Range)", async () => {
+    const tag = `"${sha256(VIDEO)}"`;
+    const same = await call(FILE, "file", VIDEO_ID, { range: "bytes=0-9", "if-range": tag });
+    expect(same.status).toBe(206);
+    // A slice of an older file must not be spliced onto these bytes: the whole file instead.
+    const older = await call(FILE, "file", VIDEO_ID, { range: "bytes=0-9", "if-range": '"something-older"' });
+    expect(older.status).toBe(200);
+    expect(Buffer.from(await older.arrayBuffer()).equals(VIDEO)).toBe(true);
   });
 
   it("saves the file under its title with ?download=1, the bytes and the other headers unchanged", async () => {
@@ -194,6 +237,17 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
       { params: Promise.resolve({ id: VIDEO_ID }) },
     );
     expect(inline.headers.get("content-disposition")).toBe('inline; filename="demo.mp4"');
+  });
+
+  it("names the download on a 304 too, so a renamed asset saves under its new name", async () => {
+    const response = await FILE(
+      new Request(`${ORIGIN}/api/assets/${encodeURIComponent(VIDEO_ID)}/file?download=1`, {
+        headers: { "if-none-match": `"${sha256(VIDEO)}"` },
+      }),
+      { params: Promise.resolve({ id: VIDEO_ID }) },
+    );
+    expect(response.status).toBe(304);
+    expect(response.headers.get("content-disposition")).toBe('attachment; filename="Demo.mp4"');
   });
 
   it("keeps the attachment on a Range request for a download", async () => {
@@ -284,6 +338,29 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
     }
   });
 
+  it("serves a stored PDF inline with no CSP, tagged by its hash, and a 304 for a tag the browser holds", async () => {
+    const response = await call(PDF_ROUTE, "pdf", VIDEO_ID);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("application/pdf");
+    expect(response.headers.get("content-disposition")).toMatch(/^inline; filename="[^"]+\.pdf"$/);
+    expect(response.headers.get("content-security-policy")).toBeNull();
+    expect(response.headers.get("etag")).toBe(`"${sha256(PDF)}"`);
+    expect(response.headers.get("content-length")).toBe(String(PDF.length));
+    expect(Buffer.from(await response.arrayBuffer()).equals(PDF)).toBe(true);
+    const again = await call(PDF_ROUTE, "pdf", VIDEO_ID, { "if-none-match": `"${sha256(PDF)}"` });
+    expect(again.status).toBe(304);
+    expect((await again.arrayBuffer()).byteLength).toBe(0);
+  });
+
+  it("answers the PDF route's problems as the poster route does", async () => {
+    const none = await call(PDF_ROUTE, "pdf", PENDING_ID);
+    expect(none.status).toBe(404);
+    expect(await codeOf(none)).toBe("not-uploaded");
+    const notVideo = await call(PDF_ROUTE, "pdf", SVG_ID);
+    expect(notVideo.status).toBe(404);
+    expect(await codeOf(notVideo)).toBe("not-a-video");
+  });
+
   it("serves the poster asset itself through the file route, as an image", async () => {
     const response = await call(FILE, "file", POSTER_ID);
     expect(response.status).toBe(200);
@@ -292,31 +369,13 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
   });
 
   it("serves a stored PDF for the browser's viewer, without the sandbox an SVG needs", async () => {
-    const pdf = Buffer.from("%PDF-1.4\n%%EOF\n");
-    const key = await stored(pdf, "pdf");
-    const id = `pdf:${VIDEO_ID}`;
-    await scratch.db.insert(asset).values({
-      id,
-      kind: "pdf",
-      path: null,
-      url: null,
-      contentHash: sha256(pdf),
-      bytes: pdf.length,
-      title: "Demo (pages)",
-      sourceRepo: "gnosia",
-      blobKey: key,
-    });
-    try {
-      const response = await call(FILE, "file", id);
-      expect(response.status).toBe(200);
-      expect(response.headers.get("content-type")).toBe("application/pdf");
-      expect(response.headers.get("content-security-policy")).toBeNull();
-      expect(response.headers.get("x-content-type-options")).toBe("nosniff");
-      // Everything else keeps the sandbox.
-      expect((await call(FILE, "file", POSTER_ID)).headers.get("content-security-policy")).toContain("sandbox");
-    } finally {
-      await scratch.db.delete(asset).where(eq(asset.id, id));
-    }
+    const response = await call(FILE, "file", PDF_ID);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("application/pdf");
+    expect(response.headers.get("content-security-policy")).toBeNull();
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+    // Everything else keeps the sandbox.
+    expect((await call(FILE, "file", POSTER_ID)).headers.get("content-security-policy")).toContain("sandbox");
   });
 
   it("answers not-uploaded for a video with no stored poster, and cuts none", async () => {

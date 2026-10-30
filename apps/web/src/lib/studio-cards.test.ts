@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { valueOf } from "@/components/ui/mention-text";
+import { valueOf } from "@/lib/mentions";
 import type { DraftSlot, DraftView, TranscriptEntry, VideoBrief } from "@/lib/studio-drafts";
 import type { Brief, Job } from "@/lib/studio-jobs";
 
@@ -265,6 +265,16 @@ describe("pressing", () => {
     expect(
       kindDrawBlock("diagram", DIAGRAM, bothAsked(), [], { capUsd: 5, totalUsd: 6, exceeded: true, oldestAgesOutAt: null }, null)?.reason,
     ).toMatch(/daily cap is spent/);
+  });
+
+  it("words a blank reason itself rather than throwing (S2-09)", () => {
+    const blank = [{ name: "revideokc" as const, strength: "", available: false, reason: "  " }];
+    expect(kindDrawBlock("video", { ...VIDEO, tool: "revideokc" }, bothAsked(), [], null, { ok: true, reason: null, tools: blank })?.reason).toBe(
+      "revideokc videos are not available on this machine.",
+    );
+    expect(kindDrawBlock("diagram", DIAGRAM, bothAsked(), [], null, null, { ok: false, reason: "" })?.reason).toBe(
+      "Diagrams cannot be drawn on this machine right now.",
+    );
   });
 
   it("presses a video on its own tool's doctor: revideokc's verdict for a revideokc brief, manimkc's for the rest (D75)", () => {

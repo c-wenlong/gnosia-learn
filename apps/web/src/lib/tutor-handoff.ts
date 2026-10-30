@@ -1,4 +1,4 @@
-import type { MentionOption, MentionValue } from "@/components/ui/mention-text";
+import type { MentionOption, MentionValue } from "@/lib/mentions";
 import { isConceptSlug } from "@/lib/concept-workspace-core";
 import { mentionOptions } from "@/lib/studio-cards";
 import { capFrom } from "@/lib/studio-chat";

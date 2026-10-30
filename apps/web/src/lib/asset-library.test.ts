@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { searchableText } from "./library";
+
 // A signed-in request, so the owner seam (`@/lib/owner`) resolves `local`.
 vi.mock("@/lib/auth/session", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth/session")>()),
@@ -80,7 +82,7 @@ vi.mock("@gnosia/catalog/state", () => ({
 
 vi.mock("next/server", () => ({ connection: async () => undefined }));
 
-const { loadAssetParents, readLibrary, readAssetDetail, readSearchText, searchableText } = await import(
+const { loadAssetParents, readLibrary, readAssetDetail, readSearchText } = await import(
   "@/lib/asset-library"
 );
 
@@ -153,6 +155,8 @@ describe("the wikilink index", () => {
 
 describe("a failing concept-link lookup", () => {
   it("still returns the rows, with no concept chips", async () => {
+    // The Library's concepts come from the parents read now, so that is the one to fail.
+    assetParents.mockRejectedValueOnce(new Error("parents unavailable"));
     const snapshot = await readLibrary();
     expect(snapshot.reachable).toBe(true);
     expect(snapshot.rows).toHaveLength(1);
@@ -199,5 +203,27 @@ describe("the words search reads", () => {
   it("reads nothing for an empty query", async () => {
     const out = await readSearchText([], []);
     expect(out.searchedText).toBe(false);
+  });
+});
+
+describe("mapLimited, which search reads its files through", () => {
+  it("keeps the input's order and never runs more than the limit at once", async () => {
+    const { mapLimited } = await import("./asset-library");
+    let running = 0;
+    let most = 0;
+    const out = await mapLimited(Array.from({ length: 30 }, (_, i) => i), 4, async (i) => {
+      running += 1;
+      most = Math.max(most, running);
+      await new Promise((resolve) => setTimeout(resolve, (i * 7) % 5));
+      running -= 1;
+      return i * 2;
+    });
+    expect(out).toEqual(Array.from({ length: 30 }, (_, i) => i * 2));
+    expect(most).toBe(4);
+  });
+
+  it("answers an empty list with an empty list", async () => {
+    const { mapLimited } = await import("./asset-library");
+    expect(await mapLimited([], 8, async () => 1)).toEqual([]);
   });
 });

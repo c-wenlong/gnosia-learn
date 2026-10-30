@@ -89,7 +89,7 @@ export async function loadPreview(requested: string): Promise<PreviewAnswer> {
             star above its words, as the page puts them beside its title. */}
         {!isVideo && (
           <div className="flex flex-wrap items-start gap-2.5">
-            <MarkWatched assetId={asset.id} verb="read" lastWatchedDay={null} />
+            <MarkWatched assetId={asset.id} />
             <FavoriteButton assetId={asset.id} initial={favorite !== null} />
           </div>
         )}

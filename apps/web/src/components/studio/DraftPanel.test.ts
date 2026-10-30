@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   focus: vi.fn(),
   insertMention: vi.fn(),
+  readStudioHealth: vi.fn(async () => null),
   lateHandle: false,
   events: null as null | { onEvent: (event: { type: string; data: unknown }) => void },
   composer: null as null | {
@@ -90,7 +91,7 @@ vi.mock("@/lib/studio-drafts", async (importOriginal) => ({
     mocks.events = handlers;
     return () => {};
   },
-  readStudioHealth: async () => null,
+  readStudioHealth: mocks.readStudioHealth,
 }));
 
 const { DraftPanel } = await import("./DraftPanel");
@@ -107,6 +108,7 @@ beforeEach(() => {
   mocks.setDraftTrust.mockClear();
   mocks.declineSuggestion.mockClear();
   mocks.sendMessage.mockClear();
+  mocks.readStudioHealth.mockClear();
   mocks.lateHandle = false;
   sessionStorage.clear();
   mocks.sendMessage.mockResolvedValue({ ok: true, status: 202, data: { draftId: "d1", seq: 1, note: "" } });
@@ -879,3 +881,90 @@ describe("the consent card (D106–D110)", () => {
     expect(button(host, "Save always-allow")).toBeUndefined();
   });
 });
+
+describe("health on opening (S1-11)", () => {
+  it("is read once, not again when the record lands after it", async () => {
+    const view = draft({ harness: "claude" } as Partial<DraftView>);
+    // The record lands after the opening read has gone out, as it does
+    // against a real runner.
+    mocks.getDraft.mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => resolve({ ok: true, status: 200, data: view }), 10)),
+    );
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    await act(async () => {
+      root.render(
+        createElement(DraftPanel, {
+          draftId: "d1",
+          jobId: null,
+          path: "/studio?draft=d1",
+          topics: [],
+          titles: {},
+          suggestions: [],
+          cap: null,
+          video: { ok: true, reason: null },
+          videoTitles: {},
+        }),
+      );
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 40));
+    });
+    await settle();
+    mounted.push(() => {
+      act(() => root.unmount());
+      host.remove();
+    });
+    expect(host.textContent).not.toBe("");
+    expect(mocks.readStudioHealth).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Cmd+Enter from outside the composer (S1-15)", () => {
+  it("does not send the composer's words while Send is held", async () => {
+    const host = await mount({ ...pair(), inFlight: true });
+    await act(async () => mocks.composer!.onChange({ text: "and make it blue", mentions: [] }));
+    expect(mocks.composer!.sendDisabled).toBe(true);
+    const outside = host.querySelector("[data-header] h2")!;
+    await act(async () => {
+      outside.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }));
+    });
+    await settle();
+    expect(mocks.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("sends them when Send is free", async () => {
+    const host = await mount(pair());
+    await act(async () => mocks.composer!.onChange({ text: "and make it blue", mentions: [] }));
+    const outside = host.querySelector("[data-header] h2")!;
+    await act(async () => {
+      outside.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }));
+    });
+    await settle();
+    expect(mocks.sendMessage).toHaveBeenCalledWith("d1", { text: "and make it blue", mentions: [] });
+  });
+});
+
+describe("a brief that names two elements alike (S1-20)", () => {
+  it("draws both chips without a duplicate-key warning", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const twin: Brief = { ...DIAGRAM, elements: [{ label: "Node" }, { label: "Node", note: "the replica" }] };
+    const host = await mount(
+      draft({
+        state: "briefed",
+        turns: 1,
+        transcript: [
+          entry(1, "person", "@diagram replicas", { mentions: [{ kind: "diagram", start: 0, end: 8 }] }),
+          entry(2, "planner", "Here.", { briefs: [{ kind: "diagram", brief: twin, requestSeq: 1 }] }),
+        ],
+        slots: { diagram: slot({ brief: twin, briefSeq: 2, requestSeq: 1, state: "briefed" }), video: slot() },
+      }),
+    );
+    const said = errors.mock.calls.map((call) => String(call[0]));
+    errors.mockRestore();
+    expect(host.textContent?.match(/Node/g)?.length).toBeGreaterThanOrEqual(2);
+    expect(said.filter((line) => line.includes("same key"))).toEqual([]);
+  });
+});
+

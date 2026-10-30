@@ -152,6 +152,28 @@ describe.skipIf(!reachable.ok)("review API routes", () => {
     expect(body.items[1]?.intervals).toEqual([1, 15, 14, 16]);
   });
 
+  it("cuts a long queue at the session's limit and says more are due", async () => {
+    const card = (conceptId: string) => ({
+      conceptId,
+      repetitions: 2,
+      ease: 2.5,
+      intervalDays: 6,
+      lapses: 0,
+      due: "2026-01-01T00:00:00.000Z",
+      lastReviewed: "2025-12-26T00:00:00.000Z",
+      leech: false,
+      history: [],
+    });
+    for (const id of ["alpha", "beta", "gamma"]) await state.upsertReview(scratch.db, card(id));
+    const { readReviewSession } = await import("@/lib/review-queue");
+    const cut = await readReviewSession(null, new Date("2026-02-01T00:00:00.000Z"), null, 2);
+    expect(cut.items).toHaveLength(2);
+    expect(cut.more).toBe(true);
+    const whole = await readReviewSession(null, new Date("2026-02-01T00:00:00.000Z"), null, 3);
+    expect(whole.items).toHaveLength(3);
+    expect(whole.more).toBeUndefined();
+  });
+
   it("refuses an empty or oversized concept in the query", async () => {
     expect((await due(new Request(`${ORIGIN}/api/review/due?concept=`))).status).toBe(400);
     expect((await due(new Request(`${ORIGIN}/api/review/due?concept=${"x".repeat(200)}`))).status).toBe(400);

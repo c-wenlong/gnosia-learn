@@ -16,6 +16,7 @@ import {
 import { readOwnerCustomProviders } from "./custom-providers";
 import type { Env } from "./deps";
 import { failureCode, openSavedKeys } from "./provider-keys";
+import { pointsAtThisApp } from "./self-address";
 import { readChain } from "./tutor-models";
 
 /**
@@ -61,11 +62,21 @@ async function ownerInputs(
 /**
  * The owner's own providers as the tutor calls them (T14). Empty when they
  * cannot be read: their chain entries then have no config and are left out,
- * as an entry for a provider this build does not know would be.
+ * as an entry for a provider this build does not know would be. A provider
+ * whose base URL is this app or the studio runner (`pointsAtThisApp`), saved
+ * before that was refused or written by hand, is left out the same way, so
+ * neither a turn nor Test sends the owner's key there.
  */
 async function customConfigs(db: Promise<CatalogDatabase>, owner: string): Promise<ProviderConfig[]> {
   try {
-    return (await readOwnerCustomProviders(await db, owner)).map(customProviderConfig);
+    const rows = await readOwnerCustomProviders(await db, owner);
+    return rows
+      .filter((row) => {
+        if (!pointsAtThisApp(row.baseUrl, process.env)) return true;
+        console.warn(`tutor: custom provider ${row.id} points at this app or its studio runner, left out`);
+        return false;
+      })
+      .map(customProviderConfig);
   } catch (error) {
     console.warn(`tutor: custom providers unavailable (${failureCode(error)})`);
     return [];

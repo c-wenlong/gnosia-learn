@@ -64,7 +64,10 @@ import { createWriteQueue } from "@/lib/write-queue";
  * shows what the database holds.
  *
  * Writes go with `keepalive` while they are small, so one still in flight
- * when the tab closes is delivered rather than cancelled.
+ * when the tab closes is delivered rather than cancelled. One the page could
+ * not send in order before it went (queued behind another on its key, or
+ * kept after a refusal) is saved on `pagehide` and sent by the next load
+ * (`OUTBOX_KEY`).
  *
  * **`reachable` is not the same as "no data".** A learner with an empty
  * database and a learner whose database is unreachable both see zeros, and the
@@ -151,12 +154,68 @@ export const RESET_BATCH = 400;
 /** How a kept write draws its value again: from the state it made, a reducer that sets that value. */
 type Replay = (next: LearnerState) => (previous: LearnerState) => LearnerState;
 
+/**
+ * A kept write as data, so it can outlive the page: what `pagehide` saves to
+ * the outbox (`OUTBOX_KEY`) and the next load sends again.
+ */
+type Outbound =
+  | { kind: "note"; topicId: string; note: string }
+  | { kind: "progress"; topicId: string; done: boolean }
+  | { kind: "recap"; topicId: string; input: KnowledgeInput; countSession: boolean }
+  | { kind: "theme"; theme: ThemeMode };
+
+/** A write worth keeping: how to draw it again, and the same write as data. */
+interface Keep {
+  replay: Replay;
+  outbound: Outbound;
+}
+
 /** A refused write kept to be drawn and sent again: see `unsaved`. */
-interface Kept {
+interface Kept extends Keep {
   reduce: (previous: LearnerState) => LearnerState;
   send: (next: LearnerState) => Promise<ApiResponse>;
   confirm: Confirm;
-  replay: Replay;
+}
+
+/**
+ * Where `pagehide` leaves the writes the page could not send in order: those
+ * queued behind a write still in flight on their key, and those kept after a
+ * refusal. The next load sends them again, once, if they are under a day old.
+ * Starting a queued write out of turn instead could let the older write in
+ * flight land after it and overwrite it.
+ */
+export const OUTBOX_KEY = "gnosia:learner-outbox";
+const OUTBOX_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+function writeOutbox(writes: readonly Outbound[]): void {
+  try {
+    if (writes.length === 0) window.localStorage.removeItem(OUTBOX_KEY);
+    else window.localStorage.setItem(OUTBOX_KEY, JSON.stringify({ at: Date.now(), writes }));
+  } catch {
+    /* site data blocked or full: nothing more this page can do */
+  }
+}
+
+/** The outbox's writes, emptied as they are read; none when it is stale or not ours. */
+function takeOutbox(): Outbound[] {
+  let raw: string | null = null;
+  try {
+    raw = window.localStorage.getItem(OUTBOX_KEY);
+    if (raw !== null) window.localStorage.removeItem(OUTBOX_KEY);
+  } catch {
+    return [];
+  }
+  if (raw === null) return [];
+  try {
+    const box = JSON.parse(raw) as { at?: unknown; writes?: unknown };
+    if (typeof box.at !== "number" || Date.now() - box.at > OUTBOX_MAX_AGE_MS || !Array.isArray(box.writes)) return [];
+    return box.writes.filter(
+      (w): w is Outbound =>
+        w !== null && typeof w === "object" && ["note", "progress", "recap", "theme"].includes((w as { kind?: unknown }).kind as string),
+    );
+  } catch {
+    return [];
+  }
 }
 
 /** `state` with one item's recap set to `recap`, or removed when there is none. */
@@ -335,12 +394,12 @@ export function LearnerProvider({
    */
   const unsaved = useRef(new Map<string, Kept>());
   /**
-   * Writes queued behind another on their key that have not started. On
-   * `pagehide` they are started at once, with `keepalive`, out of turn: the
-   * page may never live to see the write ahead of them answer, and a note
-   * typed last would otherwise never leave the tab.
+   * Writes queued behind another on their key that have not started, with
+   * the write as data when it is one worth keeping. On `pagehide` those go
+   * to the outbox (`OUTBOX_KEY`) rather than out of turn: the page may never
+   * live to see the write ahead of them answer.
    */
-  const waiting = useRef(new Set<() => void>());
+  const waiting = useRef(new Map<() => void, { key: string; outbound: Outbound } | null>());
   /** `retryUnsaved`, for `commit`, which is defined before it. */
   const retryKept = useRef<(skip: readonly string[]) => void>(() => undefined);
 
@@ -428,10 +487,11 @@ export function LearnerProvider({
    * database still holds the older, and a snapshot from before it must not
    * be adopted.
    *
-   * `replay` marks a write worth keeping when it is refused for a reason
-   * that can pass (`unsaved`): given the state the write made, it returns the
-   * reducer that draws that value again, a fixed value however often it
-   * runs. One key only.
+   * `keep` marks a write worth keeping when it is refused for a reason that
+   * can pass (`unsaved`), or left queued when the page goes (the outbox): its
+   * `replay`, given the state the write made, returns the reducer that draws
+   * that value again, a fixed value however often it runs, and `outbound` is
+   * the write as data. One key only.
    */
   const commit = useCallback(
     (
@@ -439,7 +499,7 @@ export function LearnerProvider({
       reduce: (previous: LearnerState) => LearnerState,
       send: (next: LearnerState) => Promise<ApiResponse>,
       confirm: Confirm,
-      replay?: Replay,
+      keep?: Keep,
     ): Promise<boolean> => {
       const next = reduce(current.current);
       current.current = next;
@@ -450,8 +510,8 @@ export function LearnerProvider({
         if (response.ok === false) {
           // Only the newest write on its key is kept: a newer one is on its
           // way, and is the value to keep if anything is.
-          if (newest && replay !== undefined && typeof key === "string" && retryable(response)) {
-            unsaved.current.set(key, { reduce: replay(next), send, confirm, replay });
+          if (newest && keep !== undefined && typeof key === "string" && retryable(response)) {
+            unsaved.current.set(key, { ...keep, reduce: keep.replay(next), send, confirm });
           }
           return;
         }
@@ -466,14 +526,11 @@ export function LearnerProvider({
         // A new write gets its own re-reads, whatever earlier ones used.
         rereads.current = 0;
       };
-      // Started once, by the queue in turn or by `pagehide` out of it.
-      let sent: Promise<ApiResponse> | null = null;
       const start = () => {
         waiting.current.delete(start);
-        sent ??= send(next);
-        return sent;
+        return send(next);
       };
-      waiting.current.add(start);
+      waiting.current.set(start, keep !== undefined && typeof key === "string" ? { key, outbound: keep.outbound } : null);
       return new Promise<boolean>((resolve) => {
         queue.current.run(
           key,
@@ -505,9 +562,9 @@ export function LearnerProvider({
    */
   const retryUnsaved = useCallback(
     (skip: readonly string[] = []) => {
-      for (const [key, { reduce, send, confirm, replay }] of [...unsaved.current]) {
+      for (const [key, { reduce, send, confirm, replay, outbound }] of [...unsaved.current]) {
         if (skip.includes(key)) continue;
-        void commit(key, reduce, send, confirm, replay);
+        void commit(key, reduce, send, confirm, { replay, outbound });
       }
     },
     [commit],
@@ -535,13 +592,27 @@ export function LearnerProvider({
 
   // Registered by the provider's own effect, which runs after its
   // children's, so a field that flushes its draft on `pagehide` (`TopicRow`)
-  // has queued that write by the time this starts it.
+  // has queued that write by the time this reads the queue. A write whose key
+  // was idle has already started, with `keepalive`; what is left is saved,
+  // the newest write per key, kept refusals first so a queued write on the
+  // same key wins. A page restored from the back-forward cache carries on
+  // with its queue in memory, so the copy goes.
   useEffect(() => {
     const leave = () => {
-      for (const start of [...waiting.current]) start();
+      const byKey = new Map<string, Outbound>();
+      for (const [key, { outbound }] of unsaved.current) byKey.set(key, outbound);
+      for (const left of waiting.current.values()) if (left !== null) byKey.set(left.key, left.outbound);
+      writeOutbox([...byKey.values()]);
+    };
+    const back = (event: PageTransitionEvent) => {
+      if (event.persisted) writeOutbox([]);
     };
     window.addEventListener("pagehide", leave);
-    return () => window.removeEventListener("pagehide", leave);
+    window.addEventListener("pageshow", back);
+    return () => {
+      window.removeEventListener("pagehide", leave);
+      window.removeEventListener("pageshow", back);
+    };
   }, []);
 
   // The root layout can only read the theme cookie, so a browser without one
@@ -568,7 +639,7 @@ export function LearnerProvider({
         (previous) => setTheme(previous, theme),
         () => post("preference", { key: "theme", value: theme }),
         same((state) => state.theme),
-        () => (previous) => setTheme(previous, theme),
+        { replay: () => (previous) => setTheme(previous, theme), outbound: { kind: "theme", theme } },
       );
     },
     [commit],
@@ -603,20 +674,24 @@ export function LearnerProvider({
     [commit],
   );
 
-  const toggleTopicCompletion = useCallback(
-    (topicId: string) => {
-      // The value, decided here, rather than a toggle: a kept write drawn
-      // again over a snapshot must not flip a tick the snapshot already has.
-      const done = current.current.completed[topicId] !== true;
+  const setCompleted = useCallback(
+    (topicId: string, done: boolean) => {
       commit(
         `progress:${topicId}`,
         (previous) => setTopicCompleted(previous, topicId, done),
         () => post("progress", { curriculumItemId: topicId, completed: done }),
         same((state) => state.completed[topicId] === true),
-        () => (previous) => setTopicCompleted(previous, topicId, done),
+        { replay: () => (previous) => setTopicCompleted(previous, topicId, done), outbound: { kind: "progress", topicId, done } },
       );
     },
     [commit],
+  );
+
+  // The value, decided here, rather than a toggle: a kept write drawn again
+  // over a snapshot must not flip a tick the snapshot already has.
+  const toggleTopicCompletion = useCallback(
+    (topicId: string) => setCompleted(topicId, current.current.completed[topicId] !== true),
+    [setCompleted],
   );
 
   const updateNote = useCallback(
@@ -626,7 +701,7 @@ export function LearnerProvider({
         (previous) => setNote(previous, topicId, note),
         () => post("note", { curriculumItemId: topicId, note }),
         same((state) => state.notes[topicId] ?? null),
-        () => (previous) => setNote(previous, topicId, note),
+        { replay: () => (previous) => setNote(previous, topicId, note), outbound: { kind: "note", topicId, note } },
       );
     },
     [commit],
@@ -674,7 +749,10 @@ export function LearnerProvider({
         // write it is sent again is stored; one whose answer was lost after it
         // was stored is counted twice, which only a request id on the route
         // could tell apart.
-        (next) => (previous) => withRecap(previous, topicId, next.knowledge[topicId]),
+        {
+          replay: (next) => (previous) => withRecap(previous, topicId, next.knowledge[topicId]),
+          outbound: { kind: "recap", topicId, input, countSession: options?.countSession !== false },
+        },
       );
     },
     [commit],
@@ -775,7 +853,20 @@ export function LearnerProvider({
     [commit],
   );
 
-  useLegacyImport(router.refresh);
+  useLegacyImport(router.refresh, setSaveError);
+
+  // What the last page left in the outbox, sent again once, as it was made.
+  const resent = useRef(false);
+  useEffect(() => {
+    if (resent.current) return;
+    resent.current = true;
+    for (const write of takeOutbox()) {
+      if (write.kind === "note") updateNote(write.topicId, write.note);
+      else if (write.kind === "progress") setCompleted(write.topicId, write.done);
+      else if (write.kind === "recap") saveKnowledge(write.topicId, write.input, { countSession: write.countSession });
+      else setThemeMode(write.theme);
+    }
+  }, [updateNote, setCompleted, saveKnowledge, setThemeMode]);
 
   const value = useMemo(
     () => ({
@@ -819,21 +910,26 @@ export function LearnerProvider({
   return <LearnerContext.Provider value={value}>{children}</LearnerContext.Provider>;
 }
 
+/** A small marker that the legacy document was refused, so it is not posted on every load. */
+const LEGACY_REFUSED_KEY = `${LEGACY_STORAGE_KEY}:refused`;
+
 /**
  * Carry one browser's old localStorage document into the database, once.
  *
  * Every browser that used the app before bundle 5 is holding ticks, notes and
  * recaps that no database has. This posts them on first mount and removes the
- * key when the server confirms. A failure that can pass (no answer, a 5xx, a
- * rate limit) keeps the key, so it is tried again on the next load rather
- * than losing the document; a refusal of the document itself (a 400, a body
- * too large) is final, and the key goes rather than being posted on every
- * load for good. So does a value that is not a document at all.
+ * key when the server confirms. A database that could not be reached keeps the
+ * key, so the attempt is retried on the next load rather than losing the
+ * document. A document the server refuses (a 400) would be refused again on
+ * every load, so `LEGACY_REFUSED_KEY` is set beside it and the document is
+ * not posted again; it stays where it was, in this browser, and `report` says
+ * so once. A marker rather than a moved copy: a second copy of a document
+ * that already fills most of the storage allowance could not be written.
  *
  * `refresh` afterwards, because the imported rows are in the snapshot the
  * server rendered *before* they existed.
  */
-function useLegacyImport(refresh: () => void): void {
+function useLegacyImport(refresh: () => void, report: (message: string) => void): void {
   const attempted = useRef(false);
 
   useEffect(() => {
@@ -848,6 +944,11 @@ function useLegacyImport(refresh: () => void): void {
       return;
     }
     if (raw === null) return;
+    try {
+      if (window.localStorage.getItem(LEGACY_REFUSED_KEY) !== null) return;
+    } catch {
+      return;
+    }
 
     let payload: unknown;
     try {
@@ -862,24 +963,24 @@ function useLegacyImport(refresh: () => void): void {
       }
       return;
     }
-    const drop = () => {
-      try {
-        window.localStorage.removeItem(LEGACY_STORAGE_KEY);
-      } catch {
-        /* the leftover key is harmless: an import retries as a no-op */
-      }
-    };
-    if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
-      drop();
-      return;
-    }
+    if (payload === null || typeof payload !== "object" || Array.isArray(payload)) return;
 
     void post("import", payload).then((response) => {
       if (response.ok === false) {
-        if (!retryable(response) && response.status !== 401 && response.status !== 403) drop();
+        if (response.code !== "BAD_REQUEST") return;
+        try {
+          window.localStorage.setItem(LEGACY_REFUSED_KEY, new Date().toISOString());
+        } catch {
+          /* no room even for the marker: it is posted, and refused, next time */
+        }
+        report(`Your study record saved in this browser could not be imported (${response.error ?? "refused"}). It is kept in this browser.`);
         return;
       }
-      drop();
+      try {
+        window.localStorage.removeItem(LEGACY_STORAGE_KEY);
+      } catch {
+        /* the import landed; the leftover key is harmless and retries as a no-op */
+      }
       refresh();
     });
   }, [refresh]);

@@ -109,5 +109,12 @@ private func optional<T>(_ value: Any?) -> T? {
         #expect(TutorCheckAnswer(picked: 0, words: nil, confidence: 50).correct(for: check) == true)
         #expect(TutorCheckAnswer(picked: 1, words: nil, confidence: 50).correct(for: check) == false)
         #expect(TutorCheckAnswer(picked: nil, words: nil, confidence: nil).correct(for: check) == false)
+        // A composed and a decomposed é are two options, and only the key is right.
+        var forms = choice
+        forms["options"] = ["caf\u{E9}", "cafe\u{301}", "cafe"]
+        forms["answer"] = "caf\u{E9}"
+        let unicode = try #require(TutorCardCheck(json: forms))
+        #expect(TutorCheckAnswer(picked: 0, words: nil, confidence: 50).correct(for: unicode) == true)
+        #expect(TutorCheckAnswer(picked: 1, words: nil, confidence: 50).correct(for: unicode) == false)
     }
 }

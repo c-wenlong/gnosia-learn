@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { readCustomProviders, readEvents, readLearnerSnapshot, readPreferences, readTutorModels } from "@gnosia/catalog/state";
+import { failureCode } from "@gnosia/tutor/server/provider-keys";
 
 import { enforceRateLimit } from "@/lib/agent/guard";
 import { LEARNER_RATE_LIMIT, requestOwner } from "@/lib/learner-api";
@@ -58,8 +59,8 @@ export async function GET(_req: Request): Promise<NextResponse> {
       };
     });
   } catch (error) {
-    // The driver's message is logged, not returned: it is the failed SQL.
-    console.warn(`learner export failed: ${error instanceof Error ? error.message : String(error)}`);
+    // Logged by code only: the driver's message is the failed SQL and its parameters.
+    console.warn(`learner export failed (${failureCode(error)})`);
     return NextResponse.json(
       { ok: false, error: "Not exported: the database is unreachable.", code: "STORE_UNAVAILABLE" },
       { status: 503, headers: { "Cache-Control": "no-store" } },
