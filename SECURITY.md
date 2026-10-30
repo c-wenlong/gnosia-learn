@@ -58,8 +58,8 @@ target to promise. Reports are acknowledged as soon as I see them.
   (`requestOwner` in `apps/web/src/lib/learner-api.ts`), so a request with no
   session never reaches the database and every write lands on the signed-in
   owner's row. The same helpers that bound the agent routes still apply:
-  same-origin (403), a bounded body (400), and a per-owner window of 60 writes
-  a minute (429). The same-origin check stops a cross-site page, not a `curl`
+  same-origin (403), a bounded body (400), and 60 writes a minute per owner
+  on each route, counted per route rather than across them (429). The same-origin check stops a cross-site page, not a `curl`
   with a forged `Origin`; the session is what keeps a stranger out.
   `preference` takes an allow-list of keys rather than any key, so the route is
   not an open JSON store, and a stored resource URL must be `http(s)` so it
