@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
-import type { EmbedResolution } from "@/components/NoteProse";
 import { PAGE_ENTER, WORKSPACE_ROOT } from "@/components/PageLoading";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -15,17 +14,15 @@ import { dueRecall } from "@gnosia/tutor/tutor-check";
 import { TutorChat } from "@/components/workspace/TutorChat";
 import { WorkspacePanels } from "@/components/workspace/WorkspacePanels";
 import { buildConceptSessionContext, tutorStyleLabel } from "@gnosia/tutor/prompt";
-import { loadAssetAccess, readFileProblems } from "@/lib/asset-library";
+import { loadAssetAccess } from "@/lib/asset-library";
 import { thumbnailFor } from "@/lib/library-thumbnails";
-import type { RouteProblemCode } from "@gnosia/tutor/asset-problems";
 import { isConceptSlug, placeLabel, toConceptPromptInput } from "@gnosia/tutor/concept-workspace-core";
 import { loadConceptWorkspace } from "@/lib/concept-workspace";
 import { appTimeZone } from "@gnosia/tutor/server/time-zone";
 import { dueLabel } from "@/lib/learn-index";
-import { assetFileHref, assetStatusHref, isCompanionKind } from "@/lib/library";
-import { embedTargets } from "@/lib/note-embeds";
+import { isCompanionKind } from "@/lib/library";
 import { NOTHING_TO_ASK } from "@gnosia/tutor/session-core";
-import { sessionWillAsk } from "@/lib/session-page";
+import { noteResolvers, sessionWillAsk } from "@/lib/session-page";
 import { readTutorStyle } from "@/lib/settings";
 import { studioEnabled } from "@/lib/studio";
 
@@ -94,19 +91,8 @@ export default async function ConceptWorkspacePage({ params, searchParams }: Par
     .filter((a) => !isCompanionKind(a.kind))
     .map((a) => ({ ...a, thumbnail: thumbnailFor(a, access) }));
 
-  const embedId = (name: string) => `diagram:learn/assets/${name}`;
-  const embedProblems = w.note.available
-    ? await readFileProblems(embedTargets(w.note.source).map(embedId))
-    : new Map<string, RouteProblemCode | null>();
-  const resolveEmbed = (name: string): EmbedResolution => {
-    const id = embedId(name);
-    const problem = embedProblems.get(id) ?? null;
-    if (problem !== null) return { problem };
-    return { src: assetFileHref(id), statusHref: assetStatusHref(id) };
-  };
-  // A note's wikilinks name its neighbours (and its session logs, which have no
-  // workspace), so the neighbours are the links worth resolving.
-  const known = new Set([w.slug, ...[...w.requires, ...w.assumes, ...w.dependants, ...w.backlinks].map((r) => r.slug)]);
+  // The note's wikilinks and embeds, resolved as the session page resolves them.
+  const { resolveNote, resolveEmbed } = await noteResolvers(w, w.note.available ? w.note.source : "");
 
   // Decided here, on the server: the provider keys never reach the client.
   const canAsk = await sessionWillAsk(w);
@@ -140,7 +126,7 @@ export default async function ConceptWorkspacePage({ params, searchParams }: Par
           <NoteAndSources
             workspace={w}
             sources={session.sources}
-            resolveNote={(target) => (known.has(target) ? `/learn/${target}` : undefined)}
+            resolveNote={resolveNote}
             resolveEmbed={resolveEmbed}
           />
         }
