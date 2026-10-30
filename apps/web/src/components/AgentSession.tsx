@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { providerLabel } from "@gnosia/schema/shared";
 import { MathText } from "@/components/Math";
 import { NoteProse } from "@/components/NoteProse";
@@ -26,35 +25,13 @@ import type {
 import { useLearner } from "@/lib/learner-context";
 import { buildAgentSessionContext } from "@/lib/agent/prompt";
 import { RecapCard, RecapEditor } from "@/components/TopicRecap";
-import { ChoiceCheckCard } from "@/components/workspace/ChoiceCheckCard";
-import { RecallCheckCard } from "@/components/workspace/RecallCheckCard";
-import { VerdictRow } from "@/components/workspace/VerdictRow";
+import { CheckCard, CheckRow, slotPlan, useCheckThread, useMemoryThread, type SlotOptions } from "@/components/workspace/use-check-thread";
 import {
-  chatRequestId,
-  closeChatSession,
-  judgeAnswer,
-  recordAnswer,
-} from "@/lib/chat-recall";
-import {
-  choiceAnswerText,
-  choiceOrder,
-  gradeChoice,
-  isCardCheck,
-  isChoiceCheck,
-  isRecallCheck,
-  recallAnswerText,
   restoreCardCheck,
   type ChoiceAnswer,
-  type ChoicePick,
   type RecallPick,
 } from "@/lib/check-block";
-import {
-  checkSource,
-  newVerdict,
-  pendingCheck,
-  type TurnCheck,
-  type Verdict,
-} from "@/lib/tutor-check";
+import type { TurnCheck, Verdict } from "@/lib/tutor-check";
 import { scrollBehavior } from "@/lib/motion";
 import { tutorProblem } from "@/lib/tutor-errors";
 import { recapTurns, topicRequestTurns } from "@/lib/tutor-thread";
@@ -68,9 +45,8 @@ interface UiMessage {
   meta?: string;
   /** A tutor turn that asked a check, naming the topic concept it tests (phase 3 of docs/proposals/recall-in-chat.md). */
   check?: TurnCheck | null;
-  /** A learner turn that answered one: its verdict row, and the concept it records against. */
+  /** A learner turn that answered one: its verdict row. */
   verdict?: Verdict | null;
-  concept?: string;
   /**
    * A learner turn that answered a check card (docs/proposals/structured-checks.md,
    * phase 3): a choice card's pick and write, or a recall card's words. Its
@@ -96,7 +72,6 @@ export function AgentSession({
   /** The titles of the concepts the topic declares, by id, for the recorded-answer card; an id stands in for a missing one. */
   conceptTitles?: Record<string, string>;
 }) {
-  const router = useRouter();
   const { state, ready, saveKnowledge, saveError } = useLearner();
   const learnerNote = state.notes[topic.id] ?? "";
   const storedKnowledge = state.knowledge[topic.id];
@@ -124,7 +99,9 @@ export function AgentSession({
     [course, module, topic, learnerNote, priorKnowledge],
   );
 
-  const [messages, setMessages] = useState<UiMessage[]>([]);
+  // The thread, and a store whose `read` is the thread right now, for async work that outlives a render.
+  const [messages, store] = useMemoryThread<UiMessage>();
+  const setMessages = store.write;
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -218,8 +195,9 @@ export function AgentSession({
             : data.model,
         );
       }
-      setMessages((prev) => [
-        ...prev,
+      // Onto the thread as it is now: a verdict may have been written meanwhile.
+      setMessages([
+        ...store.read(),
         {
           id: uid(),
           role: "assistant",
@@ -311,236 +289,37 @@ export function AgentSession({
     await callAgent([seed]);
   }
 
-  /** Change one answer's verdict row. */
-  function patchVerdict(messageId: string, patch: Partial<Verdict>) {
-    setMessages((prev) =>
-      prev.map((m) =>
-        m.id === messageId && m.verdict
-          ? { ...m, verdict: { ...m.verdict, ...patch } }
-          : m,
-      ),
-    );
-  }
-
-  /** Request ids with a write in flight: a second tap waits on the first. */
-  const recording = useRef(new Set<string>());
-  /** This topic's chat session (R6), shared with nothing else on the page. */
-  const scope = `topic-${topic.id}`;
-
-  /** The learner's tap: one observation on the check's concept, replayed rather than doubled on a retry. */
-  async function record(messageId: string, tappedNow: boolean) {
-    const m = messages.find((x) => x.id === messageId);
-    const verdict = m?.verdict;
-    if (
-      !m ||
-      !verdict ||
-      !m.concept ||
-      verdict.state === "saving" ||
-      verdict.state === "recorded"
-    )
-      return;
-    if (recording.current.has(verdict.requestId)) return;
-    const correct = verdict.tapped ?? tappedNow;
-    recording.current.add(verdict.requestId);
-    patchVerdict(messageId, { state: "saving", tapped: correct, error: null });
-    try {
-      // A recall card's answer records its words against the tutor's commitment.
-      const asked = messages
-        .slice(0, messages.indexOf(m))
-        .findLast((x) => x.role === "assistant");
-      const recall =
-        m.recall && isRecallCheck(asked?.check)
-          ? { pick: m.recall, check: asked.check }
-          : null;
-      const recorded = await recordAnswer({
-        scope,
-        sessionLabel: topic.id,
-        conceptSlug: m.concept,
-        correct,
-        source: verdict.source,
-        requestId: verdict.requestId,
-        question: verdict.question,
-        answer: m.content,
-        // The session is the topic's: its answers span the concepts the topic declares.
-        sessionTitle: `${course.code} · ${topic.title}`,
-        sessionGoal: topic.id,
-        ...(recall !== null
-          ? {
-              card: {
-                key: recall.check.answer,
-                chosen: recall.pick.answer,
-                confidence: recall.pick.confidence,
-                thinking: recall.pick.thinking,
-              },
-            }
-          : {}),
-      });
-      patchVerdict(messageId, { state: "recorded", error: null, recorded });
-      // The shell's learner snapshot (mastery, progress) reads the new state.
-      router.refresh();
-    } catch (e) {
-      patchVerdict(messageId, {
-        state: "failed",
-        error: e instanceof Error ? e.message : "The answer was not recorded.",
-      });
-    } finally {
-      recording.current.delete(verdict.requestId);
-    }
-  }
-
-  /** Change one choice answer's write. */
-  function patchChoice(messageId: string, patch: Partial<ChoiceAnswer>) {
-    setMessages((prev) =>
-      prev.map((m) =>
-        m.id === messageId && m.choice
-          ? { ...m, choice: { ...m.choice, ...patch } }
-          : m,
-      ),
-    );
-  }
-
-  /** Write a choice card's answer: one observation on its concept, replayed rather than doubled on a retry. */
-  async function recordChoice(answer: UiMessage, asked: UiMessage) {
-    const choice = answer.choice;
-    const check = asked.check;
-    if (!choice || !answer.concept || !isChoiceCheck(check)) return;
-    if (choice.state === "recorded" || recording.current.has(choice.requestId)) return;
-    recording.current.add(choice.requestId);
-    patchChoice(answer.id, { state: "saving", error: null });
-    try {
-      const recorded = await recordAnswer({
-        scope,
-        sessionLabel: topic.id,
-        conceptSlug: answer.concept,
-        correct: choice.correct,
-        source: choice.source,
-        requestId: choice.requestId,
-        question: check.question,
-        answer: answer.content,
-        sessionTitle: `${course.code} · ${topic.title}`,
-        sessionGoal: topic.id,
-        card: {
-          key: check.answer,
-          chosen: choice.picked === null ? null : (check.options[choice.picked] ?? null),
-          confidence: choice.confidence,
-          thinking: choice.thinking,
-        },
-      });
-      patchChoice(answer.id, { state: "recorded", error: null, recorded });
-      router.refresh();
-    } catch (e) {
-      patchChoice(answer.id, {
-        state: "failed",
-        error: e instanceof Error ? e.message : "The answer was not recorded.",
-      });
-    } finally {
-      recording.current.delete(choice.requestId);
-    }
-  }
-
-  /** Submit on a choice card: graded against the key, recorded at once, and sent to the tutor. */
-  function submitChoice(askedAt: number, pick: ChoicePick) {
-    const asked = messages[askedAt];
-    if (busy || !asked || !isChoiceCheck(asked.check) || !asked.check.concept) return;
-    if (pendingCheck(messages) !== askedAt) return;
-    const answer: UiMessage = {
-      id: uid(),
-      role: "user",
-      content: choiceAnswerText(asked.check, pick),
-      concept: asked.check.concept,
-      choice: {
-        ...pick,
-        requestId: chatRequestId(),
-        correct: gradeChoice(asked.check, pick),
-        source: checkSource(messages, askedAt),
-        state: "saving",
-        error: null,
-        recorded: null,
-      },
-    };
-    const history = [...messages, answer];
-    setMessages(history);
-    void recordChoice(answer, asked);
-    void callAgent(history);
-  }
-
-  /** Submit on a recall card: judged against the commitment, sent to the tutor, recorded on the learner's tap. */
-  function submitRecall(askedAt: number, pick: RecallPick) {
-    const asked = messages[askedAt];
-    if (busy || !asked || !isRecallCheck(asked.check) || !asked.check.concept) return;
-    if (pendingCheck(messages) !== askedAt) return;
-    const concept = asked.check.concept;
-    const answer: UiMessage = {
-      id: uid(),
-      role: "user",
-      content: recallAnswerText(pick),
-      concept,
-      recall: pick,
-      verdict: newVerdict(asked.check.question, chatRequestId(), checkSource(messages, askedAt)),
-    };
-    const history = [...messages, answer];
-    setMessages(history);
-    void judgeAnswer(concept, asked.check.question, pick.answer, asked.check.answer).then((v) =>
-      patchVerdict(
-        answer.id,
-        v === null
-          ? { judged: "unavailable", suggested: null }
-          : { judged: "ready", suggested: v.correct, feedback: v.feedback },
-      ),
-    );
-    void callAgent(history);
-  }
-
   const titled = (concept: string) => ({
     title: conceptTitles[concept] ?? concept,
     noteHref: `/learn/${concept}`,
   });
 
-  // R6: the topic's chat session closes when the page goes away. Best-effort.
-  useEffect(() => {
-    const onHide = () => closeChatSession(scope);
-    window.addEventListener("pagehide", onHide);
-    return () => {
-      window.removeEventListener("pagehide", onHide);
-      closeChatSession(scope);
-    };
-  }, [scope]);
+  // The check cards, verdict rows, writes and the topic's chat session (R6),
+  // shared with the concept tutor. A check records against the concept it
+  // names, which the route keeps only when the topic declares it.
+  const conceptOf = (asked: UiMessage) => asked.check?.concept ?? null;
+  const thread = useCheckThread<UiMessage>({
+    store,
+    scope: `topic-${topic.id}`,
+    sessionLabel: topic.id,
+    // The session is the topic's: its answers span the concepts the topic declares.
+    sessionTitle: `${course.code} · ${topic.title}`,
+    sessionGoal: topic.id,
+    conceptOf,
+    newTurn: (fields) => ({ id: uid(), ...fields }),
+  });
 
   /** The composer's send: Enter, or the Send button. */
   async function send(value: string) {
     const text = value.trim();
     if (!text || busy) return;
-    // A reply to a turn that asked a check is its answer, on the concept the
-    // check named. A card check is answered on its card; a message typed instead is a message.
-    const asked = pendingCheck(messages);
-    const check = asked === null ? null : messages[asked].check;
-    const next: UiMessage =
-      check?.concept && asked !== null && !isCardCheck(check)
-        ? {
-            id: uid(),
-            role: "user",
-            content: text,
-            concept: check.concept,
-            verdict: newVerdict(
-              check.question,
-              chatRequestId(),
-              checkSource(messages, asked),
-            ),
-          }
-        : { id: uid(), role: "user", content: text };
-    if (next.verdict && next.concept) {
-      const id = next.id;
-      void judgeAnswer(next.concept, next.verdict.question, text).then((v) =>
-        patchVerdict(
-          id,
-          v === null
-            ? { judged: "unavailable", suggested: null }
-            : { judged: "ready", suggested: v.correct, feedback: v.feedback },
-        ),
-      );
-    }
-    const history = [...messages, next];
+    // A reply to a turn that asked a prose check is its answer, on the
+    // concept the check named; a card check is answered on its card.
+    const current = store.read();
+    const next = thread.typedTurn(current, text);
+    const history = [...current, next];
     setMessages(history);
+    thread.judgeTyped(next, history);
     setInput("");
     if (!started) setStarted(true);
     await callAgent(history);
@@ -548,47 +327,20 @@ export function AgentSession({
 
   const backHref = `/courses/${course.slug}/${module.slug}`;
 
-  /** The card under a tutor turn that asked a card check, with the answer the next learner turn gave, if any. */
-  const pendingAt = pendingCheck(messages);
-  const lastVerdict = messages.findLastIndex((x) => x.verdict);
-  const cardAfter = (i: number) => {
-    const m = messages[i];
-    const check = m?.check;
-    if (!m || !isCardCheck(check) || !check.concept) return null;
-    const next = messages[i + 1]?.role === "user" ? messages[i + 1] : undefined;
-    const concept = titled(check.concept);
-    if (isRecallCheck(check)) {
-      const answered = next?.recall ? next : null;
-      return (
-        <RecallCheckCard
-          key={`c-${m.id}`}
-          check={check}
-          pick={answered?.recall ?? null}
-          verdict={answered?.verdict ?? null}
-          live={pendingAt === i}
-          rowLive={answered !== null && messages.indexOf(answered) === lastVerdict}
-          disabled={busy}
-          onSubmit={(pick) => submitRecall(i, pick)}
-          onRecord={(correct) => answered && void record(answered.id, correct)}
-          concept={concept}
-        />
-      );
-    }
-    const answer = next?.choice ?? null;
-    return (
-      <ChoiceCheckCard
-        key={`c-${m.id}`}
-        check={check}
-        order={choiceOrder(check, `${topic.id}#${m.id}#${check.question}`)}
-        answer={answer}
-        live={pendingAt === i}
-        disabled={busy}
-        onSubmit={(pick) => submitChoice(i, pick)}
-        onRetry={() => next && void recordChoice(next, m)}
-        concept={concept}
-      />
-    );
+  const slot: SlotOptions<UiMessage> = {
+    disabled: busy,
+    orderSeed: (_, asked) => `${topic.id}#${asked.id}#${asked.check?.question ?? ""}`,
+    concept: titled,
+    // A card's answer is stored, then sent: the write and the judge find it.
+    send: (turn, items) => {
+      const history = [...items, turn];
+      setMessages(history);
+      void callAgent(history);
+    },
   };
+  // Where the cards and rows go, worked out once for the whole thread.
+  const plan = slotPlan(messages, conceptOf);
+  const slotProps = { items: messages, thread, conceptOf, slot, plan };
 
   return (
     // A 48rem reading measure, centred in the `app` layout's wider column.
@@ -686,14 +438,7 @@ export function AgentSession({
           )}
           {messages.map((m, i) => {
             // A card's answer is the card's to show; the turn holds what the tutor was sent.
-            if (m.role === "user" && (m.choice || m.recall)) return null;
-            // Each answer's row sits under the tutor's reply to it, or under the answer until that arrives.
-            const answered =
-              messages[i - 1]?.role === "user" && m.role === "assistant"
-                ? messages[i - 1]
-                : m.role === "user" && messages[i + 1]?.role !== "assistant"
-                  ? m
-                  : null;
+            if (m.role === "user" && (m.choice || m.recall)) return [<CheckRow key={`v${i}`} at={i} {...slotProps} />];
             return [
               // The kit's two voices: the tutor's bare prose and the learner's
               // tinted bubble, told apart by shape, so no turn carries a
@@ -709,17 +454,8 @@ export function AgentSession({
                   <MathText text={m.content} />
                 </UserMessage>
               ),
-              m.role === "assistant" ? cardAfter(i) : null,
-              answered?.verdict && !answered.recall ? (
-                <VerdictRow
-                  key={`v-${answered.id}`}
-                  verdict={answered.verdict}
-                  live={messages.indexOf(answered) === lastVerdict}
-                  onRecord={(correct) => void record(answered.id, correct)}
-                  // The concept the prose check named, as a card check's row names it.
-                  concept={answered.concept ? titled(answered.concept) : undefined}
-                />
-              ) : null,
+              m.role === "assistant" ? <CheckCard key={`c${i}`} at={i} {...slotProps} /> : null,
+              <CheckRow key={`v${i}`} at={i} {...slotProps} />,
             ];
           })}
           {busy && (

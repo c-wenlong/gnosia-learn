@@ -16,13 +16,11 @@ import {
 } from "react";
 
 import { cx, MENU_HEADING, MENU_PANEL, menuRowClasses } from "./classes";
-import { typeaheadIndex } from "./filter-menu";
+import { NO_TYPEAHEAD, typeaheadIndex, typeaheadStep } from "./filter-menu";
 import { Glyph, type GlyphName } from "./Glyph";
 import { Popover } from "./Popover";
 import { tabKeyIndex } from "./roving";
 
-/** A pause this long between keys starts a new typeahead prefix. */
-const TYPEAHEAD_RESET_MS = 700;
 
 interface MenuControls {
   /**
@@ -106,7 +104,7 @@ export function Menu({
   const list = useRef<HTMLDivElement>(null);
   // Which item opening focuses: the first, the last (Up on the button), or the checked one.
   const opening = useRef<"first" | "last">("first");
-  const typed = useRef({ buffer: "", at: 0 });
+  const typed = useRef(NO_TYPEAHEAD);
   // An item's `afterClose`, run once the list has closed.
   const after = useRef<(() => void) | null>(null);
   const id = useId();
@@ -159,7 +157,7 @@ export function Menu({
 
   const show = (from: "first" | "last") => {
     opening.current = from;
-    typed.current = { buffer: "", at: 0 };
+    typed.current = NO_TYPEAHEAD;
     setOpen(true);
   };
 
@@ -193,13 +191,11 @@ export function Menu({
       return;
     }
     if (event.key.length === 1 && event.key !== " " && !event.ctrlKey && !event.metaKey && !event.altKey) {
-      const t = typed.current;
-      t.buffer = event.timeStamp - t.at > TYPEAHEAD_RESET_MS ? event.key : t.buffer + event.key;
-      t.at = event.timeStamp;
+      typed.current = typeaheadStep(typed.current, event.key, event.timeStamp);
       const hit = typeaheadIndex(
         all.map((item) => item.textContent?.trim() ?? ""),
         at,
-        t.buffer,
+        typed.current.buffer,
       );
       if (hit !== null) all[hit]?.focus();
     }

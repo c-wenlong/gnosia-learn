@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { usePanelHost } from "@/components/studio/panel-host";
-import type { MentionValue } from "@/components/ui/mention-text";
+import type { MentionValue } from "@/lib/mentions";
 import { createDraft, idempotencyKey, type TagKind } from "@/lib/studio-drafts";
 import { leaveOpener, sessionStore } from "@/lib/studio-extend";
 import { panelHref } from "@/lib/studio-view";

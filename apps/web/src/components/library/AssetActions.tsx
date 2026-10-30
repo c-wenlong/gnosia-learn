@@ -5,6 +5,7 @@ import { useState, type Ref } from "react";
 import { Button } from "@/components/ui/Button";
 import { buttonClasses, cx, STATUS_TEXT } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
+import { setFavorite } from "@/lib/asset-actions";
 
 /**
  * The pill buttons beside a library asset's title, the way a video site puts
@@ -28,19 +29,12 @@ export function FavoriteButton({ assetId, initial }: { assetId: string; initial:
     setOn(next);
     setBusy(true);
     setFailed(false);
-    try {
-      const response = await fetch("/api/learner/favorite", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ assetId, favorite: next }),
-      });
-      if (!response.ok) throw new Error(String(response.status));
-    } catch {
+    const answer = await setFavorite(assetId, next);
+    if (!answer.ok) {
       setOn(!next);
       setFailed(true);
-    } finally {
-      setBusy(false);
     }
+    setBusy(false);
   };
 
   return (

@@ -1,4 +1,4 @@
-import { cx } from "./classes";
+import { cx, FOCUS } from "./classes";
 
 /**
  * Kit `Rating`: one of the four equal-weight buttons under a review card, the
@@ -45,7 +45,7 @@ export function RatingButton({
       className={cx(
         "flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-[14px] border-2 py-3 md:gap-1 md:rounded-2xl md:py-3.5",
         "transition-colors duration-100 select-none disabled:cursor-not-allowed disabled:opacity-50",
-        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+        FOCUS,
         suggested ? "border-accent bg-tint" : "border-border bg-surface not-disabled:hover:bg-surface2",
         className,
       )}

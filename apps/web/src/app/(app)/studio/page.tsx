@@ -25,8 +25,10 @@ import { runnerSettings } from "@/lib/studio-agent-settings";
 import { makeVideoTitle } from "@/lib/studio-extend";
 import { readVideos } from "@/lib/studio-video";
 import { vocabularyBanner, vocabularyTopics, type VocabularyState } from "@/lib/studio-vocabulary";
+import { appTimeZone } from "@/lib/time-zone";
 import {
   CLOSED,
+  dayAndTime,
   displayTitle,
   panelHref,
   panelSignature,
@@ -180,7 +182,11 @@ export default async function StudioPage({
   const [listed, jobList, vocabulary, draftList, videoList] = await reads;
   const drafts = draftList.ok && Array.isArray(draftList.data.drafts) ? draftList.data.drafts : null;
   const topics = vocabulary.ok ? vocabularyTopics(vocabulary.data) : [];
-  const staleVocabulary = vocabularyBanner(health.data.vocabulary);
+  // Times in the app's zone, as the rest of the studio prints them, never
+  // the server's own zone and locale.
+  const zone = appTimeZone();
+  const when = (iso: string): string => dayAndTime(iso, undefined, zone) || iso;
+  const staleVocabulary = vocabularyBanner(health.data.vocabulary, when);
   const topicTitles = topicTitleMap(topics);
   const topicDomains = topicDomainMap(topics);
   if (!listed.ok) {
@@ -350,7 +356,7 @@ export default async function StudioPage({
                 Not connected to the catalog: browsing and drawing still work, and Accept waits for it,
                 since a diagram lands in the database.
                 {listing.stale === true && listing.readAt !== undefined && (
-                  <> This list is the copy read at {new Date(listing.readAt).toLocaleString()}.</>
+                  <> This list is the copy read at {when(listing.readAt)}.</>
                 )}
               </Banner>
             )}

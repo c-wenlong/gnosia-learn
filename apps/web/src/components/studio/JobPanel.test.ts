@@ -183,3 +183,15 @@ describe("a diagram job's panel", () => {
     expect(host.textContent).not.toMatch(pathLike);
   });
 });
+
+describe("the phase list, read aloud (S1-10)", () => {
+  it("says each phase's state in words, not only by a mark and a colour", async () => {
+    stubFetch([{ status: 200, body: { ...DIAGRAM, state: "failed", phase: "drawing", errorKind: "timeout", error: "no answer" } }]);
+    const host = await mount();
+    await settle();
+    const words = [...host.querySelectorAll("ol .sr-only")].map((node) => node.textContent);
+    expect(words).toContain("Done: ");
+    expect(words).toContain("Failed: ");
+    expect(words).toContain("Not started: ");
+  });
+});

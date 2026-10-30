@@ -304,7 +304,9 @@ function useFrame(src: string, seconds: number) {
       src={src}
       muted
       playsInline
-      preload="auto"
+      // Only what a seek needs: each frame asked for is fetched as a range,
+      // where `auto` could pull the whole file a second time beside the player.
+      preload="metadata"
       tabIndex={-1}
       onLoadedMetadata={(e) => settle(e.currentTarget)}
       onSeeked={(e) => settle(e.currentTarget)}

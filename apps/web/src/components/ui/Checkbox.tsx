@@ -1,6 +1,6 @@
 import type { InputHTMLAttributes, ReactNode, Ref } from "react";
 
-import { cx } from "./classes";
+import { cx, FOCUS } from "./classes";
 import { Glyph } from "./Glyph";
 
 /**
@@ -43,7 +43,7 @@ export function Checkbox({
             "peer m-0 size-5 cursor-pointer appearance-none rounded-md border-2 border-border bg-surface",
             "transition-colors duration-100 motion-reduce:transition-none",
             "not-disabled:hover:border-text3 checked:border-accent checked:bg-accent not-disabled:checked:hover:border-accent",
-            "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+            FOCUS,
             "disabled:cursor-not-allowed",
           )}
           {...rest}

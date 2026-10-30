@@ -4,7 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { MentionComposer, type MentionComposerHandle, type MentionComposerProps } from "./MentionComposer";
-import type { MentionOption, MentionValue } from "./mention-text";
+import type { MentionOption, MentionValue } from "@/lib/mentions";
 
 /**
  * The studio's chat field on the real Lexical editor, in a DOM: the value it

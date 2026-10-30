@@ -1,6 +1,7 @@
 import "server-only";
 
 import { connection } from "next/server";
+import { cache } from "react";
 import {
   assetCounts,
   assetParents,
@@ -255,11 +256,15 @@ async function readAssetTextForLocal(db: CatalogDatabase, id: string, limit: num
   return readAssetTextForCore(await seamsFor(), db, id, limit);
 }
 
-/** As `readAssetDetail`, with the marker that keeps it out of the build. */
-export async function loadAssetDetail(id: string): Promise<AssetDetail> {
+/**
+ * As `readAssetDetail`, with the marker that keeps it out of the build. Once
+ * per request and id: the asset page's `generateMetadata` and the page itself
+ * both ask, and React's `cache` hands the second the first one's read.
+ */
+export const loadAssetDetail = cache(async (id: string): Promise<AssetDetail> => {
   await connection();
   return readAssetDetail(id);
-}
+});
 
 /**
  * Which rows' bytes the asset routes can hand over, decided per row.
@@ -438,11 +443,11 @@ const NO_TEXT: SearchText = { texts: new Map(), sources: {}, skipped: 0, searche
  * was said and its chapter titles, not by its JSON keys; one that does not
  * parse is searched as raw text rather than skipped.
  *
- * About fifty-five small files today, each one primary-key lookup and one read,
- * queued on the shared pool. There is no index and no cache, which is right
- * at this size and is the first thing to change if the catalog grows by an
- * order of magnitude: reading every file on every search is fine for a few
- * hundred rows and not for tens of thousands.
+ * About six hundred small files today, each one primary-key lookup and one
+ * read, `SEARCH_READS_AT_ONCE` at a time. There is no index; the view that
+ * holds the result is kept for a minute (`loadLibraryView`), so a search is
+ * read once for its first page and reused for the pages after. Reading every
+ * file per search is fine for hundreds of rows and not for tens of thousands.
  */
 export async function readSearchText(
   rows: readonly AssetWithTopics[],
@@ -454,12 +459,10 @@ export async function readSearchText(
   try {
     const db = await catalogDatabase();
     const [bodies, sources] = await Promise.all([
-      Promise.all(
-        candidates.map(async (row) => {
-          const { text: raw, unreadable } = await readAssetTextForLocal(db, row.id, TEXT_PREVIEW_BYTES);
-          return [row.id, raw === null ? null : searchableText(row.kind, raw), unreadable] as const;
-        }),
-      ),
+      mapLimited(candidates, SEARCH_READS_AT_ONCE, async (row) => {
+        const { text: raw, unreadable } = await readAssetTextForLocal(db, row.id, TEXT_PREVIEW_BYTES);
+        return [row.id, raw === null ? null : searchableText(row.kind, raw), unreadable] as const;
+      }),
       derivationSources(
         db,
         candidates.filter((row) => isCompanionKind(row.kind)).map((row) => row.id),
@@ -477,6 +480,27 @@ export async function readSearchText(
     warn("search text", error);
     return NO_TEXT;
   }
+}
+
+/**
+ * How many notes and transcripts one search reads at a time. Each is a row
+ * lookup and a store read; hundreds started at once only queue on the one
+ * database connection and the disk, and hold every body in memory together.
+ */
+const SEARCH_READS_AT_ONCE = 8;
+
+/** `items.map(fn)`, with at most `limit` calls in flight, in the input's order. */
+export async function mapLimited<T, R>(items: readonly T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return out;
 }
 
 /** As `readSearchText`, with the marker that keeps it out of the build. */

@@ -5,6 +5,19 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { TranscriptPanel } from "./TranscriptPanel";
 import type { TranscriptCue } from "./media";
 
+// Counts the lines drawn: each line formats its timecode once per render.
+const formatted = vi.hoisted(() => ({ count: 0 }));
+vi.mock("@/components/media", async (importOriginal) => {
+  const media = await importOriginal<typeof import("@/components/media")>();
+  return {
+    ...media,
+    formatTimecode: (seconds: number) => {
+      formatted.count += 1;
+      return media.formatTimecode(seconds);
+    },
+  };
+});
+
 /**
  * Behaviour, not markup. The three things worth pinning are the highlight
  * following playback, a click seeking, and the panel giving up the follow the
@@ -253,3 +266,20 @@ describe("TranscriptPanel", () => {
     expect(host.textContent).not.toMatch(/\d+ lines?|\/ 0/);
   });
 });
+
+describe("TranscriptPanel while a video plays", () => {
+  it("draws no line again until the line being spoken changes, and then only the two that changed", () => {
+    const long: TranscriptCue[] = Array.from({ length: 200 }, (_, i) => ({ start: i * 4, end: i * 4 + 3, text: `Line ${i}.` }));
+    const seek = () => undefined;
+    const { host, rerender } = mount(createElement(TranscriptPanel, { cues: long, currentTime: 0.5, onSeek: seek }));
+    expect(lines(host)).toHaveLength(200);
+    formatted.count = 0;
+    // Four time updates inside line 0, each with a new `onSeek`, as a parent re-rendering hands over.
+    for (const t of [0.75, 1, 1.25, 1.5]) rerender(createElement(TranscriptPanel, { cues: long, currentTime: t, onSeek: () => seek() }));
+    expect(formatted.count).toBe(0);
+    rerender(createElement(TranscriptPanel, { cues: long, currentTime: 4.25, onSeek: seek }));
+    expect(formatted.count).toBe(2);
+    expect(activeText(host)).toContain("Line 1.");
+  });
+});
+

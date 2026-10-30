@@ -3,8 +3,8 @@ import type { MasteryLabel } from "@gnosia/catalog/state";
 import { assetDisplayTitle, assetKindLabel, type AssetCardRef } from "@/components/asset-meta";
 import { safeNextPath } from "@/lib/auth/core";
 import { bucketOf, type MasteryBucket } from "@/lib/mastery-bucket";
-import { COMPANION_KINDS, compareByKindThenId, isCompanionKind, kindRank } from "@gnosia/tutor/kind-order";
-export { COMPANION_KINDS, compareByKindThenId, isCompanionKind, kindRank };
+import { compareByKindThenId, isCompanionKind, kindRank } from "@gnosia/tutor/kind-order";
+export { compareByKindThenId, isCompanionKind };
 
 /**
  * What the library shows first, and why it is not everything.
@@ -105,26 +105,6 @@ export function kindFacets(counts: readonly { kind: string; count: number }[]): 
   return { primary, companion, standalone, total };
 }
 
-/**
- * What to call a count of one kind: `30 videos`, `1 session log`, `23 captions`.
- *
- * The rule is deliberately small — lowercase the label a chip already shows,
- * and add an `s` unless the count is one or the label already ends in one. That
- * last clause is what keeps `Captions` and `Chapters` from becoming
- * `captionss`, and it is why this is a function rather than a template string
- * at the call site.
- *
- * It exists because the results line read "0 assets filed under
- * inverse-kinematics" while eight assets were filed under it and only the kind
- * filter had excluded them. Naming the kind is the difference between a count
- * that explains itself and one that contradicts the chip above it.
- */
-export function kindNoun(label: string, count: number): string {
-  const word = label.toLowerCase();
-  if (count === 1 || word.endsWith("s")) return word;
-  return `${word}s`;
-}
-
 /* -------------------------------------------------------------------------- */
 /* Type tabs                                                                  */
 /* -------------------------------------------------------------------------- */
@@ -180,14 +160,6 @@ export function tabOf(kind: string | null): string {
   if (kind === null || kind === "") return "";
   if (kind === OTHERS_KIND || isCompanionKind(kind)) return OTHERS_KIND;
   return kind;
-}
-
-/**
- * Whether a row's kind is one the Others tab lists: exactly the companion
- * kinds, the rows All leaves out, so no file is in both tabs.
- */
-export function isOtherKind(kind: string): boolean {
-  return isCompanionKind(kind);
 }
 
 /** "42 files", "1 file". */
@@ -548,7 +520,7 @@ export function filterRows<T extends { id: string; kind: string; topics: string[
       (kind === null
         ? favorites !== null || !isCompanionKind(row.kind)
         : kind === OTHERS_KIND
-          ? isOtherKind(row.kind)
+          ? isCompanionKind(row.kind)
           : row.kind === kind) &&
       (favorites === null || favorites.has(row.id)) &&
       (topic === null || row.topics.includes(topic)) &&
