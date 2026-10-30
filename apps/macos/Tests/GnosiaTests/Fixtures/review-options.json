@@ -322,5 +322,90 @@
         "wrong": "notes"
       }
     }
+  ],
+  "notes": [
+    {
+      "name": "a space-like character before a continuation line",
+      "body": "```check\nq: Why\ufeff\n  is it zero?\na: Because\u00a0\n  they share nothing.\nwhy: x\n```\n",
+      "checks": [
+        {
+          "id": "c1",
+          "question": "Why is it zero?",
+          "answer": "Because they share nothing.",
+          "why": "x",
+          "source": "",
+          "hash": "a42376efa3d2baf21fa4fe041f554df717bc254d21852a446137ef906efc3e8f"
+        }
+      ]
+    },
+    {
+      "name": "a note saved with CRLF endings",
+      "body": "Intro\r\n\r\n```check\r\nq: Which packet opens it?\r\na: SYN\r\n```\r\n",
+      "checks": [
+        {
+          "id": "c1",
+          "question": "Which packet opens it?",
+          "answer": "SYN",
+          "why": "",
+          "source": "",
+          "hash": "dcf6ebfb2b0c20a0846d7bce1b350643ea0f759db256450bb766315f0028da14"
+        }
+      ]
+    },
+    {
+      "name": "a leading BOM, an NBSP before a key, tabs around a value",
+      "body": "\ufeff```check\n\u00a0q: Lead NBSP?\na:\tTabbed answer\t\n```\n",
+      "checks": [
+        {
+          "id": "c1",
+          "question": "Lead NBSP?",
+          "answer": "Tabbed answer",
+          "why": "",
+          "source": "",
+          "hash": "5b652718163d63db1872a46b2800e9ba367d4fcf55d5a68dde6dfc5d7dbf0c0d"
+        }
+      ]
+    },
+    {
+      "name": "NEL is no space to JavaScript",
+      "body": "```check\nq: NEL at end\u0085\na: kept\n```\n",
+      "checks": [
+        {
+          "id": "c1",
+          "question": "NEL at end\u0085",
+          "answer": "kept",
+          "why": "",
+          "source": "",
+          "hash": "2903d8e1578e46d9b9216d8b31d89d0bc390144f9f0abcb76b1d40a05382a17c"
+        }
+      ]
+    },
+    {
+      "name": "a line separator inside a key line makes it no field",
+      "body": "```check\nq: split\u2028here\na: x\n```\n",
+      "checks": []
+    },
+    {
+      "name": "upper-case keys, a folded answer, a check inside a list",
+      "body": "```check\nQ: Upper key?\nA: First line\n   second line\nSOURCE: Book\n```\n\n- item\n\n  ```check\n  q: In a list?\n  a: Yes\n  ```\n",
+      "checks": [
+        {
+          "id": "c1",
+          "question": "Upper key?",
+          "answer": "First line second line",
+          "why": "",
+          "source": "Book",
+          "hash": "2b878ede9f6ae9ccc126b450629d6d6f1b05105dcb12226a3c597e001d73c312"
+        },
+        {
+          "id": "c2",
+          "question": "In a list?",
+          "answer": "Yes",
+          "why": "",
+          "source": "",
+          "hash": "9a7d9aeeb2ce4552fcec95e319362ee991939021489583c237b5b8f6e05cfe45"
+        }
+      ]
+    }
   ]
 }

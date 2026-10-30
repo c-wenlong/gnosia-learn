@@ -26,6 +26,24 @@ import Testing
         }
     }
 
+    /// The hash starts from the note's text, so the checks have to read as
+    /// the web reads them first: CRLF endings, a BOM, JavaScript's spaces.
+    @Test func readsANotesChecksAsTheStoreKeysThem() throws {
+        let notes = try #require(try fixture()["notes"] as? [[String: Any]])
+        #expect(notes.count >= 5)
+        for n in notes {
+            let name = n["name"] as? String ?? "?"
+            let expected = try #require(n["checks"] as? [[String: String]])
+            let checks = parseChecks(n["body"] as? String)
+            #expect(checks.count == expected.count, "\(name)")
+            for (check, want) in zip(checks, expected) {
+                #expect(check == ConceptCheck(id: want["id"]!, question: want["question"]!, answer: want["answer"]!,
+                                              why: want["why"]!, source: want["source"]!), "\(name)")
+                #expect(checkOptionsHash(question: check.question, answer: check.answer) == want["hash"], "\(name)")
+            }
+        }
+    }
+
     @Test func eachCardAsksAsTheWebDoes() throws {
         let f = try fixture()
         let item = try #require(f["item"] as? [String: Any])

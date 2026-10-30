@@ -41,11 +41,16 @@ private let jsTrimSet: Set<UInt32> = [
     0x2028, 0x2029, 0x202F, 0x205F, 0x3000, 0xFEFF,
 ]
 
+/// Whether JavaScript's `\s` (and so its `trim`) counts `scalar` as space.
+func jsWhitespace(_ scalar: Unicode.Scalar) -> Bool {
+    jsTrimSet.contains(scalar.value)
+}
+
 /// `text.trim()` as JavaScript does it.
 func jsTrim(_ text: String) -> String {
     let scalars = text.unicodeScalars
-    guard let start = scalars.firstIndex(where: { !jsTrimSet.contains($0.value) }) else { return "" }
-    let end = scalars.lastIndex(where: { !jsTrimSet.contains($0.value) })!
+    guard let start = scalars.firstIndex(where: { !jsWhitespace($0) }) else { return "" }
+    let end = scalars.lastIndex(where: { !jsWhitespace($0) })!
     return String(scalars[start...end])
 }
 

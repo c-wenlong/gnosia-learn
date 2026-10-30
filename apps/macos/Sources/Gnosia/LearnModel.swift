@@ -739,16 +739,19 @@ struct ConceptCheck: Hashable {
 
 /// The ```check fences of a note body, in order. The web walks the parsed
 /// block tree so a check inside a list or a quote still counts; a line scan
-/// for the fence finds the same blocks either way.
+/// for the fence finds the same blocks either way. Lines split as
+/// parseNote splits them (`\r?\n`, a leading BOM dropped), so a note saved
+/// with CRLF endings still has its checks.
 private func checkBlockTexts(_ source: String) -> [String] {
     var texts: [String] = []
     var open: [String]? = nil
-    for line in source.components(separatedBy: "\n") {
-        let trimmed = line.trimmingCharacters(in: .whitespaces)
+    let body = source.unicodeScalars.first == "\u{FEFF}" ? String(source.unicodeScalars.dropFirst()) : source
+    for line in checkLines(body) {
+        let trimmed = jsTrim(line)
         if open == nil {
             if trimmed.hasPrefix("```") {
-                let info = trimmed.dropFirst(3).trimmingCharacters(in: .whitespaces)
-                    .components(separatedBy: .whitespaces).first?.lowercased() ?? ""
+                let info = jsTrim(String(trimmed.dropFirst(3))).unicodeScalars
+                    .split(whereSeparator: jsWhitespace).first.map { String(String.UnicodeScalarView($0)).lowercased() } ?? ""
                 if info == "check" { open = [] }
             }
         } else if trimmed.hasPrefix("```") {
@@ -763,24 +766,55 @@ private func checkBlockTexts(_ source: String) -> [String] {
 
 /// One check block's text to a check — `q:`/`a:`/`why:`/`source:` fields,
 /// continuation lines folding into the current field; nil with no
-/// question. readCheck in concept-note-core.ts.
+/// question. readCheck in concept-note-core.ts, down to its whitespace:
+/// lines split on `\r?\n`, and every trim is JavaScript's (`jsTrim`), so a
+/// field reads character for character as the web reads it and its hash
+/// matches the one the stored wrong options are kept under.
 private func readCheck(_ text: String) -> (question: String, answer: String, why: String, source: String)? {
     var fields: [String: String] = [:]
     var field: String? = nil
-    for line in text.components(separatedBy: "\n") {
-        let trimmed = line.trimmingCharacters(in: .whitespaces)
-        // `q`/`a`/`why`/`source` followed by a colon, case-insensitive.
-        if let split = trimmed.range(of: ":"),
-           ["q", "a", "why", "source"].contains(trimmed[..<split.lowerBound].lowercased()),
-           !trimmed[..<split.lowerBound].contains(" ") {
-            field = String(trimmed[..<split.lowerBound]).lowercased()
-            fields[field!] = String(trimmed[split.upperBound...]).trimmingCharacters(in: .whitespaces)
-        } else if let field, !trimmed.isEmpty {
-            fields[field] = "\(fields[field] ?? "") \(trimmed)".trimmingCharacters(in: .whitespaces)
+    for line in checkLines(text) {
+        if let (key, value) = checkField(line) {
+            field = key
+            fields[key] = jsTrim(value)
+        } else if let field, !jsTrim(line).isEmpty {
+            fields[field] = jsTrim("\(fields[field] ?? "") \(jsTrim(line))")
         }
     }
     guard let q = fields["q"], !q.isEmpty else { return nil }
     return (q, fields["a"] ?? "", fields["why"] ?? "", fields["source"] ?? "")
+}
+
+/// `text.split(/\r?\n/)`, on unicode scalars, since a Swift Character
+/// holds `\r\n` as one: split at each `\n`, and a `\r` right before one
+/// goes with it.
+private func checkLines(_ text: String) -> [String] {
+    let pieces = text.unicodeScalars.split(separator: "\n", omittingEmptySubsequences: false)
+    return pieces.enumerated().map { i, piece in
+        var line = String.UnicodeScalarView(piece)
+        if i < pieces.count - 1, line.last == "\r" { line.removeLast() }
+        return String(line)
+    }
+}
+
+/// `/^\s*(q|a|why|source):\s*(.*)$/i` on one line: the key, lowercased,
+/// and the rest after the colon. `.` matches no line terminator, so a line
+/// holding one is a continuation, as it is there.
+private func checkField(_ line: String) -> (String, String)? {
+    let scalars = Array(line.unicodeScalars)
+    var i = 0
+    while i < scalars.count, jsWhitespace(scalars[i]) { i += 1 }
+    for key in ["q", "a", "why", "source"] {
+        let keyScalars = Array(key.unicodeScalars)
+        let end = i + keyScalars.count
+        guard end < scalars.count, scalars[end] == ":" else { continue }
+        let word = String(String.UnicodeScalarView(scalars[i..<end])).lowercased()
+        guard word == key else { continue }
+        let rest = scalars[(end + 1)...]
+        if rest.contains(where: { [0x0A, 0x0D, 0x2028, 0x2029].contains($0.value) }) { return nil }
+        return (key, String(String.UnicodeScalarView(rest)))
+    }
+    return nil
 }
 
 /// The check blocks of a note body — parseChecks. The catalog stores the

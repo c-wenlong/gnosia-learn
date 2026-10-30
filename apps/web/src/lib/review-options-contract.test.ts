@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ReviewQueueItem, StoredCheckDistractor } from "@gnosia/catalog/state";
 import { CHECK_OPTIONS_VERSION } from "@gnosia/tutor/check-options";
-import type { ConceptCheck } from "@gnosia/tutor/concept-note-core";
+import { parseChecks, type ConceptCheck } from "@gnosia/tutor/concept-note-core";
 import { checkHash, readWrittenOptions } from "@gnosia/tutor/server/check-options";
 
 import { toReviewItem } from "./review-queue";
@@ -49,6 +49,8 @@ interface Fixture {
   item: Omit<ReviewQueueItem, "conceptId" | "card">;
   pool: string[];
   cards: Card[];
+  /** Note bodies, and the checks and hashes they read as: the parse the hash starts from. */
+  notes: { name: string; body: string; checks: (ConceptCheck & { hash: string })[] }[];
 }
 
 const FIXTURE = resolve(__dirname, "../../../macos/Tests/GnosiaTests/Fixtures/review-options.json");
@@ -62,6 +64,11 @@ describe("the review-options contract with the macOS app", () => {
   it("hashes a check as the store keys it", () => {
     expect(fixture.checkOptionsVersion).toBe(CHECK_OPTIONS_VERSION);
     for (const h of fixture.hashes) expect(checkHash(h), JSON.stringify(h.question)).toBe(h.hash);
+  });
+
+  it.each(fixture.notes.map((n) => [n.name, n] as const))("reads a note's checks as the store keys them: %s", (_, n) => {
+    const checks = parseChecks(n.body);
+    expect(checks.map((c) => ({ ...c, hash: checkHash(c) }))).toEqual(n.checks);
   });
 
   it("covers the tutor's options, the notes' and recall", () => {
