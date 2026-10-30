@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState, type Ref } from "react";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { cx, LABEL, NOTE } from "@/components/ui/classes";
@@ -68,6 +68,7 @@ export function RecapCard({
   topic,
   title = "What you established",
   onEdit,
+  editRef,
 }: {
   knowledge: TopicKnowledge;
   course: Course;
@@ -75,6 +76,8 @@ export function RecapCard({
   topic: Topic;
   title?: string;
   onEdit?: () => void;
+  /** The Edit control, for a caller that hands focus back to it when its editor closes. */
+  editRef?: Ref<HTMLButtonElement>;
 }) {
   const { forgetKnowledge } = useLearner();
   // A refused copy says nothing, as it always has: the Markdown is a
@@ -89,7 +92,11 @@ export function RecapCard({
       aria-label={title}
       actions={
         <>
-          {onEdit && <TextLink onClick={onEdit}>Edit</TextLink>}
+          {onEdit && (
+            <TextLink ref={editRef} onClick={onEdit}>
+              Edit
+            </TextLink>
+          )}
           <TextLink onClick={() => void copy(formatKnowledgeMarkdown(knowledge, course, module, topic), "markdown")}>
             {copied === "markdown" ? "Copied" : "Copy as Markdown"}
           </TextLink>
@@ -139,12 +146,15 @@ export function RecapEditor({
   onSave,
   onCancel,
   className,
+  focusOnOpen = false,
 }: {
   initial?: Partial<KnowledgeInput>;
   submitLabel?: string;
   onSave: (input: KnowledgeInput) => void;
   onCancel: () => void;
   className?: string;
+  /** Focus Summary when the editor mounts: set when a press of the reader's opened it in place of that control. */
+  focusOnOpen?: boolean;
 }) {
   const [summary, setSummary] = useState(initial?.summary ?? "");
   const [keyPoints, setKeyPoints] = useState(
@@ -156,6 +166,11 @@ export function RecapEditor({
   const [openQuestions, setOpenQuestions] = useState(
     toLines(initial?.openQuestions ?? []),
   );
+
+  const summaryField = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (focusOnOpen) summaryField.current?.focus();
+  }, [focusOnOpen]);
 
   const empty =
     !summary.trim() &&
@@ -207,6 +222,7 @@ export function RecapEditor({
         <FormRow key={field.key} label={field.label} hint={field.hint}>
           {({ id, describedBy }) => (
             <Textarea
+              ref={field.key === "summary" ? summaryField : undefined}
               id={id}
               value={field.value}
               onChange={(e) => field.set(e.target.value)}
@@ -254,6 +270,15 @@ export function TopicRecap({
   const { state, saveKnowledge } = useLearner();
   const knowledge = ownValue(state.knowledge, topic.id);
   const [editing, setEditing] = useState(false);
+  // Add recap or the card's Edit, whichever is drawn. Each is swapped for the
+  // editor when pressed, so focus goes to Summary on opening and comes back
+  // here when Save or Cancel closes it, rather than falling to the page.
+  const opener = useRef<HTMLButtonElement>(null);
+  const wasEditing = useRef(false);
+  useEffect(() => {
+    if (wasEditing.current && !editing) opener.current?.focus();
+    wasEditing.current = editing;
+  }, [editing]);
 
   // The editor and the card take turns in place; each fades in rather than
   // swapping in a frame.
@@ -261,6 +286,7 @@ export function TopicRecap({
     return (
       <div className="w-full animate-fade-in motion-reduce:animate-none">
         <RecapEditor
+          focusOnOpen
           initial={knowledge}
           onSave={(input) => {
             saveKnowledge(topic.id, input, { countSession: false });
@@ -273,7 +299,11 @@ export function TopicRecap({
   }
 
   if (!knowledge) {
-    return <TextLink onClick={() => setEditing(true)}>Add recap</TextLink>;
+    return (
+      <TextLink ref={opener} onClick={() => setEditing(true)}>
+        Add recap
+      </TextLink>
+    );
   }
 
   return (
@@ -284,6 +314,7 @@ export function TopicRecap({
         module={module}
         topic={topic}
         onEdit={() => setEditing(true)}
+        editRef={opener}
       />
     </div>
   );

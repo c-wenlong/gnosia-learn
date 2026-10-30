@@ -393,6 +393,33 @@ describe("VideoPlayer", () => {
     expect(button().getAttribute("aria-pressed")).toBe(String(before));
   });
 
+  it("names the speed button with the rate it plays at", () => {
+    const host = mount(createElement(VideoPlayer, { src: "/v.mp4" }));
+    const button = () => host.querySelector('[aria-label^="Playback speed"]') as HTMLButtonElement;
+    // The name replaces the visible "1×", so it has to carry the rate itself.
+    expect(button().getAttribute("aria-label")).toBe("Playback speed, 1×");
+    act(() => button().click());
+    act(() => video(host).dispatchEvent(new Event("ratechange")));
+    expect(video(host).playbackRate).toBe(1.25);
+    expect(button().getAttribute("aria-label")).toBe("Playback speed, 1.25×");
+  });
+
+  it("gives the scrub bar no range until the length is known, and the time in words throughout", () => {
+    const host = mount(createElement(VideoPlayer, { src: "/v.mp4", chapters, startAt: 21 }));
+    const el = video(host);
+    // A max of 0 under a resume point of 21 is an invalid slider.
+    for (const name of ["aria-valuemin", "aria-valuemax", "aria-valuenow"]) {
+      expect(slider(host).hasAttribute(name)).toBe(false);
+    }
+    expect(slider(host).getAttribute("aria-valuetext")).toBe("0:21, Close");
+    Object.defineProperty(el, "duration", { get: () => 30, configurable: true });
+    act(() => el.dispatchEvent(new Event("loadedmetadata")));
+    expect(slider(host).getAttribute("aria-valuemin")).toBe("0");
+    expect(slider(host).getAttribute("aria-valuemax")).toBe("30");
+    expect(slider(host).getAttribute("aria-valuenow")).toBe("21");
+    expect(slider(host).getAttribute("aria-valuetext")).toBe("0:21 of 0:30, Close");
+  });
+
   it("moves five seconds on an arrow and flashes a total that grows while it is up", () => {
     vi.useFakeTimers();
     try {
