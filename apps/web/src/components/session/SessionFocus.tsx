@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
@@ -10,12 +10,10 @@ import { Collapse } from "@/components/ui/Collapse";
 import { MathText } from "@/components/Math";
 import { FeedbackBar } from "@/components/ui/FeedbackBar";
 import { Placeholder } from "@/components/ui/Placeholder";
-import { SegmentedControl } from "@/components/ui/SegmentedControl";
-import { Textarea } from "@/components/ui/Textarea";
-import { cx, LABEL, TRACK } from "@/components/ui/classes";
-import { TextLink } from "@/components/ui/TextLink";
+import { cx } from "@/components/ui/classes";
 import { DEFAULT_CONFIDENCE } from "@/lib/check-block";
-import { STOP_ITEMS } from "@/components/workspace/ChoiceCheckCard";
+import { ConfidenceField, ReasoningField } from "@/components/workspace/SurenessFields";
+import { FocusFrame } from "./FocusFrame";
 import {
   feedbackNote,
   newSessionId,
@@ -42,6 +40,8 @@ import {
 import { scrollBehavior } from "@/lib/motion";
 import { quizKey } from "@/lib/quiz-keys";
 import { randomToken } from "@/lib/random-token";
+import { tutorProblem } from "@/lib/tutor-errors";
+import { closeChatSession, closeSessionNow, releaseScope, saveObservation } from "@/lib/chat-recall";
 
 import { SessionClose } from "./SessionClose";
 
@@ -114,20 +114,6 @@ interface Graded {
   recorded: RecordedAnswer;
 }
 
-interface ObserveReply {
-  ok?: boolean;
-  error?: string;
-  result?: RecordedAnswer;
-}
-
-function modelProblem(code: string | undefined, error: string | undefined, status: number): string {
-  // The server's own words say which case it is (docs/TUTOR-MODELS.md, T4):
-  // no key anywhere, or a model list whose providers have none.
-  if (code === "MISSING_API_KEY") return error ?? "The tutor has no model provider key yet. Add one in Settings, under Providers.";
-  if (code === "UNSTRUCTURED_REPLY") return "The tutor answered, but not with a question it could be graded on.";
-  if (code === "RATE_LIMITED") return "Too many questions in a minute; the tutor is resting.";
-  return error ?? `The tutor did not answer (HTTP ${status}).`;
-}
 
 export function SessionFocus({
   slug,
@@ -188,10 +174,11 @@ export function SessionFocus({
   const inFlight = useRef(false);
   const requested = useRef(new Set<number>());
   const attempts = useRef<Record<number, Attempt>>({});
-  const sessionId = useRef<string | null>(null);
-  const closed = useRef(false);
-  /** The body of the answer being saved, if any: leaving resends it with the close. */
-  const saving = useRef<Record<string, unknown> | null>(null);
+  /**
+   * This visit's session scope in `chat-recall`, which owns the write and the
+   * close (the tutors' too): one per mount, so a reload starts a new session.
+   */
+  const [scope] = useState(() => `session:${slug}:${randomToken()}`);
   const feedbackRef = useRef<HTMLDivElement>(null);
   /** The step's column, keyed on the step, so its heading can take the focus. */
   const columnRef = useRef<HTMLDivElement>(null);
@@ -282,7 +269,7 @@ export function SessionFocus({
         const body = (await res.json().catch(() => ({}))) as { question?: SessionQuestion; code?: string; error?: string };
         if (controller.signal.aborted) return;
         const question = res.ok && body.question !== undefined ? body.question : null;
-        const note = question === null ? modelProblem(body.code, body.error, res.status) : null;
+        const note = question === null ? tutorProblem(res.status, body) : null;
         setResolved((prev) => ({ ...prev, [at]: { question, note } }));
       })
       .catch(() => {
@@ -331,8 +318,7 @@ export function SessionFocus({
       const picked = attempt.picked;
       setSent((prev) => (index in prev ? prev : { ...prev, [index]: picked }));
       const correct = picked !== null && picked === question.correct;
-      sessionId.current ??= newSessionId(slug, new Date(), randomToken());
-      const payload = {
+      const fields = {
         conceptSlug: conceptOf(step),
         correct,
         // Asked after this session taught it is a teaching check; a probe,
@@ -340,8 +326,6 @@ export function SessionFocus({
         source: step.kind === "check" && mode === "learn" ? "teach" : "probe",
         // A week check names its module, which the event carries.
         ...(weekCheck === null ? {} : { module: weekCheck.moduleId }),
-        requestId: attempt.requestId,
-        sessionId: sessionId.current,
         question: question.prompt,
         // `answer` is the right one, as `learn observe --answer` means it;
         // `chosen` is the pick, null for "I don't know".
@@ -351,34 +335,27 @@ export function SessionFocus({
         ...(attempt.confidence === null ? {} : { confidence: attempt.confidence }),
         ...(attempt.thinking === null ? {} : { thinking: attempt.thinking }),
       };
-      saving.current = payload;
       try {
-        const res = await fetch("/api/learner/observe", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-          // Survives the page going away, so an answer sent just before the
-          // learner leaves still lands.
-          keepalive: true,
+        // Kept for a page going away (resent with the close), queued, timed
+        // out, and retried under a fresh session if this one was closed elsewhere.
+        const recorded = await saveObservation<RecordedAnswer>({
+          scope,
+          requestId: attempt.requestId,
+          newSession: () => newSessionId(slug, new Date(), randomToken()),
+          fields,
         });
-        const body = (await res.json().catch(() => null)) as ObserveReply | null;
-        if (!res.ok || body?.ok !== true || body.result === undefined) {
-          setError(body?.error ?? `Not saved (${res.status}). Press Try again; your pick is kept.`);
-          return;
-        }
-        const recorded = body.result;
         // On a replayed retry the verdict is the one first recorded.
         setGraded((prev) => ({ ...prev, [index]: { picked, correct: recorded.correct, recorded } }));
         router.refresh();
-      } catch {
-        setError("Not saved: the server could not be reached. Press Try again; your pick is kept.");
+      } catch (e) {
+        const why = e instanceof TypeError ? "Not saved: the server could not be reached." : e instanceof Error ? e.message : "Not saved.";
+        setError(`${why} Press Try again; your pick is kept.`);
       } finally {
-        saving.current = null;
         inFlight.current = false;
         setPending(false);
       }
     },
-    [question, step, graded, index, slug, mode, router, conceptOf, weekCheck, confidence, thinking],
+    [question, step, graded, index, slug, mode, router, conceptOf, weekCheck, confidence, thinking, scope],
   );
 
   /**
@@ -387,59 +364,33 @@ export function SessionFocus({
    * (Exit, Ask the tutor, a closed tab), so answered sessions do not stay
    * `running`. A session no answer opened has nothing to close.
    */
-  const closeSession = useCallback(async (leaving: boolean): Promise<void> => {
-    const id = sessionId.current;
-    if (id === null || closed.current) return;
-    const send = () =>
-      fetch("/api/learner/session/close", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: id }),
-        keepalive: leaving,
-      });
-    if (leaving) {
-      closed.current = true;
-      // An answer still saving must land before the close, or a first answer
-      // would open a session nothing closes and a later one would be refused
-      // by a closed session. Waiting for it is no good on a closing tab, where
-      // nothing runs after `pagehide`; so the answer is sent again with
-      // `closeSession`, which the server records (or replays, by its request
-      // id) and then closes, in one request. Whichever copy lands first
-      // records the answer; the other replays it.
-      const pending = saving.current;
-      const request =
-        pending === null
-          ? send()
-          : fetch("/api/learner/observe", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ ...pending, closeSession: true }),
-              keepalive: true,
-            });
-      void request.catch(() => undefined);
-      return;
-    }
-    for (let attempt = 0; attempt < 2 && !closed.current; attempt += 1) {
-      try {
-        const res = await send();
-        if (res.ok) closed.current = true;
-      } catch {
-        // Retried once below; a close that never lands leaves a running row,
-        // never lost evidence, since every answer is already recorded.
-      }
-      if (!closed.current && attempt === 0) await new Promise((resolve) => setTimeout(resolve, 1_500));
-    }
-  }, []);
+  // Both closes are chat-recall's, and both act only on a session an answer
+  // opened and nothing has closed yet: a scope with none sends nothing, and
+  // a second close finds the session already gone. So there is no "closed"
+  // flag here to go stale (a StrictMode remount, a close still retrying when
+  // the page goes away).
+  const closeSession = useCallback(
+    async (leaving: boolean): Promise<void> => {
+      // Leaving: an answer still saving is resent with `closeSession`, so the
+      // answer and the close commit together (see `closeChatSession`).
+      if (leaving) closeChatSession(scope);
+      else await closeSessionNow(scope);
+    },
+    [scope],
+  );
 
-  // Leaving before the close screen still closes what was answered.
+  // Leaving before the close screen still closes what was answered. The
+  // scope is this visit's alone, so it is forgotten once its saves and
+  // closes are done.
   useEffect(() => {
     const onHide = () => void closeSession(true);
     window.addEventListener("pagehide", onHide);
     return () => {
       window.removeEventListener("pagehide", onHide);
       void closeSession(true);
+      releaseScope(scope);
     };
-  }, [closeSession]);
+  }, [closeSession, scope]);
 
   const advance = useCallback(() => {
     let walk = steps;
@@ -519,12 +470,12 @@ export function SessionFocus({
       .sort((a, b) => a - b)
       .map((i) => (graded[i] as Graded).recorded);
     return (
-      <Frame
+      <FocusFrame
         percent={100}
         label={checkPlan === null ? label : "Module check"}
         short={checkPlan === null ? short : "Module check"}
-        exitHref={exitHref}
-        exitLabel={exitLabel}
+        exit={{ href: exitHref, label: exitLabel }}
+        progressLabel="Session progress"
         stepKey={index}
         columnRef={columnRef}
       >
@@ -545,12 +496,20 @@ export function SessionFocus({
                 }
           }
         />
-      </Frame>
+      </FocusFrame>
     );
   }
 
   return (
-    <Frame percent={percent} label={label} short={short} exitHref={exitHref} exitLabel={exitLabel} stepKey={index} columnRef={columnRef}>
+    <FocusFrame
+      percent={percent}
+      label={label}
+      short={short}
+      exit={{ href: exitHref, label: exitLabel }}
+      progressLabel="Session progress"
+      stepKey={index}
+      columnRef={columnRef}
+    >
       <h1 tabIndex={-1} className="font-display text-[20px] leading-tight font-bold text-text outline-none md:text-[28px]">
         {step.place?.title ?? title}
         {step.place === undefined && <span className="hidden md:inline"> · {STEP_NAME[step.kind]}</span>}
@@ -706,7 +665,7 @@ export function SessionFocus({
           </div>
         </>
       )}
-    </Frame>
+    </FocusFrame>
   );
 }
 
@@ -774,105 +733,11 @@ function Sureness({
   onConfidence: (next: number) => void;
   onThinking: (next: string) => void;
 }) {
-  const id = useId();
   return (
     <div className="flex animate-enter flex-col gap-3 motion-reduce:animate-none">
-      <div className="flex flex-col gap-1.5">
-        <p id={`${id}-sure`} className={LABEL}>
-          How sure are you?
-        </p>
-        <SegmentedControl
-          label="How sure are you?"
-          labelledBy={`${id}-sure`}
-          items={STOP_ITEMS}
-          value={String(confidence)}
-          onChange={(next) => onConfidence(Number(next))}
-          size="sm"
-          block
-          disabled={locked}
-        />
-      </div>
-      <label className="flex flex-col gap-1.5">
-        <span className={LABEL}>Your reasoning (optional)</span>
-        <Textarea
-          value={thinking}
-          onChange={(e) => onThinking(e.target.value)}
-          maxLength={SESSION_TEXT_LIMIT}
-          rows={2}
-          disabled={locked}
-          placeholder="Why you picked it, or what you were unsure about"
-        />
-      </label>
+      <ConfidenceField value={confidence} onChange={onConfidence} disabled={locked} />
+      <ReasoningField value={thinking} onChange={onThinking} disabled={locked} />
     </div>
   );
 }
 
-/**
- * Focus mode's frame: the step bar, the label and exit row, the 720px column.
- * The column is keyed on `stepKey`, so each step mounts afresh and rises in;
- * the bar above it stays, and its fill slides to the new width.
- */
-function Frame({
-  percent,
-  label,
-  short,
-  exitHref,
-  exitLabel,
-  stepKey,
-  columnRef,
-  children,
-}: {
-  percent: number;
-  label: string;
-  short: string;
-  exitHref: string;
-  /** What the exit link says from 768px up; "Exit" on a phone. */
-  exitLabel: string;
-  stepKey: number;
-  columnRef: RefObject<HTMLDivElement | null>;
-  children: ReactNode;
-}) {
-  const value = Math.max(0, Math.min(100, percent));
-  return (
-    // On a phone the column fills what the shell's header and store banner
-    // leave, less the page's bottom padding (the page's root is a flex column
-    // there, `AppShell`), so the actions sit at the bottom where a thumb is
-    // (hi-fi 15).
-    <div className="flex flex-1 flex-col">
-      <div
-        className={cx("h-2 w-full md:h-3", TRACK)}
-        role="progressbar"
-        aria-label="Session progress"
-        aria-valuenow={Math.round(value)}
-        aria-valuemin={0}
-        aria-valuemax={100}
-      >
-        <div
-          className="h-full rounded-r-[4px] bg-accent transition-[width] duration-300 ease-soft motion-reduce:transition-none md:rounded-r-md"
-          style={{ width: `${value}%` }}
-        />
-      </div>
-      <div className="flex items-center justify-between gap-4 px-3.5 py-2 text-[12px] font-medium text-text2 md:px-6 md:py-3">
-        <p className="min-w-0 truncate">
-          <span className="md:hidden">{short}</span>
-          <span className="hidden md:inline">{label}</span>
-        </p>
-        <TextLink href={exitHref} tone="muted" className="shrink-0">
-          <span className="md:hidden">Exit</span>
-          <span className="hidden md:inline">{exitLabel}</span>
-        </TextLink>
-      </div>
-      <div
-        key={stepKey}
-        ref={columnRef}
-        data-step={stepKey}
-        className={cx(
-          "mx-auto flex w-full max-w-[720px] flex-1 animate-enter flex-col gap-3 px-3.5 pt-1 pb-3.5 motion-reduce:animate-none",
-          "md:flex-none md:gap-[22px] md:px-0 md:pt-0 md:pb-10",
-        )}
-      >
-        {children}
-      </div>
-    </div>
-  );
-}

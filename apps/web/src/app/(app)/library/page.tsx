@@ -12,7 +12,7 @@ import { SearchField } from "@/components/ui/SearchField";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { cx, NOTE, PAGE_TITLE, STATUS_TEXT } from "@/components/ui/classes";
 import { TextLink } from "@/components/ui/TextLink";
-import { unservedRows } from "@/lib/asset-library";
+import { unservedRows } from "@/lib/library-thumbnails";
 import {
   filesNoun,
   isCompanionKind,
@@ -21,7 +21,7 @@ import {
   OTHERS_KIND,
   tabOf,
   type LibraryFilters,
-  type LibraryView,
+  type LibraryLayout,
 } from "@/lib/library";
 import { isRenderSource, RENDER_SOURCES, uploadCommand } from "@/lib/asset-problems";
 import { parseOpen } from "@/lib/library-preview";
@@ -373,7 +373,7 @@ export default async function LibraryPage({
  * marked `aria-current`. Icons only, since the tiles and the lines say which
  * is which; each link is named for a screen reader and titled for a hover.
  */
-function ViewToggle({ filters, view }: { filters: LibraryFilters; view: LibraryView }) {
+function ViewToggle({ filters, view }: { filters: LibraryFilters; view: LibraryLayout }) {
   return (
     <SegmentedControl
       mode="links"
