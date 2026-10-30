@@ -9,7 +9,9 @@ import {
   guidebookConcept,
   isLocked,
   itemDoneWith,
+  conceptsByItem,
   itemStanding,
+  percentOf,
   moduleConceptCount,
   moduleHref,
   moduleMark,
@@ -89,6 +91,24 @@ describe("conceptsForTopic", () => {
     const [react] = conceptsForTopic(concepts, "cp4284-m3-t1");
     expect(react?.bucket).toBe("untouched");
     expect(conceptsForTopic(concepts, "cp4284-m1-t1")[0]?.bucket).toBe("learning");
+  });
+});
+
+describe("conceptsByItem and percentOf", () => {
+  it("lists each item's concepts once, in the knowledge base's order", () => {
+    const kb = [
+      { id: "a", topics: ["t1", "t2"] },
+      { id: "b", topics: ["t2", "t2"] },
+      { id: "c", topics: [] },
+    ];
+    const byItem = conceptsByItem(kb);
+    expect([...byItem.keys()]).toEqual(["t1", "t2"]);
+    expect(byItem.get("t2")?.map((c) => c.id)).toEqual(["a", "b"]);
+  });
+
+  it("rounds to a whole percent, and is 0 with nothing to do", () => {
+    expect(percentOf(2, 3)).toBe(67);
+    expect(percentOf(0, 0)).toBe(0);
   });
 });
 
