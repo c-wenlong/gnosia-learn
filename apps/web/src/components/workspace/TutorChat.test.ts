@@ -54,7 +54,10 @@ vi.mock("next/link", async () => {
 });
 vi.mock("@/components/NoteProse", async () => {
   const { createElement } = await import("react");
-  return { NoteProse: ({ source }: { source: string }) => createElement("div", null, source) };
+  // `images` drawn as an attribute: whether a reply's markdown image is fetched is the caller's choice.
+  return {
+    NoteProse: ({ source, images }: { source: string; images?: string }) => createElement("div", { "data-images": images ?? "show" }, source),
+  };
 });
 vi.mock("@/components/Math", async () => {
   const { createElement } = await import("react");
@@ -796,5 +799,42 @@ describe("a recall check (docs/proposals/structured-checks.md, phase 2)", () => 
     expect(host.textContent).toContain("Not answered");
     expect(fetched.filter((c) => c.url === "/api/agent/judge")).toHaveLength(0);
     expect(host.querySelector('[aria-label="Record this answer"]')).toBeNull();
+  });
+});
+
+describe("a tutor turn", () => {
+  it("draws the reply with markdown images as links, so a reply cannot make the browser fetch a URL", async () => {
+    const host = await mount();
+    await typePlain(host, "What is a SYN?");
+    await act(async () => textarea(host)!.form!.requestSubmit());
+    await settle();
+    const reply = [...host.querySelectorAll("[data-images]")].find((el) => el.textContent === "An answer [1].");
+    expect(reply?.getAttribute("data-images")).toBe("link");
+  });
+
+  it("is dropped, not appended, when it lands after the page went away", async () => {
+    let answer: (r: Response) => void = () => {};
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string, init?: RequestInit) => {
+        if (url !== "/api/agent/chat") return Promise.resolve(new Response("{}", { status: 200 }));
+        signal = init?.signal ?? undefined;
+        return new Promise<Response>((resolve, reject) => {
+          answer = resolve;
+          signal?.addEventListener("abort", () => reject(signal?.reason), { once: true });
+        });
+      }),
+    );
+    const host = await mount({ slug: "tcp-leave" });
+    await typePlain(host, "What is a SYN?");
+    await act(async () => textarea(host)!.form!.requestSubmit());
+    mounted.pop()?.();
+    expect(signal?.aborted).toBe(true);
+    answer(new Response(JSON.stringify({ message: { content: "Too late." } }), { status: 200 }));
+    await settle();
+    // The thread ends on the question, for Try again to ask once more.
+    const stored = JSON.parse(sessionStorage.getItem(threadKey("tcp-leave")) ?? "[]") as Array<{ role: string; content: string }>;
+    expect(stored.map((t) => t.content)).toEqual(["What is a SYN?"]);
   });
 });

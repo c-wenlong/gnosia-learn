@@ -1,5 +1,5 @@
 import { RECALL_ANSWER_LIMIT } from "./check-block";
-import { CONCEPT_BODY_LIMIT } from "./prompt";
+import { NOTE_DATA_LINE, noteAsData } from "./prompt";
 import { firstObject } from "./session-question";
 import { CHAT_ANSWER_LIMIT, CHECK_QUESTION_LIMIT, VERDICT_FEEDBACK_LIMIT } from "./tutor-check";
 
@@ -51,8 +51,7 @@ function fenced(text: string): string {
  * wrong answer.
  */
 export function buildJudgePrompt(input: JudgeInput): string {
-  const body = (input.body ?? "").trim();
-  const clipped = body.length > CONCEPT_BODY_LIMIT ? `${body.slice(0, CONCEPT_BODY_LIMIT)}\n\n[note truncated]` : body;
+  const note = noteAsData(input.body);
   const commitment = input.commitment?.trim()
     ? `## The answer the tutor committed to
 The tutor wrote this answer when it asked the question, before the learner replied. It is your first reference: grade the learner's answer against it.
@@ -76,7 +75,7 @@ You grade a learner's answer to one question about a concept in their notebook. 
 - Summary: ${input.summary || "(no summary written)"}
 
 ## The note
-${clipped || "(the note's body could not be read; judge from the summary and your own knowledge, and be conservative)"}
+${note === null ? "(the note's body could not be read; judge from the summary and your own knowledge, and be conservative)" : `${NOTE_DATA_LINE}\n${note}`}
 
 ${commitment}${reference}## The question the tutor asked
 ${input.question.slice(0, CHECK_QUESTION_LIMIT)}

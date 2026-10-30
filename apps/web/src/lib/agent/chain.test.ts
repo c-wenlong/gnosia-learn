@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   availableProviderSummary,
@@ -299,6 +299,22 @@ describe("listProviderModels", () => {
 });
 
 describe("a turn's time limits", () => {
+  // The limits run on a fake clock: `AbortSignal.timeout` keeps Node's own
+  // timer, which no fake controls, so it is swapped for one on `setTimeout`
+  // that does. On the wall clock a loaded machine fired the second attempt's
+  // timer after the turn's deadline and the walk recorded two attempts, not three.
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.spyOn(AbortSignal, "timeout").mockImplementation((ms: number) => {
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(new DOMException("The operation timed out.", "TimeoutError")), ms);
+      return controller.signal;
+    });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   /** A fetch that never answers on its own, and rejects as fetch does when its signal aborts. */
   function hanging() {
     return vi.fn((_url: string, init?: RequestInit) =>
@@ -318,13 +334,14 @@ describe("a turn's time limits", () => {
         JSON.parse(String(init?.body)).model === "hangs" ? hang(url, init) : Promise.resolve(ok("from the second")),
       ),
     );
-    const started = Date.now();
-    const outcome = await completeWithFallback(
+    const walk = completeWithFallback(
       [{ role: "user", content: "hi" }],
       tutorSteps([{ provider: "nvidia", model: "hangs" }, { provider: "openrouter", model: "answers" }], {}, ENV),
       { attemptMs: 60, deadlineMs: 5_000 },
     );
-    expect(Date.now() - started).toBeLessThan(2_000);
+    // The first entry's limit, and no more: the second answers at once.
+    await vi.advanceTimersByTimeAsync(60);
+    const outcome = await walk;
     expect(outcome.ok).toBe(true);
     if (!outcome.ok) return;
     expect(outcome.result.content).toBe("from the second");
@@ -335,8 +352,8 @@ describe("a turn's time limits", () => {
 
   it("stops the walk at the turn's deadline and returns the attempts so far, saying what was not tried", async () => {
     vi.stubGlobal("fetch", hanging());
-    const started = Date.now();
-    const outcome = await completeWithFallback(
+    let settled = false;
+    const walk = completeWithFallback(
       [{ role: "user", content: "hi" }],
       tutorSteps(
         [
@@ -351,8 +368,16 @@ describe("a turn's time limits", () => {
       // Each attempt may take 80 ms, the whole turn 200: the third is cut
       // off by the turn's deadline, and the fourth is never started.
       { attemptMs: 80, deadlineMs: 200 },
-    );
-    expect(Date.now() - started).toBeLessThan(2_000);
+    ).finally(() => {
+      settled = true;
+    });
+    // Two whole attempts end at 160 ms; the walk is still on the third.
+    await vi.advanceTimersByTimeAsync(199);
+    expect(settled).toBe(false);
+    // The deadline, not the third attempt's own limit (240 ms), ends it.
+    await vi.advanceTimersByTimeAsync(1);
+    expect(settled).toBe(true);
+    const outcome = await walk;
     expect(outcome).toMatchObject({ ok: false, code: "ALL_PROVIDERS_FAILED" });
     if (outcome.ok) return;
     expect(outcome.attempts.map((a) => [a.model, a.timedOut])).toEqual([

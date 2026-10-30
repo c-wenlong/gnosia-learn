@@ -133,7 +133,7 @@ export function OpenTutorChat({ subject }: { subject: string }) {
             </UserMessage>
           ) : (
             <TutorMessage key={i} className="animate-enter motion-reduce:animate-none">
-              <NoteProse source={turn.content} idPrefix={`t${i}-`} />
+              <NoteProse source={turn.content} idPrefix={`t${i}-`} images="link" />
             </TutorMessage>
           ),
         )}

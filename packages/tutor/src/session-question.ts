@@ -1,4 +1,4 @@
-import { CONCEPT_BODY_LIMIT, type ConceptPromptInput } from "./prompt";
+import { NOTE_DATA_LINE, noteAsData, type ConceptPromptInput } from "./prompt";
 import { DEFAULT_TUTOR_STYLE, type TutorStyle } from "./preferences";
 import { seedOf } from "./review-core";
 import type { SessionQuestion } from "./session-core";
@@ -58,8 +58,7 @@ export function buildSessionQuestionPrompt(
   avoid: readonly string[] = [],
   style: TutorStyle = DEFAULT_TUTOR_STYLE,
 ): string {
-  const body = input.body?.trim() ?? "";
-  const clipped = body.length > CONCEPT_BODY_LIMIT ? `${body.slice(0, CONCEPT_BODY_LIMIT)}\n\n[note truncated]` : body;
+  const note = noteAsData(input.body);
   const purpose =
     step === "probe"
       ? "This is a PROBE: it is asked before any teaching, to measure whether the learner already holds the idea. Ask about the core idea itself, answerable in a few seconds by someone who understands it, without needing the note's exact wording."
@@ -78,7 +77,7 @@ ${purpose}
 - Summary: ${input.summary || "(no summary written)"}
 
 ## The note
-${clipped || "(the note's body could not be read; write from the summary)"}
+${note === null ? "(the note's body could not be read; write from the summary)" : `${NOTE_DATA_LINE}\n${note}`}
 ${avoidLines}
 ## Rules
 1. Exactly four options. One is correct. The three wrong ones are plausible mistakes a learner actually makes, not jokes, and not "all of the above".
