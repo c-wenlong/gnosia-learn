@@ -178,6 +178,13 @@ each moves to version 2 when its key is next saved. No migration.
 
 **Rotating a provider key** is Replace in Settings, then Test.
 
+**The macOS app's sidecar** (`services/sidecar`) opens and seals the same rows,
+so it needs the same `AUTH_SECRET`. It reads the environment the web reads, in
+the web's order: what the process exports, then `$GNOSIA_HOME/.env`, then
+`apps/web/.env.local` and its siblings through Next's own loader
+(`services/sidecar/src/env.ts`). Its `/api/health` answers `secret: false`
+when it has none, and the app's Settings says so.
+
 ## Out of scope
 
 - The studio's agents (D6).

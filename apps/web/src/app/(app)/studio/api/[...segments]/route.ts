@@ -1,6 +1,8 @@
 import { STUDIO_OWNER_HEADER } from "@gnosia/schema/shared";
 import { NextResponse, type NextRequest } from "next/server";
 
+import { requestIsSameOrigin } from "@/lib/auth/core";
+import { BodyTooLarge, readBodyText } from "@/lib/learner-api";
 import { currentOwner, NoOwnerError } from "@/lib/owner";
 import { requireStudio, studioOrigin } from "@/lib/studio";
 import { RUNNER_DOWN } from "@/lib/studio-drafts";
@@ -27,13 +29,23 @@ import { RUNNER_DOWN } from "@/lib/studio-drafts";
  * `requireStudio()` every page calls, which is also what makes the gate test a
  * real test — it walks this directory and would fail if this file forgot.
  *
- * What is forwarded: the method, the path under `/api`, the query string, and
- * the body. What is not: `Origin`, `Sec-Fetch-*`, `Cookie`, `Host` and the
- * app's own referer. What is added: the signed-in owner, in
- * `STUDIO_OWNER_HEADER`, from the session (phase 4). Any value the page sent
- * under that name is dropped first, so a page cannot name an owner; the runner
- * serves only the owner it was started for and refuses anyone else. The runner then sees what `curl` sends, which is what the
- * guard is looking for — a program rather than a page.
+ * What is forwarded: the method, the path under `/api`, the query string, the
+ * body (at most `MAX_BODY_BYTES`, the runner's own limit) and the few request
+ * headers in `FORWARDED`. Everything else the browser or a client sent is
+ * dropped, `Origin`, `Sec-Fetch-*`, `Cookie`, `Host`, `Authorization`, the
+ * forwarded chain and hop-by-hop headers included: an allow list, so a header
+ * nobody thought of does not reach the runner. What is added: the signed-in
+ * owner, in `STUDIO_OWNER_HEADER`, from the session (phase 4). A page cannot
+ * name an owner; the runner serves only the owner it was started for and
+ * refuses anyone else. The runner then sees what `curl` sends, which is what
+ * the guard is looking for — a program rather than a page.
+ *
+ * What comes back: the runner's status, body and headers, minus a `Location`
+ * (it would name `127.0.0.1:7250`, which the browser cannot follow), a
+ * `Set-Cookie` (the runner has no business setting one on this origin) and
+ * the hop-by-hop headers, plus `RESPONSE_CSP`: a picture the runner serves
+ * (an agent-drawn SVG) opened directly is then a sandboxed document with
+ * scripts off, the same rule as the asset file route's `ASSET_CSP`.
  *
  * **And that is exactly why this route has to make the same judgement itself,
  * first.** Stripping the headers the runner reasons about moves the decision
@@ -54,22 +66,37 @@ import { RUNNER_DOWN } from "@/lib/studio-drafts";
 
 export const dynamic = "force-dynamic";
 
-/** Everything a browser adds that says "a page sent this". */
-const STRIPPED = new Set([
-  "host",
-  "origin",
-  "referer",
-  "cookie",
-  "connection",
+/**
+ * The request headers the runner reads, and nothing else: the body's type,
+ * the conditional and range headers a picture or a video uses, and the
+ * reconnect position an event stream sends (`services/studio/src/api.ts`).
+ */
+const FORWARDED = [
+  "accept",
+  "accept-language",
+  "content-type",
+  "if-none-match",
+  "if-modified-since",
+  "last-event-id",
+  "range",
+];
+
+/** The runner's own body limit (`BODY_LIMIT` in `services/studio/src/api.ts`). */
+const MAX_BODY_BYTES = 1_000_000;
+
+/** Response headers that describe the hop to the runner, or that the browser must not get from it. */
+const DROPPED_RESPONSE = [
+  "content-encoding",
   "content-length",
-  "sec-fetch-site",
-  "sec-fetch-mode",
-  "sec-fetch-dest",
-  "sec-fetch-user",
-  "upgrade-insecure-requests",
-  // Set below from the session, never taken from the page.
-  STUDIO_OWNER_HEADER,
-]);
+  "connection",
+  "keep-alive",
+  "transfer-encoding",
+  "location",
+  "set-cookie",
+];
+
+/** Every proxied answer is, as a document, sandboxed with scripts off. */
+const RESPONSE_CSP = "default-src 'none'; style-src 'unsafe-inline'; font-src data:; img-src data:; sandbox";
 
 /**
  * `guard`'s three checks, made here against this app's own origin.
@@ -82,8 +109,10 @@ const STRIPPED = new Set([
  * 1. `Sec-Fetch-Site`, which every current browser sends and no program does,
  *    must say same-origin. `none` is a direct navigation — the address bar —
  *    and is taken for the same reason the runner takes it.
- * 2. `Origin`, when present, must be this server's. A browser sends it on
- *    every request that is not a plain GET.
+ * 2. `Origin`, when present, must be this server's, and the literal `null`
+ *    (a sandboxed frame, a `data:` page) is refused. A browser sends it on
+ *    every request that is not a plain GET. 1 and 2 are
+ *    `requestIsSameOrigin` in `@/lib/auth/core`.
  * 3. A body-carrying method must be `application/json`, which is not a
  *    safelisted content type, so a cross-origin `fetch` has to preflight and
  *    Next answers no CORS headers for this route. Checking it here rather than
@@ -91,27 +120,20 @@ const STRIPPED = new Set([
  *    a simple request into a trusted one.
  */
 function check(request: NextRequest): string | null {
-  const site = request.headers.get("sec-fetch-site");
-  if (site !== null && site !== "same-origin" && site !== "none") {
-    return `this request is ${site} according to the browser that sent it, and only same-origin is taken`;
-  }
-
-  const origin = request.headers.get("origin");
-  const host = request.headers.get("host");
-  if (origin !== null && origin !== "" && origin !== "null") {
-    let sameHost = false;
-    try {
-      sameHost = new URL(origin).host === host;
-    } catch {
-      sameHost = false;
+  // Sec-Fetch-Site, then Origin against this server's host (`null` refused),
+  // with a request carrying neither let through: that is a program, which is
+  // who the runner already takes. One rule for every guarded route.
+  if (!requestIsSameOrigin(request, { allowMissing: true })) {
+    const origin = request.headers.get("origin");
+    const site = request.headers.get("sec-fetch-site");
+    if (site !== null && site !== "same-origin" && site !== "none") {
+      return `this request is ${site} according to the browser that sent it, and only same-origin is taken`;
     }
-    if (!sameHost) {
-      return (
-        `this request carries Origin "${origin}", so it came from another site. The studio starts ` +
-        `paid agent sessions with filesystem access; a website does not get to do that, whatever ` +
-        `the user happens to have open in another tab.`
-      );
-    }
+    return (
+      `this request carries Origin "${origin}", so it came from another site. The studio starts ` +
+      `paid agent sessions with filesystem access; a website does not get to do that, whatever ` +
+      `the user happens to have open in another tab.`
+    );
   }
 
   if (request.method !== "GET" && request.method !== "HEAD") {
@@ -149,8 +171,9 @@ async function proxy(request: NextRequest, segments: string[]): Promise<Response
   const target = `${studioOrigin()}/api/${segments.map(encodeURIComponent).join("/")}${search}`;
 
   const headers = new Headers();
-  for (const [name, value] of request.headers) {
-    if (!STRIPPED.has(name.toLowerCase())) headers.set(name, value);
+  for (const name of FORWARDED) {
+    const value = request.headers.get(name);
+    if (value !== null) headers.set(name, value);
   }
   headers.set(STUDIO_OWNER_HEADER, owner);
 
@@ -160,12 +183,24 @@ async function proxy(request: NextRequest, segments: string[]): Promise<Response
   // a trusted one. Setting it without that check ahead of it was the bug.
   if (hasBody) headers.set("content-type", "application/json");
 
+  let body: string | undefined;
+  if (hasBody) {
+    try {
+      body = await readBodyText(request, MAX_BODY_BYTES);
+    } catch (error) {
+      if (error instanceof BodyTooLarge) {
+        return NextResponse.json({ error: `bodies here are at most ${MAX_BODY_BYTES} bytes`, detail: null }, { status: 413 });
+      }
+      throw error;
+    }
+  }
+
   let upstream: Response;
   try {
     upstream = await fetch(target, {
       method: request.method,
       headers,
-      ...(hasBody ? { body: await request.text() } : {}),
+      ...(body !== undefined ? { body } : {}),
       cache: "no-store",
       redirect: "manual",
     });
@@ -182,8 +217,9 @@ async function proxy(request: NextRequest, segments: string[]): Promise<Response
   }
 
   const out = new Headers(upstream.headers);
-  out.delete("content-encoding");
-  out.delete("content-length");
+  for (const name of DROPPED_RESPONSE) out.delete(name);
+  out.set("content-security-policy", RESPONSE_CSP);
+  out.set("x-content-type-options", "nosniff");
   return new Response(upstream.body, { status: upstream.status, headers: out });
 }
 

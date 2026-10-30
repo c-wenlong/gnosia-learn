@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { resetRateLimits } from "@gnosia/tutor/guards";
 
 import type { ConceptWorkspace } from "@/lib/concept-workspace-core";
+
+// Every request is the same owner, and the limiter is keyed by owner: each
+// test starts with fresh windows.
+beforeEach(() => resetRateLimits());
 
 /**
  * `POST /api/agent/chat` with `conceptSlug`: the concept tutor. The provider

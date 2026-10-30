@@ -6,7 +6,7 @@ import { getCourses } from "@/data/courses";
 import { unlessUnreachable } from "@/data/source";
 import { getTopics } from "@/data/topics";
 import { defaultSelection } from "@/lib/concept-graph";
-import { cachedDomainLayout, domainTree, type DomainMapData, type DomainNode, type DomainTopic } from "@/lib/domain-map";
+import { cachedDomainLayouts, domainTree, type DomainMapData, type DomainNode, type DomainTopic } from "@/lib/domain-map";
 import { readyConcepts } from "@/lib/map-reading";
 import { currentOwner } from "@/lib/owner";
 import { readRecentCourses } from "@/lib/recent-courses";
@@ -131,7 +131,7 @@ export default async function LearnPage({ searchParams }: { searchParams: Search
   const tree = domainTree(domainNodes, kb.edges, vocabulary);
   const map: DomainMapData = {
     tree,
-    layouts: Object.fromEntries(tree.map((d) => [d.slug, cachedDomainLayout(domainNodes, kb.edges, vocabulary, d.slug)])),
+    layouts: cachedDomainLayouts(domainNodes, kb.edges, vocabulary, tree.map((d) => d.slug)),
   };
 
   return (

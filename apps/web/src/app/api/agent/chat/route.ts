@@ -17,10 +17,12 @@ export const runtime = "nodejs";
  * and maps the plain reply onto `NextResponse`.
  */
 export async function POST(req: Request): Promise<NextResponse> {
-  const refused = enforceSameOrigin(req) ?? enforceRateLimit(req, "agent:chat", CHAT_RATE_LIMIT);
-  if (refused) return refused;
+  const crossOrigin = enforceSameOrigin(req);
+  if (crossOrigin) return crossOrigin;
   const owner = await requestOwner();
   if (owner instanceof NextResponse) return owner;
+  const limited = enforceRateLimit(owner, "agent:chat", CHAT_RATE_LIMIT);
+  if (limited) return limited;
 
   const body = (await req.json().catch(() => null)) as ChatBody | null;
   if (body === null || typeof body !== "object" || !Array.isArray(body.messages)) {

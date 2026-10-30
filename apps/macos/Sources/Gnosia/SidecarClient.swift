@@ -25,6 +25,9 @@ struct SidecarClient {
         let ok: Bool
         let service: String
         let owner: String
+        /// Whether the sidecar has an AUTH_SECRET that opens saved provider
+        /// keys. Optional so an older sidecar's health still decodes.
+        let secret: Bool?
     }
 
     /// One chat turn's envelope, the fields `chatTurn` answers with.

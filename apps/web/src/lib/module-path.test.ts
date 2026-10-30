@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { conceptsForTopic, resolveTopicMastery, type KbConceptLike, type TopicMastery } from "./course-path";
 import {
   conceptMeta,
+  moduleConcepts,
   modulePath,
   pathSequence,
   quizHref,
@@ -124,6 +125,13 @@ function videosOnPage(path: ReturnType<typeof modulePath>): string[] {
     .filter((s) => s.kind === "video" || s.kind === "asset")
     .map((s) => s.id);
 }
+
+describe("moduleConcepts", () => {
+  it("is every lesson's concepts in lesson order, each once", () => {
+    const lessons = { topics: [{ concepts: ["a", "b"] }, { concepts: [] }, { concepts: ["b", "c", "a", "d"] }] } as unknown as Pick<Module, "topics">;
+    expect(moduleConcepts(lessons)).toEqual(["a", "b", "c", "d"]);
+  });
+});
 
 describe("modulePath: the order of the steps", () => {
   it("runs before you start, watch, read alongside, the lessons with their concept steps, then practice", () => {

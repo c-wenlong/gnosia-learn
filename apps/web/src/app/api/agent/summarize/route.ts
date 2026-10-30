@@ -46,7 +46,7 @@ export async function POST(req: Request) {
 
   // Before the topic lookup on purpose: otherwise a caller could spin the
   // limiter for free by varying the slugs and collecting 404s.
-  const rateLimited = enforceRateLimit(req, "summarize", SUMMARIZE_RATE_LIMIT);
+  const rateLimited = enforceRateLimit(owner, "summarize", SUMMARIZE_RATE_LIMIT);
   if (rateLimited) return rateLimited;
 
   return turnResponse(await summarizeTurn(tutorDeps(owner), body));

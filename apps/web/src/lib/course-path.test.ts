@@ -3,13 +3,16 @@ import { describe, expect, it } from "vitest";
 import {
   conceptsForTopic,
   continueHref,
+  courseTopicIds,
   defaultModuleIndex,
   doneLine,
   EMPTY_STANDING,
   guidebookConcept,
   isLocked,
   itemDoneWith,
+  conceptsByItem,
   itemStanding,
+  percentOf,
   moduleConceptCount,
   moduleHref,
   moduleMark,
@@ -36,6 +39,13 @@ function concept(slug: string, pL: number, bucket: PathConcept["bucket"]): PathC
 
 const mastered: TopicMastery = { bucket: "mastered", pL: 0.95, next: "a", concepts: [concept("a", 0.95, "mastered")] };
 const learning: TopicMastery = { bucket: "learning", pL: 0.4, next: "b", concepts: [concept("b", 0.4, "learning")] };
+
+describe("courseTopicIds", () => {
+  it("lists every topic id, module by module", () => {
+    const course = { modules: [{ topics: [{ id: "m1-a" }, { id: "m1-b" }] }, { topics: [] }, { topics: [{ id: "m3-a" }] }] } as unknown as Parameters<typeof courseTopicIds>[0];
+    expect(courseTopicIds(course)).toEqual(["m1-a", "m1-b", "m3-a"]);
+  });
+});
 
 describe("conceptsForTopic", () => {
   const concepts = [
@@ -89,6 +99,24 @@ describe("conceptsForTopic", () => {
     const [react] = conceptsForTopic(concepts, "cp4284-m3-t1");
     expect(react?.bucket).toBe("untouched");
     expect(conceptsForTopic(concepts, "cp4284-m1-t1")[0]?.bucket).toBe("learning");
+  });
+});
+
+describe("conceptsByItem and percentOf", () => {
+  it("lists each item's concepts once, in the knowledge base's order", () => {
+    const kb = [
+      { id: "a", topics: ["t1", "t2"] },
+      { id: "b", topics: ["t2", "t2"] },
+      { id: "c", topics: [] },
+    ];
+    const byItem = conceptsByItem(kb);
+    expect([...byItem.keys()]).toEqual(["t1", "t2"]);
+    expect(byItem.get("t2")?.map((c) => c.id)).toEqual(["a", "b"]);
+  });
+
+  it("rounds to a whole percent, and is 0 with nothing to do", () => {
+    expect(percentOf(2, 3)).toBe(67);
+    expect(percentOf(0, 0)).toBe(0);
   });
 });
 

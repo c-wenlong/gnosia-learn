@@ -18,10 +18,10 @@ import { requestOwner } from "@/lib/learner-api";
 const ASK_RATE_LIMIT = { limit: 240, windowMs: 60_000 };
 
 export async function GET(req: Request): Promise<NextResponse> {
-  const limited = enforceRateLimit(req, "learner:ask", ASK_RATE_LIMIT);
-  if (limited !== null) return limited;
   const owner = await requestOwner();
   if (owner instanceof NextResponse) return owner;
+  const limited = enforceRateLimit(owner, "learner:ask", ASK_RATE_LIMIT);
+  if (limited !== null) return limited;
 
   const query = (new URL(req.url).searchParams.get("q") ?? "").slice(0, MAX_ASK_QUERY);
   const results = query.trim().length < 2 ? [] : rankAsk(query, await readAskEntries());

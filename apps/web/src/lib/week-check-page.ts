@@ -1,10 +1,11 @@
 import "server-only";
 
-import { readEvents } from "@gnosia/catalog/state";
+import { readConceptObservations } from "@gnosia/catalog/state";
 import { connection } from "next/server";
 
 import { readConceptNote } from "@/lib/concept-note";
 import { observationsOf } from "@/lib/concept-workspace-core";
+import { moduleConcepts } from "@/lib/module-path";
 import { catalogDatabase, readKb } from "@/lib/learner-store";
 import { currentOwner } from "@/lib/owner";
 import {
@@ -49,16 +50,19 @@ export async function loadWeekCheck(module: Pick<Module, "topics">): Promise<Wee
   if (!reachable) return { state: "unreachable" };
 
   const byId = new Map(kb.concepts.map((c) => [c.id, c]));
-  const taught: string[] = [];
-  for (const item of module.topics) for (const slug of item.concepts) if (!taught.includes(slug)) taught.push(slug);
-  const concepts = taught.flatMap((slug) => {
+  const concepts = moduleConcepts(module).flatMap((slug) => {
     const c = byId.get(slug);
     return c === undefined ? [] : [c];
   });
 
   let events;
   try {
-    events = await readEvents(await catalogDatabase(), owner);
+    // Only these concepts' observations and the voids: the whole log only grows.
+    events = await readConceptObservations(
+      await catalogDatabase(),
+      owner,
+      concepts.map((c) => c.id),
+    );
   } catch (error) {
     console.warn(`week check: the event log is unavailable, ${error instanceof Error ? error.message : String(error)}`);
     return { state: "unreachable" };

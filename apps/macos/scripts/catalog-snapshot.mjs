@@ -1,7 +1,7 @@
 // The catalog snapshot Gnosia reads: the parts of the catalog the macOS app
 // draws, mirrored into one SQLite file it can open read-only.
 //
-// usage: node apps/macos/scripts/catalog-snapshot.mjs [--out PATH]
+// usage: node apps/macos/scripts/catalog-snapshot.mjs [--out PATH] [--owner ID] [--if-stale]
 //
 // The catalog it reads is the same SQLite file every catalog command reads:
 // CATALOG_DB when set, services/catalog/.env's DATABASE_URL (or the shell's)
@@ -34,10 +34,25 @@
 // (`Date(timeIntervalSince1970:)`), so `ms / 1000.0` at copy time is the
 // whole conversion.
 //
+// One owner's view, like every read the web app makes (AGENTS.md, "A read
+// that forgets its owner reads every owner"): content rows are that owner's
+// and the commons', learner rows are that owner's alone, and the link tables
+// keep only rows whose ends were mirrored. The owner is --owner, then
+// GNOSIA_SIDECAR_OWNER (the sidecar's own setting, so the app reads back
+// what the sidecar writes), then `local`; it is written into snapshot_meta
+// for the app to read rather than assume.
+//
+// --if-stale writes only when the mirror is behind: missing, of an older
+// format, for another owner, or older than the catalog file or its WAL (the
+// catalog runs in WAL mode, so a new row moves `catalog.db-wal` and the main
+// file only at a checkpoint). A mirror that is none of those prints `fresh`
+// and exits 0 without writing. The app runs it that way, so the source and
+// the owner are resolved here, once, and never guessed at in Swift.
+//
 // Exit codes: 0 snapshot written, 1 the read or write failed, 2 the
 // invocation was wrong.
 
-import { existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, renameSync, rmSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -47,7 +62,13 @@ import Database from 'better-sqlite3';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const CATALOG_ENV = join(ROOT, 'services/catalog/.env');
-const USAGE = 'usage: node catalog-snapshot.mjs [--out PATH]';
+const USAGE = 'usage: node catalog-snapshot.mjs [--out PATH] [--owner ID] [--if-stale]';
+
+/** The owner whose rows every owner reads (COMMONS_OWNER in packages/schema/src/shared.ts). */
+const COMMONS = 'commons';
+
+/** Mirror format: 4 added event.concept_slug, event.session_id, `session` and the owner filter. */
+export const SCHEMA_VERSION = 4;
 
 class Refusal extends Error {}
 
@@ -316,18 +337,34 @@ CREATE TABLE preference (
   PRIMARY KEY (learner_id, key)
 );
 
--- Deliberately partial: watched state and last-playback need only when (at),
--- what kind (type) and which asset (payload's asset), so concept_slug,
--- session_id and created_at stay out of the mirror until a surface reads
--- them.
+-- The catalog promotes an event's concept and session out of the payload
+-- into columns (services/catalog/src/state/events.ts, toRow); the mirror
+-- keeps them, so a check's status is matched on its own concept rather
+-- than on question text across every concept. created_at stays out.
 CREATE TABLE event (
-  id         INTEGER PRIMARY KEY,
-  at         REAL NOT NULL,
-  learner_id TEXT NOT NULL,
-  type       TEXT NOT NULL,
-  payload    TEXT NOT NULL DEFAULT '{}'
+  id           INTEGER PRIMARY KEY,
+  at           REAL NOT NULL,
+  learner_id   TEXT NOT NULL,
+  type         TEXT NOT NULL,
+  payload      TEXT NOT NULL DEFAULT '{}',
+  concept_slug TEXT,
+  session_id   TEXT
 );
 CREATE INDEX event_at_idx ON event(at);
+CREATE INDEX event_concept_idx ON event(concept_slug);
+
+-- Tutor and studio sessions, so a session started on the web shows on the
+-- app's Recent beside the ones it opened itself.
+CREATE TABLE session (
+  id         TEXT PRIMARY KEY,
+  kind       TEXT NOT NULL,
+  learner_id TEXT NOT NULL,
+  state      TEXT NOT NULL,
+  title      TEXT,
+  goal       TEXT,
+  started_at REAL,
+  updated_at REAL
+);
 
 CREATE TABLE asset_name (
   learner_id TEXT NOT NULL,
@@ -437,7 +474,43 @@ const ASSET_COLUMNS = `id, kind, path, url, content_hash, inputs_hash, bytes,
   created_at / 1000.0 AS created_at,
   updated_at / 1000.0 AS updated_at`;
 
-async function snapshot(sourcePath, out) {
+/** A file's modification time in ms, or null when it is not there. */
+function mtimeOf(path) {
+  try {
+    return statSync(path).mtimeMs;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Why the mirror at `out` needs rewriting for `owner` from `sourcePath`, or
+ * null when it is current. A source that is not there is the snapshot's own
+ * refusal to report, so it reads as stale.
+ */
+export function staleness(sourcePath, out, owner) {
+  const mirrorAt = mtimeOf(out);
+  if (mirrorAt === null) return 'no mirror yet';
+  const sourceAt = mtimeOf(sourcePath);
+  if (sourceAt === null) return 'no catalog to compare';
+  let meta;
+  try {
+    const db = new Database(out, { readonly: true, fileMustExist: true });
+    try {
+      meta = Object.fromEntries(db.prepare('SELECT key, value FROM snapshot_meta').all().map((r) => [r.key, r.value]));
+    } finally {
+      db.close();
+    }
+  } catch {
+    return 'the mirror cannot be read';
+  }
+  if (meta.schema_version !== String(SCHEMA_VERSION)) return `format ${meta.schema_version ?? '?'}, not ${SCHEMA_VERSION}`;
+  if ((meta.owner ?? 'local') !== owner) return `made for ${meta.owner ?? 'local'}, not ${owner}`;
+  const newest = Math.max(sourceAt, mtimeOf(`${sourcePath}-wal`) ?? 0);
+  return newest > mirrorAt ? 'the catalog changed since' : null;
+}
+
+export async function snapshot(sourcePath, out, owner = 'local') {
   // The live catalog and its mirror cannot be one file: the write goes
   // through a `.partial` rename that would put the reduced shape over the
   // full database, deleting everything the mirror leaves out.
@@ -455,8 +528,10 @@ async function snapshot(sourcePath, out) {
   }
   const source = new Database(sourcePath, { readonly: true, fileMustExist: true });
   // `.all()` returns plain rows the way pg's `result.rows` did, so the
-  // reads below keep their old shape.
-  const all = (sql) => source.prepare(sql).all();
+  // reads below keep their old shape. `@owner` and `@commons` bind the one
+  // owner the file is for.
+  const scope = { owner, commons: COMMONS };
+  const all = (sql) => (sql.includes('@') ? source.prepare(sql).all(scope) : source.prepare(sql).all());
 
   const partial = `${out}.partial-${process.pid}`;
   rmSync(partial, { force: true });
@@ -465,13 +540,13 @@ async function snapshot(sourcePath, out) {
   try {
     db = new Database(partial);
     db.exec(DDL);
-    db.pragma('user_version = 3');
+    db.pragma(`user_version = ${SCHEMA_VERSION}`);
 
     const write = db.transaction((rows) => {
       const {
         assets, derivations, assetTopics, assetConcepts, topics, concepts,
         prerequisites, masteries, reviews, progress, recaps, preferences,
-        events, assetNames,
+        events, sessions, assetNames,
         collections, curriculumItems, collectionItems, itemConcepts, itemAssets,
         tags, collectionTags,
       } = rows;
@@ -593,9 +668,20 @@ async function snapshot(sourcePath, out) {
       }
 
       const eventInsert = db.prepare(
-        'INSERT INTO event (id, at, learner_id, type, payload) VALUES (?, ?, ?, ?, ?)',
+        `INSERT INTO event (id, at, learner_id, type, payload, concept_slug, session_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
       );
-      for (const e of events) eventInsert.run(e.id, e.at, e.learner_id, e.type, e.payload);
+      for (const e of events) {
+        eventInsert.run(e.id, e.at, e.learner_id, e.type, e.payload, e.concept_slug, e.session_id);
+      }
+
+      const sessionInsert = db.prepare(
+        `INSERT INTO session (id, kind, learner_id, state, title, goal, started_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      );
+      for (const x of sessions) {
+        sessionInsert.run(x.id, x.kind, x.learner_id, x.state, x.title, x.goal, x.started_at, x.updated_at);
+      }
 
       const nameInsert = db.prepare(
         `INSERT INTO asset_name (learner_id, asset_id, title, created_at, updated_at)
@@ -681,49 +767,64 @@ async function snapshot(sourcePath, out) {
     // milliseconds, divided by 1000.0 into the REAL seconds the mirror
     // stores.
     const rows = {
-      assets: all(`SELECT ${ASSET_COLUMNS} FROM asset`),
-      derivations: all('SELECT asset_id, source_asset_id FROM asset_derivation'),
-      assetTopics: all('SELECT asset_id, topic_slug FROM asset_topic'),
-      assetConcepts: all('SELECT asset_id, concept_slug FROM asset_concept'),
+      assets: all(`SELECT ${ASSET_COLUMNS} FROM asset WHERE owner_id IN (@owner, @commons)`),
+      derivations: all(`SELECT asset_id, source_asset_id FROM asset_derivation
+        WHERE asset_id IN (SELECT id FROM asset WHERE owner_id IN (@owner, @commons)) AND source_asset_id IN (SELECT id FROM asset WHERE owner_id IN (@owner, @commons))`),
+      assetTopics: all(`SELECT asset_id, topic_slug FROM asset_topic
+        WHERE asset_id IN (SELECT id FROM asset WHERE owner_id IN (@owner, @commons)) AND topic_slug IN (SELECT slug FROM topic WHERE owner_id IN (@owner, @commons))`),
+      assetConcepts: all(`SELECT asset_id, concept_slug FROM asset_concept
+        WHERE asset_id IN (SELECT id FROM asset WHERE owner_id IN (@owner, @commons)) AND concept_slug IN (SELECT slug FROM concept WHERE owner_id IN (@owner, @commons))`),
       topics: all(`SELECT slug, title, domain, summary, position,
-        archived_at / 1000.0 AS archived_at FROM topic`),
+        archived_at / 1000.0 AS archived_at FROM topic WHERE owner_id IN (@owner, @commons)`),
       concepts: all(`SELECT slug, title, summary, topic_slug, path, domain, body,
         tags, sources,
         authored_at / 1000.0 AS authored_at,
         topic_position, owner_id,
         archived_at / 1000.0 AS archived_at,
         created_at / 1000.0 AS created_at,
-        updated_at / 1000.0 AS updated_at FROM concept`),
+        updated_at / 1000.0 AS updated_at FROM concept WHERE owner_id IN (@owner, @commons)`),
       prerequisites: all(`SELECT concept_slug, prerequisite_slug, kind, position,
-        created_at / 1000.0 AS created_at FROM concept_prerequisite`),
+        created_at / 1000.0 AS created_at FROM concept_prerequisite
+        WHERE concept_slug IN (SELECT slug FROM concept WHERE owner_id IN (@owner, @commons)) AND prerequisite_slug IN (SELECT slug FROM concept WHERE owner_id IN (@owner, @commons))`),
       masteries: all(`SELECT learner_id, concept_slug, p_l, observations, correct,
         last_seen / 1000.0 AS last_seen,
         created_at / 1000.0 AS created_at,
-        updated_at / 1000.0 AS updated_at FROM mastery`),
+        updated_at / 1000.0 AS updated_at FROM mastery
+        WHERE learner_id = @owner`),
       reviews: all(`SELECT learner_id, concept_slug, repetitions, ease, interval_days,
         lapses, due / 1000.0 AS due,
         last_reviewed / 1000.0 AS last_reviewed,
         leech,
         created_at / 1000.0 AS created_at,
-        updated_at / 1000.0 AS updated_at FROM review`),
+        updated_at / 1000.0 AS updated_at FROM review
+        WHERE learner_id = @owner`),
       progress: all(`SELECT learner_id, curriculum_item_id,
         completed_at / 1000.0 AS completed_at, note,
         created_at / 1000.0 AS created_at,
-        updated_at / 1000.0 AS updated_at FROM progress`),
+        updated_at / 1000.0 AS updated_at FROM progress
+        WHERE learner_id = @owner`),
       recaps: all(`SELECT learner_id, curriculum_item_id, summary,
         key_points, misconceptions, open_questions, source, sessions,
         created_at / 1000.0 AS created_at,
-        updated_at / 1000.0 AS updated_at FROM recap`),
+        updated_at / 1000.0 AS updated_at FROM recap
+        WHERE learner_id = @owner`),
       preferences: all(`SELECT learner_id, key, value,
         created_at / 1000.0 AS created_at,
-        updated_at / 1000.0 AS updated_at FROM preference`),
+        updated_at / 1000.0 AS updated_at FROM preference
+        WHERE learner_id = @owner`),
       // Ordered as readEvents orders (`at`, then `id`): replay and
       // last-watched both read the log's order, not just its set.
       events: all(`SELECT id, at / 1000.0 AS at,
-        learner_id, type, payload FROM event ORDER BY at, id`),
+        learner_id, type, payload, concept_slug, session_id FROM event
+        WHERE learner_id = @owner ORDER BY at, id`),
+      sessions: all(`SELECT id, kind, learner_id, state, title, goal,
+        started_at / 1000.0 AS started_at,
+        updated_at / 1000.0 AS updated_at FROM session
+        WHERE learner_id = @owner`),
       assetNames: all(`SELECT learner_id, asset_id, title,
         created_at / 1000.0 AS created_at,
-        updated_at / 1000.0 AS updated_at FROM asset_name`),
+        updated_at / 1000.0 AS updated_at FROM asset_name
+        WHERE learner_id = @owner`),
       // ==== courses ====
       // The tables readCourses joins to build a Course (readers/courses.ts):
       // the collection tree, the checklist rows, the membership rows that give
@@ -734,31 +835,39 @@ async function snapshot(sourcePath, out) {
         metadata, cover_blob_key,
         archived_at / 1000.0 AS archived_at,
         created_at / 1000.0 AS created_at,
-        updated_at / 1000.0 AS updated_at FROM collection`),
+        updated_at / 1000.0 AS updated_at FROM collection WHERE owner_id IN (@owner, @commons)`),
       curriculumItems: all(`SELECT id, collection_id, position, title,
         subtopics, videos,
         archived_at / 1000.0 AS archived_at,
         created_at / 1000.0 AS created_at,
-        updated_at / 1000.0 AS updated_at FROM curriculum_item`),
+        updated_at / 1000.0 AS updated_at FROM curriculum_item WHERE owner_id IN (@owner, @commons)`),
       collectionItems: all(`SELECT id, collection_id, position, topic_slug,
         concept_slug, asset_id, topic_position,
-        created_at / 1000.0 AS created_at FROM collection_item`),
+        created_at / 1000.0 AS created_at FROM collection_item
+        WHERE collection_id IN (SELECT id FROM collection WHERE owner_id IN (@owner, @commons))
+          AND (topic_slug IS NULL OR topic_slug IN (SELECT slug FROM topic WHERE owner_id IN (@owner, @commons)))
+          AND (concept_slug IS NULL OR concept_slug IN (SELECT slug FROM concept WHERE owner_id IN (@owner, @commons)))
+          AND (asset_id IS NULL OR asset_id IN (SELECT id FROM asset WHERE owner_id IN (@owner, @commons)))`),
       itemConcepts: all(`SELECT concept_slug, curriculum_item_id, position,
-        created_at / 1000.0 AS created_at FROM concept_curriculum_item`),
+        created_at / 1000.0 AS created_at FROM concept_curriculum_item
+        WHERE concept_slug IN (SELECT slug FROM concept WHERE owner_id IN (@owner, @commons)) AND curriculum_item_id IN (SELECT id FROM curriculum_item WHERE owner_id IN (@owner, @commons))`),
       itemAssets: all(`SELECT curriculum_item_id, asset_id, position,
-        created_at / 1000.0 AS created_at FROM curriculum_item_asset`),
+        created_at / 1000.0 AS created_at FROM curriculum_item_asset
+        WHERE curriculum_item_id IN (SELECT id FROM curriculum_item WHERE owner_id IN (@owner, @commons)) AND asset_id IN (SELECT id FROM asset WHERE owner_id IN (@owner, @commons))`),
       tags: all(`SELECT id, label, description, position,
         created_at / 1000.0 AS created_at,
-        updated_at / 1000.0 AS updated_at FROM tag`),
+        updated_at / 1000.0 AS updated_at FROM tag WHERE owner_id IN (@owner, @commons)`),
       collectionTags: all(`SELECT collection_id, tag_id, position,
-        created_at / 1000.0 AS created_at FROM collection_tag`),
+        created_at / 1000.0 AS created_at FROM collection_tag
+        WHERE collection_id IN (SELECT id FROM collection WHERE owner_id IN (@owner, @commons)) AND tag_id IN (SELECT id FROM tag WHERE owner_id IN (@owner, @commons))`),
       // ==== end courses ====
     };
     write(rows);
 
     const meta = db.prepare('INSERT INTO snapshot_meta (key, value) VALUES (?, ?)');
     meta.run('generator', 'catalog-snapshot.mjs');
-    meta.run('schema_version', '3');
+    meta.run('schema_version', String(SCHEMA_VERSION));
+    meta.run('owner', owner);
     meta.run('source', 'sqlite');
     meta.run('taken_at', String(Date.now() / 1000));
     // The file path: a path can carry no password, so it is safe to show.
@@ -781,7 +890,12 @@ async function main(argv) {
   try {
     ({ values: args } = parseArgs({
       args: argv,
-      options: { out: { type: 'string' }, help: { type: 'boolean', short: 'h' } },
+      options: {
+        out: { type: 'string' },
+        owner: { type: 'string' },
+        'if-stale': { type: 'boolean' },
+        help: { type: 'boolean', short: 'h' },
+      },
       strict: true,
     }));
   } catch (error) {
@@ -794,9 +908,16 @@ async function main(argv) {
   }
   try {
     const out = outputPath(args);
-    const { counts } = await snapshot(catalogPath(), out);
+    // The source first: it loads services/catalog/.env, which may name the owner.
+    const source = catalogPath();
+    const owner = args.owner?.trim() || process.env.GNOSIA_SIDECAR_OWNER?.trim() || 'local';
+    if (args['if-stale'] && staleness(source, out, owner) === null) {
+      console.log('fresh');
+      return 0;
+    }
+    const { counts } = await snapshot(source, out, owner);
     const total = Object.values(counts).reduce((a, b) => a + b, 0);
-    console.log(`catalog snapshot → ${out}`);
+    console.log(`catalog snapshot for ${owner} → ${out}`);
     for (const [table, n] of Object.entries(counts)) console.log(`  ${table}: ${n}`);
     console.log(`  ${total} rows mirrored`);
     return 0;

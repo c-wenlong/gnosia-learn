@@ -251,10 +251,6 @@ export interface AxesLayout {
   height: number;
   /** Each concept's dot. */
   positions: Record<string, { x: number; y: number }>;
-  /** Each concept's layer, from 0. */
-  layer: Record<string, number>;
-  /** How many concepts of the domain need each one. */
-  needed: Record<string, number>;
   /** How many layers there are, and how wide each one's column is. */
   layers: number;
   column: number;

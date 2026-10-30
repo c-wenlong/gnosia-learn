@@ -86,7 +86,20 @@ describe("the loopback guard", () => {
   it("answers health", async () => {
     const response = await fetch(`${base}/api/health`);
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ ok: true, service: "gnosia-sidecar", owner: "local" });
+    expect(await response.json()).toMatchObject({ ok: true, service: "gnosia-sidecar", owner: "local", secret: false });
+  });
+
+  it("says in health whether it can open saved keys", async () => {
+    const withSecret = createApi(stubDeps({ AUTH_SECRET: "s".repeat(32) }));
+    await new Promise<void>((resolve) => withSecret.listen(0, "127.0.0.1", resolve));
+    try {
+      const { port } = withSecret.address() as AddressInfo;
+      const response = await fetch(`http://127.0.0.1:${port}/api/health`);
+      expect(await response.json()).toMatchObject({ secret: true });
+    } finally {
+      withSecret.closeAllConnections();
+      await new Promise((resolve) => withSecret.close(resolve));
+    }
   });
 
   it("refuses a Host that is not this socket", () => {
