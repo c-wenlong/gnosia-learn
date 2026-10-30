@@ -114,6 +114,15 @@ describe("POST /api/agent/session", () => {
     readTutorStyle.mockResolvedValue("guide-concise");
   });
 
+  it("refuses a body past its byte limit with a 413, before the limiter or any read", async () => {
+    enforceRateLimit.mockClear();
+    const { status, json } = await call({ conceptSlug: "dot-product", step: "probe", avoid: ["x".repeat(20_000)] });
+    expect(status).toBe(413);
+    expect(json.code).toBe("PAYLOAD_TOO_LARGE");
+    expect(enforceRateLimit).not.toHaveBeenCalled();
+    expect(readConceptWorkspace).not.toHaveBeenCalled();
+  });
+
   it("refuses another origin before reading anything", async () => {
     expect((await call({ conceptSlug: "dot-product", step: "probe" }, "https://evil.example")).status).toBe(403);
     expect(readConceptWorkspace).not.toHaveBeenCalled();

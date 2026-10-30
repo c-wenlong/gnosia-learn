@@ -260,6 +260,19 @@ describe("the draft routes", () => {
     await until(() => agentMock.startAgent.mock.calls.length > 0, "the job never reached its agent");
   });
 
+  it("answers a message resent with its key 200 replayed, with the first one's seq", async () => {
+    await fake.script([{ text: "Tell me more." }]);
+    const { draftId } = (await (await post("/api/drafts", {})).json()) as { draftId: string };
+    const first = await post(`/api/drafts/${draftId}/messages`, { text: "hello", idempotencyKey: "m1" });
+    expect(first.status).toBe(202);
+    const { seq } = (await first.json()) as { seq: number };
+    const again = await post(`/api/drafts/${draftId}/messages`, { text: "hello", idempotencyKey: "m1" });
+    expect(again.status).toBe(200);
+    expect(await again.json()).toMatchObject({ draftId, seq, replayed: true });
+    await drafts.settled(draftId);
+    expect(drafts.get(draftId)!.turns).toBe(1);
+  });
+
   it("refuses what the table refuses, in the { error, detail } envelope", async () => {
     expect((await fetch(`${base}/api/drafts/nope`)).status).toBe(404);
     const { draftId } = (await (await post("/api/drafts", {})).json()) as { draftId: string };

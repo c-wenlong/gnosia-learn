@@ -21,7 +21,7 @@ import {
   makeVideoValue,
 } from "./studio-extend";
 import { openerValue } from "./studio-cards";
-import { RUNNER_DOWN } from "@/lib/studio-client";
+import { RUNNER_DOWN, RUNNER_SLOW } from "@/lib/studio-client";
 
 /** A `Storage` in memory, and one whose every call throws like a blocked one. */
 function memory(): Storage {
@@ -94,6 +94,13 @@ describe("a refused Extend", () => {
     // A 502 the runner itself sent is about the diagram, not about the runner.
     expect(extendRefusal(502, refusal("dot-product would not inspect"), "x").actions).toContain("canvas");
     expect(extendRefusal(500, refusal("boom"), "x").headline).toBe("The runner answered 500.");
+  });
+
+  it("says a read past the deadline is still going, never that the runner is down (R2-1-01)", () => {
+    const slow = extendRefusal(0, refusal(RUNNER_SLOW, "The operation timed out."), "TCP handshake");
+    expect(slow.headline).toBe("The studio is still reading TCP handshake.");
+    expect(slow.detail).not.toContain("npm run studio");
+    expect(slow.actions).toEqual(["retry", "close"]);
   });
 });
 
@@ -180,6 +187,18 @@ describe("the press's idempotency key", () => {
     const second = extendKey(store, "dot-product", fresh, 1);
     expect(second).not.toBe(first);
     expect(extendKey(store, "dot-product", fresh, 1 + EXTEND_KEY_TTL_MS)).not.toBe(second);
+  });
+
+  it("lives its window from its last use, so a Try again after a four-minute wait joins the same create", () => {
+    const store = memory();
+    let minted = 0;
+    const fresh = () => `k${(minted += 1)}`;
+    const first = extendKey(store, "dot-product", fresh, 0);
+    // The attempt ends at the four-minute deadline and stamps the key again.
+    expect(extendKey(store, "dot-product", fresh, 4 * 60_000)).toBe(first);
+    // Six minutes after the press, two after the attempt ended: still the same key.
+    expect(extendKey(store, "dot-product", fresh, 6 * 60_000)).toBe(first);
+    expect(extendKey(store, "dot-product", fresh, 6 * 60_000 + EXTEND_KEY_TTL_MS)).not.toBe(first);
   });
 
   it("is reused for the same print only, so an edited press makes its own draft", () => {

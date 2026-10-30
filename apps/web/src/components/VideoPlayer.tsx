@@ -157,8 +157,9 @@ export function VideoPlayer({
 
   // Playback position belongs to the file being played, so a new `src` starts
   // over (at its own resume point, when the caller gives one). Without this
-  // the component keeps whatever the last video was at: a soft navigation
-  // from one asset to the next reuses the mounted instance.
+  // the component keeps whatever the last video was at whenever it is handed
+  // a new `src` in place: a navigation that changes only the query string,
+  // or the studio swapping the video it shows.
   //
   // Done during render rather than in an effect on purpose, so the swapped-in
   // video is never painted with the old position. This is the documented way

@@ -180,6 +180,8 @@ export interface TranscriptEntry {
   briefs?: TranscriptBrief[];
   /** On a person's message: its chips (D57). */
   mentions?: DraftMention[];
+  /** On a person's message: the idempotency key it was sent with, when it had one. */
+  key?: string;
   /** On a planner reply: the kinds it offers as suggestion buttons (D58, D105). */
   suggest?: TagKind[];
   /** On a planner reply with a suggestion: the pitch line its consent card shows (D106). */
@@ -331,6 +333,16 @@ export interface DraftSummary {
 /* -------------------------------------------------------------------------- */
 
 /**
+ * How long a create opened on a diagram or a video waits. The runner answers
+ * it only after the checkout and `canvas inspect`, and gives `inspect` alone
+ * 180 seconds (`STUDIO_VERB_TIMEOUT_MS`), so the shared `CALL_TIMEOUT_MS`
+ * gave up on a cold Chromium while the runner was still making the draft.
+ * Past this the answer is `RUNNER_SLOW`, and a retry with the same key joins
+ * the create still running.
+ */
+export const SOURCE_CREATE_TIMEOUT_MS = 240_000;
+
+/**
  * `POST /api/drafts`: a new conversation, or one opened on a diagram to
  * extend it. `model` is the picker its composer carries (D90); `harness` is
  * the pane picker's last pick, so the conversation's turns run on the harness
@@ -342,6 +354,7 @@ export function createDraft(input: { source?: string; sourceKind?: "diagram" | "
   return call<{ draftId: string; state: DraftState; note: string }>(BASE, {
     method: "POST",
     body: JSON.stringify({ ...rest, ...(harness === "claude" ? {} : { harness }) }),
+    ...(input.source === undefined ? {} : { signal: AbortSignal.timeout(SOURCE_CREATE_TIMEOUT_MS) }),
   });
 }
 
@@ -434,17 +447,21 @@ export function getDraft(draftId: string) {
  *
  * `mentions` is left out when there are none, so an untagged turn is the body
  * a runner from before STUDIO-MENTIONS.md already takes.
+ *
+ * `key` is the message's idempotency key: a resend with it is answered 200
+ * `replayed` with the first message's seq, and starts no second paid turn.
  */
 export function sendMessage(
   draftId: string,
   body: string | { text: string; mentions?: readonly DraftMention[]; make?: boolean },
+  key?: string,
 ) {
   const message = typeof body === "string" ? { text: body } : body;
   const payload =
     message.mentions !== undefined && message.mentions.length > 0 ? message : { text: message.text, ...(message.make === true ? { make: true } : {}) };
-  return call<{ draftId: string; seq: number; note: string }>(draftPath(draftId, "/messages"), {
+  return call<{ draftId: string; seq: number; note: string; replayed?: true }>(draftPath(draftId, "/messages"), {
     method: "POST",
-    body: JSON.stringify(payload),
+    body: JSON.stringify(key === undefined ? payload : { ...payload, idempotencyKey: key }),
   });
 }
 

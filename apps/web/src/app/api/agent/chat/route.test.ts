@@ -116,6 +116,14 @@ describe("POST /api/agent/chat with conceptSlug", () => {
     readTutorStyle.mockResolvedValue("guide-concise");
   });
 
+  it("refuses a body past its byte limit with a 413 before any read", async () => {
+    // Padding the turn never reads, so only the byte limit can refuse it.
+    const { status, json } = await call({ conceptSlug: "dot-product", messages: [], pad: "x".repeat(300_000) });
+    expect(status).toBe(413);
+    expect(json.code).toBe("PAYLOAD_TOO_LARGE");
+    expect(readConceptWorkspace).not.toHaveBeenCalled();
+  });
+
   it("refuses a slug that could not be a concept before any read", async () => {
     const { status, json } = await call({ conceptSlug: "../secrets", messages: [] });
     expect(status).toBe(400);

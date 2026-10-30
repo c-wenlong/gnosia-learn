@@ -214,7 +214,7 @@ table's routes.
 | `GET /api/drafts?limit=` | The planner conversations, newest first |
 | `POST /api/drafts` | `{ source, idempotencyKey? }`: create one — `source: null` a blank conversation; the key makes a retry land on the same draft |
 | `GET /api/drafts/{id}` | The draft and its transcript |
-| `POST /api/drafts/{id}/messages` | `{ text, mentions? }`: a person turn to the planner; mentions are `{kind,start,end}` triples checked against the text |
+| `POST /api/drafts/{id}/messages` | `{ text, mentions?, idempotencyKey? }`: a person turn to the planner; mentions are `{kind,start,end}` triples checked against the text. A resend with a key already sent answers `200 { seq, replayed: true }` with the first message's seq and starts no second turn |
 | `GET /api/drafts/{id}/events` | SSE for a live conversation |
 | `POST /api/drafts/{id}/draw` | `{ kind, idempotencyKey? }`: the in-force brief of that kind, queued as a job |
 | `POST /api/drafts/{id}/abandon` | Close it |

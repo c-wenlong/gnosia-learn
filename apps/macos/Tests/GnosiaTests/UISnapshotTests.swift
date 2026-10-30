@@ -91,13 +91,16 @@ struct UISnapshots {
         await shooter.shoot("concept-chat-choice", ConceptDetailView(concept: concept).environment(\.tutorChatSeed, Self.thread(answered: false)))
         await shooter.shoot("session-sureness", SessionView(slug: concept.slug).environment(\.sessionSeedPick, 0))
         await shooter.shoot("review", ReviewView())
+        // The second due card, whose wrong options the tutor wrote (the
+        // fixture stores them; ui-fixture-options.ts).
+        await shooter.shoot("review-tutor", ReviewView().environment(\.reviewSeedIndex, 1))
         await shooter.shoot("course", CourseDetailView(course: course))
         await shooter.shoot("module", CourseDetailView(course: course, moduleID: module.id))
         await shooter.shoot("studio-home", StudioView(), stack: false)
         await shooter.shoot("studio-draft", StudioDraftView(draftId: FixtureRoutes.draftId))
         await shooter.shoot("settings", SettingsView().frame(width: 1280, height: 800))
 
-        #expect(shooter.written.count == 2 * 14 + 1, "\(shooter.written)")
+        #expect(shooter.written.count == 2 * 15 + 1, "\(shooter.written)")
     }
 
     /// A thread whose one tutor turn asks a recall check, live.
