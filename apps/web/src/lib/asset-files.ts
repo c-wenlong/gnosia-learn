@@ -66,7 +66,14 @@ function lazyBlobStore(): BlobStore {
   };
 }
 
-async function seams(): Promise<AssetSeams> {
+/**
+ * This app's seams for the shared asset reads: the request's owner scope,
+ * the selected content source and the deferred blob store. The one builder
+ * every asset read uses, the file routes' and the library's text reads alike
+ * (S6-12 of the library audit), so a bad `GNOSIA_HOME` reads as
+ * `blob-store-unavailable` everywhere.
+ */
+export async function seams(): Promise<AssetSeams> {
   return { scope: await currentScope(), source: contentSource(), blobStore: lazyBlobStore() };
 }
 
