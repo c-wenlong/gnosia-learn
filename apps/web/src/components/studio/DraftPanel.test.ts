@@ -924,6 +924,24 @@ describe("the consent card (D106–D110)", () => {
   });
 });
 
+describe("two health reads answering out of order (R2-1-18)", () => {
+  it("keeps the newer answer, not the one that landed last", async () => {
+    let releaseOld: (value: unknown) => void = () => undefined;
+    const spent = { dailyCap: { capUsd: 5, totalUsd: 6, exceeded: true, oldestAgesOutAt: "2026-10-31T00:00:00Z" }, video: null, diagramAgent: null, agent: null };
+    const free = { dailyCap: { capUsd: 5, totalUsd: 1, exceeded: false }, video: null, diagramAgent: null, agent: null };
+    // The opening read hangs; a BYOK write's read answers at once.
+    mocks.readStudioHealth.mockImplementationOnce(() => new Promise((resolve) => (releaseOld = resolve)));
+    mocks.readStudioHealth.mockImplementationOnce(async () => free);
+    await mount(draft());
+    await act(async () => window.dispatchEvent(new Event("gnosia:byok-settings")));
+    await settle();
+    expect(mocks.composer!.sendDisabled).not.toBe(true);
+    await act(async () => releaseOld(spent));
+    await settle();
+    expect(mocks.composer!.sendDisabled).not.toBe(true);
+  });
+});
+
 describe("health on opening (S1-11)", () => {
   it("is read once, not again when the record lands after it", async () => {
     const view = draft({ harness: "claude" } as Partial<DraftView>);

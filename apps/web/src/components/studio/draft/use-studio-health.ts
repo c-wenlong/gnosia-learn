@@ -79,13 +79,18 @@ export function useStudioHealth({
   // focus: a job held elsewhere may have been accepted meanwhile, the day's
   // spend may have aged out, and the video doctor may have recovered.
   const capReadAt = useRef(0);
+  /** The newest health read asked, so an older one that lands later is dropped (R2-1-18). */
+  const healthAsked = useRef(0);
   // Stable, so no effect below reads health a second time when the record
   // lands: a callback over `view?.harness` changed identity as it did, and
   // every effect read health again (S1-11). The tiers are read by the effect above.
   const readHealth = useCallback(async () => {
     capReadAt.current = Date.now();
+    const mine = (healthAsked.current += 1);
     const health = await readStudioHealth();
-    if (health === null) return;
+    // A read asked before the latest one would put older spend and an older
+    // menu over newer ones, whichever lands last.
+    if (health === null || mine !== healthAsked.current) return;
     const next = capFrom(health.dailyCap);
     if (next !== null) setCap(next);
     setVideo(videoAvailability(health.video));
