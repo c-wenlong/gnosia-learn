@@ -29,7 +29,9 @@ export async function libraryPage(href: string, cursor: string, order?: string[]
   const after = parseCursor(cursor);
   const groups = parseOrder(order);
   if (after === null || groups === null || typeof href !== "string") return { state: "stale" };
-  const view = await loadLibraryView(paramsOf(href));
+  // The page drew the first page of this view moments ago: take what it
+  // worked out rather than reading the whole catalog again for fifty rows.
+  const view = await loadLibraryView(paramsOf(href), { reuse: true });
   if (!view.library.reachable) return { state: "unreachable" };
   return renderLibraryPage(view, after, groups);
 }

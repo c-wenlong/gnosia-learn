@@ -21,7 +21,7 @@ import {
   trimValue,
   type MentionOption,
   type MentionValue,
-} from "@/components/ui/mention-text";
+} from "@/lib/mentions";
 import { MENTION_HINT, mentionOptions, valueSendBlock } from "@/lib/studio-cards";
 import { harnessModelOptions, type RunnerResolved } from "@/lib/studio-agent-settings";
 import { useByokTiers } from "@/lib/use-byok-tiers";

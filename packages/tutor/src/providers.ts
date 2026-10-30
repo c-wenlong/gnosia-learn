@@ -395,11 +395,6 @@ export function keyTestModel(
   return { model: config?.model ?? "", modelFrom: "default", used: false };
 }
 
-/** The server's keys alone, for a caller with no owner (the tests, a script). */
-export function serverCredentials(env: EnvMap = process.env): ProviderCredential[] {
-  return orderCredentials({}, env);
-}
-
 /**
  * The cascade in words, for the `providers` field of an error: each provider
  * and where its key came from, never any of the key.

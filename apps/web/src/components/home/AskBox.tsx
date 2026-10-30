@@ -7,8 +7,8 @@ import { Glyph, type GlyphName } from "@/components/ui/Glyph";
 import { SearchField } from "@/components/ui/SearchField";
 import { cx, MENU_PANEL, menuRowClasses } from "@/components/ui/classes";
 import { isImeKey } from "@/components/ui/composer-keys";
-import { moveActive } from "@/components/ui/mention-text";
-import { usePresence } from "@/components/ui/use-presence";
+import { Popover } from "@/components/ui/Popover";
+import { moveActive } from "@/components/ui/roving";
 import { ASK_START_KEY, askTutorHref, MAX_ASK_QUERY, type AskEntry, type AskKind } from "@/lib/ask-core";
 
 /** How long typing pauses before the box asks. */
@@ -29,8 +29,9 @@ type Option = { key: string; href: string; entry: AskEntry | null };
  *
  * An ARIA combobox: the input owns a listbox, arrows move
  * `aria-activedescendant`, Escape closes the list and then clears the text.
- * The list is the kit's menu box and rows (`MENU_PANEL`, `menuRowClasses`),
- * popping in and, kept for its way out (`usePresence`), out again.
+ * The list is the kit's menu box and rows (`MENU_PANEL`, `menuRowClasses`)
+ * in the kit `Popover`, which places it in the top layer, takes the first
+ * Escape, and closes it when the focus or a press goes elsewhere.
  * Matches are drawn only for the text they were asked for, so an Enter while
  * the next answer is on its way opens the tutor rather than the last text's
  * match. Choosing the tutor marks the subject as asked from here, which is
@@ -46,19 +47,9 @@ export function AskBox() {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const latest = useRef(0);
-  // The list closes a beat after the field loses focus. Focus coming back
-  // within that beat (the clear button, then the field) keeps it open.
-  const blurTimer = useRef<number | null>(null);
-  const cancelBlur = () => {
-    if (blurTimer.current !== null) window.clearTimeout(blurTimer.current);
-    blurTimer.current = null;
-  };
-  useEffect(
-    () => () => {
-      if (blurTimer.current !== null) window.clearTimeout(blurTimer.current);
-    },
-    [],
-  );
+  // What the list opens from: the field and its clear button, so focus
+  // moving between the two keeps it open.
+  const anchor = useRef<HTMLDivElement>(null);
 
   const trimmed = query.trim();
   // The tutor is offered for any subject ("R" is a language); the title
@@ -124,7 +115,6 @@ export function AskBox() {
   if (showList && (kept.options !== options || kept.active !== activeOption || kept.asked !== trimmed)) {
     setKept({ options, active: activeOption, asked: trimmed });
   }
-  const presence = usePresence(showList, 120);
   const shown = showList ? { options, active: activeOption, asked: trimmed } : kept;
 
   // The highlighted option stays in view as the arrows move it or new
@@ -134,7 +124,7 @@ export function AskBox() {
   }, [activeId]);
 
   return (
-    <div className="relative">
+    <div ref={anchor}>
       <SearchField
         label="What do you want to learn?"
         placeholder="What do you want to learn?"
@@ -154,17 +144,7 @@ export function AskBox() {
           setOpen(true);
           setActive(0);
         }}
-        onFocus={() => {
-          cancelBlur();
-          setOpen(true);
-        }}
-        onBlur={() => {
-          cancelBlur();
-          blurTimer.current = window.setTimeout(() => {
-            blurTimer.current = null;
-            setOpen(false);
-          }, 120);
-        }}
+        onFocus={() => setOpen(true)}
         onKeyDown={(e) => {
           if (e.key === "ArrowDown" || e.key === "ArrowUp") {
             if (options.length === 0) return;
@@ -179,61 +159,58 @@ export function AskBox() {
             go(activeOption ?? options[0]);
           } else if (e.key === "Escape") {
             // A search field clears itself on Escape; this one closes the
-            // list first, and clears only on the second press.
+            // list first (the `Popover` takes that press), and clears only
+            // on the second.
             e.preventDefault();
-            if (showList) setOpen(false);
-            else setQuery("");
+            setQuery("");
           }
         }}
       />
-      {presence.mounted && (
-        <ul
-          id={presence.leaving ? undefined : listId}
-          role="listbox"
-          aria-label="Matches"
-          inert={presence.leaving}
-          className={cx(
-            "absolute inset-x-0 top-full z-40 mt-2 origin-top",
-            MENU_PANEL,
-            presence.leaving ? "pointer-events-none animate-pop-out" : "animate-pop-in",
-            "motion-reduce:animate-none",
-          )}
-        >
-          {shown.options.map((option, i) => {
-            const on = option === shown.active;
-            return (
-              <li
-                key={option.key}
-                id={`${id}-${option.key}`}
-                role="option"
-                aria-selected={on}
-                onMouseDown={(e) => e.preventDefault()}
-                onMouseEnter={() => setActive(i)}
-                onClick={() => go(option)}
-                className={menuRowClasses({
-                  active: on,
-                  className: cx(option.entry === null && shown.options.length > 1 && "mt-1 border-t border-hair"),
-                })}
-              >
-                {option.entry === null ? (
-                  <>
-                    <Glyph name="concepts" className="text-accent-text" />
-                    <span className="min-w-0 flex-1 truncate">Ask the tutor about &ldquo;{shown.asked}&rdquo;</span>
-                  </>
-                ) : (
-                  <>
-                    <Glyph name={GLYPH[option.entry.kind]} className="text-text2" />
-                    <span className="min-w-0 flex-1 truncate">{option.entry.title}</span>
-                    {option.entry.detail !== null && (
-                      <span className="shrink-0 text-[12px] font-normal text-text3">{option.entry.detail}</span>
-                    )}
-                  </>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      <Popover
+        anchorRef={anchor}
+        open={showList}
+        onOpenChange={() => setOpen(false)}
+        minWidthFromAnchor
+        id={listId}
+        role="listbox"
+        aria-label="Matches"
+        // A press on a row keeps the focus in the field.
+        onMouseDown={(e) => e.preventDefault()}
+        className={MENU_PANEL}
+      >
+        {shown.options.map((option, i) => {
+          const on = option === shown.active;
+          return (
+            <div
+              key={option.key}
+              id={`${id}-${option.key}`}
+              role="option"
+              aria-selected={on}
+              onMouseEnter={() => setActive(i)}
+              onClick={() => go(option)}
+              className={menuRowClasses({
+                active: on,
+                className: cx(option.entry === null && shown.options.length > 1 && "mt-1 border-t border-hair"),
+              })}
+            >
+              {option.entry === null ? (
+                <>
+                  <Glyph name="concepts" className="text-accent-text" />
+                  <span className="min-w-0 flex-1 truncate">Ask the tutor about &ldquo;{shown.asked}&rdquo;</span>
+                </>
+              ) : (
+                <>
+                  <Glyph name={GLYPH[option.entry.kind]} className="text-text2" />
+                  <span className="min-w-0 flex-1 truncate">{option.entry.title}</span>
+                  {option.entry.detail !== null && (
+                    <span className="shrink-0 text-[12px] font-normal text-text3">{option.entry.detail}</span>
+                  )}
+                </>
+              )}
+            </div>
+          );
+        })}
+      </Popover>
     </div>
   );
 }

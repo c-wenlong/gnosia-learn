@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { nextIndexForKey, sectionsOf, triggerText, typeaheadIndex, valueText, type FilterOption } from "./filter-menu";
+import { nextIndexForKey, NO_TYPEAHEAD, sectionsOf, triggerText, TYPEAHEAD_RESET_MS, typeaheadIndex, typeaheadStep, valueText, type FilterOption } from "./filter-menu";
 
 const TYPES: FilterOption[] = [
   { value: "", label: "All kinds", short: "All" },
@@ -57,6 +57,19 @@ describe("nextIndexForKey", () => {
     expect(nextIndexForKey("End", 1, 5)).toBe(4);
     expect(nextIndexForKey("a", 1, 5)).toBeNull();
     expect(nextIndexForKey("ArrowDown", 0, 0)).toBeNull();
+  });
+});
+
+describe("typeaheadStep", () => {
+  it("adds a key to the prefix within the pause, and starts again after it", () => {
+    const c = typeaheadStep(NO_TYPEAHEAD, "c", 5000);
+    expect(c).toEqual({ buffer: "c", at: 5000 });
+    const cs = typeaheadStep(c, "s", 5000 + TYPEAHEAD_RESET_MS);
+    expect(cs).toEqual({ buffer: "cs", at: 5000 + TYPEAHEAD_RESET_MS });
+    expect(typeaheadStep(cs, "m", 5001 + 2 * TYPEAHEAD_RESET_MS)).toEqual({ buffer: "m", at: 5001 + 2 * TYPEAHEAD_RESET_MS });
+    // A new state each time: the empty one every list starts from is never written to.
+    expect(NO_TYPEAHEAD).toEqual({ buffer: "", at: 0 });
+    expect(c).not.toBe(NO_TYPEAHEAD);
   });
 });
 

@@ -32,3 +32,17 @@ export function lookupFailed(route: string, error: unknown): Response {
     { status: 503 },
   );
 }
+
+/**
+ * Does `If-None-Match` name this tag? A weak tag (`W/"…"`) matches its strong
+ * twin, since these are compared for a 304 and never for a range, and `*`
+ * matches anything.
+ */
+export function matchesEtag(header: string | null, etag: string): boolean {
+  if (header === null) return false;
+  const strip = (tag: string) => (tag.startsWith("W/") ? tag.slice(2) : tag);
+  return header
+    .split(",")
+    .map((tag) => strip(tag.trim()))
+    .some((tag) => tag === "*" || tag === strip(etag));
+}

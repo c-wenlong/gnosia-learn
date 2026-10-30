@@ -1,4 +1,4 @@
-import type { MentionValue } from "@/components/ui/mention-text";
+import type { MentionValue } from "@/lib/mentions";
 import { visibleEntries } from "@/lib/studio-chat";
 import type { DraftKind, DraftView, TagKind, TranscriptEntry } from "@/lib/studio-drafts";
 

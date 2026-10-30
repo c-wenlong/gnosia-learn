@@ -39,13 +39,12 @@ function rerender(host: HTMLElement, element: ReactElement) {
 const props = { src: "/assets/bkt-update.svg", title: "How BKT updates a belief" };
 
 describe("DiagramView", () => {
-  it("shows the drawing as an image, titled and described", () => {
+  it("shows the drawing as an image, described by its title", () => {
     const host = mount(createElement(DiagramView, props));
     const img = host.querySelector("img") as HTMLImageElement;
     expect(img.getAttribute("src")).toBe(props.src);
     expect(img.getAttribute("alt")).toBe(props.title);
     expect(img.getAttribute("loading")).toBe("lazy");
-    expect(host.querySelector("h3")?.textContent).toBe(props.title);
   });
 
   it("offers the file itself at full size", () => {
@@ -81,7 +80,7 @@ describe("DiagramView", () => {
     expect(host.textContent).toContain("This diagram did not load.");
     // The URL is not repeated in the panel: it names an asset id, and the
     // reason (asked of the status route) is what the reader acts on. The
-    // header's Full size link still points at the file.
+    // corner's Full size link still points at the file.
     expect(host.querySelector("[role=status]")?.textContent).not.toContain(props.src);
   });
 
@@ -108,22 +107,12 @@ describe("DiagramView", () => {
     expect(host.querySelector("[data-skeleton]")?.getAttribute("data-skeleton")).toBe("loading");
   });
 
-  it("drops its title bar when the page names it, and keeps Full size even when it fails", () => {
-    const host = mount(createElement(DiagramView, { ...props, heading: false }));
+  it("has no title bar, since the page names it, and keeps Full size even when it fails", () => {
+    const host = mount(createElement(DiagramView, props));
     expect(host.querySelector("h3")).toBeNull();
     act(() => (host.querySelector("img") as HTMLImageElement).dispatchEvent(new Event("error")));
     expect(host.textContent).toContain("This diagram did not load.");
     const link = [...host.querySelectorAll("a")].find((a) => a.textContent === "Full size");
     expect(link?.getAttribute("href")).toBe(props.src);
-  });
-
-  it("renders a caption only when it is given one", () => {
-    const bare = mount(createElement(DiagramView, props));
-    expect(bare.querySelector("figcaption")).toBeNull();
-
-    const captioned = mount(
-      createElement(DiagramView, { ...props, caption: "From the session on 12 Sep." }),
-    );
-    expect(captioned.querySelector("figcaption")?.textContent).toContain("12 Sep");
   });
 });

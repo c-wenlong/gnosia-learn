@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { tabIds, tabKeyIndex } from "./roving";
+import { moveActive, tabIds, tabKeyIndex } from "./roving";
 
 describe("tabKeyIndex", () => {
   it("steps along a row with Left and Right, wrapping at either end", () => {
@@ -60,5 +60,21 @@ describe("tabKeyIndex", () => {
 describe("tabIds", () => {
   it("names a tab and its panel from one base, so the two point at each other", () => {
     expect(tabIds(":r1:", "tutor")).toEqual({ tab: ":r1:-tab-tutor", panel: ":r1:-panel-tutor" });
+  });
+});
+
+describe("moveActive", () => {
+  it("steps through every row and wraps at either end", () => {
+    const rows = ["a", "b", "c"];
+    expect(moveActive(rows, 0, 1)).toBe(1);
+    expect(moveActive(rows, 2, 1)).toBe(0);
+    expect(moveActive(rows, 0, -1)).toBe(2);
+    expect(moveActive([], 0, 1)).toBe(-1);
+  });
+
+  it("skips a row the predicate refuses, and stays put when it refuses them all", () => {
+    const rows = ["a", "b", "c"];
+    expect(moveActive(rows, 0, 1, (row) => row !== "b")).toBe(2);
+    expect(moveActive(rows, 1, 1, () => false)).toBe(1);
   });
 });

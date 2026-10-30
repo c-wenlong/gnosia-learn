@@ -546,8 +546,8 @@ export function textareaClasses({ className }: { className?: string } = {}): str
  * border on the surface, 6px inside, rows 2px apart, scrolling past
  * min(30rem, 70vh). No shadow: the kit draws its layers with the border, as
  * a `Card` does. The kit `Popover` draws it for a filter, a field, the
- * account menu and the studio's menus; a list that keeps the focus in its own
- * field (Home's Ask box, the @ menu) takes it as well. Width is the caller's:
+ * account menu, the studio's menus, and the lists that keep the focus in
+ * their own field (Home's Ask box, the @ menu). Width is the caller's:
  * a list as wide as its words (`w-max`), a field's list as wide as the field,
  * a suggestion list as wide as its box. `menu-kit.test.ts` fails a second
  * copy drawn by hand.

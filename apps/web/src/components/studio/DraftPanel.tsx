@@ -33,7 +33,7 @@ import { FilterMenu } from "@/components/ui/FilterMenu";
 import { Glyph } from "@/components/ui/Glyph";
 import { InlineConfirm } from "@/components/ui/InlineConfirm";
 import type { MentionComposerHandle } from "@/components/ui/MentionComposer";
-import { EMPTY_MENTION_VALUE, isEmptyValue } from "@/components/ui/mention-text";
+import { EMPTY_MENTION_VALUE, isEmptyValue } from "@/lib/mentions";
 import { TutorMessage, UserMessage } from "@/components/ui/Message";
 import { TextLink } from "@/components/ui/TextLink";
 import { useFollowFoot } from "@/components/ui/use-follow-foot";

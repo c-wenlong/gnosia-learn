@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 
 import type { Value } from "@/components/studio/draft/thread";
-import { prependValue } from "@/components/ui/mention-text";
+import { prependValue } from "@/lib/mentions";
 import { openerSend, openerValue } from "@/lib/studio-cards";
 import { isEmptyConversation } from "@/lib/studio-chat";
 import type { DraftView } from "@/lib/studio-drafts";

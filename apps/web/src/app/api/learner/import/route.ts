@@ -17,6 +17,14 @@ import { BadRequest, handler } from "@/lib/learner-api";
  * recap, and rejecting the whole document over one bad key would strand the
  * study record this route exists to rescue.
  */
+/**
+ * A whole study record: every note (each up to 20,000 characters), every recap
+ * and every link, far past the 64 KB a single write gets. A browser holds
+ * about five million characters of localStorage per origin, so no document it
+ * kept is bigger than this in UTF-8 unless most of it is outside ASCII.
+ */
+const MAX_IMPORT_BODY_BYTES = 10_000_000;
+
 export const POST = handler(
   "import",
   (body): LegacyPayload => {
@@ -29,4 +37,5 @@ export const POST = handler(
     return body as LegacyPayload;
   },
   async (db, payload, owner) => importLegacyState(db, payload, owner),
+  { maxBodyBytes: MAX_IMPORT_BODY_BYTES },
 );

@@ -8,29 +8,22 @@ import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
 import { PlainTextPlugin } from "@lexical/react/LexicalPlainTextPlugin";
 import {
   $createParagraphNode,
-  $createRangeSelection,
   $createTextNode,
   $getNodeByKey,
   $getRoot,
   $getSelection,
-  $isElementNode,
-  $isLineBreakNode,
   $isRangeSelection,
   $isTextNode,
   $setSelection,
   BLUR_COMMAND,
   COMMAND_PRIORITY_CRITICAL,
   COMMAND_PRIORITY_HIGH,
-  DecoratorNode,
   KEY_ARROW_DOWN_COMMAND,
   KEY_ARROW_UP_COMMAND,
   KEY_ENTER_COMMAND,
   KEY_ESCAPE_COMMAND,
   KEY_TAB_COMMAND,
-  type DOMExportOutput,
-  type LexicalNode,
   type NodeKey,
-  type SerializedLexicalNode,
 } from "lexical";
 import { mergeRegister } from "@lexical/utils";
 import {
@@ -45,50 +38,46 @@ import {
   type Ref,
 } from "react";
 
+import {
+  filterMentionOptions,
+  firstActive,
+  isEmptyValue,
+  isUsable,
+  mapOffset,
+  menuOpenedAnnouncement,
+  plusMenuStays,
+  rowAnnouncement,
+  sameValue,
+  serializeMentions,
+  valuePieces,
+  type MentionOption,
+  type MentionValue,
+  type PlusAnchor,
+  type SerializedNodeLike,
+  type TextEdit,
+} from "@/lib/mentions";
+
 import { Button } from "./Button";
-import { cx, MENU_PANEL, menuRowClasses } from "./classes";
-import { ComposerBox, SendDisc } from "./ComposerBox";
+import { cx } from "./classes";
+import { ComposerBox, ComposerReason, ComposerRow, SendDisc } from "./ComposerBox";
 import {
   COMPOSER_BOX_MIN_ROWS,
   COMPOSER_FRAME,
   COMPOSER_LINE_PX,
   COMPOSER_MAX_ROWS,
   COMPOSER_PLACEHOLDER,
-  COMPOSER_REASON,
   COMPOSER_TEXT,
   composerBoxFieldPx,
+  composerGate,
   composerKey,
   isImeKey,
 } from "./composer-keys";
-import { Glyph, type GlyphName } from "./Glyph";
+import { Glyph } from "./Glyph";
 import { IconButton } from "./IconButton";
-import { MentionChip } from "./MentionChip";
-import { usePresence } from "./use-presence";
-import {
-  caretOffset,
-  caretPoint,
-  filterMentionOptions,
-  firstActive,
-  isEmptyValue,
-  isUsable,
-  mapOffset,
-  MENTION_NODE_TYPE,
-  mentionQuery,
-  mentionToken,
-  menuOpenedAnnouncement,
-  moveActive,
-  rowAnnouncement,
-  sameValue,
-  serializeMentions,
-  valuePieces,
-  plusMenuStays,
-  type CaretLine,
-  type MentionOption,
-  type MentionValue,
-  type PlusAnchor,
-  type SerializedNodeLike,
-  type TextEdit,
-} from "./mention-text";
+import { $createMentionNode, $mentionNodes, MentionNode } from "./mention-node";
+import { $insertChip, $placeAfter, $queryAtCaret, $selectionOffsets, $selectOffsets } from "./mention-selection";
+import { MentionMenu } from "./MentionMenu";
+import { moveActive } from "./roving";
 
 /**
  * Kit `MentionComposer`: the studio's chat input, with tags as chips inline
@@ -117,7 +106,7 @@ import {
  *
  * Only the studio renders it, lazily, so Lexical stays out of every other
  * route (open question 4 of the mentions doc). The React-free rules are
- * `mention-text.ts` and `composer-keys.ts`.
+ * `@/lib/mentions` and `composer-keys.ts`.
  */
 
 export interface MentionComposerHandle {
@@ -200,100 +189,6 @@ export function MentionComposer<K extends string = string>(props: MentionCompose
 }
 
 /* -------------------------------------------------------------------------- */
-/* The chip                                                                   */
-/* -------------------------------------------------------------------------- */
-
-type SerializedMentionNode = SerializedLexicalNode & { kind: string; name: string; icon: string | null };
-
-/**
- * The chip: an inline decorator node, one unit to the caret, that reports
- * `@<kind>` as its text, so copying it gives the words it sends and
- * `serializeMentions` finds it by its type.
- */
-export class MentionNode extends DecoratorNode<ReactNode> {
-  __kind: string;
-  __name: string;
-  __icon: string | null;
-
-  static getType(): string {
-    return MENTION_NODE_TYPE;
-  }
-
-  static clone(node: MentionNode): MentionNode {
-    return new MentionNode(node.__kind, node.__name, node.__icon, node.__key);
-  }
-
-  static importJSON(json: SerializedMentionNode): MentionNode {
-    return new MentionNode(json.kind, json.name, json.icon ?? null);
-  }
-
-  constructor(kind: string, name: string, icon: string | null, key?: NodeKey) {
-    super(key);
-    this.__kind = kind;
-    this.__name = name;
-    this.__icon = icon;
-  }
-
-  exportJSON(): SerializedMentionNode {
-    return { type: MENTION_NODE_TYPE, version: 1, kind: this.__kind, name: this.__name, icon: this.__icon };
-  }
-
-  createDOM(): HTMLElement {
-    const span = document.createElement("span");
-    span.contentEditable = "false";
-    return span;
-  }
-
-  updateDOM(): false {
-    return false;
-  }
-
-  exportDOM(): DOMExportOutput {
-    return { element: document.createTextNode(mentionToken(this.__kind)) as unknown as HTMLElement };
-  }
-
-  getTextContent(): string {
-    return mentionToken(this.__kind);
-  }
-
-  isInline(): boolean {
-    return true;
-  }
-
-  /** Backspace and Delete beside a chip take it whole, rather than selecting it first. */
-  isKeyboardSelectable(): boolean {
-    return false;
-  }
-
-  getKind(): string {
-    return this.getLatest().__kind;
-  }
-
-  decorate(): ReactNode {
-    return <MentionChip name={this.__name} icon={(this.__icon as GlyphName | null) ?? null} />;
-  }
-}
-
-function $createMentionNode(option: Pick<MentionOption, "id" | "name" | "icon">): MentionNode {
-  return new MentionNode(option.id, option.name, option.icon ?? null);
-}
-
-function $isMentionNode(node: LexicalNode | null | undefined): node is MentionNode {
-  return node instanceof MentionNode;
-}
-
-/** Every chip in the field, in order. */
-function $mentionNodes(): MentionNode[] {
-  const out: MentionNode[] = [];
-  const walk = (node: LexicalNode) => {
-    if ($isMentionNode(node)) out.push(node);
-    else if ($isElementNode(node)) for (const child of node.getChildren()) walk(child);
-  };
-  walk($getRoot());
-  return out;
-}
-
-/* -------------------------------------------------------------------------- */
 /* The field                                                                  */
 /* -------------------------------------------------------------------------- */
 
@@ -355,6 +250,10 @@ function Field<K extends string>({
   // editor drops its selection when focus leaves, so a toggle pressed from
   // the keyboard would otherwise find none to keep.
   const lastCaret = useRef<{ text: string; anchor: number; focus: number } | null>(null);
+  // Cmd+Enter's `onModEnter`, waiting for the key's own update to commit.
+  const modTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The frame the @ menu is placed against.
+  const frame = useRef<HTMLDivElement | null>(null);
 
   // The latest props, for command handlers registered once.
   const latest = useRef({ value, onChange, onSubmit, mentions, onModEnter, disabled, sendDisabled });
@@ -362,9 +261,7 @@ function Field<K extends string>({
     latest.current = { value, onChange, onSubmit, mentions, onModEnter, disabled, sendDisabled };
   });
 
-  const reason = (disabled || sendDisabled) && disabledReason ? disabledReason : null;
-  const empty = isEmptyValue(value);
-  const blocked = disabled || sendDisabled || empty;
+  const { blocked, reason } = composerGate({ disabled, sendDisabled, empty: isEmptyValue(value), disabledReason });
   const optionId = (option: MentionOption<K>) => `${base}-opt-${option.id}`;
 
   const openMenu = useCallback((next: MenuState<K> | null) => {
@@ -491,7 +388,9 @@ function Field<K extends string>({
     (option: MentionOption<K>) => {
       const current = menuRef.current;
       if (!isUsable(option)) return;
-      let added = false;
+      // Announced from inside the update: a pick by Enter or Tab runs inside
+      // the key's own update, where this one is queued to run after it.
+      const added = () => setAnnouncement(`${option.name} tag added.`);
       editor.update(() => {
         const already = $mentionNodes().some((node) => node.getKind() === option.id);
         if (current !== null && current.mode === "typed" && current.nodeKey !== null) {
@@ -513,21 +412,12 @@ function Field<K extends string>({
           const chip = $createMentionNode(option);
           query.replace(chip);
           $placeAfter(chip);
-          added = true;
+          added();
           return;
         }
-        if (already) return;
-        const selection = $getSelection();
-        if (!$isRangeSelection(selection)) $getRoot().selectEnd();
-        const range = $getSelection();
-        if (!$isRangeSelection(range)) return;
-        const chip = $createMentionNode(option);
-        range.insertNodes([chip]);
-        $placeAfter(chip);
-        added = true;
+        if (!already && $insertChip(option) !== null) added();
       });
       openMenu(null);
-      if (added) setAnnouncement(`${option.name} tag added.`);
       editor.focus();
     },
     [editor, openMenu],
@@ -538,7 +428,6 @@ function Field<K extends string>({
       const option = latest.current.mentions.find((entry) => entry.id === kind);
       if (option === undefined || latest.current.disabled) return;
       openMenu(null);
-      let added = false;
       editor.update(() => {
         if ($mentionNodes().some((node) => node.getKind() === kind)) {
           if (!$isRangeSelection($getSelection())) $getRoot().selectEnd();
@@ -546,18 +435,9 @@ function Field<K extends string>({
         }
         // At the caret the field last had, or at the end of a field nobody
         // has clicked into yet.
-        let selection = $getSelection();
-        if (!focusedOnce.current || !$isRangeSelection(selection)) {
-          $getRoot().selectEnd();
-          selection = $getSelection();
-        }
-        if (!$isRangeSelection(selection)) return;
-        const chip = $createMentionNode(option);
-        selection.insertNodes([chip]);
-        $placeAfter(chip);
-        added = true;
+        if (!focusedOnce.current) $getRoot().selectEnd();
+        if ($insertChip(option) !== null) setAnnouncement(`${option.name} tag added.`);
       });
-      if (added) setAnnouncement(`${option.name} tag added.`);
       editor.focus();
     },
     [editor, openMenu],
@@ -668,7 +548,9 @@ function Field<K extends string>({
         (event) => {
           if (menuRef.current === null) return false;
           // The menu only: the `<dialog>` around the panel would take an
-          // uncancelled Escape as its own close request (T2).
+          // uncancelled Escape as its own close request (T2). The menu's
+          // `Popover` takes the press first once it is up; this covers the
+          // moment before its layer is registered.
           event.preventDefault();
           event.stopPropagation();
           openMenu(null);
@@ -699,8 +581,13 @@ function Field<K extends string>({
             // inside one, and its commit puts the DOM selection (and so the
             // focus) back in the field, which would undo a caller moving
             // focus to a card's button.
-            if (mod !== undefined && isEmptyValue(now)) setTimeout(mod, 0);
-            else submit();
+            if (mod !== undefined && isEmptyValue(now)) {
+              if (modTimer.current !== null) clearTimeout(modTimer.current);
+              modTimer.current = setTimeout(() => {
+                modTimer.current = null;
+                mod();
+              }, 0);
+            } else submit();
             return true;
           }
           // Shift+Enter: the plain-text plugin's line break.
@@ -716,33 +603,41 @@ function Field<K extends string>({
         },
         COMMAND_PRIORITY_HIGH,
       ),
+      () => {
+        // A Cmd+Enter's hand-off still waiting when the field goes.
+        if (modTimer.current !== null) clearTimeout(modTimer.current);
+        modTimer.current = null;
+      },
     );
   }, [editor, openMenu, pick, submit]);
 
+  // Whether the field has ever had focus, for `insertMention`'s place. On
+  // whichever element is the editor's root, as it is set and replaced.
   useEffect(() => {
-    const root = editor.getRootElement();
-    if (root === null) return;
     const mark = () => {
       focusedOnce.current = true;
     };
-    root.addEventListener("focus", mark);
-    return () => root.removeEventListener("focus", mark);
-  });
+    let on: HTMLElement | null = null;
+    const stop = editor.registerRootListener((root) => {
+      on?.removeEventListener("focus", mark);
+      root?.addEventListener("focus", mark);
+      on = root;
+    });
+    return () => {
+      stop();
+      on?.removeEventListener("focus", mark);
+    };
+  }, [editor]);
 
   /* ---------------------------------------------------------------- */
   /* Render                                                            */
   /* ---------------------------------------------------------------- */
 
   // A disabled field shows no menu, whatever was open when it was disabled.
+  // Nothing points at a menu on its way out: the field's `aria-controls` and
+  // `aria-activedescendant` read `open`.
   const open = menu !== null && !disabled;
   const activeOption = menu?.options[menu.active];
-  // The menu last shown, kept while it leaves (`usePresence`), so it fades
-  // out with its rows rather than emptying first. Nothing points at it then:
-  // the field's `aria-controls` and `aria-activedescendant` read `open`.
-  const [kept, setKept] = useState(menu);
-  if (open && kept !== menu) setKept(menu);
-  const presence = usePresence(open, 120);
-  const drawn = open ? menu : kept;
   const tagged = new Set(value.mentions.map((mention) => mention.kind as string));
   const maxHeight = COMPOSER_LINE_PX * Math.max(1, maxRows) + 24;
   const box = layout === "box";
@@ -813,76 +708,26 @@ function Field<K extends string>({
   );
 
   return (
-    <form onSubmit={submit} className={cx("relative flex flex-col gap-1.5", className)}>
-      {presence.mounted && drawn !== null && (
-        <div
-          inert={presence.leaving}
-          className={cx(
-            "absolute left-0 z-20 w-full md:max-w-[360px]",
-            // Under the box, beside its plus; over the row, which sits at the foot of a panel.
-            box ? "top-full mt-2" : "bottom-full mb-2",
-            MENU_PANEL,
-            // It pops in from the corner it hangs off, the plus's side, once,
-            // as it opens (typing a query re-renders the rows, not this box),
-            // and out the same way.
-            box ? "origin-top-left" : "origin-bottom-left",
-            presence.leaving ? "pointer-events-none animate-pop-out" : "animate-pop-in",
-            "motion-reduce:animate-none",
-          )}
-        >
-          <ul id={presence.leaving ? undefined : listId} role="listbox" aria-label="What to make" className="flex flex-col gap-0.5">
-            {drawn.options.length === 0 ? (
-              <li className="px-3 py-2.5 text-[13px] text-text2">Nothing matches</li>
-            ) : (
-              drawn.options.map((option, at) => {
-                const usable = isUsable(option);
-                const active = at === drawn.active;
-                return (
-                  <li
-                    key={option.id}
-                    id={optionId(option)}
-                    role="option"
-                    aria-selected={active}
-                    aria-disabled={!usable || undefined}
-                    // The field keeps focus, and a phone keeps its keyboard up.
-                    onMouseDown={(event) => event.preventDefault()}
-                    onMouseEnter={() => {
-                      if (usable && menuRef.current !== null) openMenu({ ...menuRef.current, active: at });
-                    }}
-                    onClick={() => pick(option)}
-                    className={menuRowClasses({ active, disabled: !usable, className: "pointer-coarse:min-h-12" })}
-                  >
-                    {option.icon && (
-                      <Glyph
-                        name={option.icon as GlyphName}
-                        className={cx(!usable ? "text-text3" : active ? "text-accent-text" : "text-text2")}
-                      />
-                    )}
-                    {/* The name over its description, always: side by side, a
-                        longer description wrapped under its name at one width
-                        and sat beside it at another, so two rows of one menu
-                        were laid out two ways. */}
-                    <span className="flex min-w-0 flex-1 flex-col">
-                      <span className={cx("leading-5", !usable && "text-text3")}>{option.name}</span>
-                      <span className="min-w-0 text-[13px] leading-5 font-normal text-text2">{usable ? option.description : option.disabledReason}</span>
-                    </span>
-                    {tagged.has(option.id) && (
-                      <>
-                        <Glyph name="tick" size={16} className="text-accent-text" />
-                        <span className="sr-only">, already tagged</span>
-                      </>
-                    )}
-                  </li>
-                );
-              })
-            )}
-          </ul>
-          {mentionHint !== undefined && <p className="px-2 pt-1 pb-0.5 text-[12px] leading-4 text-text3">{mentionHint}</p>}
-        </div>
-      )}
+    <form onSubmit={submit} className={cx("flex flex-col gap-1.5", className)}>
+      <MentionMenu
+        anchorRef={frame}
+        menu={open ? menu : null}
+        listId={listId}
+        optionId={optionId}
+        tagged={tagged}
+        hint={mentionHint}
+        // Under the box, beside its plus; over the row, which sits at the foot of a panel.
+        placement={box ? "bottom-start" : "top-start"}
+        onClose={() => openMenu(null)}
+        onHover={(at) => {
+          if (menuRef.current !== null) openMenu({ ...menuRef.current, active: at });
+        }}
+        onPick={pick}
+      />
 
       {box ? (
         <ComposerBox
+          ref={frame}
           disabled={disabled}
           field={field}
           leading={plus}
@@ -890,30 +735,29 @@ function Field<K extends string>({
           send={<SendDisc label={sendLabel} disabled={blocked} describedBy={describedBy} />}
         />
       ) : (
-        <div className="flex items-end gap-2.5">
-          <div
-            className={cx(
-              "relative flex min-w-0 flex-1 items-end",
-              COMPOSER_FRAME,
-              "focus-within:border-accent",
-              disabled && "cursor-not-allowed opacity-60",
-            )}
-          >
-            <div className="shrink-0 p-2">{plus}</div>
-            {field}
-          </div>
-          <div className="pb-0.5">
+        <ComposerRow
+          field={
+            <div
+              ref={frame}
+              className={cx(
+                "relative flex min-w-0 flex-1 items-end",
+                COMPOSER_FRAME,
+                "focus-within:border-accent",
+                disabled && "cursor-not-allowed opacity-60",
+              )}
+            >
+              <div className="shrink-0 p-2">{plus}</div>
+              {field}
+            </div>
+          }
+          send={
             <Button type="submit" disabled={blocked} aria-describedby={describedBy}>
               {sendLabel}
             </Button>
-          </div>
-        </div>
+          }
+        />
       )}
-      {reason !== null && (
-        <p id={reasonId} className={quietReason ? "sr-only" : COMPOSER_REASON}>
-          {reason}
-        </p>
-      )}
+      <ComposerReason id={reasonId} reason={reason} quiet={quietReason} />
       <p role="status" aria-live="polite" className="sr-only">
         {announcement}
       </p>
@@ -921,80 +765,3 @@ function Field<K extends string>({
   );
 }
 
-/* -------------------------------------------------------------------------- */
-
-/**
- * The `@query` just before the caret, if the caret sits after one: `@` at the
- * start of a line or after whitespace (a chip right before it does not
- * count), in the same text node.
- */
-function $queryAtCaret(): { nodeKey: NodeKey; offset: number; query: string } | null {
-  const selection = $getSelection();
-  if (!$isRangeSelection(selection) || !selection.isCollapsed()) return null;
-  const node = selection.anchor.getNode();
-  if (!$isTextNode(node) || selection.anchor.type !== "text") return null;
-  const previous = node.getPreviousSibling();
-  // What precedes the node, reduced to the one character the rule looks at.
-  const lead = previous === null || $isLineBreakNode(previous) ? "" : $isMentionNode(previous) ? "x" : previous.getTextContent().slice(-1);
-  const before = lead + node.getTextContent().slice(0, selection.anchor.offset);
-  const found = mentionQuery(before);
-  if (found === null || found.offset < lead.length) return null;
-  return { nodeKey: node.getKey(), offset: found.offset - lead.length, query: found.query };
-}
-
-/** The field's paragraphs as plain lines, for `caretOffset` and `caretPoint`. */
-function $caretLines(): CaretLine[] {
-  return $getRoot()
-    .getChildren()
-    .map((block) => ({
-      key: block.getKey(),
-      children: $isElementNode(block)
-        ? block.getChildren().map((child) => ({
-            key: child.getKey(),
-            type: $isMentionNode(child) ? ("chip" as const) : $isLineBreakNode(child) ? ("break" as const) : ("text" as const),
-            length: child.getTextContentSize(),
-          }))
-        : [],
-    }));
-}
-
-/** The selection as offsets into the value's text, or null when there is none to keep. */
-function $selectionOffsets(): { anchor: number; focus: number } | null {
-  const selection = $getSelection();
-  if (!$isRangeSelection(selection)) return null;
-  const lines = $caretLines();
-  const rootKey = $getRoot().getKey();
-  const anchor = caretOffset(lines, { key: selection.anchor.key, offset: selection.anchor.offset, type: selection.anchor.type }, rootKey);
-  const focus = caretOffset(lines, { key: selection.focus.key, offset: selection.focus.offset, type: selection.focus.type }, rootKey);
-  return anchor === null || focus === null ? null : { anchor, focus };
-}
-
-/** Select from `anchor` to `focus`, offsets into the value's text. False when the field has no lines. */
-function $selectOffsets(anchor: number, focus: number): boolean {
-  const lines = $caretLines();
-  const from = caretPoint(lines, anchor);
-  const to = caretPoint(lines, focus);
-  if (from === null || to === null) return false;
-  const selection = $createRangeSelection();
-  selection.anchor.set(from.key, from.offset, from.type);
-  selection.focus.set(to.key, to.offset, to.type);
-  $setSelection(selection);
-  return true;
-}
-
-/** After a chip: a space when the next character is not one, and the caret after it. */
-function $placeAfter(chip: MentionNode): void {
-  const next = chip.getNextSibling();
-  if ($isTextNode(next) && /^\s/.test(next.getTextContent())) {
-    next.select(1, 1);
-    return;
-  }
-  if ($isTextNode(next)) {
-    next.setTextContent(` ${next.getTextContent()}`);
-    next.select(1, 1);
-    return;
-  }
-  const space = $createTextNode(" ");
-  chip.insertAfter(space);
-  space.select(1, 1);
-}

@@ -7,7 +7,7 @@ import type { SaveOutcome } from "@/components/studio/ConfirmCard";
 import { askToNotify } from "@/components/studio/JobsProvider";
 import { usePanelHost } from "@/components/studio/panel-host";
 import { cardKey, type CardKey, type Value } from "@/components/studio/draft/thread";
-import { EMPTY_MENTION_VALUE, isEmptyValue, trimValue, valueOf } from "@/components/ui/mention-text";
+import { EMPTY_MENTION_VALUE, isEmptyValue, trimValue, valueOf } from "@/lib/mentions";
 import { kindDrawKey, valueBack, type LiveCard, type makeBoth } from "@/lib/studio-cards";
 import { drawRefusal, sendRefusal, startOverStep, type DrawRefusal } from "@/lib/studio-chat";
 import {

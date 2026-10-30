@@ -173,8 +173,32 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
     expect(response.headers.get("accept-ranges")).toBe("bytes");
     expect(response.headers.get("content-disposition")).toBe('inline; filename="demo.mp4"');
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
-    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(response.headers.get("cache-control")).toBe("private, no-cache");
+    expect(response.headers.get("etag")).toBe(`"${sha256(VIDEO)}"`);
     expect(Buffer.from(await response.arrayBuffer()).equals(VIDEO)).toBe(true);
+  });
+
+  it("answers a 304 with no body when the browser already holds these bytes, a range included", async () => {
+    const tag = `"${sha256(VIDEO)}"`;
+    const asks: Record<string, string>[] = [{ "if-none-match": tag }, { "if-none-match": `W/${tag}` }, { "if-none-match": tag, range: "bytes=0-9" }];
+    for (const headers of asks) {
+      const response = await call(FILE, "file", VIDEO_ID, headers);
+      expect(response.status).toBe(304);
+      expect(response.headers.get("etag")).toBe(tag);
+      expect((await response.arrayBuffer()).byteLength).toBe(0);
+    }
+    // Other bytes than the ones held: the file, as usual.
+    expect((await call(FILE, "file", VIDEO_ID, { "if-none-match": '"something-older"' })).status).toBe(200);
+  });
+
+  it("honours a range only for the bytes it was taken from (If-Range)", async () => {
+    const tag = `"${sha256(VIDEO)}"`;
+    const same = await call(FILE, "file", VIDEO_ID, { range: "bytes=0-9", "if-range": tag });
+    expect(same.status).toBe(206);
+    // A slice of an older file must not be spliced onto these bytes: the whole file instead.
+    const older = await call(FILE, "file", VIDEO_ID, { range: "bytes=0-9", "if-range": '"something-older"' });
+    expect(older.status).toBe(200);
+    expect(Buffer.from(await older.arrayBuffer()).equals(VIDEO)).toBe(true);
   });
 
   it("saves the file under its title with ?download=1, the bytes and the other headers unchanged", async () => {
@@ -194,6 +218,17 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
       { params: Promise.resolve({ id: VIDEO_ID }) },
     );
     expect(inline.headers.get("content-disposition")).toBe('inline; filename="demo.mp4"');
+  });
+
+  it("names the download on a 304 too, so a renamed asset saves under its new name", async () => {
+    const response = await FILE(
+      new Request(`${ORIGIN}/api/assets/${encodeURIComponent(VIDEO_ID)}/file?download=1`, {
+        headers: { "if-none-match": `"${sha256(VIDEO)}"` },
+      }),
+      { params: Promise.resolve({ id: VIDEO_ID }) },
+    );
+    expect(response.status).toBe(304);
+    expect(response.headers.get("content-disposition")).toBe('attachment; filename="Demo.mp4"');
   });
 
   it("keeps the attachment on a Range request for a download", async () => {

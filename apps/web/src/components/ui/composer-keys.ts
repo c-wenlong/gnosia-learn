@@ -131,3 +131,25 @@ export function composerKey(event: {
 export function modEnterTarget(value: string, hasModEnter: boolean): "mod" | "send" {
   return hasModEnter && value.trim() === "" ? "mod" : "send";
 }
+
+/**
+ * Whether Send is refused (the field off, the caller holding Send, nothing
+ * typed), and the reason line to show, which only a field or a Send that is
+ * off has: an empty field needs no explaining.
+ */
+export function composerGate({
+  disabled,
+  sendDisabled,
+  empty,
+  disabledReason,
+}: {
+  disabled: boolean;
+  sendDisabled: boolean;
+  empty: boolean;
+  disabledReason?: string;
+}): { blocked: boolean; reason: string | null } {
+  return {
+    blocked: disabled || sendDisabled || empty,
+    reason: (disabled || sendDisabled) && disabledReason ? disabledReason : null,
+  };
+}

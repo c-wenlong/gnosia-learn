@@ -123,7 +123,7 @@ export function AssetBody({
   }
 
   if (asset.kind === "diagram_svg") {
-    return servable ? <DiagramView src={fileHref} statusHref={statusHref} title={title} heading={false} /> : unavailable;
+    return servable ? <DiagramView src={fileHref} statusHref={statusHref} title={title} /> : unavailable;
   }
 
   // A video's still: a picture, drawn on the same mat as a diagram.
@@ -133,7 +133,6 @@ export function AssetBody({
         src={fileHref}
         statusHref={statusHref}
         title={title}
-        heading={false}
         failureHeadline="This picture did not load."
       />
     ) : (

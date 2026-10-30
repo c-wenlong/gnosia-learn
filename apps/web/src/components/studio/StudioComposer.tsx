@@ -8,7 +8,7 @@ import { ComposerBox } from "@/components/ui/ComposerBox";
 import { cx } from "@/components/ui/classes";
 import { COMPOSER_BOX_MIN_ROWS, COMPOSER_FRAME, composerBoxFieldPx } from "@/components/ui/composer-keys";
 import type { MentionComposerProps } from "@/components/ui/MentionComposer";
-import { carryMentions, fallbackTagLine, mapOffset } from "@/components/ui/mention-text";
+import { carryMentions, fallbackTagLine, mapOffset } from "@/lib/mentions";
 import type { TagKind } from "@/lib/studio-drafts";
 
 /**

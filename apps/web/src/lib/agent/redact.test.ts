@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { REDACTED, redactSecrets } from "@/lib/agent/redact";
+import { REDACTED, redactSecrets } from "@gnosia/tutor/redact";
 
 describe("redactSecrets", () => {
   const key = "sk-or-v1-8f2c7a91d04e6b35c8a1f7e2d9b40c6a";

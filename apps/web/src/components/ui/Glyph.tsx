@@ -90,8 +90,8 @@ const PATHS = {
   compose: "M9 4H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-4M14.2 3.3a1.5 1.5 0 0 1 2.1 2.1L10 11.7l-2.8.7.7-2.8z",
   // A pushpin: pin a row to the top of the sidebar.
   pin: "M7.5 3.5h5M8.5 3.5v4.2L6 10.5v1.5h8v-1.5l-2.5-2.8V3.5M10 12v4.5",
-  // A pencil: rename.
-  rename: "M12.8 4.7l2.5 2.5-7.6 7.6-3.2.7.7-3.2zM11.3 6.2l2.5 2.5",
+  // The same pencil: rename.
+  rename: PENCIL,
   // An arrow out of a box: open somewhere else.
   open: "M11 4h5v5M16 4l-7 7M14 11.5V15a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h3.5",
   // An arrow down onto a line: save the file.
@@ -101,8 +101,6 @@ const PATHS = {
   // Arrows up and down: move a row earlier or later.
   up: "M10 15.5v-11M5.5 9L10 4.5 14.5 9",
   down: "M10 4.5v11M5.5 11l4.5 4.5 4.5-4.5",
-  // A chevron pointing down: a row that opens below itself (turned when open).
-  expand: "M5.5 8l4.5 4.5L14.5 8",
 } as const;
 
 export type GlyphName = keyof typeof PATHS;

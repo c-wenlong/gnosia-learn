@@ -196,7 +196,7 @@ struct TutorCheckAnswer: Equatable {
     func correct(for check: TutorCardCheck) -> Bool? {
         guard check.kind == .choice else { return nil }
         guard let picked, check.options.indices.contains(picked) else { return false }
-        return check.options[picked] == check.answer
+        return sameScalars(check.options[picked], check.answer)
     }
 }
 
@@ -263,7 +263,7 @@ struct TutorCheckCard: View {
 
     private func optionRow(_ i: Int) -> some View {
         let text = check.options[i]
-        let isKey = text == check.answer
+        let isKey = sameScalars(text, check.answer)
         // Once answered, the answer alone says what was picked: an option
         // tapped before "I don't know" is not a pick.
         let chosen = (answer == nil ? picked : answer?.picked) == i
