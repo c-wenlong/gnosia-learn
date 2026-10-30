@@ -4,11 +4,11 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode 
 
 import { FADE_IN, POP_IN } from "@/components/studio/motion";
 import { Reveal } from "@/components/studio/motion-parts";
-import { PanelLink } from "@/components/studio/PanelLink";
+import { FOOTER, LiveFooter, MadeFooter, OnHoldFooter, useHoldAction } from "@/components/studio/brief-card-footers";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
-import { CARD_TITLE, chipClasses, cx, LABEL, linkClasses } from "@/components/ui/classes";
+import { CARD_TITLE, chipClasses, cx, LABEL } from "@/components/ui/classes";
 import { FilterMenu } from "@/components/ui/FilterMenu";
 import { Glyph } from "@/components/ui/Glyph";
 import { IconButton } from "@/components/ui/IconButton";
@@ -30,7 +30,7 @@ import {
   type FieldProblem,
 } from "@/lib/studio-brief-edit";
 import { composerKey } from "@/components/ui/composer-keys";
-import { kindCardEditable, madeLine, pressLabel, type KindCardStatus } from "@/lib/studio-cards";
+import { kindCardEditable, pressLabel, type KindCardStatus } from "@/lib/studio-cards";
 import { modeLine, type DrawBlock } from "@/lib/studio-chat";
 import type { PendingTopic, Refusal } from "@/lib/studio-drafts";
 import type { Brief } from "@/lib/studio-jobs";
@@ -74,7 +74,6 @@ export function ConfirmCard({
   onDraw,
   onSave,
   onEditingChange,
-  onEditNewest,
   editBlock = null,
   jobHref,
   jobRunning = false,
@@ -100,11 +99,6 @@ export function ConfirmCard({
   onSave?: (brief: Brief) => Promise<SaveOutcome>;
   /** Told when editing starts and stops, so the panel holds Draw and Send meanwhile. */
   onEditingChange?: (editing: boolean) => void;
-  /**
-   * Starts editing the newest brief, when there is one to edit: offered on a
-   * card whose brief was replaced while the person was editing it.
-   */
-  onEditNewest?: () => void;
   /** Why the brief cannot be edited right now (a reply being written, a press under way), or null. */
   editBlock?: string | null;
   /** On a `drawn` card: the job this brief started. */
@@ -138,8 +132,7 @@ export function ConfirmCard({
   const [saving, setSaving] = useState(false);
   const [problems, setProblems] = useState<FieldProblem[]>([]);
   const [focusNext, setFocusNext] = useState<FocusKey | null>(null);
-  const [using, setUsing] = useState(false);
-  const [useError, setUseError] = useState<string | null>(null);
+  const { using, useError, use } = useHoldAction();
   /**
    * Whether editing has started on this card: from then on a swap between
    * the brief as read and its fields fades in. The card's first drawing does
@@ -305,16 +298,6 @@ export function ConfirmCard({
     const outcome = await onSave(brief);
     setSaving(false);
     if (!outcome.ok) setProblems([saveRefusal(outcome.status, outcome.refusal, toEdit(brief))]);
-  }
-
-  /** Use this brief on a card the planner put on hold. */
-  async function takeOffHold() {
-    if (onUse === undefined || using) return;
-    setUsing(true);
-    setUseError(null);
-    const error = await onUse();
-    setUsing(false);
-    setUseError(error);
   }
 
   function discard() {
@@ -549,21 +532,14 @@ export function ConfirmCard({
 
         {/* The footers: one at a time, each folding open and shut as the
             card's state moves (live, editing, held, on hold, drawn). */}
-        <Reveal open={onHold && held === null}>
-          <div className={FOOTER}>
-            <p className="text-[13px] leading-5 text-text">On hold: {holdReason ?? "the conversation contradicted this brief"}</p>
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <Button size="sm" variant="secondary" onClick={() => void takeOffHold()} disabled={using || editBlock !== null} title={editBlock ?? undefined}>
-                {using ? "Saving…" : "Use this brief"}
-              </Button>
-            </div>
-            {useError !== null && (
-              <p role="alert" className="text-[13px] leading-5 text-danger">
-                {useError}
-              </p>
-            )}
-          </div>
-        </Reveal>
+        <OnHoldFooter
+          open={onHold && held === null}
+          reason={holdReason}
+          using={using}
+          error={useError}
+          editBlock={editBlock}
+          onUse={() => void use(onUse)}
+        />
 
         <Reveal open={frozen}>
           <div role="status" className={FOOTER}>
@@ -572,11 +548,6 @@ export function ConfirmCard({
               here so nothing is lost; the newest brief is below.
             </p>
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              {onEditNewest !== undefined && (
-                <Button size="sm" onClick={onEditNewest}>
-                  Edit the newest brief
-                </Button>
-              )}
               <Button size="sm" variant="ghost" onClick={discard}>
                 Discard my edits
               </Button>
@@ -626,68 +597,28 @@ export function ConfirmCard({
           </div>
         </Reveal>
 
-        <Reveal open={live && held === null}>
-          <div className={FOOTER}>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <Button
-                variant={paired ? "secondary" : "primary"}
-                onClick={onDraw}
-                disabled={busy || block !== null}
-                aria-keyshortcuts={keyShortcut ? "Meta+Enter Control+Enter" : undefined}
-                data-studio-draw
-                data-card-kind="diagram"
-              >
-                {busy ? (proposed ? "Creating the topic…" : "Queuing…") : pressLabel("diagram", proposed)}
-              </Button>
-            </div>
-            {block !== null && <p className="text-[12px] leading-4 text-text2">{block.reason}</p>}
-            {refusal !== null && refusal.text !== null && block === null && (
-              <p role="alert" className="text-[13px] leading-5 text-text">
-                {refusal.text}
-              </p>
-            )}
-            {holder !== null && (
-              <PanelLink href={holderHref(holder)} scroll={false} className={linkClasses({ size: "sm", className: "w-fit" })}>
-                Open that job
-              </PanelLink>
-            )}
-            {block === null && refusal === null && (
-              <p className="text-[12px] text-text3">
-                Nothing is drawn or spent until you press it.
-                {costNote !== null && <> {costNote}</>}
-                {keyShortcut && (
-                  <span className="max-md:hidden">
-                    {" "}
-                    <kbd className="font-sans">⌘</kbd>/Ctrl+Enter works too.
-                  </span>
-                )}
-              </p>
-            )}
-          </div>
-        </Reveal>
+        <LiveFooter
+          open={live && held === null}
+          kind="diagram"
+          label={busy ? (proposed ? "Creating the topic…" : "Queuing…") : pressLabel("diagram", proposed)}
+          busy={busy}
+          block={block}
+          refusal={refusal}
+          holder={holder}
+          holderHref={holderHref}
+          paired={paired}
+          keyShortcut={keyShortcut}
+          costNote={costNote}
+          onPress={onDraw}
+        />
 
-        <Reveal open={status === "drawn" && jobHref !== null}>
-          <div className="mt-3.5 border-t border-hair pt-3">
-            {jobHref !== null && (
-              <PanelLink href={jobHref} scroll={false} className={linkClasses({ size: "sm" })}>
-                {madeLine("diagram", jobRunning)}. Open the job
-              </PanelLink>
-            )}
-          </div>
-        </Reveal>
+        <MadeFooter open={status === "drawn"} kind="diagram" jobHref={jobHref} jobRunning={jobRunning} />
       </div>
     </Card>
   );
 }
 
 /* -------------------------------------------------------------------------- */
-
-/**
- * A footer: a rule and its content, and the card's 14px above the rule. The
- * space is the footer's own (a margin, inside its fold) rather than a gap
- * in the card, so a footer folded shut leaves nothing behind.
- */
-const FOOTER = "mt-3.5 flex flex-col gap-2 border-t border-hair pt-3.5";
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (

@@ -2,23 +2,32 @@
 
 import { StudioTime } from "@/components/studio/StudioZone";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-import { FADE_IN, POP_IN } from "@/components/studio/motion";
+import {
+  JobRowWords,
+  JobTileFrame,
+  JobTileHeldPicture,
+  jobTileLabel,
+  jobTileLayer,
+  JobTileStatus,
+  JobTileVeil,
+  NewJobCard,
+  NewJobRow,
+} from "@/components/studio/job-tile";
+import { FADE_IN } from "@/components/studio/motion";
 import { FadeImg } from "@/components/studio/motion-parts";
 import { PanelLink } from "@/components/studio/PanelLink";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
-import { Duration } from "@/components/studio/JobStrip";
 import { KindBadge, KindWord } from "@/components/studio/KindBadge";
 import { usePanelHost } from "@/components/studio/panel-host";
-import { JOB_BAR, JOB_CONTROL, TILE, TILE_ACTIONS, TILE_LIFT } from "@/components/studio/surfaces";
+import { TILE, TILE_ACTIONS, TILE_LIFT } from "@/components/studio/surfaces";
 import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
 import { buttonClasses, cx, linkClasses } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
 import { useImageReveal } from "@/components/ui/use-image-reveal";
 import { useSheets } from "@/components/studio/video/use-video-job";
-import { useElapsed } from "@/lib/use-elapsed";
+import { useOnScreen } from "@/lib/use-on-screen";
 import { createDraft, idempotencyKey } from "@/lib/studio-drafts";
 import { extendKey, forgetExtendKey, sessionStore } from "@/lib/studio-extend";
 import {
@@ -263,34 +272,15 @@ export function NewVideoJobs({ slugs, path, layout }: { slugs: string[]; path: s
   const making = newVideoJobs(jobs, existing, ended, dismissed);
   return making.map((job) =>
     layout === "grid" ? (
-      <div key={job.jobId} className={cx(TILE, TILE_LIFT, POP_IN)}>
-        <div className="relative aspect-[4/3] overflow-hidden border-b border-border">
-          <VideoStage job={job} title={job.title ?? "New video"} backdrop={null} path={path} isNew />
-          <KindBadge kind="video" />
-        </div>
-        <div className="flex min-w-0 flex-col gap-1.5 p-3">
-          <span className="line-clamp-2 text-sm font-medium">{job.title ?? "New video"}</span>
-          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-            <Badge>{job.topic}</Badge>
-          </div>
-        </div>
-      </div>
-    ) : (
-      <PanelLink
+      <NewJobCard
         key={job.jobId}
-        href={panelHref(path, { job: job.jobId })}
-        scroll={false}
-        className={cx("flex h-8 min-w-0 items-center gap-2 rounded-md px-2 text-xs transition-colors hover:bg-surface2", FADE_IN)}
-      >
-        <span className="flex h-6 w-12 shrink-0 items-center justify-center overflow-hidden rounded border border-border bg-surface2">
-          <Dot stage={videoTileStage(job)} />
-        </span>
-        <KindBadge kind="video" inline />
-        <span className="min-w-[5rem] flex-1 truncate font-medium">{job.title ?? "New video"}</span>
-        <span className="flex min-w-0 max-w-[45%]">
-          <RowWords job={job} />
-        </span>
-      </PanelLink>
+        job={job}
+        kind="video"
+        title={job.title ?? "New video"}
+        stage={<VideoStage job={job} title={job.title ?? "New video"} backdrop={null} path={path} isNew />}
+      />
+    ) : (
+      <NewJobRow key={job.jobId} job={job} kind="video" title={job.title ?? "New video"} path={path} words={<RowWords job={job} />} />
     ),
   );
 }
@@ -319,26 +309,28 @@ function VideoStage({
   const newest = newestSheet(sheets);
   const live = useDecoded(newest === null ? null : sheetSrc(job.jobId, newest));
   const headline = videoHeadline(job);
-  const label =
-    stage === "review"
-      ? isNew
-        ? `Review ${title}`
-        : `Review the new version of ${title}`
-      : stage === "failed"
-        ? `${title}: ${videoFailureLine(job)}. Open the job`
-        : `${title}: ${headline}. Open the job`;
+  const failure = videoFailureLine(job);
+  const seconds = job.gate?.durationSeconds ?? null;
 
   return (
-    <div ref={frame} className="relative h-full w-full bg-surface2">
-      <Backdrop job={job} stage={stage} live={live} backdrop={backdrop} />
-      <PanelLink
-        href={panelHref(path, { job: job.jobId })}
-        scroll={false}
-        aria-label={label}
-        className="absolute inset-0 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
-      />
-      <Status job={job} stage={stage} headline={headline} path={path} />
-    </div>
+    <JobTileFrame
+      ref={frame}
+      job={job}
+      label={jobTileLabel({ stage, isNew, title, headline, failure })}
+      path={path}
+      backdrop={<Backdrop job={job} stage={stage} live={live} backdrop={backdrop} />}
+      status={
+        <JobTileStatus
+          job={job}
+          stage={stage}
+          headline={headline}
+          reviewLine={seconds === null ? "Built and checked" : `${spokenLength(seconds)}, built and checked`}
+          failure={failure}
+          step={{ words: videoStepCount(job), timed: job.state !== "queued", idle: "Video" }}
+          path={path}
+        />
+      }
+    />
   );
 }
 
@@ -373,13 +365,7 @@ function Backdrop({
   if (stage === "review") {
     return (
       <div className="absolute inset-0 bg-black">
-        {!posterShown && fallback !== null && (
-          <div aria-hidden className="absolute inset-0 overflow-hidden">
-            {/* eslint-disable-next-line @next/next/no-img-element -- a runner file behind the proxy. */}
-            <img src={fallback} alt="" className="absolute inset-0 h-full w-full object-contain blur-[3px]" />
-            <div className="studio-veil absolute inset-0" />
-          </div>
-        )}
+        {!posterShown && fallback !== null && <JobTileHeldPicture src={fallback} padded={false} />}
         {!posterMissing && (
           // eslint-disable-next-line @next/next/no-img-element -- the gate's poster, behind the proxy.
           <img
@@ -396,11 +382,10 @@ function Backdrop({
     );
   }
 
-  const blur = stage === "failed" ? "blur-[6px]" : "blur-[3px]";
-  const layer = cx("absolute inset-0 h-full w-full object-contain", blur, "transition-[filter] duration-300 ease-out motion-reduce:transition-none");
+  const layer = jobTileLayer(stage, false);
   const hasPicture = live.current !== null || backdrop !== null;
   return (
-    <div aria-hidden className={cx("absolute inset-0 overflow-hidden", hasPicture ? "bg-black" : "")}>
+    <JobTileVeil stage={stage} className={hasPicture ? "bg-black" : ""}>
       {live.current === null && backdrop !== null && (
         // eslint-disable-next-line @next/next/no-img-element -- see above.
         <img src={backdrop} alt="" decoding="async" className={layer} />
@@ -413,123 +398,20 @@ function Backdrop({
         // eslint-disable-next-line @next/next/no-img-element -- see above.
         <img key={live.current} src={live.current} alt="" className={cx(layer, "studio-fade-in")} />
       )}
-      <div
-        className={cx(
-          "absolute inset-0 transition-[background-color] duration-300 ease-out motion-reduce:transition-none",
-          stage === "failed" ? "studio-veil-strong" : "studio-veil",
-        )}
-      />
-      {stage === "working" && <div className="studio-shimmer absolute inset-0 overflow-hidden" />}
-    </div>
-  );
-}
-
-/** The bar at the foot of the picture, as a diagram job's (`Status` in `GridJob.tsx`). */
-function Status({ job, stage, headline, path }: { job: VideoJob; stage: VideoTileStage; headline: string; path: string }) {
-  const { post, dismiss } = useStudioJobs();
-  const [cancelling, setCancelling] = useState(false);
-
-  if (stage === "review") {
-    const seconds = job.gate?.durationSeconds ?? null;
-    return (
-      <div className={JOB_BAR}>
-        <Dot stage={stage} />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate font-medium text-text">{headline}</span>
-          <span className="block truncate text-text2">
-            {seconds === null ? "Built and checked" : `${spokenLength(seconds)}, built and checked`}
-          </span>
-        </span>
-        {/* Not a control: the whole picture is the link to the review. */}
-        <span className={buttonClasses({ size: "xs" })}>Review</span>
-      </div>
-    );
-  }
-
-  if (stage === "failed") {
-    return (
-      <div className={cx(JOB_BAR, "flex-wrap")}>
-        <Dot stage={stage} />
-        <span className="min-w-0 flex-1 truncate font-medium text-danger">{videoFailureLine(job)}</span>
-        <span className="flex w-full justify-end gap-1.5">
-          {typeof job.draftId === "string" && (
-            <PanelLink href={conversationHref(path, job.draftId)} scroll={false} className={JOB_CONTROL}>
-              Talk it through
-            </PanelLink>
-          )}
-          <Button variant="secondary" size="xs" onClick={() => dismiss(job.jobId)} className="pointer-events-auto">
-            Dismiss
-          </Button>
-        </span>
-      </div>
-    );
-  }
-
-  const stopping = cancelling || job.cancelRequestedAt !== null;
-  return (
-    <>
-      <div className={JOB_BAR}>
-        <Dot stage={stage} />
-        <span className="min-w-0 flex-1">
-          <span role="status" className="block truncate font-medium text-text">
-            {headline}
-          </span>
-          <StepAndTime job={job} />
-        </span>
-        <Button
-          variant="secondary"
-          size="xs"
-          disabled={stopping}
-          onClick={async () => {
-            setCancelling(true);
-            const result = await post(`/studio/api/jobs/${encodeURIComponent(job.jobId)}/cancel`);
-            if (!result.ok) setCancelling(false);
-          }}
-          className="pointer-events-auto"
-        >
-          {stopping ? "Stopping" : "Cancel"}
-        </Button>
-      </div>
-      <span aria-hidden className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 overflow-hidden bg-surface2">
-        <span className="block h-full w-1/3 animate-[studio-slide_1.6s_ease-in-out_infinite] bg-accent" />
-      </span>
-    </>
-  );
-}
-
-function StepAndTime({ job }: { job: VideoJob }) {
-  // Null until hydrated, so the server's second is never matched against the browser's.
-  const elapsed = useElapsed(job);
-  const step = videoStepCount(job);
-  const timed = job.state !== "queued";
-  return (
-    <span className="block truncate tabular-nums text-text2">
-      {step === null && !timed ? "Video" : step}
-      {step !== null && timed ? " · " : ""}
-      {timed && <Duration ms={elapsed} live={job.finished === null} />}
-    </span>
+    </JobTileVeil>
   );
 }
 
 function RowWords({ job }: { job: VideoJob }) {
   const stage = videoTileStage(job);
-  const elapsed = useElapsed(job);
   return (
-    <span className={cx("flex min-w-0 max-w-full items-center gap-1.5", stage === "failed" ? "text-danger" : "text-text2")}>
-      <Dot stage={stage} />
-      <span className="min-w-0 truncate">{stage === "failed" ? videoFailureLine(job) : videoHeadline(job)}</span>
-      {stage === "working" && job.state !== "queued" && (
-        <span className="shrink-0 text-text2">
-          <Duration ms={elapsed} live={job.finished === null} />
-        </span>
-      )}
-    </span>
+    <JobRowWords
+      job={job}
+      stage={stage}
+      words={stage === "failed" ? videoFailureLine(job) : videoHeadline(job)}
+      timed={stage === "working" && job.state !== "queued"}
+    />
   );
-}
-
-function Dot({ stage }: { stage: VideoTileStage }) {
-  const tone = stage === "failed" ? "bg-danger" : stage === "review" ? "bg-ok" : "bg-accent studio-breathe";
-  return <span aria-hidden className={cx("h-2 w-2 shrink-0 rounded-full transition-colors duration-200 motion-reduce:transition-none", tone)} />;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -567,17 +449,4 @@ function useDecoded(src: string | null): { current: string | null; previous: str
     return () => clearTimeout(timer);
   }, [held.previous]);
   return held;
-}
-
-/** Whether the element is on screen, or within a screen's margin of it. */
-function useOnScreen(ref: RefObject<HTMLElement | null>): boolean {
-  const [on, setOn] = useState(false);
-  useEffect(() => {
-    const element = ref.current;
-    if (element === null || typeof IntersectionObserver === "undefined") return;
-    const observer = new IntersectionObserver((entries) => setOn(entries.some((entry) => entry.isIntersecting)), { rootMargin: "200px" });
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [ref]);
-  return on;
 }

@@ -5,14 +5,17 @@ import { Fragment, useId, useRef, useState, type ReactNode } from "react";
 
 import { formatTimecode, type TranscriptCue, type VideoChapter } from "@/components/media";
 import { JobLog } from "@/components/studio/JobPanel";
-import { Duration } from "@/components/studio/JobStrip";
-import { postJob, useStudioJobs } from "@/components/studio/JobsProvider";
+import { CancelJobButton, Duration, JobDot } from "@/components/studio/job-bits";
+import { JobCost } from "@/components/studio/JobCost";
+import { useStudioJobs } from "@/components/studio/JobsProvider";
+import { PanelLink } from "@/components/studio/PanelLink";
+import { useJobVerb } from "@/components/studio/use-job-verb";
 import { FADE_IN } from "@/components/studio/motion";
 import { FadeImg } from "@/components/studio/motion-parts";
 import { useJobEvents, useSheets, useTranscript, useVideoJob } from "@/components/studio/video/use-video-job";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
-import { cx, LABEL } from "@/components/ui/classes";
+import { buttonClasses, cx, LABEL } from "@/components/ui/classes";
 import { composerKey } from "@/components/ui/composer-keys";
 import { Collapse } from "@/components/ui/Collapse";
 import { Glyph } from "@/components/ui/Glyph";
@@ -24,6 +27,7 @@ import { VideoPlayer } from "@/components/VideoPlayer";
 import { modelName } from "@/lib/model-name";
 import { announceOpener, leaveOpener, sessionStore } from "@/lib/studio-extend";
 import { isActive, narration, type StudioEvent } from "@/lib/studio-jobs";
+import { jobVerbPath } from "@/lib/studio-job-verb";
 import { checkWord, progressWord } from "@/lib/studio-job-state";
 import { useElapsed } from "@/lib/use-elapsed";
 import {
@@ -123,7 +127,7 @@ function Body({ job, brief, path, inConversation }: { job: VideoJob; brief: Vide
 
   return (
     <div className="flex min-w-0 flex-col gap-5 px-5 py-4">
-      <StatusLine job={full} replaced={job.state === "discarded" && child !== null} />
+      <StatusLine job={full} path={path} replaced={job.state === "discarded" && child !== null} />
       {stopped && <FailureCard job={full} path={path} inConversation={inConversation} />}
       {job.state === "discarded" && (
         <p className="rounded-xl bg-surface2 px-4 py-3 text-[14px] text-text2">
@@ -137,9 +141,9 @@ function Body({ job, brief, path, inConversation }: { job: VideoJob; brief: Vide
           <p className="min-w-0 flex-1 text-[14px] text-text">
             A newer version: {videoHeadline(child).toLowerCase()}.
           </p>
-          <Button size="sm" href={panelHref(path, { job: child.jobId })}>
+          <PanelLink href={panelHref(path, { job: child.jobId })} scroll={false} className={buttonClasses({ size: "sm" })}>
             Open it
-          </Button>
+          </PanelLink>
         </div>
       )}
 
@@ -177,14 +181,11 @@ function Body({ job, brief, path, inConversation }: { job: VideoJob; brief: Vide
  * What the job is doing, the step count, the time and the cost, and Cancel.
  * The headline is a live region, so a screen reader hears each new step.
  */
-function StatusLine({ job, replaced }: { job: VideoJob; replaced: boolean }) {
-  const { post } = useStudioJobs();
-  const [cancelling, setCancelling] = useState(false);
+function StatusLine({ job, path, replaced }: { job: VideoJob; path: string; replaced: boolean }) {
   const live = job.state === "running" || job.state === "queued";
   // Null until hydrated, so the server's second is never matched against the browser's.
   const elapsed = useElapsed(job);
   const step = videoStepCount(job);
-  const stopping = cancelling || job.cancelRequestedAt !== null;
   const model = job.resolvedModel ?? job.agentModel?.passed ?? null;
   const facts: ReactNode[] = [
     step,
@@ -194,7 +195,7 @@ function StatusLine({ job, replaced }: { job: VideoJob; replaced: boolean }) {
 
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
-      <span aria-hidden className={cx("size-2.5 shrink-0 rounded-full transition-colors duration-200 motion-reduce:transition-none", dotTone(job))} />
+      <JobDot job={job} size="md" />
       <div className="min-w-0 flex-1">
         <p role="status" className="truncate text-[15px] font-semibold text-text">
           {replaced ? "Replaced" : headline(job)}
@@ -209,15 +210,7 @@ function StatusLine({ job, replaced }: { job: VideoJob; replaced: boolean }) {
           {job.costUsd !== null && (
             <>
               {facts.length > 0 ? " · " : ""}
-              <span
-                title={
-                  job.costSource === "stream"
-                    ? "An estimate from the session's usage events, which runs low: the agent was stopped before it reported its own figure."
-                    : "What the agent reported this job cost."
-                }
-              >
-                {job.costSource === "stream" ? "~" : ""}${job.costUsd.toFixed(2)}
-              </span>
+              <JobCost usd={job.costUsd} source={job.costSource} />
             </>
           )}
           {model !== null && (
@@ -228,20 +221,7 @@ function StatusLine({ job, replaced }: { job: VideoJob; replaced: boolean }) {
           )}
         </p>
       </div>
-      {live && (
-        <Button
-          size="sm"
-          variant="secondary"
-          disabled={stopping}
-          onClick={async () => {
-            setCancelling(true);
-            const result = await post(`/studio/api/jobs/${encodeURIComponent(job.jobId)}/cancel`);
-            if (!result.ok) setCancelling(false);
-          }}
-        >
-          {stopping ? "Stopping" : "Cancel"}
-        </Button>
-      )}
+      {live && <CancelJobButton job={job} path={path} size="sm" />}
     </div>
   );
 }
@@ -271,35 +251,21 @@ function effortTitle(job: VideoJob): string | undefined {
   return parts.length === 0 ? undefined : parts.join(", ");
 }
 
-function dotTone(job: VideoJob): string {
-  if (job.state === "failed" || job.state === "interrupted") return "bg-danger";
-  if (job.state === "awaiting_review" || job.state === "accepted") return "bg-ok";
-  if (job.state === "cancelled" || job.state === "discarded") return "bg-text3";
-  return "bg-accent studio-breathe";
-}
-
 /* -------------------------------------------------------------------------- */
 /* A failure                                                                  */
 /* -------------------------------------------------------------------------- */
 
 function FailureCard({ job, path, inConversation }: { job: VideoJob; path: string; inConversation: boolean }) {
   const failure = videoFailure(job);
-  const { post } = useStudioJobs();
-  const router = useRouter();
-  const [busy, setBusy] = useState(false);
+  const { run, busy: verb } = useJobVerb(path);
+  const busy = verb !== null;
   const [said, setSaid] = useState<string | null>(null);
   const [changing, setChanging] = useState(false);
 
+  // Resume queues a new job that continues this one's session, and the panel follows it.
   const resume = async (): Promise<void> => {
-    setBusy(true);
-    const result = await post(`/studio/api/jobs/${encodeURIComponent(job.jobId)}/resume`);
-    setBusy(false);
-    const next = typeof result.data.jobId === "string" ? result.data.jobId : null;
-    if (result.ok && next !== null) {
-      router.push(panelHref(path, { job: next }), { scroll: false });
-      return;
-    }
-    setSaid(typeof result.data.error === "string" ? result.data.error : `Resume answered ${result.status}.`);
+    const result = await run(job.jobId, "resume", { follow: true });
+    if (!result.ok || result.next === null) setSaid(result.text);
   };
 
   return (
@@ -320,9 +286,13 @@ function FailureCard({ job, path, inConversation }: { job: VideoJob; path: strin
           </Button>
         )}
         {failure.actions.includes("talk") && !inConversation && typeof job.draftId === "string" && (
-          <Button size="sm" variant="ghost" href={conversationHref(path, job.draftId)}>
+          <PanelLink
+            href={conversationHref(path, job.draftId)}
+            scroll={false}
+            className={buttonClasses({ size: "sm", variant: "ghost" })}
+          >
             Back to the conversation
-          </Button>
+          </PanelLink>
         )}
       </div>
       {changing && (
@@ -868,22 +838,18 @@ function Landed({ job, path }: { job: VideoJob; path: string }) {
 /* -------------------------------------------------------------------------- */
 
 function Actions({ job, path, accept, discard, change }: { job: VideoJob; path: string; accept: boolean; discard: boolean; change: boolean }) {
-  const { post, refresh } = useStudioJobs();
+  const { run, busy, refresh } = useJobVerb(path);
   const router = useRouter();
-  const [busy, setBusy] = useState<"accept" | "discard" | null>(null);
   const [said, setSaid] = useState<{ ok: boolean; text: string } | null>(null);
   const [changing, setChanging] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
 
   const act = async (verb: "accept" | "discard"): Promise<void> => {
-    setBusy(verb);
-    const result = await post(`/studio/api/jobs/${encodeURIComponent(job.jobId)}/${verb}`);
-    setBusy(null);
+    const result = await run(job.jobId, verb);
     setConfirmDiscard(false);
-    const note = typeof result.data.note === "string" ? result.data.note : null;
-    const error = typeof result.data.error === "string" ? result.data.error : null;
-    setSaid(result.ok ? null : { ok: false, text: error ?? note ?? `${verb === "accept" ? "Accept" : "Discard"} answered ${result.status}.` });
+    setSaid(result.ok ? null : { ok: false, text: result.text });
     await refresh();
+    // The grid changes: an accepted video gets its tile, a discarded one loses its job.
     router.refresh();
   };
 
@@ -949,8 +915,7 @@ function Actions({ job, path, accept, discard, change }: { job: VideoJob; path: 
  * posted straight to the runner) has only the first.
  */
 function ChangeForm({ job, path, onClose }: { job: VideoJob; path: string; onClose: () => void }) {
-  const { refresh } = useStudioJobs();
-  const router = useRouter();
+  const { send, go, refresh } = useJobVerb(path);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -968,31 +933,22 @@ function ChangeForm({ job, path, onClose }: { job: VideoJob; path: string; onClo
       return;
     }
     setBusy(true);
-    // `postJob` rather than the provider's `post`, which reads the job list
-    // before it returns: on a job in review that list already says
-    // discarded, and the panel flashed "Discarded" before it moved on. The
-    // panel moves to the new job first and the list is read after.
-    const { ok, status, data } = await postJob(`/studio/api/jobs/${encodeURIComponent(job.jobId)}/revise`, {
-      changes: text.trim(),
+    // Quiet, not the provider's `post`, which reads the job list before it
+    // returns: on a job in review that list already says discarded, and the
+    // panel flashed "Discarded" before it moved on. The panel moves to the
+    // new job first and the list is read after.
+    const result = await send(jobVerbPath(job.jobId, "revise"), {
+      body: { changes: text.trim() },
+      label: "revise",
+      follow: { from: job.jobId },
+      quiet: true,
     });
-    const next = typeof data.jobId === "string" ? data.jobId : null;
-    if (ok && next !== null) {
-      router.push(panelHref(path, { job: next }), { scroll: false });
-      void refresh();
-      router.refresh();
-      return;
-    }
-    setBusy(false);
+    void refresh();
+    if (result.ok && result.next !== null) return;
     // A lost reply after the runner committed shows up on the next poll as
     // this job set aside with a link to its change (`childJob`).
-    void refresh();
-    setProblem(
-      status === 0
-        ? `The studio runner is not answering: ${String(data.detail)}`
-        : typeof data.error === "string"
-          ? data.error
-          : `The runner answered ${status}.`,
-    );
+    setBusy(false);
+    setProblem(result.text);
   };
 
   const talk = (): void => {
@@ -1003,7 +959,7 @@ function ChangeForm({ job, path, onClose }: { job: VideoJob; path: string; onClo
     }
     if (typeof job.draftId !== "string") return;
     leaveOpener(sessionStore(), job.draftId, { send: null, compose: text.trim(), source: null, mentions: ["video"] });
-    router.push(conversationHref(path, job.draftId), { scroll: false });
+    go(conversationHref(path, job.draftId));
     announceOpener(job.draftId);
   };
 
