@@ -8,7 +8,8 @@ import { AssetRow } from "@/components/library/AssetRow";
 import { cx } from "@/components/ui/classes";
 import { getCourses } from "@/data/courses";
 import { getTopics } from "@/data/topics";
-import { loadAssetAccess, loadFavorites, loadLibrary, loadSearchText, thumbnailFor, thumbnailStatusFor } from "@/lib/asset-library";
+import { loadAssetAccess, loadFavorites, loadLibrary, loadSearchText } from "@/lib/asset-library";
+import { thumbnailFor, thumbnailStatusFor } from "@/lib/library-thumbnails";
 import { dayGroups, editedLabel, timeOfDay } from "@/lib/day-groups";
 import { loadKnowledgeBase } from "@/lib/learner-store";
 import {
