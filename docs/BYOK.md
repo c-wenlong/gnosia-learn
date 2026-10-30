@@ -15,7 +15,7 @@ are written down here before anything else.
 | --- | --- |
 | The table | `provider_key`, migration `0018_provider_key`, declared in `packages/schema/src/state.ts` |
 | The one module that reads and writes it | `services/catalog/src/state/provider-keys.ts` |
-| Sealing and opening | `apps/web/src/lib/provider-keys/seal.ts` |
+| Sealing and opening | `packages/tutor/src/server/seal.ts` (tests in `packages/tutor/test/seal.test.ts`) |
 | The web app's store, per owner | `apps/web/src/lib/provider-keys/store.ts` |
 | The order the tutor tries keys in | `orderCredentials` in `apps/web/src/lib/agent/providers.ts`, `tutorCredentials` in `apps/web/src/lib/agent/credentials.ts` |
 | Save and remove | `POST` and `DELETE /api/learner/provider-key` |
@@ -78,8 +78,18 @@ printable ASCII with no spaces. The Test button is the real check. Saving and
 removing go through the same guards as every Settings write: same origin, a
 per-IP rate limit, and the session's owner.
 
-**D6. The studio's agents are out of scope.** They run `claude` under the
-machine's own login (AGENTS.md, "Diagram studio"), not these keys.
+**D6. The studio's agents keep a plaintext copy.** By default they run
+`claude` under the machine's own login (AGENTS.md, "Diagram studio"), not
+these keys. But with `STUDIO_ENABLED` set, saving an OpenAI, Anthropic,
+Gemini, OpenRouter or NVIDIA key (`TUTOR_TO_BYOK` in
+`apps/web/src/lib/byok-providers.ts`) also sends the plaintext key to the
+runner, and `POST /api/learner/provider-key/sync` opens every saved key and
+sends it the same way. The runner writes it to `$STUDIO_HOME/byok.json`,
+mode 0600, so its video agents can spend it. `STUDIO_HOME` defaults to
+`<repo>/.studio/`, which is gitignored but inside the checkout. So D3 and the
+first row of the threat model hold only while the studio is off. Where that
+file lives, or whether the runner should open the sealed rows itself, is
+open: see the threat model's last row.
 
 **D7. The additional data binds each row to its owner, provider and
 version.** The GCM tag covers `["gnosia/provider-key", version, owner,
@@ -132,6 +142,7 @@ What each kind of attacker gets.
 | Both the database and the environment | Every stored key, decrypted | Nothing more to protect. This is where the keys were before this change, when they sat in `.env` in the clear |
 | Code running on the server | Every key it touches, in memory | Out of scope: no design that lets the server call a provider can hide the key from the server |
 | Script running in the Settings page (an XSS) | A key while it is being typed, and the use of saved keys through Test | A saved key: no response carries one |
+| A copy of the checkout or of `STUDIO_HOME` while the studio is on (a backup, the homeserver copy, any agent session working in the repository) | Every key mirrored to the runner, in the clear, from `byok.json` (D6) | Keys for providers the runner does not take (custom providers). **Open**: moving the file's default out of the checkout, or having the runner open the sealed rows with `AUTH_SECRET`, is the owner's call |
 
 So the design moves the keys from "anyone with the environment" to "anyone
 with the environment and the database". Keep the two apart: a database
@@ -151,9 +162,10 @@ Things that could leak a key, and what stops each:
   sharing six characters in a row with it, which covers masked echoes such as
   `sk-or-v1-ab***yz`.
 - **The exports.** D11.
-- **The client bundle.** `seal.ts`, `store.ts`, `settings.ts` and
-  `credentials.ts` import `server-only`, so a client component reaching them
-  fails the build. The Settings card is handed `ProviderKeyView` rows: a
+- **The client bundle.** `store.ts`, `settings.ts` and `credentials.ts`
+  import `server-only`, so a client component reaching them fails the build.
+  The seal itself is `@gnosia/tutor/server/seal`, which only those modules and
+  the two key routes import. The Settings card is handed `ProviderKeyView` rows: a
   provider, the last four characters, a date and two booleans.
 - **Responses.** Every answer from the two routes is `Cache-Control:
   no-store` and carries at most the last four characters. The route tests
@@ -172,7 +184,7 @@ secret after any suspected leak of the environment, and rotate the provider
 keys at the provider as well if the database may have leaked with it.
 
 **Introducing a dedicated secret** later: add version 2 to `deriveKey` in
-`seal.ts`, deriving from the new variable, and make `sealKey` write version 2.
+`packages/tutor/src/server/seal.ts`, deriving from the new variable, and make `sealKey` write version 2.
 Rows still at version 1 keep opening while `AUTH_SECRET` is unchanged, and
 each moves to version 2 when its key is next saved. No migration.
 
@@ -187,7 +199,8 @@ when it has none, and the app's Settings says so.
 
 ## Out of scope
 
-- The studio's agents (D6).
+- The studio runner's own copy of the keys is described in D6, not designed
+  away.
 - Accounts beyond the one owner. The table and every function take the owner,
   so a second account needs nothing here, but `currentOwner()` still answers
   `local` for every signed-in request.

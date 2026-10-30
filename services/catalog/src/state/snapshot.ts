@@ -1,5 +1,6 @@
 import {
   emptyLearnerState,
+  isUserResourceUrl,
   LOCAL_LEARNER_ID,
   PREFERENCE_KEYS,
   type LastVisited,
@@ -104,7 +105,9 @@ export function asUserResources(value: unknown): Record<string, UserResource[]> 
     const resources = list.flatMap((item): UserResource[] => {
       if (item === null || typeof item !== "object") return [];
       const raw = item as Record<string, unknown>;
-      if (typeof raw.url !== "string" || raw.url === "") return [];
+      // http(s) only, as every writer stores: a value written before that
+      // rule (or by hand) must not reach an href.
+      if (typeof raw.url !== "string" || !isUserResourceUrl(raw.url)) return [];
       return [
         {
           id: typeof raw.id === "string" && raw.id !== "" ? raw.id : raw.url,

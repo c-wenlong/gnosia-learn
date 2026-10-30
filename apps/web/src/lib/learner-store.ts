@@ -16,20 +16,20 @@ import { currentOwner } from "@/lib/owner";
 /**
  * The web app's door to the learner state store.
  *
- * **Server only**, and `import "server-only"` enforces it: this holds a
- * Postgres pool, and a `"use client"` import would otherwise compile and ship
- * a database driver to the browser. Components get the state through
+ * **Server only**, and `import "server-only"` enforces it: this holds the
+ * catalog's SQLite handle, and a `"use client"` import would otherwise compile
+ * and ship a database driver to the browser. Components get the state through
  * `LearnerProvider`, which a server component seeds from here, and change it
  * through `/api/learner/*`.
  *
  * Three rules shape this file.
  *
  * **Nothing here runs at build time.** Every entry point calls `connection()`
- * first, which tells Next this work belongs to a request. Vercel has no
- * database yet, so a build that queried one would fail on every deploy —
- * and a page that baked its answer in at build time would show a study session
- * from whenever the last deploy happened, which is the bug `learn/state/
- * index.json` had.
+ * first, which tells Next this work belongs to a request. `connect` creates
+ * the database file on first use, so a build that opened it would leave a
+ * file behind wherever it ran, and a page that baked its answer in at build
+ * time would show a study session from whenever the last deploy happened,
+ * which is the bug `learn/state/index.json` had.
  *
  * **An unreachable database is a state, not a crash.** Reads degrade to empty
  * and say so, exactly as `loadKnowledgeBase` already did for a missing
@@ -43,23 +43,22 @@ import { currentOwner } from "@/lib/owner";
  */
 
 /**
- * One pool for the process, opened on first use.
+ * One connection for the process, opened on first use.
  *
  * Next reuses the module across requests, so this is per server instance
- * rather than per render. `max: 4` because page renders are concurrent and a
- * single socket would serialise them; small because the app is one learner and
- * a serverless platform multiplies instances, not queries.
+ * rather than per render. A SQLite file is one handle per connect, and its
+ * writes are serialised by the file, not by a pool.
  */
-let pool: { db: CatalogDatabase; close: () => Promise<void> } | null = null;
+let handle: { db: CatalogDatabase; close: () => Promise<void> } | null = null;
 
 /**
- * The pool itself, for a read that lives in another module.
+ * The connection itself, for a read that lives in another module.
  *
  * `@/lib/asset-library` is the catalog's other reader — the content half rather
  * than the learner's — and it degrades in exactly the shape the three reads
- * below do. What it must not do is open a second pool: two pools in one process
- * is two sets of sockets, two idle-error handlers and two answers to "is the
- * database up". So the connection stays private to this module and is handed
+ * below do. What it must not do is open a second handle: two in one process
+ * are two busy timeouts on one file and two answers to "is the database up".
+ * So the connection stays private to this module and is handed
  * out; the degradation stays with whoever is doing the reading, because the
  * empty value a failed read falls back to is different for every one of them.
  */
@@ -68,20 +67,14 @@ export async function catalogDatabase(): Promise<CatalogDatabase> {
 }
 
 async function database(): Promise<CatalogDatabase> {
-  if (pool === null) {
-    // Imported lazily so the pool is never constructed during a build, even if
-    // something imports this module for its types.
+  if (handle === null) {
+    // Imported lazily so nothing is opened during a build, even if something
+    // imports this module for its types. `connectionTimeoutMillis` is how long
+    // a read waits on a file another process is writing.
     const { connect } = await import("@gnosia/catalog/state");
-    const created = connect({ max: 4, connectionTimeoutMillis: 3_000 });
-    // An idle client that the server drops emits on the pool, and an
-    // unhandled 'error' event takes the whole process down. A dropped
-    // connection is normal operation for a database behind a proxy.
-    created.pool.on("error", (error: Error) => {
-      console.warn(`learner store: idle connection dropped — ${error.message}`);
-    });
-    pool = created;
+    handle = connect({ connectionTimeoutMillis: 3_000 });
   }
-  return pool.db;
+  return handle.db;
 }
 
 export interface Snapshot {

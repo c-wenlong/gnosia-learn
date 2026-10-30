@@ -1,11 +1,10 @@
-import { asThemeMode, PREFERENCE_KEYS, THEME_MODES, type ThemeMode } from "@gnosia/schema/shared";
+import { asThemeMode, isUserResourceUrl, PREFERENCE_KEYS, THEME_MODES, USER_RESOURCE_LIMITS, type ThemeMode } from "@gnosia/schema/shared";
 import {
   appendEvent,
   asLastVisited,
   asRecentModules,
   readPreference,
   withLearnerLock,
-  inTransaction,
   withRecentModule,
   writePreference,
   type CatalogDatabase,
@@ -85,23 +84,6 @@ export const POST = handler(
   },
 );
 
-/** A failed write's SQLSTATE, read down drizzle's `cause` chain; never its message, which carries the bind parameters. */
-function failureCode(error: unknown): string {
-  for (let at: unknown = error; at instanceof Error; at = at.cause) {
-    const code = (at as { code?: unknown }).code;
-    if (typeof code === "string") return code;
-  }
-  return "unknown";
-}
-
-/** Whether a failed write names `constraint`, down the same chain. */
-function mentions(error: unknown, constraint: string): boolean {
-  for (let at: unknown = error; at instanceof Error; at = at.cause) {
-    if ((at as { constraint?: unknown }).constraint === constraint) return true;
-  }
-  return false;
-}
-
 /**
  * Write `lastVisited`, put the same visit at the front of `recentModules`, and
  * append a `visit` event, in one transaction under the learner's row lock so
@@ -126,25 +108,14 @@ async function rememberVisit(db: CatalogDatabase, value: unknown, owner: string)
   await withLearnerLock(db, owner, async (tx) => {
     if (visit !== undefined) {
       // Stamped by the server, as `watched` is: the log orders by it, and a
-      // browser's clock is not the log's. In a savepoint, so a database that
-      // has not yet taken migration 0025 (which allows the type) loses the
-      // event and still keeps the preferences, which Recent reads as well.
-      try {
-        await inTransaction(tx, async (savepoint) =>
-          appendEvent(
-            savepoint,
-            { type: "visit", course: visit.courseSlug, ...(visit.moduleSlug === undefined ? {} : { module: visit.moduleSlug }) },
-            owner,
-          ),
-        );
-      } catch (error) {
-        // Only the one refusal a database without 0025 gives (a check
-        // violation, 23514, on `event_type_check`). Anything else fails the
-        // write as before, so a log that has stopped taking visits is a 503
-        // someone sees, not a quiet gap in Recent.
-        if (failureCode(error) !== "23514" || !mentions(error, "event_type_check")) throw error;
-        console.warn("preference: visit event not written, the database has not taken migration 0025");
-      }
+      // browser's clock is not the log's. A write that fails fails the whole
+      // visit, so a log that has stopped taking visits is a 503 someone sees,
+      // not a quiet gap in Recent.
+      await appendEvent(
+        tx,
+        { type: "visit", course: visit.courseSlug, ...(visit.moduleSlug === undefined ? {} : { module: visit.moduleSlug }) },
+        owner,
+      );
       const stored = asRecentModules(await readPreference(tx, PREFERENCE_KEYS.recentModules, owner));
       const previous = asLastVisited(await readPreference(tx, PREFERENCE_KEYS.lastVisited, owner));
       const list = stored ?? (previous !== undefined ? [previous] : []);
@@ -207,10 +178,9 @@ function inactiveCourses(value: unknown): string[] {
   return [...new Set(value as string[])];
 }
 
-/** At most 50 modules, 50 links each: a personal reading list, not a mirror. */
-const MAX_RESOURCE_MODULES = 50;
-const MAX_RESOURCES_PER_MODULE = 50;
-const MAX_RESOURCE_CHARS = 2_000;
+const MAX_RESOURCE_MODULES = USER_RESOURCE_LIMITS.modules;
+const MAX_RESOURCES_PER_MODULE = USER_RESOURCE_LIMITS.perModule;
+const MAX_RESOURCE_CHARS = USER_RESOURCE_LIMITS.chars;
 
 function userResources(value: unknown): Record<string, { id: string; title: string; url: string }[]> {
   const raw = object(value);
@@ -233,10 +203,9 @@ function userResources(value: unknown): Record<string, { id: string; title: stri
           throw new BadRequest(`"value.${moduleId}[${i}].${field}" must be a short string.`);
         }
       }
-      // http(s) only. The value comes back out into an href, and a stored
-      // `javascript:` URL would be a self-inflicted XSS on the next render.
+      // http(s) only (`isUserResourceUrl`): the value comes back out into an href.
       const url = String(resource.url);
-      if (!/^https?:\/\//i.test(url)) {
+      if (!isUserResourceUrl(url)) {
         throw new BadRequest(`"value.${moduleId}[${i}].url" must be an http(s) URL.`);
       }
       return { id: String(resource.id), title: String(resource.title), url };

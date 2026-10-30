@@ -90,6 +90,8 @@ describe.skipIf(!reachable.ok)("custom provider routes", () => {
       { label: "Gateway", baseUrl: "http://gw.example/v1", key: KEY },
       { label: "", baseUrl: "https://gw.example/v1", key: KEY },
       { label: "Gateway", baseUrl: "https://gw.example/v1", key: "short" },
+      { label: "Studio", baseUrl: "http://127.0.0.1:7250/v1", key: KEY },
+      { label: "Itself", baseUrl: "http://localhost:3000/api", key: KEY },
     ]) {
       const response = await route.POST(request("/api/learner/custom-provider", "POST", body));
       expect(response.status, JSON.stringify(body).slice(0, 60)).toBe(400);
