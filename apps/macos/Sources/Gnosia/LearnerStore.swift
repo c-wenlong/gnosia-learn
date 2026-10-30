@@ -369,7 +369,9 @@ final class LearnerStore {
         var ranges = stored?.ranges ?? []
         var done = marked || (stored?.done ?? false)
         if case .position(let duration, let played) = mirror, duration > 0 {
-            ranges = Array(clampRanges(ranges + played, duration: duration).suffix(maxPlaybackRanges))
+            // The first MAX_RANGES, as applySave keeps them, so this row and
+            // the catalog's never hold different stretches of one video.
+            ranges = Array(clampRanges(ranges + played, duration: duration).prefix(maxPlaybackRanges))
             done = done || playbackCoverage(ranges, duration: duration) >= watchedFraction
         }
         // The mirror body, decided up front — a zero duration has nothing

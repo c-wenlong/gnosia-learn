@@ -80,6 +80,8 @@ struct PlayerView: NSViewRepresentable {
         context.coordinator.onPosition = onPosition
         context.coordinator.onPlayhead = onPlayhead
         if let seconds = seekTo {
+            // Closed before the seek, so no tick can stretch the range over it.
+            context.coordinator.jumped()
             view.player?.seek(to: CMTime(seconds: seconds, preferredTimescale: 600))
             DispatchQueue.main.async { self.seekTo = nil }
         }
@@ -109,6 +111,9 @@ struct PlayerView: NSViewRepresentable {
         private var jump: Double = 3
         private var timer: Timer?
         private var endObserver: NSObjectProtocol?
+        /// AVPlayerItem.timeJumped: every seek, the transport's scrubber and
+        /// `seekTo` alike, closes the stretch playing, however short the jump.
+        private var jumpObserver: NSObjectProtocol?
         private var pauseObservation: NSKeyValueObservation?
         /// The periodic observer the per-second playhead tick comes from;
         /// its player is kept beside the token because removing it is that
@@ -136,6 +141,13 @@ struct PlayerView: NSViewRepresentable {
             let ranges = played
             played = []
             onPosition(position, duration, ranges)
+        }
+
+        /// A seek: the stretch playing ends at the last tick before it, and
+        /// the next tick of play opens one where the playhead landed.
+        func jumped() {
+            if let start = open, last > start { played.append([start, last]) }
+            open = nil
         }
 
         /// One playhead tick: a stretch opens when play starts, closes on a
@@ -180,6 +192,8 @@ struct PlayerView: NSViewRepresentable {
             }
             endObserver.map(NotificationCenter.default.removeObserver)
             endObserver = nil
+            jumpObserver.map(NotificationCenter.default.removeObserver)
+            jumpObserver = nil
             pauseObservation?.invalidate()
             pauseObservation = nil
             if let playheadObserver {
@@ -187,6 +201,11 @@ struct PlayerView: NSViewRepresentable {
                 self.playheadObserver = nil
             }
             guard let player = view.player else { return }
+            jumpObserver = NotificationCenter.default.addObserver(
+                forName: AVPlayerItem.timeJumpedNotification, object: player.currentItem, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.jumped() }
+            }
             // A periodic observer over the caller's tick: it also reports
             // the paused seeks a timer would miss, and costs nothing while
             // the player is idle.
@@ -221,6 +240,8 @@ struct PlayerView: NSViewRepresentable {
             timer = nil
             endObserver.map(NotificationCenter.default.removeObserver)
             endObserver = nil
+            jumpObserver.map(NotificationCenter.default.removeObserver)
+            jumpObserver = nil
             pauseObservation?.invalidate()
             pauseObservation = nil
             if let playheadObserver {

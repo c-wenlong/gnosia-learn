@@ -1,7 +1,7 @@
 // The catalog snapshot Gnosia reads: the parts of the catalog the macOS app
 // draws, mirrored into one SQLite file it can open read-only.
 //
-// usage: node apps/macos/scripts/catalog-snapshot.mjs [--out PATH] [--owner ID]
+// usage: node apps/macos/scripts/catalog-snapshot.mjs [--out PATH] [--owner ID] [--if-stale]
 //
 // The catalog it reads is the same SQLite file every catalog command reads:
 // CATALOG_DB when set, services/catalog/.env's DATABASE_URL (or the shell's)
@@ -42,10 +42,17 @@
 // what the sidecar writes), then `local`; it is written into snapshot_meta
 // for the app to read rather than assume.
 //
+// --if-stale writes only when the mirror is behind: missing, of an older
+// format, for another owner, or older than the catalog file or its WAL (the
+// catalog runs in WAL mode, so a new row moves `catalog.db-wal` and the main
+// file only at a checkpoint). A mirror that is none of those prints `fresh`
+// and exits 0 without writing. The app runs it that way, so the source and
+// the owner are resolved here, once, and never guessed at in Swift.
+//
 // Exit codes: 0 snapshot written, 1 the read or write failed, 2 the
 // invocation was wrong.
 
-import { existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, renameSync, rmSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -55,7 +62,7 @@ import Database from 'better-sqlite3';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const CATALOG_ENV = join(ROOT, 'services/catalog/.env');
-const USAGE = 'usage: node catalog-snapshot.mjs [--out PATH] [--owner ID]';
+const USAGE = 'usage: node catalog-snapshot.mjs [--out PATH] [--owner ID] [--if-stale]';
 
 /** The owner whose rows every owner reads (COMMONS_OWNER in packages/schema/src/shared.ts). */
 const COMMONS = 'commons';
@@ -467,6 +474,42 @@ const ASSET_COLUMNS = `id, kind, path, url, content_hash, inputs_hash, bytes,
   created_at / 1000.0 AS created_at,
   updated_at / 1000.0 AS updated_at`;
 
+/** A file's modification time in ms, or null when it is not there. */
+function mtimeOf(path) {
+  try {
+    return statSync(path).mtimeMs;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Why the mirror at `out` needs rewriting for `owner` from `sourcePath`, or
+ * null when it is current. A source that is not there is the snapshot's own
+ * refusal to report, so it reads as stale.
+ */
+export function staleness(sourcePath, out, owner) {
+  const mirrorAt = mtimeOf(out);
+  if (mirrorAt === null) return 'no mirror yet';
+  const sourceAt = mtimeOf(sourcePath);
+  if (sourceAt === null) return 'no catalog to compare';
+  let meta;
+  try {
+    const db = new Database(out, { readonly: true, fileMustExist: true });
+    try {
+      meta = Object.fromEntries(db.prepare('SELECT key, value FROM snapshot_meta').all().map((r) => [r.key, r.value]));
+    } finally {
+      db.close();
+    }
+  } catch {
+    return 'the mirror cannot be read';
+  }
+  if (meta.schema_version !== String(SCHEMA_VERSION)) return `format ${meta.schema_version ?? '?'}, not ${SCHEMA_VERSION}`;
+  if ((meta.owner ?? 'local') !== owner) return `made for ${meta.owner ?? 'local'}, not ${owner}`;
+  const newest = Math.max(sourceAt, mtimeOf(`${sourcePath}-wal`) ?? 0);
+  return newest > mirrorAt ? 'the catalog changed since' : null;
+}
+
 export async function snapshot(sourcePath, out, owner = 'local') {
   // The live catalog and its mirror cannot be one file: the write goes
   // through a `.partial` rename that would put the reduced shape over the
@@ -801,7 +844,10 @@ export async function snapshot(sourcePath, out, owner = 'local') {
       collectionItems: all(`SELECT id, collection_id, position, topic_slug,
         concept_slug, asset_id, topic_position,
         created_at / 1000.0 AS created_at FROM collection_item
-        WHERE collection_id IN (SELECT id FROM collection WHERE owner_id IN (@owner, @commons))`),
+        WHERE collection_id IN (SELECT id FROM collection WHERE owner_id IN (@owner, @commons))
+          AND (topic_slug IS NULL OR topic_slug IN (SELECT slug FROM topic WHERE owner_id IN (@owner, @commons)))
+          AND (concept_slug IS NULL OR concept_slug IN (SELECT slug FROM concept WHERE owner_id IN (@owner, @commons)))
+          AND (asset_id IS NULL OR asset_id IN (SELECT id FROM asset WHERE owner_id IN (@owner, @commons)))`),
       itemConcepts: all(`SELECT concept_slug, curriculum_item_id, position,
         created_at / 1000.0 AS created_at FROM concept_curriculum_item
         WHERE concept_slug IN (SELECT slug FROM concept WHERE owner_id IN (@owner, @commons)) AND curriculum_item_id IN (SELECT id FROM curriculum_item WHERE owner_id IN (@owner, @commons))`),
@@ -844,7 +890,12 @@ async function main(argv) {
   try {
     ({ values: args } = parseArgs({
       args: argv,
-      options: { out: { type: 'string' }, owner: { type: 'string' }, help: { type: 'boolean', short: 'h' } },
+      options: {
+        out: { type: 'string' },
+        owner: { type: 'string' },
+        'if-stale': { type: 'boolean' },
+        help: { type: 'boolean', short: 'h' },
+      },
       strict: true,
     }));
   } catch (error) {
@@ -860,6 +911,10 @@ async function main(argv) {
     // The source first: it loads services/catalog/.env, which may name the owner.
     const source = catalogPath();
     const owner = args.owner?.trim() || process.env.GNOSIA_SIDECAR_OWNER?.trim() || 'local';
+    if (args['if-stale'] && staleness(source, out, owner) === null) {
+      console.log('fresh');
+      return 0;
+    }
     const { counts } = await snapshot(source, out, owner);
     const total = Object.values(counts).reduce((a, b) => a + b, 0);
     console.log(`catalog snapshot for ${owner} → ${out}`);

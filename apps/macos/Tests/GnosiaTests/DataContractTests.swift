@@ -43,6 +43,18 @@ private func column(_ path: String, _ sql: String) throws -> [String] {
         #expect(playbackCoverage([[0, 10]], duration: 0) == 0)
     }
 
+    @MainActor @Test func theRowKeepsTheFirstRangesAsTheCatalogDoes() throws {
+        let (dir, path) = try tempPath("learner.db")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = LearnerStore(path: path)
+        // 500 one-second stretches two seconds apart, then a long last one.
+        let early = (0 ..< maxPlaybackRanges).map { [Double($0) * 2, Double($0) * 2 + 1] }
+        store.setWatch("v", seconds: 2_000, done: false, mirror: .position(duration: 2_000, ranges: early + [[1_100, 2_000]]))
+        #expect(store.watchEntry(for: "v")?.ranges.count == maxPlaybackRanges)
+        #expect(store.watchEntry(for: "v")?.ranges.last == [998, 999])
+        #expect(store.watchEntry(for: "v")?.done == false)
+    }
+
     @MainActor @Test func aScrubToTheEndIsNotAWatch() throws {
         let (dir, path) = try tempPath("learner.db")
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -94,8 +106,12 @@ private func column(_ path: String, _ sql: String) throws -> [String] {
         #expect(merged?.watchedAt == "1970-01-01T00:00:00.000Z")
         // Inside the last ten seconds: the web's rule starts it over.
         #expect(resumeAt(merged) == 0)
-        // A mark with no duration cannot stand as a playback.
+        // A mark with no duration cannot stand as a playback on its own,
+        // but its verdict lands on the web's row.
         #expect(mergedPlayback(stored: nil, local: WatchMark(seconds: 3, done: true)) == nil)
+        let marked = mergedPlayback(stored: web, local: WatchMark(seconds: 0, done: true, updatedAt: Date(timeIntervalSince1970: 0)))
+        #expect(marked?.watchedAt == "1970-01-01T00:00:00.000Z")
+        #expect(marked?.position == 460)
     }
 }
 
@@ -171,20 +187,11 @@ private func column(_ path: String, _ sql: String) throws -> [String] {
 }
 
 @Suite struct SnapshotFreshness {
-    @Test func aWalWriteMakesTheMirrorStale() throws {
-        let (dir, source) = try tempPath("catalog.db")
-        defer { try? FileManager.default.removeItem(at: dir) }
-        let mirror = dir.appendingPathComponent("app-catalog.db").path
-        let fm = FileManager.default
-        let t0 = Date(timeIntervalSince1970: 1_000_000)
-        for path in [source, mirror] { fm.createFile(atPath: path, contents: Data()) }
-        try fm.setAttributes([.modificationDate: t0], ofItemAtPath: source)
-        try fm.setAttributes([.modificationDate: t0.addingTimeInterval(60)], ofItemAtPath: mirror)
-        #expect(!CatalogSnapshot.isStale(mirror: mirror, source: source))
-        // The row landed in the WAL; the main file's time did not move.
-        fm.createFile(atPath: source + "-wal", contents: Data())
-        try fm.setAttributes([.modificationDate: t0.addingTimeInterval(120)], ofItemAtPath: source + "-wal")
-        #expect(CatalogSnapshot.isStale(mirror: mirror, source: source))
+    @Test func freshIsWhatTheScriptSays() {
+        // The script resolves the catalog and the owner and decides; the app reads its word.
+        #expect(CatalogSnapshot.outcome(status: 0, stdout: "shell noise\nfresh\n", stderr: "") == .fresh)
+        #expect(CatalogSnapshot.outcome(status: 0, stdout: "catalog snapshot for local → /x\n", stderr: "") == .refreshed)
+        #expect(CatalogSnapshot.outcome(status: 1, stdout: "", stderr: "catalog-snapshot: no catalog at /x") == .failed("catalog-snapshot: no catalog at /x"))
     }
 
     @Test func aFailureSaysWhatTheScriptSaid() {

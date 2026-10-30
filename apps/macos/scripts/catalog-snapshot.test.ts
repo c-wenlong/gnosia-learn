@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { migratedScratchDatabase, type Scratch } from "../../../services/catalog/test/scratch-database";
 import { ASSETS, seedAssets, seedContent } from "../../../services/catalog/test/state-fixture";
 // @ts-expect-error: a plain ESM script with no declarations; vitest runs it as it is.
-import { SCHEMA_VERSION, snapshot } from "./catalog-snapshot.mjs";
+import { SCHEMA_VERSION, snapshot, staleness } from "./catalog-snapshot.mjs";
 
 /**
  * The mirror the macOS app reads, made from a real migrated catalog: every
@@ -38,6 +38,8 @@ beforeAll(async () => {
   db.run(sql`INSERT INTO event (learner_id, type, payload, concept_slug, session_id)
     VALUES ('local', 'observation', '{"question":"What is alpha?","correct":true}', 'alpha', 's-local')`);
   db.run(sql`INSERT INTO event (learner_id, type, payload) VALUES ('someone', 'visit', '{}')`);
+  // A link from `local`'s module to the other owner's asset: one end is out of scope.
+  db.run(sql`INSERT INTO collection_item (collection_id, position, asset_id) VALUES ('fx-m1', 0, ${ASSETS.link})`);
 
   dir = mkdtempSync(join(tmpdir(), "gnosia-snapshot-"));
   out = join(dir, "app-catalog.db");
@@ -77,6 +79,18 @@ describe("the macOS catalog snapshot", () => {
     expect(assets).toContain(ASSETS.video);
     expect(assets).not.toContain(ASSETS.link);
     expect(rows("SELECT asset_id FROM asset_concept").map((r) => r.asset_id)).not.toContain(ASSETS.link);
+    expect(rows("SELECT asset_id FROM collection_item").map((r) => r.asset_id)).not.toContain(ASSETS.link);
+  });
+
+  it("says when the mirror is behind, and why", async () => {
+    expect(staleness(scratch.url, out, "local")).toBeNull();
+    expect(staleness(scratch.url, out, "someone")).toMatch(/made for local/);
+    expect(staleness(scratch.url, join(dir, "missing.db"), "local")).toMatch(/no mirror/);
+    // A write lands in the WAL, which moves even when the main file does not.
+    const past = new Date(Date.now() - 60_000);
+    utimesSync(out, past, past);
+    scratch.db.run(sql`INSERT INTO event (learner_id, type, payload) VALUES ('local', 'visit', '{}')`);
+    expect(staleness(scratch.url, out, "local")).toMatch(/changed/);
   });
 
   it("has every column the app reads", () => {

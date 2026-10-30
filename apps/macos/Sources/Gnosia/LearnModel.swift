@@ -1261,7 +1261,14 @@ func parseIsoInstant(_ text: String) -> Date? {
 /// web's instant first. A watch row with no known duration cannot stand as
 /// a Playback on its own.
 func mergedPlayback(stored: Playback?, local: WatchMark?) -> Playback? {
-    guard let local, let duration = local.duration, duration > 0 else { return stored }
+    guard let local else { return stored }
+    guard let duration = local.duration, duration > 0 else {
+        // A Mark watched before any heartbeat here knows no duration, but its
+        // verdict still stands on the web's row.
+        guard let stored, local.done, stored.watchedAt == nil else { return stored }
+        return Playback(position: stored.position, duration: stored.duration,
+                        watchedAt: isoInstant(local.updatedAt ?? Date()), updatedAt: stored.updatedAt)
+    }
     let localAt = local.updatedAt ?? .distantPast
     let mine = Playback(
         position: min(max(0, local.seconds), duration),

@@ -4,10 +4,13 @@
 //
 //  Keeps the mirror the app reads (<data home>/app-catalog.db) current
 //  without a manual `node scripts/catalog-snapshot.mjs`: on launch and each
-//  time the app comes to the front, when the live catalog.db (or its WAL)
-//  is newer than the mirror — or the mirror does not exist — the repo's
-//  script is spawned through the same login shell the sidecar
-//  uses, and the caller reloads the store when it exits cleanly. A missing
+//  time the app comes to the front, the repo's script runs with
+//  `--if-stale` through the same login shell the sidecar uses. The script
+//  decides: it resolves the catalog file and the owner the way every
+//  catalog command does, and rewrites the mirror only when it is missing,
+//  of another format or owner, or older than the catalog or its WAL —
+//  otherwise it prints `fresh`. The caller reloads the store when a new
+//  file landed. A missing
 //  repo or node, or a refused run, leaves whatever file was already there
 //  and keeps what went wrong for Settings;
 //  a bundled app with no checkout just keeps its last snapshot. The script
@@ -34,7 +37,6 @@ enum CatalogSnapshot {
     /// /dev/null: a snapshot that cannot be taken is otherwise a stale
     /// library with nothing anywhere saying so.
     static func refreshIfNeeded(location: CatalogLocation) async -> Outcome {
-        guard isStale(location: location) else { return .fresh }
         guard let root = repoRoot() else {
             return .failed("No checkout found to run the snapshot from; set GNOSIA_REPO to the repository root.")
         }
@@ -51,33 +53,39 @@ enum CatalogSnapshot {
             proc.executableURL = URL(fileURLWithPath: "/bin/zsh")
             proc.arguments = [
                 "-lc",
-                "node apps/macos/scripts/catalog-snapshot.mjs --out '\(location.catalogPath)'"
+                "node apps/macos/scripts/catalog-snapshot.mjs --if-stale --out '\(location.catalogPath)'"
             ]
             proc.currentDirectoryURL = root
-            proc.standardOutput = FileHandle.nullDevice
+            let stdout = Pipe()
+            proc.standardOutput = stdout
             proc.standardError = stderr
             // stderr is drained while the script runs, so a chatty run never
             // fills the pipe and blocks before it can exit.
             let drained = DispatchGroup()
             let said = SaidBox()
+            let printed = SaidBox()
             proc.terminationHandler = { p in
                 drained.wait()
-                done.resume(returning: p.terminationStatus == 0
-                    ? .refreshed
-                    : .failed(failureLine(said.text, status: p.terminationStatus)))
+                done.resume(returning: outcome(status: p.terminationStatus, stdout: printed.text, stderr: said.text))
             }
             // Entered before the run, so a script that exits at once still
-            // finds the read pending rather than an empty group.
+            // finds the reads pending rather than an empty group.
             drained.enter()
             DispatchQueue.global().async {
                 said.text = String(decoding: stderr.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
                 drained.leave()
             }
+            drained.enter()
+            DispatchQueue.global().async {
+                printed.text = String(decoding: stdout.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+                drained.leave()
+            }
             do {
                 try proc.run()
             } catch {
-                // No child holds the pipe: close our end so the read ends.
+                // No child holds the pipes: close our ends so the reads end.
                 try? stderr.fileHandleForWriting.close()
+                try? stdout.fileHandleForWriting.close()
                 done.resume(returning: .failed("Could not start node: \(error.localizedDescription)"))
             }
         }
@@ -99,32 +107,13 @@ enum CatalogSnapshot {
         return String(lines.suffix(2).joined(separator: " ").prefix(400))
     }
 
-    /// The mirror is stale when the file the script would read is newer
-    /// than it, or when there is no mirror at all — the run then decides
-    /// whether it can find a source at all. A source the env names that is
-    /// not a file (a postgres DATABASE_URL) can't be stat'ed for freshness;
-    /// with a mirror already present the run is skipped rather than spawned
-    /// blind every launch.
-    private static func isStale(location: CatalogLocation) -> Bool {
-        guard FileManager.default.fileExists(atPath: location.catalogPath) else { return true }
-        let env = ProcessInfo.processInfo.environment
-        let raw = env["CATALOG_DB"]?.trimmingCharacters(in: .whitespaces)
-        let source = (raw?.isEmpty == false ? raw : nil)
-            ?? CatalogLocation.dataHome(env: env).appendingPathComponent("catalog.db").path
-        return isStale(mirror: location.catalogPath, source: source)
-    }
-
-    /// The comparison itself. The catalog runs in WAL mode, so a new row
-    /// lands in `catalog.db-wal` and the main file's time moves only at a
-    /// checkpoint, which a server holding the file open makes rarely: the
-    /// source's time is the newer of the two files.
-    static func isStale(mirror: String, source: String) -> Bool {
-        guard let srcAt = modified(source), let dstAt = modified(mirror) else { return false }
-        return max(srcAt, modified(source + "-wal") ?? .distantPast) > dstAt
-    }
-
-    private static func modified(_ path: String) -> Date? {
-        (try? FileManager.default.attributesOfItem(atPath: path)[.modificationDate]) as? Date
+    /// What a run came to: `fresh` on stdout is the script saying the
+    /// mirror was current and nothing was written.
+    static func outcome(status: Int32, stdout: String, stderr: String) -> Outcome {
+        guard status == 0 else { return .failed(failureLine(stderr, status: status)) }
+        // Any line, not the first: a login shell can print before the script does.
+        let fresh = stdout.split(whereSeparator: \.isNewline).contains { $0.trimmingCharacters(in: .whitespaces) == "fresh" }
+        return fresh ? .fresh : .refreshed
     }
 
     /// The same discovery SidecarManager uses: GNOSIA_REPO wins, then the
