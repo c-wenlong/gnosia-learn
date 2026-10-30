@@ -33,14 +33,35 @@ export function AddProvider({
   /** The Add custom provider button, which the dialog returns focus to. */
   opener: () => HTMLElement | null;
 }) {
+  // In the page only while open, as the old key form: a password field kept
+  // in the page is one a browser may fill with the sign-in password. The
+  // form's state lives in the child, so every way out (Escape, the backdrop,
+  // Close, Cancel) drops what was typed with it, the key above all: kept in
+  // state it would fill back in on reopen, where it could be sent to a
+  // different base URL.
+  const form = usePresence(open, DIALOG_CLOSE_MS);
+  if (!form.mounted) return null;
+  return <AddProviderForm leaving={form.leaving} onSaving={onSaving} onClose={onClose} onAdded={onAdded} opener={opener} />;
+}
+
+function AddProviderForm({
+  leaving,
+  onSaving,
+  onClose,
+  onAdded,
+  opener,
+}: {
+  leaving: boolean;
+  onSaving: (saving: boolean) => void;
+  onClose: () => void;
+  onAdded: (label: string, text?: string) => void;
+  opener: () => HTMLElement | null;
+}) {
   const [draft, setDraft] = useState("");
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  // In the page only while open, as the old key form: a password field kept
-  // in the page is one a browser may fill with the sign-in password.
-  const form = usePresence(open, DIALOG_CLOSE_MS);
 
   const save = async (event: FormEvent) => {
     event.preventDefault();
@@ -59,7 +80,6 @@ export function AddProvider({
     onAdded(label);
   };
 
-  if (!form.mounted) return null;
   const ready = draft.trim() !== "" && name.trim() !== "" && url.trim() !== "";
   // A save in flight is not dismissed: Escape, the backdrop and Close all
   // ask the same way, and the ask waits — a hid error is a silent failure.
@@ -67,7 +87,7 @@ export function AddProvider({
     if (!saving) onClose();
   };
   return (
-    <Dialog label="Add a custom provider" onClose={askClose} closing={form.leaving} size="compact" className="md:w-[520px]" opener={opener}>
+    <Dialog label="Add a custom provider" onClose={askClose} closing={leaving} size="compact" className="md:w-[520px]" opener={opener}>
       <DialogHeader title="Add a custom provider" onClose={askClose} />
       <form onSubmit={(e) => void save(e)} aria-label="Add a custom provider" className="flex min-h-0 flex-col gap-3 overflow-y-auto p-6 pt-5">
         <FormRow label="Name" hint="How it is listed here and named in the tutor's messages.">
@@ -133,10 +153,7 @@ export function AddProvider({
             variant="secondary"
             size="sm"
             disabled={saving}
-            onClick={() => {
-              setDraft("");
-              onClose();
-            }}
+            onClick={askClose}
           >
             Cancel
           </Button>
