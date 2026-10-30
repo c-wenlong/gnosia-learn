@@ -3,6 +3,7 @@ import type { MasteryLabel } from "@gnosia/catalog/state";
 import { assetDisplayTitle, assetKindLabel, type AssetCardRef } from "@/components/asset-meta";
 import { safeNextPath } from "@/lib/auth/core";
 import { bucketOf, type MasteryBucket } from "@/lib/mastery-bucket";
+import { parseTranscript } from "@/lib/transcript";
 import { compareByKindThenId, isCompanionKind, kindRank } from "@gnosia/tutor/kind-order";
 export { compareByKindThenId, isCompanionKind };
 
@@ -640,4 +641,17 @@ export function assetBackLink(from: string | string[] | undefined): { href: stri
     }
   }
   return { href: "/library", label: "Library" };
+}
+
+/** A file's words as search sees them: a transcript's lines, anything else as written. */
+export function searchableText(kind: string, raw: string): string {
+  if (kind === "transcript") {
+    const parsed = parseTranscript(raw);
+    if (parsed !== null) {
+      return [...parsed.chapters.map((c) => c.title), ...parsed.cues.map((c) => c.text)]
+        .join("\n")
+        .toLowerCase();
+    }
+  }
+  return raw.toLowerCase();
 }

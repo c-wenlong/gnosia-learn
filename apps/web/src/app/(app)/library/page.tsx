@@ -12,7 +12,7 @@ import { SearchField } from "@/components/ui/SearchField";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { cx, NOTE, PAGE_TITLE, STATUS_TEXT } from "@/components/ui/classes";
 import { TextLink } from "@/components/ui/TextLink";
-import { unservedRows } from "@/lib/asset-library";
+import { unservedRows } from "@/lib/library-thumbnails";
 import {
   filesNoun,
   isCompanionKind,
