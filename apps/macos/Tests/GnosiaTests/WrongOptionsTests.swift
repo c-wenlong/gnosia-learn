@@ -51,6 +51,18 @@ import Testing
         }
     }
 
+    @Test func optionsAreUsedOnlyForTheQuestionOnScreen() throws {
+        let check = ConceptCheck(id: "c1", question: "Which packet opens it?", answer: "SYN", why: "", source: "")
+        let pool = SessionDistractorPool(near: ["ACK", "FIN"], far: [])
+        let q = try #require(sessionCheckQuestion(slug: "tcp", check: check, variant: "check", otherAnswers: [], pool: pool, canWrite: true))
+        #expect(sameCheck(q, question: " Which packet opens it? ", answer: "SYN"))
+        #expect(!sameCheck(q, question: "Which packet closes it?", answer: "SYN"))
+        #expect(!sameCheck(q, question: "Which packet opens it?", answer: "ACK"))
+        #expect(!sameCheck(q, question: nil, answer: "SYN"))
+        let long = ConceptCheck(id: "c1", question: "Explain?", answer: String(repeating: "x", count: 401), why: "", source: "")
+        #expect(sessionCheckQuestion(slug: "tcp", check: long, variant: "check", otherAnswers: [], pool: pool, canWrite: true)?.rewrite == nil)
+    }
+
     @Test func theLinesAreTheWebs() {
         #expect(WrongSource.notes.note == "Options made without the tutor, from related notes.")
         #expect(WrongSource.padded.note?.hasPrefix("Options made without the tutor. Some come from unrelated notes") == true)

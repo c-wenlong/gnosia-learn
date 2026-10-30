@@ -144,8 +144,20 @@ func sessionCheckQuestion(
         i != question.correct && !strong.contains(key(choice))
     }
     question.wrong = padded ? .padded : .notes
-    if canWrite { question.rewrite = .init(concept: slug, check: check.id, variant: variant) }
+    // An answer longer than an option may be (400 characters) asks for none.
+    if canWrite, check.answer.trimmingCharacters(in: .whitespacesAndNewlines).count <= 400 {
+        question.rewrite = .init(concept: slug, check: check.id, variant: variant)
+    }
     return question
+}
+
+/// Whether options the sidecar wrote are for this question — sameCheck:
+/// the check's question and answer as the catalog read them match the
+/// question's prompt and right choice.
+func sameCheck(_ question: SessionQuestion, question serverQuestion: String?, answer serverAnswer: String?) -> Bool {
+    guard let serverQuestion, let serverAnswer, question.choices.indices.contains(question.correct) else { return false }
+    let trim = { (s: String) in s.trimmingCharacters(in: .whitespacesAndNewlines) }
+    return trim(serverQuestion) == trim(question.prompt) && trim(serverAnswer) == trim(question.choices[question.correct])
 }
 
 /// A question carrying `rewrite`, laid out again with the wrong options

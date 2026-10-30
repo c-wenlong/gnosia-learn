@@ -256,12 +256,9 @@ struct ModuleCheckView: View {
                 if let client = try? await sidecar.readyClient(),
                    let reply = try? await client.checkOptions(conceptSlug: ask.concept, checkId: ask.check),
                    let options = reply["options"] as? [String],
-                   let answer = reply["answer"] as? String,
-                   question.choices.indices.contains(question.correct),
                    // Options for the check as the catalog reads it now: a note
                    // edited since the plan was built asks a different question.
-                   answer.trimmingCharacters(in: .whitespacesAndNewlines)
-                       == question.choices[question.correct].trimmingCharacters(in: .whitespacesAndNewlines) {
+                   sameCheck(question, question: reply["question"] as? String, answer: reply["answer"] as? String) {
                     laid = withWrittenOptions(question, options)
                 }
                 // updateValue, not a subscript: assigning nil would remove the key.
