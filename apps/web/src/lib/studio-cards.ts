@@ -7,6 +7,7 @@ import {
   capSentence,
   cardStatus,
   drawLabel,
+  sentence,
   STILL_ANSWERING,
   targetSlug,
   visibleEntries,
@@ -356,7 +357,7 @@ export function kindDrawBlock(
     return { reason: `“${name}” already holds ${brief.slug} (${state}). Accept or discard it first.`, holder: holder.jobId };
   }
   if (kind === "diagram" && diagram !== null && !diagram.ok) {
-    return { reason: diagram.reason === null ? "Diagrams cannot be drawn on this machine right now." : sentenceOf(diagram.reason), holder: null };
+    return { reason: sentence(diagram.reason ?? "") || "Diagrams cannot be drawn on this machine right now.", holder: null };
   }
   if (kind === "video" && video !== null) {
     // Each tool has its own doctor: a revideokc brief is pressed on revideokc's
@@ -364,7 +365,7 @@ export function kindDrawBlock(
     const tool = briefTool(brief);
     const option = video.tools?.find((entry) => entry.name === tool);
     if (tool !== "manimkc" && option !== undefined) {
-      if (!option.available) return { reason: option.reason === null ? `${tool} videos are not available on this machine.` : sentenceOf(option.reason), holder: null };
+      if (!option.available) return { reason: sentence(option.reason ?? "") || `${tool} videos are not available on this machine.`, holder: null };
     } else if (!video.ok) {
       return { reason: video.reason === null ? "Videos are not available on this machine." : `Videos are unavailable: ${video.reason}`, holder: null };
     }
@@ -682,9 +683,3 @@ export function openerSend(opener: { send: string | null; sendMentions?: readonl
   return { text: opener.send, mentions: validMentions(opener.send, [...(opener.sendMentions ?? [])]) };
 }
 
-/** A runner's sentence as the card shows it: a capital first, a full stop last. */
-function sentenceOf(text: string): string {
-  const trimmed = text.trim();
-  const capital = trimmed[0]!.toUpperCase() + trimmed.slice(1);
-  return /[.!?]$/.test(capital) ? capital : `${capital}.`;
-}

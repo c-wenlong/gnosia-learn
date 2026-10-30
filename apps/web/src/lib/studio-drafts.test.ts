@@ -315,6 +315,12 @@ describe("tags and cards per kind (docs/STUDIO-MENTIONS.md, API)", () => {
     expect(videoAvailability(undefined)).toEqual({ ok: false, reason: null });
   });
 
+  it("reads a tool's blank reason as none (S2-09)", () => {
+    expect(videoAvailability({ ok: true, checks: [], tools: [{ name: "revideokc", strength: "", available: false, reason: " " }] }).tools).toEqual([
+      { name: "revideokc", strength: "", available: false, reason: null },
+    ]);
+  });
+
   it("reads health's video tools, keeping only well-formed ones it knows (STUDIO-VIDEO-TOOLS.md, D73)", () => {
     const tools = [
       { name: "manimkc", strength: "ManimGL", available: true, reason: null },

@@ -310,7 +310,8 @@ export function phaseRows(
       status = "done";
     } else if (at > current) {
       status = "pending";
-    } else if (job.state === "awaiting_review" || job.state === "accepted") {
+    } else if (job.state === "awaiting_review" || job.state === "accepted" || job.state === "discarded") {
+      // A discarded job was finished and in review: it is over, not live.
       status = "done";
     } else if (failedHere) {
       status = "failed";
@@ -519,11 +520,17 @@ function rawFailureReport(job: Job): FailureReport {
       };
     case "not-claimed":
       return { code: null, headline: "the catalog would not hand this job over", detail, actions: ["retry"] };
+    case "internal":
+      // The runner itself threw: nothing about the drawing, so the error is
+      // the whole story and a fresh attempt is the way on.
+      return { code: null, headline: "the runner failed while running it", detail, actions: ["retry"] };
     default:
       return {
         code: null,
-        headline: job.gate === null ? "nothing was written" : "the check refused what it drew",
-        detail: job.gate?.findings.join(" ") ?? detail,
+        // Blame the check only when it refused: a job can fail after a
+        // check that passed, and then the runner's error is the reason.
+        headline: job.gate === null ? "nothing was written" : job.gate.ok ? "it failed after the check passed" : "the check refused what it drew",
+        detail: job.gate !== null && job.gate.findings.length > 0 ? job.gate.findings.join(" ") : detail,
         actions: ["retry", "talk"],
       };
   }

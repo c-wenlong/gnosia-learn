@@ -182,13 +182,14 @@ export function VideoChangeButton({
   const [problem, setProblem] = useState<string | null>(null);
   const name = `video:${slug}`;
   return (
-    <>
+    // `data-problem` keeps a tile's actions shown while the refusal is up
+    // (`TILE_ACTIONS`), so the reason does not vanish with the hover.
+    <span className="relative inline-flex" data-problem={problem !== null ? "" : undefined}>
       <button
         type="button"
         data-pending={pending ? "" : undefined}
         disabled={pending}
         aria-label={`Change: ${title}`}
-        title={problem ?? undefined}
         onClick={async (event) => {
           event.preventDefault();
           event.stopPropagation();
@@ -212,17 +213,24 @@ export function VideoChangeButton({
           // address bar moves without a server render.
           const href = conversationHref(host?.path ?? path, draftId);
           if (host?.navigate(href) !== true) router.push(href, { scroll: false });
+          // The host's conversation opens over the grid, which stays mounted
+          // under it: the tile is still here when the person comes back.
+          setPending(false);
         }}
         className={className}
       >
         {pending ? "Opening" : problem !== null ? "Try again" : "Change"}
       </button>
+      {/* Seen as well as heard: a tooltip is out of reach on a phone. */}
       {problem !== null && (
-        <span role="alert" className="sr-only">
+        <span
+          role="alert"
+          className="absolute top-full right-0 z-20 mt-1 w-56 rounded-md border border-border bg-surface px-2 py-1.5 text-left text-xs leading-4 font-normal text-danger shadow-sm"
+        >
           {problem}
         </span>
       )}
-    </>
+    </span>
   );
 }
 

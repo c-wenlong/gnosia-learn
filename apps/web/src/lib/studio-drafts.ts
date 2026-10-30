@@ -1010,7 +1010,8 @@ export function videoTools(raw: unknown): VideoToolOption[] {
         name: name as VideoToolName,
         strength: typeof strength === "string" ? strength : "",
         available: available === true,
-        reason: typeof reason === "string" ? reason : null,
+        // A blank reason says nothing: null, so the card words it itself.
+        reason: typeof reason === "string" && reason.trim() !== "" ? reason.trim() : null,
         ...(stop === null ? {} : { toolchainStop: stop }),
       },
     ];
