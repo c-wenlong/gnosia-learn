@@ -133,6 +133,9 @@ describe("the browser's confirm()", () => {
     expect(await confirms("export const go = () => window.confirm('Sure?');")).toBe(1);
     expect(await confirms("globalThis.window.confirm('Sure?');")).toBe(1);
     expect(await confirms("export const go = () => self.confirm('Sure?');")).toBe(1);
+    // Every read, not only a dotted call (Greptile on #556).
+    expect(await confirms('export const go = () => window["confirm"]("Sure?");')).toBe(1);
+    expect(await confirms('export const go = () => window.confirm.call(window, "Sure?");')).toBe(1);
   });
 
   it("is told from a confirm of the file's own", async () => {
@@ -185,6 +188,7 @@ describe("type", () => {
       'export const css = "a { font-size: 0.625rem; }";',
       jsx("<text fontSize={11} />"),
       jsx("<text fontSize={Math.min(11, size)} />"),
+      jsx("<text fontSize={11 - 1} />"),
       jsx("<p style={{ fontSize: big ? 14 : 10 }} />"),
       "export const f = (compact: boolean) => { const fontSize = compact ? 12 : 11.5; return fontSize; };",
     ],

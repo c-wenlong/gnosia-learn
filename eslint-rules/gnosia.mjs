@@ -280,15 +280,18 @@ const kitTypingDots = syntax("One typing indicator, the kit's TypingDots.", {
 
 const GLOBALS = new Set(["window", "self", "globalThis"]);
 /**
- * `window.confirm(...)`, and a chain of globals ending in it
- * (`globalThis.window.confirm`), rooted in a global no local binding shadows.
+ * A read of `window.confirm` (called, `.call`ed or `["confirm"]`), and a
+ * chain of globals ending in it (`globalThis.window.confirm`), rooted in a
+ * global no local binding shadows.
  * A bare `confirm()` is `no-restricted-globals`, which reads scope the same way.
  */
 const kitConfirm = {
   meta: { type: "problem", docs: { description: "Ask in place, never through the browser's confirm()." }, schema: [] },
   create(context) {
     return {
-      'CallExpression > MemberExpression.callee[property.name="confirm"]'(node) {
+      MemberExpression(node) {
+        const name = node.computed ? (node.property.type === "Literal" ? node.property.value : null) : node.property.name;
+        if (name !== "confirm") return;
         let owner = node.object;
         while (owner.type === "MemberExpression" && !owner.computed && GLOBALS.has(owner.property.name)) owner = owner.object;
         if (owner.type !== "Identifier" || !GLOBALS.has(owner.name) || !isGlobal(context, owner, owner.name)) return;
@@ -469,6 +472,17 @@ function leastSize(raw) {
     return null;
   }
   const known = (values) => values.filter((v) => v !== null);
+  if (node.type === "BinaryExpression" && ["+", "-", "*", "/"].includes(node.operator)) {
+    // Arithmetic on numbers alone is a number; on a variable it says nothing.
+    const left = leastSize(node.left);
+    const right = leastSize(node.right);
+    if (left === null || right === null) return null;
+    return { "+": left + right, "-": left - right, "*": left * right, "/": left / right }[node.operator];
+  }
+  if (node.type === "UnaryExpression" && node.operator === "-") {
+    const value = leastSize(node.argument);
+    return value === null ? null : -value;
+  }
   if (node.type === "ConditionalExpression" || node.type === "LogicalExpression") {
     const sides = known(node.type === "ConditionalExpression" ? [leastSize(node.consequent), leastSize(node.alternate)] : [leastSize(node.left), leastSize(node.right)]);
     return sides.length ? Math.min(...sides) : null;
