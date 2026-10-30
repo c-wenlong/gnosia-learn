@@ -144,6 +144,18 @@ describe.skipIf(!reachable.ok)("custom provider routes", () => {
     expect((init.headers as Record<string, string>).Authorization).toBe(`Bearer ${KEY}`);
   });
 
+  it("never calls a saved provider whose URL is the studio runner, and refuses moving one there", async () => {
+    await route.POST(request("/api/learner/custom-provider", "POST", { label: "Gateway", baseUrl: "https://gw.example/v1", key: KEY }));
+    await chain.POST(request("/api/learner/tutor-model", "POST", { provider: "custom-gateway", model: "gw/fast" }));
+    const moved = await route.PATCH(request("/api/learner/custom-provider", "PATCH", { provider: "custom-gateway", baseUrl: "http://127.0.0.1:7250/api/jobs//cancel" }));
+    expect(moved.status).toBe(400);
+    // A row saved before the rule, or written by hand: the tutor leaves it out.
+    await scratch.pool.query("update custom_provider set base_url = 'http://127.0.0.1:7250/api/jobs//cancel'");
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const steps = await credentials.tutorCredentials("local", {});
+    expect(steps.some((s) => isCallable(s))).toBe(false);
+  });
+
   it("renames and moves a provider, keeping its key and models, and Delete removes it whole", async () => {
     await route.POST(request("/api/learner/custom-provider", "POST", { label: "Gateway", baseUrl: "https://gw.example/v1", key: KEY }));
     await chain.POST(request("/api/learner/tutor-model", "POST", { provider: "custom-gateway", model: "gw/fast" }));

@@ -620,7 +620,7 @@ export function LearnerProvider({
   return <LearnerContext.Provider value={value}>{children}</LearnerContext.Provider>;
 }
 
-/** Where a legacy document the server refused is kept, so it is not posted on every load. */
+/** A small marker that the legacy document was refused, so it is not posted on every load. */
 const LEGACY_REFUSED_KEY = `${LEGACY_STORAGE_KEY}:refused`;
 
 /**
@@ -631,8 +631,10 @@ const LEGACY_REFUSED_KEY = `${LEGACY_STORAGE_KEY}:refused`;
  * key when the server confirms. A database that could not be reached keeps the
  * key, so the attempt is retried on the next load rather than losing the
  * document. A document the server refuses (a 400) would be refused again on
- * every load, so it is moved aside to `LEGACY_REFUSED_KEY`, still in this
- * browser, and `report` says so once.
+ * every load, so `LEGACY_REFUSED_KEY` is set beside it and the document is
+ * not posted again; it stays where it was, in this browser, and `report` says
+ * so once. A marker rather than a moved copy: a second copy of a document
+ * that already fills most of the storage allowance could not be written.
  *
  * `refresh` afterwards, because the imported rows are in the snapshot the
  * server rendered *before* they existed.
@@ -652,7 +654,11 @@ function useLegacyImport(refresh: () => void, report: (message: string) => void)
       return;
     }
     if (raw === null) return;
-    const stored = raw;
+    try {
+      if (window.localStorage.getItem(LEGACY_REFUSED_KEY) !== null) return;
+    } catch {
+      return;
+    }
 
     let payload: unknown;
     try {
@@ -673,10 +679,9 @@ function useLegacyImport(refresh: () => void, report: (message: string) => void)
       if (response.ok === false) {
         if (response.code !== "BAD_REQUEST") return;
         try {
-          window.localStorage.setItem(LEGACY_REFUSED_KEY, stored);
-          window.localStorage.removeItem(LEGACY_STORAGE_KEY);
+          window.localStorage.setItem(LEGACY_REFUSED_KEY, new Date().toISOString());
         } catch {
-          /* left where it was: it is retried, and refused, next time */
+          /* no room even for the marker: it is posted, and refused, next time */
         }
         report(`Your study record saved in this browser could not be imported (${response.error ?? "refused"}). It is kept in this browser.`);
         return;

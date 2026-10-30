@@ -2,10 +2,10 @@ import { CustomProviderError } from "@gnosia/catalog/state";
 import { isCustomProviderId } from "@gnosia/schema/shared";
 import { NextResponse } from "next/server";
 
-import { pointsAtThisApp } from "@/lib/custom-providers/self-address";
 import { changeCustomProvider, createCustomProvider } from "@/lib/custom-providers/store";
 import { answer, guard, readBody, refuse } from "@/lib/provider-keys/requests";
 import { checkKeyShape } from "@gnosia/tutor/server/seal";
+import { pointsAtThisApp, SELF_ADDRESS_REASON } from "@gnosia/tutor/server/self-address";
 import { failureCode, NoKeySecretError } from "@/lib/provider-keys/store";
 import { CHAIN_WRITE_RATE_LIMIT } from "@/lib/tutor-models/requests";
 
@@ -28,8 +28,6 @@ export const runtime = "nodejs";
  * the provider route's, which removes it whole.
  */
 
-const SELF_ADDRESS = "That address is this app or its studio runner, not a model provider.";
-
 function failed(what: string, error: unknown): NextResponse {
   if (error instanceof CustomProviderError) {
     return refuse(error.message, error.code, error.code === "NOT_FOUND" ? 404 : error.code === "FULL" ? 409 : 400);
@@ -44,7 +42,7 @@ export async function POST(req: Request): Promise<NextResponse> {
   if (owner instanceof NextResponse) return owner;
   const body = await readBody(req);
   if (body instanceof NextResponse) return body;
-  if (pointsAtThisApp(body.baseUrl, req.url)) return refuse(SELF_ADDRESS);
+  if (pointsAtThisApp(body.baseUrl, process.env, req.url)) return refuse(SELF_ADDRESS_REASON);
   const shape = checkKeyShape(body.key);
   if (!shape.ok) return refuse(shape.reason);
 
@@ -65,7 +63,7 @@ export async function PATCH(req: Request): Promise<NextResponse> {
   if (body.label === undefined && body.baseUrl === undefined && body.key === undefined) {
     return refuse("Send a new name, a new base URL, a new key, or any of them.");
   }
-  if (pointsAtThisApp(body.baseUrl, req.url)) return refuse(SELF_ADDRESS);
+  if (pointsAtThisApp(body.baseUrl, process.env, req.url)) return refuse(SELF_ADDRESS_REASON);
   let key: string | undefined;
   if (body.key !== undefined) {
     const shape = checkKeyShape(body.key);

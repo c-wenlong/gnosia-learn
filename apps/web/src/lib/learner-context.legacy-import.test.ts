@@ -62,13 +62,31 @@ async function mount(status: number, body: Record<string, unknown>): Promise<Ret
 const DOCUMENT = JSON.stringify({ notes: { a: "a long note" } });
 
 describe("the legacy import", () => {
-  it("moves a refused document aside and says so, so it is not posted on every load", async () => {
+  it("marks a refused document and says so, then does not post it on the next load", async () => {
     window.localStorage.setItem(LEGACY_STORAGE_KEY, DOCUMENT);
-    const fetch = await mount(400, { ok: false, error: "Body too large.", code: "BAD_REQUEST" });
-    expect(fetch).toHaveBeenCalledTimes(1);
-    expect(window.localStorage.getItem(LEGACY_STORAGE_KEY)).toBeNull();
-    expect(window.localStorage.getItem(`${LEGACY_STORAGE_KEY}:refused`)).toBe(DOCUMENT);
+    const first = await mount(400, { ok: false, error: "Body too large.", code: "BAD_REQUEST" });
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(window.localStorage.getItem(LEGACY_STORAGE_KEY)).toBe(DOCUMENT);
+    expect(window.localStorage.getItem(`${LEGACY_STORAGE_KEY}:refused`)).not.toBeNull();
     await vi.waitFor(() => expect(held.saveError).toMatch(/could not be imported \(Body too large\.\)\. It is kept in this browser\./));
+
+    act(() => root?.unmount());
+    const second = await mount(400, { ok: false, error: "Body too large.", code: "BAD_REQUEST" });
+    expect(second).not.toHaveBeenCalled();
+  });
+
+  it("still keeps the document when even the marker cannot be written", async () => {
+    window.localStorage.setItem(LEGACY_STORAGE_KEY, DOCUMENT);
+    const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("full", "QuotaExceededError");
+    });
+    try {
+      await mount(400, { ok: false, error: "Body too large.", code: "BAD_REQUEST" });
+    } finally {
+      setItem.mockRestore();
+    }
+    expect(window.localStorage.getItem(LEGACY_STORAGE_KEY)).toBe(DOCUMENT);
+    await vi.waitFor(() => expect(held.saveError).toMatch(/could not be imported/));
   });
 
   it("keeps the document for the next load when the database could not be reached", async () => {
