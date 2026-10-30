@@ -78,7 +78,7 @@ export function jobCardSentence(kind: JobKind, state: string): string {
  * (a tick, a cross, a dot) and colour say it to the eye only. Sentence case,
  * ending in a colon so the row's own label follows.
  */
-export function progressWord(status: "done" | "current" | "pending" | "failed"): string {
+export function progressWord(status: "done" | "current" | "pending" | "failed" | "stopped"): string {
   switch (status) {
     case "done":
       return "Done: ";
@@ -86,6 +86,8 @@ export function progressWord(status: "done" | "current" | "pending" | "failed"):
       return "In progress: ";
     case "failed":
       return "Failed: ";
+    case "stopped":
+      return "Stopped: ";
     default:
       return "Not started: ";
   }

@@ -190,6 +190,20 @@ describe("the step list", () => {
     expect(rows.filter((row) => row.status === "failed")).toHaveLength(1);
   });
 
+  it("heads a job in a state it does not know with the state table's words (R2-1-28)", () => {
+    expect(videoHeadline(job({ state: "waiting_on_gpu_slot" as VideoJob["state"], phase: null, steps: [] }))).toBe("Waiting on gpu slot");
+  });
+
+  it("marks the step a cancelled job stopped in as stopped, not failed (R2-1-11)", () => {
+    const rows = stepRows(job({ state: "cancelled", finished: at(90) }));
+    expect(rows.find((row) => row.key === "preview")?.status).toBe("stopped");
+    expect(rows.filter((row) => row.status === "failed")).toHaveLength(0);
+    // Cancelled while queued, before any step ran.
+    const queued = stepRows(job({ state: "cancelled", steps: [], finished: at(5) }));
+    expect(queued.filter((row) => row.status === "failed")).toHaveLength(0);
+    expect(queued.filter((row) => row.status === "stopped")).toHaveLength(1);
+  });
+
   it("marks one step, never two, and the runner's own failed step over a running one", () => {
     const two = steps({ storyboard: { state: "done" }, preview: { state: "running", rounds: 2 }, look: { state: "running" } });
     const rows = stepRows(job({ state: "failed", steps: two }));
