@@ -167,11 +167,17 @@ and goes into the learner export, so a key pasted into the model field must
 not reach it. `checkModelId` refuses an id with a known key prefix (`nvapi-`,
 `sk-`, `AIza`) or a run of 20 or more letters and digits holding both, which
 random key material has and model ids, whose words are split by `-`, `.`, `/`
-and `:`, do not; the catalog function and every route share it. The add route
-also refuses an id that is, contains, or is a 12-character-or-longer part of
-any key the owner's tutor could call with, saved or server, for any provider.
-Neither refusal repeats the value. A listed id that looks like a key is
-dropped from the list.
+and `:`, do not; the catalog function and every route share it. The add and
+replace writes (the web route and the sidecar's turns, through `echoesKey` in
+`packages/tutor/src/server/key-echo.ts`) also refuse an id that is or contains
+a whole key the owner's tutor could call with, saved or server, for any
+provider, skipping a server key shorter than 16 characters. They never refuse
+a part of a key: until 2026-10-30 they refused any 12-character-or-longer
+part, and refused versus accepted let a session slide a fragment along a key
+and read an OpenRouter key out in about 66,000 requests. Whether an id holds a
+whole key is a question only the key's holder can ask, and a pasted fragment
+of key material is `checkModelId`'s to refuse by its shape. Neither refusal
+repeats the value. A listed id that looks like a key is dropped from the list.
 
 ## What this does not change
 
