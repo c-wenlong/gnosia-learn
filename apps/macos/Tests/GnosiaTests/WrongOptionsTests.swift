@@ -61,6 +61,11 @@ import Testing
         #expect(!sameCheck(q, question: nil, answer: "SYN"))
         let long = ConceptCheck(id: "c1", question: "Explain?", answer: String(repeating: "x", count: 401), why: "", source: "")
         #expect(sessionCheckQuestion(slug: "tcp", check: long, variant: "check", otherAnswers: [], pool: pool, canWrite: true)?.rewrite == nil)
+        // Counted in UTF-16 units, as the sidecar counts: 200 emoji are 400 units, 201 are 402.
+        let atLimit = ConceptCheck(id: "c1", question: "Explain?", answer: String(repeating: "😀", count: 200), why: "", source: "")
+        let past = ConceptCheck(id: "c1", question: "Explain?", answer: String(repeating: "😀", count: 201), why: "", source: "")
+        #expect(sessionCheckQuestion(slug: "tcp", check: atLimit, variant: "check", otherAnswers: [], pool: pool, canWrite: true)?.rewrite != nil)
+        #expect(sessionCheckQuestion(slug: "tcp", check: past, variant: "check", otherAnswers: [], pool: pool, canWrite: true)?.rewrite == nil)
     }
 
     @Test func theLinesAreTheWebs() {

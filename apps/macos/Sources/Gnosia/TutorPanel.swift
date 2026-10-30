@@ -172,6 +172,9 @@ struct TutorSessionView: View {
     @State private var rewritten: [Int: SessionQuestion?] = [:]
     /// Steps whose options request already ran.
     @State private var rewriting = Set<Int>()
+    /// Which plan an options reply belongs to: Start over builds a new plan
+    /// while an old request may still be out, and its reply is dropped.
+    @State private var planEpoch = 0
     @State private var graded: [Int: Graded] = [:]
     /// The first attempt fixes the pick, the confidence and the reasoning;
     /// a retry sends them again under its first requestId, so a replay
@@ -294,6 +297,7 @@ struct TutorSessionView: View {
         requested = []
         rewritten = [:]
         rewriting = []
+        planEpoch += 1
         graded = [:]
         attempts = [:]
         answers = []
@@ -386,6 +390,7 @@ struct TutorSessionView: View {
                   !rewriting.contains(at)
             else { continue }
             rewriting.insert(at)
+            let epoch = planEpoch
             Task { @MainActor in
                 var laid: SessionQuestion? = nil
                 if let client = try? await sidecar.readyClient(),
@@ -396,6 +401,8 @@ struct TutorSessionView: View {
                    sameCheck(question, question: reply["question"] as? String, answer: reply["answer"] as? String) {
                     laid = withWrittenOptions(question, options)
                 }
+                // A reply for a plan Start over replaced is for nobody.
+                guard epoch == planEpoch else { return }
                 // updateValue, not a subscript: assigning nil would remove the key.
                 rewritten.updateValue(laid, forKey: at)
             }

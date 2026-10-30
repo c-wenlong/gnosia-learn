@@ -145,7 +145,9 @@ func sessionCheckQuestion(
     }
     question.wrong = padded ? .padded : .notes
     // An answer longer than an option may be (400 characters) asks for none.
-    if canWrite, check.answer.trimmingCharacters(in: .whitespacesAndNewlines).count <= 400 {
+    // UTF-16 units, as the sidecar counts them (`String.length`), so an
+    // answer with emoji is judged the same on both sides.
+    if canWrite, check.answer.trimmingCharacters(in: .whitespacesAndNewlines).utf16.count <= 400 {
         question.rewrite = .init(concept: slug, check: check.id, variant: variant)
     }
     return question
