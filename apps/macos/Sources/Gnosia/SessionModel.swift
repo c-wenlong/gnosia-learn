@@ -3,9 +3,13 @@
 //  Gnosia
 //
 //  The session's pure half: the step plan, the questions a note's check
-//  blocks become, the teaching prose cut from the note, and the arithmetic
+//  blocks become, the teaching prose cut from the note, and the estimate
 //  one graded answer writes — BKT update, propagation to the prerequisites,
-//  the SM-2 review card — plus the close screen's numbers.
+//  the SM-2 review card — plus the close screen's numbers. The estimate is
+//  what the app draws the moment an answer lands; the catalog's reply
+//  replaces it (RecordedAnswer, recordedOutcome, LearnerStore.applyRecorded),
+//  so the rules here only have to agree with the catalog's, which
+//  LearningRulesTests holds them to.
 //
 //  Kept in step with:
 //    packages/tutor/src/session-core.ts     — plan, questions, prose, close
@@ -514,22 +518,119 @@ struct SessionPropagation: Hashable {
     let pLAfter: Double
 }
 
-/// What one graded answer became — the observe route's reply, as the
-/// feedback bar and the close screen read it.
+/// Whose numbers an answer's outcome carries (S9-06).
+enum AnswerStatus: Hashable {
+    /// The app's own, from its copy of the rules: what it draws the moment
+    /// an answer lands, until the catalog answers.
+    case estimated
+    /// The catalog's, from the observe route's reply.
+    case recorded
+    /// The catalog refused the answer, or the mirror gave up on it; the
+    /// numbers stay the app's and the reason says why.
+    case notRecorded(String)
+}
+
+/// What one graded answer became, as the feedback bar and the close screen
+/// read it: first the app's estimate, then — `recordedOutcome` — the observe
+/// route's reply laid over it.
 struct SessionAnswerOutcome {
-    let concept: String
-    let correct: Bool
+    var concept: String
+    var correct: Bool
     /// `probe` or `teach` — which step asked, as `source` records it.
-    let source: String
-    let opportunity: Bool
-    let grade: Int
+    var source: String
+    var opportunity: Bool
+    var grade: Int
+    var pLBefore: Double
+    var pLAfter: Double
+    var mastered: Bool
+    var propagated: [SessionPropagation]
+    var card: CatalogReview
+    /// True when this answer created the concept's first card.
+    var cardCreated: Bool
+    /// The answer's own request id: the key its catalog record comes back
+    /// under. Empty until the caller sets it on the write.
+    var requestId: String = ""
+    var status: AnswerStatus = .estimated
+}
+
+/// The observe route's reply for one answer: what the catalog recorded.
+struct RecordedAnswer: Hashable {
+    let concept: String
     let pLBefore: Double
     let pLAfter: Double
     let mastered: Bool
+    /// The prerequisites the answer spread to, with their numbers. A
+    /// replayed answer's reply names them without numbers, and those are
+    /// left out — the web's whatMoved leaves them out too.
     let propagated: [SessionPropagation]
-    let card: CatalogReview
-    /// True when this answer created the concept's first card.
+    /// The concept's next review, when the reply names one.
+    let due: Date?
     let cardCreated: Bool
+    let replayed: Bool
+
+    /// The reply's `result`, or nil when it is not an observe result.
+    init?(result: [String: Any]) {
+        guard
+            let concept = result["concept"] as? String,
+            let before = (result["pLBefore"] as? NSNumber)?.doubleValue,
+            let after = (result["pLAfter"] as? NSNumber)?.doubleValue,
+            before.isFinite, after.isFinite
+        else { return nil }
+        self.concept = concept
+        pLBefore = before
+        pLAfter = after
+        mastered = result["mastered"] as? Bool ?? false
+        propagated = (result["propagated"] as? [[String: Any]] ?? []).compactMap { p in
+            guard
+                let slug = p["concept"] as? String,
+                let hops = (p["hops"] as? NSNumber)?.intValue,
+                let before = (p["pLBefore"] as? NSNumber)?.doubleValue,
+                let after = (p["pLAfter"] as? NSNumber)?.doubleValue
+            else { return nil }
+            return SessionPropagation(concept: slug, hops: hops, pLBefore: before, pLAfter: after)
+        }
+        let card = result["card"] as? [String: Any]
+        due = ((card?["due"] ?? result["due"]) as? String).flatMap(isoDate)
+        cardCreated = card?["created"] as? Bool ?? false
+        replayed = result["replayed"] as? Bool ?? false
+    }
+}
+
+/// What the catalog said about one answer or review grade, by request id.
+enum AnswerRecord: Hashable {
+    case observed(RecordedAnswer)
+    /// A review grade: the rating on record, which on a replay is the
+    /// first write's.
+    case graded(ReviewRating)
+    case notRecorded(String)
+}
+
+/// `outcome` with the catalog's record laid over it: the recorded p(L)
+/// move, propagation and next review replace the estimate, or the reason
+/// it was not recorded marks it. No record leaves the estimate as it is.
+func recordedOutcome(_ outcome: SessionAnswerOutcome, _ record: AnswerRecord?) -> SessionAnswerOutcome {
+    var shown = outcome
+    switch record {
+    case .observed(let r)?:
+        shown.pLBefore = r.pLBefore
+        shown.pLAfter = r.pLAfter
+        shown.mastered = r.mastered
+        shown.propagated = r.propagated
+        if let due = r.due {
+            let c = shown.card
+            shown.card = CatalogReview(
+                conceptSlug: c.conceptSlug, repetitions: c.repetitions, ease: c.ease,
+                intervalDays: c.intervalDays, lapses: c.lapses, due: due,
+                lastReviewed: c.lastReviewed, leech: c.leech)
+        }
+        shown.cardCreated = r.cardCreated
+        shown.status = .recorded
+    case .notRecorded(let reason)?:
+        shown.status = .notRecorded(reason)
+    case .graded?, nil:
+        break
+    }
+    return shown
 }
 
 /// The mastery rows an answer touched, to upsert — the concept's own and
@@ -545,7 +646,9 @@ struct SessionAnswerWrite {
     /// `module` carries and the observe body sends, as the web's week
     /// check payload does. Nil on a concept's own session.
     var module: String? = nil
-    var requestId: String
+    /// The answer's request id, copied onto the outcome as it is set so the
+    /// catalog's record finds its way back to the outcome it replaces.
+    var requestId: String { didSet { outcome.requestId = requestId } }
     var question: String?
     var answer: String?
     var chosen: String?
@@ -557,9 +660,10 @@ struct SessionAnswerWrite {
     var at: Date
 }
 
-/// The learner's working state for the length of one session — the mastery
-/// table and the review cards, copied at the start so each answer's update
-/// builds on the last, exactly as `readModel` + `writeModel` frame it.
+/// The learner's state one answer's estimate starts from — the mastery
+/// table and the review cards, as `readModel` frames them. Built fresh for
+/// each answer from the store (`current`), so an estimate starts from the
+/// catalog's numbers wherever a reply has already replaced the app's.
 struct SessionLearnerModel {
     var params: BKTParams
     var mastery: [String: CatalogMastery]
@@ -674,6 +778,19 @@ struct SessionLearnerModel {
     }
 }
 
+extension SessionLearnerModel {
+    /// The model as the store's merged rows stand now: learner.db's (the
+    /// catalog's once their reply landed, the app's estimate before) over
+    /// the snapshot's.
+    @MainActor static func current(_ store: CatalogStore) -> SessionLearnerModel {
+        SessionLearnerModel(
+            params: bktParams(preferences: store.preferences),
+            mastery: store.mastery,
+            cards: store.learn.cards
+        )
+    }
+}
+
 // MARK: - Feedback and close (session-core.ts)
 
 /// p(L) to two places, the way every page prints it.
@@ -695,11 +812,30 @@ func formatMove(before: Double, after: Double) -> String {
 
 /// The feedback bar's note — feedbackNote: "p(L) 0.55 to 0.49 · this becomes
 /// a review card".
+/// Until the catalog answers the numbers are the app's estimate, and the
+/// note says so.
 func sessionFeedbackNote(_ answer: SessionAnswerOutcome, now: Date = Date()) -> String {
     let move = "p(L) \(formatPL(answer.pLBefore)) to \(formatPL(answer.pLAfter))"
-    if answer.cardCreated { return "\(move) · this becomes a review card" }
-    let due = dueLabel(answer.card.due, now: now).label
-    return "\(move) · next review \(due)"
+    let note = answer.cardCreated
+        ? "\(move) · this becomes a review card"
+        : "\(move) · next review \(dueLabel(answer.card.due, now: now).label)"
+    switch answer.status {
+    case .recorded: return note
+    case .estimated: return "\(note) · not yet recorded"
+    case .notRecorded: return "\(note) · not recorded"
+    }
+}
+
+/// The close screen's line under its numbers when any of them are still
+/// the app's estimate, or nil when the catalog recorded every answer.
+func sessionEstimateNote(_ answers: [SessionAnswerOutcome]) -> String? {
+    if answers.contains(where: { if case .notRecorded = $0.status { return true }; return false }) {
+        return "The catalog did not record every answer, so some of these numbers are this app's own."
+    }
+    if answers.contains(where: { $0.status == .estimated }) {
+        return "Some answers are not recorded yet, so some of these numbers are this app's estimate."
+    }
+    return nil
 }
 
 /// A close screen's What moved row — MovedRow.

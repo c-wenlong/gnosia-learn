@@ -20,6 +20,8 @@
 //  with the module named, exactly as the web's grade payload sends it, so
 //  the check keeps no score of its own and mastery moves per concept. The
 //  session row is the module's: its id is the goal, its title the name.
+//  The numbers the check draws are the app's estimate until each answer's
+//  reply lands, then the catalog's (`LearnerStore.shown`).
 //
 
 import SwiftUI
@@ -41,7 +43,6 @@ struct ModuleCheckView: View {
     /// Why the check asks nothing, when the plan knew before it began —
     /// the web page's `weekCheck.reason`.
     @State private var reason: String? = nil
-    @State private var model = SessionLearnerModel(params: BKTParams(), mastery: [:], cards: [:])
     /// slug → title, for the close screen's What moved rows.
     @State private var titles: [String: String] = [:]
 
@@ -144,11 +145,6 @@ struct ModuleCheckView: View {
         let available = await probeModelAvailable()
         plan = moduleCheckPlan(module: module, store: store, modelAvailable: available)
         reason = weekCheckReason(plan)
-        model = SessionLearnerModel(
-            params: bktParams(preferences: store.preferences),
-            mastery: store.mastery,
-            cards: store.learn.cards
-        )
         titles = Dictionary(uniqueKeysWithValues: store.learn.concepts.map { ($0.slug, $0.title) })
         startedAt = Date()
         ready = true
@@ -294,10 +290,10 @@ struct ModuleCheckView: View {
             sessionId = newSessionId(slug: module.id, now: Date(), random: UUID().uuidString)
         }
         let concept = conceptOf(step)
-        // The model advances with the answer; if the write does not land
-        // the model goes back too, so a retry replays the same answer
-        // from the same state.
-        let baseline = model
+        // The estimate starts from the store's rows as they stand, which
+        // a failed write leaves untouched, so a retry replays the same
+        // answer from the same state.
+        var model = SessionLearnerModel.current(store)
         var write = model.answer(
             concept, correct: correct, source: "probe", confidence: attempt.confidence,
             prereqsOf: { store.learn.byId[$0]?.requires ?? [] }
@@ -319,7 +315,6 @@ struct ModuleCheckView: View {
             }
             store.refreshLearner()
         } else {
-            model = baseline
             error = learner.error ?? "Not saved. Press Try again; your pick is kept."
         }
         pending = false
@@ -330,6 +325,14 @@ struct ModuleCheckView: View {
     /// recomputes what follows; the close step stamps the session and
     /// closes it.
     private func advance() {
+        // What follows an answer is decided by the answer as it stands when
+        // the learner moves on: the catalog's record when its reply is in
+        // (it says whether the concept is now mastered), else the app's
+        // estimate. Taken here, once, so a reply arriving later cannot
+        // rewrite the step the learner is on.
+        if let g = graded[index] {
+            graded[index]?.outcome = learner.shown(g.outcome)
+        }
         var walk = steps
         let current = steps[safe: index]
         if current?.kind == .check, graded[index] == nil, skipped[index] == nil {
@@ -640,7 +643,7 @@ struct ModuleCheckView: View {
                         MathText(text: reason, font: .callout)
                             .foregroundStyle(ink)
                     }
-                    Text(sessionFeedbackNote(answered.outcome))
+                    Text(sessionFeedbackNote(learner.shown(answered.outcome)))
                         .font(.caption)
                         .foregroundStyle(G.text2)
                 }
@@ -691,9 +694,10 @@ struct ModuleCheckView: View {
     private var closeStep: some View {
         let minutes = max(1, Int(((closedAt ?? Date()).timeIntervalSince(startedAt) / 60).rounded()))
         let slugs = plan.concepts.map(\.slug)
-        let totals = sessionTotals(slugs: slugs, answers: answers)
-        let moved = sessionWhatMoved(slug: module.id, title: module.title, answers: answers, titles: titles)
-        let scheduled = sessionScheduled(slug: module.id, title: module.title, answers: answers, titles: titles)
+        let shown = answers.map(learner.shown)
+        let totals = sessionTotals(slugs: slugs, answers: shown)
+        let moved = sessionWhatMoved(slug: module.id, title: module.title, answers: shown, titles: titles)
+        let scheduled = sessionScheduled(slug: module.id, title: module.title, answers: shown, titles: titles)
         let walked = stepsWalked(steps)
         let asked = "\(answers.count) question\(answers.count == 1 ? "" : "s")"
         return VStack(spacing: 24) {
@@ -711,6 +715,12 @@ struct ModuleCheckView: View {
                 statTile("Right", "\(totals.right) / \(totals.answered)")
                 statTile("Mastery moved", formatTotalsMove(totals))
                 statTile("Review cards", "\(totals.cards)")
+            }
+            if let estimate = sessionEstimateNote(shown) {
+                Text(estimate)
+                    .font(.caption)
+                    .foregroundStyle(G.text2)
+                    .frame(maxWidth: .infinity, alignment: .center)
             }
 
             cardBlock("What moved") {

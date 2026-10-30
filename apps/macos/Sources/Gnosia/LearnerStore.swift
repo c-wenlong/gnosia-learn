@@ -39,6 +39,14 @@
 //  whatever outlives both is dropped, counted and logged — the divergence
 //  a future sync would reconcile.
 //
+//  An answer's numbers are the catalog's once it has them (S9-06). The
+//  app computes an answer's p(L) and card itself so it can draw them the
+//  moment the pick lands, and writes them here; when the observe or grade
+//  mirror lands, its reply carries what the catalog recorded and the rows
+//  it moved, and `applyRecorded` replaces the estimate with them — in
+//  learner.db and in `answerRecords`, which the session's feedback bar and
+//  close screen read by request id.
+//
 
 import Foundation
 import CSQLite3
@@ -258,6 +266,13 @@ final class LearnerStore {
     /// preview or a test is "no mirror": the local writes all still land
     /// and nothing is queued.
     var sidecar: SidecarManager?
+
+    /// What the catalog said about each answer and review grade the mirror
+    /// sent, by request id — the record `shown` lays over an estimate.
+    private(set) var answerRecords: [String: AnswerRecord] = [:]
+    /// Bumped each time a catalog reply moves learner.db's mastery or
+    /// review rows, so the shell can re-merge them into the catalog store.
+    private(set) var recordedVersion = 0
 
     init(path: String = LearnerStore.defaultPath()) {
         self.path = path
@@ -645,8 +660,9 @@ final class LearnerStore {
     @discardableResult
     func recordSessionAnswer(_ write: SessionAnswerWrite) -> Bool {
         // The web's observe body: the server recomputes mastery and the
-        // card from the evidence, so the local outcome numbers stay this
-        // file's own — they are never sent.
+        // card from the evidence, so the local outcome numbers are never
+        // sent. They stand only until the reply replaces them
+        // (applyRecorded).
         let mirror = Self.observeJSON(write).map {
             // Deduped by requestId — the server's own replay key: queueing
             // the same answer twice (a "Try again" replay) collapses to one.
@@ -802,27 +818,36 @@ final class LearnerStore {
         // writeModel: the mastery rows the answer touched — the concept's
         // own and each prerequisite propagation created or moved.
         for row in write.masteryRows {
-            try db.run("""
-                INSERT INTO mastery (learner_id, concept_slug, p_l, observations, correct,
-                    last_seen, created_at, updated_at)
-                VALUES ('local', ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT (learner_id, concept_slug) DO UPDATE SET
-                    p_l = excluded.p_l, observations = excluded.observations,
-                    correct = excluded.correct, last_seen = excluded.last_seen,
-                    updated_at = excluded.updated_at
-                """,
-                [
-                    .text(row.conceptSlug), .real(row.pL), .int(row.observations), .int(row.correct),
-                    // A prerequisite only ever propagated to was never seen:
-                    // its last_seen stays NULL, as the web's row reads.
-                    row.lastSeen.map { Bind.real($0.timeIntervalSince1970) } ?? .null,
-                    .real(at), .real(at),
-                ])
+            try upsertMastery(db, row, at: at)
         }
 
         // writeCard: the concept's card as SM-2 left it — due, ease, lapses
         // and all, the same columns the snapshot's review mirror carries.
-        let card = outcome.card
+        try upsertReview(db, outcome.card, reviewedFallback: write.at, at: at)
+    }
+
+    /// One mastery row, as writeModel leaves it. A prerequisite only ever
+    /// propagated to was never seen: its last_seen stays NULL, as the web's
+    /// row reads.
+    private func upsertMastery(_ db: WritableDatabase, _ row: CatalogMastery, at: Double) throws {
+        try db.run("""
+            INSERT INTO mastery (learner_id, concept_slug, p_l, observations, correct,
+                last_seen, created_at, updated_at)
+            VALUES ('local', ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (learner_id, concept_slug) DO UPDATE SET
+                p_l = excluded.p_l, observations = excluded.observations,
+                correct = excluded.correct, last_seen = excluded.last_seen,
+                updated_at = excluded.updated_at
+            """,
+            [
+                .text(row.conceptSlug), .real(row.pL), .int(row.observations), .int(row.correct),
+                row.lastSeen.map { Bind.real($0.timeIntervalSince1970) } ?? .null,
+                .real(at), .real(at),
+            ])
+    }
+
+    /// One review card, as upsertReview leaves it.
+    private func upsertReview(_ db: WritableDatabase, _ card: CatalogReview, reviewedFallback: Date, at: Double) throws {
         try db.run("""
             INSERT INTO review (learner_id, concept_slug, repetitions, ease, interval_days,
                 lapses, due, last_reviewed, leech, created_at, updated_at)
@@ -836,7 +861,7 @@ final class LearnerStore {
             [
                 .text(card.conceptSlug), .int(card.repetitions), .real(card.ease),
                 .int(card.intervalDays), .int(card.lapses), .real(card.due.timeIntervalSince1970),
-                .real((card.lastReviewed ?? write.at).timeIntervalSince1970), .int(card.leech ? 1 : 0),
+                .real((card.lastReviewed ?? reviewedFallback).timeIntervalSince1970), .int(card.leech ? 1 : 0),
                 .real(at), .real(at),
             ])
     }
@@ -916,43 +941,12 @@ final class LearnerStore {
 
         // upsertReview: the card as SM-2 left it, the same columns the
         // snapshot's review mirror carries.
-        let card = write.card
-        try db.run("""
-            INSERT INTO review (learner_id, concept_slug, repetitions, ease, interval_days,
-                lapses, due, last_reviewed, leech, created_at, updated_at)
-            VALUES ('local', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT (learner_id, concept_slug) DO UPDATE SET
-                repetitions = excluded.repetitions, ease = excluded.ease,
-                interval_days = excluded.interval_days, lapses = excluded.lapses,
-                due = excluded.due, last_reviewed = excluded.last_reviewed,
-                leech = excluded.leech, updated_at = excluded.updated_at
-            """,
-            [
-                .text(card.conceptSlug), .int(card.repetitions), .real(card.ease),
-                .int(card.intervalDays), .int(card.lapses), .real(card.due.timeIntervalSince1970),
-                .real((card.lastReviewed ?? write.at).timeIntervalSince1970), .int(card.leech ? 1 : 0),
-                .real(at), .real(at),
-            ])
+        try upsertReview(db, write.card, reviewedFallback: write.at, at: at)
 
         // writeModel's one changed row — the concept's entry as BKT moved
         // it. Every other entry the model holds is already in the file,
         // so the single upsert is all the write owes.
-        let entry = write.mastery
-        try db.run("""
-            INSERT INTO mastery (learner_id, concept_slug, p_l, observations, correct,
-                last_seen, created_at, updated_at)
-            VALUES ('local', ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT (learner_id, concept_slug) DO UPDATE SET
-                p_l = excluded.p_l, observations = excluded.observations,
-                correct = excluded.correct, last_seen = excluded.last_seen,
-                updated_at = excluded.updated_at
-            """,
-            [
-                .text(entry.conceptSlug), .real(entry.pL), .int(entry.observations),
-                .int(entry.correct),
-                entry.lastSeen.map { Bind.real($0.timeIntervalSince1970) } ?? .null,
-                .real(at), .real(at),
-            ])
+        try upsertMastery(db, write.mastery, at: at)
 
         return write.grade
     }
@@ -981,6 +975,127 @@ final class LearnerStore {
                 return
             }
         }
+    }
+
+    // MARK: - The catalog's record of an answer (S9-06)
+
+    /// The two mirrors whose replies carry what the catalog recorded.
+    static let observeRoute = "/api/learner/observe"
+    static let gradeRoute = "/api/review/grade"
+
+    /// `outcome` as the session should draw it: the catalog's record laid
+    /// over the app's estimate once the reply is in.
+    func shown(_ outcome: SessionAnswerOutcome) -> SessionAnswerOutcome {
+        recordedOutcome(outcome, answerRecords[outcome.requestId])
+    }
+
+    /// The rating on record for a review grade's request id, once the
+    /// catalog has answered.
+    func recordedRating(_ requestId: String) -> ReviewRating? {
+        if case .graded(let rating)? = answerRecords[requestId] { return rating }
+        return nil
+    }
+
+    /// An observe or grade mirror landed: keep what the catalog said about
+    /// the answer, and replace learner.db's estimated rows with the ones the
+    /// reply carries (the sidecar reads them back after the write, so they
+    /// are the catalog's as it stands — any web answer since the last
+    /// snapshot included). The event's numbers follow, so nothing in the
+    /// file still carries the estimate.
+    ///
+    /// `pending` names the concepts a still-queued answer will move: their
+    /// rows are left to that answer's reply, since this one's predate it and
+    /// would draw the concept back to before an answer the learner can see.
+    func applyRecorded(route: String, body: Data, reply: [String: Any], pending: Set<String> = []) {
+        guard
+            let sent = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any],
+            let requestId = sent["requestId"] as? String, !requestId.isEmpty,
+            let result = reply["result"] as? [String: Any]
+        else { return }
+
+        var eventType = "observation"
+        var eventFields: [(key: String, value: Bind)] = []
+        if route == Self.observeRoute, let recorded = RecordedAnswer(result: result) {
+            answerRecords[requestId] = .observed(recorded)
+            eventFields = [("pLBefore", .real(recorded.pLBefore)), ("pLAfter", .real(recorded.pLAfter))]
+        } else if route == Self.gradeRoute,
+                  let raw = (result["rating"] as? NSNumber)?.intValue,
+                  let rating = ReviewRating(rawValue: raw) {
+            answerRecords[requestId] = .graded(rating)
+            eventType = "review"
+            let grade = (result["grade"] as? NSNumber)?.intValue ?? rating.grade
+            eventFields = [("grade", .int(Int64(grade)))]
+            if let pL = (result["pL"] as? NSNumber)?.doubleValue { eventFields.append(("pLAfter", .real(pL))) }
+        } else {
+            return
+        }
+
+        let rows = result["rows"] as? [String: Any] ?? [:]
+        let mastery = (rows["mastery"] as? [[String: Any]] ?? []).compactMap(Self.recordedMastery)
+            .filter { !pending.contains($0.conceptSlug) }
+        let review = (rows["review"] as? [[String: Any]] ?? []).compactMap(Self.recordedReview)
+            .filter { !pending.contains($0.conceptSlug) }
+        let now = Date()
+        write { db in
+            for row in mastery { try upsertMastery(db, row, at: now.timeIntervalSince1970) }
+            for card in review { try upsertReview(db, card, reviewedFallback: now, at: now.timeIntervalSince1970) }
+            for (key, value) in eventFields {
+                try db.run(
+                    "UPDATE event SET payload = json_set(payload, ?, ?) WHERE type = ? AND json_extract(payload, '$.requestId') = ?",
+                    [.text("$.\(key)"), value, .text(eventType), .text(requestId)]
+                )
+            }
+        }
+        recordedVersion += 1
+    }
+
+    /// The concepts the answers still in the queue name — an observe's
+    /// `conceptSlug`, a grade's `conceptId`.
+    private func pendingAnswerConcepts() -> Set<String> {
+        guard let db,
+              let rows = try? db.query(
+                  "SELECT body FROM mirror_queue WHERE route IN (?, ?)",
+                  bind: [Self.observeRoute, Self.gradeRoute])
+        else { return [] }
+        var concepts: Set<String> = []
+        while rows.next() {
+            guard let text = rows.text(0),
+                  let body = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any]
+            else { continue }
+            if let slug = (body["conceptSlug"] ?? body["conceptId"]) as? String { concepts.insert(slug) }
+        }
+        return concepts
+    }
+
+    /// One `rows.mastery` entry of a reply, as the store's row type.
+    private static func recordedMastery(_ raw: [String: Any]) -> CatalogMastery? {
+        guard let slug = raw["conceptSlug"] as? String,
+              let pL = (raw["pL"] as? NSNumber)?.doubleValue, pL.isFinite
+        else { return nil }
+        return CatalogMastery(
+            conceptSlug: slug,
+            pL: pL,
+            observations: (raw["observations"] as? NSNumber)?.int64Value ?? 0,
+            correct: (raw["correct"] as? NSNumber)?.int64Value ?? 0,
+            lastSeen: (raw["lastSeen"] as? String).flatMap(isoDate)
+        )
+    }
+
+    /// One `rows.review` entry of a reply, as the store's card type.
+    private static func recordedReview(_ raw: [String: Any]) -> CatalogReview? {
+        guard let slug = raw["conceptSlug"] as? String,
+              let due = (raw["due"] as? String).flatMap(isoDate)
+        else { return nil }
+        return CatalogReview(
+            conceptSlug: slug,
+            repetitions: (raw["repetitions"] as? NSNumber)?.int64Value ?? 0,
+            ease: (raw["ease"] as? NSNumber)?.doubleValue ?? SM2.defaultEase,
+            intervalDays: (raw["intervalDays"] as? NSNumber)?.int64Value ?? 1,
+            lapses: (raw["lapses"] as? NSNumber)?.int64Value ?? 0,
+            due: due,
+            lastReviewed: (raw["lastReviewed"] as? String).flatMap(isoDate),
+            leech: raw["leech"] as? Bool ?? false
+        )
     }
 
     /// The `watch.ranges` column: `[[start, end], ...]` as JSON.
@@ -1152,8 +1267,12 @@ final class LearnerStore {
             // oldest queued, so everything behind it stays behind it.
             if row.nextAt > now { break }
             do {
-                try await client.replay(route: row.route, body: Data(row.body.utf8))
+                let reply = try await client.replay(route: row.route, body: Data(row.body.utf8))
                 try? db.run("DELETE FROM mirror_queue WHERE id = ?", [.int(row.id)])
+                if row.route == Self.observeRoute || row.route == Self.gradeRoute {
+                    applyRecorded(route: row.route, body: Data(row.body.utf8), reply: reply,
+                                  pending: pendingAnswerConcepts())
+                }
             } catch let refusal as SidecarClient.SidecarError where (400 ... 499).contains(refusal.status) {
                 dropMirror(row, because: refusal.errorDescription ?? "refused", db: db)
             } catch {
@@ -1186,6 +1305,13 @@ final class LearnerStore {
     /// counted so the divergence is visible rather than silent.
     private func dropMirror(_ row: MirrorRow, because reason: String, db: WritableDatabase) {
         try? db.run("DELETE FROM mirror_queue WHERE id = ?", [.int(row.id)])
+        // An answer the catalog will never hold: the session's numbers for
+        // it stay the app's, and say so.
+        if row.route == Self.observeRoute || row.route == Self.gradeRoute,
+           let body = (try? JSONSerialization.jsonObject(with: Data(row.body.utf8))) as? [String: Any],
+           let requestId = body["requestId"] as? String {
+            answerRecords[requestId] = .notRecorded(reason)
+        }
         droppedMirrors += 1
         lastMirrorError = reason
         NSLog("gnosia learner mirror: dropped %@ after %@ send attempts: %@",

@@ -224,11 +224,13 @@ struct SidecarClient {
     // LearnerStore's, and services/sidecar/src/api.ts lists the routes.
 
     /// The retry queue's send: `POST` a persisted body back to its route.
-    /// The body arrives already encoded — it was stored as bytes — and the
-    /// reply only needs checking, which `decode`'s refusal pass does.
-    func replay(route: String, body: Data) async throws {
+    /// The body arrives already encoded — it was stored as bytes. The reply
+    /// is checked by `decode`'s refusal pass and handed back: an answer's
+    /// carries what the catalog recorded (LearnerStore.applyRecorded).
+    @discardableResult
+    func replay(route: String, body: Data) async throws -> [String: Any] {
         let (data, response) = try await send("POST", route, data: body)
-        _ = try decode([String: Any].self, from: data, response: response)
+        return try decode([String: Any].self, from: data, response: response)
     }
 
     // MARK: - transport

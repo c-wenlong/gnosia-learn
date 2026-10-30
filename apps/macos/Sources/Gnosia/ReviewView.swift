@@ -85,6 +85,15 @@ struct ReviewView: View {
     private struct Outcome: Hashable {
         let conceptId: String
         let rating: ReviewRating
+        let requestId: String
+    }
+
+    /// Each rating as the catalog recorded it once the grade's reply is in
+    /// (on a replay that is the first write's), the local record before.
+    private var shownOutcomes: [Outcome] {
+        outcomes.map { o in
+            Outcome(conceptId: o.conceptId, rating: learner.recordedRating(o.requestId) ?? o.rating, requestId: o.requestId)
+        }
     }
 
     // The queue is fixed when the surface opens — the web's initial.items.
@@ -595,6 +604,7 @@ struct ReviewView: View {
     /// "Review done" — the queue worked through: how many, how many
     /// Agains, and where the next card lands, then Back to Home.
     private var closeScreen: some View {
+        let outcomes = shownOutcomes
         let again = outcomes.filter { $0.rating == .again }.count
         // The next due is read after the last grade — the writes just
         // made are what moved it.
@@ -682,9 +692,11 @@ struct ReviewView: View {
         phase = .answered
     }
 
-    /// One rating: this card's gradeReview — computed over the store's
-    /// freshest rows the way the web reads them inside its learner lock —
-    /// and the card advances only once the write lands. A failed write
+    /// One rating: this card's gradeReview — estimated over the store's
+    /// freshest rows the way the web reads them inside its learner lock,
+    /// so Home and the queue move at once; the catalog's reply replaces
+    /// the estimate when the queued grade lands (LearnerStore.applyRecorded)
+    /// — and the card advances only once the write lands. A failed write
     /// keeps the card with the error on it; the slot's requestId stays
     /// pinned so the retry is a replay, not a second count.
     private func rate(_ rating: ReviewRating) {
@@ -726,7 +738,7 @@ struct ReviewView: View {
         if let recorded = learner.recordReviewGrade(write) {
             // The rating on record — the one asked for, or on a replay
             // the first write's, whatever this press claimed.
-            outcomes.append(Outcome(conceptId: item.conceptId, rating: recorded))
+            outcomes.append(Outcome(conceptId: item.conceptId, rating: recorded, requestId: requestId))
             index += 1
             phase = .ask
             picked = nil
