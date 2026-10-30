@@ -558,14 +558,11 @@ function bad(error: string): TurnReply {
 }
 
 /**
- * `POST /api/agent/judge` with `{ conceptSlug, question, answer, commitment? }`:
- * the judge's verdict on one answer to a check the concept tutor asked in the
- * chat (R5 of docs/proposals/recall-in-chat.md). It writes nothing.
- * `commitment` is the answer a recall check's tutor committed to when it
- * asked (docs/proposals/structured-checks.md, phase 2), and the judge's first
- * reference, ahead of any note check `matchCheck` finds.
+ * The 400 a judge body earns, or null when it is well formed. Exported so
+ * the route answers it before the rate limiter is touched, with the same
+ * rules the turn applies.
  */
-export async function judgeTurn(deps: TutorDeps, body: unknown): Promise<TurnReply> {
+export function validateJudgeBody(body: unknown): TurnReply | null {
   if (body === null || typeof body !== "object" || Array.isArray(body)) return bad("The body must be a JSON object");
   const { conceptSlug, question, answer, commitment } = body as Record<string, unknown>;
   if (!isConceptSlug(conceptSlug)) return bad("conceptSlug must be a concept id (lowercase letters, digits and hyphens)");
@@ -576,6 +573,26 @@ export async function judgeTurn(deps: TutorDeps, body: unknown): Promise<TurnRep
     return bad(`answer must be the learner's reply, 1 to ${CHAT_ANSWER_LIMIT} characters`);
   }
   if (!isCommitment(commitment)) return bad(COMMITMENT_RULE);
+  return null;
+}
+
+/**
+ * `POST /api/agent/judge` with `{ conceptSlug, question, answer, commitment? }`:
+ * the judge's verdict on one answer to a check the concept tutor asked in the
+ * chat (R5 of docs/proposals/recall-in-chat.md). It writes nothing.
+ * `commitment` is the answer a recall check's tutor committed to when it
+ * asked (docs/proposals/structured-checks.md, phase 2), and the judge's first
+ * reference, ahead of any note check `matchCheck` finds.
+ */
+export async function judgeTurn(deps: TutorDeps, body: unknown): Promise<TurnReply> {
+  const refused = validateJudgeBody(body);
+  if (refused) return refused;
+  const { conceptSlug, question, answer, commitment } = body as {
+    conceptSlug: string;
+    question: string;
+    answer: string;
+    commitment: string | null | undefined;
+  };
 
   const read = await workspaceOf(deps, conceptSlug);
   if (read.state === "unreachable") {
@@ -651,12 +668,8 @@ export async function judgeTurn(deps: TutorDeps, body: unknown): Promise<TurnRep
 
 const MAX_AVOID = 4;
 
-/**
- * `POST /api/agent/session` with `{ conceptSlug, step: "probe" | "check",
- * avoid? }`: one multiple-choice question for a session step, written by the
- * tutor model as structured JSON.
- */
-export async function sessionQuestionTurn(deps: TutorDeps, body: unknown): Promise<TurnReply> {
+/** The 400 a session-question body earns, or null when it is well formed; the route's and the turn's one rule. */
+export function validateSessionBody(body: unknown): TurnReply | null {
   if (body === null || typeof body !== "object" || Array.isArray(body)) return bad("The body must be a JSON object");
   const { conceptSlug, step, avoid } = body as Record<string, unknown>;
   if (!isConceptSlug(conceptSlug)) return bad("conceptSlug must be a concept id (lowercase letters, digits and hyphens)");
@@ -664,6 +677,18 @@ export async function sessionQuestionTurn(deps: TutorDeps, body: unknown): Promi
   if (avoid !== undefined && (!Array.isArray(avoid) || avoid.length > MAX_AVOID || avoid.some((q) => typeof q !== "string"))) {
     return bad(`avoid must be a list of at most ${MAX_AVOID} questions`);
   }
+  return null;
+}
+
+/**
+ * `POST /api/agent/session` with `{ conceptSlug, step: "probe" | "check",
+ * avoid? }`: one multiple-choice question for a session step, written by the
+ * tutor model as structured JSON.
+ */
+export async function sessionQuestionTurn(deps: TutorDeps, body: unknown): Promise<TurnReply> {
+  const refused = validateSessionBody(body);
+  if (refused) return refused;
+  const { conceptSlug, step, avoid } = body as { conceptSlug: string; step: QuestionStep; avoid?: string[] };
   const asked = ((avoid as string[] | undefined) ?? []).map((q) => q.slice(0, QUESTION_LIMITS.prompt));
 
   const read = await workspaceOf(deps, conceptSlug);

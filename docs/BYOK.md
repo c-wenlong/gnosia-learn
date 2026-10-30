@@ -147,7 +147,7 @@ Things that could leak a key, and what stops each:
   failure path logs the message.
 - **A provider quoting the key back.** Provider errors reach the browser in
   the tutor's `attempts` and in a Test result. `redactSecrets` in
-  `apps/web/src/lib/agent/redact.ts` removes the whole key and any word
+  `packages/tutor/src/redact.ts` removes the whole key and any word
   sharing six characters in a row with it, which covers masked echoes such as
   `sk-or-v1-ab***yz`.
 - **The exports.** D11.

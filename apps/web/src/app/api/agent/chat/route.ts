@@ -1,12 +1,7 @@
 import { NextResponse } from "next/server";
-import {
-  CHAT_RATE_LIMIT,
-  enforcePayloadBounds,
-  enforceRateLimit,
-  enforceSameOrigin,
-} from "@/lib/agent/guard";
+import { CHAT_RATE_LIMIT, enforceRateLimit, enforceSameOrigin } from "@/lib/agent/guard";
 import { tutorDeps, turnResponse } from "@/lib/agent/env";
-import { chatTurn, type ChatBody } from "@gnosia/tutor/server/turns";
+import { chatTurn, payloadTooLarge, type ChatBody } from "@gnosia/tutor/server/turns";
 import { requestOwner } from "@/lib/learner-api";
 
 export const runtime = "nodejs";
@@ -31,8 +26,8 @@ export async function POST(req: Request): Promise<NextResponse> {
   if (body === null || typeof body !== "object" || !Array.isArray(body.messages)) {
     return NextResponse.json({ error: "The body must be a JSON object with a messages array" }, { status: 400 });
   }
-  const tooLarge = enforcePayloadBounds(body.messages, typeof body.learnerNote === "string" ? body.learnerNote : undefined);
-  if (tooLarge) return tooLarge;
+  const tooLarge = payloadTooLarge(body.messages, typeof body.learnerNote === "string" ? body.learnerNote : undefined);
+  if (tooLarge) return turnResponse(tooLarge);
 
   return turnResponse(await chatTurn(tutorDeps(owner), body));
 }

@@ -231,3 +231,33 @@ describe("ReviewSession moving through the queue", () => {
     expect(document.activeElement).toBe(done.querySelector("h1"));
   });
 });
+
+describe("ReviewSession reading the state again", () => {
+  it("refreshes the page once, at the end, never after each grade", async () => {
+    router.refresh.mockClear();
+    const second = card({ conceptId: "ip", prompt: "What does IP route?", answer: "Packets." });
+    const host = await mount([RECALL, second]);
+    await settle(() => button(host, "Show answer").click());
+    await settle(() => rating(host, "Good").click());
+    expect(router.refresh).not.toHaveBeenCalled();
+    await settle(() => button(host, "Show answer").click());
+    await settle(() => rating(host, "Good").click());
+    expect(graded).toEqual([2, 2]);
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("says more cards are due when the session read only the first of them", async () => {
+    vi.mocked(fetch).mockImplementation(async (url) =>
+      url === "/api/review/grade"
+        ? new Response(JSON.stringify({ ok: true, result: { rating: 2 } }), { status: 200 })
+        : new Response(JSON.stringify({ ok: true, nextDue: null, items: Array.from({ length: 50 }, () => ({})), more: true }), {
+            status: 200,
+          }),
+    );
+    const host = await mount([RECALL]);
+    await settle(() => button(host, "Show answer").click());
+    await settle(() => rating(host, "Good").click());
+    await settle(() => undefined);
+    expect(host.textContent).toContain("1 card reviewed, and over 50 more are due.");
+  });
+});

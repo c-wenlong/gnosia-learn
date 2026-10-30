@@ -60,6 +60,8 @@ export interface ReviewSessionData {
   reachable: boolean;
   items: ReviewItem[];
   nextDue: string | null;
+  /** More cards are due than one session asks (`items` was cut at its limit). */
+  more?: boolean;
 }
 
 /** A check block, as `concept-note-core` reads it. */

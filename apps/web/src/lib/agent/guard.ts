@@ -4,8 +4,6 @@ import {
   checkRateLimit,
   clientIp,
   isSameOrigin,
-  measurePayload,
-  PAYLOAD_LIMITS,
   resolveHost,
   storeFor,
   type RateLimitRule,
@@ -44,24 +42,6 @@ export function enforceSameOrigin(req: Request): NextResponse | null {
       code: "ORIGIN_MISMATCH",
     },
     { status: 403 },
-  );
-}
-
-/** 413 when one request would forward more than `PAYLOAD_LIMITS` allows. */
-export function enforcePayloadBounds(
-  messages: readonly { content?: unknown }[],
-  extraText?: string,
-): NextResponse | null {
-  const { count, chars } = measurePayload(messages, extraText);
-  if (count <= PAYLOAD_LIMITS.maxMessages && chars <= PAYLOAD_LIMITS.maxTotalChars) {
-    return null;
-  }
-  return NextResponse.json(
-    {
-      error: `Session too large to send (messages: ${count}, characters: ${chars}; limit: ${PAYLOAD_LIMITS.maxMessages} messages, ${PAYLOAD_LIMITS.maxTotalChars} characters). Save a recap and start a fresh session.`,
-      code: "PAYLOAD_TOO_LARGE",
-    },
-    { status: 413 },
   );
 }
 

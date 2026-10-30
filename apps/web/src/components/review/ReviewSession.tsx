@@ -16,6 +16,7 @@ import { CLOSE_TITLE, cx, TRACK } from "@/components/ui/classes";
 import { TextLink } from "@/components/ui/TextLink";
 import { scrollBehavior } from "@/lib/motion";
 import { quizKey } from "@/lib/quiz-keys";
+import { randomToken } from "@/lib/random-token";
 import {
   cardEyebrow,
   cardStats,
@@ -46,9 +47,11 @@ import {
  * The queue is fixed when the page renders. Each rating is one
  * `POST /api/review/grade`, and the card advances only once it has been
  * recorded: a grade that did not save stays on screen with the error, since a
- * review silently lost is worse than one retried (layering rule 14). After each
- * write `router.refresh()` re-reads the layout, so the learner snapshot the
- * shell holds moves with the session.
+ * review silently lost is worse than one retried (layering rule 14). Once the
+ * queue is done, `router.refresh()` re-reads the layout, so the learner
+ * snapshot the shell holds catches up with the session. Not after each grade:
+ * a refresh re-reads the whole queue and a note per card, all of which this
+ * page throws away, since its queue is fixed.
  *
  * **Motion.** Each card's column is keyed on its place in the queue, so the
  * next card rises in rather than being swapped in place, and the focus moves
@@ -70,6 +73,8 @@ interface Outcome {
 interface CloseData {
   nextDue: string | null;
   remaining: number;
+  /** More are due than one session reads, so `remaining` is a floor. */
+  more: boolean;
 }
 
 export function ReviewSession({
@@ -117,7 +122,7 @@ export function ReviewSession({
   const current = useRef(0);
   // One name per card, reused by a retry, so a grade the server saved but
   // whose answer was lost is not recorded twice (`requestId` on the route).
-  const attempt = useRef(newRequestId());
+  const attempt = useRef(randomToken());
 
   const now = useMemo(() => new Date(asOf), [asOf]);
   const item: ReviewItem | undefined = items[index];
@@ -157,7 +162,7 @@ export function ReviewSession({
           return;
         }
         current.current = index + 1;
-        attempt.current = newRequestId();
+        attempt.current = randomToken();
         // What the server recorded, which on a replayed retry is the first
         // rating rather than the one just pressed.
         const recorded = isRating(body.result?.rating) ? body.result.rating : rating;
@@ -166,7 +171,6 @@ export function ReviewSession({
         setPhase("ask");
         setPicked(null);
         setWhyOpen(false);
-        router.refresh();
       } catch {
         setError("Not saved: the server could not be reached.");
       } finally {
@@ -174,7 +178,7 @@ export function ReviewSession({
         setPending(false);
       }
     },
-    [item, index, router],
+    [item, index],
   );
 
   const reveal = useCallback(() => setPhase("shown"), []);
@@ -210,18 +214,22 @@ export function ReviewSession({
   useEffect(() => {
     if (!done || total === 0) return;
     let live = true;
+    // The shell's learner snapshot (mastery, the due count) reads every grade at once.
+    router.refresh();
     fetch("/api/review/due", { cache: "no-store" })
       .then((res) => res.json())
-      .then((body: { ok?: boolean; nextDue?: string | null; items?: unknown[] }) => {
-        if (live && body.ok) setClose({ nextDue: body.nextDue ?? null, remaining: body.items?.length ?? 0 });
+      .then((body: { ok?: boolean; nextDue?: string | null; items?: unknown[]; more?: boolean }) => {
+        if (live && body.ok) {
+          setClose({ nextDue: body.nextDue ?? null, remaining: body.items?.length ?? 0, more: body.more === true });
+        }
       })
       .catch(() => {
-        if (live) setClose({ nextDue: null, remaining: 0 });
+        if (live) setClose({ nextDue: null, remaining: 0, more: false });
       });
     return () => {
       live = false;
     };
-  }, [done, total]);
+  }, [done, total, router]);
 
   useEffect(() => {
     if (item === undefined) return;
@@ -304,7 +312,9 @@ export function ReviewSession({
         <Closing
           title="Review done"
           lead={`${outcomes.length} ${outcomes.length === 1 ? "card" : "cards"} reviewed${
-            close !== null && close.remaining > 0 ? `, and ${close.remaining} more came due` : ""
+            close !== null && close.remaining > 0
+              ? `, and ${close.more ? `over ${close.remaining}` : close.remaining} more ${close.remaining === 1 && !close.more ? "is" : "are"} due`
+              : ""
           }.`}
         >
           <div className="flex w-full gap-2.5 md:gap-3.5">
@@ -442,12 +452,6 @@ function focusLost(): boolean {
   const active = document.activeElement;
   if (active === null || active === document.body || !active.isConnected) return true;
   return active.closest("a[href], button:not(:disabled), input, textarea, select, [contenteditable='true']") === null;
-}
-
-function newRequestId(): string {
-  // `randomUUID` needs a secure context; a LAN address over http is not one.
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
 }
 
 function keysHint(item: ReviewItem, phase: Phase): string {
