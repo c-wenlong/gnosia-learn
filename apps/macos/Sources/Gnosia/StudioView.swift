@@ -397,7 +397,7 @@ struct StatePill: View {
     var body: some View {
         Text(state.replacingOccurrences(of: "_", with: " "))
             .font(.caption2.weight(.semibold))
-            .foregroundStyle(color == G.streak ? G.streakText : color)
+            .foregroundStyle(color == G.streak ? G.warnText : color)
             .padding(.horizontal, 8)
             .padding(.vertical, 2.5)
             .background(color.opacity(0.14), in: Capsule())
@@ -423,7 +423,7 @@ struct StudioBanner: View {
             if tone != .quiet {
                 Image(systemName: tone == .danger ? "exclamationmark.octagon" : "exclamationmark.triangle")
                     .font(.callout)
-                    .foregroundStyle(tone == .danger ? G.danger : G.streakText)
+                    .foregroundStyle(tone == .danger ? G.danger : G.warnText)
             }
             Text(text)
                 .font(.callout)
