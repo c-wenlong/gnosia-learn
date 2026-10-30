@@ -69,7 +69,6 @@ enum G {
         "btn-face": (0x0f5f61, 0x5cbab3),
         "btn-text": (0xfaf6ec, 0x0a1621),
         "streak": (0xb3842c, 0xe2b95e),
-        "streak-text": (0x916a23, 0xe2b95e),
         "ok": (0x29cc57, 0x29cc57),
         "ok-text": (0x008024, 0x5ed981),
         "warn-text": (0x8c6800, 0xf9d25c),
@@ -121,7 +120,6 @@ enum G {
 
     /// The streak gold — day markers, due badges.
     static let streak = token("streak")
-    static let streakText = token("streak-text")
 
     /// Signals, same hues as the web's.
     static let ok = token("ok")
