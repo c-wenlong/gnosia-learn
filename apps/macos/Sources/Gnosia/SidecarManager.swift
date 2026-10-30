@@ -47,6 +47,13 @@ final class SidecarManager {
         }
     }
 
+    /// A manager over a client that is already answering: it never spawns.
+    /// For the UI snapshot harness, whose client is served by fixtures.
+    init(client: SidecarClient) {
+        self.client = client
+        status = .running(port: client.baseURL.port ?? 0)
+    }
+
     /// Idempotent: a running or already-starting sidecar is reused.
     func start() {
         guard client == nil, status != .starting else { return }
@@ -86,7 +93,7 @@ final class SidecarManager {
 
     private func spawn() async {
         guard let root = Self.repoRoot() else {
-            status = .failed("No checkout found — set GNOSIA_REPO to the repository root.")
+            status = .failed("No checkout found. Set GNOSIA_REPO to the repository root.")
             return
         }
         let entry = root.appending(path: "services/sidecar/src/index.ts")

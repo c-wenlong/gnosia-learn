@@ -237,7 +237,7 @@ final class TutorSettings {
     func removeProvider(_ provider: String, using sidecar: SidecarManager) async {
         await run(sidecar, tag: "provider-\(provider)") { client in
             _ = try await client.removeTutorProvider(provider)
-            note = "\(label(for: provider)) removed — its saved key went with it."
+            note = "\(label(for: provider)) removed, and its saved key with it."
         }
         await refresh(using: sidecar)
     }
@@ -254,7 +254,7 @@ final class TutorSettings {
             let reply = try await client.tutorModelList(provider)
             if let models = reply["models"] as? [[String: Any]] {
                 listedModels[provider] = models.compactMap { $0["id"] as? String }
-                note = "\(listedModels[provider]?.count ?? 0) models listed — pick from the menu."
+                note = "\(listedModels[provider]?.count ?? 0) models listed. Pick one from the menu."
             } else {
                 note = "\(label(for: provider)): \(reply["message"] as? String ?? "no model list.")"
             }
@@ -290,7 +290,7 @@ final class TutorSettings {
     private func testNote(_ reply: [String: Any], for provider: String) -> String {
         if reply["ok"] as? Bool == true {
             let model = (reply["served"] as? String) ?? (reply["model"] as? String) ?? (reply["tested"] as? String) ?? ""
-            return "\(label(for: provider)): the key works\(model.isEmpty ? "." : " — \(model).")"
+            return "\(label(for: provider)): the key works\(model.isEmpty ? "." : ": \(model).")"
         }
         return "\(label(for: provider)): \(reply["message"] as? String ?? "the test failed.")"
     }
@@ -325,7 +325,7 @@ struct TutorSettingsSection: View {
                 Button("Try again") { Task { await settings.refresh(using: sidecar) } }
             } else {
                 if !settings.keysReachable {
-                    Text("The catalog could not be read — the server's keys alone show.")
+                    Text("The catalog could not be read, so only the server's keys show.")
                         .font(.caption)
                         .foregroundStyle(G.warnText)
                 }
@@ -365,14 +365,14 @@ struct TutorSettingsSection: View {
             }
         }
 
-        Section("Model chain — the tutor tries these, top to bottom") {
+        Section("Model chain: the tutor tries these, top to bottom") {
             if !settings.chainReachable {
                 Text("The chain could not be read.")
                     .font(.caption)
                     .foregroundStyle(G.warnText)
             }
             if settings.chain.isEmpty {
-                Text("No models yet — the tutor answers nothing until one is added.")
+                Text("No models yet. The tutor answers nothing until one is added.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
@@ -512,8 +512,10 @@ struct TutorSettingsSection: View {
         }
         .padding(.top, 6)
 
-        ForEach(group.entries.indices, id: \.self) { index in
-            let entry = group.entries[index]
+        // Keyed by the entry, not its index: a Form flattens every group's
+        // rows into one list, so two providers' first models shared the id
+        // 0 and the second group drew the first group's model.
+        ForEach(Array(group.entries.enumerated()), id: \.element) { index, entry in
             HStack(spacing: 8) {
                 Text(entry.model)
                     .font(.callout.monospaced())
@@ -656,7 +658,7 @@ private struct CustomProviderSheet: View {
                 }
             }
             Text(adding
-                 ? "Any OpenAI-compatible endpoint. The URL is the part before /chat/completions — https:// only, or http:// for a model server on this machine. The key is sent once and stored encrypted; only its last four characters are shown again. For a local server that needs no key, type any 16 characters."
+                 ? "Any OpenAI-compatible endpoint. The URL is the part before /chat/completions: https:// only, or http:// for a model server on this machine. The key is sent once and stored encrypted; only its last four characters are shown again. For a local server that needs no key, type any 16 characters."
                  : "The name and the URL save together. The key field left empty keeps the key saved now; a new one is sent once and stored encrypted.")
                 .font(.caption)
                 .foregroundStyle(.secondary)

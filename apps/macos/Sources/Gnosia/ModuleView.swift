@@ -189,7 +189,9 @@ struct ModuleView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Module \(module.order) of \(course.modules.count)")
+            // Its place in the list, not its authored `order`: a course
+            // whose modules are numbered 1 and 3 read "Module 3 of 2".
+            Text("Module \((course.modules.firstIndex { $0.id == module.id } ?? 0) + 1) of \(course.modules.count)")
                 .font(.callout)
                 .foregroundStyle(.secondary)
             Text(module.title)

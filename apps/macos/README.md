@@ -15,6 +15,28 @@ swift run Gnosia     # opens the window (runs unbundled)
 swift test           # GnosiaTests: the session arithmetic, learner.db writes and the data contracts
 ```
 
+To look at the screens without running the app, draw them to PNGs:
+
+```sh
+# from the repo root
+node apps/macos/scripts/ui-snapshots.mjs [--out DIR]
+```
+
+It builds a catalog from `seed/` (with a few answers recorded so the map,
+Home and Review have state), mirrors it, and runs the `UISnapshots` suite
+(`Tests/GnosiaTests/UISnapshotTests.swift`), which draws Home, the shell,
+Learn, the Library, a concept with its tutor's check cards, a session with
+"How sure are you?", Review, a course and a module, the Studio home and a
+conversation with a consent card and a planner picture, and Settings, at
+1280x800 in light and dark. The PNGs go to `DIR`, else
+`GNOSIA_SNAPSHOT_DIR`, else `<OS temp>/gnosia-ui-snapshots`, never into the
+repository. Nothing touches `~/.gnosia` or a running studio: the studio's
+and the sidecar's routes are answered from fixtures. A screen is drawn in
+an off-screen window rather than with `ImageRenderer`, which runs none of a
+view's `.task` work; `home-imagerenderer.png` is written beside the rest to
+show what it gives. Note bodies and chat bubbles are WKWebViews and draw
+their plain-text stand-in.
+
 macOS 14+, Swift 6 toolchain. There are no external SPM dependencies: the app
 links the SDK's libsqlite3 through a module map (`Sources/CSQLite3`), and uses
 only Foundation, SwiftUI, AVKit/AVFoundation, PDFKit and ImageIO.

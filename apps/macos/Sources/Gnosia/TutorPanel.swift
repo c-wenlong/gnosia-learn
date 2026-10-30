@@ -109,11 +109,19 @@ struct TutorPanel: View {
 /// The structured session — probe, teach, check, close — taking the
 /// whole panel when it runs. Every piece of the walk is unchanged from
 /// when this was `TutorPanel` itself.
+extension EnvironmentValues {
+    /// An option the session's first question opens with already picked,
+    /// so "How sure are you?" is up: the UI snapshot harness's way to draw
+    /// it. Nil in the app.
+    @Entry var sessionSeedPick: Int? = nil
+}
+
 struct TutorSessionView: View {
     @Environment(CatalogStore.self) private var store
     @Environment(LearnerStore.self) private var learner
     @Environment(SidecarManager.self) private var sidecar
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.sessionSeedPick) private var seedPick
 
     /// The concept the session is about — the plan, the pool and the
     /// model are built from the workspace at open, once.
@@ -257,6 +265,7 @@ struct TutorSessionView: View {
         )
         titles = Dictionary(uniqueKeysWithValues: store.learn.concepts.map { ($0.slug, $0.title) })
         startedAt = Date()
+        if index == 0, selected == nil { selected = seedPick }
         ready = true
         askModelQuestion(index)
     }
@@ -540,7 +549,9 @@ struct TutorSessionView: View {
                 .padding(.horizontal, gutter)
                 .padding(.top, 10)
                 .padding(.bottom, 48)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                // The standalone page is the web's FocusFrame, its column
+                // centred; in the workspace's panel it keeps to the left.
+                .frame(maxWidth: .infinity, alignment: embedded ? .leading : .center)
             }
         }
     }
@@ -563,7 +574,7 @@ struct TutorSessionView: View {
             Text("\(title) · \(step.kind.name)")
                 .font(.gnosiaTitle(26))
             if step.kind == .probe {
-                Text("One question before any teaching — not for marks, just to see what you already hold.")
+                Text("One question before any teaching, to see where you start. It measures; it does not teach.")
                     .font(.callout)
                     .foregroundStyle(G.text2)
             }

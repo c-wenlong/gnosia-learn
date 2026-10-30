@@ -143,8 +143,8 @@ struct ConceptDetailView: View {
                 .buttonStyle(.plain)
             }
 
+            // The domain is the eyebrow's already (the web prints it once).
             HStack(spacing: 8) {
-                if let domain = w.domain { Text(domain) }
                 if let place = w.place {
                     NavigationLink(value: AppDestination.module(course: place.courseSlug, module: place.moduleSlug)) {
                         Text(place.label)
@@ -164,7 +164,7 @@ struct ConceptDetailView: View {
             // honest half is the note's side: with no checks every
             // question is the tutor's to write.
             if w.checks.isEmpty {
-                Text("This note has no checks — a session's questions are the tutor's to write, so nothing may be recorded.")
+                Text("This note has no checks: a session's questions are the tutor's to write, so nothing may be recorded.")
                     .font(.caption)
                     .foregroundStyle(G.text3)
             }

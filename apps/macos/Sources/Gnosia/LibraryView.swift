@@ -396,7 +396,9 @@ struct LibraryView: View {
         switch layout {
         case .grid:
             LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 190, maximum: 230), spacing: 18)],
+                // Top-aligned: cards of different heights in one row line
+                // up at the top, as the web's grid does, not at their middles.
+                columns: [GridItem(.adaptive(minimum: 190, maximum: 230), spacing: 18, alignment: .top)],
                 spacing: 18
             ) {
                 ForEach(rows) { asset in
@@ -632,12 +634,15 @@ struct AssetCard: View {
                 DiagramThumbnail(asset: asset)
                     .frame(maxWidth: .infinity)
             } else {
+                // The web card's 110px tile, the card's full width: an
+                // aspect ratio on an unbounded width collapsed it to a strip
+                // as wide as the glyph's row happened to be.
                 Image(systemName: assetKindSymbol(asset.kind))
                     .font(.title2)
                     .foregroundStyle(kindTint(asset.kind).opacity(0.9))
                     .frame(maxWidth: .infinity)
-                    .aspectRatio(16.0 / 9.0, contentMode: .fit)
-                    .background(kindTint(asset.kind).opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+                    .frame(height: 110)
+                    .background(kindTint(asset.kind).opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
             }
 
             VStack(alignment: .leading, spacing: 6) {
@@ -842,8 +847,8 @@ private struct DiagramThumbnail: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .aspectRatio(16.0 / 9.0, contentMode: .fit)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .frame(height: 110)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
         .task(id: asset.id) {
             guard let key = asset.blobKey,
                   let svg = store.blobText(for: key) else { return }

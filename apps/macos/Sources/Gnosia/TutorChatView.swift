@@ -161,9 +161,16 @@ func tutorStyleLabel(_ preferences: [String: String]) -> String {
 
 // MARK: - The chat
 
+extension EnvironmentValues {
+    /// A thread the chat opens on instead of an empty one: the UI snapshot
+    /// harness draws the check cards through it. Empty in the app.
+    @Entry var tutorChatSeed: [TutorThreadTurn] = []
+}
+
 struct TutorChatView: View {
     @Environment(CatalogStore.self) private var store
     @Environment(SidecarManager.self) private var sidecar
+    @Environment(\.tutorChatSeed) private var seed
 
     /// The concept the tutor works on.
     let slug: String
@@ -233,6 +240,7 @@ struct TutorChatView: View {
             title: w.title, observations: w.observations,
             firstRequires: w.requires.first?.title
         )
+        if turns.isEmpty { turns = seed }
         ready = true
     }
 
