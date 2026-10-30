@@ -46,6 +46,19 @@ export function AskBox() {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const latest = useRef(0);
+  // The list closes a beat after the field loses focus. Focus coming back
+  // within that beat (the clear button, then the field) keeps it open.
+  const blurTimer = useRef<number | null>(null);
+  const cancelBlur = () => {
+    if (blurTimer.current !== null) window.clearTimeout(blurTimer.current);
+    blurTimer.current = null;
+  };
+  useEffect(
+    () => () => {
+      if (blurTimer.current !== null) window.clearTimeout(blurTimer.current);
+    },
+    [],
+  );
 
   const trimmed = query.trim();
   // The tutor is offered for any subject ("R" is a language); the title
@@ -141,8 +154,17 @@ export function AskBox() {
           setOpen(true);
           setActive(0);
         }}
-        onFocus={() => setOpen(true)}
-        onBlur={() => window.setTimeout(() => setOpen(false), 120)}
+        onFocus={() => {
+          cancelBlur();
+          setOpen(true);
+        }}
+        onBlur={() => {
+          cancelBlur();
+          blurTimer.current = window.setTimeout(() => {
+            blurTimer.current = null;
+            setOpen(false);
+          }, 120);
+        }}
         onKeyDown={(e) => {
           if (e.key === "ArrowDown" || e.key === "ArrowUp") {
             if (options.length === 0) return;

@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { Figtree, Geist_Mono } from "next/font/google";
 import { cx } from "@/components/ui/classes";
+import { NONCE_HEADER } from "@/lib/auth/csp";
 import { asMotionMode, LEGACY_MOTION_COOKIE, MOTION_COOKIE, motionAttribute } from "@/lib/motion";
 import { resolveSiteUrl } from "@/lib/site-url";
 import { asThemeMode, LEGACY_THEME_COOKIE, SYSTEM_THEME_SCRIPT, THEME_COOKIE, themeClass } from "@/lib/theme-cookie";
@@ -70,13 +71,18 @@ export const metadata: Metadata = {
  * Settings' "Always reduce motion" is a cookie for the same reason, and lands
  * as `data-motion="reduce"` on `<html>`, which `globals.css` reads beside the
  * device's `prefers-reduced-motion` (`@/lib/motion`).
+ *
+ * The theme script carries the request's CSP nonce, which the proxy put on
+ * `NONCE_HEADER` (`@/lib/auth/csp`); without it the page's policy would
+ * refuse to run it.
  */
 export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const cookieStore = await cookies();
+  const [cookieStore, requestHeaders] = await Promise.all([cookies(), headers()]);
+  const nonce = requestHeaders.get(NONCE_HEADER) ?? undefined;
   const theme = asThemeMode(cookieStore.get(THEME_COOKIE)?.value ?? cookieStore.get(LEGACY_THEME_COOKIE)?.value) ?? "light";
   const classes = themeClass(theme, false);
   const motion = motionAttribute(
@@ -92,7 +98,7 @@ export default async function RootLayout({
       className={cx(figtree.variable, geistMono.variable, "h-full antialiased", ...classes)}
     >
       <body className="min-h-full">
-        <script dangerouslySetInnerHTML={{ __html: SYSTEM_THEME_SCRIPT }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: SYSTEM_THEME_SCRIPT }} />
         {children}
       </body>
     </html>

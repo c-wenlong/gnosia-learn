@@ -25,12 +25,11 @@ import { withLearnerStore } from "@/lib/learner-store";
  * the browser sends no `Origin` on a plain link, and a cross-site page cannot
  * read the response without CORS headers, which this route never sends.
  */
-export async function GET(req: Request): Promise<NextResponse> {
-  const limited = enforceRateLimit(req, "learner:export", LEARNER_RATE_LIMIT);
-  if (limited !== null) return limited;
-
+export async function GET(_req: Request): Promise<NextResponse> {
   const owner = await requestOwner();
   if (owner instanceof NextResponse) return owner;
+  const limited = enforceRateLimit(owner, "learner:export", LEARNER_RATE_LIMIT);
+  if (limited !== null) return limited;
 
   const exportedAt = new Date();
   let body: {

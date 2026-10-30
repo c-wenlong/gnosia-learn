@@ -304,6 +304,11 @@ export async function chatTurn(deps: TutorDeps, body: ChatBody): Promise<TurnRep
   if (!courseSlug || !moduleSlug || !topicId || !Array.isArray(messages)) {
     return reply(400, { error: "courseSlug, moduleSlug, topicId, and messages are required" });
   }
+  // As on the other paths: a turn with another role or non-text content
+  // would otherwise reach every provider in the chain and fail at each.
+  if (!wellFormedTurns(messages)) {
+    return reply(400, { error: "messages must be an array of { role, content } turns", code: "BAD_REQUEST" });
+  }
 
   const tooLarge = payloadTooLarge(messages, learnerNote);
   if (tooLarge) return tooLarge;
@@ -740,15 +745,15 @@ export async function summarizeTurn(deps: TutorDeps, body: SummarizeBody): Promi
     return reply(400, { error: "courseSlug, moduleSlug, topicId, and messages are required" });
   }
 
+  if (!wellFormedTurns(messages)) {
+    return reply(400, { error: "messages must be an array of { role, content } turns", code: "BAD_REQUEST" });
+  }
+
   const tooLarge = payloadTooLarge(messages);
   if (tooLarge) return tooLarge;
 
-  const turns = messages.filter(
-    (m) =>
-      (m?.role === "user" || m?.role === "assistant") &&
-      typeof m.content === "string" &&
-      m.content.trim(),
-  );
+  // Blank turns and any system turn say nothing about the dialogue.
+  const turns = messages.filter((m) => (m.role === "user" || m.role === "assistant") && m.content.trim());
   if (turns.length < 2) {
     return reply(400, { error: "Not enough dialogue to summarise yet", code: "TRANSCRIPT_TOO_SHORT" });
   }

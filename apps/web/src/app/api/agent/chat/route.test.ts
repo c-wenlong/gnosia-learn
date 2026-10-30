@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { resetRateLimits } from "@gnosia/tutor/guards";
 
 import type { ConceptWorkspace } from "@/lib/concept-workspace-core";
+
+// Every request is the same owner, and the limiter is keyed by owner: each
+// test starts with fresh windows.
+beforeEach(() => resetRateLimits());
 
 /**
  * `POST /api/agent/chat` with `conceptSlug`: the concept tutor. The provider
@@ -362,6 +367,18 @@ describe("POST /api/agent/chat with conceptSlug", () => {
     const res = await call({ messages: [] });
     expect(res.status).toBe(400);
     expect(String(res.json.error)).toContain("courseSlug, moduleSlug, topicId");
+  });
+
+  it("refuses a malformed topic turn before any read or provider call, as the other paths do", async () => {
+    getCourses.mockClear();
+    const topic = { courseSlug: "cp4284", moduleSlug: "m1", topicId: "t1" };
+    for (const messages of [[{ role: "tool", content: "x" }], [{ role: "user", content: { parts: ["x"] } }], [null]]) {
+      const { status, json } = await call({ ...topic, messages });
+      expect(status).toBe(400);
+      expect(json.code).toBe("BAD_REQUEST");
+    }
+    expect(getCourses).not.toHaveBeenCalled();
+    expect(completeWithFallback).not.toHaveBeenCalled();
   });
 
   it("answers the topic path's refused course read with a 503 body, not a bare 500", async () => {
