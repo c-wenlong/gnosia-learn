@@ -259,11 +259,13 @@ describe("/library", () => {
   });
 
   it("searches with ?q= by a row's name and by the words it holds, and keeps the query in the box", async () => {
-    searchText.texts = new Map([["session:2026-09-29-tlb", "the translation lookaside buffer caches page table entries"]]);
+    // A note's words are searched; a session log's are not (`readSearchText`).
+    searchText.texts = new Map([["note:tlb", "the translation lookaside buffer caches page table entries"]]);
     try {
-      // By the words: only the log says "lookaside".
+      // By the words: only the note says "lookaside".
       const byWords = await render({ q: "lookaside", view: "list" });
-      expect(byWords).toContain("Session log");
+      expect(byWords).toContain("The TLB");
+      expect(byWords).not.toContain("Session log");
       expect(byWords).not.toContain("Paging, step by step");
       expect(byWords).not.toContain("OSTEP");
       expect(byWords).toMatch(/<input[^>]*name="q"[^>]*value="lookaside"/);

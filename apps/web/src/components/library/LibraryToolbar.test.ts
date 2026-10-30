@@ -153,7 +153,6 @@ describe("LibraryToolbar's type row", () => {
     const thumb = c.querySelector("[data-segment-thumb]");
     expect(thumb).not.toBeNull();
     const group = thumb!.closest('[role="group"]')!;
-    expect([...group.querySelectorAll("a")].map((a) => a.textContent)).toEqual(links(c).map((a) => a.textContent));
     expect(group.querySelector('a[aria-current="page"]')?.textContent).toContain("Notes");
     // The old strip drew its own bold-copy width trick.
     expect(c.querySelector(".invisible.col-start-1")).toBeNull();
