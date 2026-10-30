@@ -152,6 +152,24 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
     expect((await snapshot()).knowledge).toEqual({});
   });
 
+  it("counts a recap sent again under its request id once", async () => {
+    const recap = { curriculumItemId: ITEMS[0], summary: "once", source: "agent", requestId: "r-1" };
+    expect((await call("recap", recap)).status).toBe(200);
+    const again = await call("recap", recap);
+    expect(again.status).toBe(200);
+    expect((again.body.result as { recap: { sessions: number } }).recap.sessions).toBe(1);
+    await call("recap", { ...recap, requestId: "r-2" });
+    expect((await snapshot()).knowledge[ITEMS[0]]?.sessions).toBe(2);
+  });
+
+  it("refuses a malformed request id, storing nothing", async () => {
+    for (const requestId of [12, "", "has space", "x".repeat(129)]) {
+      const { status } = await call("recap", { curriculumItemId: ITEMS[0], summary: "no", source: "agent", requestId });
+      expect(status, JSON.stringify(requestId)).toBe(400);
+    }
+    expect((await snapshot()).knowledge).toEqual({});
+  });
+
   it("resets progress and bumps the epoch, leaving recaps alone", async () => {
     await call("progress", { curriculumItemId: ITEMS[0], completed: true });
     await call("recap", { curriculumItemId: ITEMS[0], summary: "kept", source: "manual" });

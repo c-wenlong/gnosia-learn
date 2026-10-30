@@ -1,5 +1,6 @@
 import { RECAP_SOURCES, type KnowledgeSource } from "@gnosia/schema/shared";
 import { upsertRecap } from "@gnosia/catalog/state";
+import { isSessionToken } from "@gnosia/tutor/session-core";
 
 import {
   BadRequest,
@@ -16,6 +17,10 @@ import {
  * constants the `recap` table's CHECK constraints are built from, and an
  * entirely empty input clears the row. This route's job is to establish that
  * the shapes are right and hand them over.
+ *
+ * `requestId` names this one recap. The page makes one per save and sends it
+ * again with every retry, so a recap whose answer was lost after it was
+ * stored is not counted as a second session when it arrives again.
  */
 export const POST = handler(
   "recap",
@@ -29,9 +34,10 @@ export const POST = handler(
       source: source(body.source),
     },
     countSession: optionalBoolean(body, "countSession", true),
+    requestId: requestId(body.requestId),
   }),
-  async (db, { curriculumItemId, input, countSession }, owner) => {
-    const saved = await upsertRecap(db, curriculumItemId, input, { countSession, learnerId: owner });
+  async (db, { curriculumItemId, input, countSession, requestId }, owner) => {
+    const saved = await upsertRecap(db, curriculumItemId, input, { countSession, requestId, learnerId: owner });
     return { curriculumItemId, cleared: saved === null, recap: saved };
   },
 );
@@ -61,4 +67,12 @@ function source(value: unknown): KnowledgeSource {
     throw new BadRequest(`"source" must be one of ${RECAP_SOURCES.join(", ")}.`);
   }
   return value as KnowledgeSource;
+}
+
+function requestId(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (!isSessionToken(value)) {
+    throw new BadRequest(`"requestId" must be a short token of letters, digits, "-" and "_".`);
+  }
+  return value;
 }
