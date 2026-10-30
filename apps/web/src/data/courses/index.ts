@@ -3,6 +3,7 @@ import "server-only";
 import { cache } from "react";
 
 import { contentSource } from "@/data/source";
+import { courseTopicIds } from "@/lib/course-path";
 import type { Course, Module, Topic } from "@/lib/types";
 
 /**
@@ -24,7 +25,7 @@ import type { Course, Module, Topic } from "@/lib/types";
  * **Server only.** Reading content reaches the database, and `server-only`
  * makes a `"use client"` module that reaches it fail at build time rather
  * than shipping a database driver to the browser. Client components take the course, module and topic they need as
- * props; the pure helpers they still want are in `@/lib/curriculum`.
+ * props; the pure helpers they still want are in `@/lib/course-path`.
  */
 export const getCourses = cache(async (): Promise<Course[]> => contentSource().courses());
 
@@ -41,17 +42,7 @@ export function getModule(
 
 /** Every curriculum item id across `courses`, in course and module order. */
 export function getAllTopicIds(courses: readonly Course[]): string[] {
-  return courses.flatMap((c) =>
-    c.modules.flatMap((m) => m.topics.map((t) => t.id)),
-  );
-}
-
-export function getCourseTopicIds(course: Course): string[] {
-  return course.modules.flatMap((m) => m.topics.map((t) => t.id));
-}
-
-export function getModuleTopicIds(module: Module): string[] {
-  return module.topics.map((t) => t.id);
+  return courses.flatMap(courseTopicIds);
 }
 
 /** The other courses in `courses` that share a theme with `course`. */
@@ -77,6 +68,3 @@ export function findTopic(
   return undefined;
 }
 
-export function totalTopicCount(courses: readonly Course[]): number {
-  return getAllTopicIds(courses).length;
-}

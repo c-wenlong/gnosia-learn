@@ -160,14 +160,22 @@ export function quizHref(slug: string): string {
   return `${conceptSessionHref(slug)}?mode=check`;
 }
 
+/**
+ * The module's concepts in teaching order: lesson by lesson, each in its
+ * lesson's order, a concept two lessons name once. The path draws them in
+ * this order, the week check asks them in it, and the course page sends
+ * their slice of the knowledge base, so all three read it from here.
+ */
+export function moduleConcepts(module: Pick<Module, "topics">): string[] {
+  return [...new Set(module.topics.flatMap((item) => item.concepts))];
+}
+
 export function modulePath(input: ModulePathInput): ModulePath {
   const { module, concepts, mastery, completed, assets, checks } = input;
   const byId = new Map(concepts.map((c) => [c.id, c]));
   const placed = new Set<string>();
 
-  // The module's concepts in teaching order: lesson by lesson, each in its lesson's order.
-  const taught: string[] = [];
-  for (const item of module.topics) for (const slug of item.concepts) if (!taught.includes(slug)) taught.push(slug);
+  const taught = moduleConcepts(module);
   const inModule = new Set(taught);
 
   // Before you start: every requires edge out of the module, then every assumes edge.
