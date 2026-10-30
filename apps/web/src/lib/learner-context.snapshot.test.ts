@@ -387,6 +387,47 @@ describe("a write refused for a reason that can pass", () => {
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
+  it("drops a kept note the moment a newer edit to it is made, so going online cannot send the older text after it", async () => {
+    const { container, answer, fetcher, sent } = setup({});
+    act(() => held.learner!.updateNote("t1", "older"));
+    await answer(503);
+    act(() => held.learner!.updateNote("t1", "newer"));
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
+    // Online while "newer" is in flight: nothing kept to send.
+    act(() => void window.dispatchEvent(new Event("online")));
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(container.textContent).toBe("note=newer tick=false");
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(sent(1)).toEqual({ curriculumItemId: "t1", note: "newer" });
+  });
+
+  it("keeps only the newest of a key's refused writes, not one a newer write superseded", async () => {
+    const { container, draw, answer, fetcher, sent } = setup({});
+    act(() => held.learner!.updateNote("t1", "first"));
+    act(() => held.learner!.updateNote("t1", "second"));
+    await answer(503);
+    act(() => void window.dispatchEvent(new Event("online")));
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    await answer(503);
+    draw({});
+    expect(container.textContent).toBe("note=second tick=false");
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(3));
+    expect(sent(2)).toEqual({ curriculumItemId: "t1", note: "second" });
+  });
+
+  it("sends kept writes again when a held snapshot is adopted, all but the one refused just now", async () => {
+    const { draw, answer, fetcher, sent } = setup({});
+    act(() => held.learner!.updateNote("t1", "kept"));
+    await answer(503);
+    act(() => held.learner!.toggleTopicCompletion("t2"));
+    // Arrives while the tick is in flight: held, then adopted once it is refused.
+    draw({});
+    await answer(503);
+    await vi.waitFor(() => expect(fetcher).toHaveBeenCalledTimes(3));
+    expect(sent(2)).toEqual({ curriculumItemId: "t1", note: "kept" });
+  });
+
   it("sends kept writes again when the browser is back online", async () => {
     const { answer, fetcher, sent } = setup({});
     act(() => held.learner!.updateNote("t1", "offline"));

@@ -97,6 +97,39 @@ describe("a write that never answers", () => {
   });
 });
 
+describe("leaving the page", () => {
+  it("starts a write queued behind another on its key at once, so the note typed last leaves the tab", async () => {
+    const answers: ((response: Response) => void)[] = [];
+    const { calls } = mount(() => new Promise<Response>((resolve) => answers.push(resolve)));
+    act(() => held.learner!.updateNote("t1", "first"));
+    act(() => held.learner!.updateNote("t1", "typed last"));
+    await vi.waitFor(() => expect(calls()).toHaveLength(1));
+    act(() => void window.dispatchEvent(new Event("pagehide")));
+    expect(calls()).toHaveLength(2);
+    expect(JSON.parse(calls()[1][1].body as string)).toEqual({ curriculumItemId: "t1", note: "typed last" });
+    // The queue's own turn later does not send it again.
+    await act(async () => {
+      answers.shift()!(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(calls()).toHaveLength(2);
+  });
+});
+
+describe("a kept recap", () => {
+  it("is drawn again as the write made it, without counting another session each time", async () => {
+    const { draw } = mount(() => Promise.resolve(new Response("{}", { status: 503 })));
+    const input = { summary: "Why attention is permutation-equivariant.", keyPoints: [], misconceptions: [], openQuestions: [], source: "agent" as const };
+    act(() => held.learner!.saveKnowledge("t1", input));
+    await vi.waitFor(() => expect(held.learner!.saveError).not.toBeNull());
+    expect(held.learner!.state.knowledge.t1?.sessions).toBe(1);
+    draw({});
+    draw({ completed: { t9: true } });
+    expect(held.learner!.state.knowledge.t1?.summary).toBe(input.summary);
+    expect(held.learner!.state.knowledge.t1?.sessions).toBe(1);
+  });
+});
+
 describe("keepalive", () => {
   it("goes with a small write, so a tab closed while it is in flight still delivers it", async () => {
     const { calls } = mount(ok);

@@ -111,7 +111,9 @@ export function SearchResults({
   // The runner matches a conversation's name as well as its own words, and
   // heads each row by `conversationTitle`, so a renamed one is found and
   // shown by its name.
-  const conversations = search.found === null ? [] : searchRows(search.found.drafts, {}, search.words);
+  // Only while the runner answers for the conversations: otherwise the
+  // catalog's matches hold them, and the runner's too would list each twice.
+  const conversations = !studio || search.found === null ? [] : searchRows(search.found.drafts, {}, search.words);
   const others = (recent.found ?? []).filter((item) => !(studio && item.kind === "draft"));
   const hits: ({ type: "draft"; at: string; row: SearchRow } | { type: "item"; at: string; item: RecentItem })[] = [
     ...conversations.map((row) => ({ type: "draft" as const, at: row.updated, row })),

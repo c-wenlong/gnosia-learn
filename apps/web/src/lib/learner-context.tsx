@@ -148,6 +148,25 @@ let keepaliveInFlight = 0;
  */
 export const RESET_BATCH = 400;
 
+/** How a kept write draws its value again: from the state it made, a reducer that sets that value. */
+type Replay = (next: LearnerState) => (previous: LearnerState) => LearnerState;
+
+/** A refused write kept to be drawn and sent again: see `unsaved`. */
+interface Kept {
+  reduce: (previous: LearnerState) => LearnerState;
+  send: (next: LearnerState) => Promise<ApiResponse>;
+  confirm: Confirm;
+  replay: Replay;
+}
+
+/** `state` with one item's recap set to `recap`, or removed when there is none. */
+function withRecap(state: LearnerState, topicId: string, recap: LearnerState["knowledge"][string] | undefined): LearnerState {
+  const knowledge = { ...state.knowledge };
+  if (recap === undefined) delete knowledge[topicId];
+  else knowledge[topicId] = recap;
+  return { ...state, knowledge };
+}
+
 /** A refusal that can pass: worth keeping and sending again. */
 function retryable(response: ApiResponse): boolean {
   if (response.ok !== false) return false;
@@ -303,16 +322,27 @@ export function LearnerProvider({
   const epochFloor = useRef(initialState.epoch);
   /**
    * Each refused write that can still be stored, by its one key: how to show
-   * it again over a snapshot, and how to send it again. Only writes whose
-   * reducer gives the same state however often it runs are kept (a note, a
-   * tick, a recap, the theme), since one may land on a snapshot that already
-   * has it; a reset never is, since a learner told "Not reset" should not see
-   * it happen later on its own. A stored write on a key, a reset's included,
-   * drops what was kept there. Two tabs can still race: a kept note sent
-   * again replaces one another tab stored since, as two tabs' writes always
-   * have (`createWriteQueue`).
+   * it again over a snapshot (`reduce`, a fixed value, the same however often
+   * it runs, since it may land on a snapshot that already has it), and how to
+   * send it again. Kept only for a note, a tick, a recap and the theme, and
+   * only when the refused write was the newest on its key; a reset never is,
+   * since a learner told "Not reset" should not see it happen later on its
+   * own. Any newer write on a key, a reset's included, drops what was kept
+   * there the moment it is made: it is the newer intent, and a kept older
+   * value sent after it would overwrite it. Two tabs can still race: a kept
+   * note sent again replaces one another tab stored since, as two tabs'
+   * writes always have (`createWriteQueue`).
    */
-  const unsaved = useRef(new Map<string, { reduce: (previous: LearnerState) => LearnerState; send: (next: LearnerState) => Promise<ApiResponse>; confirm: Confirm }>());
+  const unsaved = useRef(new Map<string, Kept>());
+  /**
+   * Writes queued behind another on their key that have not started. On
+   * `pagehide` they are started at once, with `keepalive`, out of turn: the
+   * page may never live to see the write ahead of them answer, and a note
+   * typed last would otherwise never leave the tab.
+   */
+  const waiting = useRef(new Set<() => void>());
+  /** `retryUnsaved`, for `commit`, which is defined before it. */
+  const retryKept = useRef<(skip: readonly string[]) => void>(() => undefined);
 
   /**
    * The server is the authority. When a navigation or a `router.refresh()`
@@ -398,9 +428,10 @@ export function LearnerProvider({
    * database still holds the older, and a snapshot from before it must not
    * be adopted.
    *
-   * `keep` marks a write worth keeping when it is refused for a reason that
-   * can pass (`unsaved`): one key, and a reducer that gives the same state
-   * however often it runs.
+   * `replay` marks a write worth keeping when it is refused for a reason
+   * that can pass (`unsaved`): given the state the write made, it returns the
+   * reducer that draws that value again, a fixed value however often it
+   * runs. One key only.
    */
   const commit = useCallback(
     (
@@ -408,21 +439,22 @@ export function LearnerProvider({
       reduce: (previous: LearnerState) => LearnerState,
       send: (next: LearnerState) => Promise<ApiResponse>,
       confirm: Confirm,
-      keep = false,
+      replay?: Replay,
     ): Promise<boolean> => {
       const next = reduce(current.current);
       current.current = next;
       setState(next);
       const keys = typeof key === "string" ? [key] : key;
-      const record = (response: ApiResponse) => {
-        // The queue settles a key's writes in order, so this is the newest
-        // word on each of its keys so far.
-        if (response.ok !== false) for (const k of keys) unsaved.current.delete(k);
-        else if (typeof key === "string") {
-          if (keep && retryable(response)) unsaved.current.set(key, { reduce, send, confirm });
-          else unsaved.current.delete(key);
+      for (const k of keys) unsaved.current.delete(k);
+      const record = (response: ApiResponse, newest: boolean) => {
+        if (response.ok === false) {
+          // Only the newest write on its key is kept: a newer one is on its
+          // way, and is the value to keep if anything is.
+          if (newest && replay !== undefined && typeof key === "string" && retryable(response)) {
+            unsaved.current.set(key, { reduce: replay(next), send, confirm, replay });
+          }
+          return;
         }
-        if (response.ok === false) return;
         // A write recorded on any of these keys is older, since the queue
         // runs a key's writes in order, and a snapshot that shows this one
         // was read after it too. Kept, a reset's check (the note gone) would
@@ -434,18 +466,31 @@ export function LearnerProvider({
         // A new write gets its own re-reads, whatever earlier ones used.
         rereads.current = 0;
       };
+      // Started once, by the queue in turn or by `pagehide` out of it.
+      let sent: Promise<ApiResponse> | null = null;
+      const start = () => {
+        waiting.current.delete(start);
+        sent ??= send(next);
+        return sent;
+      };
+      waiting.current.add(start);
       return new Promise<boolean>((resolve) => {
         queue.current.run(
           key,
-          () => send(next),
+          start,
           (response) => {
             setSaveError(response.ok === false ? (response.error ?? UNREACHABLE) : null);
-            record(response);
-            if (queue.current.pending === 0 && held.current !== null) receive(held.current);
+            record(response, true);
+            // A held snapshot adopted here came from a database that answered,
+            // so it is a moment to send kept writes again, as a fresh one is:
+            // all but this write's own, which was refused just now.
+            if (queue.current.pending === 0 && held.current !== null && receive(held.current)) {
+              retryKept.current(response.ok === false ? keys : []);
+            }
             resolve(response.ok !== false);
           },
           (response) => {
-            record(response);
+            record(response, false);
             resolve(response.ok !== false);
           },
         );
@@ -454,12 +499,22 @@ export function LearnerProvider({
     [receive],
   );
 
-  /** Send every kept write again: see `unsaved`. Each that is refused again is kept again. */
-  const retryUnsaved = useCallback(() => {
-    const kept = [...unsaved.current];
-    unsaved.current.clear();
-    for (const [key, { reduce, send, confirm }] of kept) void commit(key, reduce, send, confirm, true);
-  }, [commit]);
+  /**
+   * Send kept writes again (see `unsaved`), all but those on `skip`. Each
+   * that is refused again is kept again.
+   */
+  const retryUnsaved = useCallback(
+    (skip: readonly string[] = []) => {
+      for (const [key, { reduce, send, confirm, replay }] of [...unsaved.current]) {
+        if (skip.includes(key)) continue;
+        void commit(key, reduce, send, confirm, replay);
+      }
+    },
+    [commit],
+  );
+  useEffect(() => {
+    retryKept.current = retryUnsaved;
+  }, [retryUnsaved]);
 
   // A snapshot from a database that did not answer is not adopted: it is
   // empty, and would wipe every tick and note on screen. One that did answer
@@ -469,13 +524,25 @@ export function LearnerProvider({
     if (seen.current === initialState) return;
     seen.current = initialState;
     if (!reachable) return;
-    if (receive(initialState) && unsaved.current.size > 0) retryUnsaved();
+    if (receive(initialState)) retryUnsaved();
   }, [initialState, reachable, receive, retryUnsaved]);
 
   useEffect(() => {
-    window.addEventListener("online", retryUnsaved);
-    return () => window.removeEventListener("online", retryUnsaved);
+    const online = () => retryUnsaved();
+    window.addEventListener("online", online);
+    return () => window.removeEventListener("online", online);
   }, [retryUnsaved]);
+
+  // Registered by the provider's own effect, which runs after its
+  // children's, so a field that flushes its draft on `pagehide` (`TopicRow`)
+  // has queued that write by the time this starts it.
+  useEffect(() => {
+    const leave = () => {
+      for (const start of [...waiting.current]) start();
+    };
+    window.addEventListener("pagehide", leave);
+    return () => window.removeEventListener("pagehide", leave);
+  }, []);
 
   // The root layout can only read the theme cookie, so a browser without one
   // is served light even when the preference row says dark. The provider is
@@ -501,7 +568,7 @@ export function LearnerProvider({
         (previous) => setTheme(previous, theme),
         () => post("preference", { key: "theme", value: theme }),
         same((state) => state.theme),
-        true,
+        () => (previous) => setTheme(previous, theme),
       );
     },
     [commit],
@@ -546,7 +613,7 @@ export function LearnerProvider({
         (previous) => setTopicCompleted(previous, topicId, done),
         () => post("progress", { curriculumItemId: topicId, completed: done }),
         same((state) => state.completed[topicId] === true),
-        true,
+        () => (previous) => setTopicCompleted(previous, topicId, done),
       );
     },
     [commit],
@@ -559,7 +626,7 @@ export function LearnerProvider({
         (previous) => setNote(previous, topicId, note),
         () => post("note", { curriculumItemId: topicId, note }),
         same((state) => state.notes[topicId] ?? null),
-        true,
+        () => (previous) => setNote(previous, topicId, note),
       );
     },
     [commit],
@@ -601,7 +668,13 @@ export function LearnerProvider({
             countSession: options?.countSession !== false,
           }),
         same((state) => recapOf(state, topicId)),
-        true,
+        // The recap as the write made it, not the reducer again: it counts a
+        // session each time it runs, and a kept recap is drawn over every
+        // snapshot until it is stored. The server counts the session when the
+        // write it is sent again is stored; one whose answer was lost after it
+        // was stored is counted twice, which only a request id on the route
+        // could tell apart.
+        (next) => (previous) => withRecap(previous, topicId, next.knowledge[topicId]),
       );
     },
     [commit],

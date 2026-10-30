@@ -101,8 +101,15 @@ describe("the motion setting", () => {
     expect(container.textContent).toContain("Always reduce motion stops the app's animations");
   });
 
-  it("leaves the cookie to the layout's seed: the page alone writes nothing", () => {
+  it("brings the cookie in line with the row it read, since the layout's seed does not run on a client navigation", () => {
+    document.cookie = `${MOTION_COOKIE}=system; Path=/`;
     mount(settings({ motion: "always" }));
+    expect(readMotionCookie()).toBe("always");
+    expect(document.documentElement.dataset.motion).toBe("reduce");
+
+    document.cookie = `${MOTION_COOKIE}=; Path=/; Max-Age=0`;
+    delete document.documentElement.dataset.motion;
+    mount(settings({ reachable: false, motion: "system" }));
     expect(readMotionCookie()).toBeNull();
   });
 });

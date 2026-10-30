@@ -22,7 +22,7 @@ const mocks = vi.hoisted(() => ({
   renameDraft: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({ usePathname: () => mocks.pathname }));
-vi.mock("@/lib/studio-drafts", () => ({ listDrafts: mocks.listDrafts, renameDraft: mocks.renameDraft }));
+vi.mock("@/lib/studio-drafts", async (importOriginal) => ({ runnerDown: (await importOriginal<typeof import("@/lib/studio-drafts")>()).runnerDown, listDrafts: mocks.listDrafts, renameDraft: mocks.renameDraft }));
 vi.mock("@/lib/recent-client", () => ({ fetchRecent: mocks.fetchRecent, changeRecent: mocks.changeRecent, VISIT_STORED_EVENT: "gnosia:visit-stored" }));
 vi.mock("next/image", () => ({ default: () => null }));
 vi.mock("@/components/brand", () => ({ GnosiaWordmark: () => createElement("span", null, "Gnosia") }));
@@ -434,10 +434,21 @@ describe("the sections", () => {
   });
 
   it("falls back to the catalog's conversations when the runner stops answering before any list landed", async () => {
-    mocks.listDrafts.mockResolvedValue({ ok: false, status: 502, data: { error: "the studio runner is not answering" } });
+    mocks.listDrafts.mockResolvedValue({ ok: false, status: 502, refusal: { error: "the studio runner is not answering", detail: null } });
     await mount(true);
     expect(mocks.listDrafts).toHaveBeenCalledTimes(1);
     await vi.waitFor(() => expect(mocks.fetchRecent).toHaveBeenLastCalledWith({ pages: 1, drafts: true }));
+  });
+
+  it("switches to the catalog's mirror when the runner stops answering after its list landed", async () => {
+    const MIRRORED = item({ key: "draft:d9", kind: "draft", title: "Mirrored chat", href: "/studio?draft=d9", draftId: "d9" });
+    const container = await mount(true);
+    expect(recentRows(container)).toContain("Conversation: TCP vs UDP");
+    mocks.listDrafts.mockResolvedValue({ ok: false, status: 502, refusal: { error: "the studio runner is not answering", detail: null } });
+    withRows({ items: [MIRRORED] });
+    await act(async () => void window.dispatchEvent(new Event("focus")));
+    await vi.waitFor(() => expect(mocks.fetchRecent).toHaveBeenLastCalledWith({ pages: 1, drafts: true }));
+    await vi.waitFor(() => expect(recentRows(container)).toEqual(["Conversation: Mirrored chat"]));
   });
 
   it("says in Courses why there are none when nobody flipped them", async () => {
@@ -733,7 +744,8 @@ describe("the sections", () => {
 
   it("keeps a saved name shown when the read after it fails, rather than the old title", async () => {
     const container = await mount(true);
-    mocks.listDrafts.mockResolvedValue({ ok: false, status: 502, refusal: { error: "the studio runner is not answering", detail: null } });
+    // A refusal from a runner that answers; one that is down hands over to the catalog's mirror.
+    mocks.listDrafts.mockResolvedValue({ ok: false, status: 503, refusal: { error: "the catalog did not answer", detail: null } });
     mocks.renameDraft.mockResolvedValue({ ok: true, status: 200, data: { draftId: "d1", name: "Transport layer", title: "TCP vs UDP", changed: true, note: "" } });
     await renameTo(container, "Transport layer");
     await act(async () => {

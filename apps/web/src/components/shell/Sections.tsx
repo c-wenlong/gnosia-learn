@@ -116,7 +116,7 @@ export function Sections({ rail, onPick, search }: { rail: boolean; onPick: () =
 
   // The runner's conversations as Recent's rows, called as `conversationTitle` calls them.
   const fromRunner =
-    conversations.list === null
+    conversations.list === null || !fromRunnerLive
       ? null
       : draftRows(
           conversations.list.drafts.map((draft) => (draft.draftId in renames ? { ...draft, name: renames[draft.draftId] } : draft)),
@@ -153,7 +153,7 @@ export function Sections({ rail, onPick, search }: { rail: boolean; onPick: () =
     setOlderError(null);
     const [server, runner] = await Promise.all([
       model?.more === true ? recent.showOlder() : Promise.resolve(true),
-      conversations.list?.more === true ? conversations.showOlder() : Promise.resolve(true),
+      fromRunner !== null && conversations.list?.more === true ? conversations.showOlder() : Promise.resolve(true),
     ]);
     setLoadingOlder(false);
     if (!server || !runner) setOlderError("Older rows could not be read. Try again in a moment.");

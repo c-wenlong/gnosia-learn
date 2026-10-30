@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { AVATARS, avatarLabel, DISPLAY_NAME_MAX, PREFERENCE_KEYS, type AvatarId } from "@gnosia/schema/shared";
 
 import { ThemeSwitch } from "@/components/ThemeSwitch";
@@ -16,7 +16,7 @@ import { buttonClasses, cx, inputClasses } from "@/components/ui/classes";
 import { isImeKey } from "@/components/ui/composer-keys";
 import { statusProps, useSaveStatus, type SaveStatus } from "@/components/ui/save-status";
 import { useLearner } from "@/lib/learner-context";
-import { applyMotionToDocument, writeMotionCookie } from "@/lib/motion";
+import { applyMotionToDocument, readMotionCookie, writeMotionCookie } from "@/lib/motion";
 import { sendJson } from "@/lib/send-json";
 import { MOTION_MODES, type MotionMode } from "@/lib/preferences";
 import type { SettingsSnapshot } from "@/lib/settings";
@@ -63,9 +63,18 @@ export function usePreference<T>(key: string, initial: T) {
 
 /** The General tab: how the app looks and moves. */
 export function GeneralSettings({ settings }: { settings: SettingsSnapshot }) {
-  // The cookie is brought in line with the stored row on every page, this one
-  // included, by the layout's `MotionSeed`.
   const motion = usePreference<MotionMode>(PREFERENCE_KEYS.reducedMotion, settings.motion);
+
+  // The stored row wins, as the layout's `MotionSeed` has it. The layout
+  // stays mounted across client navigations and its seed does not run
+  // again, so this page brings the cookie in line with the row it read
+  // fresh: a refused save, or a change made in another browser.
+  const storedMotion = settings.reachable ? settings.motion : null;
+  useEffect(() => {
+    if (storedMotion === null || readMotionCookie() === storedMotion) return;
+    writeMotionCookie(storedMotion);
+    applyMotionToDocument(storedMotion);
+  }, [storedMotion]);
   return (
     <Card title="Appearance">
       <Field label="Theme" note="Classic is the original palette and Gnosia the brand's; each has a light and a dark. System follows your device.">

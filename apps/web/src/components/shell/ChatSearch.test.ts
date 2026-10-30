@@ -17,7 +17,7 @@ const mocks = vi.hoisted(() => ({ pathname: "/home", listDrafts: vi.fn(), fetchR
 // The account row names the learner; this suite is about the search.
 vi.mock("@/lib/learner-context", () => ({ useLearner: () => ({ state: { displayName: null } }) }));
 vi.mock("next/navigation", () => ({ usePathname: () => mocks.pathname }));
-vi.mock("@/lib/studio-drafts", () => ({ listDrafts: mocks.listDrafts }));
+vi.mock("@/lib/studio-drafts", async (importOriginal) => ({ runnerDown: (await importOriginal<typeof import("@/lib/studio-drafts")>()).runnerDown, listDrafts: mocks.listDrafts }));
 // The catalog's half of Recent: empty here, so every row is the runner's.
 vi.mock("@/lib/recent-client", () => ({ fetchRecent: mocks.fetchRecent, changeRecent: vi.fn(async () => true), VISIT_STORED_EVENT: "gnosia:visit-stored" }));
 vi.mock("next/image", () => ({ default: () => null }));
