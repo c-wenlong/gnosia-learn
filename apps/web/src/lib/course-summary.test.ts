@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { itemDoneWith, pathStatus } from "@/lib/course-path";
 import type { Course, TagMeta } from "@/lib/types";
 
 import {
@@ -104,6 +105,30 @@ describe("courseStatus", () => {
     // the module-2 topic has no concepts, so its tick counts.
     const status = courseStatus(graphics, { "cp4281-m1-t2": true, "cp4281-m2-t1": true }, standing);
     expect(status).toMatchObject({ completed: 2, total: 3, percent: 67, label: "Next: Dot product" });
+  });
+});
+
+describe("courseStatus beside the course page's pathStatus", () => {
+  // Three modules: a ticked first, a second whose concept-backed topic is ticked but not
+  // mastered, and a third. Every combination of ticks agrees on percent and next.
+  const three = course("cp9999", "CP9999", "Three", [], [["A", "B"], ["C"], ["D", "E"]]);
+  const summary = toCourseSummary(three, []);
+  const standing = { mastered: ["cp9999-m3-t1"], withConcepts: ["cp9999-m2-t1", "cp9999-m3-t1"] };
+  const ids = summary.topics.map((t) => t.id);
+
+  it("names the topic the page calls active, and the same percent, for every set of ticks", () => {
+    for (let mask = 0; mask < 1 << ids.length; mask++) {
+      const completed = Object.fromEntries(ids.filter((_, i) => mask & (1 << i)).map((id) => [id, true as const]));
+      const done = itemDoneWith(standing, completed);
+      const modules = three.modules.map((m) => ({
+        id: m.id,
+        topics: m.topics.map((t) => ({ id: t.id, mastery: standing.withConcepts.includes(t.id) ? { bucket: done(t.id) ? "mastered" : "learning" } : null })),
+      })) as Parameters<typeof pathStatus>[0];
+      const path = pathStatus(modules, completed);
+      const card = courseStatus(summary, completed, standing);
+      expect(card.next?.id ?? null, `ticks ${mask.toString(2)}`).toBe(path.active?.topicId ?? null);
+      expect(card.percent).toBe(path.percent);
+    }
   });
 });
 

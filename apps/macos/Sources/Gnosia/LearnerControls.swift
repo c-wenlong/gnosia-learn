@@ -94,7 +94,7 @@ struct RenameTitle: View {
 
     /// The web route refuses a name past assetNameMax; the field does the
     /// same check before it ever reaches the store.
-    private var tooLong: Bool { draft.count > assetNameMax }
+    private var tooLong: Bool { assetNameTooLong(draft) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
