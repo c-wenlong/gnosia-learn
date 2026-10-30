@@ -65,7 +65,8 @@ private func pL(_ path: String, _ slug: String) throws -> Double? {
             "replayed": false, "grade": 4,
             "rows": [
                 "mastery": [
-                    ["conceptSlug": "gamma", "pL": 0.81, "observations": 4, "correct": 3, "lastSeen": "2026-10-30T10:00:00.000Z"],
+                    ["conceptSlug": "gamma", "pL": 0.81, "observations": 4, "correct": 3, "lastSeen": "2026-10-30T10:00:00.000Z",
+                     "updatedAt": "2026-10-30T10:00:01.000Z"],
                     ["conceptSlug": "beta", "pL": 0.52, "observations": 2, "correct": 1, "lastSeen": NSNull()],
                 ],
                 "review": [
@@ -107,6 +108,9 @@ private func pL(_ path: String, _ slug: String) throws -> Double? {
         #expect(try row(path, "SELECT p_l, observations, correct FROM mastery WHERE concept_slug = 'gamma'")
             == ["0.81", "4", "3"])
         #expect(try row(path, "SELECT p_l, last_seen FROM mastery WHERE concept_slug = 'beta'") == ["0.52", ""])
+        // The catalog's own stamp, so a later web answer still outdates it.
+        #expect(try row(path, "SELECT updated_at FROM mastery WHERE concept_slug = 'gamma'")
+            == [String(isoDate("2026-10-30T10:00:01.000Z")!.timeIntervalSince1970)])
         #expect(try row(path, "SELECT repetitions, ease, interval_days FROM review WHERE concept_slug = 'gamma'")
             == ["2", "2.6", "6"])
         #expect(try row(path, """

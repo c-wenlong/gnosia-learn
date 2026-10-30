@@ -808,7 +808,14 @@ describe.skipIf(!reachable.ok)("the learner write routes, against a scratch data
       expect(body.result.rows.review).toEqual([expect.objectContaining({ conceptSlug: "alpha", due: card?.due, ease: card?.ease })]);
       const entry = (await readModel(scratch.db, "local")).concepts.alpha;
       expect(body.result.rows.mastery).toEqual([
-        { conceptSlug: "alpha", pL: body.result.pL, observations: entry?.observations, correct: entry?.correct, lastSeen: entry?.lastSeen },
+        {
+          conceptSlug: "alpha",
+          pL: body.result.pL,
+          observations: entry?.observations,
+          correct: entry?.correct,
+          lastSeen: entry?.lastSeen,
+          updatedAt: expect.stringMatching(/^\d{4}-\d\d-\d\dT/),
+        },
       ]);
 
       const reviews = (await readEvents(scratch.db, "local")).filter((e) => e.type === "review");

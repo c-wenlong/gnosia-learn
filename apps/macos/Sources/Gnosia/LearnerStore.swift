@@ -1053,16 +1053,20 @@ final class LearnerStore {
             return dropQueueRow(queueRow)
         }
 
+        // Each row keeps the catalog's own `updatedAt` as its stamp, not the
+        // moment the reply arrived: CatalogStore merges learner.db over the
+        // snapshot by that clock, so a web answer the catalog takes after
+        // these rows were read still wins at the next snapshot.
         let rows = result["rows"] as? [String: Any] ?? [:]
-        let mastery = (rows["mastery"] as? [[String: Any]] ?? []).compactMap(Self.recordedMastery)
-            .filter { !pending.contains($0.conceptSlug) }
-        let review = (rows["review"] as? [[String: Any]] ?? []).compactMap(Self.recordedReview)
-            .filter { !pending.contains($0.conceptSlug) }
         let now = Date()
+        let mastery = (rows["mastery"] as? [[String: Any]] ?? []).compactMap { Self.recordedMastery($0, now: now) }
+            .filter { !pending.contains($0.row.conceptSlug) }
+        let review = (rows["review"] as? [[String: Any]] ?? []).compactMap { Self.recordedReview($0, now: now) }
+            .filter { !pending.contains($0.row.conceptSlug) }
         let landed = write { db in
             if let queueRow { try db.run("DELETE FROM mirror_queue WHERE id = ?", [.int(queueRow)]) }
-            for row in mastery { try upsertMastery(db, row, at: now.timeIntervalSince1970) }
-            for card in review { try upsertReview(db, card, reviewedFallback: now, at: now.timeIntervalSince1970) }
+            for (row, stamp) in mastery { try upsertMastery(db, row, at: stamp) }
+            for (card, stamp) in review { try upsertReview(db, card, reviewedFallback: now, at: stamp) }
             for (key, value) in eventFields {
                 try db.run(
                     "UPDATE event SET payload = json_set(payload, ?, ?) WHERE type = ? AND json_extract(payload, '$.requestId') = ?",
@@ -1130,25 +1134,31 @@ final class LearnerStore {
     }
 
     /// One `rows.mastery` entry of a reply, as the store's row type.
-    private static func recordedMastery(_ raw: [String: Any]) -> CatalogMastery? {
+    private static func recordedMastery(_ raw: [String: Any], now: Date) -> (row: CatalogMastery, stamp: Double)? {
         guard let slug = raw["conceptSlug"] as? String,
               let pL = (raw["pL"] as? NSNumber)?.doubleValue, pL.isFinite
         else { return nil }
-        return CatalogMastery(
+        return (CatalogMastery(
             conceptSlug: slug,
             pL: pL,
             observations: (raw["observations"] as? NSNumber)?.int64Value ?? 0,
             correct: (raw["correct"] as? NSNumber)?.int64Value ?? 0,
             lastSeen: (raw["lastSeen"] as? String).flatMap(isoDate)
-        )
+        ), stamp(raw, now: now))
+    }
+
+    /// A reply row's `updatedAt` in seconds, or now for a sidecar that
+    /// sends none.
+    private static func stamp(_ raw: [String: Any], now: Date) -> Double {
+        ((raw["updatedAt"] as? String).flatMap(isoDate) ?? now).timeIntervalSince1970
     }
 
     /// One `rows.review` entry of a reply, as the store's card type.
-    private static func recordedReview(_ raw: [String: Any]) -> CatalogReview? {
+    private static func recordedReview(_ raw: [String: Any], now: Date) -> (row: CatalogReview, stamp: Double)? {
         guard let slug = raw["conceptSlug"] as? String,
               let due = (raw["due"] as? String).flatMap(isoDate)
         else { return nil }
-        return CatalogReview(
+        return (CatalogReview(
             conceptSlug: slug,
             repetitions: (raw["repetitions"] as? NSNumber)?.int64Value ?? 0,
             ease: (raw["ease"] as? NSNumber)?.doubleValue ?? SM2.defaultEase,
@@ -1157,7 +1167,7 @@ final class LearnerStore {
             due: due,
             lastReviewed: (raw["lastReviewed"] as? String).flatMap(isoDate),
             leech: raw["leech"] as? Bool ?? false
-        )
+        ), stamp(raw, now: now))
     }
 
     /// The `watch.ranges` column: `[[start, end], ...]` as JSON.

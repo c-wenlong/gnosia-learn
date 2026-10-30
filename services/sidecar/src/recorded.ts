@@ -1,4 +1,5 @@
-import { readCards, readConceptGraph, readConceptObservations, readModel, type CatalogDatabase } from "@gnosia/catalog/state";
+import { readConceptGraph, readConceptObservations, type CatalogDatabase } from "@gnosia/catalog/state";
+import { mastery, review } from "@gnosia/schema";
 import type { TutorDeps } from "@gnosia/tutor/server/deps";
 import type { TurnReply } from "@gnosia/tutor/server/turns";
 
@@ -27,6 +28,8 @@ export interface RecordedMastery {
   observations: number;
   correct: number;
   lastSeen: string | null;
+  /** When the catalog last wrote the row: the app keeps it as the row's merge clock. */
+  updatedAt: string;
 }
 
 export interface RecordedReview {
@@ -38,6 +41,7 @@ export interface RecordedReview {
   due: string;
   lastReviewed: string | null;
   leech: boolean;
+  updatedAt: string;
 }
 
 export interface RecordedRows {
@@ -45,27 +49,40 @@ export interface RecordedRows {
   review: RecordedReview[];
 }
 
-/** The owner's mastery and review rows for `concepts`, the ones that exist. */
+/**
+ * The owner's mastery and review rows for `concepts`, the ones that exist,
+ * each with its own `updatedAt`. The app stamps its copy with that rather
+ * than the moment the reply arrived, so a web answer committed in between
+ * still outdates it at the next snapshot. Read whole and filtered here: a
+ * learner's rows are few, and the tables are all this needs.
+ */
 export async function recordedRows(db: CatalogDatabase, owner: string, concepts: string[]): Promise<RecordedRows> {
-  const wanted = [...new Set(concepts)];
-  const [model, cards] = await Promise.all([readModel(db, owner), readCards(db, wanted, owner)]);
-  const mastery = wanted.flatMap((slug) => {
-    const entry = model.concepts[slug];
-    return entry === undefined
-      ? []
-      : [{ conceptSlug: slug, pL: entry.pL, observations: entry.observations, correct: entry.correct, lastSeen: entry.lastSeen }];
-  });
-  const review = cards.map((card) => ({
-    conceptSlug: card.conceptId,
-    repetitions: card.repetitions,
-    ease: card.ease,
-    intervalDays: card.intervalDays,
-    lapses: card.lapses,
-    due: card.due,
-    lastReviewed: card.lastReviewed,
-    leech: card.leech,
-  }));
-  return { mastery, review };
+  const wanted = new Set(concepts);
+  const [masteryRows, reviewRows] = await Promise.all([db.select().from(mastery), db.select().from(review)]);
+  const mine = <R extends { learnerId: string; conceptSlug: string }>(row: R) =>
+    row.learnerId === owner && wanted.has(row.conceptSlug);
+  const iso = (at: Date | null) => (at === null ? null : at.toISOString());
+  return {
+    mastery: masteryRows.filter(mine).map((row) => ({
+      conceptSlug: row.conceptSlug,
+      pL: row.pL,
+      observations: row.observations,
+      correct: row.correct,
+      lastSeen: iso(row.lastSeen),
+      updatedAt: row.updatedAt.toISOString(),
+    })),
+    review: reviewRows.filter(mine).map((row) => ({
+      conceptSlug: row.conceptSlug,
+      repetitions: row.repetitions,
+      ease: row.ease,
+      intervalDays: row.intervalDays,
+      lapses: row.lapses,
+      due: row.due.toISOString(),
+      lastReviewed: iso(row.lastReviewed),
+      leech: row.leech,
+      updatedAt: row.updatedAt.toISOString(),
+    })),
+  };
 }
 
 /** What a reply gains besides the rows: the concepts to read rows for, and any fields the turn's own reply leaves out. */
