@@ -4,6 +4,7 @@ import { conceptSummaries, type AssetRef, type ConceptSummary } from "@gnosia/ca
 
 import { tutorCredentials } from "@/lib/agent/credentials";
 import { isCallable } from "@gnosia/tutor/providers";
+import { readWrittenOptions, type WrittenOptions } from "@gnosia/tutor/server/check-options";
 import { readAssetAccess, readFileProblems } from "@/lib/asset-library";
 import type { RouteProblemCode } from "@gnosia/tutor/asset-problems";
 import type { ConceptWorkspace } from "@gnosia/tutor/concept-workspace-core";
@@ -23,13 +24,18 @@ import {
 
 /**
  * Everything a session page needs beyond the workspace object, read on the
- * server: the step plan (the note's checks turned into questions, with wrong
- * options drawn from other concepts' summaries), the asset the teach step
- * shows, whether a tutor model is configured at all, and the concept Keep
- * going leads to.
+ * server: the step plan (the note's checks turned into questions, with the
+ * wrong options the tutor wrote for each check when it has, else drawn from
+ * the note's other answers and other concepts' summaries), the asset the
+ * teach step shows, whether a tutor model is configured at all, and the
+ * concept Keep going leads to.
  *
  * Reads degrade (layering rule 14): no summaries means fewer questions, no
- * asset access means the placeholder, no knowledge base means no Keep going.
+ * stored options means options from the notes (each such question asks the
+ * tutor first when a model is configured), no asset access means the
+ * placeholder, no knowledge base means no Keep going. Nothing here calls a
+ * model: the tutor writes a check's options when the session page asks for
+ * them (`POST /api/agent/check-options`), never while a page renders.
  */
 
 /** What the teach step's widget slot shows. */
@@ -113,19 +119,31 @@ export async function readSummaries(): Promise<ConceptSummary[]> {
 }
 
 /**
+ * The tutor's stored wrong options for one concept's checks, by check id;
+ * none when the catalog cannot answer (`readWrittenOptions` degrades).
+ */
+export async function readConceptOptions(workspace: Pick<ConceptWorkspace, "slug" | "checks">): Promise<WrittenOptions> {
+  if (workspace.checks.length === 0) return {};
+  const written = await readWrittenOptions(catalogDatabase(), await currentOwner(), [workspace]);
+  return written.get(workspace.slug) ?? {};
+}
+
+/**
  * Whether a session on this concept will ask anything, for the workspace
  * before one starts, decided from the plan the session page would build.
  * With a model configured, or a note with no check, the answer needs no
- * summaries, so none are read.
+ * summaries and no stored options, so neither is read.
  */
 export async function sessionWillAsk(workspace: ConceptWorkspace): Promise<boolean> {
   const modelAvailable = await tutorModelConfigured();
-  const summaries = modelAvailable || workspace.checks.length === 0 ? [] : await readSummaries();
+  const skip = modelAvailable || workspace.checks.length === 0;
+  const [summaries, written] = skip ? [[], {}] : await Promise.all([readSummaries(), readConceptOptions(workspace)]);
   return sessionCanAsk(
     {
       slug: workspace.slug,
       checks: workspace.checks,
       pool: distractorPool(workspace, summaries),
+      written,
       summary: workspace.summary,
     },
     modelAvailable,
@@ -133,7 +151,7 @@ export async function sessionWillAsk(workspace: ConceptWorkspace): Promise<boole
 }
 
 export async function loadSessionPage(workspace: ConceptWorkspace, mode: ConceptSessionMode): Promise<SessionPageData> {
-  const summaries = await readSummaries();
+  const [summaries, written] = await Promise.all([readSummaries(), readConceptOptions(workspace)]);
 
   const [asset, { kb }] = await Promise.all([teachAsset(workspace.assets), readKb(await currentOwner())]);
   const byId = new Map(kb.concepts.map((c) => [c.id, c]));
@@ -149,6 +167,8 @@ export async function loadSessionPage(workspace: ConceptWorkspace, mode: Concept
       mode,
       checks: workspace.checks,
       pool: distractorPool(workspace, summaries),
+      written,
+      canWrite: modelAvailable,
       summary: workspace.summary,
     }),
     modelAvailable,

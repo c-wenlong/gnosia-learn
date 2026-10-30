@@ -360,6 +360,84 @@ describe("a question the tutor writes", () => {
   });
 });
 
+/**
+ * A note's check whose wrong options the tutor has not written (docs/LEARN.md,
+ * "Wrong options"): the page asks for them before showing the question, and
+ * when the tutor cannot answer it asks with the notes' options and says so.
+ */
+describe("wrong options the tutor writes", () => {
+  const PADDED: SessionQuestion = {
+    ...QUESTION,
+    choices: ["SYN", "ACK", "Self-attention is permutation-equivariant."],
+    wrong: "padded",
+    rewrite: { concept: "tcp", check: "c1", variant: "check" },
+  };
+  const WRITTEN = ["FIN", "RST", "PSH"];
+
+  async function mountWith(reply: () => Promise<Response>) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) => (url === "/api/agent/check-options" ? reply() : Promise.resolve(new Response("{}", { status: 200 })))),
+    );
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    await act(async () => {
+      root.render(
+        createElement(SessionFocus, {
+          slug: "tcp",
+          title: "The TCP handshake",
+          mode: "check",
+          plan: [
+            { kind: "check", question: PADDED, fallback: null },
+            { kind: "close", question: null, fallback: null },
+          ],
+          modelAvailable: true,
+          nothingToAsk: false,
+          teach: createElement("p", null, "Three packets."),
+          asset: null,
+          assetCompact: null,
+          next: null,
+        }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    mounted.push(() => {
+      act(() => root.unmount());
+      host.remove();
+    });
+    return host;
+  }
+
+  it("asks the tutor for the check's options and shows the question with them, unmarked", async () => {
+    const host = await mountWith(async () => new Response(JSON.stringify({ options: WRITTEN, answer: "SYN", cached: false }), { status: 200 }));
+    const asked = vi.mocked(fetch).mock.calls.filter(([url]) => url === "/api/agent/check-options");
+    expect(asked).toHaveLength(1);
+    expect(JSON.parse(String((asked[0]?.[1] as RequestInit).body))).toEqual({ conceptSlug: "tcp", checkId: "c1" });
+    for (const option of [...WRITTEN, "SYN"]) expect(choice(host, option)).toBeDefined();
+    expect(host.textContent).not.toContain("Self-attention");
+    expect(host.textContent).not.toContain("without the tutor");
+  });
+
+  it("asks with the notes' options, and says the tutor did not write them, when the tutor refuses", async () => {
+    const host = await mountWith(async () => new Response(JSON.stringify({ code: "MISSING_API_KEY", error: "No key" }), { status: 503 }));
+    expect(choice(host, "Self-attention is permutation-equivariant.")).toBeDefined();
+    expect(host.textContent).toContain("Options made without the tutor. Some come from unrelated notes");
+  });
+
+  it("keeps the notes' options when the tutor's are for a check that has changed since the page drew", async () => {
+    const host = await mountWith(async () => new Response(JSON.stringify({ options: WRITTEN, answer: "ACK" }), { status: 200 }));
+    expect(choice(host, "Self-attention is permutation-equivariant.")).toBeDefined();
+    expect(choice(host, "RST")).toBeUndefined();
+  });
+
+  it("shows that the options are coming while the tutor writes them", async () => {
+    const host = await mountWith(() => new Promise<Response>(() => undefined));
+    expect(host.textContent).toContain("The tutor is writing the options");
+    expect(choice(host, "SYN")).toBeUndefined();
+  });
+});
+
 describe("SessionFocus writing through chat-recall (S4-08)", () => {
   it("sends the answer again under a fresh session when its session was closed elsewhere", async () => {
     const recorded = { concept: "tcp", correct: true, pLBefore: 0.3, pLAfter: 0.5, propagated: [], card: null, replayed: false };

@@ -10,6 +10,7 @@ import {
 
 import type { ConceptCheck } from "@gnosia/tutor/concept-note-core";
 import { readConceptNote } from "@/lib/concept-note";
+import { readWrittenOptions } from "@gnosia/tutor/server/check-options";
 import { catalogDatabase } from "@/lib/learner-store";
 import { currentOwner, ownerScope } from "@/lib/owner";
 import { buildChoices, recallPrompt, type ReviewItem, type ReviewSessionData } from "@gnosia/tutor/review-core";
@@ -17,7 +18,10 @@ import { buildChoices, recallPrompt, type ReviewItem, type ReviewSessionData } f
 /**
  * The review queue as cards a page can render: the due list from the catalog,
  * each concept's note read for its check blocks, and every card turned into
- * either a multiple-choice check or a recall prompt.
+ * either a multiple-choice check or a recall prompt. A check's wrong options
+ * are the ones the tutor wrote for it when a session stored them
+ * (docs/LEARN.md, "Wrong options"), else other notes' answers and summaries;
+ * the review reads that store and never calls a model to fill it.
  *
  * Shared by the `/review` page (through `loadReviewSession`, which marks the
  * request as dynamic) and `GET /api/review/due` (through `readReviewSession`,
@@ -56,6 +60,8 @@ export function toReviewItem(
   item: ReviewQueueItem,
   checks: readonly ConceptCheck[],
   pool: readonly string[],
+  /** The tutor's wrong options per check id, stored and still matching their checks. */
+  written: Readonly<Record<string, readonly string[]>> = {},
 ): ReviewItem {
   const check = firstCheck(checks);
   const base = {
@@ -87,7 +93,9 @@ export function toReviewItem(
   }
 
   const answer = check.answer.trim() !== "" ? check.answer : item.summary;
-  const mc = check.answer.trim() !== "" ? buildChoices(item.conceptId, check.answer, pool) : null;
+  const tutored = written[check.id];
+  const fromTutor = check.answer.trim() !== "" && tutored !== undefined ? buildChoices(item.conceptId, check.answer, tutored) : null;
+  const mc = fromTutor ?? (check.answer.trim() !== "" ? buildChoices(item.conceptId, check.answer, pool) : null);
   return {
     ...base,
     kind: mc === null ? "recall" : "check",
@@ -97,6 +105,7 @@ export function toReviewItem(
     source: check.source.trim() === "" ? null : check.source,
     choices: mc?.choices ?? null,
     correct: mc?.correct ?? null,
+    ...(mc === null ? {} : { wrong: fromTutor !== null ? ("tutor" as const) : ("notes" as const) }),
   };
 }
 
@@ -146,6 +155,11 @@ export async function readReviewSession(
   // recall from the summary the catalog already has.
   const notes = await Promise.all(queue.items.map((item) => readConceptNote(item.conceptId)));
   const checks = notes.map((note) => (note.ok ? note.checks : []));
+  const written = await readWrittenOptions(
+    catalogDatabase(),
+    owner,
+    queue.items.map((item, i) => ({ slug: item.conceptId, checks: checks[i] ?? [] })),
+  );
   const answers = queue.items.map((item, i) => ({
     conceptId: item.conceptId,
     domain: item.domain,
@@ -155,7 +169,7 @@ export async function readReviewSession(
   return {
     reachable: true,
     items: queue.items.map((item, i) =>
-      toReviewItem(item, checks[i] ?? [], distractorPool(item, answers, summaries)),
+      toReviewItem(item, checks[i] ?? [], distractorPool(item, answers, summaries), written.get(item.conceptId)),
     ),
     nextDue: queue.nextDue,
     ...(more ? { more } : {}),

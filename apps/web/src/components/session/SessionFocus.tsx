@@ -27,7 +27,9 @@ import {
   type SessionQuestion,
   type SessionStep,
   withConsequence,
+  withWrittenOptions,
   canAskAgain,
+  WRONG_SOURCE_NOTE,
 } from "@gnosia/tutor/session-core";
 import {
   outcomeOf,
@@ -56,6 +58,14 @@ import { SessionClose } from "./SessionClose";
  * and lets the learner go on. A step the server already knows cannot be
  * filled (no check, no model) is not in the plan at all; `nothingToAsk` says
  * the plan asks nothing, and the teach step and the close screen say why.
+ *
+ * A note's check whose wrong options the tutor has not written yet carries
+ * `rewrite`: the page asks the tutor for them (`POST /api/agent/check-options`,
+ * once per check, stored on the server) for the step on screen and the two
+ * after it, and shows the question laid out with them. When the tutor cannot
+ * answer, the question is asked with the options made from the notes, and a
+ * line under them says the tutor did not write them (docs/LEARN.md, "Wrong
+ * options").
  *
  * Picking is 1 to 4 or a click; Check (or Enter) grades. A pick brings up how
  * sure the learner is (six stops, resting on 50) and an optional line of
@@ -154,6 +164,8 @@ export function SessionFocus({
   const [thinking, setThinking] = useState("");
   const [graded, setGraded] = useState<Record<number, Graded>>({});
   const [resolved, setResolved] = useState<Record<number, Resolved>>({});
+  /** A note question's options from the tutor, by step: the question laid out with them, or null when it could not. */
+  const [rewritten, setRewritten] = useState<Record<number, SessionQuestion | null>>({});
   const [whyOpen, setWhyOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -173,6 +185,7 @@ export function SessionFocus({
   // Refs, not state, for what a handler must see before React re-renders.
   const inFlight = useRef(false);
   const requested = useRef(new Set<number>());
+  const rewriting = useRef(new Set<number>());
   const attempts = useRef<Record<number, Attempt>>({});
   /**
    * This visit's session scope in `chat-recall`, which owns the write and the
@@ -208,20 +221,30 @@ export function SessionFocus({
 
   /** The question on screen for a step, or why there is none, or that it is coming. */
   const questionFor = useCallback(
-    (i: number): { status: "ready"; question: SessionQuestion } | { status: "loading" } | { status: "none"; note: string } => {
+    (
+      i: number,
+    ):
+      | { status: "ready"; question: SessionQuestion }
+      | { status: "loading"; writing: "question" | "options" }
+      | { status: "none"; note: string } => {
       const s = steps[i];
       if (s === undefined || (s.kind !== "probe" && s.kind !== "check")) return { status: "none", note: "" };
-      if (s.question !== null) return { status: "ready", question: s.question };
+      if (s.question !== null) {
+        if (s.question.rewrite === undefined || !modelAvailable) return { status: "ready", question: s.question };
+        const r = rewritten[i];
+        if (r === undefined) return { status: "loading", writing: "options" };
+        return { status: "ready", question: r ?? s.question };
+      }
       if (!modelAvailable) {
         return s.fallback !== null ? { status: "ready", question: s.fallback } : { status: "none", note: NOTHING_TO_ASK };
       }
       const r = resolved[i];
-      if (r === undefined) return { status: "loading" };
+      if (r === undefined) return { status: "loading", writing: "question" };
       if (r.question !== null) return { status: "ready", question: r.question };
       if (s.fallback !== null) return { status: "ready", question: s.fallback };
       return { status: "none", note: r.note ?? NOTHING_TO_ASK };
     },
-    [steps, modelAvailable, resolved],
+    [steps, modelAvailable, resolved, rewritten],
   );
 
   /**
@@ -278,6 +301,61 @@ export function SessionFocus({
       })
       .finally(() => asking.current.delete(controller));
   }, [index, steps, modelAvailable, graded, questionFor, conceptOf]);
+
+  /** Option requests in flight, aborted (and forgotten) if the page goes away, as the question requests are. */
+  const optioning = useRef(new Map<AbortController, number>());
+  useEffect(() => {
+    const held = optioning.current;
+    const asked = rewriting.current;
+    return () => {
+      for (const [controller, at] of held) {
+        controller.abort();
+        asked.delete(at);
+      }
+      held.clear();
+    };
+  }, []);
+
+  // A note question whose wrong options the tutor has not written asks for them,
+  // once, for this step and the two after it, so the next question is usually
+  // ready by the time it comes up. Any refusal keeps the options from the notes.
+  useEffect(() => {
+    if (!modelAvailable) return;
+    for (const at of [index, index + 1, index + 2]) {
+      const q = steps[at]?.question ?? null;
+      const ask = q?.rewrite;
+      if (q === null || ask === undefined || rewriting.current.has(at)) continue;
+      rewriting.current.add(at);
+      const controller = new AbortController();
+      optioning.current.set(controller, at);
+      const keep = () => {
+        if (!controller.signal.aborted) setRewritten((prev) => ({ ...prev, [at]: null }));
+      };
+      fetch("/api/agent/check-options", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conceptSlug: ask.concept, checkId: ask.check }),
+        signal: controller.signal,
+      })
+        .then(async (res) => {
+          const body = (await res.json().catch(() => ({}))) as { options?: unknown; answer?: unknown };
+          if (controller.signal.aborted) return;
+          const answer = q.choices[q.correct] ?? "";
+          // Options for the check as the server read it now: a note edited since
+          // the page drew asks a different question, so they are not used.
+          const fits =
+            res.ok &&
+            Array.isArray(body.options) &&
+            body.options.every((o) => typeof o === "string") &&
+            typeof body.answer === "string" &&
+            body.answer.trim() === answer.trim();
+          const question = fits ? withWrittenOptions(q, body.options as string[]) : null;
+          setRewritten((prev) => ({ ...prev, [at]: question }));
+        })
+        .catch(keep)
+        .finally(() => optioning.current.delete(controller));
+    }
+  }, [index, steps, modelAvailable]);
 
   // A failed request is forgotten, and the effect above asks again.
   const askAgain = useCallback(() => {
@@ -540,7 +618,11 @@ export function SessionFocus({
           {step.kind === "check" && assetCompact !== null && mode === "learn" && assetCompact}
 
           {current.status === "loading" && (
-            <Placeholder label="The tutor is writing a question…" height={180} className="motion-safe:animate-pulse" />
+            <Placeholder
+              label={current.writing === "options" ? "The tutor is writing the options…" : "The tutor is writing a question…"}
+              height={180}
+              className="motion-safe:animate-pulse"
+            />
           )}
 
           {noQuestion !== null && (
@@ -575,7 +657,11 @@ export function SessionFocus({
               onSelect={setSelected}
               // A question the tutor wrote replaces its placeholder: it rises in, at
               // least as tall as the placeholder was, so nothing under it jumps up.
-              className={step.question === null && modelAvailable ? "min-h-[180px] animate-enter motion-reduce:animate-none" : undefined}
+              className={
+                (step.question === null || step.question.rewrite !== undefined) && modelAvailable
+                  ? "min-h-[180px] animate-enter motion-reduce:animate-none"
+                  : undefined
+              }
             />
           )}
 
@@ -709,6 +795,9 @@ function Question({
           </ChoiceRow>
         ))}
       </div>
+      {question.wrong !== undefined && question.wrong !== "tutor" && (
+        <p className="text-[12px] leading-snug text-text2">{WRONG_SOURCE_NOTE[question.wrong]}</p>
+      )}
     </div>
   );
 }

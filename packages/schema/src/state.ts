@@ -22,6 +22,7 @@ import { session } from "./studio";
 import {
   ASSET_NAME_MAX,
   AVATARS,
+  CHECK_DISTRACTOR_LIMITS,
   CUSTOM_PROVIDER_ID_SQL,
   CUSTOM_PROVIDER_LIMITS,
   DEFAULT_P_L,
@@ -516,6 +517,60 @@ export const assetName = sqliteTable(
     check(
       "asset_name_title_check",
       sql.raw(`length(title) between 1 and ${ASSET_NAME_MAX} and title = trim(title) and not (title regexp '\\s{2}|[\\n\\r\\t]')`),
+    ),
+  ],
+);
+
+/**
+ * The tutor's wrong options for one check block in a note, cached per learner
+ * (docs/LEARN.md, "Wrong options"). A note holds a check's question and its
+ * answer but no wrong options; a session, a week check or a review card asks
+ * it as multiple choice, and the wrong options the tutor model writes for it
+ * are kept here so they are written once per check rather than once per
+ * session.
+ *
+ * Keyed by the check's id within its note (`c1`, `c2`, ... in note order) and
+ * holding `check_hash`, a sha256 over the check's question and answer (and
+ * the prompt's version), so a check edited, or moved to another place in its
+ * note, reads as missing and is written again: the one row per id is
+ * replaced. Read and written only by
+ * `services/catalog/src/state/check-distractors.ts`, always under one
+ * learner: the options were bought with that learner's model key, and one
+ * learner's options for a commons note are nobody else's.
+ *
+ * **State, and derived.** Losing every row costs one model call per check
+ * the next time it is asked, nothing more, so no exporter reads it.
+ * `cascade` on the learner and on the concept, as `mastery`.
+ */
+export const checkDistractor = sqliteTable(
+  "check_distractor",
+  {
+    learnerId: text("learner_id")
+      .notNull()
+      .references(() => learner.id, { onDelete: "cascade", onUpdate: "cascade" }),
+    conceptSlug: text("concept_slug")
+      .notNull()
+      .references(() => concept.slug, { onDelete: "cascade", onUpdate: "cascade" }),
+    checkId: text("check_id").notNull(),
+    checkHash: text("check_hash").notNull(),
+    /** A JSON array of exactly three strings. */
+    options: text("options").notNull(),
+    /** The model and provider that wrote them, for an owner reading the row; null when unknown. */
+    model: text("model"),
+    provider: text("provider"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.learnerId, t.conceptSlug, t.checkId] }),
+    index("check_distractor_concept_slug_idx").on(t.conceptSlug),
+    check("check_distractor_check_id_check", sql`check_id regexp '^c[1-9][0-9]{0,3}$'`),
+    check("check_distractor_check_hash_check", sql`check_hash regexp '^[0-9a-f]{64}$'`),
+    check(
+      "check_distractor_options_check",
+      sql.raw(
+        `json_valid(options) and json_type(options) = 'array' and json_array_length(options) = ${CHECK_DISTRACTOR_LIMITS.options} and length(options) <= ${CHECK_DISTRACTOR_LIMITS.options * (CHECK_DISTRACTOR_LIMITS.maxOptionChars * 2 + 8)}`,
+      ),
     ),
   ],
 );

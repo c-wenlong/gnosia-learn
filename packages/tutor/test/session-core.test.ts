@@ -5,6 +5,7 @@ import {
   asksNothing,
   canAskAgain,
   buildSessionPlan,
+  checkQuestion,
   isEmptyStep,
   sessionCanAsk,
   withoutEmptySteps,
@@ -28,6 +29,8 @@ import {
   teachProse,
   tutorPrefill,
   whatMoved,
+  withWrittenOptions,
+  WRONG_SOURCE_NOTE,
   type RecordedAnswer,
   type SessionQuestion,
 } from "../src/session-core";
@@ -107,6 +110,69 @@ describe("distractorPool", () => {
   });
 });
 
+/**
+ * Wrong options (docs/LEARN.md, "Wrong options"): the tutor's for the check
+ * when they are stored, else the notes', marked, and with a model to ask, a
+ * request for the tutor's first. The dot-product check is the one a real
+ * catalog asked with "Self-attention is permutation-equivariant..." among its
+ * options: two near options, so the third came from another course.
+ */
+describe("checkQuestion", () => {
+  const dot = check("c1", "What does the dot product of two unit vectors measure?", "The cosine of the angle between them.");
+  const near = ["A vector is a list of numbers.", "The norm is a vector's length."];
+  const far = ["Self-attention is permutation-equivariant without positional encodings."];
+  const written = [
+    "The sine of the angle between them.",
+    "The length of their sum.",
+    "The area of the parallelogram they span.",
+  ];
+  const base = { slug: "dot-product", check: dot, variant: "probe", otherAnswers: [], pool: { near, far } };
+
+  it("pads a check with two near options from another course, says so, and asks the tutor first when it can", () => {
+    const offline = checkQuestion(base);
+    expect(offline?.choices).toContain(far[0]);
+    expect(offline?.wrong).toBe("padded");
+    expect(offline?.rewrite).toBeUndefined();
+
+    const online = checkQuestion({ ...base, canWrite: true });
+    expect(online?.choices).toEqual(offline?.choices);
+    expect(online?.rewrite).toEqual({ concept: "dot-product", check: "c1", variant: "probe" });
+  });
+
+  it("asks with the tutor's options once they are stored, and nothing from the notes", () => {
+    const q = checkQuestion({ ...base, written, canWrite: true });
+    expect(q?.wrong).toBe("tutor");
+    expect(q?.rewrite).toBeUndefined();
+    expect([...(q?.choices ?? [])].sort()).toEqual([...written, dot.answer].sort());
+    expect(q?.choices[q.correct]).toBe(dot.answer);
+  });
+
+  it("marks a check with three near options as from the notes, with no padding", () => {
+    const q = checkQuestion({ ...base, otherAnswers: ["Zero for perpendicular vectors."], pool: { near, far } });
+    expect(q?.wrong).toBe("notes");
+    expect(q?.choices).not.toContain(far[0]);
+  });
+
+  it("lays the tutor's options out the same whether they arrive on the page or from the store", () => {
+    const fallback = checkQuestion({ ...base, canWrite: true });
+    const arrived = withWrittenOptions(fallback as SessionQuestion, written);
+    const stored = checkQuestion({ ...base, written, canWrite: true });
+    expect(arrived).toEqual(stored);
+    // No rewrite asked, or options that cannot make a question: the page keeps what it has.
+    expect(withWrittenOptions(stored as SessionQuestion, written)).toBeNull();
+    expect(withWrittenOptions(fallback as SessionQuestion, [dot.answer])).toBeNull();
+  });
+
+  it("falls back to the notes when the stored options cannot make a question", () => {
+    expect(checkQuestion({ ...base, written: [dot.answer, dot.answer, dot.answer] })?.wrong).toBe("padded");
+  });
+
+  it("names both kinds of options made without the tutor", () => {
+    expect(WRONG_SOURCE_NOTE.notes).toMatch(/without the tutor/);
+    expect(WRONG_SOURCE_NOTE.padded).toMatch(/unrelated notes/);
+  });
+});
+
 describe("nextConcept", () => {
   const frontier = [
     { id: "big-o", title: "Big-O", domain: "algorithms" },
@@ -122,6 +188,28 @@ describe("nextConcept", () => {
     expect(nextConcept(frontier, { slug: "dot", domain: "foundations", dependants: [] })?.slug).toBe("norm");
     expect(nextConcept(frontier, { slug: "x", domain: null, dependants: [] })?.slug).toBe("big-o");
     expect(nextConcept([frontier[1] as (typeof frontier)[number]], { slug: "dot", domain: null, dependants: [] })).toBeNull();
+  });
+});
+
+describe("buildSessionPlan with the tutor's options", () => {
+  it("asks a check with stored options as written, and asks the tutor for the rest when it can", () => {
+    const checks = [check("c1", "First?", "One."), check("c2", "Second?", "Two.")];
+    const written = { c1: ["Uno.", "Eins.", "Un."] };
+    const plan = buildSessionPlan({ slug: "x", mode: "check", checks, pool: POOL, written, canWrite: true });
+    expect(plan[0]?.question).toMatchObject({ id: "c1", wrong: "tutor" });
+    expect(plan[0]?.question?.rewrite).toBeUndefined();
+    expect(plan[1]?.question).toMatchObject({ id: "c2", rewrite: { concept: "x", check: "c2", variant: "check" } });
+
+    const offline = buildSessionPlan({ slug: "x", mode: "check", checks, pool: POOL, written });
+    expect(offline[1]?.question?.rewrite).toBeUndefined();
+    expect(offline[1]?.question?.wrong).toBe("notes");
+  });
+
+  it("lets a check the notes cannot fill be asked once the tutor's options are stored", () => {
+    const lonely = [check("c1", "Only?", "Alone.")];
+    const empty = { near: [], far: [] };
+    expect(sessionCanAsk({ slug: "x", checks: lonely, pool: empty }, false)).toBe(false);
+    expect(sessionCanAsk({ slug: "x", checks: lonely, pool: empty, written: { c1: ["A.", "B.", "C."] } }, false)).toBe(true);
   });
 });
 

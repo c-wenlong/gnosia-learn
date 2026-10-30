@@ -66,7 +66,38 @@ export interface SessionQuestion {
   /** The check's `source:` line, shown as a citation. */
   source: string | null;
   origin: "note" | "model";
+  /**
+   * A note question's wrong options, where they came from: `tutor` when the
+   * tutor model wrote them for this check (stored, docs/LEARN.md "Wrong
+   * options"), `notes` when they are the note's other answers and its
+   * neighbours' summaries, `padded` when those ran short and summaries of
+   * unrelated concepts made up the three. The page says when the tutor did
+   * not write them. A question the tutor wrote whole has none.
+   */
+  wrong?: WrongSource;
+  /**
+   * A note question whose wrong options the tutor has not written yet, and a
+   * tutor model can be asked: the page asks for them
+   * (`POST /api/agent/check-options`) before showing the question, and shows
+   * it as it is, made from the notes, when the tutor cannot. `variant` is the
+   * one the question was laid out under, so the options the tutor writes are
+   * laid out the way a later page reading them from the store lays them out.
+   */
+  rewrite?: { concept: string; check: string; variant: string };
 }
+
+/** Where a note question's wrong options came from (`SessionQuestion.wrong`). */
+export type WrongSource = "tutor" | "notes" | "padded";
+
+/**
+ * The line under a question whose wrong options the tutor did not write. The
+ * padded kind says why it matters: an option about another course is easy to
+ * rule out, so the right one can be picked by its shape.
+ */
+export const WRONG_SOURCE_NOTE: Record<Exclude<WrongSource, "tutor">, string> = {
+  notes: "Options made without the tutor, from related notes.",
+  padded: "Options made without the tutor. Some come from unrelated notes, so they may be easy to rule out.",
+};
 
 /**
  * A check block as a multiple-choice question: its answer and wrong options
@@ -104,6 +135,66 @@ export function noteQuestion(
     source: source === "" ? null : source,
     origin: "note",
   };
+}
+
+/**
+ * The question a note's check becomes, with its wrong options from the best
+ * source there is: the tutor's, when it wrote them for this check as it now
+ * reads (`written`); otherwise the note's other answers and the neighbours'
+ * summaries (`wrongOptionsFor`), padded with unrelated summaries only when
+ * those cannot make three, and marked as made without the tutor. When a
+ * tutor model can be asked (`canWrite`), such a question also carries
+ * `rewrite`, so the page asks the tutor for the check's options first.
+ *
+ * Null when the check has no answer, or neither source can supply two wrong
+ * options.
+ */
+export function checkQuestion(input: {
+  slug: string;
+  check: ConceptCheck;
+  variant: string;
+  /** The note's other checks' answers. */
+  otherAnswers: readonly string[];
+  pool: DistractorPool;
+  /** The tutor's options for this check, when stored and still matching it. */
+  written?: readonly string[] | undefined;
+  canWrite?: boolean;
+  summary?: string;
+}): SessionQuestion | null {
+  const { slug, check, variant, otherAnswers, pool, written, canWrite = false, summary = "" } = input;
+  if (written !== undefined) {
+    const tutored = noteQuestion(slug, check, written, variant, summary);
+    if (tutored !== null) return { ...tutored, wrong: "tutor" };
+  }
+  const question = noteQuestion(slug, check, wrongOptionsFor(check, otherAnswers, pool), variant, summary);
+  if (question === null) return null;
+  const strong = new Set([...otherAnswers, ...pool.near].map((t) => t.trim().replace(/\s+/g, " ").toLowerCase()));
+  const padded = question.choices.some(
+    (choice, i) => i !== question.correct && !strong.has(choice.trim().replace(/\s+/g, " ").toLowerCase()),
+  );
+  return {
+    ...question,
+    wrong: padded ? "padded" : "notes",
+    ...(canWrite ? { rewrite: { concept: slug, check: check.id, variant } } : {}),
+  };
+}
+
+/**
+ * A question carrying `rewrite`, laid out again with the wrong options the
+ * tutor wrote for its check: the same order `checkQuestion` gives once they
+ * are stored, since both seed the layout the same way. Null when the
+ * question asks for no rewrite or the options cannot make one (fewer than
+ * two left once the answer is taken out), and the page keeps the question it
+ * has.
+ */
+export function withWrittenOptions(question: SessionQuestion, options: readonly string[]): SessionQuestion | null {
+  const { rewrite, ...rest } = question;
+  if (rewrite === undefined) return null;
+  const answer = question.choices[question.correct];
+  if (answer === undefined) return null;
+  const mc = buildChoices(`${rewrite.concept}#${rewrite.check}#${rewrite.variant}`, answer, options);
+  if (mc === null) return null;
+  return { ...rest, choices: mc.choices, correct: mc.correct, wrong: "tutor" };
 }
 
 /** Wrong options for a note's checks, split by how near they sit to this concept. */
@@ -231,22 +322,31 @@ export function buildSessionPlan(input: {
   slug: string;
   mode: ConceptSessionMode;
   checks: readonly ConceptCheck[];
-  /** Other concepts' summaries, as wrong options. */
+  /** Other concepts' summaries, as wrong options when the tutor wrote none. */
   pool: DistractorPool;
+  /** The tutor's wrong options per check id, stored and still matching their checks. */
+  written?: Readonly<Record<string, readonly string[]>>;
+  /** A tutor model can be asked, so a check with none written asks for them first (`rewrite`). */
+  canWrite?: boolean;
   /** This concept's summary, behind each note question's "Why?". */
   summary?: string;
 }): SessionStep[] {
-  const { slug, mode, checks, pool, summary = "" } = input;
+  const { slug, mode, checks, pool, written = {}, canWrite = false, summary = "" } = input;
   const answers = checks.map((c) => c.answer.trim()).filter((a) => a !== "");
-  const poolFor = (check: ConceptCheck) =>
-    wrongOptionsFor(
-      check,
-      answers.filter((a) => a !== check.answer.trim()),
-      pool,
-    );
   const ask = (variant: string) =>
     checks
-      .map((c) => noteQuestion(slug, c, poolFor(c), variant, summary))
+      .map((check) =>
+        checkQuestion({
+          slug,
+          check,
+          variant,
+          otherAnswers: answers.filter((a) => a !== check.answer.trim()),
+          pool,
+          written: written[check.id],
+          canWrite,
+          summary,
+        }),
+      )
       .filter((q): q is SessionQuestion => q !== null);
 
   const close: SessionStep = { kind: "close", question: null, fallback: null };
@@ -337,7 +437,13 @@ export function asksNothing(plan: readonly SessionStep[]): boolean {
  * variant a check is asked under changes only the order of its options.
  */
 export function sessionCanAsk(
-  input: { slug: string; checks: readonly ConceptCheck[]; pool: DistractorPool; summary?: string },
+  input: {
+    slug: string;
+    checks: readonly ConceptCheck[];
+    pool: DistractorPool;
+    written?: Readonly<Record<string, readonly string[]>>;
+    summary?: string;
+  },
   modelAvailable: boolean,
 ): boolean {
   if (modelAvailable) return true;

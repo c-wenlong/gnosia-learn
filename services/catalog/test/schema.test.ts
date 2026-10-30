@@ -62,7 +62,7 @@ describe.skipIf(!reachable.ok)("catalog schema", () => {
             and name not like 'sqlite_%' and name not like '\\_\\_drizzle\\_%' escape '\\' and name <> 'catalog_armed_rule'`,
       );
       expect(rows[0]?.n).toBe(Object.keys(tables).length);
-      expect(rows[0]?.n).toBe(41);
+      expect(rows[0]?.n).toBe(42);
     });
 
     it("is idempotent", async () => {
