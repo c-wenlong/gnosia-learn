@@ -7,6 +7,7 @@ import { DiagramRow, DiagramTile } from "@/components/studio/DiagramTile";
 import { useFadeOnChange } from "@/components/studio/motion-parts";
 import { NewDiagramJobs } from "@/components/studio/GridJob";
 import { useStudioPath } from "@/components/studio/panel-host";
+import { PanelLink } from "@/components/studio/PanelLink";
 import { EmptyDirectory } from "@/components/studio/StudioBlocked";
 import { DisplayMenu, KindSegments, SortMenu, StudioSearch, TopicChips } from "@/components/studio/StudioControls";
 import { SettingsLink } from "@/components/studio/StudioSettings";
@@ -152,9 +153,11 @@ export function StudioGrid({
               : view.kind === "diagram" || videos.length === 0
                 ? "No diagram matches this filter."
                 : "No diagram or video matches this filter."}{" "}
-            <a className="underline underline-offset-2" href="/studio">
+            {/* Clears the filter alone, keeping the layout and the sort, and
+                in the browser: a bare `/studio` was a whole document load. */}
+            <PanelLink className="underline underline-offset-2" href={studioHref(view, { topics: [], query: "", kind: "all", selected: null })}>
               Clear it
-            </a>
+            </PanelLink>
             .
           </p>
         )}

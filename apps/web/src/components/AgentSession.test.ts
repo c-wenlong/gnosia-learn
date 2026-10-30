@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
+import { renderToString } from "react-dom/server";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Course, Module, Topic } from "@gnosia/tutor/types";
@@ -12,7 +13,11 @@ import type { Course, Module, Topic } from "@gnosia/tutor/types";
  * recorded against that concept under the topic's session.
  */
 
-const learner = { state: { notes: {}, knowledge: {} }, saveKnowledge: vi.fn(), saveError: null };
+const learner: { state: { notes: object; knowledge: Record<string, unknown> }; saveKnowledge: () => void; saveError: null } = {
+  state: { notes: {}, knowledge: {} },
+  saveKnowledge: vi.fn(),
+  saveError: null,
+};
 vi.mock("@/lib/learner-context", () => ({ useLearner: () => learner }));
 const router = { push: vi.fn(), replace: vi.fn(), refresh: vi.fn() };
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
@@ -59,7 +64,8 @@ const recall = {
   answer: "They are orthogonal: neither has a component along the other.",
 };
 
-let replies: Array<{ content: string; check?: unknown }> = [];
+/** The tutor's next replies; one with a `status` is a failed turn. */
+let replies: Array<{ content: string; check?: unknown; status?: number }> = [];
 const fetched: Array<{ url: string; body: Record<string, unknown> }> = [];
 
 beforeEach(() => {
@@ -81,6 +87,7 @@ beforeEach(() => {
         return new Response(JSON.stringify({ verdict: { correct: true, feedback: "Names orthogonality." } }), { status: 200 });
       }
       const next = replies.shift() ?? { content: "Carry on." };
+      if (next.status !== undefined) return new Response(JSON.stringify({ error: next.content }), { status: next.status });
       return new Response(JSON.stringify({ message: { content: next.content }, check: next.check ?? null }), { status: 200 });
     }),
   );
@@ -300,5 +307,67 @@ describe("the topic tutor's thread", () => {
     expect(signal.aborted).toBe(true);
     answer(new Response(JSON.stringify({ message: { content: "Too late." } }), { status: 200 }));
     await settle();
+  });
+});
+
+describe("a failed topic turn", () => {
+  it("offers Try again, which sends the unanswered turn once more rather than a second copy", async () => {
+    replies = [{ content: "The tutor took too long", status: 504 }, { content: "Where shall we start?" }];
+    const host = await mount();
+    await click(button(host, "Start Socratic dialogue"));
+    const alert = host.querySelector('[role="alert"]');
+    expect(alert?.textContent).toContain("The tutor took too long");
+
+    await click(button(alert!, "Try again"));
+    expect(chats()).toHaveLength(2);
+    expect(chats()[1].body.messages).toEqual(chats()[0].body.messages);
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+    expect(host.textContent).toContain("Where shall we start?");
+  });
+
+  it("keeps an answer's verdict row through Try again, and records it once", async () => {
+    replies = [
+      { content: "Try one.", check: { question: "What does softmax output?", concept: "softmax" } },
+      { content: "The tutor took too long", status: 504 },
+      { content: "Yes." },
+    ];
+    const host = await mount();
+    await click(button(host, "Start Socratic dialogue"));
+    await say(host, "A probability distribution.");
+    await click(button(host.querySelector<HTMLElement>('[role="alert"]')!, "Try again"));
+
+    const [failed, retried] = chats().slice(-2);
+    expect(retried.body.messages).toEqual(failed.body.messages);
+    expect(host.textContent).toContain("Yes.");
+    await click(button(host, "Record as correct"));
+    const observed = fetched.filter((c) => c.url === "/api/learner/observe");
+    expect(observed).toHaveLength(1);
+    expect(observed[0].body).toMatchObject({ conceptSlug: "softmax", correct: true });
+  });
+});
+
+describe("the prior recap", () => {
+  const prior = { topicId: "t1", summary: "Scores are dot products.", keyPoints: [], misconceptions: [], openQuestions: [], source: "agent", updatedAt: "2026-10-30" };
+  afterEach(() => {
+    learner.state.knowledge = {};
+  });
+
+  it("is in the server's HTML, so its card does not pop in after hydration", () => {
+    learner.state.knowledge = { t1: prior };
+    const html = renderToString(createElement(AgentSession, { course, module: mod, topic }));
+    expect(html).toContain("It will resume from here rather");
+  });
+
+  it("goes to the tutor with the first turn", async () => {
+    learner.state.knowledge = { t1: prior };
+    const host = await mount();
+    await click(button(host, "Start Socratic dialogue"));
+    expect(chats()[0].body.priorKnowledge).toMatchObject({ summary: "Scores are dot products." });
+  });
+
+  it("is said to be saved with the learner's progress", () => {
+    const html = renderToString(createElement(AgentSession, { course, module: mod, topic }));
+    expect(html).toContain("Recaps are saved with your progress and survive a progress reset.");
+    expect(html).not.toContain("live in this browser");
   });
 });

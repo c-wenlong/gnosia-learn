@@ -38,6 +38,7 @@ import { restoreCardCheck } from "@gnosia/tutor/check-block";
 import { CHAT_ANSWER_LIMIT, pendingCheck, recallOpening, type TurnCheck } from "@gnosia/tutor/tutor-check";
 
 import { CheckCard, CheckRow, slotPlan, useCheckThread, type SlotOptions } from "./use-check-thread";
+import { takeUnanswered } from "./unanswered";
 import { NOTE_HASH } from "./WorkspacePanels";
 
 /**
@@ -45,9 +46,7 @@ import { NOTE_HASH } from "./WorkspacePanels";
  * (`POST /api/agent/chat` with `conceptSlug`).
  *
  * The thread is kept per concept in `sessionStorage`: it survives a reload and
- * a trip to another page in the same tab, and goes when the tab closes. That
- * is enough while chat writes no evidence; mastery moves through the session
- * and the CLI, not through this thread.
+ * a trip to another page in the same tab, and goes when the tab closes.
  *
  * Tutor turns render through `NoteProse`, the same renderer the note uses, so
  * a list or a formula in a reply reads the way it does in the note. A `[n]`
@@ -461,11 +460,10 @@ export function TutorChat({
   function retry() {
     // The unanswered question, past any hand-off marker after it: asked
     // again from where it was, so the thread never holds it twice.
-    const at = turns.findLastIndex((item) => item.role !== "studio");
-    const unanswered = turns[at];
-    if (unanswered?.role !== "user") return;
+    const unanswered = takeUnanswered(turns);
+    if (unanswered === null) return;
     // The same turn goes back, verdict and all, so an answer keeps its row and request id.
-    void ask(unanswered.content, [...turns.slice(0, at), ...turns.slice(at + 1)], { carried: unanswered });
+    void ask(unanswered.turn.content, unanswered.rest, { carried: unanswered.turn as TutorTurn });
   }
 
   function prefill(question: string) {

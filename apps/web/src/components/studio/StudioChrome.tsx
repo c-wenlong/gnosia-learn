@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { PanelLink } from "@/components/studio/PanelLink";
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
 import { cx, LABEL } from "@/components/ui/classes";
@@ -125,7 +126,7 @@ export function VerbNotice({
   // The headline is the studio's own; the runner's words came through the
   // URL, so they are quoted under it and never read as the studio speaking.
   return (
-    <Banner tone={report.ok ? "ok" : "danger"} dismissHref={clearHref}>
+    <Banner tone={report.ok ? "ok" : "danger"} dismissHref={clearHref} dismissLink={PanelLink}>
       <span className="font-semibold">{report.headline}</span>
       {(report.said !== null || (report.detail !== null && report.detail !== "")) && (
         <span className="block text-[12px] text-text2">
