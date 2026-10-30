@@ -40,13 +40,21 @@ function announceByokWrite<T>(result: Promise<T>): Promise<T> {
   return result;
 }
 
+/** The active BYOK provider's Default model and its tier models (D94). */
+export interface ByokTiers {
+  model: string | null;
+  tiers: ByokProviderStatus["models"];
+}
+
 /**
  * The active provider's Default model and tier models from a settings read,
  * or null when nothing is configured (no Default model, or a key that is
  * missing or no longer opens): a conversation then offers no BYOK tier to
- * pick, since a turn on one would be refused.
+ * pick, since a turn on one would be refused. The one reading of a settings
+ * answer's tiers: the composer's hook (`useByokTiers`) and the
+ * conversation's (`useStudioHealth`) both go through it.
  */
-export function activeByokTiers(view: ByokSettingsView): { model: string | null; tiers: ByokProviderStatus["models"] } | null {
+export function activeByokTiers(view: ByokSettingsView): ByokTiers | null {
   const entry = view.configured ? view.providers.find((provider) => provider.provider === view.active) : undefined;
   return entry === undefined ? null : { model: view.model, tiers: entry.models };
 }

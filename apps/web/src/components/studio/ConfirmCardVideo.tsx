@@ -1,11 +1,10 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useState } from "react";
 
 import { Reveal } from "@/components/studio/motion-parts";
-import { FooterError, FOOTER, LiveFooter, MadeFooter, OnHoldFooter, useHoldAction } from "@/components/studio/brief-card-footers";
-import { ProposedTopic } from "@/components/studio/ConfirmCard";
-import { Collapse } from "@/components/ui/Collapse";
+import { FooterError, FOOTER, LiveFooter, MadeFooter, OnHoldFooter, ProposedTopic, useHoldAction } from "@/components/studio/brief-card-parts";
+import { Disclosure } from "@/components/ui/Disclosure";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
@@ -222,7 +221,6 @@ export function ConfirmCardVideo({
 function Storyboard({ brief, charsPerSecond }: { brief: VideoBrief; charsPerSecond: number | undefined }) {
   const narrated = isNarrated(brief);
   const [open, setOpen] = useState<ReadonlySet<number>>(new Set());
-  const base = useId();
   const toggle = (at: number) =>
     setOpen((current) => {
       const next = new Set(current);
@@ -234,35 +232,34 @@ function Storyboard({ brief, charsPerSecond }: { brief: VideoBrief; charsPerSeco
     <ol aria-label="Storyboard" className="flex flex-col divide-y divide-hair overflow-hidden rounded-xl border border-hair">
       {brief.scenes.map((scene, at) => {
         const expanded = open.has(at);
-        const panel = `${base}-scene-${at}`;
         return (
           <li key={`${scene.name}-${at}`}>
-            <button
-              type="button"
-              aria-expanded={expanded}
-              aria-controls={panel}
-              onClick={() => toggle(at)}
+            {/* Folds open and shut; the beats stay drawn while shut, inert. */}
+            <Disclosure
+              open={expanded}
+              onOpenChange={() => toggle(at)}
               className={cx(
                 "flex min-h-11 w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-surface2",
                 "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent",
               )}
+              summary={
+                <>
+                  <span className="w-5 shrink-0 text-[12px] tabular-nums text-text3">{at + 1}</span>
+                  <span className="min-w-0 flex-1 text-[14px] font-medium text-text">{chapterTitle(scene.name)}</span>
+                  <span className="shrink-0 text-[12px] tabular-nums text-text2">
+                    {beatCount(scene.beats.length)} · {shortLength(sceneSeconds(scene, narrated, charsPerSecond))}
+                  </span>
+                  <Glyph
+                    name="next"
+                    size={16}
+                    className={cx(
+                      "text-text3 transition-transform duration-300 ease-soft motion-reduce:transition-none",
+                      expanded && "rotate-90",
+                    )}
+                  />
+                </>
+              }
             >
-              <span className="w-5 shrink-0 text-[12px] tabular-nums text-text3">{at + 1}</span>
-              <span className="min-w-0 flex-1 text-[14px] font-medium text-text">{chapterTitle(scene.name)}</span>
-              <span className="shrink-0 text-[12px] tabular-nums text-text2">
-                {beatCount(scene.beats.length)} · {shortLength(sceneSeconds(scene, narrated, charsPerSecond))}
-              </span>
-              <Glyph
-                name="next"
-                size={16}
-                className={cx(
-                  "text-text3 transition-transform duration-300 ease-soft motion-reduce:transition-none",
-                  expanded && "rotate-90",
-                )}
-              />
-            </button>
-            {/* Folds open and shut; the beats stay drawn while shut, inert. */}
-            <Collapse open={expanded} id={panel}>
               <ol className="flex flex-col gap-3 px-3 pb-3 pl-11 pt-1">
                 {scene.beats.map((beat, index) => (
                   <li key={index} className="flex flex-col gap-1">
@@ -283,7 +280,7 @@ function Storyboard({ brief, charsPerSecond }: { brief: VideoBrief; charsPerSeco
                   </li>
                 ))}
               </ol>
-            </Collapse>
+            </Disclosure>
           </li>
         );
       })}

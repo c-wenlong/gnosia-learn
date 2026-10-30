@@ -1,5 +1,4 @@
 import type { JobState } from "@gnosia/schema/shared";
-import { formatBytes } from "@gnosia/tutor/asset-meta";
 import type { VideoChapter } from "@gnosia/tutor/media";
 
 import { assetFileHref, assetStatusHref } from "@/lib/library";
@@ -351,7 +350,7 @@ export interface StepRow {
 }
 
 /** Whether a job's brief is narrated; a job whose record carries no brief yet is taken as narrated. */
-export function isNarrated(brief: Pick<VideoBrief, "voice"> | undefined): boolean {
+function isNarrated(brief: Pick<VideoBrief, "voice"> | undefined): boolean {
   return brief === undefined || briefIsNarrated(brief);
 }
 
@@ -673,27 +672,13 @@ export function changeWord(kind: LineChange["kind"]): string {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Time and size                                                              */
-/* -------------------------------------------------------------------------- */
-
-/** "58 s", "3 min 4 s", "12 min": a video's length, read aloud. */
-export function spokenLength(seconds: number | null): string {
-  return seconds === null || !Number.isFinite(seconds) || seconds < 0 ? "" : shortLength(seconds);
-}
-
-/** `2.1 MB`, `640 kB`, as the library sizes a file, or "" with no size. */
-export function formatSize(bytes: number | null): string {
-  return formatBytes(bytes) ?? "";
-}
-
-/* -------------------------------------------------------------------------- */
 /* The review                                                                 */
 /* -------------------------------------------------------------------------- */
 
 /** The line at the top of a finished job: its length and what the checks found. */
 export function readyHeadline(job: VideoJob): string {
   const gate = job.gate;
-  const length = spokenLength(gate?.durationSeconds ?? gate?.length?.durationSeconds ?? null);
+  const length = shortLength(gate?.durationSeconds ?? gate?.length?.durationSeconds ?? null);
   const warnings = gate?.warnings.length ?? 0;
   const lead = length === "" ? "The video is ready" : `The video is ready, ${length}`;
   return warnings === 0 ? lead : `${lead}, with ${warnings} warning${warnings === 1 ? "" : "s"}`;

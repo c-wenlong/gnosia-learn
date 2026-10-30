@@ -4,7 +4,8 @@ import { safely } from "@/lib/storage-safe";
  * The pane picker's last pick, kept in `localStorage`: a draft is made before
  * its pane exists, and `POST /api/drafts`'s `harness` is read from here so the
  * next conversation keeps the harness the last one ran on. `"claude"` is the
- * default and is never written.
+ * default, and is written like the others rather than removed (see
+ * `rememberHarness`).
  */
 
 const KEY = "studio:harness";

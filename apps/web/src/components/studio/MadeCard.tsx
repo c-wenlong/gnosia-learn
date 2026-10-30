@@ -2,7 +2,7 @@
 
 import { StudioTime, useStudioZone } from "@/components/studio/StudioZone";
 import Link from "next/link";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ExtendLink } from "@/components/studio/ExtendLink";
 import { KindBadge, KindWord } from "@/components/studio/KindBadge";
@@ -11,7 +11,8 @@ import { FadeImg } from "@/components/studio/motion-parts";
 import { VideoChangeButton } from "@/components/studio/video/VideoGridJob";
 import { Button } from "@/components/ui/Button";
 import { buttonClasses, cx } from "@/components/ui/classes";
-import { Collapse, CollapseChevron } from "@/components/ui/Collapse";
+import { CollapseChevron } from "@/components/ui/Collapse";
+import { Disclosure } from "@/components/ui/Disclosure";
 import { Glyph } from "@/components/ui/Glyph";
 import {
   madeListLabel,
@@ -130,7 +131,6 @@ export function MadeCard({ item, path }: { item: MadeItem; path: string }) {
  */
 export function MadeList({ made }: { made: readonly MadeItem[] }) {
   const [open, setOpen] = useState(false);
-  const id = useId();
   const box = useRef<HTMLElement | null>(null);
   // The list opens at the thread's foot, under the composer's edge: once it
   // has glided open, the thread scrolls just far enough to show it.
@@ -143,23 +143,24 @@ export function MadeList({ made }: { made: readonly MadeItem[] }) {
   if (label === null) return null;
   return (
     <section ref={box} aria-label="Everything made in this conversation" className="flex w-full flex-col px-1.5">
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-controls={id}
-        onClick={() => setOpen((was) => !was)}
+      <Disclosure
+        open={open}
+        onOpenChange={setOpen}
         className="inline-flex items-center gap-1 self-start rounded-sm text-[13px] font-medium text-text2 hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        regionClassName="w-full"
+        summary={(shown) => (
+          <>
+            {label}
+            <CollapseChevron open={shown} className="h-4 w-4" />
+          </>
+        )}
       >
-        {label}
-        <CollapseChevron open={open} className="h-4 w-4" />
-      </button>
-      <Collapse open={open} id={id} className="w-full">
         <ul className="mt-2 flex w-full max-w-[34rem] flex-col divide-y divide-hair rounded-xl border border-border bg-surface">
           {made.map((item) => (
             <MadeRow key={item.id} item={item} />
           ))}
         </ul>
-      </Collapse>
+      </Disclosure>
     </section>
   );
 }

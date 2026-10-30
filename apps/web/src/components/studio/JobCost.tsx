@@ -1,7 +1,7 @@
 import { costLabel } from "@/lib/studio-chat";
 
 /** What a cost figure is the cost of: one job, or a whole conversation's turns. */
-export type CostSubject = "job" | "conversation";
+type CostSubject = "job" | "conversation";
 
 /**
  * The tooltip on a cost figure. A cancelled, timed-out or interrupted job (or
@@ -9,7 +9,7 @@ export type CostSubject = "job" | "conversation";
  * the stream, which runs low. The tilde and this sentence are the whole of
  * saying so; a bare number would read as the bill.
  */
-export function costTitle(source: "result" | "stream" | null, subject: CostSubject = "job"): string {
+function costTitle(source: "result" | "stream" | null, subject: CostSubject = "job"): string {
   if (subject === "conversation") {
     return source === "stream"
       ? "What this conversation has cost so far. A turn cut off before it reported is rebuilt from its stream, which runs low."

@@ -116,8 +116,6 @@ export function openDraftEvents(
   after: number | (() => number),
   handlers: {
     onEvent: (event: DraftEvent) => void;
-    onOpen?: () => void;
-    onDrop?: () => void;
     onReopen?: () => void;
   },
 ): () => void {
@@ -152,10 +150,8 @@ export function openDraftEvents(
     source = next;
     next.onopen = () => {
       attempt = 0;
-      handlers.onOpen?.();
     };
     next.onerror = () => {
-      handlers.onDrop?.();
       if (next.readyState !== EventSource.CLOSED || stopped) return;
       detach(next);
       if (source === next) source = null;

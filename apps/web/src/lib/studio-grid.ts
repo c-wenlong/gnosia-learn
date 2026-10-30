@@ -13,7 +13,6 @@ import { dayLabel, timeOfDay } from "@/lib/day-groups";
 import { dayKey } from "@gnosia/tutor/days";
 import { NO_TOPIC, type KindFilter, type StudioView } from "@/lib/studio-url";
 
-export { formatBytes } from "@gnosia/tutor/asset-meta";
 
 /** Mirrors `services/studio/src/canvas/diagrams.ts`. Structural, not imported: the */
 /* two packages do not depend on each other and a shared type would need a third. */
