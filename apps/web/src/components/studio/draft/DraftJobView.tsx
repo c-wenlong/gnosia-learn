@@ -6,7 +6,7 @@ import { FADE_IN } from "@/components/studio/motion";
 import { PanelLink } from "@/components/studio/PanelLink";
 import { DialogHeader } from "@/components/studio/StudioDialog";
 import { Button } from "@/components/ui/Button";
-import { cx } from "@/components/ui/classes";
+import { buttonClasses, cx } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
 import { jobKind } from "@/lib/studio-cards";
 import { isTerminal, type Job } from "@/lib/studio-jobs";
@@ -59,9 +59,12 @@ export function DraftJobView({
                   ? `${kind === "video" ? "The video" : "The drawing"} did not pass. What the checks found is in the conversation.`
                   : "Ask for a change, or start something new."}
             </p>
-            <Button size="sm" href={panelHref(path, { job: null })}>
+            {/* Through the panel host, as the bar above is: a plain `Link`
+                would prefetch and server-render `/studio` for a move the
+                browser draws, and reset the scroll. */}
+            <PanelLink href={panelHref(path, { job: null })} scroll={false} className={buttonClasses({ size: "sm" })}>
               Back to the conversation
-            </Button>
+            </PanelLink>
             <Button size="sm" variant="secondary" onClick={onNewConversation} disabled={starting}>
               New conversation
             </Button>

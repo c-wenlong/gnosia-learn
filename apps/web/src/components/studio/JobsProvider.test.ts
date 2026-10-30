@@ -124,6 +124,62 @@ describe("refresh", () => {
   });
 });
 
+/**
+ * A poll that read the list it already holds changes nothing a reader draws,
+ * so it must not hand them a new array: every tile's links read the
+ * provider's context through the panel host (R2-1-16 of the round-2 audit).
+ */
+describe("an unchanged poll", () => {
+  it("keeps the list it holds, so its readers do not draw again", async () => {
+    const answers = deferredFetch();
+    const drawn = vi.fn();
+    function Counter() {
+      const jobs = useStudioJobs();
+      useEffect(() => {
+        handle.refresh = jobs.refresh;
+      });
+      drawn();
+      return createElement("output", null, jobs.jobs.map((entry) => entry.state).join(","));
+    }
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    await act(async () => {
+      root.render(
+        createElement(
+          JobsProvider as unknown as (props: { initialJobs: Job[]; streamEnabled: boolean }) => ReactElement,
+          { initialJobs: [job("running")], streamEnabled: false },
+          createElement(Counter),
+        ),
+      );
+    });
+    cleanups.push(() => {
+      act(() => root.unmount());
+      host.remove();
+    });
+    const before = drawn.mock.calls.length;
+    let read: Promise<void> = Promise.resolve();
+    await act(async () => {
+      read = handle.refresh();
+    });
+    await act(async () => {
+      answers[0]!([job("running")]);
+      await read;
+    });
+    expect(drawn).toHaveBeenCalledTimes(before);
+    // A row that moved is a new list, and is drawn.
+    await act(async () => {
+      read = handle.refresh();
+    });
+    await act(async () => {
+      answers[1]!([{ ...job("running"), phase: "drawing" } as Job]);
+      await read;
+    });
+    expect(drawn).toHaveBeenCalledTimes(before + 1);
+    expect(host.textContent).toBe("running");
+  });
+});
+
 /** `postJob` is the verbs' request, which keeps the runner's error shape. */
 describe("postJob", () => {
   it("posts JSON (an empty object for no body) and hands the answer back as it is", async () => {

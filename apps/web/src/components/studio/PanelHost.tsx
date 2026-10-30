@@ -20,7 +20,7 @@ import { DraftPanel } from "@/components/studio/DraftPanel";
 import { HarnessPicker } from "@/components/studio/HarnessPicker";
 import { JobPanel } from "@/components/studio/JobPanel";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
-import { HostContext, NEW_CHAT_EVENT } from "@/components/studio/panel-host";
+import { HostContext, type HostControls, NEW_CHAT_EVENT } from "@/components/studio/panel-host";
 import { Sentence } from "@/components/studio/Sentence";
 import { VerbNotice } from "@/components/studio/StudioChrome";
 import { FADE_IN } from "@/components/studio/motion";
@@ -262,10 +262,6 @@ export function PanelHost({
     () => ({ begin, settle, navigate, warmSettings }),
     [begin, settle, navigate, warmSettings],
   );
-  // The path joins the stable verbs here rather than in their memo: in it,
-  // the compiler reads the state setters behind them as dependencies and
-  // gives up on the component.
-  const controls = { ...verbs, path };
   const closeHref = panelHref(path, CLOSED);
 
   // New chat is the home view: its composer is where a conversation starts.
@@ -393,7 +389,7 @@ export function PanelHost({
   });
 
   return (
-    <HostContext.Provider value={controls}>
+    <HostProvider verbs={verbs} path={path}>
       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
         {chat}
         {/* Fades back in as the conversation closes: an animation starts
@@ -405,8 +401,21 @@ export function PanelHost({
         </div>
       </div>
       {dialog}
-    </HostContext.Provider>
+    </HostProvider>
   );
+}
+
+/**
+ * The host's context: its verbs with its path, a new object only when either
+ * changes. A new one on every render drew every `usePanelHost` reader (each
+ * tile's two links, the search, the strip's menus) on every jobs poll
+ * (R2-1-16 of the round-2 audit). A component of its own, since a memo
+ * inside `PanelHost` over the verbs makes the compiler read the state
+ * setters behind them as dependencies and give up on the component.
+ */
+function HostProvider({ verbs, path, children }: { verbs: Omit<HostControls, "path">; path: string; children: ReactNode }) {
+  const controls = useMemo(() => ({ ...verbs, path }), [verbs, path]);
+  return <HostContext.Provider value={controls}>{children}</HostContext.Provider>;
 }
 
 /**
