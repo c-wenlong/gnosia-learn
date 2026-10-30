@@ -32,6 +32,11 @@ final class WebServer {
 
     private(set) var status: Status = .off
 
+    /// The token the window's first request carries in the
+    /// `x-gnosia-local-token` header, when the server is ours; nil for an
+    /// adopted dev server, where the owner signs in as usual.
+    private(set) var launchToken: String?
+
     /// Minted per launch and handed to the spawned server as
     /// GNOSIA_LOCAL_TOKEN; the window's first URL redeems it at
     /// /api/auth/local for a real session cookie. Never written to disk —
@@ -55,6 +60,7 @@ final class WebServer {
     func start() async {
         guard case .off = status else { return }
         status = .starting
+        await Checkout.prepare()
         for attempt in 1 ... 3 {
             let port = Int.random(in: 49200 ... 59800)
             guard spawn(port: port) else { return }  // no repo/node — status is failed
@@ -62,9 +68,11 @@ final class WebServer {
                 // The window's first load: redeem the launch token for the
                 // session cookie, which 303s onward to /home. The token is
                 // only ever sent after the server proves it hosts our
-                // /api/auth/local route — anything else answering on the
-                // port never sees the secret.
-                status = .running(URL(string: "\(url.absoluteString)api/auth/local?token=\(localToken)") ?? url)
+                // /api/auth/local route, and in a header, never the URL
+                // (S7-09): anything else answering on the port, or a log of
+                // request URLs, never sees the secret.
+                launchToken = localToken
+                status = .running(url.appending(path: "api/auth/local"))
                 return
             }
             process?.terminate()
@@ -109,9 +117,8 @@ final class WebServer {
             "exec node '\(next.path)' \(Self.mode(web: web)) '\(web.path)' -p \(port) -H 127.0.0.1"
         ]
         proc.currentDirectoryURL = root
-        // The shared child environment: ~/.gnosia/.env merged under the real
-        // one and the SQLite catalog pinned (Checkout.childEnv). An existing
-        // CATALOG_DB is left alone, and GNOSIA_CATALOG is deliberately not
+        // The shared child environment (Checkout.childEnv: the launchers'
+        // one resolver, with the catalog's file pinned). GNOSIA_CATALOG is deliberately not
         // consulted — it names the native app's read snapshot, not the live
         // database. GNOSIA_LOCAL_TOKEN is the per-launch secret
         // /api/auth/local redeems for a session cookie.

@@ -45,6 +45,9 @@ enum CatalogSnapshot {
             return .failed("apps/macos/scripts/catalog-snapshot.mjs is not in \(root.path).")
         }
 
+        // The launchers' shared environment (ChildEnvironment, S9-08): the
+        // catalog file the web writes, pinned, so the script snapshots it.
+        let env = await ChildEnvironment.resolve(root: root)
         // --out always names where the app reads, so a Settings override or
         // a GNOSIA_CATALOG env reaches the script the same way.
         return await withCheckedContinuation { done in
@@ -56,6 +59,7 @@ enum CatalogSnapshot {
                 "node apps/macos/scripts/catalog-snapshot.mjs --if-stale --out '\(location.catalogPath)'"
             ]
             proc.currentDirectoryURL = root
+            if let env { proc.environment = env }
             let stdout = Pipe()
             proc.standardOutput = stdout
             proc.standardError = stderr

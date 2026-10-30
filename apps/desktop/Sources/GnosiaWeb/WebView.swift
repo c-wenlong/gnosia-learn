@@ -7,7 +7,13 @@
 //  127.0.0.1 (external links, target=_blank) is handed to the real browser,
 //  and the app's cookies live in the default persistent data store so
 //  sign-in survives relaunches. The View > Reload menu posts
-//  .gnosiaWebReload, which the coordinator wires to webView.reload().
+//  .gnosiaWebReload, which the coordinator wires to webView.reload(), and
+//  Back and Forward post their own; a two-finger swipe does the same.
+//
+//  A response the server sends as an attachment (Settings' Export, the
+//  Library's Download) or one the view cannot show is saved, not shown
+//  (S9-10): WebKit's default renders an attachment it can display, which
+//  replaced the whole app with raw JSON or a full-window video.
 //
 
 import AppKit
@@ -16,15 +22,28 @@ import WebKit
 
 extension Notification.Name {
     static let gnosiaWebReload = Notification.Name("gnosiaWebReload")
+    static let gnosiaWebBack = Notification.Name("gnosiaWebBack")
+    static let gnosiaWebForward = Notification.Name("gnosiaWebForward")
+}
+
+/// Whether a response is saved rather than shown: one the server marks
+/// `Content-Disposition: attachment`, or one the view has no way to show.
+func shouldDownload(disposition: String?, canShowMIMEType: Bool) -> Bool {
+    if let disposition, disposition.split(separator: ";").first?
+        .trimmingCharacters(in: .whitespaces).lowercased() == "attachment" { return true }
+    return !canShowMIMEType
 }
 
 struct WebView: NSViewRepresentable {
     let url: URL
+    /// The launch token for the first request's header, or nil.
+    var token: String?
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> WKWebView {
         let view = WKWebView()
+        view.allowsBackForwardNavigationGestures = true
         view.navigationDelegate = context.coordinator
         view.uiDelegate = context.coordinator
         // The page's <title> becomes the window title — the web app sets
@@ -34,19 +53,22 @@ struct WebView: NSViewRepresentable {
             view.window?.title = view.title?.isEmpty == false ? view.title! : "Gnosia"
         }
         context.coordinator.webView = view
-        NotificationCenter.default.addObserver(
-            context.coordinator,
-            selector: #selector(Coordinator.reloadPage),
-            name: .gnosiaWebReload,
-            object: nil
-        )
-        view.load(URLRequest(url: url))
+        for (name, selector) in [
+            (Notification.Name.gnosiaWebReload, #selector(Coordinator.reloadPage)),
+            (.gnosiaWebBack, #selector(Coordinator.goBack)),
+            (.gnosiaWebForward, #selector(Coordinator.goForward)),
+        ] {
+            NotificationCenter.default.addObserver(context.coordinator, selector: selector, name: name, object: nil)
+        }
+        var request = URLRequest(url: url)
+        if let token { request.setValue(token, forHTTPHeaderField: "x-gnosia-local-token") }
+        view.load(request)
         return view
     }
 
     func updateNSView(_ nsView: WKWebView, context: Context) {}
 
-    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate {
         weak var webView: WKWebView?
         var titleObservation: NSKeyValueObservation?
 
@@ -54,10 +76,20 @@ struct WebView: NSViewRepresentable {
             webView?.reload()
         }
 
+        @objc func goBack() {
+            webView?.goBack()
+        }
+
+        @objc func goForward() {
+            webView?.goForward()
+        }
+
         func webView(
             _ webView: WKWebView,
             decidePolicyFor action: WKNavigationAction
         ) async -> WKNavigationActionPolicy {
+            // <a download> asks for a download outright.
+            if action.shouldPerformDownload { return .download }
             guard
                 let url = action.request.url,
                 url.scheme == "http" || url.scheme == "https"
@@ -65,6 +97,54 @@ struct WebView: NSViewRepresentable {
             if url.host == "127.0.0.1" || url.host == "localhost" { return .allow }
             NSWorkspace.shared.open(url)
             return .cancel
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor response: WKNavigationResponse
+        ) async -> WKNavigationResponsePolicy {
+            let disposition = (response.response as? HTTPURLResponse)?
+                .value(forHTTPHeaderField: "Content-Disposition")
+            return shouldDownload(disposition: disposition, canShowMIMEType: response.canShowMIMEType) ? .download : .allow
+        }
+
+        func webView(_ webView: WKWebView, navigationAction: WKNavigationAction, didBecome download: WKDownload) {
+            download.delegate = self
+        }
+
+        func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) {
+            download.delegate = self
+        }
+
+        /// Where the file goes: a save panel on the window, starting in
+        /// Downloads with the server's own file name. Cancel cancels the
+        /// download; the page stays where it was.
+        func download(
+            _ download: WKDownload,
+            decideDestinationUsing response: URLResponse,
+            suggestedFilename: String
+        ) async -> URL? {
+            let panel = NSSavePanel()
+            panel.nameFieldStringValue = suggestedFilename
+            panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+            panel.canCreateDirectories = true
+            let answer: NSApplication.ModalResponse
+            if let window = webView?.window {
+                answer = await panel.beginSheetModal(for: window)
+            } else {
+                answer = panel.runModal()
+            }
+            guard answer == .OK, let url = panel.url else { return nil }
+            // WebKit refuses to write over a file; the panel already asked.
+            try? FileManager.default.removeItem(at: url)
+            return url
+        }
+
+        func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {
+            let alert = NSAlert()
+            alert.messageText = "The download did not finish"
+            alert.informativeText = error.localizedDescription
+            if let window = webView?.window { alert.beginSheetModal(for: window) } else { alert.runModal() }
         }
 
         /// target=_blank gets no second window: the link opens in the real

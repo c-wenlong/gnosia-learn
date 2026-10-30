@@ -107,3 +107,43 @@ export async function loadSidecarEnv({ appDir = join(repoRoot(), "apps", "web") 
     if (value !== undefined) process.env[key] = catalogPathFrom(appDir, value);
   }
 }
+
+/**
+ * Pin `CATALOG_DB` at the file the catalog's own resolver names
+ * (`databasePath()`: `CATALOG_DB`, then `services/catalog/.env`, then
+ * `DATABASE_URL`, then the data home), so every process this environment
+ * reaches opens that one file whatever its working directory or its own
+ * reading of the dotenv files. A value the resolver refuses (a Postgres URL)
+ * is left for the catalog to refuse with its own message.
+ *
+ * Read after `loadSidecarEnv`, which is what makes a value in the data
+ * home's `.env` or the web app's `.env.local` count.
+ */
+export async function pinCatalogFile(): Promise<string | null> {
+  const before = { ...process.env };
+  const { databasePath } = await import("@gnosia/catalog/state");
+  let file: string | null = null;
+  try {
+    file = databasePath();
+  } catch {
+    file = null;
+  }
+  // The catalog's dotenv read fills process.env; the pin is all that should stay of it.
+  for (const key of Object.keys(process.env)) if (!(key in before)) delete process.env[key];
+  if (file !== null) process.env.CATALOG_DB = file;
+  return file;
+}
+
+/**
+ * The environment a launcher hands every service it spawns (S9-08): the
+ * web's (`loadSidecarEnv`) with the catalog's file pinned (`pinCatalogFile`).
+ * The desktop shell and the macOS app both take it from `child-env.ts`
+ * rather than each re-deriving it, so the web, the studio runner, the
+ * sidecar and the snapshot script cannot open two different databases or
+ * run under two different spend caps.
+ */
+export async function childEnvironment(options: { appDir?: string } = {}): Promise<Record<string, string>> {
+  await loadSidecarEnv(options);
+  await pinCatalogFile();
+  return Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined));
+}

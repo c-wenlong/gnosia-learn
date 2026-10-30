@@ -44,6 +44,53 @@ async function loaded(env: Record<string, string>, appDir: string, keys: string[
   return JSON.parse(stdout) as Record<string, string>;
 }
 
+/** What `childEnvironment` hands a launcher, given a child's own environment and an app dir. */
+async function child(env: Record<string, string>, appDir: string): Promise<Record<string, string>> {
+  const script = `
+    const { childEnvironment } = await import(${JSON.stringify(ENTRY)});
+    process.stdout.write(JSON.stringify(await childEnvironment({ appDir: ${JSON.stringify(appDir)} })));
+  `;
+  const { stdout } = await run(process.execPath, ["--import", TSX, "--input-type=module", "-e", script], {
+    env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "", ...env },
+  });
+  return JSON.parse(stdout) as Record<string, string>;
+}
+
+describe("the launchers' shared environment (S9-08)", () => {
+  it("pins the catalog at the data home's file when nothing names one", async () => {
+    const home = temp();
+    const env = await child({ GNOSIA_HOME: home, CATALOG_ENV_FILE: join(temp(), "none.env") }, temp());
+    expect(env.CATALOG_DB).toBe(join(home, "catalog.db"));
+  });
+
+  it("honours services/catalog/.env's DATABASE_URL, which a bare data-home pin used to outrank", async () => {
+    const catalogEnv = join(temp(), "catalog.env");
+    writeFileSync(catalogEnv, "DATABASE_URL=/elsewhere/catalog.db\nCATALOG_ONLY=1\n");
+    const env = await child({ GNOSIA_HOME: temp(), CATALOG_ENV_FILE: catalogEnv }, temp());
+    expect(env.CATALOG_DB).toBe("/elsewhere/catalog.db");
+    // Only the pin comes out of the catalog's own file; the catalog reads the rest itself.
+    expect(env.CATALOG_ONLY).toBeUndefined();
+  });
+
+  it("carries the data home's settings and the app's catalog path to every child", async () => {
+    const home = temp();
+    writeFileSync(join(home, ".env"), "STUDIO_DAILY_USD=5\nSTUDIO_ENABLED=1\n");
+    const app = temp();
+    writeFileSync(join(app, ".env.local"), "CATALOG_DB=./data/catalog.db\n");
+    const env = await child({ GNOSIA_HOME: home, CATALOG_ENV_FILE: join(temp(), "none.env") }, app);
+    expect(env).toMatchObject({ STUDIO_DAILY_USD: "5", STUDIO_ENABLED: "1", CATALOG_DB: join(app, "data/catalog.db") });
+  });
+
+  it("leaves a Postgres URL unpinned, for the catalog to refuse in its own words", async () => {
+    const env = await child(
+      { GNOSIA_HOME: temp(), CATALOG_ENV_FILE: join(temp(), "none.env"), DATABASE_URL: "postgres://x/y" },
+      temp(),
+    );
+    expect(env.CATALOG_DB).toBeUndefined();
+    expect(env.DATABASE_URL).toBe("postgres://x/y");
+  });
+});
+
 describe("the sidecar's environment", () => {
   it("reads the data home's .env, under what the process exports", async () => {
     const home = temp();
