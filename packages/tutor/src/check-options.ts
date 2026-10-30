@@ -36,6 +36,7 @@ export function buildCheckOptionsPrompt(input: ConceptPromptInput, check: { ques
   const note = noteAsData(input.body);
   const quote = (text: string) =>
     `\`\`\`text\n${text.trim().slice(0, CHECK_TEXT_LIMIT).replace(/`{3,}/g, (fence) => fence.split("").join(" "))}\n\`\`\``;
+  const { max } = optionLengthBounds(check.answer);
   const length = check.answer.trim().length;
 
   return `# Gnosia session · wrong options · ${input.title}
@@ -57,7 +58,7 @@ ${quote(check.answer)}
 
 ## Rules
 1. Exactly three wrong options. Each is wrong for a reason a learner who half-understands the idea could believe: a common misconception, a swapped condition or direction, a neighbouring idea applied in the wrong place. No jokes, no "all of the above", no "none of the above".
-2. Each reads like the right answer: the same kind of statement, the same register and notation (if the answer uses $...$ maths, the options may too), and about the same length, roughly ${Math.max(1, Math.round(length * 0.6))} to ${Math.max(20, Math.round(length * 1.5))} characters.
+2. Each reads like the right answer: the same kind of statement, the same register and notation (if the answer uses $...$ maths, the options may too), and about the same length, roughly ${Math.min(max, Math.max(1, Math.round(length * 0.6)))} to ${Math.min(max, Math.max(20, Math.round(length * 1.5)))} characters.
 3. Each is plainly wrong to someone who holds the idea. Never a statement that is also true, a paraphrase of the right answer, or the right answer with a word changed that leaves it true.
 4. The options stand alone: no numbering, no letters, no reference to "the note" or to the other options.
 5. Stay inside what the note and its field say.
@@ -87,10 +88,19 @@ export function optionKey(text: string): string {
  */
 export function optionLengthBounds(answer: string): { min: number; max: number } {
   const length = answer.trim().length;
-  return {
-    min: length < 12 ? 1 : Math.ceil(length * 0.3),
-    max: Math.min(CHECK_DISTRACTOR_LIMITS.maxOptionChars, Math.max(length * 3, length + 60)),
-  };
+  const max = Math.min(CHECK_DISTRACTOR_LIMITS.maxOptionChars, Math.max(length * 3, length + 60));
+  return { min: Math.min(max, length < 12 ? 1 : Math.ceil(length * 0.3)), max };
+}
+
+/**
+ * Whether a check's answer is short enough for the tutor to write options
+ * shaped like it: no longer than the longest option the table keeps. A
+ * longer answer is asked with the notes' options, without a model call that
+ * could only be refused.
+ */
+export function canWriteOptionsFor(answer: string): boolean {
+  const length = answer.trim().length;
+  return length > 0 && length <= CHECK_DISTRACTOR_LIMITS.maxOptionChars;
 }
 
 /**

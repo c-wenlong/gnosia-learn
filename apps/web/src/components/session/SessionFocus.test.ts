@@ -3,7 +3,7 @@ import { act, createElement, StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
-import type { SessionQuestion, SessionStep } from "@gnosia/tutor/session-core";
+import { OPTIONS_WAIT_MS, type SessionQuestion, type SessionStep } from "@gnosia/tutor/session-core";
 import type { WeekCheckPlan } from "@/lib/week-check";
 
 /**
@@ -410,7 +410,7 @@ describe("wrong options the tutor writes", () => {
   }
 
   it("asks the tutor for the check's options and shows the question with them, unmarked", async () => {
-    const host = await mountWith(async () => new Response(JSON.stringify({ options: WRITTEN, answer: "SYN", cached: false }), { status: 200 }));
+    const host = await mountWith(async () => new Response(JSON.stringify({ options: WRITTEN, question: QUESTION.prompt, answer: "SYN", cached: false }), { status: 200 }));
     const asked = vi.mocked(fetch).mock.calls.filter(([url]) => url === "/api/agent/check-options");
     expect(asked).toHaveLength(1);
     expect(JSON.parse(String((asked[0]?.[1] as RequestInit).body))).toEqual({ conceptSlug: "tcp", checkId: "c1" });
@@ -425,10 +425,37 @@ describe("wrong options the tutor writes", () => {
     expect(host.textContent).toContain("Options made without the tutor. Some come from unrelated notes");
   });
 
-  it("keeps the notes' options when the tutor's are for a check that has changed since the page drew", async () => {
-    const host = await mountWith(async () => new Response(JSON.stringify({ options: WRITTEN, answer: "ACK" }), { status: 200 }));
+  it.each([
+    ["a new answer", { question: QUESTION.prompt, answer: "ACK" }],
+    ["a reworded question", { question: "Which packet closes the connection?", answer: "SYN" }],
+    ["no question at all", { answer: "SYN" }],
+  ])("keeps the notes' options when the tutor's are for a check with %s since the page drew", async (_, check) => {
+    const host = await mountWith(async () => new Response(JSON.stringify({ options: WRITTEN, ...check }), { status: 200 }));
     expect(choice(host, "Self-attention is permutation-equivariant.")).toBeDefined();
     expect(choice(host, "RST")).toBeUndefined();
+  });
+
+  it("stops waiting past the tutor's deadline and asks with the notes' options", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"], shouldAdvanceTime: true });
+    try {
+      const host = await mountWith(
+        () =>
+          new Promise<Response>((_, reject) => {
+            const signal = vi.mocked(fetch).mock.calls.at(-1)?.[1]?.signal;
+            signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+          }),
+      );
+      expect(host.textContent).toContain("The tutor is writing the options");
+      await act(async () => {
+        vi.advanceTimersByTime(OPTIONS_WAIT_MS);
+        await Promise.resolve();
+      });
+      await act(async () => undefined);
+      expect(choice(host, "Self-attention is permutation-equivariant.")).toBeDefined();
+      expect(host.textContent).toContain("Options made without the tutor");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("shows that the options are coming while the tutor writes them", async () => {

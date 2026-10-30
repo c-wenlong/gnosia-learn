@@ -30,6 +30,7 @@ import {
   tutorPrefill,
   whatMoved,
   withWrittenOptions,
+  sameCheck,
   WRONG_SOURCE_NOTE,
   type RecordedAnswer,
   type SessionQuestion,
@@ -165,6 +166,19 @@ describe("checkQuestion", () => {
 
   it("falls back to the notes when the stored options cannot make a question", () => {
     expect(checkQuestion({ ...base, written: [dot.answer, dot.answer, dot.answer] })?.wrong).toBe("padded");
+  });
+
+  it("asks no rewrite for an answer longer than an option may be", () => {
+    const long = check("c1", "Explain it?", "x".repeat(401));
+    expect(checkQuestion({ ...base, check: long, canWrite: true })?.rewrite).toBeUndefined();
+  });
+
+  it("uses the server's options only for the question on the page", () => {
+    const q = checkQuestion({ ...base, canWrite: true }) as SessionQuestion;
+    expect(sameCheck(q, { question: ` ${dot.question} `, answer: dot.answer })).toBe(true);
+    expect(sameCheck(q, { question: "Another question?", answer: dot.answer })).toBe(false);
+    expect(sameCheck(q, { question: dot.question, answer: "Another answer." })).toBe(false);
+    expect(sameCheck(q, { question: undefined, answer: dot.answer })).toBe(false);
   });
 
   it("names both kinds of options made without the tutor", () => {

@@ -29,6 +29,8 @@ import {
   withConsequence,
   withWrittenOptions,
   canAskAgain,
+  OPTIONS_WAIT_MS,
+  sameCheck,
   WRONG_SOURCE_NOTE,
 } from "@gnosia/tutor/session-core";
 import {
@@ -328,9 +330,15 @@ export function SessionFocus({
       rewriting.current.add(at);
       const controller = new AbortController();
       optioning.current.set(controller, at);
-      const keep = () => {
-        if (!controller.signal.aborted) setRewritten((prev) => ({ ...prev, [at]: null }));
-      };
+      // A request that stalls does not hold the question back for good: past
+      // the tutor's own deadline the page asks with the notes' options.
+      let timedOut = false;
+      const timer = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, OPTIONS_WAIT_MS);
+      /** Gone because the page went away: nobody is left to show anything to. */
+      const gone = () => controller.signal.aborted && !timedOut;
       fetch("/api/agent/check-options", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -338,22 +346,25 @@ export function SessionFocus({
         signal: controller.signal,
       })
         .then(async (res) => {
-          const body = (await res.json().catch(() => ({}))) as { options?: unknown; answer?: unknown };
-          if (controller.signal.aborted) return;
-          const answer = q.choices[q.correct] ?? "";
+          const body = (await res.json().catch(() => ({}))) as { options?: unknown; question?: unknown; answer?: unknown };
+          if (gone()) return;
           // Options for the check as the server read it now: a note edited since
           // the page drew asks a different question, so they are not used.
           const fits =
             res.ok &&
             Array.isArray(body.options) &&
             body.options.every((o) => typeof o === "string") &&
-            typeof body.answer === "string" &&
-            body.answer.trim() === answer.trim();
+            sameCheck(q, { question: body.question, answer: body.answer });
           const question = fits ? withWrittenOptions(q, body.options as string[]) : null;
           setRewritten((prev) => ({ ...prev, [at]: question }));
         })
-        .catch(keep)
-        .finally(() => optioning.current.delete(controller));
+        .catch(() => {
+          if (!gone()) setRewritten((prev) => ({ ...prev, [at]: null }));
+        })
+        .finally(() => {
+          clearTimeout(timer);
+          optioning.current.delete(controller);
+        });
     }
   }, [index, steps, modelAvailable]);
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildCheckOptionsPrompt,
+  canWriteOptionsFor,
   optionLengthBounds,
   parseCheckOptions,
 } from "../src/check-options";
@@ -83,5 +84,18 @@ describe("parseCheckOptions", () => {
     expect(optionLengthBounds("O(n)")).toEqual({ min: 1, max: 64 });
     expect(optionLengthBounds("x".repeat(100))).toEqual({ min: 30, max: 300 });
     expect(optionLengthBounds("x".repeat(300)).max).toBe(400);
+    // A long answer never asks for an option longer than one may be.
+    expect(optionLengthBounds("x".repeat(1_334))).toEqual({ min: 400, max: 400 });
+    expect(canWriteOptionsFor("x".repeat(400))).toBe(true);
+    expect(canWriteOptionsFor("x".repeat(401))).toBe(false);
+    expect(canWriteOptionsFor("  ")).toBe(false);
+  });
+
+  it("asks for a range inside the bounds for a long answer", () => {
+    const prompt = buildCheckOptionsPrompt(
+      { slug: "x", title: "X", summary: "", body: null } as unknown as Parameters<typeof buildCheckOptionsPrompt>[0],
+      { question: "Q?", answer: "x".repeat(300) },
+    );
+    expect(prompt).toContain("roughly 180 to 400 characters");
   });
 });

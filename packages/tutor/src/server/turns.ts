@@ -37,7 +37,7 @@ import {
   judgeRequest,
   parseVerdict,
 } from "../judge";
-import { buildCheckOptionsPrompt, CHECK_OPTIONS_REQUEST, parseCheckOptions } from "../check-options";
+import { buildCheckOptionsPrompt, canWriteOptionsFor, CHECK_OPTIONS_REQUEST, parseCheckOptions } from "../check-options";
 import { checkHash, generationKey, oncePerCheck, readWrittenOptions, storeOptions } from "./check-options";
 import {
   buildSessionQuestionPrompt,
@@ -778,9 +778,11 @@ export function validateCheckOptionsBody(body: unknown): TurnReply | null {
  * check or review card asks the same check with no model call
  * (docs/LEARN.md, "Wrong options").
  *
- * Answers `{ options, answer, cached }`: `answer` is the check's answer as the
- * server read it, so a page whose note changed since it drew can tell the
- * options are not for its question. A stored row whose hash still matches
+ * Answers `{ options, question, answer, cached }`: `question` and `answer`
+ * are the check as the server read it, so a page whose note changed since it
+ * drew can tell the options are not for its question. An answer longer than
+ * an option may be (`canWriteOptionsFor`) is a 422 `CHECK_TOO_LONG` before
+ * any model call. A stored row whose hash still matches
  * the check answers at once; otherwise one generation per check at a time
  * (`oncePerCheck`), validated by `parseCheckOptions` and refused as a 502
  * when the reply does not hold three usable options. No key is a 503 with
@@ -808,10 +810,17 @@ export async function checkOptionsTurn(deps: TutorDeps, body: unknown): Promise<
     return reply(404, { error: "The note has no such check with a question and an answer.", code: "CHECK_NOT_FOUND" });
   }
 
+  const question = check.question.trim();
   const hash = checkHash(check);
   const stored = (await readWrittenOptions(deps.db, deps.owner, [{ slug: conceptSlug, checks: [check] }])).get(conceptSlug)?.[checkId];
   if (stored !== undefined) {
-    return reply(200, { options: stored, answer, cached: true }, { "Cache-Control": "no-store" });
+    return reply(200, { options: stored, question, answer, cached: true }, { "Cache-Control": "no-store" });
+  }
+  if (!canWriteOptionsFor(answer)) {
+    return reply(422, {
+      error: "The check's answer is longer than a wrong option can be, so its options come from the notes.",
+      code: "CHECK_TOO_LONG",
+    });
   }
 
   return oncePerCheck(generationKey(deps.owner, conceptSlug, checkId, hash), async (): Promise<TurnReply> => {
@@ -853,6 +862,7 @@ export async function checkOptionsTurn(deps: TutorDeps, body: unknown): Promise<
       200,
       {
         options: parsed.options,
+        question,
         answer,
         cached: false,
         model: outcome.result.model,

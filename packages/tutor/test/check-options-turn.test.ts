@@ -102,7 +102,10 @@ describe.skipIf(!reachable.ok)("checkOptionsTurn", () => {
       checkOptionsTurn(deps(LOCAL_LEARNER_ID), { conceptSlug: "alpha", checkId: "c1" }),
     ]);
     expect(complete).toHaveBeenCalledTimes(1);
-    expect(first).toMatchObject({ status: 200, body: { options: GOOD, answer: ANSWER, cached: false, model: "m" } });
+    expect(first).toMatchObject({
+      status: 200,
+      body: { options: GOOD, question: "What does the dot product of unit vectors measure?", answer: ANSWER, cached: false, model: "m" },
+    });
     expect(second.body).toEqual(first.body);
 
     const [messages] = complete.mock.calls[0] as [{ role: string; content: string }[]];
@@ -149,6 +152,15 @@ describe.skipIf(!reachable.ok)("checkOptionsTurn", () => {
       body: { code: "ALL_PROVIDERS_FAILED" },
     });
     expect(await readCheckDistractors(scratch.db, LOCAL_LEARNER_ID, ["alpha"])).toEqual([]);
+  });
+
+  it("asks no model for an answer longer than an option may be", async () => {
+    checks = [{ ...(checks[0] as ConceptCheck), answer: "x".repeat(401) }];
+    expect(await checkOptionsTurn(deps(LOCAL_LEARNER_ID), { conceptSlug: "alpha", checkId: "c1" })).toMatchObject({
+      status: 422,
+      body: { code: "CHECK_TOO_LONG" },
+    });
+    expect(complete).not.toHaveBeenCalled();
   });
 
   it("keeps one learner's options from another's, for the same note", async () => {

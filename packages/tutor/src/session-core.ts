@@ -1,4 +1,5 @@
 import type { ConceptSummary } from "@gnosia/catalog/state";
+import { CHECK_DISTRACTOR_LIMITS } from "@gnosia/schema/shared";
 
 import type { ConceptCheck } from "./concept-note-core";
 import type { ConceptWorkspace } from "./concept-workspace-core";
@@ -172,10 +173,13 @@ export function checkQuestion(input: {
   const padded = question.choices.some(
     (choice, i) => i !== question.correct && !strong.has(choice.trim().replace(/\s+/g, " ").toLowerCase()),
   );
+  // An answer longer than an option may be cannot get options shaped like it
+  // (`canWriteOptionsFor` in check-options.ts), so nothing is asked for.
+  const writable = canWrite && check.answer.trim().length <= CHECK_DISTRACTOR_LIMITS.maxOptionChars;
   return {
     ...question,
     wrong: padded ? "padded" : "notes",
-    ...(canWrite ? { rewrite: { concept: slug, check: check.id, variant } } : {}),
+    ...(writable ? { rewrite: { concept: slug, check: check.id, variant } } : {}),
   };
 }
 
@@ -196,6 +200,31 @@ export function withWrittenOptions(question: SessionQuestion, options: readonly 
   if (mc === null) return null;
   return { ...rest, choices: mc.choices, correct: mc.correct, wrong: "tutor" };
 }
+
+/**
+ * Whether options the server wrote are for the question on the page: its
+ * check's question and answer as the server read them match the question's
+ * prompt and right choice. A note edited since the page drew (a reworded
+ * question, or another check moved into this id) asks something else, and
+ * options written for that are not used here.
+ */
+export function sameCheck(question: SessionQuestion, server: { question: unknown; answer: unknown }): boolean {
+  const answer = question.choices[question.correct];
+  return (
+    typeof server.question === "string" &&
+    typeof server.answer === "string" &&
+    answer !== undefined &&
+    server.question.trim() === question.prompt.trim() &&
+    server.answer.trim() === answer.trim()
+  );
+}
+
+/**
+ * How long the page waits for the tutor's options before asking with the
+ * notes': the tutor's own turn deadline (60 seconds by default,
+ * `DEFAULT_TURN_DEADLINE_MS`) with room for the request around it.
+ */
+export const OPTIONS_WAIT_MS = 70_000;
 
 /** Wrong options for a note's checks, split by how near they sit to this concept. */
 export interface DistractorPool {
