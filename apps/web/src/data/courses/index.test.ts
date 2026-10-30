@@ -4,12 +4,10 @@ import {
   getAllTopicIds,
   getCourse,
   getCourses,
-  getCourseTopicIds,
   getModule,
-  getModuleTopicIds,
   getRelatedCourses,
-  totalTopicCount,
 } from "@/data/courses";
+import { courseTopicIds } from "@/lib/course-path";
 import { getTags, tagFor, tagsFor } from "@/data/content";
 import type { Course } from "@/lib/types";
 
@@ -68,19 +66,14 @@ describe("course lookups", () => {
     const ids = getAllTopicIds(courses);
     expect(ids.length).toBeGreaterThan(0);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(totalTopicCount(courses)).toBe(ids.length);
   });
 
   it("scopes topic ids to one course when given one", async () => {
     const course = (await getCourse("cp4284"))!;
     const both = [course, otherCourse([])];
-    expect(getCourseTopicIds(course)).toEqual(getAllTopicIds([course]));
-    expect(getCourseTopicIds(course).length).toBeLessThan(getAllTopicIds(both).length);
-  });
-
-  it("lists a module's topic ids", () => {
-    const mod = courses[0].modules[0];
-    expect(getModuleTopicIds(mod)).toEqual(mod.topics.map((t) => t.id));
+    expect(courseTopicIds(course)).toEqual(getAllTopicIds([course]));
+    expect(courseTopicIds(course)).toEqual(course.modules.flatMap((m) => m.topics.map((t) => t.id)));
+    expect(courseTopicIds(course).length).toBeLessThan(getAllTopicIds(both).length);
   });
 
   it("finds a topic and the module it belongs to", async () => {

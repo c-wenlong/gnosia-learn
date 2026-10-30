@@ -7,7 +7,7 @@ import { getTopics } from "@/data/topics";
 import { loadCourseAssets } from "@/lib/course-assets";
 import { conceptsByItem, conceptsForTopic, guidebookConcept, resolveTopicMastery, type TopicMastery } from "@/lib/course-path";
 import { loadKnowledgeBase } from "@/lib/kb/load";
-import type { PathKbConcept } from "@/lib/module-path";
+import { moduleConcepts, type PathKbConcept } from "@/lib/module-path";
 import type { Course } from "@/lib/types";
 
 /**
@@ -65,7 +65,7 @@ export async function loadCourseHome(course: Course): Promise<CourseHomeData> {
       if (result) mastery[t.id] = result;
       return { mastery: result };
     });
-    const taught = [...new Set(m.topics.flatMap((t) => t.concepts))];
+    const taught = moduleConcepts(m);
     modules[m.id] = {
       guidebook: guidebookConcept(resolved, authored, known),
       assets: assets.byTopic[m.topic] ?? null,

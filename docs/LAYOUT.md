@@ -115,7 +115,7 @@ leaves:
 | `provider-keys/`, `tutor-models/`, `custom-providers/`, `providers/` | The BYOK seal, the model chain, the owner's own providers and how Settings views them |
 | `asset-files.ts`, `blob-store.ts`, `asset-problems.ts`, `asset-library.ts`, `library*.ts` | An asset row to its bytes, the store the routes read, the refusal codes, and the library's reads and groupings |
 | `concept-*.ts`, `concept-workspace*.ts`, `kb/` | The concept graph and the workspace's read model |
-| `course-*.ts`, `module-path.ts`, `week-check*.ts`, `curriculum.ts`, `progress.ts` | The course home, the learning path and the week check's plan |
+| `course-*.ts`, `module-path.ts`, `week-check*.ts` | The course home, the learning path and the week check's plan |
 | `home*.ts`, `recent*.ts`, `ask*.ts`, `playback.ts`, `review-*.ts`, `domain-*.ts`, `learn-index.ts`, `map-reading.ts` | The surfaces' read models and arithmetic |
 | `studio*.ts`, `conversation-*.ts`, `tutor-studio.ts`, `tutor-handoff*.ts` | The web half of the studio surface: the runner client, the corpus reads and the tutor→studio hand-off |
 | `owner.ts`, `settings.ts`, `preference*.ts`, `theme-cookie.ts`, `byok-*.ts` | Owner scope, settings reads, the preference keys, the theme cookie |
