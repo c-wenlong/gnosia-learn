@@ -152,7 +152,8 @@ jobs:
         # scripts/flip-rehearsal.mjs is the owner's flip-day and cut-over
         # procedure, and its suite is the slowest in the repository (133 s of
         # 664 s on 2026-10-04, when the catalog was still Postgres): it copies
-        # and backs up whole databases.
+        # and backs up whole databases. It is split into files by subject
+        # (services/catalog/test/flip-rehearsal-*.test.ts) so they run side by side.
         # A pull request runs it only when it changes the script, the lib/
         # modules it imports, a migration (the rehearsal applies them to a
         # copy), or the suite itself; npm test on a laptop and a manual run
@@ -162,8 +163,10 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ] &&
              ! git diff --name-only HEAD^1 HEAD |
-               grep -qE '^(scripts/flip-rehearsal\.mjs|scripts/lib/|services/catalog/drizzle-sqlite/|services/catalog/test/flip-rehearsal\.test\.ts)'; then
-            echo "args=--exclude services/catalog/test/flip-rehearsal.test.ts" >> "$GITHUB_OUTPUT"
+               grep -qE '^(scripts/flip-rehearsal\.mjs|scripts/lib/|services/catalog/drizzle-sqlite/|services/catalog/test/flip-rehearsal)'; then
+            # Quoted: the suite is five files (flip-rehearsal*.test.ts), and an
+            # unquoted glob would be expanded by the shell into test filters.
+            echo "args=--exclude 'services/catalog/test/flip-rehearsal*.test.ts'" >> "$GITHUB_OUTPUT"
             echo "The flip-rehearsal suite is skipped: nothing it covers changed."
           fi
 
