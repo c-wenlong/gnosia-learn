@@ -35,8 +35,6 @@ enum BKT {
     static let readyThreshold = 0.75
     /// p(L) at or below which a concept is a gap.
     static let gapThreshold = 0.4
-    /// Prior belief before the first observation, when `bktParams` has none.
-    static let defaultPL0 = 0.25
 }
 
 /// The pipeline's five-way label on p(L) — `masteryLabel` in bkt.mjs.
@@ -546,7 +544,9 @@ struct LearnGraph {
         self.itemPlace = itemPlace
         self.allCourses = allCourses
 
-        let prior = LearnGraph.pL0(preferences: preferences)
+        // The prior belief `bktParams` stores, or the default — the pL0
+        // half of masteryOf.
+        let prior = bktParams(preferences: preferences).pL0
         let cards = Dictionary(uniqueKeysWithValues: reviews.map { ($0.conceptSlug, $0) })
         self.cards = cards
 
@@ -1211,14 +1211,6 @@ extension LearnGraph {
         guard let list = parsePreferenceJSON(preferences["inactiveCourses"]) as? [Any] else { return [] }
         return Set(list.compactMap { $0 as? String }.filter { !$0.isEmpty })
     }
-
-    /// The prior belief `bktParams` stores, or the default — the pL0 half
-    /// of masteryOf.
-    static func pL0(preferences: [String: String]) -> Double {
-        guard let raw = parsePreferenceJSON(preferences["bktParams"]) as? [String: Any],
-              let v = raw["pL0"] as? Double, v.isFinite else { return BKT.defaultPL0 }
-        return v
-    }
 }
 
 /// A `playback:<asset>` preference read back — parsePlayback: position at
@@ -1506,7 +1498,8 @@ func recentItems(
         .map(\.element)
 }
 
-private func isoDate(_ s: String) -> Date? {
+/// An ISO 8601 instant, with or without fractional seconds.
+func isoDate(_ s: String) -> Date? {
     if let d = ISO8601DateFormatter().date(from: s) { return d }
     let f = ISO8601DateFormatter()
     f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]

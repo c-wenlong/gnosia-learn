@@ -56,6 +56,12 @@ struct GnosiaApp: App {
                 .onChange(of: store.mirroredRequestIds, initial: true) { _, ids in
                     learner.pruneMirroredEvents(ids)
                 }
+                // The catalog answered an answer's mirror and learner.db now
+                // holds its rows in place of the app's estimate: re-merge so
+                // every surface draws the recorded numbers.
+                .onChange(of: learner.recordedVersion) { _, _ in
+                    store.refreshLearner()
+                }
         }
         .windowToolbarStyle(.unified)
 
