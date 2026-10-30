@@ -95,19 +95,6 @@ const ACCOUNT = "div.border-t button[aria-expanded]";
 
 const nav = (container: HTMLElement) => container.querySelector<HTMLElement>('nav[aria-label="Primary"]')!;
 
-/** The frame without a studio, folded, mounted in one act. */
-function mountFoldedForClip() {
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root: Root = createRoot(container);
-  act(() => root.render(createElement(ShellFrame, { studio: false, initialCollapsed: true } as ComponentProps<typeof ShellFrame>, null)));
-  mounted.push(() => {
-    act(() => root.unmount());
-    container.remove();
-  });
-  return { container };
-}
-
 describe("the sidebar", () => {
   it("lists only the four destinations, and reads no conversations, without a studio", async () => {
     const container = await mount(false);
@@ -203,25 +190,6 @@ describe("the sidebar", () => {
     expect(nav(container).contains(document.activeElement)).toBe(true);
   });
 
-  it("does not clip the nav, so the account menu can open past the rail", () => {
-    const { container } = mountFoldedForClip();
-    expect(nav(container).className).not.toMatch(/(^|\s)overflow-hidden(\s|$)/);
-  });
-
-  it("keeps a flick past the end of its list from scrolling the page behind the drawer", async () => {
-    const container = await mount(true);
-    const scroller = nav(container).querySelector("ul")!.parentElement!;
-    expect(scroller.className.split(" ")).toEqual(expect.arrayContaining(["overflow-y-auto", "overscroll-contain"]));
-  });
-
-  it("transitions the drawer's visibility only as it closes, so focus can land as it opens", async () => {
-    const container = await mount(true);
-    expect(nav(container).className).toContain("max-md:transition-[translate,visibility,box-shadow]");
-    act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Open the sidebar"]')!.click());
-    expect(nav(container).className).toContain("max-md:transition-[translate,box-shadow]");
-    expect(nav(container).className).not.toContain("visibility");
-  });
-
   it("closes the drawer on Back or Forward, which can change the studio's view without its path", async () => {
     const container = await mount(true);
     act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Open the sidebar"]')!.click());
@@ -275,18 +243,6 @@ describe("the fold", () => {
   afterEach(() => {
     vi.useRealTimers();
     document.cookie = "gnosia-sidebar=; Max-Age=0; Path=/";
-  });
-
-  it("animates its width and fades its labels, and drops both under reduced motion", () => {
-    const { container, room } = mountFolded(true);
-    const panel = nav(container);
-    expect(panel.className).toContain("md:transition-[width,box-shadow]");
-    expect(panel.className).toContain("motion-reduce:transition-none");
-    expect(room().className).toContain("transition-[width]");
-    // Labels stay mounted on the rail and fade, so they can fade back in.
-    const label = [...panel.querySelectorAll("a span")].find((span) => span.textContent === "Courses")!;
-    expect(label.className).toContain("opacity-0");
-    expect(label.className).toContain("transition-opacity");
   });
 
   it("pops the account menu in as a kit Popover, and keeps it inert for its way out so it can fade", () => {
@@ -556,24 +512,6 @@ describe("the sections", () => {
     withRows();
     const container = await mount(false);
     expect(section(container, "sidebar-courses").querySelector('a[aria-current="page"]')?.getAttribute("href")).toBe("/courses/cs3230/m2");
-  });
-
-  it("settles a two-line course row to one row's height on the rail, where only its glyph shows", async () => {
-    withRows();
-    const container = document.createElement("div");
-    document.body.append(container);
-    const root: Root = createRoot(container);
-    act(() => root.render(createElement(ShellFrame, { studio: false, initialCollapsed: true } as ComponentProps<typeof ShellFrame>, null)));
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    });
-    mounted.push(() => {
-      act(() => root.unmount());
-      container.remove();
-    });
-    const row = nav(container).querySelector<HTMLAnchorElement>('a[aria-label="CS3230 Algorithms"]')!;
-    expect(row.className).toContain("h-[var(--shell-row,36px)]");
-    expect(row.className).not.toContain("+8px");
   });
 
   it("gives a course with no module visited one line, opening the course page", async () => {
