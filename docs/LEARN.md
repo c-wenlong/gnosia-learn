@@ -427,6 +427,15 @@ page or came from the store. One generation sends the note (clipped to 8,000
 characters) and the check, roughly 1,000 to 3,000 input tokens and 100
 output tokens, once per check per learner.
 
+The macOS app builds its questions itself and follows the same rules: its
+port of `checkQuestion` (`apps/macos/Sources/Gnosia/SessionModel.swift`)
+is held to the web's by one fixture
+(`apps/macos/Tests/GnosiaTests/Fixtures/wrong-options.json`), and its
+concept session and module check ask the sidecar's
+`POST /api/agent/check-options`. Its review cards still take the notes'
+options, since they are read from the app's snapshot, which does not carry
+`check_distractor`.
+
 ### Folders and ids
 
 Concepts sit one folder deep, grouped by domain:
