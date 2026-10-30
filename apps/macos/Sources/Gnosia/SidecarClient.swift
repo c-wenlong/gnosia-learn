@@ -85,6 +85,17 @@ struct SidecarClient {
         ])
     }
 
+    /// `POST /api/agent/check-options`: `{ conceptSlug, checkId }` → the
+    /// three wrong options the tutor wrote for that check (stored on the
+    /// catalog, so a second ask makes no model call) and the answer they
+    /// were written for.
+    func checkOptions(conceptSlug: String, checkId: String) async throws -> [String: Any] {
+        try await post("/api/agent/check-options", body: [
+            "conceptSlug": conceptSlug,
+            "checkId": checkId,
+        ])
+    }
+
     // MARK: - learner settings
 
     /// A provider row of `GET /api/learner/provider-key`: what Settings may

@@ -167,6 +167,14 @@ struct TutorSessionView: View {
     @State private var resolved: [Int: Resolved] = [:]
     /// Steps whose tutor request already ran — the web's `requested` ref.
     @State private var requested = Set<Int>()
+    /// A note question's options from the tutor, by step: the question laid
+    /// out with them, or nil when the tutor could not — the web's `rewritten`.
+    @State private var rewritten: [Int: SessionQuestion?] = [:]
+    /// Steps whose options request already ran.
+    @State private var rewriting = Set<Int>()
+    /// Which plan an options reply belongs to: Start over builds a new plan
+    /// while an old request may still be out, and its reply is dropped.
+    @State private var planEpoch = 0
     @State private var graded: [Int: Graded] = [:]
     /// The first attempt fixes the pick, the confidence and the reasoning;
     /// a retry sends them again under its first requestId, so a replay
@@ -217,7 +225,10 @@ struct TutorSessionView: View {
         .modifier(SessionTitle(embedded: embedded, title: title))
         .task { prepare() }
         .onChange(of: store.loaded) { _, _ in prepare() }
-        .onChange(of: index) { _, i in askModelQuestion(i) }
+        .onChange(of: index) { _, i in
+            askModelQuestion(i)
+            askOptions(i)
+        }
         .onDisappear { closeSessionOnce() }
     }
 
@@ -252,7 +263,9 @@ struct TutorSessionView: View {
             slug: slug, domain: w.domain, neighbours: neighbours,
             concepts: store.learn.concepts
         )
-        steps = buildSessionPlan(slug: slug, mode: mode, checks: checks, pool: pool, summary: w.summary)
+        // canWrite: the sidecar is always asked, as askModelQuestion asks it;
+        // with no model it refuses at once and the notes' options stay.
+        steps = buildSessionPlan(slug: slug, mode: mode, checks: checks, pool: pool, canWrite: true, summary: w.summary)
         teach = teachProse(w.body ?? "")
         noteAsksNothing = !steps.contains {
             ($0.kind == .probe || $0.kind == .check) && ($0.question != nil || $0.fallback != nil)
@@ -268,6 +281,7 @@ struct TutorSessionView: View {
         if index == 0, selected == nil { selected = seedPick }
         ready = true
         askModelQuestion(index)
+        askOptions(index)
     }
 
     /// Back at the first step with a fresh plan — the embedded session's
@@ -281,6 +295,9 @@ struct TutorSessionView: View {
         steps = []
         resolved = [:]
         requested = []
+        rewritten = [:]
+        rewriting = []
+        planEpoch += 1
         graded = [:]
         attempts = [:]
         answers = []
@@ -316,7 +333,11 @@ struct TutorSessionView: View {
     /// it is coming — the web's questionFor.
     private func questionFor(_ i: Int) -> QuestionStatus {
         guard let step = steps[safe: i], step.kind == .probe || step.kind == .check else { return .none("") }
-        if let question = step.question { return .ready(question) }
+        if let question = step.question {
+            guard question.rewrite != nil else { return .ready(question) }
+            guard let laid = rewritten[i] else { return .loading }
+            return .ready(laid ?? question)
+        }
         guard let r = resolved[i] else { return .loading }
         if let question = r.question { return .ready(question) }
         if let fallback = step.fallback { return .ready(fallback) }
@@ -354,6 +375,36 @@ struct TutorSessionView: View {
                 resolved[i] = Resolved(question: nil, note: modelProblem(err))
             } catch {
                 resolved[i] = Resolved(question: nil, note: "The tutor could not be reached.")
+            }
+        }
+    }
+
+    /// A note question whose wrong options the tutor has not written asks
+    /// the sidecar for them, once, for this step and the two after it, so
+    /// the next question is usually ready when it comes up — the web's
+    /// check-options effect. Any refusal keeps the notes' options, marked.
+    private func askOptions(_ i: Int) {
+        for at in [i, i + 1, i + 2] {
+            guard let question = steps[safe: at]?.question,
+                  let ask = question.rewrite,
+                  !rewriting.contains(at)
+            else { continue }
+            rewriting.insert(at)
+            let epoch = planEpoch
+            Task { @MainActor in
+                var laid: SessionQuestion? = nil
+                if let client = try? await sidecar.readyClient(),
+                   let reply = try? await client.checkOptions(conceptSlug: ask.concept, checkId: ask.check),
+                   let options = reply["options"] as? [String],
+                   // Options for the check as the catalog reads it now: a note
+                   // edited since the plan was built asks a different question.
+                   sameCheck(question, question: reply["question"] as? String, answer: reply["answer"] as? String) {
+                    laid = withWrittenOptions(question, options)
+                }
+                // A reply for a plan Start over replaced is for nobody.
+                guard epoch == planEpoch else { return }
+                // updateValue, not a subscript: assigning nil would remove the key.
+                rewritten.updateValue(laid, forKey: at)
             }
         }
     }
@@ -580,7 +631,9 @@ struct TutorSessionView: View {
             }
             switch status {
             case .loading:
-                placeholder("The tutor is writing a question…")
+                placeholder(
+                    step.question?.rewrite != nil ? "The tutor is writing the options…" : "The tutor is writing a question…"
+                )
             case .none(let note):
                 noQuestionCard(note: note, probe: step.kind == .probe)
             case .ready(let question):
@@ -657,6 +710,12 @@ struct TutorSessionView: View {
                 ForEach(Array(question.choices.enumerated()), id: \.offset) { i, choice in
                     choiceRow(i, choice, question: question, answered: answered)
                 }
+            }
+
+            if let note = question.wrong?.note {
+                Text(note)
+                    .font(.caption)
+                    .foregroundStyle(G.text2)
             }
 
             if answered == nil, (attempts[index].map { $0.picked } ?? selected) != nil {
