@@ -5,15 +5,19 @@ import { useState } from "react";
 import { Reveal } from "@/components/studio/motion-parts";
 import { PanelLink } from "@/components/studio/PanelLink";
 import { Button } from "@/components/ui/Button";
-import { linkClasses } from "@/components/ui/classes";
+import { Chip } from "@/components/ui/Chip";
+import { cx, linkClasses } from "@/components/ui/classes";
+import type { TopicOption } from "@/data/topics";
 import { madeLine } from "@/lib/studio-cards";
 import type { DrawBlock } from "@/lib/studio-chat";
+import type { PendingTopic } from "@/lib/studio-drafts";
 
 /**
- * The footers a brief card shows under its brief, one at a time, each folding
- * open and shut as the card's state moves: shared by the diagram card
- * (`ConfirmCard`) and the video card (`ConfirmCardVideo`), which differ in
- * their bodies and in the verb, not here.
+ * The parts the diagram card (`ConfirmCard`) and the video card
+ * (`ConfirmCardVideo`) share, which differ in their bodies and in the verb,
+ * not here: the footers a card shows under its brief, one at a time, each
+ * folding open and shut as the card's state moves, and the topic the planner
+ * proposed.
  */
 
 type Kind = "diagram" | "video";
@@ -186,5 +190,77 @@ export function MadeFooter({
         )}
       </div>
     </Reveal>
+  );
+}
+
+/** The topic the planner proposed (D39): what it is, and what it is close to. */
+export function ProposedTopic({
+  proposed,
+  topics,
+  editing,
+  onPick,
+}: {
+  proposed: PendingTopic;
+  topics: ReadonlyMap<string, TopicOption>;
+  editing: boolean;
+  onPick: (slug: string) => void;
+}) {
+  const matches = proposed.nearMatches;
+  return (
+    <div className={cx("flex min-w-0 flex-col gap-1.5", editing && "mt-2")}>
+      {!editing && (
+        <div className="flex min-h-9 flex-wrap items-center gap-2">
+          <Chip size="sm" active title={proposed.entry.slug}>
+            New topic
+          </Chip>
+          <span className="text-[14px] font-semibold text-text">{proposed.entry.title}</span>
+          <span className="font-mono text-[12px] text-text3">{proposed.entry.slug}</span>
+        </div>
+      )}
+      <p className="text-[13px] text-text2">
+        {editing && <>A new topic, created when you draw. </>}
+        In <span className="font-medium text-text">{proposed.entry.domain}</span>
+        {proposed.entry.summary !== null && proposed.entry.summary !== "" && <>. {proposed.entry.summary}</>}
+      </p>
+      {proposed.entry.relations.length > 0 && (
+        <ul className="flex flex-wrap gap-x-3 gap-y-1 text-[13px] text-text2">
+          {proposed.entry.relations.map((relation) => (
+            <li key={`${relation.kind}:${relation.to}`}>
+              <span className="text-text3">{relation.kind}</span> {topics.get(relation.to)?.title ?? relation.to}
+            </li>
+          ))}
+        </ul>
+      )}
+      {matches.length > 0 &&
+        (editing ? (
+          <div className="flex flex-wrap items-center gap-1.5 text-[13px] text-text2">
+            <span>Close to</span>
+            {matches.map((match) =>
+              topics.has(match.slug) ? (
+                <Chip key={match.slug} size="sm" title={`Use ${match.title} instead`} onClick={() => onPick(match.slug)}>
+                  {match.title}
+                </Chip>
+              ) : (
+                <span key={match.slug} className="font-medium text-text">
+                  {match.title}
+                </span>
+              ),
+            )}
+          </div>
+        ) : (
+          <p className="text-[13px] text-text2">
+            Close to{" "}
+            {matches.map((match, at) => (
+              <span key={match.slug}>
+                {at > 0 && ", "}
+                <span className="font-medium text-text" title={match.slug}>
+                  {match.title}
+                </span>
+              </span>
+            ))}
+            . To use {matches.length === 1 ? "it" : "one of those"} instead, press Edit or say so.
+          </p>
+        ))}
+    </div>
   );
 }

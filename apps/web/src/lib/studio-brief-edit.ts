@@ -2,7 +2,7 @@ import type { FilterOption } from "@/components/ui/filter-menu";
 import type { PendingTopic } from "@/lib/studio-drafts";
 import type { Refusal } from "@/lib/studio-client";
 import { refusalReason, refusalString, runnerSlow } from "@/lib/studio-client";
-import { sentence } from "@/lib/studio-chat";
+import { sentence } from "@/lib/sentence";
 import type { Brief } from "@/lib/studio-jobs";
 
 /**

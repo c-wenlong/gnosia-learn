@@ -149,8 +149,12 @@ export function aboutLength(seconds: number): string {
   return `About ${minutes} ${minutes === 1 ? "minute" : "minutes"}`;
 }
 
-/** "24 s", "1 min 12 s": a scene's predicted length on its collapsed row. */
-export function shortLength(seconds: number): string {
+/**
+ * "24 s", "1 min 12 s": a scene's predicted length on its collapsed row, and a
+ * video's length read aloud. "" for no length (null, or below zero).
+ */
+export function shortLength(seconds: number | null): string {
+  if (seconds === null || seconds < 0) return "";
   if (!Number.isFinite(seconds)) return "length unknown";
   const whole = Math.max(0, Math.round(seconds));
   if (whole < 60) return `${whole} s`;

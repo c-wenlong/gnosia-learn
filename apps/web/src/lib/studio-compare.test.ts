@@ -4,10 +4,8 @@ import {
   catalogErrorLine,
   countRows,
   emptyLintLine,
-  gitAddLine,
   lintLine,
   missingShotReason,
-  shotSrc,
   signed,
   type Comparison,
   type ComparisonSide,
@@ -18,8 +16,7 @@ import {
  *
  * The numbers themselves are the runner's and are tested there. What is tested
  * here is the thing a panel gets wrong quietly: a missing before printed as a
- * delta of zero, an empty list printed as a blank box, or a `git add` line
- * naming something that did not land.
+ * delta of zero, or an empty list printed as a blank box.
  */
 
 const side = (patch: Partial<ComparisonSide> = {}): ComparisonSide => ({
@@ -115,23 +112,6 @@ describe("an empty list, said in words", () => {
   });
 });
 
-describe("the git add line", () => {
-  it("names exactly the files that landed", () => {
-    expect(gitAddLine(["learn/assets/x.tldr", "learn/assets/x.svg"])).toBe(
-      "git add learn/assets/x.tldr learn/assets/x.svg",
-    );
-  });
-
-  /** An accept whose export had failed lands one file, and the line says one. */
-  it("names one file when one landed", () => {
-    expect(gitAddLine(["learn/assets/x.tldr"])).toBe("git add learn/assets/x.tldr");
-  });
-
-  it("is nothing at all when nothing landed", () => {
-    expect(gitAddLine([])).toBeNull();
-  });
-});
-
 describe("a missing picture", () => {
   it("says a new diagram has no before, which is not a failure", () => {
     expect(missingShotReason("before", comparison({ before: null }), "new")).toContain("is new");
@@ -175,11 +155,5 @@ describe("the catalog error under an indexed: false banner", () => {
     expect(catalogErrorLine([])).toBeNull();
     expect(catalogErrorLine(undefined)).toBeNull();
     expect(catalogErrorLine(["   "])).toBeNull();
-  });
-});
-
-describe("where a picture comes from", () => {
-  it("goes through the app's own studio proxy", () => {
-    expect(shotSrc("job 1", "before")).toBe("/studio/api/jobs/job%201/shot?which=before");
   });
 });

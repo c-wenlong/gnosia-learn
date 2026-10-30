@@ -230,9 +230,7 @@ describe("openDraftEvents", () => {
   it("asks for what came after the record, and hands on each named event", () => {
     vi.stubGlobal("EventSource", FakeSource);
     const seen: DraftEvent[] = [];
-    const open = vi.fn();
-    const drop = vi.fn();
-    const stop = openDraftEvents("d1", 7, { onEvent: (event) => seen.push(event), onOpen: open, onDrop: drop });
+    const stop = openDraftEvents("d1", 7, { onEvent: (event) => seen.push(event) });
     const source = FakeSource.last!;
     expect(source.url).toBe("/studio/api/drafts/d1/events?after=7");
     expect([...source.listeners.keys()].sort()).toEqual(
@@ -244,8 +242,6 @@ describe("openDraftEvents", () => {
     source.emit("state", "null");
     source.onerror?.();
     expect(seen).toEqual([{ type: "delta", data: { turn: 3, text: "Hel" } }]);
-    expect(open).toHaveBeenCalledOnce();
-    expect(drop).toHaveBeenCalledOnce();
     stop();
     expect(source.closed).toBe(true);
     expect(source.listeners.size).toBe(0);

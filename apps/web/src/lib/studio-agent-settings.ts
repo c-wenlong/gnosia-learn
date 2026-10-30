@@ -58,9 +58,6 @@ export const MODEL_CHOICES: ModelChoice[] = [
   { value: "claude-sonnet-5-5", label: "Claude Sonnet 5.5", id: "claude-sonnet-5-5" },
 ];
 
-// Its own React-free module with no imports, so the video job view (a client
-// component) can name a model without pulling the schema package in with it.
-
 /**
  * `GET /api/settings/agent` (#207), read defensively: its model list and what
  * "Claude Code default" resolves to. Either is null when the runner did not
@@ -328,7 +325,7 @@ export function harnessModelOptions(
   return options;
 }
 
-export function effortLabel(effort: string): string {
+function effortLabel(effort: string): string {
   return EFFORT_LABELS[effort as keyof typeof EFFORT_LABELS] ?? effort;
 }
 

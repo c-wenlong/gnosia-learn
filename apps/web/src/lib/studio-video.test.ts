@@ -19,8 +19,6 @@ import {
   sceneTitle,
   sheetsInOrder,
   sheetSrc,
-  spokenLength,
-  formatSize,
   videoAnnouncement,
   stepRows,
   uniqueWarnings,
@@ -34,7 +32,7 @@ import {
   type VideoJob,
   type VideoStep,
 } from "./studio-video-job";
-import { chapterTitle, type VideoBrief } from "@/lib/studio-brief-video";
+import { chapterTitle, shortLength, type VideoBrief } from "@/lib/studio-brief-video";
 import { videoRowJobLabel } from "@/lib/studio-grid-jobs";
 import {
   filterVideos,
@@ -47,7 +45,7 @@ import {
 import {
   newVideoJobs,
   videoJobForSlug,
-  videoTileStage,
+  tileStage,
 } from "./studio-grid-jobs";
 import {
   parseVtt,
@@ -484,13 +482,9 @@ describe("the review", () => {
   it("says the length and how many warnings, in words", () => {
     expect(readyHeadline(job({ state: "awaiting_review", gate }))).toBe("The video is ready, 3 min 4 s, with 1 warning");
     expect(readyHeadline(job({ state: "awaiting_review", gate: { ...gate, warnings: [], durationSeconds: 58 } }))).toBe("The video is ready, 58 s");
-    expect(spokenLength(120)).toBe("2 min");
-    expect(spokenLength(null)).toBe("");
-    expect(spokenLength(-1)).toBe("");
-    expect(formatSize(640_000)).toBe("640 kB");
-    expect(formatSize(25_300_000)).toBe("25 MB");
-    expect(formatSize(null)).toBe("");
-    expect(spokenLength(null)).toBe("");
+    expect(shortLength(120)).toBe("2 min");
+    expect(shortLength(null)).toBe("");
+    expect(shortLength(-1)).toBe("");
   });
 
   it("lists each warning once, with how often it came up", () => {
@@ -592,8 +586,8 @@ describe("the grid", () => {
     const jobs = [video({ jobId: "c", slug: "landed", target: "videos/landed.mp4", state: "cancelled" }), video({ jobId: "old", slug: "landed" })];
     expect(videoJobForSlug(jobs, "landed", [], [])).toBeNull();
     expect(videoJobForSlug([video({ jobId: "c", slug: "landed", state: "awaiting_review" })], "landed", [], [])?.jobId).toBe("c");
-    expect(videoTileStage(video({ state: "awaiting_review" }))).toBe("review");
-    expect(videoTileStage(video({ state: "interrupted" }))).toBe("failed");
+    expect(tileStage(video({ state: "awaiting_review" }))).toBe("review");
+    expect(tileStage(video({ state: "interrupted" }))).toBe("failed");
   });
 
   it("reads the planned video list, and the catalog's shape too, keeping only studio videos", () => {

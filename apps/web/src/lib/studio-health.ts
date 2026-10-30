@@ -65,7 +65,7 @@ function toolchainStopOf(raw: unknown): { jobId: string; at: string; detail: str
 }
 
 /** Health's `video.tools`, keeping only well-formed entries for tools the web app knows. */
-export function videoTools(raw: unknown): VideoToolOption[] {
+function videoTools(raw: unknown): VideoToolOption[] {
   if (!Array.isArray(raw)) return [];
   return raw.flatMap((entry): VideoToolOption[] => {
     if (typeof entry !== "object" || entry === null) return [];

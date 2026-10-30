@@ -145,10 +145,6 @@ export function newVideoJobs(
   return untiledJobs(videoJobs(jobs), (job) => existingSlugs.has(job.slug), ended, dismissed);
 }
 
-/** The video tile's names for the shared rules, kept for the video view's imports. */
-export type VideoTileStage = TileStage;
-export const videoTileStage: (job: Pick<VideoJob, "state">) => TileStage = tileStage;
-
 /**
  * The loader's headline: what the job is doing, in sentence case.
  *
@@ -223,23 +219,13 @@ export function videoRowJobLabel(job: VideoJob, title: string): string {
  */
 export const LIVE_POLL_MS = 3_000;
 
-/** The newest picture the agent took, through the studio's proxy. */
-export function liveShotHref(jobId: string): string {
-  return jobShotHref(jobId, "live");
-}
-
 /**
  * The live picture's URL for a job, or null for any job that is not a
  * diagram's: the only way the tile builds that URL, so a video job (whose
  * `shot?which=live` is a 404) never asks for it.
  */
 export function liveShotFor(job: Pick<Job, "jobId" | "kind">): string | null {
-  return isDiagramJob(job) ? liveShotHref(job.jobId) : null;
-}
-
-/** The candidate as the gate photographed it: the picture a finished card shows. */
-export function afterShotHref(jobId: string): string {
-  return jobShotHref(jobId, "after");
+  return isDiagramJob(job) ? jobShotHref(job.jobId, "live") : null;
 }
 
 /** Whether the tile should be asking for a newer picture. */

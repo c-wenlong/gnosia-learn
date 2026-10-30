@@ -71,7 +71,7 @@ export function IndeterminateBar() {
  * was stopped or put away, and the accent, breathing, while it is queued or
  * running.
  */
-export function jobDotTone(state: Job["state"]): string {
+function jobDotTone(state: Job["state"]): string {
   switch (state) {
     case "failed":
     case "interrupted":

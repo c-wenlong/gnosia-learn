@@ -11,6 +11,8 @@
  * `asRefusal`. No React, and nothing here runs at import time.
  */
 
+import { randomToken } from "@/lib/random-token";
+
 /**
  * What the app says when the runner does not answer: the studio proxy's 502
  * when nothing listens on the runner's port, and this file's own status 0
@@ -60,11 +62,7 @@ export function draftPath(draftId: string, rest = ""): string {
 
 /** A key a retried POST can be recognised by. The runner answers 200 with the first result. */
 export function idempotencyKey(prefix: string): string {
-  const random =
-    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-      ? crypto.randomUUID()
-      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-  return `studio-ui:${prefix}:${random}`;
+  return `studio-ui:${prefix}:${randomToken()}`;
 }
 
 /** The runner's `{ error, detail }` envelope from an answer's body, with `detail` kept as it came. */

@@ -1,7 +1,8 @@
 import Link from "next/link";
 
 import { FadeImg } from "@/components/studio/motion-parts";
-import { missingShotReason, shotSrc, type Comparison } from "@/lib/studio-compare";
+import { missingShotReason, type Comparison } from "@/lib/studio-compare";
+import { jobShotHref } from "@/lib/studio-jobs";
 import { panelHref } from "@/lib/studio-url";
 
 /**
@@ -88,7 +89,7 @@ export function ShotView({
       <div className="min-h-0 flex-1 overflow-auto bg-surface p-4">
         {missing === null ? (
           <FadeImg
-            src={shotSrc(jobId, which)}
+            src={jobShotHref(jobId, which)}
             alt={`${label}: ${title}`}
             className="mx-auto max-h-full max-w-full object-contain"
           />

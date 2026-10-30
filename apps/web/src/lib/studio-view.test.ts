@@ -28,7 +28,6 @@ import {
 import {
   displayTitle,
   filterDiagrams,
-  formatBytes,
   freshness,
   groupDiagrams,
   showsKind,
@@ -345,16 +344,6 @@ describe("the words", () => {
     ["missing", "No SVG", "warn"],
   ] as const)("reads %s as %s", (state, label, tone) => {
     expect(freshness(state)).toMatchObject({ label, tone });
-  });
-
-  it.each([
-    [null, null],
-    [512, "512 B"],
-    // Decimal, as the comparison panel and the library size the same file.
-    [213_962, "214 kB"],
-    [3_500_000, "3.5 MB"],
-  ])("formats %s bytes as %s", (bytes, expected) => {
-    expect(formatBytes(bytes)).toBe(expected);
   });
 });
 
