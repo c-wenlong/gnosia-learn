@@ -81,13 +81,14 @@ vi.mock("@/lib/auth/session", async (importOriginal) => ({
   isSignedIn: async () => true,
 }));
 vi.mock("@/lib/learner-store", () => ({ catalogDatabase: async () => ({}) }));
-vi.mock("@gnosia/catalog/state", () => ({
+vi.mock("@gnosia/catalog/state", async (importOriginal) => ({
+  classifyConnectionFailure: (await importOriginal<typeof import("@gnosia/catalog/state")>()).classifyConnectionFailure,
   contentOwnership: () => catalog.ownership(),
   dbSource: () => rowsSource,
 }));
 
 const { getCourse, getCourses } = await import("@/data/courses");
-const { ContentUnavailableError, contentSource } = await import("@/data/source");
+const { ContentUnavailableError, contentSource, unlessUnreachable } = await import("@/data/source");
 const { getTags } = await import("@/data/content");
 const { getTopics } = await import("@/data/topics");
 
@@ -180,6 +181,43 @@ describe("a type the database does not own", () => {
     } finally {
       delete process.env.CONTENT_SOURCE;
     }
+  });
+});
+
+describe("unlessUnreachable", () => {
+  it("turns an outage into null, so a page can say so in its own words", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      catalog.ownership = async () => {
+        throw Object.assign(new Error("unable to open database file"), { code: "SQLITE_CANTOPEN" });
+      };
+      await expect(inRequest(() => unlessUnreachable(getCourses()))).resolves.toBeNull();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("still throws a schema error, which the seam also calls unreachable", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      catalog.ownership = async () => {
+        throw new Error("no such table: content_source");
+      };
+      await expect(inRequest(() => unlessUnreachable(getCourses()))).rejects.toMatchObject({ reason: "unreachable" });
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("still throws a type nobody flipped, and any other failure", async () => {
+    catalog.ownership = async () => ({ ...ALL_DB, courses: "files" });
+    await expect(inRequest(() => unlessUnreachable(getCourses()))).rejects.toMatchObject({ reason: "not-flipped" });
+    await expect(unlessUnreachable(Promise.reject(new Error("no such column")))).rejects.toThrow("no such column");
+  });
+
+  it("passes a read that answered through", async () => {
+    const courses = await inRequest(() => unlessUnreachable(getCourses()));
+    expect(courses?.map((c) => c.code)).toContain("CS2111");
   });
 });
 
