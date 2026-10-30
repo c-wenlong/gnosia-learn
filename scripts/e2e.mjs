@@ -404,7 +404,8 @@ function sidebarSettled(page) {
 
 /**
  * Press a button by its label, or send a key, from inside the page, and read
- * the sidebar's box, visibility and focus on every frame for `ms` after it.
+ * the sidebar's box, visibility, focus and a destination label's opacity on
+ * every frame for `ms` after it.
  * A frame between the two ends is how a transition is told from a jump. The
  * press is the page's own rather than the mouse's, because a pointer resting
  * on the folded rail slides it out.
@@ -413,9 +414,16 @@ function pressAndWatch(page, press, ms = 700) {
   return page.evaluate(
     async ({ press, ms }) => {
       const nav = document.getElementById('app-sidebar');
+      const label = [...nav.querySelectorAll('a[href="/library"] span')].find((s) => s.textContent === 'Library');
       const read = () => {
         const box = nav.getBoundingClientRect();
-        return { left: box.left, width: box.width, visibility: getComputedStyle(nav).visibility, focusInside: nav.contains(document.activeElement) };
+        return {
+          left: box.left,
+          width: box.width,
+          visibility: getComputedStyle(nav).visibility,
+          focusInside: nav.contains(document.activeElement),
+          labelOpacity: label ? Number(getComputedStyle(label).opacity) : null,
+        };
       };
       if (press.key) window.dispatchEvent(new KeyboardEvent('keydown', { key: press.key, bubbles: true }));
       else document.querySelector(`button[aria-label="${press.label}"]`).click();
@@ -1625,14 +1633,16 @@ async function run() {
     await page.keyboard.press('Escape');
     await menu.waitFor({ state: 'hidden' });
 
-    // Under reduced motion it unfolds at once: no frame between, the labels already shown.
+    // Under reduced motion it unfolds at once: no frame between, and the label
+    // already shown on the first frame at the full width. With the fade, it
+    // would still be on its 100ms delay there.
     await page.emulateMedia({ reducedMotion: 'reduce' });
     try {
       const unfolding = await pressAndWatch(page, { label: 'Expand the sidebar' }, 300);
       const between = unfolding.filter((f) => f.width > 61 && f.width < 259);
       assert(between.length === 0 && near(unfolding.at(-1).width, 260), `under reduced motion the unfold eased: widths ${went(unfolding, 'width')}`);
-      const after = await sidebarBoxes(page);
-      assert(after.labelOpacity === '1', `under reduced motion a label has opacity ${after.labelOpacity} once unfolded`);
+      const wide = unfolding.find((f) => near(f.width, 260));
+      assert(wide.labelOpacity === 1, `under reduced motion a label has opacity ${wide.labelOpacity} on the first unfolded frame`);
     } finally {
       await page.emulateMedia({ reducedMotion: null });
     }
