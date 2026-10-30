@@ -11,6 +11,7 @@ import { TutorMessage, UserMessage } from "@/components/ui/Message";
 import { ASK_START_KEY } from "@/lib/ask-core";
 import { tutorProblem } from "@/lib/tutor-errors";
 import { trimForRequest, type TutorTurn } from "@/lib/tutor-thread";
+import { takeUnanswered } from "@/components/workspace/unanswered";
 
 interface ChatReply {
   message?: { role: "assistant"; content: string };
@@ -29,7 +30,9 @@ interface ChatReply {
  * with the owner's provider keys and a link can come from anywhere. The
  * thread lives in this page's state and nowhere else: it is not saved and
  * records no mastery (H4), which the page says above the chat. A failed turn
- * stays on screen with Try again, which resends the same thread.
+ * stays on screen with Try again, which resends the same thread; a question
+ * typed instead takes the unanswered one's place. Leaving aborts the turn in
+ * flight.
  *
  * Until the browser has said which it is, it draws nothing, rather than an
  * empty chat that Start then replaces; Start and the chat each fade in, and
@@ -44,9 +47,18 @@ export function OpenTutorChat({ subject }: { subject: string }) {
   /** Null until the browser has said whether the Ask box asked for this subject. */
   const [waiting, setWaiting] = useState<boolean | null>(null);
   const started = useRef(false);
+  /**
+   * The turn in flight, aborted when the chat goes away (a new subject
+   * remounts it, and so does leaving the page), so a reply nobody will see
+   * is not paid for to the end and never lands.
+   */
+  const inflight = useRef<AbortController | null>(null);
+  useEffect(() => () => inflight.current?.abort(), []);
 
   const send = useCallback(
     async (thread: TutorTurn[]) => {
+      const controller = new AbortController();
+      inflight.current = controller;
       setBusy(true);
       setError(null);
       try {
@@ -54,17 +66,20 @@ export function OpenTutorChat({ subject }: { subject: string }) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ subject, messages: trimForRequest(thread) }),
+          signal: controller.signal,
         });
         const data = (await res.json().catch(() => ({}))) as ChatReply;
+        if (controller.signal.aborted) return;
         if (!res.ok || data.message === undefined) {
           setError(tutorProblem(res.status, data));
           return;
         }
         setTurns([...thread, { role: "assistant", content: data.message.content }]);
       } catch {
-        setError("The tutor did not answer: the server could not be reached.");
+        if (!controller.signal.aborted) setError("The tutor did not answer: the server could not be reached.");
       } finally {
-        setBusy(false);
+        if (inflight.current === controller) inflight.current = null;
+        if (!controller.signal.aborted) setBusy(false);
       }
     },
     [subject],
@@ -73,7 +88,8 @@ export function OpenTutorChat({ subject }: { subject: string }) {
   const ask = (text: string) => {
     const content = text.trim();
     if (content === "" || busy) return;
-    const thread: TutorTurn[] = [...turns, { role: "user", content }];
+    // A question after a failed one takes its place, so two learner turns never go out in a row.
+    const thread: TutorTurn[] = [...(takeUnanswered(turns)?.rest ?? turns), { role: "user", content }];
     setTurns(thread);
     setDraft("");
     void send(thread);
@@ -85,7 +101,10 @@ export function OpenTutorChat({ subject }: { subject: string }) {
     setWaiting(false);
     const opening: TutorTurn[] = [{ role: "user", content: `I want to learn about ${subject}.` }];
     setTurns(opening);
-    void send(opening);
+    // Sent from a callback, as the concept tutor's opening is: under React's
+    // development double effect the abort above runs between the two passes,
+    // and would cut a request the effect below had already sent.
+    void Promise.resolve().then(() => send(opening));
   }, [send, subject]);
 
   useEffect(() => {
