@@ -38,7 +38,15 @@ import {
   parseVerdict,
 } from "../judge";
 import { buildCheckOptionsPrompt, canWriteOptionsFor, CHECK_OPTIONS_REQUEST, parseCheckOptions } from "../check-options";
-import { checkHash, generationKey, oncePerCheck, readWrittenOptions, storeOptions } from "./check-options";
+import {
+  checkHash,
+  generationKey,
+  oncePerCheck,
+  readWrittenOptions,
+  rememberedRefusal,
+  rememberRefusal,
+  storeOptions,
+} from "./check-options";
 import {
   buildSessionQuestionPrompt,
   parseSessionQuestion,
@@ -772,6 +780,16 @@ export function validateCheckOptionsBody(body: unknown): TurnReply | null {
 }
 
 /**
+ * A failed generation's 502, remembered so the next visit within the window
+ * answers it without a model call (`rememberRefusal`). A missing key is not
+ * remembered: adding one should take effect on the next request.
+ */
+function refuseFor(key: string, refusal: TurnReply): TurnReply {
+  rememberRefusal(key, refusal);
+  return refusal;
+}
+
+/**
  * `POST /api/agent/check-options` with `{ conceptSlug, checkId }`: three
  * wrong options for one of the note's own checks, written by the tutor model
  * once and stored per learner (`check_distractor`), so the next session, week
@@ -823,7 +841,10 @@ export async function checkOptionsTurn(deps: TutorDeps, body: unknown): Promise<
     });
   }
 
-  return oncePerCheck(generationKey(deps.owner, conceptSlug, checkId, hash), async (): Promise<TurnReply> => {
+  const key = generationKey(deps.owner, conceptSlug, checkId, hash);
+  const remembered = rememberedRefusal<TurnReply>(key);
+  if (remembered !== undefined) return remembered;
+  return oncePerCheck(key, async (): Promise<TurnReply> => {
     const credentials = await credentialsOf(deps);
     const outcome = await completeWith(
       deps,
@@ -841,14 +862,17 @@ export async function checkOptionsTurn(deps: TutorDeps, body: unknown): Promise<
             attempts: outcome.attempts,
             providers: availableProviderSummary(credentials),
           })
-        : reply(502, { error: "All free providers failed", code: "ALL_PROVIDERS_FAILED", attempts: outcome.attempts });
+        : refuseFor(key, reply(502, { error: "All free providers failed", code: "ALL_PROVIDERS_FAILED", attempts: outcome.attempts }));
     }
     const parsed = parseCheckOptions(outcome.result.content, answer);
     if (!parsed.ok) {
-      return reply(502, {
-        error: `The tutor did not write usable wrong options. ${parsed.reason}`,
-        code: "UNSTRUCTURED_REPLY",
-      });
+      return refuseFor(
+        key,
+        reply(502, {
+          error: `The tutor did not write usable wrong options. ${parsed.reason}`,
+          code: "UNSTRUCTURED_REPLY",
+        }),
+      );
     }
     await storeOptions(deps.db, deps.owner, {
       conceptSlug,
