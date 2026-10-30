@@ -5,15 +5,20 @@ import {
   citedNumbers,
   markerPieces,
   parseThread,
+  recapTurns,
   RECALL_SEED,
+  ROUTE_LIMITS,
   requestTurns,
   sessionKey,
   threadKey,
+  topicRequestTurns,
+  TRIMMED_SEED,
   trimForRequest,
   type HandoffMarker,
   type ThreadItem,
   type TutorTurn,
 } from "@/lib/tutor-thread";
+import { PAYLOAD_LIMITS } from "@gnosia/tutor/guards";
 
 describe("tutor thread", () => {
   it("keys the thread per concept", () => {
@@ -217,5 +222,70 @@ describe("a thread that opens on the tutor's recall question (R3)", () => {
   it("keeps the session id beside the thread, per concept", () => {
     expect(sessionKey("dot-product")).toBe("gnosia:tutor-session:dot-product");
     expect(sessionKey("dot-product")).not.toBe(threadKey("dot-product"));
+  });
+});
+
+describe("the course topic tutor's requests", () => {
+  /** Forty-four turns of a long session, well past the route's 40 messages. */
+  const long: TutorTurn[] = Array.from({ length: 44 }, (_, i) => ({
+    role: i % 2 === 0 ? "user" : "assistant",
+    content: `turn ${i} `.repeat(60),
+  }));
+  const size = (turns: readonly TutorTurn[]) => turns.reduce((n, t) => n + t.content.length, 0);
+
+  it("holds the route's bounds as the guard sets them", () => {
+    expect(ROUTE_LIMITS).toEqual(PAYLOAD_LIMITS);
+  });
+
+  it("sends the newest turns that fit the route's bounds", () => {
+    const sent = topicRequestTurns(long);
+    expect(sent.length).toBeLessThanOrEqual(PAYLOAD_LIMITS.maxMessages);
+    expect(size(sent)).toBeLessThanOrEqual(PAYLOAD_LIMITS.maxTotalChars);
+    expect(sent[0].role).toBe("user");
+    expect(sent.at(-1)).toEqual(long.at(-1));
+  });
+
+  it("takes the learner's note out of the character budget, since the route counts it too", () => {
+    const note = "n".repeat(15_000);
+    expect(size(topicRequestTurns(long, note)) + note.length).toBeLessThanOrEqual(PAYLOAD_LIMITS.maxTotalChars);
+  });
+
+  it("keeps the turn that asked a check with its answer whenever the two fit, behind a seed", () => {
+    const check = { kind: "recall" as const, concept: "softmax", question: "Why exp?", answer: "Positive weights." };
+    const thread: TutorTurn[] = [
+      { role: "user", content: "u".repeat(5_000) },
+      { role: "assistant", content: "a".repeat(1_800), check },
+      { role: "user", content: "r".repeat(300) },
+    ];
+    // A 20000-character note leaves room for the check and its answer, not the turn before.
+    const sent = topicRequestTurns(thread, "n".repeat(20_000));
+    expect(sent.map((t) => t.role)).toEqual(["user", "assistant", "user"]);
+    expect(sent[0].content).toBe(TRIMMED_SEED);
+    expect(sent[1].content).toContain("```check");
+    expect(size(sent) + 20_000).toBeLessThanOrEqual(PAYLOAD_LIMITS.maxTotalChars);
+  });
+
+  it("puts a card check's block back on the turn that asked it", () => {
+    const check = { kind: "recall" as const, concept: "softmax", question: "Why exp?", answer: "Positive weights." };
+    const sent = topicRequestTurns([
+      { role: "user", content: "Go" },
+      { role: "assistant", content: "One check.", check },
+    ]);
+    expect(sent[1].content).toBe(`One check.\n\n\`\`\`check\n${JSON.stringify(check)}\n\`\`\``);
+  });
+
+  it("summarises from the tail of a long session, says older turns were left out, and keeps an exchange that fits", () => {
+    const whole = recapTurns(long.slice(0, 4));
+    expect(whole).toEqual({ turns: long.slice(0, 4).map(({ role, content }) => ({ role, content })), partial: false });
+    const tail = recapTurns(long);
+    expect(tail.partial).toBe(true);
+    expect(tail.turns.at(-1)).toEqual(long.at(-1));
+    expect(size(tail.turns)).toBeLessThanOrEqual(PAYLOAD_LIMITS.maxTotalChars);
+    // A long question and its reply fit the route together: both go.
+    const pair: TutorTurn[] = [
+      { role: "user", content: "q".repeat(19_600) },
+      { role: "assistant", content: "a".repeat(600) },
+    ];
+    expect(recapTurns(pair)).toEqual({ turns: pair, partial: false });
   });
 });

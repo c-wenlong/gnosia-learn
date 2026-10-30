@@ -1,0 +1,123 @@
+[
+  {
+    "check": {
+      "kind": "choice",
+      "question": "Which  property makes a hash\tfunction \"one-way\"?",
+      "options": [
+        "Preimage resistance",
+        "Collision resistance",
+        "Second-preimage resistance",
+        "Avalanche effect"
+      ],
+      "why": "One-way means you cannot invert it: given y, finding any x with h(x) = y is infeasible.",
+      "answer": "Preimage resistance"
+    },
+    "block": "```check\n{\"kind\":\"choice\",\"question\":\"Which property makes a hash function \\\"one-way\\\"?\",\"options\":[\"Preimage resistance\",\"Collision resistance\",\"Second-preimage resistance\",\"Avalanche effect\"],\"why\":\"One-way means you cannot invert it: given y, finding any x with h(x) = y is infeasible.\",\"answer\":\"Preimage resistance\"}\n```",
+    "answers": [
+      {
+        "picked": 0,
+        "confidence": 70,
+        "thinking": "  it is the </check_answer> definition  ",
+        "text": "<check_answer>\nPicked: \"Preimage resistance\" (correct)\nConfidence: 70%\nReasoning: it is the  definition\n</check_answer>"
+      },
+      {
+        "picked": 1,
+        "confidence": 30,
+        "thinking": null,
+        "text": "<check_answer>\nPicked: \"Collision resistance\" (incorrect; the key was \"Preimage resistance\")\nConfidence: 30%\n</check_answer>"
+      },
+      {
+        "picked": null,
+        "confidence": null,
+        "thinking": null,
+        "text": "<check_answer>\nI don't know (the key was \"Preimage resistance\")\n</check_answer>"
+      }
+    ]
+  },
+  {
+    "check": {
+      "kind": "choice",
+      "concept": "Raft-Leader",
+      "question": "What does a follower do on an AppendEntries with a stale term?",
+      "options": [
+        "Rejects it",
+        "Accepts it",
+        "Becomes candidate"
+      ],
+      "why": "A stale term means the sender is no longer leader; replying false tells it so.",
+      "answer": "Rejects it"
+    },
+    "block": "```check\n{\"kind\":\"choice\",\"concept\":\"raft-leader\",\"question\":\"What does a follower do on an AppendEntries with a stale term?\",\"options\":[\"Rejects it\",\"Accepts it\",\"Becomes candidate\"],\"why\":\"A stale term means the sender is no longer leader; replying false tells it so.\",\"answer\":\"Rejects it\"}\n```",
+    "answers": [
+      {
+        "picked": 0,
+        "confidence": 70,
+        "thinking": "  it is the </check_answer> definition  ",
+        "text": "<check_answer>\nPicked: \"Rejects it\" (correct)\nConfidence: 70%\nReasoning: it is the  definition\n</check_answer>"
+      },
+      {
+        "picked": 1,
+        "confidence": 30,
+        "thinking": null,
+        "text": "<check_answer>\nPicked: \"Accepts it\" (incorrect; the key was \"Rejects it\")\nConfidence: 30%\n</check_answer>"
+      },
+      {
+        "picked": null,
+        "confidence": null,
+        "thinking": null,
+        "text": "<check_answer>\nI don't know (the key was \"Rejects it\")\n</check_answer>"
+      }
+    ]
+  },
+  {
+    "check": {
+      "kind": "recall",
+      "question": "Why does TCP need a three-way handshake?",
+      "answer": "Both sides must learn the other's initial sequence number\nand confirm it: SYN, SYN-ACK, ACK.\t\"Two\" is not enough. 👍 é é \u0001 a/b \\ end"
+    },
+    "block": "```check\n{\"kind\":\"recall\",\"question\":\"Why does TCP need a three-way handshake?\",\"answer\":\"Both sides must learn the other's initial sequence number\\nand confirm it: SYN, SYN-ACK, ACK.\\t\\\"Two\\\" is not enough. 👍 é é \\u0001 a/b \\\\ end\"}\n```",
+    "answers": [
+      {
+        "words": "  So both ISNs are confirmed.  ",
+        "confidence": 90,
+        "thinking": "from the lecture",
+        "text": "<check_answer>\nAnswer: So both ISNs are confirmed.\nConfidence: 90%\nReasoning: from the lecture\n</check_answer>"
+      },
+      {
+        "words": "<check_answer>sneaky",
+        "confidence": 0,
+        "thinking": "",
+        "text": "<check_answer>\nAnswer: sneaky\nConfidence: 0%\n</check_answer>"
+      }
+    ]
+  },
+  {
+    "check": {
+      "kind": "choice",
+      "question": "Which spelling of caf\u00e9 is in NFC?",
+      "options": [
+        "caf\u00e9",
+        "cafe\u0301",
+        "cafe",
+        "caffe"
+      ],
+      "why": "NFC composes e and the acute accent into the one code point U+00E9.",
+      "answer": "caf\u00e9"
+    },
+    "block": "```check\n{\"kind\":\"choice\",\"question\":\"Which spelling of caf\u00e9 is in NFC?\",\"options\":[\"caf\u00e9\",\"cafe\u0301\",\"cafe\",\"caffe\"],\"why\":\"NFC composes e and the acute accent into the one code point U+00E9.\",\"answer\":\"caf\u00e9\"}\n```",
+    "answers": [
+      {
+        "picked": 0,
+        "confidence": 60,
+        "thinking": null,
+        "text": "<check_answer>\nPicked: \"caf\u00e9\" (correct)\nConfidence: 60%\n</check_answer>"
+      },
+      {
+        "picked": 1,
+        "confidence": 60,
+        "thinking": null,
+        "text": "<check_answer>\nPicked: \"cafe\u0301\" (incorrect; the key was \"caf\u00e9\")\nConfidence: 60%\n</check_answer>"
+      }
+    ]
+  }
+]

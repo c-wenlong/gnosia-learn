@@ -158,6 +158,10 @@ export function AssetBody({
   const words = asset.path?.endsWith(".md") ? (
     <NoteProse
       source={text}
+      // A session log is mostly the tutor's words: a markdown image in one is
+      // a link, so a model's reply cannot make the browser fetch a URL by
+      // being shown. A note's author put its pictures there.
+      images={asset.kind === "note" ? "show" : "link"}
       // A wikilink carries a slug and a note's id carries its domain folder
       // too, so the index built alongside the row is what closes that gap. An
       // unresolved slug stays readable text.

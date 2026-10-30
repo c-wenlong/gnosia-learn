@@ -1,6 +1,7 @@
 import { createApi } from "./api";
 import { HOST, port } from "./config";
 import { tutorDeps } from "./deps";
+import { loadSidecarEnv } from "./env";
 
 /**
  * `npm run sidecar`: the process.
@@ -12,6 +13,9 @@ import { tutorDeps } from "./deps";
  * else about startup goes to stderr.
  */
 async function main(): Promise<void> {
+  // The web's environment first (AUTH_SECRET above all, which opens the
+  // saved provider keys), so the deps below read what the web reads.
+  await loadSidecarEnv();
   const runtime = tutorDeps();
   const server = createApi(runtime.deps);
   const listenPort = port();

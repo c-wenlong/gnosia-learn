@@ -14,6 +14,7 @@ const env = vi.hoisted(() => ({
   cookies: new Map<string, string>(),
   stored: null as string | null,
   asked: 0,
+  nonce: null as string | null,
   theme: "light",
   reachable: true,
   studio: false,
@@ -23,6 +24,7 @@ const env = vi.hoisted(() => ({
 
 vi.mock("next/headers", () => ({
   cookies: async () => ({ get: (name: string) => (env.cookies.has(name) ? { value: env.cookies.get(name) } : undefined) }),
+  headers: async () => new Headers(env.nonce === null ? {} : { "x-nonce": env.nonce }),
 }));
 vi.mock("@/lib/auth/session", () => ({ requireSignedIn: async () => undefined }));
 vi.mock("@/lib/learner-store", () => ({
@@ -63,6 +65,7 @@ beforeEach(() => {
   env.cookies.clear();
   env.stored = null;
   env.asked = 0;
+  env.nonce = null;
   env.theme = "light";
   env.reachable = true;
   env.studio = false;
@@ -77,6 +80,12 @@ describe("the (app) layout's motion seed", () => {
     expect(html.indexOf('dataset.motion="reduce"')).toBeGreaterThanOrEqual(0);
     expect(html.indexOf('dataset.motion="reduce"')).toBeLessThan(html.indexOf("page"));
     expect(html).toContain('data-seed="always"');
+  });
+
+  it("stamps the request's CSP nonce on the motion script, so the page policy lets it run", async () => {
+    env.stored = "always";
+    env.nonce = "abc123";
+    expect(await render()).toMatch(/<script nonce="abc123">[^<]*dataset\.motion="reduce"/);
   });
 
   it("seeds a stored system without a script", async () => {

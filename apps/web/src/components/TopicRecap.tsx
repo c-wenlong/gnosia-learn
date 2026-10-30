@@ -46,8 +46,9 @@ function RecapSection({ label, items }: { label: string; items: string[] }) {
     <div>
       <p className={LABEL}>{label}</p>
       <ul className="mt-1 list-disc space-y-1 pl-5 text-[14px] text-text2">
-        {items.map((item) => (
-          <li key={item}>{item}</li>
+        {items.map((item, index) => (
+          // Two lines may read the same; the position tells them apart.
+          <li key={`${index}-${item}`}>{item}</li>
         ))}
       </ul>
     </div>

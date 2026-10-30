@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { isConceptSlug } from "@/lib/concept-workspace-core";
 import { readConceptWorkspace } from "@/lib/concept-workspace";
+import { refuseWithoutOwner } from "@/lib/learner-api";
 
 export const runtime = "nodejs";
 
@@ -16,6 +17,8 @@ export const runtime = "nodejs";
  * is not an error: `note.available` is false and says why.
  */
 export async function GET(_req: Request, { params }: { params: Promise<{ slug: string }> }) {
+  const anonymous = await refuseWithoutOwner();
+  if (anonymous !== null) return anonymous;
   const { slug } = await params;
   if (!isConceptSlug(slug)) {
     return NextResponse.json({ error: "Not a concept id", code: "BAD_CONCEPT_SLUG" }, { status: 400 });
