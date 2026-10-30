@@ -17,6 +17,7 @@ import {
   catalogErrorLine,
   countRows,
   emptyLintLine,
+  gitAddLine,
   lintLine,
   missingShotReason,
   shotSrc,
@@ -177,8 +178,9 @@ export function ComparisonPanel({ job, path }: { job: Job; path: string }) {
  *
  * What landed (the diagram's logical names, stored in the database since
  * Track D of docs/CONTENT-MIGRATION.md). Whether the job row recorded it,
- * which is a banner with Reindex when it did not. Nothing to commit: since
- * the cut-over a put writes rows and a blob, no file in the tree.
+ * which is a banner with Reindex when it did not. And a `git add` line only
+ * for the files the put also wrote into the tree while the files still owned
+ * diagrams; after the flip there are none and nothing to commit.
  */
 function Accepted({
   job,
@@ -189,6 +191,7 @@ function Accepted({
   busy: boolean;
   onReindex: () => void;
 }) {
+  const line = gitAddLine(job.files ?? []);
   const lastCatalogError = catalogErrorLine(job.catalogErrors);
   return (
     <div className="mb-3 space-y-2">
@@ -220,6 +223,21 @@ function Accepted({
             </p>
           )}
         </Callout>
+      )}
+
+      {line !== null && (
+        <div className="rounded-md border border-border bg-surface p-2 text-xs">
+          <p className="text-text2">
+            The files still own diagrams until the flip, so the accept wrote these too.
+            Committing them is yours: the studio never runs <Mono>git add</Mono>.
+          </p>
+          {/* Wrapped, not scrolled. Two repo-relative paths do not fit a 320px
+              column, and a line that runs off the edge is one a person copies
+              half of — which is the one mistake this box exists to prevent. */}
+          <pre className="mt-1.5 rounded-md bg-surface2 p-2 font-mono text-xs break-all whitespace-pre-wrap text-text">
+            {line}
+          </pre>
+        </div>
       )}
     </div>
   );

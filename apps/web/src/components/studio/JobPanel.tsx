@@ -241,7 +241,7 @@ function DiagramJobPanel({
       {/* The comparison replaces nothing: it goes above the phase list, which
           is still how a person checks what the job actually did on its way
           here. `accepted` keeps it too: after an accept it is the record of
-          what was compared. */}
+          what was compared, and the `git add` line lives in it. */}
       {reviewing && <ComparisonPanel job={job} path={path} />}
       {job.state === "discarded" && (
         <div className="mb-3 rounded-md border border-border bg-surface2 p-2 text-xs text-text2">

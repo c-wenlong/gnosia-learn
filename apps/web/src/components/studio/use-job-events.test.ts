@@ -118,9 +118,13 @@ describe("useJobEventStream", () => {
   it("closes a finished job's stream after its replay", () => {
     vi.useFakeTimers();
     mount({ jobId: "j1", closeAfterMs: 3_000 });
+    act(() => FakeSource.made[0]!.onopen?.());
     act(() => vi.advanceTimersByTime(2_999));
     expect(FakeSource.made[0]!.closed).toBe(false);
+    expect(seen.open).toBe(true);
     act(() => vi.advanceTimersByTime(1));
     expect(FakeSource.made[0]!.closed).toBe(true);
+    // A closed stream is not live.
+    expect(seen.open).toBe(false);
   });
 });

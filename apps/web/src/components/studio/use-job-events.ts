@@ -73,7 +73,13 @@ export function useJobEventStream(
       listener.current?.(event);
     };
     for (const type of JOB_EVENT_TYPES) source.addEventListener(type, receive as EventListener);
-    const closer = closeAfterMs === undefined ? null : setTimeout(() => source.close(), closeAfterMs);
+    const closer =
+      closeAfterMs === undefined
+        ? null
+        : setTimeout(() => {
+            source.close();
+            setLiveFor((held) => (held === job ? null : held));
+          }, closeAfterMs);
 
     return () => {
       if (closer !== null) clearTimeout(closer);
