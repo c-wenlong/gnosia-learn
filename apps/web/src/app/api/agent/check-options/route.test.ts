@@ -1,3 +1,4 @@
+import { NextResponse } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ConceptWorkspace } from "@gnosia/tutor/concept-workspace-core";
@@ -110,6 +111,20 @@ describe("POST /api/agent/check-options", () => {
     readConceptWorkspace.mockResolvedValue({ state: "ok", workspace });
     readTutorStyle.mockResolvedValue("guide-concise");
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
+  });
+
+  it("answers a request with no session as a 401 before reading anything", async () => {
+    signedIn.value = false;
+    expect((await call({ conceptSlug: "dot-product", checkId: "c1" })).status).toBe(401);
+    expect(readConceptWorkspace).not.toHaveBeenCalled();
+  });
+
+  it("answers a 429 once the owner's window is spent, before any read", async () => {
+    enforceRateLimit.mockReturnValueOnce(NextResponse.json({ code: "RATE_LIMITED" }, { status: 429 }));
+    const { status, json } = await call({ conceptSlug: "dot-product", checkId: "c1" });
+    expect(status).toBe(429);
+    expect(json.code).toBe("RATE_LIMITED");
+    expect(readConceptWorkspace).not.toHaveBeenCalled();
   });
 
   it("refuses a body past its byte limit with a 413, before the limiter or any read", async () => {

@@ -65,7 +65,7 @@ function post(body: unknown): Request {
       "content-type": "application/json",
       origin: ORIGIN,
       host: "localhost:3000",
-      // A fresh client per request, so the rate limit never trips across tests.
+      // Inert: the limiter is keyed by owner, not by this header.
       "x-forwarded-for": `10.0.0.${ip}`,
     },
     body: typeof body === "string" ? body : JSON.stringify(body),
