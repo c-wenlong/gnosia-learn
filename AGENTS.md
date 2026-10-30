@@ -21,7 +21,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 | [seed/README.md](seed/README.md) | The export format (the layout `catalog export` writes and `catalog import` reads), and the seed, which is all the content a fresh clone has |
 | [seed/COURSES.md](seed/COURSES.md) | The course YAML of the export format: the shape of a file and what the reader refuses |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | How production deploys, secrets, the Vercel CLI |
-| [docs/HOMESERVER.md](docs/HOMESERVER.md) | Running the app on an Ubuntu homeserver behind Tailscale with a copy of the laptop's data: the dump and restore, the blob store re-claim, the two env files, systemd units for the app, the studio (diagrams only, V4) and the nightly export. Decisions S1 to S7. Written for Postgres: its database steps (a `postgres:17` container, `pg_dump` and `pg_restore`) predate [docs/SQLITE-MIGRATION.md](docs/SQLITE-MIGRATION.md), where the database is one file |
+| [docs/HOMESERVER.md](docs/HOMESERVER.md) | Running the app on an Ubuntu homeserver behind Tailscale with a copy of the laptop's data: the catalog file copied with SQLite's backup API, the blob store re-claimed, the two env files, systemd units for the app, the studio (diagrams only, V4) and the nightly export. Decisions S1 to S7 |
 | [docs/BYOK.md](docs/BYOK.md) | Bring your own key: the owner's model provider keys, saved in Settings and stored AES-256-GCM encrypted in `provider_key` under a key derived from `AUTH_SECRET`, with the env keys as the fallback. The decisions, the threat model, rotation, and what is out of scope |
 | [docs/TUTOR-MODELS.md](docs/TUTOR-MODELS.md) | The tutor's model chain: the owner's ordered provider and model list in `tutor_model`, edited in Settings' Providers card (each provider's key and its models together), tried top to bottom, with the built-in defaults when there is none, a per-call limit and a turn deadline. Decisions T1 to T11 |
 | [docs/CURRICULUM.md](docs/CURRICULUM.md) | Editing course data without breaking learner state |
@@ -1145,8 +1145,8 @@ not have to be worked out again.
   every video, sidecar, poster and diagram SVG, and until the cut-over
   `migrate` held it back on a database whose renders were never uploaded,
   since its guard would have rolled back the whole run. The SQLite journal
-  (`services/catalog/drizzle-sqlite/meta/_journal.json`) has two entries, and
-  the first, `0000_majestic_ronan`, carries the contract as a check from the
+  (`services/catalog/drizzle-sqlite/meta/_journal.json`) starts at
+  `0000_majestic_ronan`, which carries the contract as a check from the
   start (`asset_stored_blob_check`), so a fresh file has nothing to hold back.
   A Postgres database that never went through flip day still holds rows that
   check forbids, and `services/catalog/scripts/pg-to-sqlite.mjs` migrates its
@@ -1169,9 +1169,9 @@ not have to be worked out again.
   refuses with `MigrationSkipped` naming it rather than report success. Change
   `packages/schema/src/`, then `npm run generate -w @gnosia/catalog`, which
   writes into `drizzle-sqlite/` (`services/catalog/drizzle.config.ts`). The
-  old `services/catalog/drizzle/` folder is the Postgres journal, kept only
-  for the port script's reference (docs/SQLITE-MIGRATION.md); nothing applies
-  it.
+  old `services/catalog/drizzle/` folder is the Postgres journal, kept as a
+  reference for porting an old database (docs/SQLITE-MIGRATION.md); nothing
+  applies it, and the port script migrates its target from `drizzle-sqlite/`.
 - **`learn/state/` is gone, and `learn` needs the catalog.** `events.jsonl`,
   `model.json` and `reviews.json` are the `event`, `mastery` and `review`
   tables; `index.json` is a query. `npm run learn -- status` fails when it
@@ -1409,7 +1409,7 @@ not have to be worked out again.
   `/studio/api/*` to the runner through `rewrites()` forwards `Origin`
   verbatim, and the runner's own guard then answers every POST with 403,
   because a transparent proxy is byte-identical to the page behind it.
-  `apps/web/src/app/studio/api/[...segments]/route.ts` is a route handler for
+  `apps/web/src/app/(app)/studio/api/[...segments]/route.ts` is a route handler for
   two reasons together: it is the only form that can strip `Origin`,
   `Sec-Fetch-*`, `Cookie` and `Host` before forwarding, and the only form that
   can read `STUDIO_ENABLED` at request time, since `rewrites()` is evaluated

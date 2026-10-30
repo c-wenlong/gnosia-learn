@@ -58,7 +58,7 @@ fact stated in one is cross-referenced rather than repeated in the others.
 
 | Layer | Where | What it owns |
 | --- | --- | --- |
-| UI | `apps/web/src/app/studio/` | The conversation with the person: the grid, the inspector, the brief form, the job panel, the accept screen. Holds no job state of its own |
+| UI | `apps/web/src/app/(app)/studio/` | The conversation with the person: the grid, the inspector, the brief form, the job panel, the accept screen. Holds no job state of its own |
 | API | `services/studio/src/api.ts` | HTTP on `127.0.0.1:7250`. JSON in, JSON out, plus one SSE stream per job |
 | Runner | `services/studio/src/diagram/` | Jobs, one runner per generator kind it drives — the diagrams runner is what phases 0 to 4 build. Spawns the agent, constrains it, supervises it, checks its work, records what happened. Never draws. See D25 |
 | Agent | a headless `claude -p` session | The drawing. Writes snippets, runs the draw-look-fix loop, reads its own screenshots. The only model call in the system |
@@ -85,7 +85,7 @@ flowchart TB
         CAND["jobs/id/candidate/"]
         COMM["work/ checkouts"]
     end
-    CAT[("postgres<br/>diagram, asset, asset_job, job<br/>plus the SVG blob")]
+    CAT[("catalog, one SQLite file<br/>diagram, asset, asset_job, job<br/>plus the SVG blob")]
     TK["tools/tldrawkc<br/>npm run --silent canvas"]
 
     UI -- "/studio/api/* rewrite" --> API
@@ -139,7 +139,8 @@ test where a grep test is possible, a named reviewer check where it is not.
    [CONTENT-MIGRATION.md](CONTENT-MIGRATION.md).)
 7. **The disk record is written before the database row.**
    `jobs/<id>/session.ndjson` and `jobs/<id>/job.json` are the write-ahead log;
-   Postgres is the query surface. See D3 below.
+   the catalog (one SQLite file since
+   [SQLITE-MIGRATION.md](SQLITE-MIGRATION.md)) is the query surface. See D3 below.
 8. **Progress is a cache, never the record.** Every SSE event is appended to the
    ndjson before it is pushed. A UI that never connects to the stream shows the
    right thing from `GET /api/jobs/{id}`.
@@ -155,7 +156,11 @@ test where a grep test is possible, a named reviewer check where it is not.
 ## The schema
 
 Three new tables and one changed column, as migration `0006`, plus one column
-added by migration `0007`. Nothing else in the catalog moves.
+added by migration `0007`. Nothing else in the catalog moves. Those numbers are
+the Postgres journal's (`services/catalog/drizzle/`, kept for reference and
+applied by nothing); on SQLite these tables are part of the first migration,
+[`0000_majestic_ronan.sql`](../services/catalog/drizzle-sqlite/0000_majestic_ronan.sql),
+which carries the whole schema as it stood at the move.
 
 `0007` adds `job.cost_source`, which says whether `cost_usd` is the agent's own
 `total_cost_usd` or the runner's accumulation from the stream. Phase 7 is why,
@@ -183,10 +188,16 @@ What this deliberately leaves alone:
 
 | Table | New or changed | Columns that carry meaning |
 | --- | --- | --- |
-| `session` | New | `id` PK (text, minted by the caller), `kind` (`tutor`\|`studio`), `learner_id` FK, `state`, `title`, `goal`, `agent_session_id` (the headless session, for resume), `log_asset_id` FK nullable, `started_at`, `ended_at`, `heartbeat_at`, `error_kind`, `error`, `metadata` jsonb |
-| `job` | New | `id` PK, `kind` (`diagram` today), `session_id` FK nullable, `parent_job_id` FK nullable, `state`, `phase`, `topic_slug` FK not null, `target_path`, `candidate_path`, `target_hash_before`, `brief` jsonb, `gate` jsonb, `idempotency_key` unique, `attempt`, `requested_at`, `started_at`, `finished_at`, `reviewed_at`, `heartbeat_at`, `cancel_requested_at`, `runner`, `runner_job_id`, `exit_code`, `turns`, `cost_usd`, `cost_source`, `error_kind`, `error`, `error_detail` jsonb |
+| `session` | New | `id` PK (text, minted by the caller), `kind` (`tutor`\|`studio`), `learner_id` FK, `state`, `title`, `goal`, `agent_session_id` (the headless session, for resume), `log_asset_id` FK nullable, `started_at`, `ended_at`, `heartbeat_at`, `error_kind`, `error`, `metadata` JSON |
+| `job` | New | `id` PK, `kind` (`diagram` today), `session_id` FK nullable, `parent_job_id` FK nullable, `state`, `phase`, `topic_slug` FK not null, `target_path`, `candidate_path`, `target_hash_before`, `brief` JSON, `gate` JSON, `idempotency_key` unique, `attempt`, `requested_at`, `started_at`, `finished_at`, `reviewed_at`, `heartbeat_at`, `cancel_requested_at`, `runner`, `runner_job_id`, `exit_code`, `turns`, `cost_usd`, `cost_source`, `error_kind`, `error`, `error_detail` JSON |
 | `asset_job` | New | `asset_id` PK FK, `job_id` PK FK, `content_hash` (what the job wrote), `bytes`, `written_at` |
 | `event` | Changed | `session_id` becomes a foreign key to `session(id)`, `ON DELETE RESTRICT ON UPDATE CASCADE`. The column, its type and its index are unchanged |
+
+The JSON columns were `jsonb` on Postgres. On SQLite each is JSON text that the
+driver hands back parsed, with a `CHECK` that it holds an object, and every
+`_at` column is an epoch-millisecond integer
+([`packages/schema/src/studio.ts`](../packages/schema/src/studio.ts),
+[`packages/schema/src/columns.ts`](../packages/schema/src/columns.ts)).
 
 `target_path` is the diagram's logical name, `learn/assets/<slug>.tldr`, which
 is also the lease key. It is a name and not a file: the diagram is its row,
@@ -397,7 +408,7 @@ browser on this machine.
 | `POST` | `/api/jobs/{id}/revise` | Continue the stored session with a change request | `{ changes }` | `{ jobId, state: "queued", mode, resuming }` |
 | `POST` | `/api/jobs/{id}/resume` | Continue an `interrupted` job's session, with nothing to change | none | `{ jobId, state: "queued", parentJob, mode, resuming }` |
 
-| `GET` | `/api/health` | What is and is not working right now, from the last answer each check gave: it waits on no subprocess once each has answered once (`services/studio/src/probes/health-probes.ts`), and `freshness` says when each was checked and whether a refresh is under way | none | `{ ok, tldrawkc, chromium, claude, postgres, vocabulary: { readAt, stale, error? }, queueDepth, costLast24h, dailyCap, freshness: { tldrawkc, claude, postgres, agent: { checkedAt, stale, refreshing } } }` |
+| `GET` | `/api/health` | What is and is not working right now, from the last answer each check gave: it waits on no subprocess once each has answered once (`services/studio/src/probes/health-probes.ts`), and `freshness` says when each was checked and whether a refresh is under way | none | `{ ok, tldrawkc, chromium, claude, postgres, vocabulary: { readAt, stale, error? }, queueDepth, costLast24h, dailyCap, freshness: { tldrawkc, claude, postgres, agent: { checkedAt, stale, refreshing } } }`. `postgres` keeps its name from before the SQLite move and means `catalog status` answered ok ([`api.ts`](../services/studio/src/api.ts)) |
 | `POST` | `/api/mirrors` | Open a human canvas on one file | `{ file }` | `{ file, url, port }` |
 | `DELETE` | `/api/mirrors` | Close one | `?file=…` | `{ closed: true }` |
 | `GET` | `/api/mirrors` | What is open, and whether each is answering | `?file=…` to poll and touch one | `{ mirrors: [{ file, url, port, startedAt, lastSeenAt, healthy }] }` |
@@ -652,7 +663,7 @@ Each with the reason it exists.
   stateless commands, no daemon), and one job is four or more of them at a
   1904 px viewport and pixel ratio 2. A `STUDIO_CONCURRENCY` knob exists,
   defaults to 1 and is capped at 2.
-- **Job state is the ndjson plus `job.json` on disk, mirrored into Postgres.**
+- **Job state is the ndjson plus `job.json` on disk, mirrored into the catalog.**
   D3 says which is which.
 
 ### The gate
@@ -824,7 +835,7 @@ models: the pill goes stale and one click on Export SVG fixes it. The one thing
 the runner keeps for that window is the previous `target.tldr` hash in
 `job.target_hash_before`, so the panel can say which version is on disk.
 
-Step 5 is the only step that needs Postgres. With the database down, steps 1 to
+Step 5 is the only step that needs the catalog. With the database down, steps 1 to
 4 still run and the job lands as `accepted` with `indexed: false` and the
 reason, which the UI surfaces as a Reindex button. The files are the output; the
 index is derived.
@@ -832,7 +843,7 @@ index is derived.
 **That button is `POST /api/jobs/{id}/reindex`, and it is not optional.**
 `accepted` is terminal, so once the files have moved and the record says so, a
 second Accept is refused by the state machine and the provenance is lost until
-somebody opens psql. The route re-runs step 5 alone, against the paths the
+somebody edits the database by hand. The route re-runs step 5 alone, against the paths the
 record says it landed. It is safe to repeat: `assert-output` upserts, the
 catalog's own row is still `awaiting_review` because `job accept` is what moves
 it, and `runAccept` counts `asset_job` rows rather than requiring `--path` for
@@ -972,7 +983,8 @@ onboarding tours, and anything that assumes a second person can see the screen.
 The studio keeps the app's shell so it reads as a sibling. Three regions.
 
 - **Left rail.** The existing
-  [`Sidebar`](../apps/web/src/components/Sidebar.tsx), 288px, fixed, its own
+  `Sidebar` (since replaced by
+  [`AppSidebar`](../apps/web/src/components/shell/AppSidebar.tsx)), 288px, fixed, its own
   scroll, static at `lg` and an overlay below that. One entry is added, Studio,
   under Navigate beside Knowledge base. No second rail anywhere.
 - **Main area.** The existing
@@ -1012,7 +1024,7 @@ until it is dismissed. Without that, a job that fails leaves nothing on screen
 saying so, because the row vanishes and the reason lives in a panel nobody has
 open. It persists across both screens, because a job started from the canvas must
 still be visible after navigating back; the provider behind it is mounted in
-`apps/web/src/app/studio/layout.tsx`, which is what survives a navigation. Left to
+`apps/web/src/app/(app)/studio/layout.tsx`, which is what survives a navigation. Left to
 right: a status dot, the diagram name, the phase in words, `step 4 of 7`, elapsed
 counting up, an indeterminate bar, `polling` when the event stream is not
 connected, and Cancel. The whole strip opens the job in the right panel. No
@@ -1024,7 +1036,7 @@ Route `/studio`, beside `/library` and **not a second view of it**. The two
 cannot share a data source and should not: `/library` reads the `asset` table,
 and the studio reads the `diagram` rows through `catalog diagram list --json`
 (the runner's `GET /api/diagrams`, cached under
-`$STUDIO_HOME/cache/diagrams.json` for when Postgres is down, U3), which carry
+`$STUDIO_HOME/cache/diagrams.json` for when the catalog is unreadable, U3), which carry
 what the grid needs and an asset row does not: the shape count, the stamp and
 whether the SVG is current. The split was first drawn for a `.tldr` with no
 topic, which the indexer refused by name and so had no asset row at all; it
@@ -1065,7 +1077,7 @@ name.
 Topic filter chips are the topics that appear in the directory, not the whole of
 the vocabulary, grouped by domain in an overflow popover past six. Titles and
 domains come from the runner's `/api/vocabulary`, the same list a brief is
-checked against, so the chips keep their words with Postgres down (U3).
+checked against, so the chips keep their words with the catalog down (U3).
 `No topic` is always the last chip and always shown, because its absence is the
 thing worth noticing. Chips are multi-select, OR within themselves, and the
 active set goes in the query string.
@@ -1281,7 +1293,7 @@ floor is a 1024px window.
 | `--border`, `--chip-bg` | `#e7e5e4` / `#f5f5f4`, dark `#2a2e37` / `#1e232c` | Existing |
 | `--muted`, `--muted-strong` | `#78716c` / `#57534e`, dark `#a8a29e` / `#d6d3d1` | Existing |
 | `--accent`, `--accent-strong` | `#2563eb` / `#1d4ed8`, dark `#60a5fa` / `#93c5fd` | Existing |
-| `--warn`, `--warn-bg`, `--warn-border` | The amber the shell already uses for its store banner | New as tokens. The values exist twice today, inline in [`AppShell.tsx`](../apps/web/src/components/AppShell.tsx) and [`CourseCard.tsx`](../apps/web/src/components/CourseCard.tsx). **Phase 2 replaced those two and found two more**, in [`InferredBanner.tsx`](../apps/web/src/components/InferredBanner.tsx) and [`AgentSession.tsx`](../apps/web/src/components/AgentSession.tsx), at slightly different opacities. Those were left alone: restyling components outside the studio is a change with a different audience, and the token is there when somebody wants it |
+| `--warn`, `--warn-bg`, `--warn-border` | The amber the shell already uses for its store banner | New as tokens. The values exist twice today, inline in [`AppShell.tsx`](../apps/web/src/components/AppShell.tsx) and `CourseCard.tsx` (since removed). **Phase 2 replaced those two and found two more**, in `InferredBanner.tsx` (since removed) and [`AgentSession.tsx`](../apps/web/src/components/AgentSession.tsx), at slightly different opacities. Those were left alone: restyling components outside the studio is a change with a different audience, and the token is there when somebody wants it |
 | `--danger`, `--danger-bg`, `--danger-border` | A red triple at the same lightness as the amber triple | New. A failed job and a failed verify check have no colour today. **Phase 2 added the third**: a danger panel needs a border for the same reason the warn one does, and a pair plus an opacity modifier on a CSS variable is a Tailwind arbitrary-value trick rather than a token |
 | `--ok` | A green, used only for a passed verify check and a done phase glyph | New |
 | `--font-geist-sans`, `--font-geist-mono` | Geist and Geist Mono | Existing, via `next/font` |
@@ -1308,11 +1320,11 @@ raised it: S schema, A API and runner, U interface.
 | --- | --- | --- | --- |
 | S1 | A job crashes mid-run and the candidate is on disk | The reconcile pass at studio start finds a stale heartbeat and a dead process, and writes `interrupted`. The candidate is left alone and is offered for review with a note that no gate ran on it | Runner reconcile pass; `job.heartbeat_at` |
 | S2 | A job is cancelled while Chromium is open | The API writes `cancel_requested_at` and the state stays `running`. The runner kills the browser, writes `cancelled` and `finished_at`. If the runner never acknowledges, S1 applies and the state is `interrupted`, not `cancelled`: "the user stopped it" and "it died" are different facts | `POST /api/jobs/{id}/cancel`; reconcile pass |
-| S3 | Two jobs target the same committed path | `job_active_target_key` makes the second enqueue a `23505` naming the holder. A Postgres advisory lock dies with its connection and is invisible to the UI; a row in `queued`, `running` or `awaiting_review` is durable and showable | Partial unique index; `POST /api/jobs` returns 409 with the holder's id |
+| S3 | Two jobs target the same committed path | `job_active_target_key` makes the second enqueue a `23505` naming the holder. On SQLite the violation names the column, `job.target_path`, rather than the index, and [`sqlstate`](../services/catalog/src/state/errors.ts) maps `SQLITE_CONSTRAINT_UNIQUE` to `23505`, so [`explainEnqueue`](../services/catalog/src/commands/job.ts) accepts either name. Decided on Postgres, where an advisory lock died with its connection and was invisible to the UI; SQLite has no advisory locks at all. A row in `queued`, `running` or `awaiting_review` is durable and showable | Partial unique index; `POST /api/jobs` returns 409 with the holder's id |
 | S4 | A human edits in the mirror while a job runs | The job writes only the candidate, so there is no race on the committed file at all. The race moves to accept: three hashes make the loss visible afterwards. `job.target_hash_before`, `asset_job.content_hash`, and `asset.content_hash`. Accept refuses when the target's hash has moved since the job started, and offers to re-open the comparison | D2; accept step 3 |
 | S5 | The agent names a topic slug that is not a topic in the catalog | It cannot: `job.topic_slug` is `NOT NULL` and a foreign key with `ON DELETE RESTRICT`, so the enqueue fails with a `23503` before any GPU time. The gate checks the output's own stamp a second time, through the same reader that refuses an unstamped `.tldr` by name today. Refuse, never skip, at both ends | `job.topic_slug` FK; gate step 3; `diagrams.ts` |
-| S6 | Postgres is unreachable when a job finishes | The runner writes its terminal state to disk first and to Postgres second, so the record survives. A failed write leaves the row in `running` for the reconcile pass to fix from disk | D3 |
-| S7 | A session is deleted | It is not, once it did anything. `event.session_id` and `job.session_id` are `ON DELETE RESTRICT`, the same verdict [`0004_event_concept_restrict.sql`](../services/catalog/drizzle/0004_event_concept_restrict.sql) reached, and `SET NULL` is not even available: the referential `UPDATE` it fires is what the per-row trigger from [`0003_append_only_per_row.sql`](../services/catalog/drizzle/0003_append_only_per_row.sql) refuses. `session.log_asset_id` is the one `SET NULL`, the other way round | Migration `0006` |
+| S6 | The catalog is unreachable when a job finishes | The runner writes its terminal state to disk first and to the catalog second, so the record survives. A failed write leaves the row in `running` for the reconcile pass to fix from disk | D3 |
+| S7 | A session is deleted | It is not, once it did anything. `event.session_id` and `job.session_id` are `ON DELETE RESTRICT`, the same verdict the Postgres journal's [`0004_event_concept_restrict.sql`](../services/catalog/drizzle/0004_event_concept_restrict.sql) reached, and `SET NULL` is not even available: the referential `UPDATE` it fires is what the per-row trigger from [`0003_append_only_per_row.sql`](../services/catalog/drizzle/0003_append_only_per_row.sql) refuses. On SQLite the same holds in [`0000_majestic_ronan.sql`](../services/catalog/drizzle-sqlite/0000_majestic_ronan.sql): both keys are `ON DELETE restrict`, and `event_no_update` is the row trigger that would refuse the `UPDATE`. `session.log_asset_id` is the one `SET NULL`, the other way round | Migration `0006` (Postgres); `0000` on SQLite |
 | S8 | The same diagram is regenerated | Update in place: a new revision of the `diagram` row and a new SVG blob, under the same asset ids, which are derived from the logical name. What is new each time is one `asset_job` row per asset. `content_revision` holds every version with its author and reason (`catalog history diagram <slug>`), and `asset_job` who made it. (First written for files, when git held the bytes' history) | `catalog diagram put --job` |
 | S9 | An asset row exists from an import and a job later claims it | One `asset_job` insert, and nothing else. The id the studio derives from the logical name is the id the import derives from the same name. Assets with no producer need no backfill: the absence of an `asset_job` row is that statement | `catalog diagram put --job` |
 | A1 | Cancelling a job whose Chromium is mid-export | The agent is spawned detached in its own process group, so cancel is `SIGTERM` to the group, five seconds of grace, then `SIGKILL`. Layering rule 7 closes the browser in a `finally`, which only runs on a clean exit, so the runner then sweeps for Chromium whose `--user-data-dir` sits under the job scratch. tldrawkc has no `--user-data-dir` flag and Playwright puts its throwaway profile under `os.tmpdir()`, so what makes that rule true rather than aspirational is the agent being spawned with `TMPDIR` pointing at the job workspace: the browser's own command line then carries a path that belongs to one job and to nothing else on the machine. Measured once on a laptop: the group kill alone was enough, because the browser exits when the remote-debugging pipe closes, and the sweep found nothing to kill. The sweep stays, because "enough today" and "guaranteed" are different claims. The `.tldr` is safe either way: every write goes through the atomic rename in `tools/tldrawkc/src/lib/files.ts` | Runner cancel path |
@@ -1323,14 +1335,14 @@ raised it: S schema, A API and runner, U interface.
 | A6 | Two jobs on one file, or a job on a file open in a mirror | The lease in S3 covers the first. For the second, the studio closes the mirror when a job starts on that file and reopens it when the job ends, so the common case never reaches a refusal. It matters less than it did under D2: the job writes a candidate, so only accept collides. Accept on a file with an open mirror closes the mirror first, because Cmd+S PUTs the document as the tab last loaded it and a human save landing after the rename would silently revert it | `POST /api/mirrors`; accept step 3 |
 | A13 | A page the user is visiting POSTs to the runner | Loopback binding does not stop it: the same-origin policy hides the reply and never the side effect, and a JSON body sent as `text/plain` needs no preflight, so a fire-and-forget POST would have started a paid agent session with filesystem access. `guard` in `api.ts` requires a `Host` naming this socket (DNS rebinding forges it), `application/json` on a POST (not safelisted, so a cross-origin `fetch` must preflight and this server answers no CORS at all), and a same-origin `Origin`/`Sec-Fetch-Site` when a browser sends them. `curl` and the server-side rewrite send neither | D10, amended; `guard` |
 | A11 | A second runner has already claimed the job | `catalog job claim` is a conditional update on `state = 'queued'`, and it is the only lease that does not depend on this process being the only one. A refused claim ends the attempt before an agent is started, and does **not** call `job finish`: the row belongs to whoever holds it, and finishing it would transition *their* running job. A claim that failed because nothing answered is the degraded mode instead, and the job runs (D16) | Runner claim |
-| A12 | Postgres is unreachable at enqueue | The disk record stays and the job runs, because the write path is a disk record first (rule 7) and D16 says a missing database does not refuse a job. A catalog that *answers* and refuses — a topic outside the vocabulary, a lease another process holds — is the other fact and deletes the workspace, and forgets the record, so it stops holding that target's lease against every brief after it. "Unreachable" is the catalog CLI's exit code 3, which it sets from the driver's error code (`ECONNREFUSED`, `ENOTFOUND`, `EAI_AGAIN`) and never from message text: drizzle wraps every driver error as `Failed query: <sql>`, so the text is the same for a dead port and a live server that refused. A live server that refused (bad credentials, no such database) is exit 1, a refusal | `POST /api/jobs`; `runner.enqueue` |
+| A12 | The catalog is unreachable at enqueue | The disk record stays and the job runs, because the write path is a disk record first (rule 7) and D16 says a missing database does not refuse a job. A catalog that *answers* and refuses — a topic outside the vocabulary, a lease another process holds — is the other fact and deletes the workspace, and forgets the record, so it stops holding that target's lease against every brief after it. "Unreachable" is the catalog CLI's exit code 3, which it sets from the driver's error code and never from message text: drizzle wraps every driver error as `Failed query: <sql>`, so the text says nothing about the cause. On SQLite exit 3 means the file cannot be opened (`SQLITE_CANTOPEN`, or `ENOTDIR`, `EACCES` or `EROFS` from the path), and a file that opens but is locked past the busy timeout (`SQLITE_BUSY`) or is not a database (`SQLITE_NOTADB`) is exit 1, a refusal ([`connection-failure.ts`](../services/catalog/src/connection-failure.ts)). The rule was written for Postgres, where exit 3 was `ECONNREFUSED`, `ENOTFOUND` or `EAI_AGAIN` and a live server that refused was exit 1 | `POST /api/jobs`; `runner.enqueue` |
 | A7 | The studio process dies with jobs running | On start the runner marks every non-terminal row `interrupted` and then stops. manimkc auto-requeues; the studio does not, because a person is sitting in front of it and an agent session that restarts itself on launch is a paid call nobody asked for. Interrupted jobs appear with a Resume button that posts `POST /api/jobs/{id}/resume`, which inherits the stored session id and asks for no change request — an interruption is the one case with nothing to change, and `revise` requires one. The row keeps the phase it died in, so the panel can mark it rather than showing seven blank rows. Orphaned Chromium is swept by the same `--user-data-dir` rule as A1, and mirrors are gone with their servers | Reconcile pass |
 | A8 | The tldrawkc `dist/` is not built | Fatal at enqueue: 503 with the exact two commands (`git submodule update --init tools/tldrawkc`, then `npm ci && npm run build`), which is the message [`services/catalog/src/canvas.ts`](../services/catalog/src/canvas.ts) already writes. Nothing is queued, because every job would fail identically | `POST /api/jobs`; `GET /api/health` |
 | A9 | Log volume | Four bounds. `jobs/<id>/session.ndjson` is uncapped on disk and never sent whole to a browser. SSE carries condensed events only, roughly one line per agent turn. The UI's log panel is a window backed by `GET /api/jobs/{id}/log?from=&limit=`, with a Raw button revealing the ndjson path. The per-connection SSE buffer is capped at 500 events, dropping oldest with an `N lines omitted` marker, so a slow tab cannot back-pressure the runner | The runner's emitter; the log route |
 | A10 | Cost | Six guards, in the order they bite: `sonnet` by default, `--max-turns 60` per attempt capped server side, at most three attempts and a retry only with a specific gate finding attached, the 45 minute ceiling, `turns` and `cost_usd` recorded on the row and shown in the list and on `/api/health`, and — added in phase 7 — a daily cap, `STUDIO_DAILY_USD`, that refuses a new job with 429 once a rolling 24 hours of spend is at or over it. The cap is checked last and refuses only an enqueue: it never stops a job already running, because killing paid work halfway is a bill with nothing to show for it. **`cost_usd` is no longer the final result event alone.** That figure exists only when a session exits cleanly, so the runner accumulates from the intermediate per-message `usage` events as well, sums every attempt rather than the last, and records `cost_source` to say which kind of number a row holds. Without that, a cancelled, timed-out or interrupted attempt recorded `$0.00` for work that was paid for — and a cap reading the column would have been one anybody could walk past by pressing Cancel | Runner; `POST /api/jobs`; `services/studio/src/cost.ts` |
 | U1 | The catalog has no diagrams | One centred card, 420px: `no diagrams yet`, and one muted line saying to start a job and that a diagram needs a topic from the vocabulary before the catalog will take it | Browser empty state |
 | U2 | No jobs for the selected diagram | Never an empty screen, because the job view is a panel. The history section reads `no jobs for this diagram` with New job under it | Right panel |
-| U3 | Postgres is down | The studio keeps working. The diagram list comes from the last `catalog diagram list` cached under `$STUDIO_HOME/cache/diagrams.json`, marked stale with its `readAt` (Track D). The topics come from `catalog topic ls --owner`, the only way the studio reads them, and the last good read is cached the same way under `cache/topics.<owner>.json` (a `topics.json` from before the flag listed every owner's topics and is never read); `/api/health` reports `vocabulary.stale`, its `readAt` and the reason (from the last read any route made, and when that is older than `STUDIO_VOCABULARY_STATUS_MS`, 30 seconds by default, a new read starts behind the answer rather than in front of it, so a page render never waits on a `topic ls`), and `/api/vocabulary` serves the copy itself, so the web screens take their chips and the brief form's topic picker from the runner rather than from the app's own database-only read. The jobs come from disk. An amber banner says the catalog is unreachable and that browsing and drawing still work, and a second says "The topic list is stale since" and the copy's time (D13 of the migration plan). With no copy at all (`readAt: null`) the banner turns red and says briefs cannot be checked, and `POST /api/jobs` answers 503. Drawing runs on the checkouts already on disk. Accept refuses with `catalog-offline` and the candidate waits in its job workspace, because a diagram lands in the database (edge case 1 of the migration plan) | Accept; `GET /api/health`; `GET /api/vocabulary` |
+| U3 | The catalog is down (its file cannot be opened) | The studio keeps working. The diagram list comes from the last `catalog diagram list` cached under `$STUDIO_HOME/cache/diagrams.json`, marked stale with its `readAt` (Track D). The topics come from `catalog topic ls --owner`, the only way the studio reads them, and the last good read is cached the same way under `cache/topics.<owner>.json` (a `topics.json` from before the flag listed every owner's topics and is never read); `/api/health` reports `vocabulary.stale`, its `readAt` and the reason (from the last read any route made, and when that is older than `STUDIO_VOCABULARY_STATUS_MS`, 30 seconds by default, a new read starts behind the answer rather than in front of it, so a page render never waits on a `topic ls`), and `/api/vocabulary` serves the copy itself, so the web screens take their chips and the brief form's topic picker from the runner rather than from the app's own database-only read. The jobs come from disk. An amber banner says the catalog is unreachable and that browsing and drawing still work, and a second says "The topic list is stale since" and the copy's time (D13 of the migration plan). With no copy at all (`readAt: null`) the banner turns red and says briefs cannot be checked, and `POST /api/jobs` answers 503. Drawing runs on the checkouts already on disk. Accept refuses with `catalog-offline` and the candidate waits in its job workspace, because a diagram lands in the database (edge case 1 of the migration plan) | Accept; `GET /api/health`; `GET /api/vocabulary` |
 | U4 | tldrawkc is not built | The studio runs `doctor` once on entry and, on failure, replaces the whole content region with one card: the failing checks as doctor reported them, the two commands, and a Recheck button. Nothing else renders, because a grid that half-works is worse than a page that says what is wrong | Studio entry; A8 covers the API side |
 | U5 | `dist/page` is stale | A banner, and everything still runs. That is how `doctor` treats it: a stale bundle still works | Studio entry |
 | U6 | A `.tldr` will not parse | It is absent from the grid and listed under Errors in the panel with its file name and message, which is the only place it is visible | `list --json` errors |
@@ -1420,18 +1432,20 @@ is not recursive, so the indexer cannot see a candidate, and because a sibling
 directory is on the same filesystem, so the accept rename is atomic where an OS
 temp directory would not be. It is gitignored.
 
-### D3. Postgres is the source of truth for state; the ndjson is the write-ahead log
+### D3. The catalog is the source of truth for state; the ndjson is the write-ahead log
 
 **Verdict:** the runner appends to `jobs/<id>/session.ndjson` and writes
-`jobs/<id>/job.json` before it writes the `job` row. Postgres is what every
+`jobs/<id>/job.json` before it writes the `job` row. The catalog is what every
 reader queries and the only record that survives a wiped scratch directory. On a
 disagreement the disk record wins, and the reconcile pass at studio start
-replays it into Postgres.
+replays it into the catalog. Decided when the catalog was Postgres; it is one
+SQLite file now ([SQLITE-MIGRATION.md](SQLITE-MIGRATION.md)) and the split is
+unchanged.
 
 **Why:** the two sections disagreed because they were answering different
 questions. The API section is right that a local tool which will not start
 because a database is down fails at the worst moment, so the runner starts,
-queues and runs with Postgres unreachable. The schema section is right that
+queues and runs with the catalog unreachable. The schema section is right that
 losing the `job` table loses the brief and the failure record, and that no
 re-index writes those back. Disk-first-then-database is the split manimkc
 already runs on, per the docstring in
@@ -1464,7 +1478,7 @@ here points at it. The studio's `job` row is the caller's record and carries
 `runner` plus `runner_job_id`.
 
 **Why:** that submodule is its own repository that has to run from a fresh clone
-with no Postgres anywhere, and its server is a separate process, run locally
+with no catalog database anywhere, and its server is a separate process, run locally
 like everything else here, per its `DESIGN.md`. Pointing it at this schema
 would couple a submodule to its consumer and break the independence rule the
 root [`AGENTS.md`](../AGENTS.md) states. The cost is two state machines that can
@@ -1579,7 +1593,7 @@ difference between a program the user ran and a page the user visited.
 
 ### D11. The UI lives in `apps/web`, gated off in production
 
-**Verdict:** the studio routes are `apps/web/src/app/studio/`, and every one of
+**Verdict:** the studio routes are `apps/web/src/app/(app)/studio/`, and every one of
 them calls `notFound()` unless `STUDIO_ENABLED` is set. The rewrite from
 `/studio/api/*` to `127.0.0.1:7250` is gated on the same variable.
 
@@ -1590,7 +1604,10 @@ docs is satisfied by the gate rather than by a separate app: production serves
 404 for every studio route, so the deployed site stays the course encyclopedia
 and no headless browser reaches that build. The cost is that the gate has to
 actually be there, so it is one helper called at the top of each route and a
-test that every route under `src/app/studio/` calls it. Note that
+test that every route under `src/app/studio/` calls it. (That test is now the
+lint rule `gnosia/studio-gate` in `eslint-rules/gnosia.mjs`, over
+`src/app/(app)/studio/`, with `gate.test.ts` there calling each entry point
+with `STUDIO_ENABLED` unset.) Note that
 `npm run dev` fails in the desktop preview harness with `EPERM: uv_cwd`, so
 looking at the studio means `npm run build` then `next start`, the workaround
 the root [`AGENTS.md`](../AGENTS.md) records.
@@ -1599,10 +1616,11 @@ the root [`AGENTS.md`](../AGENTS.md) records.
 
 *The gate covers server actions too.* A server action compiles to a POST
 endpoint with a stable id, so an ungated one is the same hole as an ungated
-route with a different door. `studio-gate.test.ts` walks
-`apps/web/src/app/studio/` for `page`, `layout`, `route`, `default`,
-`template` **and** `actions`, and asserts it found something, so a glob that
-breaks fails rather than passing by finding nothing.
+route with a different door. `studio-gate.test.ts` walked
+`apps/web/src/app/studio/` (now `apps/web/src/app/(app)/studio/gate.test.ts`)
+for `page`, `layout`, `route`, `default`, `template` **and** `actions`, and
+asserted it found something, so a glob that breaks fails rather than passing
+by finding nothing.
 
 *The rewrite is a route handler, not a `rewrites()` entry.* Measured rather
 than reasoned about: a `next.config.ts` rewrite rewrites `Host` to the
@@ -1611,7 +1629,7 @@ runner's `guard` accepts — and it forwards the browser's `Origin` verbatim,
 which `guard` refuses, so every POST through one comes back 403. That is the
 guard working: a transparent proxy is byte-identical to the page it proxies
 for, and the difference has to be something the app does on purpose. A route
-handler at `app/studio/api/[...segments]/route.ts` strips `Origin`,
+handler at `app/(app)/studio/api/[...segments]/route.ts` strips `Origin`,
 `Sec-Fetch-*`, `Cookie` and `Host`, which is the deliberate act that says "a
 program ran this". It is also the only form that can read `STUDIO_ENABLED` at
 request time, since `rewrites()` is evaluated when the config loads — so one
@@ -1676,10 +1694,11 @@ stops. Resume is a button.
 watching this one, and an app that starts paid agent sessions on launch is a
 surprise.
 
-### D16. A missing `dist/` refuses the job; a missing Postgres does not
+### D16. A missing `dist/` refuses the job; a missing catalog does not
 
 **Verdict:** no tldrawkc build is a 503 at enqueue. No database is a banner and
-an `indexed: false` on accept.
+an `indexed: false` on accept. Decided on Postgres; "no database" is now a
+catalog file that cannot be opened, exit 3 (A12).
 
 **Why:** one makes every job fail identically, the other only blocks a step that
 can be run later, and the artifacts are files.
@@ -1722,10 +1741,12 @@ is. The hash it carries is what makes S4 answerable at all. There is no
 `asset_session` table either: the only asset a session produces without a job is
 its own markdown log, and `session.log_asset_id` names that directly.
 
-### D20. `job.topic_slug` is a column and a foreign key; `brief` is jsonb
+### D20. `job.topic_slug` is a column and a foreign key; `brief` is JSON
 
 **Verdict:** topic is a real column with a real foreign key. Everything else
-about the brief lives in `brief` jsonb.
+about the brief lives in the `brief` JSON column (`jsonb` on Postgres, where
+this was decided; JSON text on SQLite,
+[`packages/schema/src/studio.ts`](../packages/schema/src/studio.ts)).
 
 **Why:** `SCHEMA.md` already argues that a foreign key does not survive being
 stuffed into JSON, in the section on why `curriculum_item` is not an asset, and
@@ -1857,7 +1878,8 @@ Goal: a job can be recorded and its output attached, with no studio at all. This
 is useful on its own: the `tldrawkc-diagram` skill draws a diagram from a
 terminal today and nothing records who asked for it or whether it landed.
 
-- [x] Migration `0006` in `services/catalog/drizzle/`: `session`, `job`,
+- [x] Migration `0006` in `services/catalog/drizzle/` (the Postgres journal;
+      on SQLite it is part of `drizzle-sqlite/0000_majestic_ronan.sql`): `session`, `job`,
       `asset_job`, the `event.session_id` foreign key, and the `tutor` session
       backfill that has to precede it
 - [x] Table definitions in `packages/schema/src/state.ts` (or a new
@@ -2004,7 +2026,7 @@ stream disconnected.
 the design, each because running it said so:
 
 - **The job strip's state lives in the runner, and the cache of it lives in the
-  studio layout.** `apps/web/src/app/studio/layout.tsx` mounts the provider, so
+  studio layout.** `apps/web/src/app/(app)/studio/layout.tsx` mounts the provider, so
   the list, the events and the open `EventSource` survive a navigation between
   `/studio` and `/studio/d/<name>`; the same provider inside each page would
   rebuild the connection on every click. What the URL carries is which panel is
@@ -2048,7 +2070,7 @@ Goal: the comparison screen, and the only place a committed file changes.
 Done when: a finished job shows before and after side by side with an honest
 shape delta, Accept leaves exactly two dirty files in `git status` and one
 `asset_job` row per file, Discard leaves the working tree clean, and an Accept
-with Postgres stopped still lands both files and reports `indexed: false`.
+with the catalog unreachable (Postgres stopped, at the time) still lands both files and reports `indexed: false`.
 
 **Done, and what the five real jobs found.**
 

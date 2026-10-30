@@ -1,15 +1,35 @@
 # The catalog schema
 
-The authored content, the learner state and the rows that run them, in
-Postgres 17. This document is the reasoning; [`packages/schema/src/`](../../packages/schema/src/) is the
-definition, and `services/catalog/drizzle/` is the SQL that definition
+The authored content, the learner state and the rows that run them, in one
+SQLite file, `$GNOSIA_HOME/catalog.db` by default
+([docs/SQLITE-MIGRATION.md](../../docs/SQLITE-MIGRATION.md), `databaseUrl()` in
+[`src/env.ts`](src/env.ts)). This document is the reasoning; [`packages/schema/src/`](../../packages/schema/src/) is the
+definition, and [`drizzle-sqlite/`](drizzle-sqlite/) is the SQL that definition
 generates. When they disagree, the code is right and this file is stale.
+
+The catalog ran on Postgres until the move to SQLite, and much of what follows
+was decided there. A migration number named below (`0010`, `0013`, `0022` and
+the rest) is the old Postgres journal's, kept in `drizzle/` as a reference
+for porting an old database with
+[`scripts/pg-to-sqlite.mjs`](scripts/pg-to-sqlite.mjs); nothing applies it
+and the script does not read it. On SQLite every one of
+them is folded into
+[`drizzle-sqlite/0000_majestic_ronan.sql`](drizzle-sqlite/0000_majestic_ronan.sql),
+the whole schema and its seeds. Two SQLite migrations follow it:
+[`0001_catalog_armed_rule.sql`](drizzle-sqlite/0001_catalog_armed_rule.sql)
+(the table that stands in for deferred triggers, under "Triggers" below) and
+[`0002_recap_request_id.sql`](drizzle-sqlite/0002_recap_request_id.sql)
+(`recap.request_id`). Where a section below names one of those two, it says
+so by file. The Postgres numbers stay below as the record of when a table or
+a rule arrived. A Postgres error code such as `23503` still names
+the failure: `sqlstate` in [`src/state/errors.ts`](src/state/errors.ts) reads
+SQLite's errors onto the codes the same failures carried on Postgres.
 
 The plan is [#27](https://github.com/c-wenlong/gnosia-learn/issues/27); this is
 the first half of bundle 3, [#21](https://github.com/c-wenlong/gnosia-learn/issues/21).
 
 [docs/CONTENT-MIGRATION.md](../../docs/CONTENT-MIGRATION.md) is the plan
-that made Postgres the source of truth for content, and it is built through
+that made the database (Postgres at the time) the source of truth for content, and it is built through
 its phase 3 cut-over. Every content type is authored in the database, the
 repository's `content/` and `learn/` are gone (the tag `content-files-final`
 keeps every version of them), and files are an export format (D1 there):
@@ -23,10 +43,10 @@ directory being imported: an export, `seed/`, or `content-files-final`.
 
 | Half | Tables | Source of truth |
 | --- | --- | --- |
-| Content | `topic`, `concept`, `collection`, `curriculum_item`, `asset` and seven link tables; since 0010 also `tag`, `topic_relation`, `manimkc_topic`, `collection_tag`, `diagram`, `blob_object`, `session_log_entry` and `content_revision`; since 0015 `video` | Postgres, since the phase 3 cut-over: every type is authored here through the write seam, and files are an export (`catalog export --out`, and the nightly export under `$GNOSIA_HOME/archive/`). The manimkc rows and the mirror ledger are still rebuilt by `catalog import` from manimkc's own CLI. `content_revision` is the only record of who wrote what, and why. |
-| State | `learner`, `event`, `mastery`, `review`, `progress`, `recap`, `preference`, `provider_key`, `custom_provider`, `tutor_model`, `asset_name` | Postgres. `event` is the only copy; `mastery` and `review` are replayable from it. Filled by bundle 5's backfill — see [LEARN.md](LEARN.md). |
+| Content | `topic`, `concept`, `collection`, `curriculum_item`, `asset` and seven link tables; since 0010 also `tag`, `topic_relation`, `manimkc_topic`, `collection_tag`, `diagram`, `blob_object`, `session_log_entry` and `content_revision`; since 0015 `video` | The database, since the phase 3 cut-over: every type is authored here through the write seam, and files are an export (`catalog export --out`, and the nightly export under `$GNOSIA_HOME/archive/`). The manimkc rows and the mirror ledger are still rebuilt by `catalog import` from manimkc's own CLI. `content_revision` is the only record of who wrote what, and why. |
+| State | `learner`, `event`, `mastery`, `review`, `progress`, `recap`, `preference`, `provider_key`, `custom_provider`, `tutor_model`, `asset_name` | The database. `event` is the only copy; `mastery` and `review` are replayable from it. Filled by bundle 5's backfill: see [LEARN.md](LEARN.md). |
 | Operational | `index_run`, `mirror`, `content_source`, `catalog_instance` | Neither. What the indexers did, which content types the database owns, and whether this database is the primary. |
-| Studio | `session`, `draft`, `job`, `asset_job` | Postgres, and the only copy. Who asked for a file to be made, and what came out. |
+| Studio | `session`, `draft`, `job`, `asset_job` | The database, and the only copy. Who asked for a file to be made, and what came out. |
 
 `index_run` is the third thing because it is neither of the first two: it is not
 derived *from* files, and it is not the only copy of anything a learner did.
@@ -75,7 +95,7 @@ which brief produced them.
 | --- | --- |
 | `topic` | The shared vocabulary. Slug PK, title, domain, summary, aliases. The required join for every asset. |
 | `concept` | One authored note (`learn/concepts/<domain>/<slug>.md` in the export layout). Carries prerequisites and mastery. Optional enrichment under a topic. Since Track C the row holds the whole note: its frontmatter as columns (`title`, `summary`, `tags`, `sources`, `authored_at` for `created:`, `requires:` and `assumes:` as `concept_prerequisite`), its folder as `domain`, and the markdown after the frontmatter as `body`, byte for byte. The file it renders writes the keys in one order and leaves out an empty `assumes`, since a row keeps values, not layout; `services/catalog/src/content/notes.ts` is the one rule. |
-| `collection` | Courses and modules today, decks next. A self-referencing tree with `kind`, `position` and a `metadata` jsonb. A course may name its cover photo's blob in `cover_blob_key` (0016), with its credit in `metadata.coverCredit`. |
+| `collection` | Courses and modules today, decks next. A self-referencing tree with `kind`, `position` and a `metadata` JSON column. A course may name its cover photo's blob in `cover_blob_key` (0016), with its credit in `metadata.coverCredit`. |
 | `curriculum_item` | The checklist row a learner ticks: `cs4263-m1-t1`, its title and its subtopics. |
 | `asset` | A file or a link: video, transcript, chapters, captions, diagram source, diagram SVG, note, session, link. `source_repo` says which repository or tool made it: `gnosia`, `manimkc`, `tldrawkc`, `remotionkc` (0017, the second video tool), `revideokc` (0019, the third), or `blenderkc` (0029, the fourth). |
 | `asset_topic` | This asset is about this topic. |
@@ -87,11 +107,11 @@ which brief produced them.
 | `concept_curriculum_item` | This note contributes to this checklist row, at this position. Written by the courses source from `topics[].concepts`. |
 | `curriculum_item_asset` | This reading goes with this lesson (0022): a curated `link` asset to a curriculum item of the same module, at the item's place in the reading's `lessons:` list. Written by the courses source and `course import` only. See "Readings on lessons and listed videos" below. |
 | `tag` | A cross-course theme (`content/tags.yaml` in the export layout), at its position in the list. Since 0010, filled by the `tags` source since 0.5, and written by `catalog tag` since Track A. |
-| `collection_tag` | This course carries this tag, at its place in the course's `tags:`. Makes a stale tag a `23503` instead of a string in jsonb. |
-| `topic_relation` | A typed edge between two topics: `broader`, `related` (symmetric, stored once with the slugs in "C" order), `precedes`. Read from a topic's `relations:` list, at its position there. |
+| `collection_tag` | This course carries this tag, at its place in the course's `tags:`. Makes a stale tag a `23503` instead of a string in a JSON column. |
+| `topic_relation` | A typed edge between two topics: `broader`, `related` (symmetric, stored once with the slugs in byte order, `collate binary` in `topic_relation_related_order_check`), `precedes`. Read from a topic's `relations:` list, at its position there. |
 | `manimkc_topic` | One manimkc topic path under one vocabulary topic: `maps.manimkc` as rows, and the primary key is the one-path-one-topic rule. |
-| `diagram` | A `.tldr` document in jsonb, its SVG as a blob, and the two hashes that say whether the SVG is stale. |
-| `video` | A video made through the studio's chat (0015, docs/STUDIO-VIDEOS.md D49): its source (the scene files, `topic.yml` and the brief) in jsonb, its cut as a blob, and the hash of the source the cut was rendered from. The cut, its sidecars and its poster are also `asset` rows under `video:` and `poster:video:`. See [Studio videos: a row, five assets and one transaction](#studio-videos-a-row-five-assets-and-one-transaction). |
+| `diagram` | A `.tldr` document as JSON, its SVG as a blob, and the two hashes that say whether the SVG is stale. |
+| `video` | A video made through the studio's chat (0015, docs/STUDIO-VIDEOS.md D49): its source (the scene files, `topic.yml` and the brief) as JSON, its cut as a blob, and the hash of the source the cut was rendered from. The cut, its sidecars and its poster are also `asset` rows under `video:` and `poster:video:`. See [Studio videos: a row, five assets and one transaction](#studio-videos-a-row-five-assets-and-one-transaction). |
 | `blob_object` | One object in the blob store: `<owner_id>/<sha256>.<ext>`, its size, type, provider and whether the upload is confirmed. |
 | `session_log_entry` | One appended piece of a session log: the exact text that went onto the end of the file, so the log is its entries concatenated, byte for byte. The first entry is what `learn session start` wrote, frontmatter included. Append-only; its own history, so no revisions. An import appends what a file grew by and refuses one edited above its end. |
 | `content_revision` | One row per content write: the whole entity after it, its hash, who wrote it and why. Append-only. |
@@ -105,7 +125,7 @@ which brief produced them.
 | `mastery` | BKT belief per concept: `p_l`, observations, correct, last seen. Derived. |
 | `review` | SM-2 card per concept: repetitions, ease, interval, lapses, due, leech. Derived. |
 | `progress` | A ticked checklist row, plus the learner's note on it. |
-| `recap` | The durable "what I learnt" record per checklist row. `request_id` is the id of the write that last stored it, so a copy of that write sent again after a lost answer counts no second session. |
+| `recap` | The durable "what I learnt" record per checklist row. `request_id` (SQLite's [`0002_recap_request_id.sql`](drizzle-sqlite/0002_recap_request_id.sql)) is the id of the write that last stored it, so a copy of that write sent again after a lost answer counts no second session (`upsertRecap` in `src/state/recap.ts`). |
 | `preference` | Theme, epoch, last visited, and the studio's two agent settings (`studioVideoAgent`, `studioDiagramAgent`: `{ model, effort }`, D53 of docs/STUDIO-VIDEOS.md), which the runner reads with `catalog preference get`. Key/value, because these change with the UI. |
 | `provider_key` | An owner's own model provider API keys for the tutor, one per provider, AES-256-GCM encrypted by the web app (migration `0018_provider_key`, [docs/BYOK.md](../../docs/BYOK.md)). See "Provider keys" under the state half. |
 | `custom_provider` | The providers an owner added themselves: a name and an OpenAI-compatible base URL under an id `custom-<slug>`, which their `provider_key` row and `tutor_model` entries are filed under (migration `0028_custom_provider`, [docs/TUTOR-MODELS.md](../../docs/TUTOR-MODELS.md) T14). No secret. The base URL is `https://`, or `http://` to a loopback host, in the function and a CHECK. Written only by `src/state/custom-providers.ts`; a provider's Delete removes the row, its key and its models in one transaction (`deleteTutorProvider`). |
@@ -147,7 +167,8 @@ CREATE UNIQUE INDEX job_active_target_key ON job (target_path)
 Two jobs cannot hold the same committed path at once, and an unaccepted
 candidate keeps holding it, because the second brief would be written against
 what the first has not landed yet. Partial rather than total, because the whole
-history of a path is jobs that have finished with it. An advisory lock was the
+history of a path is jobs that have finished with it. A lock held by a
+connection (a Postgres advisory lock, when this was decided) was the
 alternative and dies with its connection, so nothing could ever show who holds
 it.
 
@@ -159,7 +180,7 @@ generator, and would make the CHECK grow every time a pipeline gained a step.
 `cancel_requested_at` is a timestamp for the same reason: a job being cancelled
 is still running until the runner has killed Chromium.
 
-**`topic_slug` is a column and a foreign key; the rest of the brief is jsonb.**
+**`topic_slug` is a column and a foreign key; the rest of the brief is JSON.**
 A foreign key does not survive being stuffed into JSON — the same argument that
 keeps `curriculum_item` out of `asset` — and the topic is the earliest moment
 refuse-never-skip can fire: a brief naming a slug that has no `topic` row
@@ -173,15 +194,16 @@ A course topic like `cs4263-m1-t1` could have been an `asset` row of kind
 `curriculum_item`, as issue #21 sketched. It is a table instead, for three
 reasons.
 
-An asset is defined by where its bytes are: exactly one of `path` or `url`, plus
-a content hash and a byte count. A curriculum item has none of those. It is a
-node inside a course file, not a file, so every column that makes `asset` useful
-would be null for it and the `num_nonnulls(path, url) = 1` check would have to
-be dropped to let it in — weakening a constraint for every real asset to
+An asset is defined by where its bytes are: a `path` or a `blob_key`, or else a
+`url`, plus a content hash and a byte count. A curriculum item has none of
+those. It is a node inside a course file, not a file, so every column that
+makes `asset` useful would be null for it and the location check
+(`asset_location_check`; `num_nonnulls(path, url) = 1` when this was decided)
+would have to be dropped to let it in, weakening a constraint for every real asset to
 accommodate a row that is not one.
 
 It also needs columns no asset has: `subtopics`, and a `collection_id` naming
-the module it is authored inside. Those would have to hide in a jsonb blob, and
+the module it is authored inside. Those would have to hide in a JSON column, and
 `collection_id` in particular is a foreign key, which does not survive being
 stuffed into JSON.
 
@@ -222,49 +244,56 @@ should. That is exactly the failure the audit already recorded: an
 `out/networking/adguard-home` render outlived its source and nothing flagged it.
 
 With typed tables the same typo is a `23503` at write time. Putting this data in
-Postgres and then dropping the constraints would leave nothing but a slower
+a database and then dropping the constraints would leave nothing but a slower
 JSON file.
 
 Where a column set must be exactly-one-of, a check constraint says so:
-`collection_item` has `num_nonnulls(topic_slug, concept_slug, asset_id) = 1`, and
-`asset` has `num_nonnulls(path, url) = 1`. A row that names no target, or two,
-is refused rather than being a silent no-op for every consumer.
+`collection_item_one_target_check` adds up `(topic_slug is not null) +
+(concept_slug is not null) + (asset_id is not null)` and wants `1`, and
+`asset_location_check` wants a `url` exactly when there is neither a `path`
+nor a `blob_key`
+([`0000_majestic_ronan.sql`](drizzle-sqlite/0000_majestic_ronan.sql)). A row
+that names no target, or two, is refused rather than being a silent no-op for
+every consumer.
 
-Kind columns are `text` plus a `CHECK`, not a Postgres `ENUM`. Both enforce the
-same thing; the check is a one-line drop-and-add in a migration, while widening
-an enum has awkward transaction rules and narrowing one is impossible. These
-vocabularies do grow: bundle 6 added `mirrors` to `index_run.source` and two
-new vocabularies of its own, each a two-statement change in
-`0005_mirror_ledger.sql`.
+Kind columns are `text` plus a `CHECK`. On Postgres that was chosen over an
+`ENUM`, whose widening has awkward transaction rules and whose narrowing is
+impossible; SQLite has no `ENUM`, so the question is gone. These vocabularies
+do grow: bundle 6 added `mirrors` to `index_run.source` and two new
+vocabularies of its own (Postgres `0005_mirror_ledger.sql`). SQLite cannot
+alter a constraint in place, so on SQLite a changed `CHECK` means a migration
+that rebuilds the table.
 
 ### Append-only is a trigger, not a revoked privilege
 
-`event` has a `BEFORE UPDATE OR DELETE ... FOR EACH STATEMENT` trigger that
-raises `restrict_violation`. It is created in
-[`drizzle/0001_event_append_only.sql`](drizzle/0001_event_append_only.sql).
+`event` has two `BEFORE UPDATE` and `BEFORE DELETE ... FOR EACH ROW` triggers,
+`event_no_update` and `event_no_delete`, that abort with
+`23001: event is append-only`. They are created in
+[`drizzle-sqlite/0000_majestic_ronan.sql`](drizzle-sqlite/0000_majestic_ronan.sql),
+beside the same pair on `content_revision` and `session_log_entry`.
 
-`REVOKE UPDATE, DELETE ON event` was the alternative and is weaker in the only
-case that matters: a revoked privilege does not bind the table's owner or a
-superuser, and the owner is precisely who runs the migrations, the CLI and psql
-on a laptop. It would read as enforced and enforce nothing. The trigger fires
-for everyone; getting past it takes an explicit `ALTER TABLE ... DISABLE
-TRIGGER`, which is an auditable act rather than an accident. It is also dumped
-and restored with the schema, so the guarantee survives the eventual `pg_dump`
-move to a cloud database, which a grant on a role that does not exist there
-would not.
+On Postgres, `REVOKE UPDATE, DELETE ON event` was the alternative and was
+weaker in the only case that mattered: a revoked privilege does not bind the
+table's owner, and the owner was precisely who ran the migrations, the CLI and
+psql on a laptop. SQLite has no privileges at all, so a trigger is the only
+guard there is. It fires for every connection that opens the file; getting
+past it takes an explicit `DROP TRIGGER`, which is an auditable act rather
+than an accident. It lives in the file with the rows, so a copy of the
+database carries it.
 
-The correction path is a new row, not an edit: the `learn` CLI already writes a
-`void` event with a reason, and the trigger's hint says so.
+The correction path is a new row, not an edit: the `learn` CLI writes a
+`void` event with a reason.
 
-The triggers are `FOR EACH ROW`, and `0003_append_only_per_row` exists because
-they were not. As `FOR EACH STATEMENT` a trigger fires on the statement whether
-or not it touches a row, and `event.concept_slug` is a foreign key with `ON
-DELETE SET NULL`: deleting any concept makes Postgres run `UPDATE ONLY event SET
-concept_slug = NULL WHERE $1 = concept_slug`, which tripped the guard even
-against a completely empty `event`. No `concept` row could be deleted at all,
-which is incompatible with an indexer whose contract is that a derived row goes
-when its file does. Per-row keeps the guarantee exactly — every event row
-actually being changed still raises — and drops the false positive.
+The triggers are per row, and on Postgres `0003_append_only_per_row` existed
+because they first were not. As `FOR EACH STATEMENT` a trigger fired on the
+statement whether or not it touched a row, and `event.concept_slug` was a
+foreign key with `ON DELETE SET NULL`: deleting any concept made Postgres run
+an `UPDATE` against `event`, which tripped the guard even against a completely
+empty `event`, so no `concept` row could be deleted at all. SQLite has row
+triggers only, so that cannot come back. `event.concept_slug` is
+`ON DELETE RESTRICT` (since Postgres 0004, and in `0000`): a concept with
+evidence cannot be deleted, and the refusal is the foreign key's rather than
+the trigger's.
 
 `event` carries no `updated_at`. A column that can never change would only
 invite someone to try.
@@ -304,11 +333,11 @@ still derived, from manimkc's CLI.
 
 `progress`, `recap` and `preference` are *not* derived. They are the only copy.
 Bundle 5 filled them: `catalog backfill` from `learn/state/*.json`, and
-`/api/learner/import` from a browser's localStorage on first mount. Their column names mirror `apps/web/src/lib/types.ts` and the limits in
-`apps/web/src/lib/storage.ts` (`KNOWLEDGE_LIMITS`: 1200-character summaries, 8-item
+`/api/learner/import` from a browser's localStorage on first mount. Their column names mirror `LearnerState` in
+`packages/schema/src/shared.ts` and the limits beside it (`KNOWLEDGE_LIMITS`: 1200-character summaries, 8-item
 lists) so that backfill is a straight copy. The per-item 300-character clamp has
-no check constraint: testing each element needs `jsonb_array_elements_text`,
-which is a subquery, and a `CHECK` cannot contain one. That clamp stays in
+no check constraint: testing each element needs `json_each`, which is a
+subquery, and a `CHECK` cannot contain one, on SQLite as on Postgres. That clamp stays in
 application code, where it already is.
 
 ### Readings on lessons and listed videos
@@ -357,15 +386,25 @@ note that still carries the key
 
 ### Indexes
 
-Every foreign key column has an index, because Postgres creates one for a
-primary key and a unique constraint but never for a foreign key, and an
-unindexed one turns every parent delete into a sequential scan of the child.
+Every foreign key column has an index, because SQLite, like Postgres before
+it, creates one for a primary key and a unique constraint but never for a
+foreign key, and an unindexed one turns every parent delete into a full scan
+of the child.
 On top of those: `event(at)` for the log read in time order, `review(due)` for
 "what is due today", `topic(domain)`, `asset(kind)` and `asset(content_hash)`
 for the drift check, and `mirror(status)` for the count `catalog status`
 reports per destination.
 
 ## The content half
+
+The column types are SQLite's, as
+[`0000_majestic_ronan.sql`](drizzle-sqlite/0000_majestic_ronan.sql) declares
+them: a column marked `json` below is `text` holding JSON (`mode: "json"` in
+`packages/schema/src/`), which drizzle hands back parsed; a time is an
+`integer` of epoch milliseconds; a flag is an `integer`, `0` or `1`; a
+fraction is `real`; bytes are a `blob`. On Postgres these were `jsonb`,
+`timestamptz`, `boolean`, `double precision` and `bytea`
+([docs/SQLITE-MIGRATION.md](../../docs/SQLITE-MIGRATION.md)).
 
 ```mermaid
 erDiagram
@@ -395,7 +434,7 @@ erDiagram
         text title
         text domain
         text summary
-        jsonb aliases
+        json aliases
     }
     concept {
         text slug PK
@@ -412,7 +451,7 @@ erDiagram
         text title
         text parent_id FK "nullable"
         int position
-        jsonb metadata
+        json metadata
         text cover_blob_key FK "nullable, courses only"
     }
     curriculum_item {
@@ -420,8 +459,8 @@ erDiagram
         text collection_id FK
         int position
         text title
-        jsonb subtopics
-        jsonb videos "asset ids, not foreign keys (0022)"
+        json subtopics
+        json videos "asset ids, not foreign keys (0022)"
     }
     asset {
         text id PK
@@ -430,7 +469,7 @@ erDiagram
         text url
         text content_hash
         text inputs_hash "what a derived asset was made from (0031)"
-        bigint bytes
+        int bytes
         text title
         text source_repo
     }
@@ -448,7 +487,7 @@ erDiagram
         text kind PK "requires|assumes"
     }
     collection_item {
-        bigint id PK
+        int id PK
         text collection_id FK
         int position
         text topic_slug FK "exactly one target"
@@ -503,46 +542,46 @@ erDiagram
         text display_name
     }
     event {
-        bigint id PK "identity"
-        timestamptz at "indexed"
+        int id PK "autoincrement"
+        int at "epoch ms, indexed"
         text learner_id FK
         text type "session-start|observation|review|session-close|void"
         text concept_slug FK "nullable"
         text session_id "nullable"
-        jsonb payload
+        json payload
     }
     mastery {
         text learner_id PK_FK
         text concept_slug PK_FK
-        float p_l "0..1"
+        real p_l "0..1"
         int observations
         int correct "<= observations"
-        timestamptz last_seen
+        int last_seen "epoch ms"
     }
     review {
         text learner_id PK_FK
         text concept_slug PK_FK
         int repetitions
-        float ease ">= 1.3"
+        real ease ">= 1.3"
         int interval_days "1..36500"
         int lapses
-        timestamptz due "indexed"
-        timestamptz last_reviewed
-        boolean leech
+        int due "epoch ms, indexed"
+        int last_reviewed "epoch ms"
+        int leech "0 or 1"
     }
     progress {
         text learner_id PK_FK
         text curriculum_item_id PK_FK
-        timestamptz completed_at "nullable"
+        int completed_at "epoch ms, nullable"
         text note
     }
     recap {
         text learner_id PK_FK
         text curriculum_item_id PK_FK
         text summary "<= 1200 chars"
-        jsonb key_points "<= 8 items"
-        jsonb misconceptions "<= 8 items"
-        jsonb open_questions "<= 8 items"
+        json key_points "<= 8 items"
+        json misconceptions "<= 8 items"
+        json open_questions "<= 8 items"
         text source "agent|manual"
         int sessions
         text request_id "nullable"
@@ -550,14 +589,14 @@ erDiagram
     preference {
         text learner_id PK_FK
         text key PK
-        jsonb value
+        json value
     }
     provider_key {
         text owner_id PK_FK "no default"
-        text provider PK "nvidia|gemini|openrouter"
-        bytea ciphertext "1..2048 bytes"
-        bytea iv "12 bytes"
-        bytea auth_tag "16 bytes"
+        text provider PK "a built-in provider or custom-<slug>"
+        blob ciphertext "1..2048 bytes"
+        blob iv "12 bytes"
+        blob auth_tag "16 bytes"
         int key_version ">= 1"
         text last4 "4 chars"
     }
@@ -611,11 +650,15 @@ table itself guarantees is here.
   nightly export, `learn vault pull` and the learner export, none of which can
   reach a table they never name. The same test lists every file that walks
   all tables without naming one (the `tables` registry, the database's table
-  list, `pg_dump`), so a generic exporter cannot arrive unread. `catalog
-  status` counts it with the state half. A `pg_dump`, such as flip day's backup, does include it, as
-  ciphertext: see the threat model.
-- It carries the copy guard of 0010 like every other table, added by its own
-  migration.
+  list, a whole-file copy through the SQLite backup API), so a generic
+  exporter cannot arrive unread. `catalog status` counts it with the state
+  half. A whole copy of the database, such as the backup
+  `scripts/flip-rehearsal.mjs` takes with `copyDatabase` from
+  [`scripts/lib/sqlite.mjs`](../../scripts/lib/sqlite.mjs) (a `pg_dump` on
+  Postgres), does include it, as ciphertext: see the threat model.
+- It carries the copy guard like every other table: its three
+  `provider_key_copy_guard_*` triggers are in
+  [`0000_majestic_ronan.sql`](drizzle-sqlite/0000_majestic_ronan.sql).
 
 ## Filling it
 
@@ -657,7 +700,8 @@ written.
 
 **`--only` selects downstream too.** Pruning a `topic` cascades: the
 `asset_topic`, `curriculum_item_topic` and `collection_item` rows pointing at it
-are deleted and `concept.topic_slug` is set to null. So `--only topics` after a
+are deleted (a topic that still files a concept is held instead, since 0012
+made `concept.topic_slug` `ON DELETE RESTRICT`; see the last section). So `--only topics` after a
 slug is renamed would leave every other source silently unlinked, and nothing
 would say so until a `show` that used to return videos stopped. Selecting a
 source therefore selects everything that points at what it owns, and the run
@@ -716,9 +760,10 @@ paths stay what they were, as logical names (D11), and the SVG asset gains
 `blob_key`.
 
 A document's bytes are its canonical JSON: keys sorted at every depth, no
-whitespace (`src/content/diagram-document.ts`). jsonb keeps no key order, so
-the file an import read cannot be given back byte for byte, and one form has
-to be the definition. `diagram.document_hash` and the `.tldr` asset's
+whitespace (`src/content/diagram-document.ts`). Postgres `jsonb`, where this
+was decided, kept no key order, so the file an import read could not be given
+back byte for byte, and one form has to be the definition; the column is JSON
+text on SQLite and the rule stands. `diagram.document_hash` and the `.tldr` asset's
 `content_hash` are the sha256 of those bytes, the export writes them, and a
 checkout writes them; tldraw reads a document in any key order, and parity
 compares `.tldr` files parsed. The first export after the import therefore
@@ -993,7 +1038,8 @@ owner may read its own rows and the commons', `readableOwners(owner)` in
 learner that owns shared content and never signs in; its `learner` row is
 created by the write seam on its first write, as `local`'s is by
 `ensureLearner`, and no read needs it. The filter is in the application, not in
-row-level security, which waits for a second service to read the database:
+the database: Postgres's row-level security was left for the day a second
+service read the database, and SQLite has none:
 
 | Where | What it does |
 | --- | --- |
@@ -1013,14 +1059,17 @@ row-level security, which waits for a second service to read the database:
 | `catalog export`, parity, `topic ls` without `--owner` | Read every owner, through an `owners` argument that is optional only on those internal functions |
 | `catalog import` (`src/index/writer.ts`, `src/index/run.ts`) | Writes as the importing owner (`CLI_OWNER`) and stamps every row it writes with it. Prunes, archives and clears links only among that owner's rows: a link is its parent's (D24), and one whose far end the owner cannot read is left for `catalog doctor`. Refuses, by id and before the source writes anything, a tree row on an id another owner holds, a link under another owner's entity or to one the owner cannot read, and a prune whose cascade would take another owner's rows (their links, their diagram under a topic, their `asset_job` record of an asset, another learner's mastery or review). Another learner's session log is neither called gone nor appended to. The cross-source lookups (`knownConcepts` and the rest) answer only for readable rows: once a source has run, what it produced plus the commons' |
 | `catalog asset upload` (`src/content/asset-upload.ts`) | Uploads the rows the CLI's owner or the commons holds, and writes each one as its own owner, so its bytes land under that owner's prefix and the seam's owner check passes. Another owner's row, and a poster whose owner is not its video's, are refused by name before a byte is read or cut |
-| `uploadBlob` (`src/content/blob.ts`) | With `GNOSIA_OWNER_BYTES_CAP` or `GNOSIA_OWNER_UPLOADS_PER_DAY` set, refuses a new object that would take its owner past either, measured from `blob_object` by `owner_id` (which the table's check ties to the key's prefix) under a per-owner advisory lock, with the row asked about locked. A key that has a row is never measured or refused, a malformed cap included. `catalog blob audit` prints each owner's totals, and its stale-pending delete takes the same lock |
+| `uploadBlob` (`src/content/blob.ts`) | With `GNOSIA_OWNER_BYTES_CAP` or `GNOSIA_OWNER_UPLOADS_PER_DAY` set, refuses a new object that would take its owner past either, measured from `blob_object` by `owner_id` (which the table's check ties to the key's prefix) inside the write transaction, whose `begin immediate` holds the file's write lock (a per-owner advisory lock on Postgres). A key that has a row is never measured or refused, a malformed cap included. `catalog blob audit` prints each owner's totals, and its stale-pending delete runs under the same write lock |
 | Blob keys and their rows (`src/content/write.ts`, `src/state/blobs.ts`) | A row may name only a blob under its own owner's prefix: the seam refuses a new key under another owner's (a key the row already had passes, for D23's move), and the asset routes' blob reads serve a blob only to a reader who may read its owner (`blob_object.owner_id` in the reader's scope), so a row naming another owner's bytes serves them to nobody who cannot read that owner, while a row D23 moved to the commons keeps serving its `local/` bytes to `local` until the upload re-keys it |
 
 **A database from before 0010** has no `owner_id`, and holds one owner's
-rows by construction. `scopedRead` runs a scoped read there unscoped, but only
+rows by construction. Only a Postgres database can be one, since every SQLite
+catalog has `owner_id` from `0000`; the guard stays in `src/content/scope.ts`.
+`scopedRead` runs a scoped read there unscoped, but only
 after asking the catalog (`ownersExist`, one question to
-`information_schema`, whose yes is kept per pool): an `undefined_column`
-error on a database that has `owner_id` is the query's own bug and is thrown,
+`pragma_table_info('asset')`, whose yes is kept per connection): a missing
+column error (`42703`, as `sqlstate` reads SQLite's "no such column") on a
+database that has `owner_id` is the query's own bug and is thrown,
 never answered with every owner's rows. A write path asks first
 (`readableFor`), since in a transaction the failed attempt would abort the
 retry.
@@ -1035,10 +1084,12 @@ and writes only `CLI_OWNER`'s rows, as its row above says), `parity`, `status`,
 Everything else a CLI prints about content is scoped to `CLI_OWNER` as the
 table above says.
 
-**A type still on files has no owner.** Until `catalog flip <type>`, the web
-app reads that type from `content/` and `learn/`, and a file carries no
-`owner_id`, so every account would see the owner's files for it. Accounts
-therefore need every type flipped first; `catalog status` says which are.
+**A type still on files has no owner.** Until `catalog flip <type>`, that
+type's truth is its files in `content/` and `learn/`, and a file carries no
+`owner_id`, so every account would see the owner's files for it (the web app
+now refuses such a type outright; see [Who owns a type](#who-owns-a-type)).
+Accounts therefore need every type flipped first; `catalog status` says which
+are.
 
 D23 of the plan decides, per type, which ids stay global and which types move
 to the commons. The import limit it named, a tree that pruned and re-stamped
@@ -1077,13 +1128,17 @@ revision that mentions the column is the one that set it.
 
 `writeContent` in `src/content/write.ts` is the one authored write: one
 transaction that takes the revision locks, refuses when the writer's `base` is
-not the latest revision, sets `gnosia.revision_id`, upserts the row and any
+not the latest revision, names the revision on the connection (`markSeam`,
+through `setRevisionId`, which `catalog_revision_id()` answers; on Postgres
+the setting `gnosia.revision_id`), upserts the row and any
 links given in a savepoint, reads the snapshot back and appends the revision.
 A write whose snapshot equals the latest revision's rolls the savepoint back,
-so it appends nothing and changes nothing, `updated_at` included. The id comes
-from the identity's own sequence before the entity write, which is why the
-identity is `BY DEFAULT`: the setting has to name the revision before the write
-the guard checks.
+so it appends nothing and changes nothing, `updated_at` included. The id is
+reserved before the entity write, because the guard checks that a revision is
+named before the write: `reserveRevisionIds` in `src/content/revisions.ts`
+takes the next `max(id) + 1`, safe under the transaction's write lock. On
+Postgres it came from the identity's own sequence, which is why that identity
+was `BY DEFAULT`.
 
 An import that deletes an entity (a topic, concept or asset its files stopped
 producing) appends a `delete` revision holding the state it was deleted in.
@@ -1091,20 +1146,25 @@ The history then ends with a word, and an entity that comes back is always a
 new revision even when its snapshot matches the one before it went.
 
 `seq` is the latest plus one, so two writers of one entity must not read the
-latest at once. Both take transaction-scoped advisory locks before reading and
-before any row lock: the seam takes its entity type shared and the entity
-exclusive, and an import takes every entity type it may touch exclusive, in
-sorted order, up front. Seam writes of different entities run side by side, an
-import waits for the ones in flight, and no two writers can each hold what the
-other is waiting for.
+latest at once. On SQLite the file is the lock: `inTransaction` opens every
+write transaction with `begin immediate`, so a writer holds the write lock from
+its first statement to its last and no two writers overlap
+([`src/db.ts`](src/db.ts)). On Postgres both took transaction-scoped advisory
+locks before reading: the seam its entity type shared and the entity
+exclusive, an import every entity type it may touch exclusive, in sorted
+order, up front. `lockEntity` and `lockTypes` in
+[`src/content/revisions.ts`](src/content/revisions.ts) keep that shape and
+take nothing now, so each caller still says where a lock was taken.
 
 A write of several entities in one transaction is `writeContents`, which takes
 every entity's locks before its first write, sorted by type and then id, and
 then writes in the order it was given (the order the foreign keys need). The
-lock order, and why nothing that follows it can deadlock, is written out in
-`src/content/revisions.ts`. Two `writeContent` calls inside one outer
-transaction do compose, as savepoints, but take their locks in call order, and
-`test/content-seam.test.ts` shows that deadlocking against an import.
+lock order, and why nothing that followed it could deadlock on Postgres, is
+written out in `src/content/revisions.ts`. Two `writeContent` calls inside one
+outer transaction do compose, as savepoints, but take their locks in call
+order. On Postgres that deadlocked against an import; on SQLite, where the
+file is the one lock, `test/content-seam.test.ts` sees the import's
+`begin immediate` time out with `SQLITE_BUSY` instead.
 
 ### Positions
 
@@ -1166,10 +1226,12 @@ records nothing anywhere.
 
 **A root belongs to the database that recorded it.** Every import records,
 beside `index_run.metadata.root`, which database it ran against
-(`metadata.database`: `current_database()` and its `pg_database` oid). A
-`createdb -T` copy inherits every row, the owner's root included, and its
-`catalog_instance` says `primary` like the original's, so the oid is what
-tells them apart. A write-through, `catalog flip`'s parity and `catalog
+(`metadata.database`: the database file's resolved path, `databaseIdentity`
+in [`src/content/import-root.ts`](src/content/import-root.ts); on Postgres it
+was the database's name and oid). A copy made with `copyDatabase`
+([`scripts/lib/sqlite.mjs`](../../scripts/lib/sqlite.mjs)) inherits every
+row, the owner's root included, and its `catalog_instance` says `primary`
+like the original's, so the file's path is what tells them apart. A write-through, `catalog flip`'s parity and `catalog
 export`'s hash all use a root only when this database recorded it, and a
 write-through also refuses a root inside any git checkout other than the
 one running it, another worktree or a separate clone
@@ -1185,10 +1247,12 @@ records the export hash of the files it just checked parity against, and with
 refuses a type whose database reader is not built (`DB_READERS` in
 `src/content/source.ts`, empty until a track fills one in), since readers
 follow the row, and it runs parity itself against the files the type was last
-imported from, holding the type's revision locks so no import moves the rows
-under the check. It arms the triggers first and counts the violators after,
-because arming takes each table's lock, so nothing can add a violator between
-the count and the commit; a refusal rolls the arming back with everything
+imported from, inside its own write transaction so no import moves the rows
+under the check. It arms the triggers first and counts the violators after
+(`src/content/flip.ts`). On Postgres the order mattered because arming took
+each table's lock; on SQLite the transaction's `begin immediate` already holds
+the file's write lock, so nothing can add a violator between the count and
+the commit either way. A refusal rolls the arming back with everything
 else. A waived rule is disarmed even if an earlier strict flip armed it.
 `manimkc` cannot be flipped until Track E gives videos a parity.
 
@@ -1246,77 +1310,91 @@ that differs, and exits 1 on any.
 
 ### Triggers
 
-Every trigger in the database, and the state migration `0010` leaves it in.
-The functions qualify table names with `public.`, so a caller's `search_path`
-cannot point them elsewhere.
+Every guard in the database, and the state a fresh one is in after
+`npm run catalog -- migrate`. SQLite has row triggers only, and one event per
+trigger, so a guard that was one Postgres trigger on `INSERT OR UPDATE OR
+DELETE` is three here, named `<guard>_ins`, `_upd` and `_del`. The functions
+the triggers call, `catalog_copy_ok()` and `catalog_revision_id()`, are
+registered by `connect` on each connection and read that connection's flags
+([`src/db.ts`](src/db.ts)); on Postgres they were the settings
+`gnosia.copy_ok` and `gnosia.revision_id`.
 
-| Trigger | Table | Kind | State | What it does |
+| Guard | Table | Kind | State | What it does |
 | --- | --- | --- | --- | --- |
-| `event_no_update`, `event_no_delete` | `event` | before, per row | on | Append-only (0001, per row since 0003) |
-| `content_revision_no_update`, `content_revision_no_delete` | `content_revision` | before, per row | on | Append-only, `catalog_append_only()` |
-| `session_log_entry_no_update`, `session_log_entry_no_delete` | `session_log_entry` | before, per row | on | Append-only, same function, its own hint |
-| `video_write_guard` | `video` | before, per row | on | The same guard, armed by 0015 itself: `video` has had no writer outside the seam, so there was nothing to wait for |
-| `<table>_write_guard` | the 18 tables in `WRITE_GUARDS` (`src/content/rules.ts`); `curriculum_item_asset`'s since 0022, created off like the rest, and armed on a database that already owns courses by `catalog flip courses --rearm` | before, per row | **off** | Refuses a write unless the transaction set `gnosia.revision_id` (D4). Armed per type by `catalog flip`; `asset`'s arms with `diagrams` (or `manimkc`), the last writers outside the seam being gone since Track D retired `assert-output` |
-| `collection_module_has_item`, `curriculum_item_module_has_item` | `collection`, `curriculum_item` | constraint, deferred | **off** | Rule `module-has-item` |
-| `curriculum_item_item_has_concept`, `concept_curriculum_item_item_has_concept` | `curriculum_item`, `concept_curriculum_item` | constraint, deferred | **off** | Rule `item-has-concept`; nine courses fail it today |
-| `concept_curriculum_item_concept_topic`, `concept_concept_topic`, `curriculum_item_concept_topic`, `collection_item_concept_topic` | the four tables that can move either side | constraint, deferred | **off** | Rule `item-concept-in-module-topic` |
-| `concept_prerequisite_course_order`, `concept_curriculum_item_course_order`, `curriculum_item_course_order`, `collection_course_order` | the four tables that can change a course's order or a `requires` edge (0021) | constraint, deferred | **off** | Rule `course-order-respects-requires`: a course teaches no concept before a concept it `requires`, judged by each concept's first appearance (module, item, position). `assumes` out of order is a doctor warning, never refused |
-| `<table>_copy_guard` | every table but `catalog_instance` | before, per statement, including `TRUNCATE` | on | Refuses a write when `catalog_instance.role = 'copy'`, naming `primary_host`, unless the connection set `gnosia.copy_ok = on` |
+| `event_no_update`, `event_no_delete` | `event` | before, per row | on | Append-only, `23001` |
+| `content_revision_no_update`, `content_revision_no_delete` | `content_revision` | before, per row | on | Append-only, with its own message |
+| `session_log_entry_no_update`, `session_log_entry_no_delete` | `session_log_entry` | before, per row | on | Append-only, with its own message |
+| `video_write_guard_*` | `video` | before, per row | on | The write guard below, created by the migration itself: `video` has had no writer outside the seam, so there was nothing to wait for |
+| `<table>_write_guard_*` | the 18 tables in `WRITE_GUARDS` (`src/content/rules.ts`) | before, per row | **off** (absent) | Refuses a write unless the connection's `catalog_revision_id()` is set (D4), with `42501`. `catalog flip` creates a type's three triggers per table and disarming drops them (`setTriggers` in [`src/content/rules.ts`](src/content/rules.ts)), where Postgres enabled and disabled triggers it had created off. `asset`'s arm with `diagrams` (or `manimkc`), the last writers outside the seam being gone since Track D retired `assert-output`; `curriculum_item_asset`'s (0022) are armed on a database that already owns courses by `catalog flip courses --rearm` |
+| `module-has-item` | `collection`, `curriculum_item` | rule, checked before commit | **off** | Every live module has at least one live curriculum item |
+| `item-has-concept` | `curriculum_item`, `concept_curriculum_item` | rule, checked before commit | **off** | Every live curriculum item names at least one concept; nine courses fail it today |
+| `item-concept-in-module-topic` | the four tables that can move either side | rule, checked before commit | **off** | An item's concepts are filed under its module's topic |
+| `course-order-respects-requires` | the four tables that can change a course's order or a `requires` edge (0021) | rule, checked before commit | **off** | A course teaches no concept before a concept it `requires`, judged by each concept's first appearance (module, item, position). `assumes` out of order is a doctor warning, never refused |
+| `<table>_copy_guard_*` | every table in `0000_majestic_ronan.sql` but `catalog_instance` | before, per row | on | Refuses a write with `25006` when `catalog_instance.role = 'copy'`, naming `primary_host`, unless the connection's `catalog_copy_ok()` answers 1 |
 
 Why each is shaped the way it is:
 
-- **The write guard is per row**, for the reason `0003` exists: a statement
-  trigger fires on a referential action that touches no row. It checks a
-  transaction-local setting, so a pooled connection cannot carry the seam's
-  permission into the next caller's write.
-- **The completeness rules are constraint triggers deferred to commit.** A
-  `CHECK` sees one row, and "at least one child" is a question about others.
-  Deferred, so a course written in one transaction is judged whole. Each is
-  attached to the parent (a new module, a new item) and to the child (the last
-  item or concept link leaving), since a trigger on the parent alone would
-  never see a child go. `catalog doctor` runs the same predicates as queries,
-  from `COMPLETENESS_RULES` in `src/content/rules.ts`, and `catalog flip
-  <type> --strict` will arm them when it reports zero.
-- **The copy guard is per statement**, because on a copy even a statement that
-  would change nothing is a write aimed at the wrong database, and `TRUNCATE`
-  has no rows. It is a trigger rather than a check in each writer for the same
-  reason `event` is append-only by trigger: it binds the web app and psql too.
-  `pg_dump` puts triggers in its post-data section, so a restore loads rows
-  before any guard exists. `CATALOG_COPY_OK=1` makes `connect()` add `-c
-  gnosia.copy_ok=on`; `catalog migrate` always does, since a copy's schema
-  must still follow the primary's.
+- **The write guard is per row.** On Postgres that was a choice, for the
+  reason `0003` existed: a statement trigger fired on a referential action
+  that touched no row. On SQLite it is the only kind. It reads a flag the
+  seam sets with `setRevisionId` and `inTransaction` clears when the outermost
+  transaction ends ([`src/db.ts`](src/db.ts)), so a connection cannot carry
+  the seam's permission into the next caller's write.
+- **The completeness rules are checked at commit.** A `CHECK` sees one row,
+  and "at least one child" is a question about others; checked at commit, a
+  course written in one transaction is judged whole. On Postgres each rule
+  was a set of `CONSTRAINT TRIGGER ... INITIALLY DEFERRED` triggers on the
+  parent and the child; their names survive in `COMPLETENESS_RULES` as labels.
+  SQLite has no deferred triggers, so an armed rule is a row in
+  `catalog_armed_rule`
+  ([`0001_catalog_armed_rule.sql`](drizzle-sqlite/0001_catalog_armed_rule.sql)),
+  and `inTransaction` runs every armed rule's violator query after the last
+  write and before `commit`, refusing with `DeferredRuleViolation`
+  ([`src/db.ts`](src/db.ts)). `catalog doctor` runs the same queries, from
+  `COMPLETENESS_RULES` in `src/content/rules.ts`, and `catalog flip <type>
+  --strict` arms them when it reports zero.
+- **The copy guard is per row now, and that is narrower.** On Postgres it was
+  per statement, because on a copy even a statement that would change nothing
+  is a write aimed at the wrong database, and `TRUNCATE` has no rows. SQLite
+  has neither statement triggers nor `TRUNCATE`, so a statement that touches
+  no row reaches no guard and lands silently on a copy
+  ([`0000_majestic_ronan.sql`](drizzle-sqlite/0000_majestic_ronan.sql) says
+  so beside the triggers). It is a trigger rather than a check in each writer
+  for the same reason `event` is append-only by trigger: it binds every
+  connection that opens the file. `CATALOG_COPY_OK=1`, or `connect({ copyOk:
+  true })`, makes `catalog_copy_ok()` answer 1 on that connection; `catalog
+  migrate` always passes it, since a copy's schema must still follow the
+  primary's.
 
-### The hand-written statements in 0010
+### The hand-written statements in 0000
 
 drizzle generates DDL for tables, columns, indexes and constraints. Everything
-else in `0010_content_expand.sql` was added by hand, above and below the
-generated block, as `0001`, `0003` and `0006` did before it:
+else in [`0000_majestic_ronan.sql`](drizzle-sqlite/0000_majestic_ronan.sql)
+was added by hand, below the generated block, as Postgres `0010` was:
 
 | Statement | Why drizzle cannot express it |
 | --- | --- |
-| `CREATE EXTENSION IF NOT EXISTS pg_trgm` | Extensions are not schema objects drizzle models. First, since the trigram indexes need it |
-| `INSERT INTO learner (id) VALUES ('local') ON CONFLICT DO NOTHING` | Data. Before any `owner_id` foreign key |
+| `INSERT INTO learner (id) VALUES ('local') ON CONFLICT DO NOTHING` | Data. Every `owner_id` foreign key needs it |
 | `INSERT INTO catalog_instance ... 'primary'` | Data. The local database is the primary (D2) |
-| `catalog_append_only()` and its four triggers | Functions and triggers |
-| `content_write_guard()`, its triggers, and `DISABLE TRIGGER` | Same, in a `DO` loop over the table list |
-| The three `catalog_check_*()` functions, their eight constraint triggers, and `DISABLE TRIGGER` | Same |
-| `catalog_copy_guard()` and its triggers | Same, in a `DO` loop |
+| The six append-only triggers | Triggers |
+| The three copy-guard triggers of every table but `catalog_instance` | Same |
+| `video_write_guard_ins`, `_upd`, `_del` | Same. The other write guards are DDL that `catalog flip` runs (`writeGuardDdl` in `src/content/rules.ts`) |
 
-A table added after 0010 carries no copy guard unless its own migration adds
-one, since 0010 named its tables. `0014_studio_drafts.sql` ends with
-`draft_copy_guard`, below drizzle's block, and
-`test/content-seam.test.ts` fails any table without one.
+A table added later carries no copy guard unless its own migration adds its
+three triggers, and `test/content-seam.test.ts` fails any table without
+`<table>_copy_guard_ins`. `catalog_armed_rule`, created by SQLite's
+`0001_catalog_armed_rule.sql`, has none, and the test passes it over by name.
 
-The trigram indexes themselves are drizzle's: `topic_title_trgm_idx` on
-`title` and `topic_aliases_trgm_idx` on `aliases::text`, since an index
-expression cannot unnest an array. Near-duplicate search is `title % $1` and
-`$1 <% aliases::text`.
+Near-duplicate topic search has no index. On Postgres it was `pg_trgm` with
+two trigram indexes; on SQLite `connect` registers `similarity()`, the same
+trigram measure computed in JavaScript ([`src/db.ts`](src/db.ts)), and
+`src/content/topics.ts` scores every live topic's title, slug and aliases
+with it.
 
 ## Working on it
 
 ```bash
-createdb gnosia                    # once, against the Homebrew Postgres 17
-npm run catalog -- migrate             # apply every outstanding migration
+npm run catalog -- migrate             # create the file on first connect, apply every outstanding migration
 npm run catalog -- status --json       # row counts, migration head, source freshness, course coverage
 MANIMKC_ROOT=/nonexistent REMOTIONKC_ROOT=/nonexistent REVIDEOKC_ROOT=/nonexistent BLENDERKC_ROOT=/nonexistent npm run catalog -- import seed   # fill it from the seed (or: import <an export>)
 for t in topics tags concepts sessions courses diagrams; do npm run catalog -- flip $t; done
@@ -1344,30 +1422,35 @@ layout. The words are in the rows: `learn concept show` for a note,
 `catalog diagram checkout` for a diagram, `catalog export` for everything.
 
 Every command exits 0 when it worked, 1 when it failed, 2 on a wrong
-invocation, 3 when the database is unreachable: nothing listening, or a host
-name that does not resolve, and 4 when the database is behind this code.
+invocation, 3 when the database is unreachable: a file that cannot be opened
+(`SQLITE_CANTOPEN`), a path through something that is not a directory, a
+permission denied or a read-only filesystem, and 4 when the database is behind this code.
 `index`, `import`, `export`, `parity`, `flip`, `ls`, `show`, `history`,
 `diff` and `renumber` (and `learn index`) check the migration journal first and refuse with how many
 migrations are outstanding and `Run: npm run catalog -- migrate`, rather than
 with drizzle's `Failed query: ...` for a table the database does not have yet.
-A server that answered and refused (bad password,
-no such database, too many clients) is 1. Either way stderr carries one line
-naming the cause, such as `database unreachable: connection refused
-(ECONNREFUSED)`, read from the driver's error code in
-`src/connection-failure.ts`. The studio runs a job without the database on 3
+A file that opened and refused (locked past the busy timeout, or not a
+database) is 1. Either way stderr carries one line naming the cause, such as
+`database unreachable: cannot open the database file (SQLITE_CANTOPEN)`, read
+from the driver's error code in
+[`src/connection-failure.ts`](src/connection-failure.ts), which still carries
+the Postgres codes beside SQLite's. The studio runs a job without the database on 3
 and refuses it on 1 (D16 in `docs/TLDRAWKC-INTEGRATION.md`).
 
 After changing anything in `packages/schema/src/`:
 
 ```bash
-npm run generate -w @gnosia/catalog   # writes services/catalog/drizzle/
+npm run generate -w @gnosia/catalog   # writes services/catalog/drizzle-sqlite/
 npm run catalog -- migrate
 npm test
 ```
 
-Never edit an applied migration. drizzle applies by the journal's timestamp
-and never compares a hash, while `catalog migrate`, `status` and `doctor` read
-a migration as applied by the sha256 of its file, so an edit makes it pending
+Never edit an applied migration, and never add one to `drizzle/`, which
+nothing applies any more (`MIGRATIONS_FOLDER` in
+[`src/migrations.ts`](src/migrations.ts) is `drizzle-sqlite/`). drizzle
+applies by the journal's timestamp and never compares a hash, while `catalog
+migrate`, `status` and `doctor` read a migration as applied by the sha256 of
+its file, so an edit makes it pending
 forever everywhere it has already run, and one drizzle will not apply again.
 `catalog migrate` refuses such a file by name (`MigrationSkipped` in
 `src/migrations.ts`) rather than report it applied.
@@ -1376,50 +1459,34 @@ forever everywhere it has already run, and one drizzle will not apply again.
 
 - **Settled in migration `0013`, phase 2's contract: a stored kind has a
   blob, and a key is the package's.** `asset_stored_blob_check` narrows the
-  location check: a `video`, `transcript`, `chapters`, `captions`, `poster` or
-  `diagram_svg` row must name a `blob_key` (a note, a log, a `.tldr` and a
-  link are rows or URLs, and keep their path). `blob_object_key_check`
-  tightens from 0010's `^[^/]+/[0-9a-f]{64}([.][a-z0-9]+)?$` to the key
-  `@gnosia/blob` makes: a lowercase owner of 1 to 64, a required extension
-  of 1 to 16 (`BLOB_KEY_PATTERN` in `packages/schema/src/content.ts`). A
-  hand-written block first lists every stored-kind asset with no blob and every
-  key the package would not make, and raises with them; `catalog doctor`
-  reports the same two lists (`src/content/blob-contract.ts`). **It applies
-  only after `catalog import` (which stores each diagram SVG) and `catalog
-  asset upload --source manimkc` have run on that database**, which on the
-  owner's was flip day. Until the phase 3 cut-over `catalog migrate` held it
-  back: 0013 was registered in `CONTRACT_MIGRATIONS`
-  (`src/migrations.ts`), so `migrate` applied everything before it as its own
-  run, asked the same question, and held 0013 (and anything after it) with
-  the reason, exiting 0 with `held`, which let a database at 0009 migrate to
-  0012 and then run the upload 0013 waits on. The price was that a migration
-  generated after 0013 waited behind it on any database still holding it.
-  The cut-over unregistered it, and `CONTRACT_MIGRATIONS` is empty: migrations may follow
-  0013 again. On a database without it, `migrate` applies it like any other
-  migration, and its guard raises with the ids and rolls that run back if
-  the data is not ready; `catalog status`, `learn init` and `learn doctor`
-  report it as outstanding and say "run migrate". Such a database cannot
-  clear it from this code, since `import` and `asset upload` refuse while a
-  migration is outstanding: it goes through flip day from a worktree at
-  `content-files-final` (the tag on `a0afd93`), where 0013 is still held,
-  then through the cut-over (`flip-rehearsal.mjs --real --cutover`) from the
-  main checkout's script pointed at that worktree, which arms or waives the
-  completeness rules, and comes back (docs/CONTENT-MIGRATION.md, "After the
-  merge"). Only a
-  database never taken through flip day can be there, and the owner's is,
-  since the cut-over merged before their flip day. The holding machinery
-  (`migrateHolding`, `heldMigrations`, `assertMigrated`) stays for the next
-  contract migration, and `test/blob-contract.test.ts` registers 0013 through
-  their `contracts` option to test it, and fails if a registered contract is
-  ever not the journal's last entry.
+  location check: a `video`, `transcript`, `chapters`, `captions`, `poster`,
+  `pdf` or `diagram_svg` row must name a `blob_key` (a note, a log, a `.tldr`
+  and a link are rows or URLs, and keep their path). `blob_object_key_check`
+  holds the key `@gnosia/blob` makes: a lowercase owner of 1 to 64, a
+  required extension of 1 to 16 (`BLOB_KEY_PATTERN` in
+  `packages/schema/src/content.ts`). On SQLite both checks are in
+  [`0000_majestic_ronan.sql`](drizzle-sqlite/0000_majestic_ronan.sql), so a
+  catalog has them from its first `migrate`, and `catalog doctor` still
+  reports any stored-kind asset with no blob and any key the package would
+  not make (`src/content/blob-contract.ts`).
+  On Postgres, 0013 was a contract migration: it applied only after `catalog
+  import` and `catalog asset upload --source manimkc` had stored every file,
+  so until the phase 3 cut-over `catalog migrate` held it back through
+  `CONTRACT_MIGRATIONS` (`src/migrations.ts`), and docs/CONTENT-MIGRATION.md,
+  "After the merge", has how the owner's database went through flip day. The
+  cut-over unregistered it, and `CONTRACT_MIGRATIONS` is empty. The holding
+  machinery (`migrateHolding`, `heldMigrations`, `assertMigrated`) stays for
+  the next contract migration; `test/blob-contract.test.ts` checks that any
+  registered contract is the journal's last entry, and skips its 0013 cases on
+  SQLite, which ships no schema from before 0013: the first migration
+  already carries the contract as `asset_stored_blob_check`.
 
 - **Settled in migration `0012`: `concept.topic_slug` is `NOT NULL`**, and its
   foreign key is `ON DELETE RESTRICT` instead of the `SET NULL` that could
-  only produce the null the column no longer allows. The migration counts the
-  concepts with no topic first, archived ones included, and refuses with every
-  slug rather than failing on the constraint; `catalog doctor` reports the
-  same list, and whether the constraint is in force, on a database behind only
-  on 0012. One consequence for an import while topics are files: the topics
+  only produce the null the column no longer allows. On Postgres the
+  migration counted the concepts with no topic first and refused with every
+  slug; on SQLite the column is `NOT NULL` from
+  [`0000_majestic_ronan.sql`](drizzle-sqlite/0000_majestic_ronan.sql) on. One consequence for an import while topics are files: the topics
   source runs before the concepts source, so a topic dropped in the same edit
   that moves its concepts elsewhere, or removes their notes, cannot be deleted
   by the topics source. That source holds it (row and links untouched,
@@ -1437,7 +1504,8 @@ forever everywhere it has already run, and one drizzle will not apply again.
   the referent exists at write time. `ON DELETE RESTRICT ON UPDATE CASCADE`,
   and `SET NULL` was not even available: the referential UPDATE it fires is
   what the per-row trigger from `0003` refuses. The migration backfills a
-  `tutor` session for every distinct value the column already held, taking
+  `tutor` session (on Postgres; SQLite has the foreign key from 0000) for
+  every distinct value the column already held, taking
   `started_at` from `min(at)` and reading a `session-close` event as `closed`
   and its absence as `interrupted`, because a column that has been free text
   for six migrations cannot be cleaned up after the constraint lands.
@@ -1449,7 +1517,8 @@ forever everywhere it has already run, and one drizzle will not apply again.
   rebuilds. **Settled in migration `0010`:** `progress` and `recap` are
   `RESTRICT` on `curriculum_item`, and `curriculum_item` is `RESTRICT` on
   `collection`, so dropping an item from the course YAML archives it and the
-  learner's tick and recap stay.
+  learner's tick and recap stay. On SQLite all three rules are in
+  [`0000_majestic_ronan.sql`](drizzle-sqlite/0000_majestic_ronan.sql).
 - `learner` holds one row by convention, not by constraint. A `CHECK (id =
   'local')` would enforce it and would have to be dropped the day authentication
   arrives, so the convention is documented instead.

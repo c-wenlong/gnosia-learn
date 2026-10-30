@@ -127,7 +127,7 @@ back in layers with `ls`, `show`, `path` and `search`, every one of them
 git clone https://github.com/c-wenlong/gnosia-learn
 cd gnosia-learn
 npm ci
-cp .env.example apps/web/.env.local   # Next reads it from apps/web/, never the root; fix its DATABASE_URL (below)
+cp .env.example apps/web/.env.local   # Next reads it from apps/web/, never the root; set OWNER_PASSWORD and AUTH_SECRET in it
 npm run dev
 ```
 
@@ -286,7 +286,7 @@ flowchart LR
 | `~/.gnosia/` (`GNOSIA_HOME`) | The blob store (`blobs/`), the Obsidian vault (`vault/`) and the nightly export (`archive/`, `npm run export:nightly`) | outside the repo |
 | `event`, `mastery`, `review` (the catalog) | The trajectory and its projections. `event` is the only copy | not in git |
 | `progress`, `recap`, `preference` (the catalog) | The web hub's ticks, notes and recaps. Also the only copy | not in git |
-| `apps/web/.env.local` | `OWNER_PASSWORD`, `AUTH_SECRET`, `DATABASE_URL`, provider keys; read from `apps/web/`, never the root | gitignored |
+| `apps/web/.env.local` | `OWNER_PASSWORD`, `AUTH_SECRET`, provider keys; read from `apps/web/`, never the root. The catalog's file is set in `services/catalog/.env`, if anywhere | gitignored |
 | `tools/manimkc/out/`, `tools/manimkc/cache/` | Rendered videos and the TTS cache | gitignored |
 
 Tutoring chat tries three free providers in order and falls through on errors and rate limits. Every variable is optional: with no keys the site still works, and Launch Agent falls back to **Copy system prompt** and **Copy terminal launch pack**.

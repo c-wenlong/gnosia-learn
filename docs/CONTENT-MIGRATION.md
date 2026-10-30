@@ -30,6 +30,12 @@ working tree, `~/.gnosia/manimkc/out` and the local `gnosia` database;
 every other number is marked *guessed* and says what would settle it. File
 and line references are against `origin/main` at `5a78e61`.
 
+Everything below was built and run on Postgres. The catalog has since moved
+to one SQLite file, `$GNOSIA_HOME/catalog.db` by default
+([SQLITE-MIGRATION.md](SQLITE-MIGRATION.md)), so the `createdb -T` copies,
+`pg_dump` backups, `pg_trgm` and roles below are history. Where a step is
+still something to run, a note says what it is today.
+
 **What changes.** Postgres becomes the source of truth for every piece of
 authored content: the topic vocabulary, tags, courses and their curriculum
 items, concept notes, session logs and diagrams. Binaries (videos, their
@@ -313,6 +319,10 @@ because of that ([DEPLOYMENT.md:163-174](DEPLOYMENT.md#the-database)). Setting
 to anyone who can pass the site password and forge an `Origin` header
 (DEPLOYMENT.md:175-190). The order below is that document's, plus database
 roles and the move of the primary.
+
+Written for a cloud Postgres, this checklist no longer applies as written:
+the catalog is a SQLite file now, with no `pg_dump`, roles or connection
+string to set. A go-live needs a new plan.
 
 - [ ] Choose the provider and region (open question 6). Put the database and
       the Vercel functions in the same region.
@@ -1726,7 +1736,16 @@ last `migrate` applied 0013.
 `node scripts/flip-rehearsal.mjs` runs flip day against a copy, and `--real
 --database <name> --checkout <dir>` runs the same list against a database in
 place: the flip the readers need before they can go database-only (#152).
-Phase 3's cut-over comes after it. The steps, each checked before the next:
+Phase 3's cut-over comes after it. The steps, each checked before the next.
+
+Today's script works on SQLite files: `--database` and `--from` name a file
+(`--from` defaults to the catalog's own), the backup in step 0 is a file
+copy through SQLite's backup API to `~/<file>-preflip-<UTC time>.db` (the
+file's name minus `.db`, so `catalog-preflip-…` for `catalog.db`), checked to
+read back and to hold the `event`, `mastery` and `review` tables, and the
+throwaway copy in step 2 is a file copy too (`copyDatabase` in
+`scripts/lib/sqlite.mjs`). The rest of this section describes the script as
+built on Postgres.
 
 0. A backup: `pg_dump -Fc` to `~/<name>-preflip-<UTC time>.dump` on `--real`
    (into the temp directory on a rehearsal), then `pg_restore --list` of the
@@ -1933,6 +1952,14 @@ the main checkout's script, pointed at that commit's worktree:
    uncommitted export with it); the rows, the backups, the parity report and
    the tag hold everything they held.
 
+The owner has run all five. A Postgres database that never went through flip
+day runs steps 1 to 3 as written, since the tag's code is Postgres's; it is
+then ported to a SQLite file with `services/catalog/scripts/pg-to-sqlite.mjs`
+([SQLITE-MIGRATION.md](SQLITE-MIGRATION.md)), and step 4 names that file
+(`--database ~/.gnosia/catalog.db`), backing up to
+`~/catalog-precutover-<UTC>.db` and saving
+`~/catalog-cutover-<UTC>.parity.json`.
+
 **Built** (branch `p3/cutover`, #159, merged before flip day at the owner's
 call; the operator half is #157):
 
@@ -2045,6 +2072,10 @@ in, and the cut-over PR's own branch has no tree left to import. The owner
 then merged #159 first, so the order that applies is "After the merge" above,
 where the tag comes first and `--cutover` runs from the main checkout against
 a worktree at it; the section after this one says what changed for that.
+
+Today `--database` names a file here too, and the backup is
+`~/<file>-precutover-<UTC time>.db`, the parity report
+`~/<file>-cutover-<UTC time>.parity.json` (see the note under flip day).
 
 `--real --cutover --database <name> --checkout <dir>` has flip day's guards
 (the named database, a terminal to type the name on, no `--yes`), and a

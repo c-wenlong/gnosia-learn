@@ -114,7 +114,7 @@ Gnosia has one reader, so authentication is a password and a signed cookie
 rather than accounts. `/` is the public landing page and `/sign-in` the door;
 everything else, `/api/*` included, needs the session. The check runs in
 `apps/web/src/proxy.ts` before any page renders, and again in the `(app)`
-layout before any query, so an anonymous request never reaches Postgres.
+layout before any query, so an anonymous request never reaches the database.
 
 ```bash
 vercel env add OWNER_PASSWORD production      # what you type on /sign-in
@@ -182,7 +182,7 @@ turning the policy off.
 
 | Name | Purpose | Where it is needed |
 | --- | --- | --- |
-| `DATABASE_URL` | Postgres holding the learner state and the catalog | Vercel (once a cloud database exists), CI, locally |
+| `CATALOG_DB`, `DATABASE_URL` | The path of the SQLite file holding the learner state and the catalog; `CATALOG_DB` wins, and with neither set it is `$GNOSIA_HOME/catalog.db` ([env.ts](../services/catalog/src/env.ts)) | Locally, only for a file away from the default, set in `services/catalog/.env` so the CLI and the app both read it; Vercel: not set, see [The database](#the-database) |
 | `OWNER_PASSWORD` | The one password that opens the app (see [Signing in](#signing-in)) | Vercel, locally |
 | `AUTH_SECRET` | Signs the session cookie, and seals the provider keys saved in Settings; 32+ characters from `openssl rand -base64 32` | Vercel, locally |
 | `SESSION_EPOCH` | Optional; change it to sign every browser out without touching the saved keys (see [Signing in](#signing-in)) | Vercel, locally (optional) |
@@ -241,36 +241,65 @@ Badges & Graphs.
 
 ## The database
 
-`DATABASE_URL` points at the Postgres holding the catalog. It defaults to
-`postgres://localhost:5432/gnosia`, which is the Homebrew install a laptop
-uses and needs no configuration; CI sets it to its `postgres:17` service.
+The catalog is one SQLite file, and there is no database server
+([SQLITE-MIGRATION.md](SQLITE-MIGRATION.md)). `databaseUrl()` in
+[services/catalog/src/env.ts](../services/catalog/src/env.ts) takes
+`CATALOG_DB`, else `DATABASE_URL`, else `$GNOSIA_HOME/catalog.db`
+(`~/.gnosia/catalog.db` when `GNOSIA_HOME` is unset), so a laptop needs no
+configuration. A `postgres://` value is refused rather than read as a file
+name (`databasePath()` in the same file), and `connect` in
+[services/catalog/src/db.ts](../services/catalog/src/db.ts) creates the file
+and its directory on first use. The web app resolves the file through the
+same function, which reads `services/catalog/.env` under the variables
+already set, so a `CATALOG_DB` there reaches the CLI and the app alike
+(`.env.example` and `services/catalog/.env.example` say the same).
 
-**Production has no database yet.** That is a deliberate state and not a
-broken one, and two things make it survivable:
+**Production has no database, and the code gives it no way to reach one.**
+A Vercel function runs the same `databaseUrl()`: with neither variable set it
+resolves `$GNOSIA_HOME/catalog.db` on the function's own filesystem, which is
+not the owner's file and does not outlive the instance. The plan this section
+used to give (a hosted Postgres from Neon or Supabase, or Postgres on the
+homeserver, filled from a `pg_dump`) no longer fits the code, since a Postgres
+URL is refused. How production reaches the catalog is open, and the owner's
+to decide.
+
+What keeps a deployment with no database usable:
 
 - `npm run build` never touches it. Every read calls `connection()` first, so
   it belongs to a request rather than to the build, and a deploy succeeds with
-  the variable unset.
-- Every read degrades. A page renders with an empty learner snapshot and says
-  the database is unreachable rather than failing; a write comes back 503 with
-  `STORE_UNAVAILABLE` and the UI shows "not saved". Nothing is lost, because
-  nothing was there to lose, but nothing new is recorded either, so the
-  production app is read-only until this is set.
+  no database.
+- Every read degraded, when this was measured against an unreachable
+  Postgres: a page rendered with an empty learner snapshot and said the
+  database is unreachable rather than failing, and a write came back 503 with
+  `STORE_UNAVAILABLE` and the UI showed "not saved". On SQLite a file that
+  cannot be opened counts as unreachable (`SQLITE_CANTOPEN`, `EACCES` and
+  `EROFS` in
+  [services/catalog/src/connection-failure.ts](../services/catalog/src/connection-failure.ts)),
+  but nobody has checked a deployment since the move: if the function can
+  create the file, `connect` makes a new empty one, and what the pages do
+  with that is unverified. Since then the browser also keeps a learner
+  write refused for a reason that can pass (a 503, a timeout, no answer)
+  for up to a day and sends it again from the next reachable snapshot
+  (the outbox in `apps/web/src/lib/learner-context.tsx`), so "not saved"
+  is no longer the end of it.
 - Content is the exception, since phase 2: the courses, topics and notes are
   rows, so a page that shows them renders the shell with a panel saying its
   content could not be read (`app/(app)/error.tsx`), where it used to fall
   back to the files. The landing page and sign-in read no content and are
   unaffected. That is edge case 20 of the plan, the one availability property
-  the move to the database gives up, and it lasts until the cloud database
-  exists.
+  the move to the database gives up, and it lasts until production has a
+  database.
 
-**Setting it is also the moment the learner routes become writable by anyone.**
-`/api/learner/*` has no account to authenticate: the only check is the same
-`enforceSameOrigin` the agent routes use, and a forged `Origin` header walks
-straight through it. Today that costs nothing, because production has no
-database and there is nothing to write. Once it does, a stranger who guesses a
-curriculum item id can tick, untick and overwrite the study record, and those
-rows are the only copy. Two things go in before the connection string:
+**Giving production a database is also the moment the learner routes become
+writable by anyone who gets past the password.** `/api/learner/*` has no
+accounts: past the session the proxy asks for, the checks are the same
+`enforceSameOrigin` the agent routes use (`apps/web/src/lib/learner-api.ts`),
+which a forged `Origin` header walks straight through, and a rate limit keyed
+by the owner. Today that costs nothing, because production has no database
+and there is nothing to write. Once it does, anyone holding the password or a
+copied cookie who guesses a curriculum item id can tick, untick and overwrite
+the study record, and those rows are the only copy. Two things go in before
+production gets a database:
 
 ```bash
 vercel firewall rules list                              # what exists
@@ -278,44 +307,35 @@ vercel firewall rules list                              # what exists
 vercel firewall publish --yes
 ```
 
-and a `pg_dump` on a schedule, because the one bound that matters against a
-write nobody authorised is being able to put the rows back. The owner password
+and a scheduled backup of the database file, because the one bound that
+matters against a write nobody authorised is being able to put the rows back.
+A backup of a live file goes through SQLite's backup API, as `copyDatabase` in
+[scripts/lib/sqlite.mjs](../scripts/lib/sqlite.mjs) does, since a plain `cp`
+can miss pages still in the `-wal`. The owner password
 ([Signing in](#signing-in)) now stands in front of every learner route, which
 is what the plan called "future auth" (`#27`); accounts are still to come.
-
-When the cloud database arrives (Neon or Supabase from Vercel, or Postgres on
-the homeserver over Tailscale — the plan has not chosen):
-
-```bash
-pg_dump gnosia > gnosia.sql          # the local database, both halves
-psql "$CLOUD_URL" < gnosia.sql
-vercel env add DATABASE_URL production       # then redeploy
-npm run catalog -- migrate                   # against the cloud URL
-```
-
-The dump carries the append-only trigger with the schema, so the guarantee
-survives the move. Migrations are keyed by file hash, so `migrate` against a
-restored dump is a no-op rather than a replay.
 
 `NEXT_PUBLIC_SITE_URL` is optional in production: Vercel supplies the
 deployment domain, and the app falls back to `http://localhost:3000` locally.
 Set it only if you want social preview images to resolve against a specific
 canonical origin.
 
-### The role Vercel connects as, and whose rows a request touches
+### Whose rows a request touches
 
-D19 of [CONTENT-MIGRATION.md](CONTENT-MIGRATION.md#d19-vercel-connects-with-a-role-that-cannot-write-content):
-when the cloud database arrives, Vercel connects as `app_web`, which has
-`SELECT` on the content tables and writes on the state tables only. That has
-not changed. What phase 4 added is the owner every request acts as:
-`currentOwner()` in `apps/web/src/lib/owner.ts` resolves it from the signed-in
-session (today the owner's cookie, which is `local`), every read passes it to
-the catalog, and every `/api/learner/*` write is made as that learner or
-answered with a 401 before the database is asked. So a content-writing route,
-when the web editor brings one, is gated on `currentOwner()` being resolved and
-passes it to the write seam as `owner`, which stamps the row and refuses one
-another owner holds. Until that editor exists no Vercel function writes content,
-and `app_web` gets no content writes before it does.
+D19 of [CONTENT-MIGRATION.md](CONTENT-MIGRATION.md#d19-vercel-connects-with-a-role-that-cannot-write-content)
+planned that Vercel would connect as a Postgres role, `app_web`, with `SELECT`
+on the content tables and writes on the state tables only. A SQLite file has
+no roles and nothing in the code defines `app_web`, so that guard has no
+counterpart now; whether production needs another is part of the open
+question under [The database](#the-database). What phase 4 added still holds:
+the owner every request acts as. `currentOwner()` in
+`apps/web/src/lib/owner.ts` resolves it from the signed-in session (today the
+owner's cookie, which is `local`), every read passes it to the catalog, and
+every `/api/learner/*` write is made as that learner or answered with a 401
+before the database is asked. So a content-writing route, when the web editor
+brings one, is gated on `currentOwner()` being resolved and passes it to the
+write seam as `owner`, which stamps the row and refuses one another owner
+holds. Until that editor exists no Vercel function writes content.
 
 ## The blob store
 
@@ -339,8 +359,10 @@ adapter in `packages/blob`, keeping objects under `$GNOSIA_HOME/blobs`, or
 - **Vercel reads no blob store today.** The `fs` store is on the laptop and a
   function cannot reach it, so the file routes serve nothing in production,
   as they serve nothing now. The cloud adapter (R2 on Hobby, Vercel Blob on
-  Pro, open question 3 of the plan) and its token arrive with the cloud
-  database in step 0.1, and the bytes move with the rows in the same window.
+  Pro, open question 3 of the plan) and its token were to arrive with the
+  cloud database in step 0.1, the bytes moving with the rows in the same
+  window. Step 0.1 was a hosted Postgres, so when the adapter arrives is now
+  part of the open question under [The database](#the-database).
 - **Course covers show only where the `fs` store is.** A course row names its
   cover by blob key (`collection.cover_blob_key`), and the web app serves it
   from `/api/courses/<slug>/cover`, so a deployment with no store to read
@@ -396,8 +418,10 @@ at bytes it never serves.
 Each root names the database that writes it, in `<root>/.owner`, written by
 the first upload or the first `catalog blob audit --fix`. `--fix` deletes
 objects no row names, so it refuses a root whose marker names another
-database: a `createdb -T` copy sharing `~/.gnosia/blobs` would otherwise
-delete the primary's objects as orphans. An upload refuses such a root too,
+database, which is another file path (`databaseIdentity` in
+[import-root.ts](../services/catalog/src/content/import-root.ts)): a copy of
+the catalog's file sharing `~/.gnosia/blobs` would otherwise delete the
+primary's objects as orphans. An upload refuses such a root too,
 since the owner's `--fix` would delete what it wrote. `--fix` also sweeps `.tmp/*.part`
 files a crashed upload left, once they are a day old.
 
@@ -514,13 +538,18 @@ that failed, 2 is a wrong invocation.
 
 It is a copy of the content only. The learner state (`event`, `mastery`,
 `review`, `progress`, `recap`) and `content_revision` are not in an export,
-so it does not replace the `pg_dump` under [The database](#the-database).
+so it does not replace a backup of the database file
+(see [The database](#the-database)).
 
 **Scheduling it on the laptop** is a launchd agent. Save this as
 `~/Library/LaunchAgents/com.gnosia.nightly-export.plist`, with every
 path made absolute for your machine (launchd expands neither `~` nor
-`$HOME`), `which node` for the first argument, and your own connection
-string in place of the placeholder:
+`$HOME`), and `which node` for the first argument. It sets no database
+variable: with `GNOSIA_HOME` set, the catalog finds its file at
+`$GNOSIA_HOME/catalog.db` ([env.ts](../services/catalog/src/env.ts)), so add a
+`CATALOG_DB` entry only for a file kept elsewhere. A
+`DATABASE_URL=postgres://...` line left in `services/catalog/.env` from the
+old example is still read there and refused, so delete it:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -545,8 +574,6 @@ string in place of the placeholder:
   </dict>
   <key>EnvironmentVariables</key>
   <dict>
-    <key>DATABASE_URL</key>
-    <string>postgres://USER@localhost:5432/gnosia</string>
     <key>GNOSIA_HOME</key>
     <string>/Users/YOU/.gnosia</string>
   </dict>

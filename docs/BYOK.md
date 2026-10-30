@@ -124,7 +124,8 @@ is the only code that reads or writes `provider_key`, and
 each from its own queries, so an exporter cannot read a table it never names.
 The same test covers the other way in, code that walks every table without
 naming any: iterating the schema's `tables` registry, listing the database's
-tables, or running `pg_dump`. Each file that does is listed in the test with
+tables, running `pg_dump`, or copying the whole file through SQLite's backup
+API (`.backup(`, `copyDatabase(`). Each file that does is listed in the test with
 what it does with the rows (`catalog status` counts them, the rehearsal's
 backup is a database dump), and a new one fails until someone has read it.
 
@@ -184,7 +185,7 @@ What each kind of attacker gets.
 
 | The attacker has | They get | They do not get |
 | --- | --- | --- |
-| A database dump alone (a backup, flip day's `pg_dump`, a leaked replica, a read-only SQL injection) | Which providers each owner saved a key for, the last four characters, the dates | Any key. AES-256-GCM under a 256-bit key derived from a secret that is not in the database |
+| A database dump alone (a copy of the catalog file, a backup, flip day's `pg_dump`, a leaked replica, a read-only SQL injection) | Which providers each owner saved a key for, the last four characters, the dates | Any key. AES-256-GCM under a 256-bit key derived from a secret that is not in the database |
 | Write access to the database alone | The power to delete or corrupt rows, which reads as "re-enter this key" | A key, or the use of one owner's key for another (D7), or a key of their own choosing slipped in (they cannot seal one) |
 | The environment alone (`AUTH_SECRET`, as in a leaked Vercel variable or `.env.local`) | A forged session when `OWNER_PASSWORD` sits beside it, as it does in `.env.local` and the Vercel project (the session key needs both, DEPLOYMENT.md "Signing in"), so the use of the owner's keys through the tutor and Test, bounded by the rate limits; and the server's fallback keys, which sit in the environment in the clear as they always have | The stored keys. The app never returns one, and without the database there is no ciphertext |
 | Write access to the environment (a Vercel project member, a tampered `.env.local`) | Every owner's decrypted key, on their next tutor turn: setting `NVIDIA_BASE_URL`, `GEMINI_BASE_URL` or `OPENROUTER_BASE_URL` to a host of their own makes the server send each saved key there as the `Authorization` header | Nothing, beyond what the next rows grant. **Accepted while there is one owner**, who is also the only person who can write the environment. **Revisit before accounts arrive**, for example by pinning the base URLs used with saved keys to the providers' own hosts, so an operator's environment cannot redirect an owner's key |

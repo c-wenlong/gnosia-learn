@@ -6,7 +6,9 @@ Next.js app renders course roadmaps and progress; a CLI runs a Probe → Plan �
 Teach → Close tutoring loop over concept notes, which are rows in the catalog;
 a native macOS app reads the same catalog through a SQLite snapshot and keeps
 its own writable store; and two loopback services — the sidecar and the
-studio runner — give the surfaces their agent calls. Postgres remains the one
+studio runner — give the surfaces their agent calls. The catalog database,
+one SQLite file (`~/.gnosia/catalog.db` by default,
+[docs/SQLITE-MIGRATION.md](docs/SQLITE-MIGRATION.md)), remains the one
 authority for content and web-side learner state: the web app, the CLI and
 the services all reach it through the same store, which is the only module
 that writes it.
@@ -93,9 +95,8 @@ another repo.
 | `apps/web/src/app/` | Routes in two groups — `(site)/` the signed-out landing and sign-in, `(app)/` the signed-in shell and its destinations (home, courses, learn, library, review, ask, studio, settings) — plus `api/` and the root layout and metadata |
 | `apps/web/src/proxy.ts` | The front door: the owner-cookie check that runs before every route the matcher lets through, including every `/api/` path |
 | `apps/web/src/components/` | Every React component: the shell (`AppShell` and `shell/`), the redesign's primitives (`ui/`), and one folder per surface (`home`, `courses`/`course-home`, `learn`/`workspace`, `library`, `session`, `review`, `ask`, `settings`, `studio`) |
-| `apps/web/src/lib/` | `learner-context.tsx` (the provider), `learner-store.ts` (the pool and the reads), `learner-api.ts` (`handler`, the shared route guard), `asset-files.ts` (an asset row to its bytes: the blob store, or the row for a note, a log or a `.tldr`, and a stored poster; nothing off the disk), `blob-store.ts` (the store the routes read), `asset-library.ts` (the library's reads of the content half), `library.ts` (what the library shows and how it links), `transcript.ts` (a sidecar to cues, defensively), `storage.ts` (the pure reducers), the surfaces' read models (`home`, `recent`, `ask`, `review-*`, `learn-index`, `domain-map`, `course-path`, `module-path`, `week-check`), the studio client and corpus reads (`studio*.ts`, `conversation-*.ts`), the settings seams (`settings.ts`, `provider-keys/`, `tutor-models/`, `custom-providers/`, `providers/`, `byok-*.ts`), `types.ts`, `theme-cookie.ts` |
-| `apps/web/src/lib/agent/` | The request side of the tutor. Most files are `export * from "@gnosia/tutor/…"` shims keeping the `@/lib/agent/*` paths working — the prompts, the providers cascade, the judge and session-question parsing moved to `packages/tutor` so the sidecar imports the same code. The web-only glue stays here: `guard.ts` (same-origin, rate limit), `courses.ts` (the route's course list), `credentials.ts` (BYOK against the app's pool), `env.ts` (`tutorDeps`, the `TutorDeps` builder) |
-| `apps/web/src/lib/kb/` | `load.ts` and `types.ts`: the concept graph as the hub reads it, straight from the catalog |
+| `apps/web/src/lib/` | `learner-context.tsx` (the provider), `learner-store.ts` (the catalog connection and the reads, `loadKnowledgeBase` among them: the concept graph as the hub reads it), `learner-api.ts` (`handler`, the shared route guard), `asset-files.ts` (an asset row to its bytes: the blob store, or the row for a note, a log or a `.tldr`, and a stored poster; nothing off the disk), `blob-store.ts` (the store the routes read), `asset-library.ts` (the library's reads of the content half), `library.ts` (what the library shows and how it links), `storage.ts` (the pure reducers), the surfaces' read models (`home`, `recent`, `ask`, `review-queue`, `learn-index`, `domain-map`, `course-path`, `module-path`, `week-check`), the studio client and corpus reads (`studio*.ts`, `conversation-*.ts`), the settings seams (`settings.ts`, `provider-keys/`, `tutor-models/`, `custom-providers/`, `providers/`, `byok-*.ts`), `theme-cookie.ts` |
+| `apps/web/src/lib/agent/` | The request side of the tutor, and only the web-only glue: the prompts, the providers cascade, the judge and session-question parsing live in `packages/tutor`, which every importer names directly, so the sidecar runs the same code. What stays here is `guard.ts` (same-origin, rate limit), `credentials.ts` (BYOK against the app's catalog connection) and `env.ts` (`tutorDeps`, the `TutorDeps` builder, and `turnResponse`) |
 | `apps/web/src/lib/auth/` | `core.ts` (the session cookie, `OWNER_PASSWORD`/`AUTH_SECRET` config) and `session.ts` (the server read) |
 | `apps/web/src/data/source.ts` | The content seam's composition root: `contentSource()`, one selected source per request, from the database only; a type not flipped is refused by name |
 | `apps/web/src/data/courses/index.ts` | Server-only `getCourses()` and the course lookups every page calls |
@@ -117,13 +118,13 @@ tsconfigs.
 | `packages/content/` | The reader for an export's `content/`: `loadCourses`, `loadTopics`, `loadTags`, the `Course` types, and the reader seam (`ContentSource`, `fileSource`, `selectSource`) |
 | `packages/schema/` | Every table shape, and the row types inferred from them |
 | `packages/blob/` | The `BlobStore` interface, the `<owner_id>/<sha256>.<ext>` key scheme, the `fs` adapter and the conformance suite any later adapter must pass ([README](packages/blob/README.md)) |
-| `packages/tutor/` | The tutor's core: prompts, providers, BYOK credentials, the model chain, and the `*Turn` functions — the four agent turns plus the provider-key and model-chain turns — the web routes and the sidecar both call. Returns `TurnReply`s — status plus a JSON body — so nothing in it knows Next.js |
+| `packages/tutor/` | The tutor's core: prompts, providers, BYOK credentials, the model chain, and the `*Turn` functions — the four agent turns, the provider-key and model-chain turns, and the learner writes in `src/server/learner-writes.ts` (progress, note, observe, review grade, session close, preference and the rest) — the web routes and the sidecar both call. Returns `TurnReply`s — status plus a JSON body — so nothing in it knows Next.js |
 | `services/catalog/` | The connection, the migrations, the indexers and the `catalog` CLI |
 | `services/studio/` | The studio's job runner and loopback API, on `127.0.0.1:7250`. Diagrams first, then video jobs through `src/video/` on the same surface (`POST /api/jobs` dispatches on the body's `kind`), and planner conversations (`src/drafts/`). It reads the topic vocabulary only through `catalog topic ls`, with the last good read cached under `$STUDIO_HOME/cache/topics.json` (D13), and opens no database connection of its own. Each job draws in its own workspace, `$STUDIO_HOME/jobs/<id>/candidate/`, never in the working tree, and Accept lands the candidate with `catalog diagram put --job`. Its repo root is where its code sits, not a walk up to `content/` ([docs/TLDRAWKC-INTEGRATION.md](docs/TLDRAWKC-INTEGRATION.md)) |
-| `services/sidecar/` | The tutor as a standalone loopback service for the native app: `node:http` on `127.0.0.1`, an ephemeral port (or `GNOSIA_SIDECAR_PORT`), and one `listening <port>` line on stdout once bound — the spawn contract `SidecarManager` parses. Its `TURNS` table serves the web app's `/api/agent/*` and `/api/learner/*` tutor paths verbatim plus the two settings reads the web does server-side, all through the same `packages/tutor` `*Turn` functions over the catalog pool, so the macOS client (`apps/macos/Sources/Gnosia/SidecarClient.swift`) reuses the BYOK, model-chain and provider-fallback contract rather than reimplementing it. Plain JSON both ways — the tutor endpoints never streamed |
+| `services/sidecar/` | The tutor as a standalone loopback service for the native app: `node:http` on `127.0.0.1`, an ephemeral port (or `GNOSIA_SIDECAR_PORT`), and one `listening <port>` line on stdout once bound — the spawn contract `SidecarManager` parses. Its `TURNS` table serves the web app's `/api/agent/*` and `/api/learner/*` tutor paths verbatim plus the two settings reads the web does server-side, all through the same `packages/tutor` `*Turn` functions over the catalog connection, so the macOS client (`apps/macos/Sources/Gnosia/SidecarClient.swift`) reuses the BYOK, model-chain and provider-fallback contract rather than reimplementing it. Plain JSON both ways — the tutor endpoints never streamed |
 
 `scripts/learn/` is what is left of the pipeline once its state moved into
-Postgres: the maths, and the published entry point.
+the catalog database: the maths, and the published entry point.
 
 | Module | Owns |
 | --- | --- |
@@ -165,15 +166,19 @@ the seam and state through the store, never the database directly.
 | `packages/content/` | `loadCourses`, `loadTopics`, `loadTags`, and the content types; `ContentSource`, the async interface every reader holds, with `fileSource(root)` over those parsers and `selectSource` choosing files or the database per type. Reads files, connects to nothing: the database implementation, `dbSource`, is the catalog's. |
 | `packages/schema/` | The Drizzle table definitions and the row types inferred from them. Connects to nothing. |
 | `packages/blob/` | `BlobStore`, `key()` and `fsStore()`: bytes under `$GNOSIA_HOME/blobs`, outside the repo. Imports nothing but Node. `catalog asset upload` writes it; the web's asset routes, the catalog commands and the sidecar all read through it. |
-| `services/catalog/` | `db.ts` (the pool), `migrations.ts`, `drizzle/` (generated SQL), `cli.ts`, `src/state/` (the learner store) and `src/learn/` (the `learn` CLI) |
-| `packages/tutor/` | Everything the tutor endpoints share, grown out of `apps/web/src/lib/` so the sidecar imports the same code: `src/` is the pure half (`providers.ts` with the provider configs, `keyFor`, `completeWithFallback`; `prompt.ts` and the per-shape builders; `session-core`, `judge`, `review-core`, `concept-graph`, the markdown and media helpers), `src/server/` is the half that touches things — `deps.ts` (`TutorDeps`/`TurnSeams`), `turns.ts` (the `*Turn` functions: four agent turns, then provider-key save/remove/status/test, the model-chain add/set/remove/move/provider moves/chain/test and `modelList`), `credentials.ts`, `provider-keys.ts`, `tutor-models.ts`, `model-list.ts`, `asset-detail.ts` and friends. The pure half imports no I/O; the server half takes the database as a promise so a dead pool degrades per read |
-| `services/sidecar/` | `src/index.ts` (the process: bind, `listening <port>`, signal close), `src/api.ts` (path → `*Turn` table, JSON in/out), `src/guard.ts` (loopback host/origin checks), `src/deps.ts` (`TutorDeps` over the catalog pool and blob store), `src/config.ts` (`HOST`, `GNOSIA_SIDECAR_PORT`) |
+| `services/catalog/` | [`db.ts`](services/catalog/src/db.ts) (the connection: one `better-sqlite3` handle per connect, whose `pool` field is a shim kept from the Postgres pool), `migrations.ts`, `drizzle-sqlite/` (generated SQL; the old `drizzle/` is the Postgres journal, kept for reference while databases cross with `services/catalog/scripts/pg-to-sqlite.mjs`, and nothing applies it), `cli.ts`, `src/state/` (the learner store) and `src/learn/` (the `learn` CLI) |
+| `packages/tutor/` | Everything the tutor endpoints share, grown out of `apps/web/src/lib/` so the sidecar imports the same code: `src/` is the pure half (`providers.ts` with the provider configs, `keyFor`, `completeWithFallback`; `prompt.ts` and the per-shape builders; `session-core`, `judge`, `review-core`, `concept-graph`, the markdown and media helpers), `src/server/` is the half that touches things — `deps.ts` (`TutorDeps`/`TurnSeams`), `turns.ts` (the `*Turn` functions: four agent turns, then provider-key save/remove/status/test, the model-chain add/set/remove/move/provider moves/chain/test and `modelList`), `credentials.ts`, `provider-keys.ts`, `tutor-models.ts`, `model-list.ts`, `asset-detail.ts`, `learner-writes.ts` (the learner writes, each a `*Turn` over the catalog's state functions) and friends. The pure half imports no I/O; the server half takes the database as a promise so a catalog that cannot be opened degrades per read |
+| `services/sidecar/` | `src/index.ts` (the process: bind, `listening <port>`, signal close), `src/api.ts` (path → `*Turn` table, JSON in/out), `src/guard.ts` (loopback host/origin checks), `src/deps.ts` (`TutorDeps` over the catalog connection and blob store), `src/config.ts` (`HOST`, `GNOSIA_SIDECAR_PORT`) |
 
 `packages/schema`, `packages/content` and `packages/blob` are the bottom of
 that stack: the first imports `drizzle-orm`, the second `yaml`, the third only
 Node's own modules, and none imports anything else of ours.
-`services/catalog` imports the first two, owns the only connection string in the
-repo, and is the only thing that talks to Postgres. The design and the
+`services/catalog` imports the first two, resolves where the catalog file is
+(`databasePath()` in `src/env.ts`), and is the only thing that writes it. A
+few scripts open it without writing: the copy and inspection helpers in
+[scripts/lib/sqlite.mjs](scripts/lib/sqlite.mjs) that the e2e, flip and macOS UI snapshot scripts use, `npm run dev:up`'s migrated check in
+`scripts/lib/dev-env.mjs`, and the macOS app's snapshot,
+`apps/macos/scripts/catalog-snapshot.mjs`. The design and the
 entity diagrams are in [services/catalog/SCHEMA.md](services/catalog/SCHEMA.md).
 
 ## The web app: routes
@@ -278,7 +283,7 @@ page dynamic, so nothing was being prerendered from it).
 everything in one pass through `apps/web/src/lib/home.ts`: the knowledge base,
 the event log, the preferences, the due queue, the snapshot and, with a
 studio, the owner's titled drafts (`recentDrafts`), through `learner-store`'s
-pool, and hands them to the pure `apps/web/src/lib/home-core.ts`. The threads
+connection, and hands them to the pure `apps/web/src/lib/home-core.ts`. The threads
 under "Pick up where you left off" merge the `recentModules` preference (kept
 by `POST /api/learner/preference` beside every `lastVisited` write), the
 `playback:<asset id>` preferences with somewhere to resume, the drafts and the
@@ -304,8 +309,8 @@ IMPLEMENTATION.md.
 The two library routes are that route's reader, and reach the catalog through
 `apps/web/src/lib/asset-library.ts`, which is `learner-store.ts`'s shape for the
 content half: `connection()` before every read, an unreachable database
-degrading to empty with a `reachable` flag beside it, and one pool for the
-process, borrowed from `learner-store` rather than opened a second time.
+degrading to empty with a `reachable` flag beside it, and one connection for
+the process, borrowed from `learner-store` rather than opened a second time.
 
 **The default view is 135 of 206 rows, and the page says so.** Sixty-nine
 assets are a caption track, a transcript and a chapter list written beside each
@@ -370,11 +375,12 @@ is a 404 on every asset that builds without a word.
 
 ## Learner state
 
-The learner's ticks, notes, recaps and preferences are rows in Postgres, and
+The learner's ticks, notes, recaps and preferences are rows in the catalog database, and
 `services/catalog/src/state/` is the only module that writes them — for the
 web app and the CLI; the native app's own writes land in `learner.db`, the
 split the end of this section explains. There is
-still no account: one `learner` row, id `local`, created on first use.
+still no account: one `learner` row, id `local`, which the first migration
+seeds (`0000_majestic_ronan`) and the store also creates on first use.
 
 ```
   server component ──► loadLearnerSnapshot() ──► readLearnerSnapshot() ──► progress
@@ -405,14 +411,17 @@ what the UI shows and what the server is told cannot disagree. `loadState`,
 | `POST /api/learner/note` | The scratch note on one curriculum item |
 | `POST /api/learner/reset` | Clears a course's ticks and notes, bumps the epoch |
 | `POST /api/learner/recap` | Writes, replaces or clears one recap |
-| `POST /api/learner/preference` | Theme, last visited, the learner's own links, and Settings' `dailyTarget`, `dailyLeeway`, `tutorStyle` and `reducedMotion` |
+| `POST /api/learner/preference` | Theme, last visited (with `recentModules` kept beside it), the learner's own links, the courses set aside, and Settings' `tutorStyle` and `reducedMotion` |
 | `POST /api/learner/import` | The one-time carry-over of a browser's old document |
 | `POST /api/review/grade` | One review grade: a `review` event, the card, the mastery entry |
 
-Every one of them is `handler()` from `apps/web/src/lib/learner-api.ts`: same-origin
+Every one of them is guarded by `apps/web/src/lib/learner-api.ts`: same-origin
 through the existing `agent/guard.ts` helpers, a rate limit, a bounded body,
-and validation. `/api/learner/preference` writes an allow-list of keys rather
-than any key, because an unauthenticated open jsonb store is not something
+and validation. Reset, recap, preference and import are `handler()`; progress,
+note and the review grade are `turnRoute()` over a `*Turn` in
+`packages/tutor/src/server/learner-writes.ts`, the same parse and write the
+sidecar runs for the native app. `/api/learner/preference` writes an allow-list of keys rather
+than any key, because an unauthenticated open JSON store is not something
 "the learner owns their own row" excuses.
 
 `/api/review/grade` is the one route here that writes evidence, and it writes
@@ -502,7 +511,8 @@ which. The rows are read once per request, so a flip shows on the next one.
 
 **Server only, and enforced.** `server-only` makes a `"use client"` module that
 reaches either of them fail the build with the import chain printed, rather
-than shipping a Postgres driver to the browser. So client
+than shipping the database driver (`better-sqlite3`, a native Node module) to
+the browser. So client
 components take what they need as props: the course page resolves the course,
 each topic's mastery and each module's assets and hands them to `CoursePath`;
 the session page resolves the course, module and topic for `AgentSession`; the
@@ -782,12 +792,12 @@ One direction for content, one door for state.
                                                         progress · recap · preference
                                                                       ▲
    apps/web/src/app  ──► apps/web/src/lib/learner-store.ts ──► @gnosia/catalog/state ┘
-       │              (the pool, the degradation)
+       │              (the connection, the degradation)
        └──► /api/learner/* ──► apps/web/src/lib/learner-api.ts ──► the same store
 
    apps/macos ──► app-catalog.db (read-only mirror) + learner.db (writable)
        │
-       ├──► services/sidecar (spawned; the tutor turns over the same catalog pool)
+       ├──► services/sidecar (spawned; the tutor turns over the same catalog file)
        └──► services/studio (connect-only: the runner is already up or the surface says so)
 ```
 
@@ -825,7 +835,8 @@ value should cost a link preview rather than the whole app.
 ## Testing
 
 `npm test` runs vitest over `apps/**/*.test.ts`, `scripts/**/*.test.mjs`,
-`services/**/*.test.ts` and `packages/**/*.test.ts`, in the `node` environment,
+`services/**/*.test.ts`, `packages/**/*.test.ts` and
+`eslint-rules/**/*.test.mjs`, in the `node` environment,
 with `@` aliased to `apps/web/src`. One config at the root covers every
 workspace, so `npm test` from the repo root is the whole suite.
 
@@ -837,53 +848,63 @@ workspace, so `npm test` from the repo root is the whole suite.
 | `apps/web/src/app/(app)/learn/page.test.ts` | `/learn` rendering when the database is unreachable, and when it is simply empty |
 | `apps/web/src/app/api/learner/routes.test.ts` | The six write routes: the origin guard, the allow-list, 400 versus 503 |
 | `apps/web/src/app/api/review/routes.test.ts` | The review routes: the origin guard, the rating range, a rating landing in the log on SM-2's scale, the due list with its focus and intervals |
-| `apps/web/src/lib/review-core.test.ts`, `review-queue.test.ts` | A review card's options (deterministic, the answer among them), check versus recall, and the interval and date wording |
+| `packages/tutor/test/review-core.test.ts`, `apps/web/src/lib/review-queue.test.ts` | A review card's options (deterministic, the answer among them), check versus recall, and the interval and date wording |
 | `services/catalog/test/review-grade.test.ts` | `gradeReview`, `reviewQueue` and the rating mapping: the grade moved out of the CLI unchanged, and a web grade replays exactly |
-| `apps/web/src/lib/asset-files.test.ts` | Range arithmetic, header-safe filenames, the closed content-type list, the byte-counted stream. No database, so it is a gate everywhere |
+| `packages/tutor/test/asset-files.test.ts` | Range arithmetic, header-safe filenames, the closed content-type list, the byte-counted stream. No database, so it is a gate everywhere |
 | `apps/web/src/app/api/assets/asset-file.test.ts` | The asset file route's refusals and headers: a video on disk under the recorded data root still answers `not-uploaded`, the SVG sandbox, a 416 on an empty object, an id never joined onto a path, an undeclared extension |
 | `apps/web/src/app/api/assets/asset-rows.test.ts` | Notes, logs and `.tldr`s served from rows on a flipped database, and `not-flipped` by name when a row or `CONTENT_SOURCE` says files |
 | `apps/web/src/data/source.test.ts` | The content seam once per request, a type not flipped refused naming `catalog flip`, an unreachable database refused rather than read from files |
 | `apps/web/src/app/api/assets/asset-unreachable.test.ts` | The three asset routes and the page's pre-render check with the catalog down: `catalog-unreachable` everywhere |
-| `apps/web/src/lib/asset-problems.test.ts` | The reason table (no paths, no em dashes, a fix per fixable code) and the probe's mapping of every answer |
+| `packages/tutor/test/asset-problems.test.ts` | The reason table (no paths, no em dashes, a fix per fixable code) and the probe's mapping of every answer |
 | `apps/web/src/components/asset-failure.test.ts`, `NoteProse.island.test.ts` | Each asset surface falling back to the shared panel with its reason, and a note without pictures rendering no client island |
 | `apps/web/src/app/api/assets/asset-blob.test.ts` | The asset routes from the blob store: a 200, a 206, a 416, a `pending` blob, a lost object and a video never uploaded as `not-uploaded`, a stored poster with its 304 and none cut for a video without one, a stored transcript read for the page |
 | `apps/web/src/app/api/assets/asset-blob-redirect.test.ts` | A store that signs URLs: the 302 carries the store's URL and no path, lives an hour, and a Range request at it returns 206 |
-| `services/catalog/test/asset-blobs-0009.test.ts` | The blob readers on a database still at 0009: no blob, no poster, one warning to migrate, so the routes answer `not-uploaded` instead of `catalog-unreachable` |
+| `services/catalog/test/asset-blobs-0009.test.ts` | The blob readers on a database still at 0009: no blob, no poster, one warning to migrate, so the routes answer `not-uploaded` instead of `catalog-unreachable`. Skipped on SQLite, which has no pre-0010 schema to build |
 | `services/catalog/test/asset-upload.test.ts` | `catalog asset upload` and `catalog blob audit`: every row pointed at bytes equal to its `content_hash`, a rerun that does nothing, a pending upload finished, a re-render refused, a re-index keeping its keys, and each audit finding with what `--fix` does |
-| `apps/web/src/lib/agent/*.test.ts` | The provider cascade, the assembled prompt, recap formatting, the route guards |
+| `apps/web/src/lib/agent/*.test.ts` | The assembled prompt, recap formatting, the route guards |
+| `packages/tutor/test/*.test.ts` | The tutor package's pure half and its server helpers: the provider cascade and chain, the judge, the session core, the check block, media, playback, transcripts, sealing |
 | `packages/content/test/courses.test.ts` | The seed's curriculum (its one course, unique ids, every module topic and tag resolving) and every refusal the reader makes |
 | `apps/web/src/data/courses/index.test.ts` | The lookups the pages call, over whatever the reader returned |
 | `services/catalog/test/state.test.ts` | The store: progress, recaps, preferences, the append-only log, replay, the import merge rules |
-| `services/catalog/test/learn-cli.test.ts` | The CLI end to end, with the five `--json` shapes pinned |
+| `services/catalog/test/learn-cli.test.ts` | The five `--json` shapes pinned; the `learn-cli-*.test.ts` suites beside it run the CLI end to end by subject (the loop, refusals, files, diagrams, confidence, rows) |
 | `services/catalog/test/backfill.test.ts` | The backfill's assertion, its idempotency, and the synthesis it does and does not do |
 | `services/catalog/test/after-cutover.test.ts` | The repository after the cut-over: a database owning every type, no `LEARN_ROOT`, a learn session, `concept add --item`, a topic write and a bare import, none of which recreates `content/` or `learn/` |
 | `services/catalog/test/nightly-export.test.ts` | `scripts/nightly-export.mjs`: an export into a dated folder, the `latest` link, pruning to `--keep`, and its refusals (a relative `GNOSIA_HOME`, an archive inside the checkout) |
 | `services/catalog/test/*.test.ts` | The schema's constraints, the indexers, the writer, the read commands |
 | `scripts/learn/lib/*.test.mjs` | BKT, the concept DAG, SM-2 conformance, frontmatter round-trips |
 
-Every catalog suite makes its own scratch SQLite file under the OS temp
-directory, so CI needs no database service and the suites are a gate
-everywhere they run.
+Anything touching the catalog makes its own scratch SQLite file under the OS
+temp directory ([scratch-database.ts](services/catalog/test/scratch-database.ts)), so the suites
+need no server and never skip for want of a database, on a laptop and on CI
+alike. The few skipped blocks left test a Postgres-era schema from
+before a migration (`0006`, `0010`, `0012`, `0013`) that the SQLite journal
+never ships, since its first migration is the whole schema.
 
-Coverage is scoped to `apps/web/src/lib`, `apps/web/src/data` and
-`scripts/learn` by design. Components and pages are verified by
-`npm run build` and by looking at the running app, so counting their lines
-would only dilute the number that matters.
-The thresholds are deliberately not raised to meet the current number:
-`learner-api.ts` and `learner-store.ts` are in scope and are covered by suites
-that need a database, so the measured value now moves with the environment.
+Coverage is scoped to `apps/web/src/lib`, `apps/web/src/data`,
+`scripts/learn` and the `src/` of `packages/tutor`, `packages/content` and
+`packages/blob` by design (`coverage.include` in
+[vitest.config.ts](vitest.config.ts)): the tutor's logic moved out of
+`apps/web/src/lib` into its package, so the gate follows it. Components and
+pages are verified by `npm run build` and by looking at the running app, so
+counting their lines would only dilute the number that matters.
+The thresholds are a backstop against regressions: each floor sits about three
+points under what the suite measured when it was set. `services/` is left
+out. It was left out while the catalog's suites needed a Postgres server and
+skipped without one, so the number moved with the environment; on SQLite they
+always run, and bringing them into scope is a decision of its own.
 
 ## The catalog
 
 `services/catalog/` and `packages/schema/` are the database that owns the
-content and the learner state, in Postgres 17. Full reasoning in
+content and the learner state, in one SQLite file
+([docs/SQLITE-MIGRATION.md](docs/SQLITE-MIGRATION.md)). Full reasoning in
 [services/catalog/SCHEMA.md](services/catalog/SCHEMA.md); the shape of it is:
 
 ```
    catalog topic · tag · course · item ──┐
    learn concept · session · observe ────┼──► the write seam ──┐
    catalog diagram · the studio ─────────┤    (a revision      │
-   catalog import <dir> (export, seed/) ─┘     per change)     ├──► Postgres ──► catalog ls / show / path / search
+   catalog import <dir> (export, seed/) ─┘     per change)     ├──► SQLite ────► catalog ls / show / path / search
    manimkc topics --json ────────────────┬──► the indexers ────┘                  (agents read here)
    remotionkc topics --json ─────────────┤
    revideokc topics --json ──────────────┤
@@ -928,11 +949,11 @@ over on first mount.
 
 | Piece | Where | What |
 | --- | --- | --- |
-| Table shapes | `packages/schema/src/` | `content.ts`, `state.ts`, `operations.ts`. Connects to nothing. |
-| Migrations | `services/catalog/drizzle/` | Generated from the schema, applied by `catalog migrate`. |
+| Table shapes | `packages/schema/src/` | `content.ts`, `authoring.ts`, `state.ts`, `operations.ts`, `studio.ts`, over the column helpers in `columns.ts`. Connects to nothing. |
+| Migrations | `services/catalog/drizzle-sqlite/` | Generated from the schema, applied by `catalog migrate` (`MIGRATIONS_FOLDER` in [migrations.ts](services/catalog/src/migrations.ts)). `0000_majestic_ronan` is the whole schema and its seeds, so a migration number from the Postgres era (`0013`, `0025`) names an entry of the old `services/catalog/drizzle/` journal, folded into `0000` here. The entries after it were written for SQLite (`0001_catalog_armed_rule`, `0002_recap_request_id`), so a low number can name an entry in either journal and the name says which. |
 | Indexers | `services/catalog/src/index/` | One module per source, each a pure "read files, return rows" function, plus one shared writer. |
 | Read commands | `services/catalog/src/commands/` | `status`, `index`, `backfill`, `ls`, `show`, `path`, `search`, all with `--json`. |
-| The learner store | `services/catalog/src/state/` | The only writer of the state tables, plus the read-only content queries the web app needs (`knowledge-base.ts`, `assets.ts`). Imported by the `learn` CLI, the backfill and the web app. |
+| The learner store | `services/catalog/src/state/` | The only writer of the state tables, plus the read-only content queries the web app needs (`knowledge-base.ts`, `assets.ts`). Imported by the `learn` CLI, the backfill, the web app and `packages/tutor`, whose server half the sidecar runs. |
 
 Each indexer owns an asset id namespace (`note:`, `link:`, `manimkc:`,
 `remotionkc:`, `revideokc:`, `blenderkc:`, `diagram:`, `session:`) and a set of tables. `mirrors` is the one that owns
@@ -1035,8 +1056,8 @@ with the command made for it (`learn concept show`, `catalog course export`).
 5. **A module that reads content or reaches the database says
    `import "server-only"`.** `apps/web/src/data/courses/index.ts`, `apps/web/src/data/content.ts`
    and `apps/web/src/lib/learner-store.ts` all do. Without it a `"use client"` import
-   would compile — shipping a YAML parser, every course file, or a Postgres
-   driver to the browser — and would only be noticed by whoever looked at a
+   would compile — shipping a YAML parser, every course file, or the
+   `better-sqlite3` driver to the browser — and would only be noticed by whoever looked at a
    bundle report. With it the build fails and prints the import chain. Client
    components get resolved objects as props; pure arithmetic over a course they
    already hold lives in `apps/web/src/lib/course-path.ts`, and pure reducers over state
@@ -1053,11 +1074,13 @@ with the command made for it (`learn concept show`, `catalog course export`).
    exports the types inferred from them. Its `./shared` subpath goes further
    and imports nothing at all — that is what makes the recap limits and the
    learner-state types safe in a `"use client"` module without dragging a
-   Postgres driver into the browser bundle.
+   database driver into the browser bundle.
 10. **The schema is the source of the SQL, never the other way round.** Change
     `packages/schema/src/`, then `npm run generate -w @gnosia/catalog`. A
-    migration that has been applied is never edited: drizzle keys them by file
-    hash.
+    migration that has been applied is never edited: drizzle applies by the
+    journal's timestamp and would skip the edited file on every run, while the
+    catalog's own status compares each file's sha256 and reports it pending,
+    so `catalog migrate` refuses with `MigrationSkipped` naming it.
 11. **The web app never writes the *content* half.** It reads the content
     through the seam, from the database only, reads `concept`, `mastery` and `review` through
     the store, and writes `progress`, `recap`, `preference` and `asset_name` (the
@@ -1074,7 +1097,7 @@ with the command made for it (`learn concept show`, `catalog course export`).
 12. **An indexer reads files and returns rows; it never touches a connection.**
     `services/catalog/src/index/*.ts` export a pure `read(context)`, and
     `writer.ts` is the only module that issues SQL for them. That seam is why
-    the indexer tests need no Postgres and the writer tests need no files.
+    the indexer tests need no database and the writer tests need no files.
 13. **An unresolved reference is a refusal, never a skip.** A concept, module or
     video whose topic does not resolve stops the index run with the file and the
     slug named. A skipped row is an asset that is silently absent from the
