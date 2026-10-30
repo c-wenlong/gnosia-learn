@@ -2,13 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { BYOK_SETTINGS_CHANGED, getByokSettings, type ByokProviderStatus } from "@/lib/studio-byok";
-
-/** The active BYOK provider's Default model and its tier models (D94). */
-export interface ByokTiers {
-  model: string | null;
-  tiers: ByokProviderStatus["models"];
-}
+import { activeByokTiers, BYOK_SETTINGS_CHANGED, getByokSettings, type ByokTiers } from "@/lib/studio-byok";
 
 /**
  * The BYOK tiers the active provider configured (D94), read fresh from
@@ -43,8 +37,7 @@ export function useByokTiers(
       const mine = ++latest;
       const result = await getByokSettings();
       if (!alive || mine !== latest || !result.ok) return;
-      const entry = result.data.configured ? result.data.providers.find((provider) => provider.provider === result.data.active) : undefined;
-      setRead(entry === undefined ? null : { model: result.data.model, tiers: entry.models });
+      setRead(activeByokTiers(result.data));
     };
     const onWrite = () => void run();
     void run();

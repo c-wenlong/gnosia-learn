@@ -292,7 +292,6 @@ export function modeLine(brief: Pick<Brief, "mode" | "slug">): { lead: string; s
   return brief.mode === "extend" ? { lead: "Extends", slug: brief.slug } : { lead: "New diagram, saved as", slug: brief.slug };
 }
 
-export { sentence };
 
 export interface DrawRefusal {
   text: string;

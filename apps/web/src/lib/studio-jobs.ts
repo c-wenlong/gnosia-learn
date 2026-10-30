@@ -129,8 +129,6 @@ export interface Job {
    */
   comparison?: Comparison | null;
   written: string[];
-  /** Files an accept also wrote into the tree while the files still owned diagrams. Optional: older runners omit it. */
-  files?: string[];
   indexed: boolean;
   error: string | null;
   errorKind: string | null;

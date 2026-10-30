@@ -12,7 +12,6 @@ import {
   showsThumbnail,
   jobForTarget,
   liveShotFor,
-  liveShotHref,
   loaderHeadline,
   loaderStep,
   newDiagramJobs,
@@ -209,8 +208,9 @@ describe("the live picture", () => {
     expect(wantsLivePicture(job({ state: "awaiting_review" }), true, false)).toBe(false);
   });
 
-  it("goes through the studio proxy, with the job id escaped", () => {
-    expect(liveShotHref("a/b")).toBe("/studio/api/jobs/a%2Fb/shot?which=live");
+  it("goes through the studio proxy, with the job id escaped, for a diagram's job only", () => {
+    expect(liveShotFor({ jobId: "a/b", kind: "diagram" })).toBe("/studio/api/jobs/a%2Fb/shot?which=live");
+    expect(liveShotFor({ jobId: "a/b", kind: "video" })).toBeNull();
   });
 });
 

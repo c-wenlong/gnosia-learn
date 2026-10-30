@@ -18,10 +18,9 @@ import { PanelLink } from "@/components/studio/PanelLink";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
 import { cx } from "@/components/ui/classes";
 import { useImageReveal } from "@/components/ui/use-image-reveal";
-import { finishedHeadline, type Job } from "@/lib/studio-jobs";
+import { finishedHeadline, jobShotHref, type Job } from "@/lib/studio-jobs";
 import {
   adoptPicture,
-  afterShotHref,
   failureLine,
   jobForTarget,
   liveShotFor,
@@ -250,7 +249,7 @@ function Backdrop({
 }) {
   const [afterMissing, setAfterMissing] = useState(false);
   const fallback = live.current ?? thumbnail;
-  const src = stage !== "review" ? null : afterMissing ? fallback : afterShotHref(job.jobId);
+  const src = stage !== "review" ? null : afterMissing ? fallback : jobShotHref(job.jobId, "after");
   // The server renders this `<img>`, so a cached picture can finish loading
   // before React attaches `onLoad`; `useImageReveal` asks the element too.
   const { attach: attachAfter, onLoad: afterLoaded, loaded: afterShown } = useImageReveal(src);

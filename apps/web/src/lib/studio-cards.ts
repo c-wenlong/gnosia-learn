@@ -272,7 +272,7 @@ export function kindPendingTopic(
 }
 
 /** The tagged message the card answered, which pairs it for Make both. */
-export function requestSeqOf(view: Pick<DraftView, "slots">, kind: DraftKind, item: Pick<TranscriptBrief, "requestSeq">, live: boolean): number | null {
+function requestSeqOf(view: Pick<DraftView, "slots">, kind: DraftKind, item: Pick<TranscriptBrief, "requestSeq">, live: boolean): number | null {
   if (live) {
     const fromSlot = slotOf(view, kind)?.requestSeq;
     if (fromSlot !== undefined && fromSlot !== null) return fromSlot;
@@ -388,7 +388,7 @@ export function pressLabel(kind: DraftKind, pending: PendingTopic | null | undef
 }
 
 /** The job a kind's card last started, as the draft's record has it. */
-export function slotJobId(view: Pick<DraftView, "slots" | "jobId">, kind: DraftKind): string | null {
+function slotJobId(view: Pick<DraftView, "slots" | "jobId">, kind: DraftKind): string | null {
   if (view.slots === undefined) return kind === "diagram" ? view.jobId : null;
   return slotOf(view, kind)?.jobId ?? null;
 }

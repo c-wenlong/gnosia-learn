@@ -9,7 +9,8 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { buttonClasses, cx } from "@/components/ui/classes";
 import { canvasHref, thumbnailHref } from "@/lib/studio-url";
-import { displayTitle, formatBytes, type Diagram } from "@/lib/studio-grid";
+import { formatBytes } from "@gnosia/tutor/asset-meta";
+import { displayTitle, type Diagram } from "@/lib/studio-grid";
 
 /**
  * One diagram in the grid, or one row in the list.
