@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { ConceptPromptInput } from "@/lib/agent/prompt";
-import { buildSessionQuestionPrompt, firstSentence, parseSessionQuestion } from "@/lib/agent/session";
+import { buildSessionQuestionPrompt, firstSentence, parseSessionQuestion } from "@gnosia/tutor/session-question";
 
 const input: ConceptPromptInput = {
   slug: "dot-product",

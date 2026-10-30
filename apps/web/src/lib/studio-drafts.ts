@@ -1,4 +1,4 @@
-import type { Mention } from "@/components/ui/mention-text";
+import type { Mention } from "@/lib/mentions";
 import { storedHarness } from "@/lib/studio-harness";
 import { VIDEO_TOOL_NAMES, type VideoBrief, type VideoToolName, type VideoToolOption } from "@/lib/studio-brief-video";
 import type { Brief } from "@/lib/studio-jobs";
@@ -1010,7 +1010,8 @@ export function videoTools(raw: unknown): VideoToolOption[] {
         name: name as VideoToolName,
         strength: typeof strength === "string" ? strength : "",
         available: available === true,
-        reason: typeof reason === "string" ? reason : null,
+        // A blank reason says nothing: null, so the card words it itself.
+        reason: typeof reason === "string" && reason.trim() !== "" ? reason.trim() : null,
         ...(stop === null ? {} : { toolchainStop: stop }),
       },
     ];

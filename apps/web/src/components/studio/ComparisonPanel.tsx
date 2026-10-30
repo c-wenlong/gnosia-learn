@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { cx, FOCUS } from "@/components/ui/classes";
+import { checkWord } from "@/lib/studio-job-state";
 import { InlineConfirm } from "@/components/ui/InlineConfirm";
 import {
   catalogErrorLine,
@@ -408,6 +409,7 @@ function Verify({ job }: { job: Job }) {
                 {check.ok ? "✓" : "✕"}
               </span>
               <span className="min-w-0 flex-1">
+                <span className="sr-only">{checkWord(check.ok)}</span>
                 <Mono>{check.rule}</Mono>
                 {check.detail !== "" && (
                   <span className="block text-text2">{check.detail}</span>

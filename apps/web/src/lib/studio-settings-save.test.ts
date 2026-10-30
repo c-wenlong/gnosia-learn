@@ -36,6 +36,11 @@ function form(fields: Record<string, string>): FormData {
   return data;
 }
 const pick = (patch: Record<string, string> = {}) => form({ kind: "video", model: "opus", effort: "high", ...patch });
+/** The runner calls that write: the save's own read of the menu is a GET and writes nothing. */
+const puts = () =>
+  (mocks.studioApi.mock.calls as Array<[string, { method?: string; body: string; timeoutMs: number } | undefined]>).filter(
+    ([, init]) => init?.method === "PUT",
+  ) as Array<[string, { method: string; body: string; timeoutMs: number }]>;
 
 beforeEach(() => {
   mocks.readPreference.mockResolvedValue(null);
@@ -48,8 +53,8 @@ beforeEach(() => {
 describe("saveStudioAgent", () => {
   it("stores through the runner, with the owner's client, and writes nothing itself", async () => {
     expect(await saveStudioAgent(pick())).toEqual({ ok: true, error: null });
-    expect(mocks.studioApi).toHaveBeenCalledTimes(1);
-    const [path, init] = mocks.studioApi.mock.calls[0] as [string, { method: string; body: string; timeoutMs: number }];
+    expect(puts()).toHaveLength(1);
+    const [path, init] = puts()[0]!;
     expect(path).toBe("/api/settings/agent");
     expect(init.method).toBe("PUT");
     expect(JSON.parse(init.body)).toEqual({ kind: "video", model: "opus", effort: "high" });
@@ -63,7 +68,7 @@ describe("saveStudioAgent", () => {
     expect(saved.ok).toBe(false);
     expect(saved.error).toContain(`"model" is "default"`);
     expect(mocks.writePreference).not.toHaveBeenCalled();
-    expect(mocks.studioApi).toHaveBeenCalledTimes(1);
+    expect(puts()).toHaveLength(1);
   });
 
   it("shows a 403 (another owner's runner) as a refusal too", async () => {
@@ -112,20 +117,36 @@ describe("saveStudioAgent", () => {
   it("says the same before calling the runner when the stored row cannot be read", async () => {
     mocks.readPreference.mockRejectedValue(new Error("connection refused"));
     expect(await saveStudioAgent(pick())).toEqual({ ok: false, error: "Not saved: the catalog did not answer." });
-    expect(mocks.studioApi).not.toHaveBeenCalled();
+    expect(puts()).toEqual([]);
   });
 
   it("checks the value as before, so neither writer sees a model the menu does not offer", async () => {
     const saved = await saveStudioAgent(pick({ model: "not-a-model-on-the-menu" }));
     expect(saved).toEqual({ ok: false, error: "That model or effort is not one the agent can run with." });
-    expect(mocks.studioApi).not.toHaveBeenCalled();
+    expect(puts()).toEqual([]);
     expect(mocks.writePreference).not.toHaveBeenCalled();
+  });
+
+  it("accepts a model the runner's menu offers that the built-in list has not heard of (S2-06)", async () => {
+    mocks.studioApi.mockImplementation(async (_path: string, init?: { method?: string }) =>
+      init?.method === "PUT" ? { ok: true, data: {} } : { ok: true, data: { models: [{ value: "claude-opus-6", label: "Claude Opus 6" }] } },
+    );
+    expect(await saveStudioAgent(pick({ model: "claude-opus-6" }))).toEqual({ ok: true, error: null });
+    expect(JSON.parse(puts()[0]![1].body)).toMatchObject({ model: "claude-opus-6" });
+  });
+
+  it("checks against the runner's menu, not the built-in one, when the runner answers", async () => {
+    mocks.studioApi.mockImplementation(async (_path: string, init?: { method?: string }) =>
+      init?.method === "PUT" ? { ok: true, data: {} } : { ok: true, data: { models: [{ value: "sonnet", label: "Sonnet" }] } },
+    );
+    expect((await saveStudioAgent(pick({ model: "opus" }))).ok).toBe(false);
+    expect(puts()).toEqual([]);
   });
 
   it("accepts the model already stored though the menu does not list it", async () => {
     mocks.readPreference.mockResolvedValue({ model: "claude-opus-4-1", effort: "low" });
     expect(await saveStudioAgent(pick({ model: "claude-opus-4-1", effort: "high" }))).toEqual({ ok: true, error: null });
-    expect(JSON.parse((mocks.studioApi.mock.calls[0] as [string, { body: string }])[1].body)).toEqual({
+    expect(JSON.parse(puts()[0]![1].body)).toEqual({
       kind: "video",
       model: "claude-opus-4-1",
       effort: "high",

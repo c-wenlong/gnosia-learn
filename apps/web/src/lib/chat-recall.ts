@@ -1,5 +1,6 @@
 import { newSessionId, SESSION_TEXT_LIMIT } from "@/lib/session-core";
 import { CHAT_ANSWER_LIMIT, type RecordedResult } from "@/lib/tutor-check";
+import { randomToken } from "@/lib/random-token";
 import { sessionKey } from "@/lib/tutor-thread";
 
 /**
@@ -16,11 +17,7 @@ import { sessionKey } from "@/lib/tutor-thread";
 
 /** A request id for one recorded answer, as the session page makes them. */
 export function chatRequestId(): string {
-  // `randomUUID` needs a secure context; a LAN address over http is not one.
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return `chat-${crypto.randomUUID().replace(/-/g, "")}`;
-  }
-  return `chat-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}`;
+  return `chat-${randomToken()}`;
 }
 
 const sessionMemory = new Map<string, string | null>();

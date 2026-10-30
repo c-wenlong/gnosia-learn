@@ -322,8 +322,8 @@ function Storyboard({ brief, charsPerSecond }: { brief: VideoBrief; charsPerSeco
                     <p className="text-[13px] leading-5 text-text2">{beat.show}</p>
                     {beat.labels.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 pt-0.5">
-                        {beat.labels.map((label) => (
-                          <Chip key={label} size="sm">
+                        {beat.labels.map((label, at) => (
+                          <Chip key={`${at}:${label}`} size="sm">
                             {label}
                           </Chip>
                         ))}

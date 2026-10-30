@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -253,6 +254,17 @@ describe.skipIf(!reachable.ok)("asset routes on a flipped database", () => {
     expect(response.headers.get("content-range")).toBe(`bytes 0-2/${whole.length}`);
     expect(Buffer.from(await response.arrayBuffer())).toEqual(whole.subarray(0, 3));
     expect((await call(FILE, "file", NOTE_ID, { range: `bytes=${whole.length + 5}-` })).status).toBe(416);
+  });
+
+  it("tags row text by its own hash, and answers a 304 for text the browser holds", async () => {
+    const whole = Buffer.from((await dbSource(scratch.db, ownerScope(LOCAL_LEARNER_ID)).concept("base"))?.markdown ?? "", "utf8");
+    const tag = `"${createHash("sha256").update(whole).digest("hex")}"`;
+    const response = await call(FILE, "file", NOTE_ID);
+    expect(response.headers.get("etag")).toBe(tag);
+    expect(response.headers.get("cache-control")).toBe("private, no-cache");
+    const again = await call(FILE, "file", NOTE_ID, { "if-none-match": tag });
+    expect(again.status).toBe(304);
+    expect((await again.arrayBuffer()).byteLength).toBe(0);
   });
 
   it("serves a log as its entries concatenated, including one started after the flip", async () => {

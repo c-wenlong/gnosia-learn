@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { MentionComposerHandle } from "@/components/ui/MentionComposer";
-import type { MentionValue } from "@/components/ui/mention-text";
+import type { MentionValue } from "@/lib/mentions";
 import type { DraftKind } from "@/lib/studio-drafts";
 
 /**

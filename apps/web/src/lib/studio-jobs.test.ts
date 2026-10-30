@@ -109,6 +109,17 @@ describe("which job the strip is about", () => {
 });
 
 describe("the phase list", () => {
+  it("shows a discarded job's last phase as done, not live (S2-12)", () => {
+    const rows = phaseRows(job({ state: "discarded", phase: "ready" }), []);
+    expect(rows.map((row) => row.status)).not.toContain("current");
+    expect(rows.at(-1)?.status).toBe("done");
+  });
+
+  it("shows an interrupted job discarded mid-phase as stopped there, not done", () => {
+    const rows = phaseRows(job({ state: "discarded", phase: "drawing" }), []);
+    expect(rows.map((row) => row.status)).toEqual(["done", "done", "failed", "pending", "pending", "pending", "pending"]);
+  });
+
   it("shows all seven from the first second, with the current one marked", () => {
     const rows = phaseRows(job({ phase: "drawing" }), [], T0 + 30_000);
     expect(rows).toHaveLength(7);
@@ -241,6 +252,27 @@ describe("the narration", () => {
 });
 
 describe("what a failure says", () => {
+  it("keeps the runner's error when a check passed and found nothing, and does not blame the check (S2-05)", () => {
+    const failed = job({ state: "failed", gate: gate({ ok: true, findings: [] }), error: "the catalog refused the write" });
+    const report = failureReport(failed);
+    expect(report.detail).toBe("the catalog refused the write");
+    expect(report.headline).not.toMatch(/check refused/);
+  });
+
+  it("still names the check's findings when it refused", () => {
+    const failed = job({ state: "failed", gate: gate({ ok: false, findings: ["two arrows point at nothing"] }), error: "gate" });
+    const report = failureReport(failed);
+    expect(report.headline).toBe("the check refused what it drew");
+    expect(report.detail).toBe("two arrows point at nothing");
+  });
+
+  it("says the runner failed when it threw (errorKind internal)", () => {
+    const report = failureReport(job({ state: "failed", errorKind: "internal", error: "the runner threw: boom" }));
+    expect(report.headline).toBe("the runner failed while running it");
+    expect(report.detail).toBe("the runner threw: boom");
+    expect(report.actions).toEqual(["retry"]);
+  });
+
   /**
    * The design's table keys on the last tldrawkc code the gate recorded, and
    * that is not the agent's exit code: the agent runs the CLI many times and
