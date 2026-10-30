@@ -8,43 +8,51 @@ import {
   changeProblem,
   chapterTitle,
   CHANGE_LIMIT,
-  filterVideos,
-  gridSections,
-  sectionItems,
-  sortVideos,
-  videoGroupKey,
   libraryHref,
   logLine,
   mediaHref,
   newestSheet,
-  newVideoJobs,
-  parseVtt,
   posterHref,
   readJobLookup,
   readSheets,
-  readTranscript,
-  readVideos,
   readyHeadline,
   reviewActions,
   sceneTitle,
   sheetsInOrder,
   sheetSrc,
   spokenLength,
+  formatSize,
+  videoAnnouncement,
   stepRows,
   uniqueWarnings,
   storyboard,
   videoFailure,
   videoHeadline,
-  videoJobForSlug,
   videoStepCount,
-  videoTileStage,
   videoFileHref,
   videoStatusHref,
   type ContactSheet,
   type VideoBrief,
   type VideoJob,
   type VideoStep,
-} from "./studio-video";
+} from "./studio-video-job";
+import {
+  filterVideos,
+  gridSections,
+  sectionItems,
+  sortVideos,
+  videoGroupKey,
+  readVideos,
+} from "./studio-video-grid";
+import {
+  newVideoJobs,
+  videoJobForSlug,
+  videoTileStage,
+} from "./studio-grid-jobs";
+import {
+  parseVtt,
+  readTranscript,
+} from "./captions";
 
 /**
  * The video job view, the video tiles and the strip are view code; every
@@ -368,6 +376,8 @@ describe("the player's captions and chapters", () => {
 
   it("titles a scene by its brief name, else by its class", () => {
     expect(chapterTitle("why_it_matters")).toBe("Why it matters");
+    // One copy of the rule now: a doubled underscore is one space here and on the brief card.
+    expect(chapterTitle("why__it")).toBe("Why it");
     expect(sceneTitle({ classes: CLASSES, brief: BRIEF }, CLASSES[1]!)).toBe("Scoring and scaling");
     expect(sceneTitle({ classes: CLASSES, brief: undefined }, "Aw2_ScoringAndScaling")).toBe("Scoring and scaling");
   });
@@ -461,6 +471,11 @@ describe("the review", () => {
     expect(readyHeadline(job({ state: "awaiting_review", gate }))).toBe("The video is ready, 3 min 4 s, with 1 warning");
     expect(readyHeadline(job({ state: "awaiting_review", gate: { ...gate, warnings: [], durationSeconds: 58 } }))).toBe("The video is ready, 58 s");
     expect(spokenLength(120)).toBe("2 min");
+    expect(spokenLength(null)).toBe("");
+    expect(spokenLength(-1)).toBe("");
+    expect(formatSize(640_000)).toBe("640 kB");
+    expect(formatSize(25_300_000)).toBe("25 MB");
+    expect(formatSize(null)).toBe("");
     expect(spokenLength(null)).toBe("");
   });
 
@@ -698,5 +713,12 @@ describe("videos among the grid's groups", () => {
     expect(one[0]?.videos).toHaveLength(4);
     expect(videoGroupKey(list[0]!, "domain", new Map([["networking", "networks"]]))).toBe("networks");
     expect(videoGroupKey(list[1]!, "domain", new Map())).toBe("none");
+  });
+});
+
+describe("what is said when a video job stops unwatched", () => {
+  it("uses the diagram job's title shape", () => {
+    expect(videoAnnouncement(job({ state: "cancelled", title: "Attention", note: "stopped" }))).toEqual({ title: "✕ Attention: cancelled", body: "stopped" });
+    expect(videoAnnouncement(job({ state: "running" }))).toBeNull();
   });
 });
