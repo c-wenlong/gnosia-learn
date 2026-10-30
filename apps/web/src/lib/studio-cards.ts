@@ -1,5 +1,5 @@
-import type { MentionOption, MentionValue } from "@/components/ui/mention-text";
-import { inlinePieces, isBareTag, isEmptyValue, prependValue, validMentions, valueOf } from "@/components/ui/mention-text";
+import type { MentionOption, MentionValue } from "@/lib/mentions";
+import { inlinePieces, isBareTag, isEmptyValue, prependValue, validMentions, valueOf } from "@/lib/mentions";
 import type { Brief, Job } from "@/lib/studio-jobs";
 import { isActive, isTerminal } from "@/lib/studio-jobs";
 import { briefTool, isVideoBrief, type VideoBrief } from "@/lib/studio-brief-video";

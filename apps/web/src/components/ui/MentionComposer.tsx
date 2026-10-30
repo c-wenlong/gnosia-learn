@@ -76,7 +76,6 @@ import {
   mentionQuery,
   mentionToken,
   menuOpenedAnnouncement,
-  moveActive,
   rowAnnouncement,
   sameValue,
   serializeMentions,
@@ -88,7 +87,8 @@ import {
   type PlusAnchor,
   type SerializedNodeLike,
   type TextEdit,
-} from "./mention-text";
+} from "@/lib/mentions";
+import { moveActive } from "./roving";
 
 /**
  * Kit `MentionComposer`: the studio's chat input, with tags as chips inline
@@ -117,7 +117,7 @@ import {
  *
  * Only the studio renders it, lazily, so Lexical stays out of every other
  * route (open question 4 of the mentions doc). The React-free rules are
- * `mention-text.ts` and `composer-keys.ts`.
+ * `@/lib/mentions` and `composer-keys.ts`.
  */
 
 export interface MentionComposerHandle {

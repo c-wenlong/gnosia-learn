@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { valueOf } from "@/components/ui/mention-text";
+import { valueOf } from "@/lib/mentions";
 import type { DraftSlot, DraftView, TranscriptEntry, VideoBrief } from "@/lib/studio-drafts";
 import type { Brief, Job } from "@/lib/studio-jobs";
 

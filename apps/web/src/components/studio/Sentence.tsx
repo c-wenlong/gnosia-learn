@@ -1,5 +1,5 @@
 import { MentionChip } from "@/components/ui/MentionChip";
-import { inlinePieces, type MentionValue } from "@/components/ui/mention-text";
+import { inlinePieces, type MentionValue } from "@/lib/mentions";
 import { KIND_NAME } from "@/lib/studio-cards";
 import type { TagKind } from "@/lib/studio-drafts";
 

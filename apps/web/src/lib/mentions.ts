@@ -1,6 +1,9 @@
 /**
- * The rules behind `MentionComposer`, kept apart from the component and from
- * Lexical (docs/STUDIO-MENTIONS.md, "What it sends").
+ * A message with tags (`{ text, mentions }`) and the rules on it: what the
+ * studio sends and checks (docs/STUDIO-MENTIONS.md, "What it sends"), and
+ * what the kit's `MentionComposer` reads its Lexical field into. Here in
+ * `lib/` because the studio's and the tutor's modules use it as much as the
+ * field does.
  *
  * React-free and editor-free, as `composer-keys.ts` is: a `"use client"`
  * module's exports are client references (AGENTS.md), and these are the parts
@@ -142,12 +145,6 @@ export function inlinePieces<K extends string = string>(value: MentionValue<K>):
 }
 
 /**
- * The runner's own checks on mentions (STUDIO-MENTIONS.md, "What it sends"),
- * applied here to what arrives rather than trusted: each range inside the
- * text and reading exactly `@<kind>`, no two overlapping, and a kind once.
- * Returns the ones that pass, in text order.
- */
-/**
  * The tags a plain-text edit of `previous` still carries. A field that cannot
  * draw chips (the fallback when Lexical will not load) reports each change as
  * one contiguous edit, so the text splits into a common prefix, the edited
@@ -193,6 +190,12 @@ export function fallbackTagLine<K extends string>(
   return names.length === 0 ? note : `Sends tagged: ${names.join(" and ")}. ${note}`;
 }
 
+/**
+ * The runner's own checks on mentions (STUDIO-MENTIONS.md, "What it sends"),
+ * applied here to what arrives rather than trusted: each range inside the
+ * text and reading exactly `@<kind>`, no two overlapping, and a kind once.
+ * Returns the ones that pass, in text order.
+ */
 export function validMentions<K extends string>(text: string, mentions: readonly Mention<K>[] | null | undefined): Mention<K>[] {
   if (!Array.isArray(mentions)) return [];
   const sorted = [...mentions]
@@ -234,11 +237,6 @@ export function isBareTag(value: MentionValue): boolean {
     rest = rest.slice(0, mention.start) + rest.slice(mention.end);
   }
   return rest.trim() === "";
-}
-
-/** The kinds a value tags, in the order they appear. */
-export function mentionKinds<K extends string>(value: MentionValue<K>): K[] {
-  return validMentions(value.text, value.mentions).map((mention) => mention.kind);
 }
 
 /**
@@ -391,18 +389,6 @@ export function toggleMentionEdit<K extends string>(value: MentionValue<K>, kind
   return hasMention(value, kind) ? removeMention(value, kind) : addMention(value, kind);
 }
 
-export function withMention<K extends string>(value: MentionValue<K>, kind: K): MentionValue<K> {
-  return addMention(value, kind).value;
-}
-
-export function withoutMention<K extends string>(value: MentionValue<K>, kind: K): MentionValue<K> {
-  return removeMention(value, kind).value;
-}
-
-export function toggleMention<K extends string>(value: MentionValue<K>, kind: K): MentionValue<K> {
-  return toggleMentionEdit(value, kind).value;
-}
-
 /**
  * Where a caret at `offset` in the text before `edit` sits after it. Text
  * after the edit moves with it, a caret inside what was removed lands where
@@ -519,29 +505,6 @@ export function isUsable(option: MentionOption): boolean {
 /** The first usable row, or -1 when every row is disabled or there are none. */
 export function firstActive(options: readonly MentionOption[]): number {
   return options.findIndex(isUsable);
-}
-
-/**
- * Down and Up through a list's rows: the next row in that direction that
- * `usable` accepts, wrapping, skipping one it refuses (the @ menu passes
- * `isUsable`, so a disabled row is stepped over). Every row is usable by
- * default, as in the home page's ask list. With nothing usable the active row
- * stays where it is.
- */
-export function moveActive<T>(
-  options: readonly T[],
-  active: number,
-  delta: 1 | -1,
-  usable: (option: T) => boolean = () => true,
-): number {
-  const count = options.length;
-  if (count === 0) return -1;
-  let at = active;
-  for (let step = 0; step < count; step += 1) {
-    at = (((at + delta) % count) + count) % count;
-    if (usable(options[at]!)) return at;
-  }
-  return active;
 }
 
 /** What the live region says when the menu opens (STUDIO-MENTIONS.md, "Accessibility"). */

@@ -2,7 +2,7 @@
 
 import { createContext, useContext } from "react";
 
-import type { MentionValue } from "@/components/ui/mention-text";
+import type { MentionValue } from "@/lib/mentions";
 import type { TagKind } from "@/lib/studio-drafts";
 
 /**

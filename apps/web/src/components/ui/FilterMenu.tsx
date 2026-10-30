@@ -5,10 +5,8 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent
 import { chipClasses, cx, inputClasses, MENU_GROUP, MENU_HEADING, MENU_PANEL, menuRowClasses } from "./classes";
 import { Glyph } from "./Glyph";
 import { Popover } from "./Popover";
-import { nextIndexForKey, sectionsOf, triggerText, typeaheadIndex, valueText, type FilterOption } from "./filter-menu";
+import { nextIndexForKey, NO_TYPEAHEAD, sectionsOf, triggerText, typeaheadIndex, typeaheadStep, valueText, type FilterOption } from "./filter-menu";
 
-/** A pause this long between keys starts a new typeahead prefix. */
-const TYPEAHEAD_RESET_MS = 700;
 
 /**
  * The list's box, a filter's and a field's alike, and `Combobox`'s: the kit
@@ -106,7 +104,7 @@ export function FilterMenu<V extends string>({
   const [keyboard, setKeyboard] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLDivElement>(null);
-  const typed = useRef({ buffer: "", at: 0 });
+  const typed = useRef(NO_TYPEAHEAD);
   const id = useId();
   const listId = `${id}-list`;
   const optionId = (index: number) => `${id}-option-${index}`;
@@ -116,7 +114,7 @@ export function FilterMenu<V extends string>({
 
   const show = (at: number, byKey: boolean) => {
     // A prefix typed into the last opening does not carry into this one.
-    typed.current = { buffer: "", at: 0 };
+    typed.current = NO_TYPEAHEAD;
     setActive(at);
     setKeyboard(byKey);
     setOpen(true);
@@ -175,11 +173,8 @@ export function FilterMenu<V extends string>({
     if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
       // The event's own time rather than Date.now(): the same clock, and
       // the React compiler's purity rule cannot tell a handler from render.
-      const now = event.timeStamp;
-      const t = typed.current;
-      t.buffer = now - t.at > TYPEAHEAD_RESET_MS ? event.key : t.buffer + event.key;
-      t.at = now;
-      const hit = typeaheadIndex(options.map((o) => o.label), active, t.buffer);
+      typed.current = typeaheadStep(typed.current, event.key, event.timeStamp);
+      const hit = typeaheadIndex(options.map((o) => o.label), active, typed.current.buffer);
       if (hit !== null) {
         setActive(hit);
         setKeyboard(true);

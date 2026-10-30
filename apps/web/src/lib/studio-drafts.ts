@@ -1,4 +1,4 @@
-import type { Mention } from "@/components/ui/mention-text";
+import type { Mention } from "@/lib/mentions";
 import { storedHarness } from "@/lib/studio-harness";
 import { VIDEO_TOOL_NAMES, type VideoBrief, type VideoToolName, type VideoToolOption } from "@/lib/studio-brief-video";
 import type { Brief } from "@/lib/studio-jobs";

@@ -48,3 +48,26 @@ export function tabKeyIndex(
 export function tabIds(base: string, id: string): { tab: string; panel: string } {
   return { tab: `${base}-tab-${id}`, panel: `${base}-panel-${id}` };
 }
+
+/**
+ * Down and Up through a list whose focus stays in a field (the @ menu, Home's
+ * Ask box): the next row in that direction that `usable` accepts, wrapping,
+ * skipping one it refuses (the @ menu passes `isUsable`, so a disabled row is
+ * stepped over). Every row is usable by default. With nothing usable the
+ * active row stays where it is.
+ */
+export function moveActive<T>(
+  options: readonly T[],
+  active: number,
+  delta: 1 | -1,
+  usable: (option: T) => boolean = () => true,
+): number {
+  const count = options.length;
+  if (count === 0) return -1;
+  let at = active;
+  for (let step = 0; step < count; step += 1) {
+    at = (((at + delta) % count) + count) % count;
+    if (usable(options[at]!)) return at;
+  }
+  return active;
+}

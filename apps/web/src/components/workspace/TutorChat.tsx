@@ -12,7 +12,7 @@ import { Composer } from "@/components/ui/Composer";
 import { MathText } from "@/components/Math";
 import { MentionChip } from "@/components/ui/MentionChip";
 import type { MentionComposerHandle } from "@/components/ui/MentionComposer";
-import type { MentionValue } from "@/components/ui/mention-text";
+import type { MentionValue } from "@/lib/mentions";
 import { TutorMessage, UserMessage } from "@/components/ui/Message";
 import { TextLink } from "@/components/ui/TextLink";
 import type { CitationSource } from "@/lib/agent/prompt";
