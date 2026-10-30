@@ -5,9 +5,20 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import type { Course, Module, Topic, TopicKnowledge } from "@gnosia/tutor/types";
-import { RecapCard, RecapEditor } from "./TopicRecap";
+import { RecapCard, RecapEditor, TopicRecap } from "./TopicRecap";
 
-vi.mock("@/lib/learner-context", () => ({ useLearner: () => ({ forgetKnowledge: () => {} }) }));
+// Saving writes the recap where the next render reads it, as the provider does.
+const learner = vi.hoisted(() => {
+  const state = { knowledge: {} as Record<string, unknown> };
+  return {
+    state,
+    forgetKnowledge: () => {},
+    saveKnowledge: (topicId: string, input: object) => {
+      state.knowledge[topicId] = { ...input, topicId, sessions: 0, updatedAt: "2026-10-30T00:00:00.000Z" };
+    },
+  };
+});
+vi.mock("@/lib/learner-context", () => ({ useLearner: () => learner }));
 
 /**
  * The recap form on the kit (#359): each field a `FormRow` over a `Textarea`,
@@ -70,5 +81,70 @@ describe("RecapCard", () => {
     expect(errors.mock.calls.some((call) => String(call[0]).includes("same key"))).toBe(false);
     act(() => root.unmount());
     errors.mockRestore();
+  });
+});
+
+/**
+ * Add recap and Edit are swapped for the editor when pressed, and Save and
+ * Cancel unmount it, so each move takes focus with it rather than leaving it
+ * on a control that is gone.
+ */
+describe("TopicRecap focus", () => {
+  const props = {
+    course: { code: "CP4284", slug: "cp4284", title: "Transformers" } as Course,
+    module: { slug: "m1", title: "Module", order: 1 } as Module,
+    topic: { id: "t1", title: "Attention" } as Topic,
+  };
+
+  function mount() {
+    (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    learner.state.knowledge = {};
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    act(() => root.render(createElement(TopicRecap, props)));
+    return {
+      host,
+      unmount: () => {
+        act(() => root.unmount());
+        host.remove();
+      },
+    };
+  }
+
+  const button = (host: HTMLElement, text: string) =>
+    [...host.querySelectorAll("button")].find((b) => b.textContent === text) as HTMLButtonElement;
+  const summary = (host: HTMLElement) => {
+    const label = [...host.querySelectorAll("label")].find((l) => l.textContent === "Summary");
+    return host.querySelector(`#${CSS.escape(label?.htmlFor ?? "")}`);
+  };
+
+  it("moves focus to Summary on opening, and back to Add recap on Cancel", () => {
+    const { host, unmount } = mount();
+    act(() => button(host, "Add recap").focus());
+    act(() => button(host, "Add recap").click());
+    expect(document.activeElement).toBe(summary(host));
+    act(() => button(host, "Cancel").click());
+    expect(document.activeElement).toBe(button(host, "Add recap"));
+    unmount();
+  });
+
+  it("hands focus to the card's Edit after Save, and back to it after editing", () => {
+    const { host, unmount } = mount();
+    act(() => button(host, "Add recap").click());
+    const field = summary(host) as HTMLTextAreaElement;
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+    act(() => {
+      setter?.call(field, "Softmax turns scores into weights.");
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    act(() => button(host, "Save recap").click());
+    expect(document.activeElement).toBe(button(host, "Edit"));
+
+    act(() => button(host, "Edit").click());
+    expect(document.activeElement).toBe(summary(host));
+    act(() => button(host, "Save recap").click());
+    expect(document.activeElement).toBe(button(host, "Edit"));
+    unmount();
   });
 });
