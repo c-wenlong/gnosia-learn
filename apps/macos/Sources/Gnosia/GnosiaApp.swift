@@ -44,9 +44,17 @@ struct GnosiaApp: App {
                     // The mirror refreshes itself: the launch starts on the
                     // snapshot already there, and a stale or missing one is
                     // rebuilt in the background and swapped in on success.
-                    if await CatalogSnapshot.refreshIfNeeded(location: store.location) {
-                        store.reload()
-                    }
+                    await store.refreshSnapshot(force: true)
+                }
+                // And again when the app comes back to the front, after a
+                // session on the web has moved the catalog on.
+                .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                    Task { await store.refreshSnapshot() }
+                }
+                // A snapshot that carries this app's answers frees their
+                // local copies (the store already reads the mirror's).
+                .onChange(of: store.mirroredRequestIds, initial: true) { _, ids in
+                    learner.pruneMirroredEvents(ids)
                 }
         }
         .windowToolbarStyle(.unified)

@@ -11,11 +11,9 @@ import {
 } from "react";
 import {
   activeChapterIndex,
-  formatTimecode,
   nextSkip,
   SKIP_FLASH_MS,
   SKIP_STEP,
-  skipLabel,
   subtitleAt,
   type SkipFlash,
   type TranscriptCue,
@@ -23,11 +21,11 @@ import {
 } from "@/components/media";
 import { TranscriptPanel } from "@/components/TranscriptPanel";
 import { cx } from "@/components/ui/classes";
-import { Glyph } from "@/components/ui/Glyph";
-import { IconButton } from "@/components/ui/IconButton";
 import { Tabs, type TabItem } from "@/components/ui/Tabs";
 import { useAssetFailure } from "@/components/use-asset-failure";
-import { VideoScrubber } from "@/components/VideoScrubber";
+import { VideoControls } from "@/components/VideoControls";
+import { VideoOverlays, type ToggleFlash } from "@/components/VideoOverlays";
+import { readSubtitles, subscribeSubtitles, toggleSubtitles } from "@/components/video-subtitles";
 import { WidgetFailure } from "@/components/WidgetFailure";
 
 /** What the player reports as it plays, for a caller that records progress. */
@@ -74,6 +72,11 @@ export type PlaybackSignal = {
  * then one card whose tabs are the transcript followed by the caller's own
  * sections, so they do not pile up as a stack of cards. Without them the
  * component is the picture and the transcript.
+ *
+ * **The pieces.** This file is the element, its state and the layout. The
+ * bar is `VideoControls`, what draws over the picture is `VideoOverlays`,
+ * the icons are `VideoIcons`, and the remembered subtitle switch is
+ * `video-subtitles`.
  *
  * **A video that fails says why.** The player is replaced, at its own size, by
  * the shared failure panel, which asks `statusHref` for the reason. The
@@ -138,12 +141,7 @@ export function VideoPlayer({
   // The icon a press on play or pause flashes in the middle. `n` counts
   // presses, so each one is a new element that fades in afresh, and `attempt`
   // is the element it was for, so a retry does not show the old one's flash.
-  const [toggleFlash, setToggleFlash] = useState<{
-    icon: "play" | "pause";
-    n: number;
-    attempt: number;
-    shown: boolean;
-  } | null>(null);
+  const [toggleFlash, setToggleFlash] = useState<(ToggleFlash & { attempt: number }) | null>(null);
   const toggleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const subtitles = useSyncExternalStore(subscribeSubtitles, readSubtitles, () => false);
   // Off on the server, so the first client render matches it.
@@ -348,6 +346,13 @@ export function VideoPlayer({
     if (!video.muted && video.volume === 0) video.volume = 0.5;
   }
 
+  function setVolumeTo(value: number) {
+    const video = videoRef.current;
+    if (!video) return;
+    video.volume = value;
+    video.muted = video.volume === 0;
+  }
+
   function cycleRate() {
     const video = videoRef.current;
     if (!video) return;
@@ -511,183 +516,48 @@ export function VideoPlayer({
           )}
         />
 
-        {subtitle !== null && (
-          <div
-            className={cx(
-              "pointer-events-none absolute inset-x-0 flex justify-center px-6 transition-[bottom] duration-200 motion-reduce:transition-none",
-              // A phone's picture is too short for a caption and the play
-              // button at once, and a paused video is not saying anything.
-              paused && "max-sm:hidden",
-              // Above the controls whenever they show, focus included.
-              controlsUp
-                ? "bottom-[4.25rem] sm:bottom-24"
-                : "bottom-4 group-has-[:focus-visible]/player:bottom-[4.25rem] sm:bottom-6 sm:group-has-[:focus-visible]/player:bottom-24",
-            )}
-          >
-            <p
-              data-subtitle
-              className="max-w-[min(90%,52rem)] rounded-md bg-black/75 px-2.5 py-1 text-center text-[clamp(12px,2.1vw,22px)] leading-snug text-white [box-decoration-break:clone]"
-            >
-              {subtitle}
-            </p>
-          </div>
-        )}
-
-        {/* Kept mounted, so it fades and shrinks away as play starts and comes back
-            the same way on pause, rather than blinking. Gone, it is invisible and
-            inert: no focus, no click through to the video under it. */}
-        {skip !== null && (
-          <div
-            // A turn of direction is a new flash, which fades in on its own side.
-            key={skip.direction}
-            aria-hidden
-            data-skip={skip.shown ? "shown" : "away"}
-            className={cx(
-              "pointer-events-none absolute top-1/2 flex -translate-y-1/2 items-center gap-1.5 text-xl font-semibold text-white tabular-nums [text-shadow:0_1px_4px_rgb(0_0_0/0.6)] sm:text-2xl",
-              "transition-[opacity,translate] duration-200 ease-soft starting:opacity-0 motion-reduce:transition-none",
-              skip.direction > 0 ? "right-[12%]" : "left-[12%] flex-row-reverse",
-              skip.shown
-                ? "translate-x-0 opacity-100"
-                : cx("opacity-0", skip.direction > 0 ? "translate-x-2" : "-translate-x-2"),
-            )}
-          >
-            <span>{skipLabel(skip)}</span>
-            <Icon
-              name={skip.direction > 0 ? "forward" : "back"}
-              className="size-6 drop-shadow-[0_1px_3px_rgb(0_0_0/0.6)] sm:size-7"
-            />
-          </div>
-        )}
-
-        {toggleFlash !== null && toggleFlash.attempt === attempt && (
-          <div
-            key={toggleFlash.n}
-            aria-hidden
-            data-toggle-flash={toggleFlash.shown ? toggleFlash.icon : "away"}
-            className={cx(
-              "pointer-events-none absolute top-1/2 left-1/2 flex size-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm sm:size-16",
-              "transition-[opacity,scale] duration-200 ease-soft starting:scale-90 starting:opacity-0 motion-reduce:transition-none",
-              toggleFlash.shown ? "scale-100 opacity-100" : "scale-110 opacity-0",
-            )}
-          >
-            {toggleFlash.icon === "play" ? (
-              <Glyph name="play" className="size-6 translate-x-0.5 fill-current sm:size-7" />
-            ) : (
-              <Icon name="pause" className="size-6 sm:size-7" />
-            )}
-          </div>
-        )}
-
-        <button
-          type="button"
-          onClick={() => {
+        <VideoOverlays
+          subtitle={subtitle}
+          paused={paused}
+          controlsUp={controlsUp}
+          bigPlay={bigPlay}
+          onBigPlay={() => {
             togglePlay();
             // This button goes inert as play starts, which would drop focus
             // on the page; the frame keeps it, so the keys still answer.
             frameRef.current?.focus({ preventScroll: true });
           }}
-          aria-label="Play"
-          inert={!bigPlay}
-          data-big-play={bigPlay ? "shown" : "away"}
-          className={cx(
-            "absolute top-1/2 left-1/2 flex size-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm sm:size-16 focus-visible:outline-2 focus-visible:outline-white",
-            "duration-150 ease-soft motion-reduce:transition-none",
-            // Visibility waits for the fade out, not in, so the button is reachable the moment it shows.
-            bigPlay
-              ? "scale-100 opacity-100 transition-[opacity,scale] hover:scale-105"
-              : "invisible scale-90 opacity-0 transition-[opacity,scale,visibility]",
-          )}
-        >
-          <Glyph name="play" className="size-6 translate-x-0.5 fill-current sm:size-7" />
-        </button>
+          skip={skip}
+          toggleFlash={toggleFlash !== null && toggleFlash.attempt === attempt ? toggleFlash : null}
+        />
 
-        <div
-          className={cx(
-            "absolute inset-x-0 bottom-0 bg-linear-to-t from-black/80 via-black/35 to-transparent px-2 pt-8 pb-1 sm:px-4 sm:pt-12 sm:pb-1.5 text-white transition-opacity duration-200 motion-reduce:transition-none",
-            controlsUp ? "opacity-100" : "opacity-0 group-has-[:focus-visible]/player:opacity-100",
-          )}
-        >
-          <VideoScrubber
-            src={src}
-            time={time}
-            duration={duration}
-            buffered={buffered}
-            chapters={chapters}
-            label={title ? `Seek in ${title}` : "Seek"}
-            onSeek={seek}
-            onScrub={setScrubbing}
-            onStep={step}
-          />
-          <div className="flex items-center gap-1 text-[13px]">
-            <ControlButton label={paused ? "Play (k)" : "Pause (k)"} onClick={togglePlay}>
-              {paused ? <Glyph name="play" className="size-5 fill-current" /> : <Icon name="pause" className="size-5" />}
-            </ControlButton>
-            <div className="group/volume flex items-center">
-              <ControlButton label={muted || volume === 0 ? "Unmute (m)" : "Mute (m)"} onClick={toggleMute}>
-                <Icon name={muted || volume === 0 ? "muted" : "volume"} className="size-5" />
-              </ControlButton>
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.05}
-                value={muted ? 0 : volume}
-                aria-label="Volume"
-                onChange={(e) => {
-                  const video = videoRef.current;
-                  if (!video) return;
-                  video.volume = Number(e.currentTarget.value);
-                  video.muted = video.volume === 0;
-                }}
-                className="w-0 cursor-pointer accent-white opacity-0 transition-all duration-150 group-focus-within/volume:ml-1 group-focus-within/volume:w-16 group-focus-within/volume:opacity-100 group-hover/volume:ml-1 group-hover/volume:w-16 group-hover/volume:opacity-100 motion-reduce:transition-none"
-              />
-            </div>
-            <span className="ml-1.5 shrink-0 tabular-nums">
-              {formatTimecode(time)}
-              <span className="text-white/60">
-                {" / "}
-                {Number.isFinite(duration) ? formatTimecode(duration) : "–:––"}
-              </span>
-            </span>
-            {chapterTitle !== undefined && (
-              <span data-chapter-label className="ml-2 min-w-0 truncate text-white/85">
-                <span aria-hidden className="mr-2 text-white/50">
-                  ·
-                </span>
-                {chapterTitle}
-              </span>
-            )}
-            <span className="flex-1" />
-            {hasSubtitles && (
-              <ControlButton label="Subtitles (c)" onClick={toggleSubtitles} pressed={subtitles}>
-                <span className="relative flex">
-                  <Icon name="cc" className="size-6" />
-                  <span
-                    aria-hidden
-                    className={cx(
-                      "absolute inset-x-1 -bottom-1 h-0.5 rounded-full bg-accent transition-transform motion-reduce:transition-none",
-                      subtitles ? "scale-x-100" : "scale-x-0",
-                    )}
-                  />
-                </span>
-              </ControlButton>
-            )}
-            <ControlButton label="Playback speed" onClick={cycleRate}>
-              <span className="w-9 text-center text-[12px] font-semibold tabular-nums">{rate}×</span>
-            </ControlButton>
-            {canPip && (
-              <ControlButton label="Picture in picture (i)" onClick={togglePip}>
-                <Icon name="pip" className="size-5" />
-              </ControlButton>
-            )}
-            <ControlButton
-              label={fullscreen ? "Exit full screen (f)" : "Full screen (f)"}
-              onClick={toggleFullscreen}
-            >
-              <Icon name={fullscreen ? "shrink" : "expand"} className="size-5" />
-            </ControlButton>
-          </div>
-        </div>
+        <VideoControls
+          src={src}
+          time={time}
+          duration={duration}
+          buffered={buffered}
+          chapters={chapters}
+          title={title}
+          controlsUp={controlsUp}
+          paused={paused}
+          muted={muted}
+          volume={volume}
+          rate={rate}
+          fullscreen={fullscreen}
+          canPip={canPip}
+          hasSubtitles={hasSubtitles}
+          subtitles={subtitles}
+          chapterTitle={chapterTitle}
+          onSeek={seek}
+          onScrub={setScrubbing}
+          onStep={step}
+          onTogglePlay={togglePlay}
+          onToggleMute={toggleMute}
+          onVolume={setVolumeTo}
+          onCycleRate={cycleRate}
+          onTogglePip={togglePip}
+          onToggleFullscreen={toggleFullscreen}
+        />
       </div>
     );
 
@@ -731,45 +601,6 @@ export function VideoPlayer({
   );
 }
 
-/*
- * Whether subtitles are on, remembered in this browser. An external store
- * rather than state read in an effect: the server renders them off, the
- * client reads the stored choice after hydration, and every player on the
- * page follows one switch. When storage is refused the switch still works for
- * the life of the page, held in `fallback`.
- */
-const SUBTITLES_KEY = "video:subtitles";
-const SUBTITLES_EVENT = "video:subtitles";
-let fallback = false;
-
-function readSubtitles(): boolean {
-  try {
-    const stored = window.localStorage.getItem(SUBTITLES_KEY);
-    return stored === null ? fallback : stored === "on";
-  } catch {
-    return fallback;
-  }
-}
-
-function subscribeSubtitles(onChange: () => void): () => void {
-  window.addEventListener(SUBTITLES_EVENT, onChange);
-  window.addEventListener("storage", onChange);
-  return () => {
-    window.removeEventListener(SUBTITLES_EVENT, onChange);
-    window.removeEventListener("storage", onChange);
-  };
-}
-
-function toggleSubtitles() {
-  fallback = !readSubtitles();
-  try {
-    window.localStorage.setItem(SUBTITLES_KEY, fallback ? "on" : "off");
-  } catch {
-    // Not remembered, still toggled.
-  }
-  window.dispatchEvent(new Event(SUBTITLES_EVENT));
-}
-
 function noSubscription(): () => void {
   return () => undefined;
 }
@@ -792,78 +623,4 @@ function bufferedEnd(video: HTMLVideoElement): number {
     if (ranges.start(i) <= video.currentTime && video.currentTime <= ranges.end(i)) return ranges.end(i);
   }
   return ranges.end(ranges.length - 1);
-}
-
-function ControlButton({
-  label,
-  onClick,
-  pressed,
-  children,
-}: {
-  /**
-   * What the button does. A toggle (`pressed` set) keeps one name whatever
-   * its state, and `aria-pressed` says whether it is on, as ARIA asks of a
-   * toggle button; a button without `pressed` names the action it would take
-   * now ("Mute", "Unmute"), since nothing else says its state.
-   */
-  label: string;
-  onClick: () => void;
-  /** Set for a toggle, so it is announced as one. */
-  pressed?: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <IconButton label={label} onClick={onClick} pressed={pressed} tone="onDark" inset>
-      {children}
-    </IconButton>
-  );
-}
-
-const PATHS = {
-  pause: <path d="M6.5 4.5h4v15h-4zM13.5 4.5h4v15h-4z" fill="currentColor" stroke="none" />,
-  volume: (
-    <>
-      <path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z" fill="currentColor" />
-      <path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" />
-    </>
-  ),
-  muted: (
-    <>
-      <path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z" fill="currentColor" />
-      <path d="M15.5 9.5l5 5M20.5 9.5l-5 5" />
-    </>
-  ),
-  cc: (
-    <>
-      <rect x="3" y="5.5" width="18" height="13" rx="2.5" />
-      <path d="M10.5 10.2a2.2 2.2 0 1 0 0 3.6M17 10.2a2.2 2.2 0 1 0 0 3.6" />
-    </>
-  ),
-  pip: (
-    <>
-      <rect x="3" y="5" width="18" height="14" rx="2" />
-      <rect x="12" y="11.5" width="6.5" height="5" rx="1" fill="currentColor" />
-    </>
-  ),
-  expand: <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />,
-  shrink: <path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" />,
-  forward: <path d="M9.5 5.5l6.5 6.5-6.5 6.5" strokeWidth="2.4" />,
-  back: <path d="M14.5 5.5L8 12l6.5 6.5" strokeWidth="2.4" />,
-} satisfies Record<string, ReactNode>;
-
-function Icon({ name, className }: { name: keyof typeof PATHS; className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      aria-hidden
-      className={className}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      {PATHS[name]}
-    </svg>
-  );
 }
