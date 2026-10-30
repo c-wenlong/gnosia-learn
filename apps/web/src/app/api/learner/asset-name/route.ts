@@ -1,8 +1,6 @@
-import { ASSET_NAME_MAX, cleanAssetName } from "@gnosia/schema/shared";
-import { writeAssetName } from "@gnosia/catalog/state";
+import { assetNameTurn } from "@gnosia/tutor/server/learner-writes";
 
-import { MAX_ASSET_ID_CHARS } from "@/app/api/learner/watched/route";
-import { BadRequest, handler } from "@/lib/learner-api";
+import { turnRoute } from "@/lib/learner-api";
 
 /**
  * The learner's own name for an asset (`asset_name`), set from the asset's
@@ -13,24 +11,8 @@ import { BadRequest, handler } from "@/lib/learner-api";
  *
  * State, not content (ARCHITECTURE.md rule 11): the asset row is untouched,
  * so no import undoes the name.
+ *
+ * The parse and the write are `assetNameTurn` in
+ * `@gnosia/tutor/server/learner-writes`, which the sidecar runs too.
  */
-export const POST = handler(
-  "asset-name",
-  (body) => {
-    const assetId = body.assetId;
-    if (typeof assetId !== "string" || assetId.trim() === "") {
-      throw new BadRequest('"assetId" is required and must be a non-empty string.');
-    }
-    if (assetId.length > MAX_ASSET_ID_CHARS) {
-      throw new BadRequest(`"assetId" is longer than ${MAX_ASSET_ID_CHARS} characters.`);
-    }
-    const name = body.name;
-    if (name !== null && typeof name !== "string") throw new BadRequest('"name" must be a string, or null to clear it.');
-    const cleaned = cleanAssetName(name);
-    if (cleaned !== null && cleaned.length > ASSET_NAME_MAX) {
-      throw new BadRequest(`"name" must be at most ${ASSET_NAME_MAX} characters.`);
-    }
-    return { assetId, name: cleaned };
-  },
-  (db, input, owner) => writeAssetName(db, input.assetId, input.name, owner),
-);
+export const POST = turnRoute("asset-name", assetNameTurn);

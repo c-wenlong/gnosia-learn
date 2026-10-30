@@ -90,8 +90,13 @@ export function ShellFrame({
   }, []);
 
   // A studio page that read the runner's list on the server has heard it
-  // answer since, whatever the layout's earlier look found.
-  const answering = studio && (runner || (chats?.initial ?? null) !== null);
+  // answer since, whatever the layout's earlier look found, and that holds
+  // after the page is left: the frame outlives navigations, the look does
+  // not run again, and a runner that stops later is caught by the reads
+  // themselves (`useConversations`' `failed`).
+  const [heard, setHeard] = useState(false);
+  if (!heard && (chats?.initial ?? null) !== null) setHeard(true);
+  const answering = studio && (runner || heard);
   const controls = useMemo<ShellControls>(
     () => ({ studio, runner: answering, timeZone, drawer, openDrawer, closeDrawer, collapsed, setCollapsed, chats, setChats }),
     [studio, answering, timeZone, drawer, openDrawer, closeDrawer, collapsed, setCollapsed, chats],

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -107,6 +108,7 @@ describe.skipIf(!reachable.ok)("asset routes on a flipped database", () => {
   let FILE: Handler;
   let STATUS: Handler;
   let library: typeof import("@/lib/asset-library");
+  let thumbs: typeof import("@/lib/library-thumbnails");
   const saved: Record<string, string | undefined> = {};
 
   const call = (handler: Handler, suffix: string, id: string, headers: Record<string, string> = {}) =>
@@ -207,6 +209,7 @@ describe.skipIf(!reachable.ok)("asset routes on a flipped database", () => {
     ({ GET: FILE } = (await import("./[id]/file/route")) as { GET: Handler });
     ({ GET: STATUS } = (await import("./[id]/status/route")) as { GET: Handler });
     library = await import("@/lib/asset-library");
+    thumbs = await import("@/lib/library-thumbnails");
   }, 120_000);
 
   afterAll(async () => {
@@ -253,6 +256,17 @@ describe.skipIf(!reachable.ok)("asset routes on a flipped database", () => {
     expect(response.headers.get("content-range")).toBe(`bytes 0-2/${whole.length}`);
     expect(Buffer.from(await response.arrayBuffer())).toEqual(whole.subarray(0, 3));
     expect((await call(FILE, "file", NOTE_ID, { range: `bytes=${whole.length + 5}-` })).status).toBe(416);
+  });
+
+  it("tags row text by its own hash, and answers a 304 for text the browser holds", async () => {
+    const whole = Buffer.from((await dbSource(scratch.db, ownerScope(LOCAL_LEARNER_ID)).concept("base"))?.markdown ?? "", "utf8");
+    const tag = `"${createHash("sha256").update(whole).digest("hex")}"`;
+    const response = await call(FILE, "file", NOTE_ID);
+    expect(response.headers.get("etag")).toBe(tag);
+    expect(response.headers.get("cache-control")).toBe("private, no-cache");
+    const again = await call(FILE, "file", NOTE_ID, { "if-none-match": tag });
+    expect(again.status).toBe(304);
+    expect((await again.arrayBuffer()).byteLength).toBe(0);
   });
 
   it("serves a log as its entries concatenated, including one started after the flip", async () => {
@@ -344,9 +358,9 @@ describe.skipIf(!reachable.ok)("asset routes on a flipped database", () => {
     ];
     const access = await library.readAssetAccess(rows);
     expect([...access.served].sort()).toEqual([NOTE_ID, SVG_ID].sort());
-    expect(library.unservedRows(rows, access).map((row) => row.id)).toEqual([UNUPLOADED_ID]);
-    expect(library.thumbnailFor(rows[0]!, access)).toBe(`/api/assets/${encodeURIComponent(SVG_ID)}/file`);
-    expect(library.thumbnailFor(rows[2]!, access)).toBeNull();
+    expect(thumbs.unservedRows(rows, access).map((row) => row.id)).toEqual([UNUPLOADED_ID]);
+    expect(thumbs.thumbnailFor(rows[0]!, access)).toBe(`/api/assets/${encodeURIComponent(SVG_ID)}/file`);
+    expect(thumbs.thumbnailFor(rows[2]!, access)).toBeNull();
   });
 
   it("draws a stored video's card from its stored poster, and none for one stored without a poster", async () => {
@@ -357,9 +371,9 @@ describe.skipIf(!reachable.ok)("asset routes on a flipped database", () => {
     const access = await library.readAssetAccess(rows);
     // Both play: their bytes are in the store.
     expect([...access.served].sort()).toEqual([BARE_ID, STORED_ID].sort());
-    expect(library.thumbnailFor(rows[0]!, access)).toBe(`/api/assets/${encodeURIComponent(STORED_ID)}/poster`);
+    expect(thumbs.thumbnailFor(rows[0]!, access)).toBe(`/api/assets/${encodeURIComponent(STORED_ID)}/poster`);
     // No stored poster, and nothing cuts one at request time any more.
-    expect(library.thumbnailFor(rows[1]!, access)).toBeNull();
+    expect(thumbs.thumbnailFor(rows[1]!, access)).toBeNull();
   });
 
   it("searches a row-backed note's words, and counts the transcript nobody uploaded", async () => {

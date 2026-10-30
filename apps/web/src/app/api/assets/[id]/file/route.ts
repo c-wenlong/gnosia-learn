@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { createHash } from "node:crypto";
 
 import {
   blobStoreProblem,
@@ -7,13 +7,11 @@ import {
   parseRange,
   resolveAsset,
   webStreamFrom,
-  type AssetFileProblem,
   type AssetRowText,
   type AssetSource,
   type AssetStored,
 } from "@/lib/asset-files";
-import { lookupFailed } from "@/lib/asset-response";
-import { assetBlobStore, SIGNED_URL_TTL_SECONDS } from "@/lib/blob-store";
+import { lookupFailed, matchesEtag, problemResponse, signedRedirect } from "@/lib/asset-response";
 import { contentDisposition } from "@/lib/download-name";
 import { withLearnerStore } from "@/lib/learner-store";
 
@@ -42,7 +40,8 @@ import { withLearnerStore } from "@/lib/learner-store";
  * | `Content-Security-Policy` | see `ASSET_CSP` below | An SVG is a document, and one served from this origin could run script with this origin's storage. The sandbox drops it into an opaque origin with scripts off, which costs a video nothing. Not sent for a PDF (`securityPolicy`). |
  * | `Content-Disposition` | `inline; filename="…"` | The point is a `<video>` and an `<img>`; `attachment` would break both. The filename is a sanitised basename so a saved file is named after itself. With `?download=1` (the Library row menu's Download) it is `attachment`, named after the asset's title (`contentDisposition` in `@/lib/download-name`). |
  * | `Accept-Ranges` | `bytes` | Without it a player will not offer a scrub bar at all. |
- * | `Cache-Control` | `private, no-store` | A re-render or a commit gives the same id new bytes, and the reason to open one of these is to look at the newest one. |
+ * | `ETag` | the bytes' sha256 | A blob's key is its sha256, and row text is hashed as it is served, so the tag changes exactly when the bytes do. |
+ * | `Cache-Control` | `private, no-cache` | A re-render or a commit gives the same id new bytes, so every use asks again; `If-None-Match` with the current tag is a 304 with no body, so a thumbnail, a replay or the scrub bar's preview of bytes already held costs no download. `If-Range` with an old tag gets the whole new file, never a slice of it. |
  *
  * `attachment` was the other way to make an SVG safe, and it is the wrong
  * trade here: browsers honour it on a navigation, which is the case that
@@ -111,7 +110,7 @@ export const runtime = "nodejs";
  * an SVG whatever the policy says. Direct navigation to the URL is the case
  * this protects, and `sandbox` is the directive that protects it.
  */
-export const ASSET_CSP =
+const ASSET_CSP =
   "default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; " +
   "font-src data:; img-src data:; sandbox";
 
@@ -136,7 +135,7 @@ function wantsDownload(request: Request): boolean {
 }
 
 /** The headers every successful answer carries, whole file or slice. */
-function baseHeaders(request: Request, file: AssetSource): Record<string, string> {
+function baseHeaders(request: Request, file: AssetSource, etag: string): Record<string, string> {
   return {
     "Content-Type": file.contentType,
     "Content-Disposition": wantsDownload(request)
@@ -144,9 +143,36 @@ function baseHeaders(request: Request, file: AssetSource): Record<string, string
       : contentDisposition("inline", file.filename),
     "X-Content-Type-Options": "nosniff",
     ...securityPolicy(file.contentType),
-    "Cache-Control": "private, no-store",
+    "Cache-Control": "private, no-cache",
+    ETag: etag,
     "Accept-Ranges": "bytes",
   };
+}
+
+/**
+ * The conditional half of a request, decided before any byte is read: a 304
+ * when the browser already holds these bytes, and the Range header to honour
+ * otherwise. A Range sent with an `If-Range` naming other bytes is dropped,
+ * so a player resuming a file that changed underneath it gets the new file
+ * whole rather than a slice of it spliced onto the old one.
+ */
+function conditional(request: Request, etag: string): { fresh: true } | { fresh: false; range: string | null } {
+  if (matchesEtag(request.headers.get("if-none-match"), etag)) return { fresh: true };
+  const ifRange = request.headers.get("if-range");
+  const range = request.headers.get("range");
+  return { fresh: false, range: ifRange !== null && ifRange.trim() !== etag ? null : range };
+}
+
+/** A 304: the validators and caching headers of a 200, and no body. */
+function notModified(headers: Record<string, string>): Response {
+  const { ETag, "Cache-Control": cache, "Content-Type": type, "Content-Disposition": disposition } = headers;
+  // The disposition too: a rename keeps the bytes and so the tag, and a
+  // cache updates its stored headers from a 304, so a download asked for
+  // again is saved under the new name.
+  return new Response(null, {
+    status: 304,
+    headers: { ETag, "Cache-Control": cache, "Content-Type": type, "Content-Disposition": disposition },
+  });
 }
 
 export async function GET(
@@ -163,13 +189,9 @@ export async function GET(
     return lookupFailed("asset file", error);
   }
 
-  if (resolved.ok === false) return problem(resolved);
+  if (resolved.ok === false) return problemResponse(resolved);
   if (resolved.source === "blob") return serveBlob(request, resolved);
   return serveRow(request, resolved);
-}
-
-function problem(p: AssetFileProblem): Response {
-  return NextResponse.json({ error: p.error, code: p.code, detail: p.detail }, { status: p.status });
 }
 
 /**
@@ -189,21 +211,17 @@ function problem(p: AssetFileProblem): Response {
  * would need to sign the disposition into its URL.
  */
 async function serveBlob(request: Request, stored: AssetStored): Promise<Response> {
-  let url: string | null;
   try {
-    url = await assetBlobStore().signedUrl(stored.key, SIGNED_URL_TTL_SECONDS);
+    const redirect = await signedRedirect(stored.key);
+    if (redirect !== null) return redirect;
   } catch (error) {
-    return problem(blobStoreProblem(error));
-  }
-  if (url !== null) {
-    return new Response(null, {
-      status: 302,
-      headers: { Location: url, "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" },
-    });
+    return problemResponse(blobStoreProblem(error));
   }
 
-  const headers = baseHeaders(request, stored);
-  const range = parseRange(request.headers.get("range"), stored.bytes);
+  const headers = baseHeaders(request, stored, `"${stored.sha256}"`);
+  const asked = conditional(request, headers.ETag);
+  if (asked.fresh) return notModified(headers);
+  const range = parseRange(asked.range, stored.bytes);
   if (range.kind === "unsatisfiable") {
     return new Response(null, {
       status: 416,
@@ -235,7 +253,7 @@ async function serveBlob(request: Request, stored: AssetStored): Promise<Respons
         headers: { ...headers, "Content-Range": `bytes */${stored.bytes}` },
       });
     }
-    return problem(blobStoreProblem(error));
+    return problemResponse(blobStoreProblem(error));
   }
 }
 
@@ -245,8 +263,10 @@ async function serveBlob(request: Request, stored: AssetStored): Promise<Respons
  * nothing is gained by streaming what the database already handed over.
  */
 function serveRow(request: Request, text: AssetRowText): Response {
-  const headers = baseHeaders(request, text);
-  const range = parseRange(request.headers.get("range"), text.bytes);
+  const headers = baseHeaders(request, text, `"${createHash("sha256").update(text.body).digest("hex")}"`);
+  const asked = conditional(request, headers.ETag);
+  if (asked.fresh) return notModified(headers);
+  const range = parseRange(asked.range, text.bytes);
   if (range.kind === "unsatisfiable") {
     return new Response(null, {
       status: 416,

@@ -160,17 +160,22 @@ describe("what it will not render", () => {
 });
 
 describe("images as links", () => {
-  it("links a markdown image instead of loading it, for text nobody here wrote", () => {
-    const host = render("![a tracker](https://evil.example/pixel.png)", { images: "link" });
+  it("links a markdown image instead of loading it by default, for text nobody here wrote", () => {
+    const host = render("![a tracker](https://evil.example/pixel.png)");
     expect(host.querySelector("img")).toBeNull();
     const link = host.querySelector("a")!;
     expect(link.getAttribute("href")).toBe("https://evil.example/pixel.png");
     expect(link.textContent).toBe("a tracker");
   });
 
-  it("still loads it by default, for a note", () => {
-    const host = render("![a picture](/a.png)");
+  it("loads it when the caller says the text is a note (images=show)", () => {
+    const host = render("![a picture](/a.png)", { images: "show" });
     expect(host.querySelector("img")).not.toBeNull();
+  });
+
+  it("still draws an embed the caller resolved, by default", () => {
+    const host = render("![[vector.svg]]", { resolveEmbed: (name: string) => `/api/assets/${name}/file` });
+    expect(host.querySelector("img")?.getAttribute("src")).toBe("/api/assets/vector.svg/file");
   });
 });
 

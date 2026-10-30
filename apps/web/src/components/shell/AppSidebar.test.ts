@@ -433,6 +433,38 @@ describe("the sections", () => {
     await vi.waitFor(() => expect(mocks.fetchRecent).toHaveBeenLastCalledWith({ pages: 1, drafts: false }));
   });
 
+  it("leaves the catalog's conversations out while the runner's list is shown, so none appears twice", async () => {
+    const MIRRORED = item({ key: "draft:d1", kind: "draft", title: "TCP vs UDP (mirror)", href: "/studio?draft=d1", draftId: "d1" });
+    // A catalog read from before the runner answered, still carrying the mirror's rows.
+    withRows({ items: [MIRRORED, VIDEO] });
+    const container = await mount(true);
+    expect(recentRows(container)).toEqual(["Conversation: TCP vs UDP", "Video: Master theorem"]);
+  });
+
+  it("keeps asking the runner after leaving the studio page that heard it answer", async () => {
+    function Studio() {
+      usePublishStudioChats({ active: null, pending: null, newChat: () => undefined, navigate: () => true, path: "/studio", initial: [DRAFT], titles: {} });
+      return null;
+    }
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root: Root = createRoot(container);
+    const draw = (page: () => null) =>
+      act(async () => {
+        root.render(createElement(ShellFrame, { studio: true, runner: false, initialCollapsed: false } as ComponentProps<typeof ShellFrame>, createElement(page)));
+      });
+    mounted.push(() => {
+      act(() => root.unmount());
+      container.remove();
+    });
+    await draw(Studio);
+    // Off the studio: the page's list is taken back, and the runner is still the source.
+    await draw(() => null);
+    mocks.listDrafts.mockClear();
+    await act(async () => void window.dispatchEvent(new Event("focus")));
+    expect(mocks.listDrafts).toHaveBeenCalled();
+  });
+
   it("falls back to the catalog's conversations when the runner stops answering before any list landed", async () => {
     mocks.listDrafts.mockResolvedValue({ ok: false, status: 502, refusal: { error: "the studio runner is not answering", detail: null } });
     await mount(true);

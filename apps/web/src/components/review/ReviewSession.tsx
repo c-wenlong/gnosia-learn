@@ -10,12 +10,13 @@ import { Collapse } from "@/components/ui/Collapse";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { MathText } from "@/components/Math";
 import { FeedbackBar } from "@/components/ui/FeedbackBar";
+import { FocusFrame } from "@/components/session/FocusFrame";
 import { RatingButton } from "@/components/ui/RatingButton";
 import { StatTile } from "@/components/ui/StatTile";
-import { CLOSE_TITLE, cx, TRACK } from "@/components/ui/classes";
-import { TextLink } from "@/components/ui/TextLink";
+import { CLOSE_TITLE, cx } from "@/components/ui/classes";
 import { scrollBehavior } from "@/lib/motion";
 import { quizKey } from "@/lib/quiz-keys";
+import { randomToken } from "@/lib/random-token";
 import {
   cardEyebrow,
   cardStats,
@@ -46,9 +47,11 @@ import {
  * The queue is fixed when the page renders. Each rating is one
  * `POST /api/review/grade`, and the card advances only once it has been
  * recorded: a grade that did not save stays on screen with the error, since a
- * review silently lost is worse than one retried (layering rule 14). After each
- * write `router.refresh()` re-reads the layout, so the learner snapshot the
- * shell holds moves with the session.
+ * review silently lost is worse than one retried (layering rule 14). Once the
+ * queue is done, `router.refresh()` re-reads the layout, so the learner
+ * snapshot the shell holds catches up with the session. Not after each grade:
+ * a refresh re-reads the whole queue and a note per card, all of which this
+ * page throws away, since its queue is fixed.
  *
  * **Motion.** Each card's column is keyed on its place in the queue, so the
  * next card rises in rather than being swapped in place, and the focus moves
@@ -70,6 +73,8 @@ interface Outcome {
 interface CloseData {
   nextDue: string | null;
   remaining: number;
+  /** More are due than one session reads, so `remaining` is a floor. */
+  more: boolean;
 }
 
 export function ReviewSession({
@@ -117,7 +122,7 @@ export function ReviewSession({
   const current = useRef(0);
   // One name per card, reused by a retry, so a grade the server saved but
   // whose answer was lost is not recorded twice (`requestId` on the route).
-  const attempt = useRef(newRequestId());
+  const attempt = useRef(randomToken());
 
   const now = useMemo(() => new Date(asOf), [asOf]);
   const item: ReviewItem | undefined = items[index];
@@ -157,7 +162,7 @@ export function ReviewSession({
           return;
         }
         current.current = index + 1;
-        attempt.current = newRequestId();
+        attempt.current = randomToken();
         // What the server recorded, which on a replayed retry is the first
         // rating rather than the one just pressed.
         const recorded = isRating(body.result?.rating) ? body.result.rating : rating;
@@ -166,7 +171,6 @@ export function ReviewSession({
         setPhase("ask");
         setPicked(null);
         setWhyOpen(false);
-        router.refresh();
       } catch {
         setError("Not saved: the server could not be reached.");
       } finally {
@@ -174,7 +178,7 @@ export function ReviewSession({
         setPending(false);
       }
     },
-    [item, index, router],
+    [item, index],
   );
 
   const reveal = useCallback(() => setPhase("shown"), []);
@@ -210,18 +214,22 @@ export function ReviewSession({
   useEffect(() => {
     if (!done || total === 0) return;
     let live = true;
+    // The shell's learner snapshot (mastery, the due count) reads every grade at once.
+    router.refresh();
     fetch("/api/review/due", { cache: "no-store" })
       .then((res) => res.json())
-      .then((body: { ok?: boolean; nextDue?: string | null; items?: unknown[] }) => {
-        if (live && body.ok) setClose({ nextDue: body.nextDue ?? null, remaining: body.items?.length ?? 0 });
+      .then((body: { ok?: boolean; nextDue?: string | null; items?: unknown[]; more?: boolean }) => {
+        if (live && body.ok) {
+          setClose({ nextDue: body.nextDue ?? null, remaining: body.items?.length ?? 0, more: body.more === true });
+        }
       })
       .catch(() => {
-        if (live) setClose({ nextDue: null, remaining: 0 });
+        if (live) setClose({ nextDue: null, remaining: 0, more: false });
       });
     return () => {
       live = false;
     };
-  }, [done, total]);
+  }, [done, total, router]);
 
   useEffect(() => {
     if (item === undefined) return;
@@ -253,18 +261,18 @@ export function ReviewSession({
 
   if (!initial.reachable) {
     return (
-      <Frame percent={0} label="Review" exit={exit} stepKey="empty" columnRef={columnRef}>
+      <FocusFrame percent={0} label="Review" exit={exit} progressLabel="Review progress" stepKey="empty" columnRef={columnRef}>
         <Closing
           title="Reviews are unavailable"
           lead="The catalog could not be read, so there is no queue to show and nothing could be graded. Check it with npm run catalog -- status, then reload."
         />
-      </Frame>
+      </FocusFrame>
     );
   }
 
   if (total === 0 && selected) {
     return (
-      <Frame percent={0} label="Review" exit={exit} stepKey="empty" columnRef={columnRef}>
+      <FocusFrame percent={0} label="Review" exit={exit} progressLabel="Review progress" stepKey="empty" columnRef={columnRef}>
         <Closing
           title="Already reviewed"
           lead="The cards picked for you are not due any more, so there is nothing to ask here. Any others that are due are under All reviews."
@@ -273,19 +281,19 @@ export function ReviewSession({
             All reviews
           </Button>
         </Closing>
-      </Frame>
+      </FocusFrame>
     );
   }
 
   if (total === 0) {
     const next = formatDue(initial.nextDue, now);
     return (
-      <Frame percent={0} label="Review" exit={exit} stepKey="empty" columnRef={columnRef}>
+      <FocusFrame percent={0} label="Review" exit={exit} progressLabel="Review progress" stepKey="empty" columnRef={columnRef}>
         <Closing
           title="Nothing due"
           lead={next === null ? "No review is scheduled yet. Cards appear here once a concept has been taught or probed." : `The next card is due ${next}.`}
         />
-      </Frame>
+      </FocusFrame>
     );
   }
 
@@ -293,7 +301,8 @@ export function ReviewSession({
     const again = outcomes.filter((o) => o.rating === 0).length;
     const next = close === null ? "…" : (formatDue(close.nextDue, new Date()) ?? "none");
     return (
-      <Frame
+      <FocusFrame
+        progressLabel="Review progress"
         percent={100}
         label={`Review · ${total} of ${total}`}
         short={`${total} of ${total}`}
@@ -304,7 +313,9 @@ export function ReviewSession({
         <Closing
           title="Review done"
           lead={`${outcomes.length} ${outcomes.length === 1 ? "card" : "cards"} reviewed${
-            close !== null && close.remaining > 0 ? `, and ${close.remaining} more came due` : ""
+            close !== null && close.remaining > 0
+              ? `, and ${close.more ? `over ${close.remaining}` : close.remaining} more ${close.remaining === 1 && !close.more ? "is" : "are"} due`
+              : ""
           }.`}
         >
           <div className="flex w-full gap-2.5 md:gap-3.5">
@@ -321,8 +332,16 @@ export function ReviewSession({
               tone="accent"
             />
           </div>
+          {close !== null && close.remaining > 0 && (
+            // The queue on this page is fixed, so the next cards are a fresh
+            // load of All reviews: a full one, never a client navigation that
+            // would keep this finished queue.
+            <Button variant="secondary" onClick={() => window.location.assign("/review")}>
+              Review the next {close.more ? "batch" : close.remaining === 1 ? "card" : `${close.remaining}`}
+            </Button>
+          )}
         </Closing>
-      </Frame>
+      </FocusFrame>
     );
   }
 
@@ -333,7 +352,8 @@ export function ReviewSession({
   const eyebrow = cardEyebrow(item);
 
   return (
-    <Frame
+    <FocusFrame
+      progressLabel="Review progress"
       percent={(position / total) * 100}
       label={`Review · ${position} of ${total}`}
       short={`${position} of ${total}`}
@@ -427,7 +447,7 @@ export function ReviewSession({
         <p>{keysHint(item, phase)}</p>
         <p suppressHydrationWarning>{cardStats(item, now)}</p>
       </div>
-    </Frame>
+    </FocusFrame>
   );
 }
 
@@ -444,80 +464,11 @@ function focusLost(): boolean {
   return active.closest("a[href], button:not(:disabled), input, textarea, select, [contenteditable='true']") === null;
 }
 
-function newRequestId(): string {
-  // `randomUUID` needs a secure context; a LAN address over http is not one.
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
-}
-
 function keysHint(item: ReviewItem, phase: Phase): string {
   if (item.kind === "recall") return phase === "ask" ? "Space reveals the answer" : "Keys 1 to 4 rate";
   return phase === "ask" ? "Keys 1 to 4 pick an answer" : "Keys 1 to 4 rate · enter continues";
 }
 
-/**
- * The focus-mode frame: the step bar, the label and exit row, the 720px column.
- * The column is keyed on `stepKey`, so each card mounts afresh and rises in;
- * the bar above it stays, and its fill slides to the new width.
- */
-function Frame({
-  percent,
-  label,
-  short,
-  exit,
-  stepKey,
-  columnRef,
-  children,
-}: {
-  percent: number;
-  label: string;
-  short?: string;
-  exit: { href: string; label: string };
-  stepKey: number | string;
-  columnRef: RefObject<HTMLDivElement | null>;
-  children: ReactNode;
-}) {
-  const value = Math.max(0, Math.min(100, percent));
-  return (
-    // On a phone the column fills what the shell's header and store banner
-    // leave, less the page's bottom padding (the page's root is a flex column
-    // there, `AppShell`), so the rating row sits at the bottom where a thumb
-    // is (hi-fi 14).
-    <div className="flex flex-1 flex-col">
-      <div
-        className={cx("h-2 w-full md:h-3", TRACK)}
-        role="progressbar"
-        aria-label="Review progress"
-        aria-valuenow={Math.round(value)}
-        aria-valuemin={0}
-        aria-valuemax={100}
-      >
-        <div
-          className="h-full rounded-r-[4px] bg-accent transition-[width] duration-300 ease-soft motion-reduce:transition-none md:rounded-r-md"
-          style={{ width: `${value}%` }}
-        />
-      </div>
-      <div className="flex items-center justify-between gap-4 px-3.5 py-2 text-[12px] font-medium text-text2 md:px-6 md:py-3">
-        <p>
-          <span className="md:hidden">{short ?? label}</span>
-          <span className="hidden md:inline">{label}</span>
-        </p>
-        <TextLink href={exit.href} tone="muted">
-          <span className="md:hidden">Exit</span>
-          <span className="hidden md:inline">{exit.label}</span>
-        </TextLink>
-      </div>
-      <div
-        key={stepKey}
-        ref={columnRef}
-        data-step={stepKey}
-        className="mx-auto flex w-full max-w-[720px] flex-1 animate-enter flex-col gap-3 px-3.5 pt-1 pb-3.5 motion-reduce:animate-none md:flex-none md:gap-[22px] md:px-0 md:pt-0 md:pb-10"
-      >
-        {children}
-      </div>
-    </div>
-  );
-}
 
 /**
  * The tinted answer panel: the answer, its citation, Why? and Open concept.

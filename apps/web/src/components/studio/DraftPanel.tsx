@@ -36,7 +36,7 @@ import {
   trimValue,
   valueOf,
   type MentionValue,
-} from "@/components/ui/mention-text";
+} from "@/lib/mentions";
 import { TutorMessage, UserMessage } from "@/components/ui/Message";
 import { TextLink } from "@/components/ui/TextLink";
 import { TypingDots } from "@/components/ui/TypingDots";
@@ -422,6 +422,29 @@ export function DraftPanel({
   // focus: a job held elsewhere may have been accepted meanwhile, the day's
   // spend may have aged out, and the video doctor may have recovered.
   const capReadAt = useRef(0);
+  // The harness, read when an answer lands rather than when the read was
+  // made: a callback over `view?.harness` changed identity as the record
+  // landed, and every effect below read health a second time (S1-11).
+  const harness = useRef(view?.harness);
+  useEffect(() => {
+    harness.current = view?.harness;
+  }, [view?.harness]);
+  // The BYOK tier models, read fresh — health's copy can be older than a
+  // Connect that just wrote them.
+  const readByokTiers = useCallback(async () => {
+    const result = await getByokSettings();
+    // A read that says nothing is configured clears what an earlier one
+    // found — a removed provider's tiers go with it.
+    if (!result.ok) return;
+    if (!result.data.configured) {
+      setAgentMenu((held) => ({ ...held, byokModel: null, byokTiers: null }));
+      return;
+    }
+    const entry = result.data.providers.find((provider) => provider.provider === result.data.active);
+    if (entry !== undefined) {
+      setAgentMenu((held) => ({ ...held, byokModel: result.data.model, byokTiers: entry.models }));
+    }
+  }, []);
   const readHealth = useCallback(async () => {
     capReadAt.current = Date.now();
     const health = await readStudioHealth();
@@ -431,23 +454,17 @@ export function DraftPanel({
     setVideo(videoAvailability(health.video));
     setDiagramAgent(diagramAvailability(health.diagramAgent));
     setAgentMenu(runnerSettings(health.agent));
-    // The BYOK tier models, read fresh — health's copy can be older than a
-    // Connect that just wrote them.
-    if (view?.harness === "byok") {
-      const result = await getByokSettings();
-      // A read that says nothing is configured clears what an earlier one
-      // found — a removed provider's tiers go with it.
-      if (!result.ok) return;
-      if (!result.data.configured) {
-        setAgentMenu((held) => ({ ...held, byokModel: null, byokTiers: null }));
-        return;
-      }
-      const entry = result.data.providers.find((provider) => provider.provider === result.data.active);
-      if (entry !== undefined) {
-        setAgentMenu((held) => ({ ...held, byokModel: result.data.model, byokTiers: entry.models }));
-      }
-    }
-  }, [view?.harness]);
+    // After health's copy, so the fresh tiers are the ones kept.
+    if (harness.current === "byok") await readByokTiers();
+  }, [readByokTiers]);
+  // A conversation whose record says BYOK (on opening, or a switch to it)
+  // reads the tiers once, without asking health again.
+  const byok = view?.harness === "byok";
+  useEffect(() => {
+    if (!byok) return;
+    const timer = setTimeout(() => void readByokTiers(), 0);
+    return () => clearTimeout(timer);
+  }, [byok, readByokTiers]);
   // A BYOK write from the dialog or Settings re-reads the tiers at once
   // (D94), so a tier just configured is pickable without a health refresh.
   useEffect(() => {
@@ -915,7 +932,13 @@ export function DraftPanel({
       return;
     }
     const plan = modEnterPlan(isEmptyValue(value), cards);
-    if (plan.action === "send") void send(value);
+    if (plan.action === "send") {
+      // The composer's own Send rules hold from anywhere in the panel: words
+      // are not sent while Send is held (a brief card being edited, a turn in
+      // flight, the turn cap) or the words themselves are refused (S1-15).
+      if (composing.sendDisabled || valueBlock !== null) return;
+      void send(value);
+    }
     else if (plan.action === "press") void press(plan.card);
     else if (plan.action === "announce") {
       // Focus stays where it is: a paid button with focus is one stray Space

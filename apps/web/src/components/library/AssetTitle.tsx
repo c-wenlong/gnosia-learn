@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
-import { ASSET_NAME_MAX, cleanAssetName } from "@gnosia/schema/shared";
+import { ASSET_NAME_MAX } from "@gnosia/schema/shared";
 
 import { Button } from "@/components/ui/Button";
 import { Collapse } from "@/components/ui/Collapse";
@@ -10,6 +10,7 @@ import { Glyph } from "@/components/ui/Glyph";
 import { LiveStatus, type StatusTone } from "@/components/ui/LiveStatus";
 import { cx, inputClasses } from "@/components/ui/classes";
 import { TextLink } from "@/components/ui/TextLink";
+import { checkAssetName, renameAsset } from "@/lib/asset-actions";
 
 type Status = { text: string | null; tone: StatusTone };
 
@@ -81,11 +82,12 @@ export function AssetTitle({
   }
 
   async function save(name: string | null) {
-    const cleaned = cleanAssetName(name);
-    if (cleaned !== null && cleaned.length > ASSET_NAME_MAX) {
-      setStatus({ text: `At most ${ASSET_NAME_MAX} characters.`, tone: "danger" });
+    const checked = checkAssetName(name);
+    if (!checked.ok) {
+      setStatus({ text: checked.message, tone: "danger" });
       return;
     }
+    const cleaned = checked.value;
     // Nothing to change: the name shown already, or clearing a name never given.
     if (cleaned === shown || (cleaned === null && named === null)) {
       close();
@@ -93,37 +95,23 @@ export function AssetTitle({
     }
     setSaving(true);
     setStatus({ text: "Saving…", tone: "muted" });
-    try {
-      const response = await fetch("/api/learner/asset-name", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ assetId, name: cleaned }),
-      });
-      const payload = (await response.json().catch(() => ({}))) as {
-        ok?: boolean;
-        error?: string;
-        result?: { title: string | null; name: string | null };
-      };
-      if (!response.ok || payload.ok === false || payload.result === undefined) {
-        setStatus({ text: payload.error ?? `Not saved (HTTP ${response.status}).`, tone: "danger" });
-        return;
-      }
-      // The server's title is the source's as of now, newer than the page's
-      // fallback if an import ran since; the fallback stands in only when the
-      // source has none (a filename or a host).
-      const next = payload.result.title ?? fallback;
-      setShown(next);
-      setNamed(payload.result.name);
-      setDraft(next);
-      setEditing(false);
-      setStatus({ text: payload.result.name === null ? "Back to the original name." : "Renamed.", tone: "ok" });
-      toggle.current?.focus();
-      router.refresh();
-    } catch {
-      setStatus({ text: "Not saved: the server could not be reached.", tone: "danger" });
-    } finally {
-      setSaving(false);
+    const answer = await renameAsset(assetId, cleaned);
+    setSaving(false);
+    if (!answer.ok) {
+      setStatus({ text: answer.message, tone: "danger" });
+      return;
     }
+    // The server's title is the source's as of now, newer than the page's
+    // fallback if an import ran since; the fallback stands in only when the
+    // source has none (a filename or a host).
+    const next = answer.value.title ?? fallback;
+    setShown(next);
+    setNamed(answer.value.name);
+    setDraft(next);
+    setEditing(false);
+    setStatus({ text: answer.value.name === null ? "Back to the original name." : "Renamed.", tone: "ok" });
+    toggle.current?.focus();
+    router.refresh();
   }
 
   return (

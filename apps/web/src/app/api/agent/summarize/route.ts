@@ -1,14 +1,9 @@
 import { NextResponse } from "next/server";
 
 import { tutorDeps, turnResponse } from "@/lib/agent/env";
-import {
-  enforcePayloadBounds,
-  enforceRateLimit,
-  enforceSameOrigin,
-  SUMMARIZE_RATE_LIMIT,
-} from "@/lib/agent/guard";
+import { enforceRateLimit, enforceSameOrigin, SUMMARIZE_RATE_LIMIT } from "@/lib/agent/guard";
 import { requestOwner } from "@/lib/learner-api";
-import { summarizeTurn, type SummarizeBody } from "@gnosia/tutor/server/turns";
+import { payloadTooLarge, summarizeTurn, type SummarizeBody } from "@gnosia/tutor/server/turns";
 
 export const runtime = "nodejs";
 
@@ -46,8 +41,8 @@ export async function POST(req: Request) {
     );
   }
 
-  const tooLarge = enforcePayloadBounds(messages);
-  if (tooLarge) return tooLarge;
+  const tooLarge = payloadTooLarge(messages);
+  if (tooLarge) return turnResponse(tooLarge);
 
   // Before the topic lookup on purpose: otherwise a caller could spin the
   // limiter for free by varying the slugs and collecting 404s.

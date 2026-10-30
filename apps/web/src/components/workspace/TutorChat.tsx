@@ -12,13 +12,14 @@ import { Composer } from "@/components/ui/Composer";
 import { MathText } from "@/components/Math";
 import { MentionChip } from "@/components/ui/MentionChip";
 import type { MentionComposerHandle } from "@/components/ui/MentionComposer";
-import type { MentionValue } from "@/components/ui/mention-text";
+import type { MentionValue } from "@/lib/mentions";
 import { TutorMessage, UserMessage } from "@/components/ui/Message";
 import { TextLink } from "@/components/ui/TextLink";
 import type { CitationSource } from "@/lib/agent/prompt";
 import { prefersReducedMotion, scrollBehavior } from "@/lib/motion";
 import type { TagKind } from "@/lib/studio-drafts";
 import { useHydrated } from "@/lib/use-hydrated";
+import { tutorProblem } from "@/lib/tutor-errors";
 import { HEALTH_READ_MS, readHealth, studioCanTag, whenIdle } from "@/lib/tutor-studio";
 import {
   chatTurns,
@@ -32,35 +33,11 @@ import {
   type ThreadItem,
   type TutorTurn,
 } from "@/lib/tutor-thread";
-import { chatRequestId, closeChatSession, judgeAnswer, recordAnswer } from "@/lib/chat-recall";
-import {
-  choiceAnswerText,
-  choiceOrder,
-  gradeChoice,
-  isCardCheck,
-  isChoiceCheck,
-  isRecallCheck,
-  recallAnswerText,
-  restoreCardCheck,
-  settleChoice,
-  type ChoiceAnswer,
-  type ChoicePick,
-  type RecallPick,
-} from "@/lib/check-block";
-import {
-  CHAT_ANSWER_LIMIT,
-  checkSource,
-  newVerdict,
-  pendingCheck,
-  recallOpening,
-  settleInterrupted,
-  type TurnCheck,
-  type Verdict,
-} from "@/lib/tutor-check";
+import { closeChatSession } from "@/lib/chat-recall";
+import { restoreCardCheck } from "@/lib/check-block";
+import { CHAT_ANSWER_LIMIT, pendingCheck, recallOpening, type TurnCheck } from "@/lib/tutor-check";
 
-import { ChoiceCheckCard } from "./ChoiceCheckCard";
-import { RecallCheckCard } from "./RecallCheckCard";
-import { VerdictRow } from "./VerdictRow";
+import { CheckCard, CheckRow, slotPlan, useCheckThread, type SlotOptions } from "./use-check-thread";
 import { NOTE_HASH } from "./WorkspacePanels";
 
 /**
@@ -181,17 +158,6 @@ function writeTurns(key: string, turns: ThreadItem[]): void {
     // A full or refused store costs persistence, not the conversation.
   }
   for (const listener of listeners) listener();
-}
-
-function errorFor(status: number, data: ChatReply): string {
-  if (data.code === "MISSING_API_KEY") {
-    // The server says which case it is: no key anywhere, or a model list
-    // whose providers have none (docs/TUTOR-MODELS.md, T4).
-    return data.error ?? "The tutor has no model provider key yet. Add one in Settings, under Providers.";
-  }
-  if (data.code === "CONCEPT_UNAVAILABLE") return "The knowledge base is unreachable, so the tutor has no note to read.";
-  if (status === 429) return "That was a lot of questions in a minute. Wait a moment and try again.";
-  return data.error ?? `The tutor did not answer (HTTP ${status}).`;
 }
 
 type Value = MentionValue<TagKind>;
@@ -348,191 +314,17 @@ export function TutorChat({
   /** The thread as stored right now: async work writes onto this, never onto a render's copy. */
   const current = () => parseThread(readRaw(key));
 
-  /** Change the verdict with this request id, wherever its turn now sits. */
-  function patchVerdict(requestId: string, patch: Partial<Verdict>) {
-    writeTurns(
-      key,
-      current().map((item) =>
-        item.role === "user" && item.verdict?.requestId === requestId ? { ...item, verdict: { ...item.verdict, ...patch } } : item,
-      ),
-    );
-  }
-
-  async function judge(verdict: Verdict, answer: string, commitment: string | null = null) {
-    const verdictNow = await judgeAnswer(slug, verdict.question, answer, commitment);
-    patchVerdict(
-      verdict.requestId,
-      verdictNow === null
-        ? { judged: "unavailable", suggested: null }
-        : { judged: "ready", suggested: verdictNow.correct, feedback: verdictNow.feedback },
-    );
-  }
-
-  /** Request ids with a write in flight from this page: a second tap waits on the first, whatever the store says. */
-  const recording = useRef(new Set<string>());
-
-  /** The learner's tap: one observation, replayed rather than doubled on a retry by its request id. */
-  async function record(requestId: string, tappedNow: boolean) {
-    const items = current();
-    const at = items.findIndex((item) => item.role === "user" && item.verdict?.requestId === requestId);
-    const turn = items[at] as TutorTurn | undefined;
-    const verdict = turn?.verdict;
-    // A recall card's answer records its words against the tutor's commitment, with its confidence and reasoning.
-    const asked = items.slice(0, Math.max(at, 0)).findLast((item): item is TutorTurn => item.role === "assistant");
-    const recall = turn?.recall && isRecallCheck(asked?.check) ? { pick: turn.recall, check: asked.check } : null;
-    if (!turn || !verdict || verdict.state === "saving" || verdict.state === "recorded") return;
-    if (recording.current.has(requestId)) return;
-    // Once tapped, the verdict is fixed: a retry resends the same one (see `Verdict.tapped`).
-    const correct = verdict.tapped ?? tappedNow;
-    recording.current.add(requestId);
-    patchVerdict(requestId, { state: "saving", tapped: correct, error: null });
-    try {
-      const recorded = await recordAnswer({
-        scope: slug,
-        sessionLabel: slug,
-        conceptSlug: slug,
-        correct,
-        source: verdict.source,
-        requestId,
-        question: verdict.question,
-        answer: turn.content,
-        ...(recall !== null
-          ? {
-              card: {
-                key: recall.check.answer,
-                chosen: recall.pick.answer,
-                confidence: recall.pick.confidence,
-                thinking: recall.pick.thinking,
-              },
-            }
-          : {}),
-      });
-      patchVerdict(requestId, { state: "recorded", error: null, recorded });
-      // The page's mastery dot, Recent answers and checks read the new state.
-      router.refresh();
-    } catch (e) {
-      // `recordAnswer` names a timeout and a write dropped after a close itself.
-      patchVerdict(requestId, { state: "failed", error: e instanceof Error ? e.message : "The answer was not recorded." });
-    } finally {
-      recording.current.delete(requestId);
-    }
-  }
-
-  /** Change the choice answer with this request id, wherever its turn now sits. */
-  function patchChoice(requestId: string, patch: Partial<ChoiceAnswer>) {
-    writeTurns(
-      key,
-      current().map((item) =>
-        item.role === "user" && item.choice?.requestId === requestId ? { ...item, choice: { ...item.choice, ...patch } } : item,
-      ),
-    );
-  }
-
-  /** Write a choice card's answer: one observation, replayed rather than doubled on a retry by its request id. */
-  async function recordChoice(requestId: string) {
-    const items = current();
-    const at = items.findIndex((item) => item.role === "user" && item.choice?.requestId === requestId);
-    const turn = items[at] as TutorTurn | undefined;
-    const choice = turn?.choice;
-    const asked = items.slice(0, Math.max(at, 0)).findLast((item): item is TutorTurn => item.role === "assistant");
-    if (!turn || !choice || !asked || !isChoiceCheck(asked.check)) return;
-    if (choice.state === "recorded" || recording.current.has(requestId)) return;
-    const check = asked.check;
-    recording.current.add(requestId);
-    patchChoice(requestId, { state: "saving", error: null });
-    try {
-      const recorded = await recordAnswer({
-        scope: slug,
-        sessionLabel: slug,
-        conceptSlug: slug,
-        correct: choice.correct,
-        source: choice.source,
-        requestId,
-        question: check.question,
-        answer: turn.content,
-        card: {
-          key: check.answer,
-          chosen: choice.picked === null ? null : (check.options[choice.picked] ?? null),
-          confidence: choice.confidence,
-          thinking: choice.thinking,
-        },
-      });
-      patchChoice(requestId, { state: "recorded", error: null, recorded });
-      router.refresh();
-    } catch (e) {
-      patchChoice(requestId, { state: "failed", error: e instanceof Error ? e.message : "The answer was not recorded." });
-    } finally {
-      recording.current.delete(requestId);
-    }
-  }
-
-  /** Submit on a choice card: graded against the key, recorded, and sent to the tutor as the learner's turn. */
-  function submitChoice(askedAt: number, pick: ChoicePick) {
-    const items = current();
-    const asked = items[askedAt];
-    if (busy || opening || asked?.role !== "assistant" || !isChoiceCheck(asked.check)) return;
-    if (pendingCheck(items) !== askedAt) return;
-    const choice: ChoiceAnswer = {
-      ...pick,
-      requestId: chatRequestId(),
-      correct: gradeChoice(asked.check, pick),
-      source: checkSource(items, askedAt),
-      state: "saving",
-      error: null,
-      recorded: null,
-    };
-    const answerTurn: TutorTurn = { role: "user", content: choiceAnswerText(asked.check, pick), choice };
-    // `ask` stores the turn before it awaits anything, so the write below finds it.
-    void ask(answerTurn.content, items, { carried: answerTurn });
-    void recordChoice(choice.requestId);
-  }
-
-  /** Submit on a recall card: judged against the commitment, sent to the tutor, and recorded on the learner's tap. */
-  function submitRecall(askedAt: number, pick: RecallPick) {
-    const items = current();
-    const asked = items[askedAt];
-    if (busy || opening || asked?.role !== "assistant" || !isRecallCheck(asked.check)) return;
-    if (pendingCheck(items) !== askedAt) return;
-    const verdict = newVerdict(asked.check.question, chatRequestId(), checkSource(items, askedAt));
-    const answerTurn: TutorTurn = { role: "user", content: recallAnswerText(pick), recall: pick, verdict };
-    // `ask` stores the turn before it awaits anything, so the judge's verdict finds it.
-    void ask(answerTurn.content, items, { carried: answerTurn });
-    void judge(verdict, pick.answer, asked.check.answer);
-  }
-
-  // Once per mount: whatever a reload cut off (a judge still pending, a write
-  // still saving) is settled, so a row is never left waiting on a request
-  // this page did not send. Never per render, or a live save would reopen.
-  useEffect(() => {
-    const items = parseThread(readRaw(key));
-    let changed = false;
-    const settled = items.map((item) => {
-      if (item.role !== "user") return item;
-      if (item.choice) {
-        const next = settleChoice(item.choice);
-        if (next === null) return item;
-        changed = true;
-        return { ...item, choice: next };
-      }
-      if (!item.verdict) return item;
-      const next = settleInterrupted(item.verdict);
-      if (next === null) return item;
-      changed = true;
-      return { ...item, verdict: next };
-    });
-    if (changed) writeTurns(key, settled);
-  }, [key]);
-
-  // R6: the thread's session closes when the page goes away, by navigation
-  // inside the app (unmount) or out of it (`pagehide`). Best-effort.
-  useEffect(() => {
-    const onHide = () => closeChatSession(slug);
-    window.addEventListener("pagehide", onHide);
-    return () => {
-      window.removeEventListener("pagehide", onHide);
-      closeChatSession(slug);
-    };
-  }, [slug]);
+  // The check cards, verdict rows, writes, the settle of whatever a reload cut
+  // off, and the thread's chat session (R6), shared with the topic tutor.
+  // Every check here records against this concept.
+  const conceptOf = () => slug;
+  const thread = useCheckThread<ThreadItem>({
+    store: { read: current, write: (items) => writeTurns(key, items) },
+    scope: slug,
+    sessionLabel: slug,
+    conceptOf,
+    newTurn: (fields) => fields,
+  });
 
   // R3: a due concept opens on the tutor. Once per mount, after hydration,
   // and only into an empty thread: a thread the learner already has is theirs.
@@ -622,23 +414,13 @@ export function TutorChat({
   ) {
     const text = question.trim();
     if (!text || busy || opening) return;
-    // The learner's reply to a turn that asked a check is its answer, and gets a row.
-    const asked = answering && carried === undefined ? pendingCheck(history) : null;
-    const askedTurn = asked === null ? null : (history[asked] as TutorTurn);
-    const userTurn: TutorTurn =
-      carried ??
-      // A card check is answered on its card; a message typed instead is a message.
-      (askedTurn?.check && !isCardCheck(askedTurn.check)
-        ? {
-            role: "user",
-            content: text,
-            verdict: newVerdict(askedTurn.check.question, chatRequestId(), checkSource(history, asked as number)),
-          }
-        : { role: "user", content: text });
+    // The learner's reply to a turn that asked a prose check is its answer,
+    // and gets a row; a card check is answered on its card.
+    const userTurn = (carried ?? (answering ? thread.typedTurn(history, text) : { role: "user", content: text })) as TutorTurn;
     const next: ThreadItem[] = [...history, userTurn];
     setTurns(next);
-    // A recall card's answer is judged by `submitRecall`, on the learner's words and the commitment, not on this block.
-    if (userTurn.verdict && userTurn.verdict.judged === "pending" && !userTurn.recall) void judge(userTurn.verdict, text);
+    // A recall card's answer is judged on submit, on the learner's words and the commitment, not on this block.
+    thread.judgeTyped(userTurn, next);
     setValue(EMPTY);
     setRefusal(null);
     dropAsk();
@@ -658,7 +440,7 @@ export function TutorChat({
       });
       const data = (await res.json().catch(() => ({}))) as ChatReply;
       if (controller.signal.aborted) return;
-      if (!res.ok) throw new Error(errorFor(res.status, data));
+      if (!res.ok) throw new Error(tutorProblem(res.status, data));
       const content = data.message?.content?.trim();
       if (!content) throw new Error("The tutor sent an empty reply. Try asking again.");
       if (Array.isArray(data.sources) && data.sources.length > 0) setSources(data.sources);
@@ -728,69 +510,16 @@ export function TutorChat({
   // question must not hide its Try again.
   const last = chatTurns(turns).at(-1);
   const note = byNumber.get(1);
-  // Where each verdict row is drawn: under the tutor's reply to the answer,
-  // or under the answer itself while that reply is missing. Only the newest
-  // answer's row stays open; an older untapped one folds.
-  const lastVerdict = turns.findLastIndex((t) => t.role === "user" && t.verdict);
-  const rowsAfter = new Map<number, { at: number; verdict: Verdict }>();
-  turns.forEach((t, i) => {
-    // A recall card draws its own answer's row.
-    if (t.role !== "user" || !t.verdict || t.recall) return;
-    rowsAfter.set(turns[i + 1]?.role === "assistant" ? i + 1 : i, { at: i, verdict: t.verdict });
-  });
-  const rowAfter = (i: number) => {
-    const row = rowsAfter.get(i);
-    return row ? (
-      <VerdictRow
-        key={`v${row.at}`}
-        verdict={row.verdict}
-        live={row.at === lastVerdict}
-        onRecord={(correct) => void record(row.verdict.requestId, correct)}
-        concept={{ title, noteHref: NOTE_HASH }}
-      />
-    ) : null;
+  const slot: SlotOptions<ThreadItem> = {
+    disabled: busy || opening,
+    orderSeed: (i, asked) => `${slug}#${i}#${(asked as TutorTurn).check?.question ?? ""}`,
+    concept: () => ({ title, noteHref: NOTE_HASH }),
+    // `ask` stores the turn before it awaits anything, so the write and the judge find it.
+    send: (turn, items) => void ask(turn.content, [...items], { carried: turn as TutorTurn }),
   };
-
-  /** The card under a tutor turn that asked a card check, with the answer the next learner turn gave, if any. */
-  const pendingAt = pendingCheck(turns);
-  const cardAfter = (i: number) => {
-    const turn = turns[i];
-    if (turn?.role !== "assistant" || !isCardCheck(turn.check)) return null;
-    const nextAt = turns.findIndex((t, j) => j > i && t.role !== "studio");
-    const next = nextAt === -1 ? undefined : (turns[nextAt] as TutorTurn);
-    if (isRecallCheck(turn.check)) {
-      const answered = next?.role === "user" && next.recall ? next : null;
-      return (
-        <RecallCheckCard
-          key={`c${i}`}
-          check={turn.check}
-          pick={answered?.recall ?? null}
-          verdict={answered?.verdict ?? null}
-          live={pendingAt === i}
-          rowLive={nextAt === lastVerdict}
-          disabled={busy || opening}
-          onSubmit={(pick) => submitRecall(i, pick)}
-          onRecord={(correct) => answered?.verdict && void record(answered.verdict.requestId, correct)}
-          concept={{ title, noteHref: NOTE_HASH }}
-        />
-      );
-    }
-    const answer = next?.role === "user" ? (next.choice ?? null) : null;
-    const answerId = answer?.requestId;
-    return (
-      <ChoiceCheckCard
-        key={`c${i}`}
-        check={turn.check}
-        order={choiceOrder(turn.check, `${slug}#${i}#${turn.check.question}`)}
-        answer={answer}
-        live={pendingAt === i}
-        disabled={busy || opening}
-        onSubmit={(pick) => submitChoice(i, pick)}
-        onRetry={() => answerId !== undefined && void recordChoice(answerId)}
-        concept={{ title, noteHref: NOTE_HASH }}
-      />
-    );
-  };
+  // Where the cards and rows go, worked out once for the whole thread.
+  const plan = slotPlan(turns, conceptOf);
+  const slotProps = { items: turns, thread, conceptOf, slot, plan };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3.5">
@@ -818,7 +547,7 @@ export function TutorChat({
         {turns.flatMap((turn, i) => {
           const enter = i < restored ? "animate-fade-in motion-reduce:animate-none" : "animate-enter motion-reduce:animate-none";
           // A card's answer is the card's to show; the turn holds what the tutor was sent.
-          if (turn.role === "user" && (turn.choice || turn.recall)) return [rowAfter(i)];
+          if (turn.role === "user" && (turn.choice || turn.recall)) return [<CheckRow key={`v${i}`} at={i} {...slotProps} />];
           const item = turn.role === "studio" ? (
             <Handed key={i} marker={turn} className={enter} />
           ) : turn.role === "user" ? (
@@ -846,7 +575,7 @@ export function TutorChat({
               <NoteProse source={turn.content} idPrefix={`t${i}-`} images="link" />
             </TutorMessage>
           );
-          return [item, cardAfter(i), rowAfter(i)];
+          return [item, <CheckCard key={`c${i}`} at={i} {...slotProps} />, <CheckRow key={`v${i}`} at={i} {...slotProps} />];
         })}
 
         {busy && (

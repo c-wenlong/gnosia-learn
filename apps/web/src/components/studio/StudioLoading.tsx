@@ -50,7 +50,7 @@ export function StudioGridLoading() {
             <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
               {Array.from({ length: 8 }, (_, at) => (
                 <div key={at} className={TILE}>
-                  <Skeleton fill className="aspect-[16/10]" />
+                  <Skeleton fill className="aspect-[4/3]" />
                   <div className="flex flex-col gap-2 p-3">
                     <Skeleton className="h-3.5 w-3/4" />
                     <Skeleton className="h-3 w-1/3" />

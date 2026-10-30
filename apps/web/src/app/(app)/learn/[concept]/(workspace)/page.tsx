@@ -15,7 +15,8 @@ import { dueRecall } from "@/lib/tutor-check";
 import { TutorChat } from "@/components/workspace/TutorChat";
 import { WorkspacePanels } from "@/components/workspace/WorkspacePanels";
 import { buildConceptSessionContext, tutorStyleLabel } from "@/lib/agent/prompt";
-import { loadAssetAccess, readFileProblems, thumbnailFor } from "@/lib/asset-library";
+import { loadAssetAccess, readFileProblems } from "@/lib/asset-library";
+import { thumbnailFor } from "@/lib/library-thumbnails";
 import type { RouteProblemCode } from "@/lib/asset-problems";
 import { isConceptSlug, placeLabel, toConceptPromptInput } from "@/lib/concept-workspace-core";
 import { loadConceptWorkspace } from "@/lib/concept-workspace";
@@ -40,9 +41,8 @@ import { studioEnabled } from "@/lib/studio";
  * configured) the header says so under Teach me, before the learner starts.
  * The button stays live, because the session still teaches.
  *
- * Everything is read on the server through `loadConceptWorkspace`, the same
- * object `GET /api/concepts/[slug]` returns. Dynamic, like every page: it
- * reads the database.
+ * Everything is read on the server through `loadConceptWorkspace`. Dynamic,
+ * like every page: it reads the database.
  */
 
 type Params = {

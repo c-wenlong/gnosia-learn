@@ -7,6 +7,7 @@ import { cx, LABEL } from "@/components/ui/classes";
 import { Combobox } from "@/components/ui/Combobox";
 import { Glyph } from "@/components/ui/Glyph";
 import { IconButton } from "@/components/ui/IconButton";
+import { InlineConfirm } from "@/components/ui/InlineConfirm";
 import { Input } from "@/components/ui/Input";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Select } from "@/components/ui/Select";
@@ -455,10 +456,24 @@ export function ByokConfig({
               {saving ? "Saving…" : "Save models"}
             </Button>
             {note !== null && <p className="text-[12px] leading-4 text-text3">{note}</p>}
+            {/* Asks first, as every other press that cannot be undone here
+                does: the key, the tiers and the pick all leave at once. */}
             {manageKeys && selected !== null && (
-              <button type="button" className="ml-auto text-[12px] leading-4 text-text3 underline-offset-2 hover:underline" disabled={saving} onClick={() => void remove()}>
-                Remove
-              </button>
+              // Keyed by provider: a question opened for one key is put
+              // away when the pick moves, so it never removes another.
+              // `busy`, not only `disabled`: an open question waits out a
+              // save, which could otherwise add the key back after Remove.
+              <InlineConfirm
+                key={provider}
+                size="text"
+                label="Remove"
+                question={`Remove ${BYOK_PROVIDERS.find((known) => known.value === provider)?.label ?? provider}'s key from Studio?`}
+                confirmLabel="Remove it"
+                onConfirm={() => void remove()}
+                busy={saving}
+                disabled={saving}
+                className="ml-auto text-[12px] leading-4"
+              />
             )}
           </div>
         </>

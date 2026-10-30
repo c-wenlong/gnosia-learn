@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { readOutcome, withOutcome } from "./studio-view";
+import { readOutcome, studioPath, withOutcome, withoutOutcome } from "./studio-view";
 
 /**
  * A verb's answer, carried in the URL the action redirects to.
@@ -65,6 +65,48 @@ describe("carrying an outcome back to the page", () => {
 
   it("is null on a page nobody reached through a verb", () => {
     expect(readOutcome({ topic: "alpha" })).toBeNull();
+  });
+
+  it("keeps a headline and a detail whole when either holds the old separator (S2-10)", () => {
+    const href = withOutcome("/studio", "export", { ok: false, headline: "export — stopped", detail: "line 1 — line 2 — line 3" });
+    expect(readOutcome(paramsOf(href))).toMatchObject({ headline: "export — stopped", detail: "line 1 — line 2 — line 3" });
+  });
+
+  it("caps the detail too", () => {
+    const href = withOutcome("/studio", "inspect", { ok: false, headline: "it threw", detail: "x".repeat(2_000) });
+    expect((paramsOf(href).d ?? "").length).toBeLessThanOrEqual(300);
+    expect(withoutOutcome(href)).toBe("/studio");
+  });
+});
+
+describe("what a link can put in the banner (S1-21)", () => {
+  it("reads only a verb this studio has", () => {
+    expect(readOutcome({ v: "Your session expired", ok: "0", m: "Sign in at evil.example" })).toBeNull();
+    expect(readOutcome({ v: "export", ok: "1", m: "export finished" })?.verb).toBe("export");
+  });
+
+  it("caps what it reads, whatever the URL carried", () => {
+    expect(readOutcome({ v: "verify", m: "x".repeat(5_000), d: "y".repeat(5_000) })).toMatchObject({
+      headline: "x".repeat(300),
+      detail: "y".repeat(300),
+    });
+  });
+});
+
+describe("where a verb redirects (S2-07)", () => {
+  it.each(["https://evil.example/studio", "//evil.example/studio", "/\\evil.example", "/elsewhere", "", "studio"])(
+    "sends %j back to the studio, not off the site",
+    (path) => {
+      expect(studioPath(path)).toBe("/studio");
+      expect(withOutcome(path, "export", { ok: true, headline: "done", detail: null })).toMatch(/^\/studio\?/);
+    },
+  );
+
+  it("keeps a studio path as it came", () => {
+    expect(studioPath("/studio/d/dot-product")).toBe("/studio/d/dot-product");
+    expect(studioPath("/studio?sel=a")).toBe("/studio?sel=a");
+    expect(studioPath("/studio")).toBe("/studio");
+    expect(studioPath("/studious")).toBe("/studio");
   });
 });
 

@@ -5,13 +5,12 @@ import { useId, useState } from "react";
 import { MathText } from "@/components/Math";
 import { Button } from "@/components/ui/Button";
 import { cx, LABEL, STATUS_TEXT } from "@/components/ui/classes";
-import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Textarea } from "@/components/ui/Textarea";
 import { DEFAULT_CONFIDENCE, type RecallCheck, type RecallPick } from "@/lib/check-block";
 import { SESSION_TEXT_LIMIT } from "@/lib/session-core";
 import type { Verdict } from "@/lib/tutor-check";
 
-import { STOP_ITEMS } from "./ChoiceCheckCard";
+import { ConfidenceField, ReasoningField } from "./SurenessFields";
 import { VerdictRow } from "./VerdictRow";
 
 /**
@@ -106,33 +105,14 @@ export function RecallCheckCard({
             />
           </label>
 
-          <div className="flex flex-col gap-1.5">
-            <p id={`${id}-sure`} className={LABEL}>
-              How sure are you?
-            </p>
-            <SegmentedControl
-              label="How sure are you?"
-              labelledBy={`${id}-sure`}
-              items={STOP_ITEMS}
-              value={String(confidence)}
-              onChange={(next) => setConfidence(Number(next))}
-              size="sm"
-              block
-              disabled={disabled}
-            />
-          </div>
+          <ConfidenceField value={confidence} onChange={setConfidence} disabled={disabled} />
 
-          <label className="flex flex-col gap-1.5">
-            <span className={LABEL}>Your reasoning (optional)</span>
-            <Textarea
-              value={thinking}
-              onChange={(e) => setThinking(e.target.value)}
-              maxLength={SESSION_TEXT_LIMIT}
-              rows={2}
-              disabled={disabled}
-              placeholder="How you got there, or what you were unsure about"
-            />
-          </label>
+          <ReasoningField
+            value={thinking}
+            onChange={setThinking}
+            disabled={disabled}
+            placeholder="How you got there, or what you were unsure about"
+          />
 
           <div className="flex flex-wrap items-center gap-3">
             <Button variant="primary" size="sm" onClick={submit} disabled={disabled}>
