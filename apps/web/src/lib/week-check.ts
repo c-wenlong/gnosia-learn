@@ -1,10 +1,10 @@
-import type { ConceptCheck } from "@/lib/concept-note-core";
+import type { ConceptCheck } from "@gnosia/tutor/concept-note-core";
 import {
   normaliseQuestion,
   type RecordedAnswer,
   type SessionQuestion,
   type SessionStep,
-} from "@/lib/session-core";
+} from "@gnosia/tutor/session-core";
 
 /**
  * A module's week check (phase 4 of docs/proposals/module-learning-path.md,

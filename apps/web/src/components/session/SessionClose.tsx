@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { StatTile } from "@/components/ui/StatTile";
 import { CLOSE_TITLE, cx } from "@/components/ui/classes";
-import { formatDue } from "@/lib/review-core";
+import { formatDue } from "@gnosia/tutor/review-core";
 import {
   formatPL,
   formatTotalsMove,
@@ -18,7 +18,7 @@ import {
   type RecordedAnswer,
   type SessionStep,
   withConsequence,
-} from "@/lib/session-core";
+} from "@gnosia/tutor/session-core";
 
 /**
  * The close screen (hi-fi 07): three numbers, what moved as before-and-after

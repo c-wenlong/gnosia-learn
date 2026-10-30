@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { fsStore, key as blobKey } from "@gnosia/blob";
 import { asset, blobObject, indexRun } from "@gnosia/schema";
 
-import type { RouteProblemCode } from "@/lib/asset-problems";
+import type { RouteProblemCode } from "@gnosia/tutor/asset-problems";
 
 import { applyMigrations } from "../../../../../../services/catalog/src/migrations";
 import {

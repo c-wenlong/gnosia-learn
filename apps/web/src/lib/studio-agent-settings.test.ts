@@ -1,20 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  acceptableModel,
-  agentDefaults,
-  checkedAgent,
-  effortOptions,
-  harnessModelOptions,
-  modelName,
-  modelOptions,
-  rowPriced,
-  rowWarning,
-  runnerDefaultOption,
-  runnerSettings,
-  storedAgent,
-  MODEL_CHOICES,
-} from "./studio-agent-settings";
+import { acceptableModel, agentDefaults, checkedAgent, effortOptions, harnessModelOptions, modelOptions, rowPriced, rowWarning, runnerDefaultOption, runnerSettings, storedAgent, MODEL_CHOICES } from "./studio-agent-settings";
+import { modelName } from "@/lib/model-name";
 
 describe("the settings panel's menus (D53)", () => {
   it("defaults videos to the Claude Code default and diagrams to sonnet, today's behaviour", () => {

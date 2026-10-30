@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { LIST_LIMIT, LISTED_STATES, readHistory } from "@/lib/studio-draft-list";
-import { listDrafts, runnerDown, type DraftSummary } from "@/lib/studio-drafts";
+import { listDrafts, type DraftSummary } from "@/lib/studio-drafts";
+import { runnerDown } from "@/lib/studio-client";
 import { useDraftsWake } from "@/lib/use-drafts-wake";
 
 import type { StudioChats } from "./shell-context";

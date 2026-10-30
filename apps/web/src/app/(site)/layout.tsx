@@ -2,7 +2,7 @@ import { Literata } from "next/font/google";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { GnosiaWordmark } from "@/components/brand";
+import { GnosiaWordmark } from "@/components/brand/GnosiaWordmark";
 import { cx } from "@/components/ui/classes";
 
 import { GITHUB_URL, siteLink } from "./site";

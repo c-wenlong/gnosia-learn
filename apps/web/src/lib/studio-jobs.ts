@@ -189,8 +189,6 @@ export const PHASES = [
   { key: "ready", label: "Ready to accept" },
 ] as const;
 
-export type PhaseKey = (typeof PHASES)[number]["key"];
-
 export function phaseIndex(phase: string | null | undefined): number {
   if (phase === null || phase === undefined) return -1;
   return PHASES.findIndex((entry) => entry.key === phase);

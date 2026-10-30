@@ -1,5 +1,5 @@
-import { dayKey } from "@/lib/days";
-import { MASTERY_BUCKET_LABEL, type MasteryBucket } from "@/lib/mastery-bucket";
+import { dayKey } from "@gnosia/tutor/days";
+import { MASTERY_BUCKET_LABEL, type MasteryBucket } from "@gnosia/tutor/mastery-bucket";
 
 /**
  * The Learn index's rows and the rules for filtering them, pure so they can be
@@ -39,10 +39,6 @@ export const LEGEND_GROUPS: readonly { key: LegendGroup; label: string }[] = [
   { key: "untouched", label: MASTERY_BUCKET_LABEL.untouched },
   { key: "ready", label: "Ready to learn" },
 ];
-
-export function isLegendGroup(filter: IndexFilter): filter is LegendGroup {
-  return LEGEND_GROUPS.some((g) => g.key === filter);
-}
 
 /**
  * Which of `ids` (the concepts the picture shows) are in each group, a

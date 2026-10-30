@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 
-import { GnosiaWordmark } from "@/components/brand";
+import { GnosiaWordmark } from "@/components/brand/GnosiaWordmark";
 import { iconButtonClasses } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
 import { IconButton } from "@/components/ui/IconButton";

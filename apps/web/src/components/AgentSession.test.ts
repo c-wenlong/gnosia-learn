@@ -3,7 +3,7 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Course, Module, Topic } from "@/lib/types";
+import type { Course, Module, Topic } from "@gnosia/tutor/types";
 
 /**
  * The course topic tutor's check cards (docs/proposals/structured-checks.md,

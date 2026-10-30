@@ -20,16 +20,15 @@ import { topicDomainMap, topicOptionsOf, topicTitleMap } from "@/data/topics";
 import { openShot, requireStudio, studioApi } from "@/lib/studio";
 import { capFrom, suggestions } from "@/lib/studio-chat";
 import { listPath } from "@/lib/studio-draft-list";
-import { diagramAvailability, videoAvailability, type DraftSummary } from "@/lib/studio-drafts";
+import { type DraftSummary } from "@/lib/studio-drafts";
+import { diagramAvailability, videoAvailability } from "@/lib/studio-health";
 import { runnerSettings } from "@/lib/studio-agent-settings";
 import { makeVideoTitle } from "@/lib/studio-extend";
-import { readVideos } from "@/lib/studio-video";
+import { readVideos } from "@/lib/studio-video-grid";
 import { vocabularyBanner, vocabularyTopics, type VocabularyState } from "@/lib/studio-vocabulary";
-import { appTimeZone } from "@/lib/time-zone";
+import { appTimeZone } from "@gnosia/tutor/server/time-zone";
 import {
   CLOSED,
-  dayAndTime,
-  displayTitle,
   panelHref,
   panelSignature,
   parseView,
@@ -37,10 +36,9 @@ import {
   shotTitle,
   studioHref,
   titleOf,
-  topicChips,
-  type DiagramListing,
   type RawParams,
-} from "@/lib/studio-view";
+} from "@/lib/studio-url";
+import { dayAndTime, displayTitle, topicChips, type DiagramListing } from "@/lib/studio-grid";
 
 /**
  * `/studio`: a composer to start a conversation, and the corpus under it.

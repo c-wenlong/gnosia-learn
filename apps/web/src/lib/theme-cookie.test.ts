@@ -1,3 +1,4 @@
+import { THEME_MODES } from "@gnosia/schema/shared";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -7,7 +8,6 @@ import {
   PALETTE_LABELS,
   SYSTEM_THEME_SCRIPT,
   THEME_APPEARANCES,
-  THEME_MODES,
   THEME_PALETTES,
   themeClass,
 } from "./theme-cookie";

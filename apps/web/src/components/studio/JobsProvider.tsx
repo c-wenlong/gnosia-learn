@@ -20,7 +20,7 @@ import {
   type StudioEvent,
 } from "@/lib/studio-jobs";
 import { useJobEventStream } from "@/components/studio/use-job-events";
-import { asVideoJob, videoAnnouncement } from "@/lib/studio-video";
+import { asVideoJob, videoAnnouncement } from "@/lib/studio-video-job";
 
 /**
  * Where the job state lives, and why it lives there.

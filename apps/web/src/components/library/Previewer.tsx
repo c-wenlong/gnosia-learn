@@ -6,7 +6,7 @@ import { previewAsset } from "@/app/(app)/library/preview-action";
 import { LibraryMoreContext, type MoreRows } from "@/components/library/library-more";
 import type { PreviewAnswer } from "@/components/library/preview-content";
 import { PreviewerHeader } from "@/components/library/PreviewerHeader";
-import { LOADING_BLOCK } from "@/components/PageLoading";
+import { SKELETON } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/Button";
 import { Dialog, DIALOG_CLOSE_MS } from "@/components/ui/Dialog";
 import { cx } from "@/components/ui/classes";
@@ -352,14 +352,14 @@ function BodySkeleton() {
   return (
     <div className="flex flex-col gap-4" aria-hidden>
       <div className="flex gap-2.5">
-        <span className={cx(LOADING_BLOCK, "h-8 w-28 rounded-full")} />
-        <span className={cx(LOADING_BLOCK, "h-8 w-24 rounded-full")} />
+        <span className={cx(SKELETON, "h-8 w-28 rounded-full")} />
+        <span className={cx(SKELETON, "h-8 w-24 rounded-full")} />
       </div>
-      <span className={cx(LOADING_BLOCK, "h-7 w-2/3")} />
-      <span className={cx(LOADING_BLOCK, "h-3.5 w-full")} />
-      <span className={cx(LOADING_BLOCK, "h-3.5 w-11/12")} />
-      <span className={cx(LOADING_BLOCK, "h-3.5 w-4/5")} />
-      <span className={cx(LOADING_BLOCK, "mt-2 h-48 w-full")} />
+      <span className={cx(SKELETON, "h-7 w-2/3")} />
+      <span className={cx(SKELETON, "h-3.5 w-full")} />
+      <span className={cx(SKELETON, "h-3.5 w-11/12")} />
+      <span className={cx(SKELETON, "h-3.5 w-4/5")} />
+      <span className={cx(SKELETON, "mt-2 h-48 w-full")} />
     </div>
   );
 }

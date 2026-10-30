@@ -1,6 +1,8 @@
 import { validMentions, valueOf, type MentionValue } from "@/lib/mentions";
 import { safely } from "@/lib/storage-safe";
-import { isTagKind, runnerDown, type DraftKind, type DraftMention, type Refusal, type TagKind, type VideoAvailability } from "@/lib/studio-drafts";
+import { isTagKind, type DraftKind, type DraftMention, type TagKind } from "@/lib/studio-drafts";
+import { runnerDown, type Refusal } from "@/lib/studio-client";
+import { type VideoAvailability } from "@/lib/studio-health";
 
 /**
  * Extend from a tile (docs/STUDIO-CHAT-FIRST.md, phase 2): the words, the

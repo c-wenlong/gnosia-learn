@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { probeAssetProblem, type AssetProblemCode } from "@/lib/asset-problems";
+import { probeAssetProblem, type AssetProblemCode } from "@gnosia/tutor/asset-problems";
 
 /**
  * A media element's failure, and the reason for it, once asked for.

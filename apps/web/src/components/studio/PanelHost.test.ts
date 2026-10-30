@@ -3,8 +3,9 @@ import { act, createElement, useEffect, type ComponentProps, type ReactNode } fr
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { StudioVideo } from "@/lib/studio-video";
-import { panelSignature, type Diagram } from "@/lib/studio-view";
+import type { StudioVideo } from "@/lib/studio-video-grid";
+import { panelSignature } from "@/lib/studio-url";
+import { type Diagram } from "@/lib/studio-grid";
 
 /**
  * The conversation opens and closes in the browser: the address bar moves

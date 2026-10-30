@@ -4,7 +4,7 @@ import { Figtree, Geist_Mono } from "next/font/google";
 import { cx } from "@/components/ui/classes";
 import { NONCE_HEADER } from "@/lib/auth/csp";
 import { asMotionMode, LEGACY_MOTION_COOKIE, MOTION_COOKIE, motionAttribute } from "@/lib/motion";
-import { resolveSiteUrl } from "@/lib/site-url";
+import { resolveSiteUrl } from "@gnosia/tutor/site-url";
 import { asThemeMode, LEGACY_THEME_COOKIE, SYSTEM_THEME_SCRIPT, THEME_COOKIE, themeClass } from "@/lib/theme-cookie";
 import "./globals.css";
 

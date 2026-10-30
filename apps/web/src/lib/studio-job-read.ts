@@ -1,4 +1,4 @@
-import { readJobLookup, type JobLookup } from "@/lib/studio-video";
+import { readJobLookup, type JobLookup } from "@/lib/studio-video-job";
 
 /**
  * `GET /api/jobs/{id}` through the studio proxy: the one read of a single

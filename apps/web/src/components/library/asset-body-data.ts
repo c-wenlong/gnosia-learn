@@ -2,13 +2,13 @@ import "server-only";
 
 import type { AssetRef } from "@gnosia/catalog/state";
 
-import type { VideoChapter } from "@/components/media";
+import type { VideoChapter } from "@gnosia/tutor/media";
 import { readAssetText, readFileProblems, withCatalog } from "@/lib/asset-library";
 import { storedPdfs, storedPosters } from "@/lib/asset-files";
-import { problemSource, type RouteProblemCode } from "@/lib/asset-problems";
+import { problemSource, type RouteProblemCode } from "@gnosia/tutor/asset-problems";
 import { assetDownloadHref, assetFileHref, assetPdfHref, assetPosterHref, assetStatusHref } from "@/lib/library";
 import { embedTargets } from "@/lib/note-embeds";
-import { parseChapters, parseTranscript, type ParsedTranscript } from "@/lib/transcript";
+import { parseChapters, parseTranscript, type ParsedTranscript } from "@gnosia/tutor/transcript";
 
 /**
  * Everything `AssetBody` draws an asset from, read once on the server: the

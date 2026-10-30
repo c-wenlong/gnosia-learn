@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-import type { Course, Module, Topic, TopicKnowledge } from "@/lib/types";
+import type { Course, Module, Topic, TopicKnowledge } from "@gnosia/tutor/types";
 import { RecapCard, RecapEditor } from "./TopicRecap";
 
 vi.mock("@/lib/learner-context", () => ({ useLearner: () => ({ forgetKnowledge: () => {} }) }));

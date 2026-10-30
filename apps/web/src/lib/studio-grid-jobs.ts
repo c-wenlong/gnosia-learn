@@ -148,8 +148,6 @@ export function newVideoJobs(
 /** The video tile's names for the shared rules, kept for the video view's imports. */
 export type VideoTileStage = TileStage;
 export const videoTileStage: (job: Pick<VideoJob, "state">) => TileStage = tileStage;
-export const videoShownOnGrid: (job: Pick<VideoJob, "jobId" | "state">, ended: readonly string[], dismissed: readonly string[]) => boolean =
-  shownOnGrid;
 
 /**
  * The loader's headline: what the job is doing, in sentence case.

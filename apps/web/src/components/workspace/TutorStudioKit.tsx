@@ -6,9 +6,10 @@ import { openConceptConversation } from "@/app/(app)/studio/actions";
 import { MentionComposer, type MentionComposerHandle } from "@/components/ui/MentionComposer";
 import type { MentionValue } from "@/lib/mentions";
 import { MENTION_HINT } from "@/lib/studio-cards";
-import { idempotencyKey, type TagKind } from "@/lib/studio-drafts";
+import { type TagKind } from "@/lib/studio-drafts";
+import { idempotencyKey } from "@/lib/studio-client";
 import { extendKey, forgetExtendKey, leaveOpener, sessionStore } from "@/lib/studio-extend";
-import { conversationHref } from "@/lib/studio-view";
+import { conversationHref } from "@/lib/studio-url";
 import {
   handoffKeyName,
   handoffPrint,

@@ -5,9 +5,10 @@ import { useState } from "react";
 
 import { usePanelHost } from "@/components/studio/panel-host";
 import type { MentionValue } from "@/lib/mentions";
-import { createDraft, idempotencyKey, type TagKind } from "@/lib/studio-drafts";
+import { createDraft, type TagKind } from "@/lib/studio-drafts";
+import { idempotencyKey } from "@/lib/studio-client";
 import { leaveOpener, sessionStore } from "@/lib/studio-extend";
-import { panelHref } from "@/lib/studio-view";
+import { panelHref } from "@/lib/studio-url";
 
 /**
  * Start a conversation: `POST /api/drafts`, then open it.

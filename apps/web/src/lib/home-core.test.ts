@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { dayDiff, dayLabel } from "@/lib/day-groups";
-import type { LogEvent } from "@/lib/days";
+import type { LogEvent } from "@gnosia/tutor/days";
 import {
   coursesInProgress,
   homeThreads,

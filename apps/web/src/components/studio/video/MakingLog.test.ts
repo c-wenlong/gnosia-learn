@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { StudioEvent } from "@/lib/studio-jobs";
-import type { VideoJob } from "@/lib/studio-video";
+import type { VideoJob } from "@/lib/studio-video-job";
 
 import { MakingLog } from "./VideoJobPanel";
 

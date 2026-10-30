@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { valueOf } from "@/lib/mentions";
-import type { DraftSlot, DraftView, TranscriptEntry, VideoBrief } from "@/lib/studio-drafts";
+import type { DraftSlot, DraftView, TranscriptEntry } from "@/lib/studio-drafts";
+import type { VideoBrief } from "@/lib/studio-brief-video";
 import type { Brief, Job } from "@/lib/studio-jobs";
 
 import {

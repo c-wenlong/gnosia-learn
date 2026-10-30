@@ -36,19 +36,18 @@ import { TextLink } from "@/components/ui/TextLink";
 import type { AgentKind } from "@/lib/studio-agent-settings";
 import { kindUnavailable } from "@/lib/studio-cards";
 import { TAG_KINDS, type DraftSummary, type TagKind } from "@/lib/studio-drafts";
-import type { StudioVideo } from "@/lib/studio-video";
+import type { StudioVideo } from "@/lib/studio-video-grid";
 import {
   browserMove,
   CLOSED,
-  displayTitle,
   panelHref,
   panelSignature,
   parseView,
   rawParamsOf,
   readOutcome,
   withoutOutcome,
-  type Diagram,
-} from "@/lib/studio-view";
+} from "@/lib/studio-url";
+import { displayTitle, type Diagram } from "@/lib/studio-grid";
 
 /**
  * The studio's frame, and the panels on `/studio` that open and close in

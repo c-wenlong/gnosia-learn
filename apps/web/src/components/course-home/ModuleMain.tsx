@@ -17,9 +17,11 @@ import {
   type ModuleStatus,
   type TopicMastery,
 } from "@/lib/course-path";
-import type { Course, Module } from "@/lib/types";
+import type { Course, Module } from "@gnosia/tutor/types";
 
-import { Glyph, META_GLYPH } from "./icons";
+import { Glyph } from "@/components/ui/Glyph";
+
+import { META_GLYPH } from "./icons";
 import { ModulePath } from "./ModulePath";
 import { ROW_HOVER, ROW_META } from "./rows";
 import type { ModuleData } from "./types";

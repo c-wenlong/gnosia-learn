@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 
-import { assetDisplayTitle, assetKindLabel } from "@/components/asset-meta";
+import { assetDisplayTitle, assetKindLabel } from "@gnosia/tutor/asset-meta";
 import { PAGE_ENTER } from "@/components/PageLoading";
 import { AssetBody } from "@/components/library/AssetBody";
 import { loadAssetBody } from "@/components/library/asset-body-data";
@@ -15,8 +15,8 @@ import { Button } from "@/components/ui/Button";
 import { cx } from "@/components/ui/classes";
 import { TextLink } from "@/components/ui/TextLink";
 import { loadAssetDetail, loadFavorite, loadLastWatched, loadPlayback } from "@/lib/asset-library";
-import { appTimeZone } from "@/lib/time-zone";
-import { dayKey } from "@/lib/days";
+import { appTimeZone } from "@gnosia/tutor/server/time-zone";
+import { dayKey } from "@gnosia/tutor/days";
 import { loadKnowledgeBase } from "@/lib/learner-store";
 import { assetBackLink, conceptHref, decodeAssetId, explainedConcepts, isCompanionKind } from "@/lib/library";
 

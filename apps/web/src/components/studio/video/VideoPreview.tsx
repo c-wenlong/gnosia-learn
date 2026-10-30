@@ -3,11 +3,12 @@
 import { DialogHeader } from "@/components/studio/StudioDialog";
 import { VideoChangeButton } from "@/components/studio/video/VideoGridJob";
 import { Button } from "@/components/ui/Button";
-import { STUDIO_SOURCE } from "@/lib/asset-problems";
+import { STUDIO_SOURCE } from "@gnosia/tutor/asset-problems";
 import { buttonClasses } from "@/components/ui/classes";
 import { VideoPlayer } from "@/components/VideoPlayer";
-import { libraryHref, posterHref, videoFileHref, videoStatusHref, type StudioVideo } from "@/lib/studio-video";
-import { gridHref } from "@/lib/studio-view";
+import { libraryHref, posterHref, videoFileHref, videoStatusHref } from "@/lib/studio-video-job";
+import { type StudioVideo } from "@/lib/studio-video-grid";
+import { gridHref } from "@/lib/studio-url";
 
 /**
  * A studio video playing over the grid (`?play=<slug>`, D85 of

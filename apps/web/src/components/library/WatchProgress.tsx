@@ -2,7 +2,7 @@
 
 import { createContext, useContext } from "react";
 
-import { formatTimecode } from "@/components/media";
+import { formatTimecode } from "@gnosia/tutor/media";
 import { Glyph } from "@/components/ui/Glyph";
 
 /** What the playback store last said about this video, kept current as it saves. */

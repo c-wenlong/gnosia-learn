@@ -2,7 +2,8 @@ import type { AssetParents, AssetPlace } from "@gnosia/catalog/state";
 import { describe, expect, it } from "vitest";
 
 import { conceptOrder } from "./library-source";
-import { askSubjectOf, assetDownloadHref, rowMenuItems, studioConversationHref, type RowMenuInput } from "./row-menu";
+import { assetDownloadHref } from "./library";
+import { askSubjectOf, rowMenuItems, studioConversationHref, type RowMenuInput } from "./row-menu";
 
 const place = (over: Partial<AssetPlace> = {}): AssetPlace => ({
   course: "cs3230",

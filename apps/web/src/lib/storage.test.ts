@@ -2,8 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   addUserResource,
   clearKnowledge,
-  defaultState,
-  KNOWLEDGE_LIMITS,
   recordKnowledge,
   removeUserResource,
   resetCourseProgress,
@@ -13,7 +11,8 @@ import {
   setTheme,
   setTopicCompleted,
 } from "@/lib/storage";
-import type { KnowledgeInput } from "@/lib/types";
+import { KNOWLEDGE_LIMITS } from "@gnosia/schema/shared";
+import { emptyLearnerState as defaultState, type KnowledgeInput } from "@gnosia/tutor/types";
 
 const sampleKnowledge = (
   overrides: Partial<KnowledgeInput> = {},

@@ -21,17 +21,24 @@ import type {
   Module,
   Topic,
   TopicKnowledge,
-} from "@/lib/types";
+} from "@gnosia/tutor/types";
 import { useLearner } from "@/lib/learner-context";
-import { buildAgentSessionContext } from "@/lib/agent/prompt";
+import { buildAgentSessionContext } from "@gnosia/tutor/prompt";
 import { RecapCard, RecapEditor } from "@/components/TopicRecap";
-import { CheckCard, CheckRow, slotPlan, useCheckThread, useMemoryThread, type SlotOptions } from "@/components/workspace/use-check-thread";
+import {
+  CheckCard,
+  CheckRow,
+  slotPlan,
+  useCheckThread,
+  useMemoryThread,
+  type SlotOptions,
+} from "@/components/workspace/use-check-thread";
 import {
   restoreCardCheck,
   type ChoiceAnswer,
   type RecallPick,
-} from "@/lib/check-block";
-import type { TurnCheck, Verdict } from "@/lib/tutor-check";
+} from "@gnosia/tutor/check-block";
+import type { TurnCheck, Verdict } from "@gnosia/tutor/tutor-check";
 import { scrollBehavior } from "@/lib/motion";
 import { tutorProblem } from "@/lib/tutor-errors";
 import { recapTurns, topicRequestTurns } from "@/lib/tutor-thread";

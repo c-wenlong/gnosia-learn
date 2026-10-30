@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { OpenTutorChat } from "@/components/ask/OpenTutorChat";
 import { AskBox } from "@/components/home/AskBox";
 import { NOTE, PAGE_TITLE } from "@/components/ui/classes";
-import { OPEN_SUBJECT_LIMIT } from "@/lib/agent/prompt";
+import { OPEN_SUBJECT_LIMIT } from "@gnosia/tutor/prompt";
 
 export const metadata: Metadata = { title: "Ask the tutor" };
 

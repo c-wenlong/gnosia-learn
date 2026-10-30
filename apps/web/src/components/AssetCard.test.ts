@@ -9,7 +9,7 @@ import {
   assetMetaLine,
   formatBytes,
   type AssetCardRef,
-} from "./asset-meta";
+} from "@gnosia/tutor/asset-meta";
 
 beforeAll(() => {
   (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =

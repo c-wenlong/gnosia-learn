@@ -7,8 +7,9 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { DomainMapData } from "@/lib/domain-map";
 import type { IndexRow } from "@/lib/learn-index";
 
-import { LearnIndex, MapPanel, SERVER_ROWS } from "./LearnIndex";
-import type { GraphEdge, GraphNode } from "@/lib/concept-graph";
+import { LearnIndex, SERVER_ROWS } from "./LearnIndex";
+import { MapPanel } from "@/components/learn/DomainBrowser";
+import type { GraphEdge, GraphNode } from "@gnosia/tutor/concept-graph";
 
 /**
  * The Learn index's graph card fades a new concept's graph in by mounting it

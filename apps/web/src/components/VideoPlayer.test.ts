@@ -4,7 +4,7 @@ import { createRoot, hydrateRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { VideoPlayer } from "./VideoPlayer";
-import type { TranscriptCue, VideoChapter } from "./media";
+import type { TranscriptCue, VideoChapter } from "@gnosia/tutor/media";
 
 const chapters: VideoChapter[] = [
   { scene: "T1_Intro", title: "Intro", start: 0, end: 8 },

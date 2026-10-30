@@ -3,7 +3,7 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ChainEntry } from "@/lib/agent/providers";
+import type { ChainEntry } from "@gnosia/tutor/providers";
 import type { ProviderRowView, ProvidersView } from "@/lib/providers/view";
 
 /**

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ConceptWorkspace } from "@/lib/concept-workspace-core";
+import type { ConceptWorkspace } from "@gnosia/tutor/concept-workspace-core";
 
 /**
  * `POST /api/agent/judge`: the verdict on one answer to a chat check.
@@ -13,9 +13,9 @@ const readConceptWorkspace = vi.hoisted(() => vi.fn());
 const completeWithFallback = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/concept-workspace", () => ({ readConceptWorkspace }));
-vi.mock("@/lib/agent/providers", async (importOriginal) => ({
+vi.mock("@gnosia/tutor/providers", async (importOriginal) => ({
   // The pure helpers (the missing-key message, the skipped entries) are real.
-  ...(await importOriginal<typeof import("@/lib/agent/providers")>()),
+  ...(await importOriginal<typeof import("@gnosia/tutor/providers")>()),
   completeWithFallback,
   availableProviderSummary: () => "none",
 }));

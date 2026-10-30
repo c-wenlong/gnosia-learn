@@ -2,11 +2,10 @@ import "server-only";
 
 import type { ProviderName } from "@gnosia/schema/shared";
 
-import { byokToTutor, TUTOR_TO_BYOK } from "@/lib/byok-providers";
+import { TUTOR_TO_BYOK } from "@/lib/byok-providers";
 import { openSavedKeys } from "@/lib/provider-keys/store";
 import { studioApi, studioEnabled } from "@/lib/studio";
 
-export { byokToTutor, TUTOR_TO_BYOK };
 
 /**
  * The tutor key a provider was just saved with, mirrored to the runner.

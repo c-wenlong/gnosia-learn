@@ -22,10 +22,10 @@ const mocks = vi.hoisted(() => ({
   renameDraft: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({ usePathname: () => mocks.pathname }));
-vi.mock("@/lib/studio-drafts", async (importOriginal) => ({ runnerDown: (await importOriginal<typeof import("@/lib/studio-drafts")>()).runnerDown, listDrafts: mocks.listDrafts, renameDraft: mocks.renameDraft }));
+vi.mock("@/lib/studio-drafts", () => ({ listDrafts: mocks.listDrafts, renameDraft: mocks.renameDraft }));
 vi.mock("@/lib/recent-client", () => ({ fetchRecent: mocks.fetchRecent, changeRecent: mocks.changeRecent, VISIT_STORED_EVENT: "gnosia:visit-stored" }));
 vi.mock("next/image", () => ({ default: () => null }));
-vi.mock("@/components/brand", () => ({ GnosiaWordmark: () => createElement("span", null, "Gnosia") }));
+vi.mock("@/components/brand/GnosiaWordmark", () => ({ GnosiaWordmark: () => createElement("span", null, "Gnosia") }));
 vi.mock("@/components/ThemeSwitch", () => ({ ThemeSwitch: () => null }));
 vi.mock("@/lib/learner-context", () => ({ useLearner: () => ({ state: { displayName: mocks.displayName } }) }));
 

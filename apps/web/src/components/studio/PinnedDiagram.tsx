@@ -7,7 +7,7 @@ import { cx } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
 import { TextLink } from "@/components/ui/TextLink";
 import { tutorTurnsWords, videoPosterHref } from "@/lib/studio-cards";
-import { thumbnailHref } from "@/lib/studio-view";
+import { thumbnailHref } from "@/lib/studio-url";
 
 /**
  * The diagram an extend conversation is about, pinned at the top of its

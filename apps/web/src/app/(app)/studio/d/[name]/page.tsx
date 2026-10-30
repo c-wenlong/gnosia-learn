@@ -19,21 +19,11 @@ import { BlockedCard, type DoctorLine } from "@/components/studio/StudioBlocked"
 import { StripMenu } from "@/components/studio/StudioControls";
 import { BackToStudio, StudioStrip, VerbNotice } from "@/components/studio/StudioChrome";
 import { openShot, requireStudio, studioApi } from "@/lib/studio";
-import { videoAvailability } from "@/lib/studio-drafts";
+import { videoAvailability } from "@/lib/studio-health";
 import { vocabularyBanner, type VocabularyState } from "@/lib/studio-vocabulary";
-import { appTimeZone } from "@/lib/time-zone";
-import {
-  canvasHref,
-  dayAndTime,
-  displayTitle,
-  extendHref,
-  freshness,
-  parsePanel,
-  readOutcome,
-  type Diagram,
-  type DiagramListing,
-  type RawParams,
-} from "@/lib/studio-view";
+import { appTimeZone } from "@gnosia/tutor/server/time-zone";
+import { canvasHref, extendHref, parsePanel, readOutcome, type RawParams } from "@/lib/studio-url";
+import { dayAndTime, displayTitle, freshness, type Diagram, type DiagramListing } from "@/lib/studio-grid";
 
 /**
  * `/studio/d/<name>`: one document on a live tldraw canvas.

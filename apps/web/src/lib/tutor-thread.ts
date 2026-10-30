@@ -6,8 +6,8 @@ import {
   restoreRecallPick,
   type ChoiceAnswer,
   type RecallPick,
-} from "@/lib/check-block";
-import { restoreCheck, restoreVerdict, type TurnCheck, type Verdict } from "@/lib/tutor-check";
+} from "@gnosia/tutor/check-block";
+import { restoreCheck, restoreVerdict, type TurnCheck, type Verdict } from "@gnosia/tutor/tutor-check";
 
 /**
  * The concept tutor's thread as the browser keeps it, and the pure rules the

@@ -10,14 +10,14 @@ import {
   type Block,
   type FigureNode,
   type Inline,
-} from "@/components/markdown";
+} from "@gnosia/tutor/markdown";
 import { EmbedImage } from "@/components/EmbedImage";
 import { SvgBlock } from "@/components/SvgBlock";
 import { compileSvg } from "@/lib/svg-block";
 import { cx } from "@/components/ui/classes";
 import { DisplayMath, InlineMath } from "@/components/Math";
 import { WidgetFailure } from "@/components/WidgetFailure";
-import type { AssetProblemCode } from "@/lib/asset-problems";
+import type { AssetProblemCode } from "@gnosia/tutor/asset-problems";
 
 /**
  * A concept note or a session log, read as prose instead of as source.

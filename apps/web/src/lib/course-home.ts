@@ -5,10 +5,16 @@ import { getTags, tagsFor } from "@/data/content";
 import { getCourses, getRelatedCourses } from "@/data/courses";
 import { getTopics } from "@/data/topics";
 import { loadCourseAssets } from "@/lib/course-assets";
-import { conceptsByItem, conceptsForTopic, guidebookConcept, resolveTopicMastery, type TopicMastery } from "@/lib/course-path";
-import { loadKnowledgeBase } from "@/lib/kb/load";
+import {
+  conceptsByItem,
+  conceptsForTopic,
+  guidebookConcept,
+  resolveTopicMastery,
+  type TopicMastery,
+} from "@/lib/course-path";
+import { loadKnowledgeBase } from "@/lib/learner-store";
 import { moduleConcepts, type PathKbConcept } from "@/lib/module-path";
-import type { Course } from "@/lib/types";
+import type { Course } from "@gnosia/tutor/types";
 
 /**
  * Everything a course page needs from the server, for `/courses/[slug]` and

@@ -1,9 +1,9 @@
 import type { MasteryLabel } from "@gnosia/catalog/state";
 
-import { assetDisplayTitle, assetKindLabel, type AssetCardRef } from "@/components/asset-meta";
+import { assetDisplayTitle, assetKindLabel, type AssetCardRef } from "@gnosia/tutor/asset-meta";
 import { safeNextPath } from "@/lib/auth/core";
-import { bucketOf, type MasteryBucket } from "@/lib/mastery-bucket";
-import { parseTranscript } from "@/lib/transcript";
+import { bucketOf, type MasteryBucket } from "@gnosia/tutor/mastery-bucket";
+import { parseTranscript } from "@gnosia/tutor/transcript";
 import { compareByKindThenId, isCompanionKind, kindRank } from "@gnosia/tutor/kind-order";
 export { compareByKindThenId, isCompanionKind };
 

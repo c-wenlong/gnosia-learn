@@ -1,4 +1,4 @@
-import type { GraphEdge } from "@/lib/concept-graph";
+import type { GraphEdge } from "@gnosia/tutor/concept-graph";
 import type { DomainNode, DomainTopic } from "@/lib/domain-map";
 
 /**

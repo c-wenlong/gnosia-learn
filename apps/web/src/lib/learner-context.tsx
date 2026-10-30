@@ -18,7 +18,7 @@ import type {
   LearnerState,
   ThemeMode,
   UserResource,
-} from "@/lib/types";
+} from "@gnosia/tutor/types";
 import {
   addUserResource,
   clearKnowledge,

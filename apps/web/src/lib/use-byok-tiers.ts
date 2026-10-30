@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { BYOK_SETTINGS_CHANGED, getByokSettings, type ByokProviderStatus } from "@/lib/studio-drafts";
+import { BYOK_SETTINGS_CHANGED, getByokSettings, type ByokProviderStatus } from "@/lib/studio-byok";
 
 /** The active BYOK provider's Default model and its tier models (D94). */
 export interface ByokTiers {

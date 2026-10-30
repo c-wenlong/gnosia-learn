@@ -2,7 +2,7 @@ import "server-only";
 
 import type { ProviderName } from "@gnosia/schema/shared";
 
-import { customProviderConfig, providerConfigs, type KeySource } from "@/lib/agent/providers";
+import { customProviderConfig, providerConfigs, type KeySource } from "@gnosia/tutor/providers";
 import { type CustomProvider, readOwnerCustomProviders } from "@/lib/custom-providers/store";
 import { failureCode, savedKeyStatuses, type SavedKeyStatus } from "@/lib/provider-keys/store";
 

@@ -330,7 +330,7 @@ anything that is not a video. A video has no button: the player posts its
 position and the stretches that actually played to `POST
 /api/learner/playback`, which merges them into a `playback:<asset id>`
 preference, and the save that takes coverage past 90% appends the event
-(`apps/web/src/lib/playback.ts` holds the rule). Scrubbing to the end is not
+(`packages/tutor/src/playback.ts` holds the rule). Scrubbing to the end is not
 watching, since coverage counts only what played.
 
 **Both pages treat unserved bytes as a state, per row.** An asset whose bytes
@@ -341,7 +341,7 @@ or a broken image. The page asks the route's own resolver (`resolveAsset`,
 batched as `servedAssets` for a grid), so the page and the route cannot give
 one asset two answers.
 
-`apps/web/src/lib/transcript.ts` parses the sidecars, defensively: a malformed
+`packages/tutor/src/transcript.ts` parses the sidecars, defensively: a malformed
 one costs the transcript panel and leaves the video playing. Its cues are read
 on the server and passed to `TranscriptPanel` as props, so there is no loading
 state and no second round trip for text the render already had a request in
@@ -797,7 +797,7 @@ the web app owned a localStorage document, and the two models of the same
 learner never spoke. The native app sits beside them rather than inside
 them: its writes land in `learner.db` today, and a bridge that lifts those
 rows into the catalog is a different branch's work — deliberately not described
-here, since this branch has none. `apps/web/src/lib/kb/load.ts` is still the only place in the app that
+here, since this branch has none. `loadKnowledgeBase` in `apps/web/src/lib/learner-store.ts` is still the only place in the app that
 reads the concept graph, and it is a query now rather than a `readFileSync` of a snapshot
 — so a study session shows up on `/learn` immediately instead of at the next
 deploy.

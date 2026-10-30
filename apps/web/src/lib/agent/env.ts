@@ -9,12 +9,12 @@ import { assetBlobStore } from "@/lib/blob-store";
 import { getCourses } from "@/data/courses";
 import { contentSource } from "@/data/source";
 import { entryCredential, keyTestCredential, tutorCredentials } from "@/lib/agent/credentials";
-import { completeWithFallback, testProviderKey } from "@/lib/agent/providers";
+import { completeWithFallback, testProviderKey } from "@gnosia/tutor/providers";
 import { readAssetDetail, readAssetText } from "@/lib/asset-library";
 import { readConceptWorkspace } from "@/lib/concept-workspace";
 import { catalogDatabase } from "@/lib/learner-store";
 import { readTutorStyle } from "@/lib/settings";
-import { cachedModelList } from "@/lib/tutor-models/model-list";
+import { cachedModelList } from "@gnosia/tutor/server/model-list";
 import { readChain } from "@/lib/tutor-models/store";
 
 /**

@@ -6,7 +6,7 @@ import {
   formatTimecode,
   transcriptCounter,
   type TranscriptCue,
-} from "@/components/media";
+} from "@gnosia/tutor/media";
 import { cardClasses, cx } from "@/components/ui/classes";
 import { TextLink } from "@/components/ui/TextLink";
 import { CARD_TITLE } from "@/components/ui/classes";

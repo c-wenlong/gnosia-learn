@@ -1,8 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import type { GraphEdge } from "@/lib/concept-graph";
-import { axesLayout, cachedDomainLayouts, domainLayout, domainOfNode, domainTree, type DomainNode, type DomainTopic } from "@/lib/domain-map";
-import { wrapLabel } from "@/lib/concept-graph";
+import type { GraphEdge } from "@gnosia/tutor/concept-graph";
+import {
+  axesLayout,
+  cachedDomainLayouts,
+  domainLayout,
+  domainOfNode,
+  domainTree,
+  type DomainNode,
+  type DomainTopic,
+} from "@/lib/domain-map";
+import { wrapLabel } from "@gnosia/tutor/concept-graph";
 import { domainShape, type ShapeName } from "@/test/domain-shapes";
 import {
   AXES_DOT_CLEAR,

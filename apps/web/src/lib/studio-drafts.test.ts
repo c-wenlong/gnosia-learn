@@ -1,30 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import {
-  abandonDraft,
-  createDraft,
-  drawBoth,
-  drawDraft,
-  drawResults,
-  releaseHold,
-  stopWaiting,
-  videoAvailability,
-  diagramAvailability,
-  getDraft,
-  idempotencyKey,
-  listDrafts,
-  openDraftEvents,
-  readStudioHealth,
-  reconnectDelay,
-  RUNNER_DOWN,
-  runnerDown,
-  refusalNumber,
-  refusalReason,
-  refusalString,
-  saveBrief,
-  sendMessage,
-  type DraftEvent,
-} from "./studio-drafts";
+import { abandonDraft, createDraft, drawBoth, drawDraft, drawResults, releaseHold, stopWaiting, getDraft, listDrafts, saveBrief, sendMessage } from "./studio-drafts";
+import { videoAvailability, diagramAvailability, readStudioHealth } from "@/lib/studio-health";
+import { idempotencyKey, RUNNER_DOWN, runnerDown, refusalNumber, refusalReason, refusalString } from "@/lib/studio-client";
+import { openDraftEvents, reconnectDelay, type DraftEvent } from "@/lib/studio-events";
 
 /**
  * The client's contract with the runner's draft routes: the paths, the bodies

@@ -5,8 +5,8 @@ import { useId } from "react";
 import { LABEL } from "@/components/ui/classes";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Textarea } from "@/components/ui/Textarea";
-import { CONFIDENCE_STOPS } from "@/lib/check-block";
-import { SESSION_TEXT_LIMIT } from "@/lib/session-core";
+import { CONFIDENCE_STOPS } from "@gnosia/tutor/check-block";
+import { SESSION_TEXT_LIMIT } from "@gnosia/tutor/session-core";
 
 /**
  * "How sure are you?" and "Your reasoning (optional)", the two fields a

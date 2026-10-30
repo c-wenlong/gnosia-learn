@@ -1,4 +1,4 @@
-import { LOADING_BLOCK } from "@/components/PageLoading";
+import { SKELETON } from "@/components/ui/Skeleton";
 import { cx, iconButtonClasses } from "@/components/ui/classes";
 import { DialogHeader } from "@/components/ui/DialogHeader";
 import { Glyph } from "@/components/ui/Glyph";
@@ -38,7 +38,7 @@ export function PreviewerHeader({
       closeSize="sm"
       leading={
         header === null ? (
-          <span aria-hidden className={cx(LOADING_BLOCK, "size-[18px] shrink-0")} />
+          <span aria-hidden className={cx(SKELETON, "size-[18px] shrink-0")} />
         ) : (
           <span className="shrink-0 animate-fade-in text-text2 motion-reduce:animate-none" aria-hidden>
             <Glyph name={header.family} size={18} />
@@ -51,7 +51,7 @@ export function PreviewerHeader({
             {/* The heading is never empty, for a screen reader; the bar is only to look at. It says
                 loading only while it is, not after the body failed to come. */}
             <span className="sr-only">{loading ? "Loading preview" : "Preview"}</span>
-            <span aria-hidden className={cx(LOADING_BLOCK, "block h-4 w-56 max-w-[50%]")} />
+            <span aria-hidden className={cx(SKELETON, "block h-4 w-56 max-w-[50%]")} />
           </>
         ) : (
           <span
@@ -68,7 +68,7 @@ export function PreviewerHeader({
       actions={
         <>
           {header === null ? (
-            <span aria-hidden className={cx(LOADING_BLOCK, "hidden h-3 w-16 sm:block")} />
+            <span aria-hidden className={cx(SKELETON, "hidden h-3 w-16 sm:block")} />
           ) : (
             header.date !== null && (
               <time

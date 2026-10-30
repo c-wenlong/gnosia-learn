@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext } from "react";
-import { dayAndTime, dayText, relativeTime } from "@/lib/studio-view";
+import { dayAndTime, dayText, relativeTime } from "@/lib/studio-grid";
 
 /**
  * The zone the studio counts days in: `appTimeZone()`, read once by the

@@ -191,7 +191,7 @@ safe to store only where `AUTH_SECRET` is not: the two together open every
 saved key.
 
 **When NVIDIA retires the model.** The default is `google/gemma-4-31b-it`
-(`DEFAULT_NVIDIA_MODEL` in `apps/web/src/lib/agent/providers.ts`), and
+(`DEFAULT_NVIDIA_MODEL` in `packages/tutor/src/providers.ts`), and
 `NVIDIA_MODEL` overrides it without a deploy of new code. The owner can also
 skip the defaults altogether: Settings, Models, lists each provider's live
 models and keeps the owner's own order ([TUTOR-MODELS.md](TUTOR-MODELS.md)). A retired NVIDIA

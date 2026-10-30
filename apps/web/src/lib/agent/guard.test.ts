@@ -1,16 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { CHAT_RATE_LIMIT, enforceRateLimit, enforceSameOrigin, SUMMARIZE_RATE_LIMIT } from "@/lib/agent/guard";
 import {
-  CHAT_RATE_LIMIT,
   checkRateLimit,
   clientIp,
-  enforceRateLimit,
-  enforceSameOrigin,
   MAX_TRACKED_CLIENTS,
   measurePayload,
   PAYLOAD_LIMITS,
-  SUMMARIZE_RATE_LIMIT,
   type RateLimitStore,
-} from "@/lib/agent/guard";
+} from "@gnosia/tutor/guards";
 import { payloadTooLarge } from "@gnosia/tutor/server/turns";
 
 const post = (headers: Record<string, string> = {}) =>

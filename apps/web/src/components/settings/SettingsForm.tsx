@@ -18,7 +18,7 @@ import { statusProps, useSaveStatus, type SaveStatus } from "@/components/ui/sav
 import { useLearner } from "@/lib/learner-context";
 import { applyMotionToDocument, readMotionCookie, writeMotionCookie } from "@/lib/motion";
 import { sendJson } from "@/lib/send-json";
-import { MOTION_MODES, type MotionMode } from "@/lib/preferences";
+import { MOTION_MODES, type MotionMode } from "@gnosia/tutor/preferences";
 import type { SettingsSnapshot } from "@/lib/settings";
 
 /**

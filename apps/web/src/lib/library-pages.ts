@@ -1,5 +1,5 @@
 import type { RowGroup } from "@/lib/library-groups";
-import type { MasteryBucket } from "@/lib/mastery-bucket";
+import type { MasteryBucket } from "@gnosia/tutor/mastery-bucket";
 import { compareSortKeys, type LibrarySort, type SortKey } from "@/lib/library";
 
 /**

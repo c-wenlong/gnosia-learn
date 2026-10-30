@@ -1315,9 +1315,9 @@ not have to be worked out again.
   server holds is a stub for a function that lives in the browser bundle.
   `npm run build` does not catch it, so the only way to find it is to load the
   page. The pure half of a client component goes in its own React-free module —
-  `apps/web/src/components/asset-meta.ts` beside `AssetCard.tsx`, the same shape
-  as `media.ts` beside `VideoPlayer.tsx` — and the component imports it like
-  anyone else.
+  `asset-meta.ts` for `AssetCard.tsx`, the same shape as `media.ts` for
+  `VideoPlayer.tsx`, both now in `packages/tutor/src` — and the component
+  imports it like anyone else.
 - **A page's `params` are not URL-decoded; a route handler's are.**
   `/library/[id]` is handed `"link%3Acs3216-m3-r1"` while
   `/api/assets/[id]/file` is handed `"link:cs3216-m3-r1"`, for the same URL

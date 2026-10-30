@@ -20,15 +20,7 @@ import { contentSource } from "@/data/source";
 import { assetBlobStore } from "@/lib/blob-store";
 import { currentScope } from "@/lib/owner";
 
-export {
-  BYTE_QUEUE,
-  contentTypeFor,
-  blobStoreProblem,
-  isRangeRefusal,
-  parseRange,
-  safeFilename,
-  webStreamFrom,
-} from "@gnosia/tutor/server/asset-files";
+export { blobStoreProblem, isRangeRefusal, parseRange, webStreamFrom } from "@gnosia/tutor/server/asset-files";
 export type {
   AssetFileProblem,
   AssetRowText,

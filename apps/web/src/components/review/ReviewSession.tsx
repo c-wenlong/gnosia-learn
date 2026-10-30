@@ -31,7 +31,7 @@ import {
   type Rating,
   type ReviewItem,
   type ReviewSessionData,
-} from "@/lib/review-core";
+} from "@gnosia/tutor/review-core";
 
 
 /**

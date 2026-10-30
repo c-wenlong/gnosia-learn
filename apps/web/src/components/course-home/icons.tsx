@@ -1,19 +1,17 @@
-import type { Family } from "@/components/asset-meta";
+import type { Family } from "@gnosia/tutor/asset-meta";
 import type { ModuleMark, ModuleMetaPart, TopicMark } from "@/lib/course-path";
-import { MASTERY_BUCKET_LABEL } from "@/lib/mastery-bucket";
-import type { ResourceType } from "@/lib/types";
+import { MASTERY_BUCKET_LABEL } from "@gnosia/tutor/mastery-bucket";
+import type { ResourceType } from "@gnosia/tutor/types";
 
 import { Glyph, type GlyphName } from "@/components/ui/Glyph";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 
 /**
  * The course page's glyph choices and the status marks a module row and a
- * topic row carry. The glyphs themselves moved into the kit
- * (`components/ui/Glyph.tsx`) for the studio's @ menu; they are re-exported
- * here so the course page's imports did not have to move. No state and no
- * hooks, so a server component could render them too.
+ * topic row carry. The glyphs themselves are the kit's
+ * (`components/ui/Glyph.tsx`). No state and no hooks, so a server component
+ * could render them too.
  */
-export { Glyph, type GlyphName };
 
 export const META_GLYPH: Record<ModuleMetaPart["icon"], GlyphName> = {
   topics: "topics",

@@ -17,8 +17,8 @@ import {
   type Job,
 } from "@/lib/studio-jobs";
 import { jobStateLabel } from "@/lib/studio-job-state";
-import { asVideoJob, videoFailureLine, videoPhaseWords, videoStepCount, readyHeadline } from "@/lib/studio-video";
-import { panelHref } from "@/lib/studio-view";
+import { asVideoJob, videoFailureLine, videoPhaseWords, videoStepCount, readyHeadline } from "@/lib/studio-video-job";
+import { panelHref } from "@/lib/studio-url";
 
 /**
  * The 32px job strip, under the studio strip and above the content.

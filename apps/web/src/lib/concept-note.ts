@@ -1,10 +1,6 @@
 import "server-only";
 
-import {
-  NOTE_READ_LIMIT,
-  readConceptNote as readConceptNoteCore,
-  type ConceptNoteRead,
-} from "@gnosia/tutor/server/concept-note";
+import { readConceptNote as readConceptNoteCore, type ConceptNoteRead } from "@gnosia/tutor/server/concept-note";
 
 import { contentSource } from "@/data/source";
 
@@ -14,8 +10,6 @@ import { contentSource } from "@/data/source";
  * selected seam.
  */
 
-export { NOTE_READ_LIMIT };
-export type { ConceptNoteRead };
 
 /** Read and parse one concept's note. Degrades to a reason, never throws. */
 export async function readConceptNote(slug: string): Promise<ConceptNoteRead> {

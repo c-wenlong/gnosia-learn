@@ -10,7 +10,7 @@ import { cx } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
 import { jobKind } from "@/lib/studio-cards";
 import { isTerminal, type Job } from "@/lib/studio-jobs";
-import { panelHref } from "@/lib/studio-view";
+import { panelHref } from "@/lib/studio-url";
 
 /**
  * The conversation panel's second body (`?draft=&job=`): the job a press

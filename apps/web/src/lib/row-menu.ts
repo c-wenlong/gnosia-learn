@@ -3,7 +3,7 @@ import type { AssetParents } from "@gnosia/catalog/state";
 import { moduleHref } from "@/lib/course-path";
 import { assetDownloadHref, assetHref, conceptHref } from "@/lib/library";
 import { latestConversation, orderedConcepts, pickPlace } from "@/lib/library-source";
-import { conversationHref } from "@/lib/studio-view";
+import { conversationHref } from "@/lib/studio-url";
 
 /**
  * Which actions a Library row's and card's more menu offers, and in what
@@ -68,8 +68,6 @@ export interface RowMenuInput {
 export function askSubjectOf(kind: string): AskSubject | null {
   return kind === "video" ? "video" : kind === "note" ? "note" : kind === "diagram_svg" ? "diagram" : null;
 }
-
-export { assetDownloadHref };
 
 /**
  * A conversation on `/studio`, open full screen: `/studio?draft=<id>`, the

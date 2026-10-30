@@ -11,7 +11,7 @@ import { readStoredMotion } from "@/lib/motion-preference";
 import { SIDEBAR_COOKIE, sidebarCollapsed } from "@/lib/sidebar-cookie";
 import { studioEnabled } from "@/lib/studio";
 import { runnerListening } from "@/lib/studio-runner";
-import { appTimeZone } from "@/lib/time-zone";
+import { appTimeZone } from "@gnosia/tutor/server/time-zone";
 import { asThemeMode, LEGACY_THEME_COOKIE, THEME_COOKIE } from "@/lib/theme-cookie";
 
 /**

@@ -6,12 +6,11 @@ import { connection } from "next/server";
 import { cache } from "react";
 
 import { ContentUnavailableError, selectContentSource, type SelectedSource } from "@gnosia/tutor/server/content-source";
-import type { ContentSource } from "@gnosia/content";
 
 import { catalogDatabase } from "@/lib/learner-store";
 import { currentScope } from "@/lib/owner";
 
-export { ContentUnavailableError, notFlippedMessage } from "@gnosia/tutor/server/content-source";
+export { ContentUnavailableError } from "@gnosia/tutor/server/content-source";
 
 /**
  * The content seam's composition root, for this app: `selectContentSource`
@@ -29,7 +28,6 @@ export const contentSource = cache((): SelectedSource =>
   }),
 );
 
-export type { ContentSource };
 
 /**
  * `read`, or null when the catalog did not answer, for a page that has its

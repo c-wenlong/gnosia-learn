@@ -6,9 +6,9 @@ import {
   formatPriorKnowledgeBlock,
   formatTranscript,
   parseKnowledgeResponse,
-} from "@/lib/agent/summary";
-import { buildAgentSessionContext } from "@/lib/agent/prompt";
-import type { TopicKnowledge } from "@/lib/types";
+} from "@gnosia/tutor/summary";
+import { buildAgentSessionContext } from "@gnosia/tutor/prompt";
+import type { TopicKnowledge } from "@gnosia/tutor/types";
 
 // The app reads courses from the database only; this suite tests logic over
 // real course data, so it reads the export tree instead (`@/test/content-files`).

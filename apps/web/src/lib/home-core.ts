@@ -18,9 +18,9 @@ import type { MasteryLabel } from "@gnosia/catalog/state";
 
 import { EMPTY_STANDING, itemDoneWith, type ItemStanding } from "@/lib/course-path";
 import { dayDiff, dayLabel } from "@/lib/day-groups";
-import { dayKey } from "@/lib/days";
-import { bucketOf, type MasteryBucket } from "@/lib/mastery-bucket";
-import { recentItems, type RecentItem, type RecentKind, type RecentSources } from "@/lib/recent-core";
+import { dayKey } from "@gnosia/tutor/days";
+import { bucketOf, type MasteryBucket } from "@gnosia/tutor/mastery-bucket";
+import { recentItems, type RecentItem, type RecentSources } from "@/lib/recent-core";
 
 /* -------------------------------------------------------------------------- */
 /* The model                                                                  */
@@ -38,8 +38,6 @@ export interface NextUp {
   /** "Next up · CP4281 M2", for the phone card. */
   eyebrowShort: string;
 }
-
-export type ThreadKind = RecentKind;
 
 /**
  * One thing to go back to, under "Pick up where you left off": a row of

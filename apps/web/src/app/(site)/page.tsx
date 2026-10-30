@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import type { ReactNode } from "react";
 
-import { GnosiaMascot, MARK_STAR, type MascotPose } from "@/components/brand";
+import { GnosiaMascot, type MascotPose } from "@/components/brand/GnosiaMascot";
+import { MARK_STAR } from "@/components/brand/GnosiaMark";
 import { Button } from "@/components/ui/Button";
 import { cx } from "@/components/ui/classes";
 

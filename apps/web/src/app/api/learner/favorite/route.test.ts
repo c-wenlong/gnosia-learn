@@ -42,7 +42,7 @@ describe.skipIf(!reachable.ok)("POST /api/learner/favorite", () => {
   let scratch: Scratch;
   let POST: (req: Request) => Promise<Response>;
   let state: typeof import("@gnosia/catalog/state");
-  let favorite: typeof import("@/lib/favorite");
+  let favorite: typeof import("@gnosia/tutor/favorite");
 
   beforeAll(async () => {
     scratch = await migratedScratchDatabase();
@@ -52,7 +52,7 @@ describe.skipIf(!reachable.ok)("POST /api/learner/favorite", () => {
     const [route, loaded, lib] = await Promise.all([
       import("./route"),
       import("@gnosia/catalog/state"),
-      import("@/lib/favorite"),
+      import("@gnosia/tutor/favorite"),
     ]);
     POST = route.POST;
     state = loaded;

@@ -4,7 +4,15 @@ import { useId, useRef, useState, type FormEvent, type MouseEvent, type ReactNod
 
 import { usePanelHost } from "@/components/studio/panel-host";
 import { PanelLink } from "@/components/studio/PanelLink";
-import { buttonClasses, chipClasses, cx, MENU_GROUP, MENU_HEADING, MENU_PANEL, menuRowClasses } from "@/components/ui/classes";
+import {
+  buttonClasses,
+  chipClasses,
+  cx,
+  MENU_GROUP,
+  MENU_HEADING,
+  MENU_PANEL,
+  menuRowClasses,
+} from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
 import { Popover } from "@/components/ui/Popover";
 import { SearchField } from "@/components/ui/SearchField";
@@ -23,8 +31,8 @@ import {
   type Layout,
   type Sort,
   type StudioView,
-  type TopicChip,
-} from "@/lib/studio-view";
+} from "@/lib/studio-url";
+import { type TopicChip } from "@/lib/studio-grid";
 
 /**
  * The kind filter, Search, the topic chips, Display and Sort.

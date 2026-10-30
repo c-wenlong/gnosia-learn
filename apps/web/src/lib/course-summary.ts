@@ -1,6 +1,6 @@
 import type { FilterOption } from "@/components/ui/filter-menu";
 import { EMPTY_STANDING, itemDoneWith, percentOf, type ItemStanding } from "@/lib/course-path";
-import type { Course, TagMeta } from "@/lib/types";
+import type { Course, TagMeta } from "@gnosia/tutor/types";
 
 /**
  * What the Courses page needs of a course: the status each card prints, the
@@ -131,15 +131,6 @@ export interface CourseFilter {
 }
 
 export const ALL_COURSES: CourseFilter = { tag: null };
-
-/** Started and not finished: at least one topic done and one left. */
-export function isInProgress(
-  summary: CourseSummary,
-  completed: Readonly<Record<string, true>>,
-  standing: ItemStanding = EMPTY_STANDING,
-): boolean {
-  return started(courseStatus(summary, completed, standing));
-}
 
 function started(status: CourseStatus): boolean {
   return status.completed > 0 && status.next !== null;

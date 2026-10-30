@@ -300,7 +300,7 @@ Tutoring chat tries three free providers in order and falls through on errors an
 | `NVIDIA_MODEL` · `GEMINI_MODEL` · `OPENROUTER_MODEL` | `google/gemma-4-31b-it` · `gemini-2.5-flash` · `openrouter/free` | Model override per provider |
 | `OPENROUTER_HTTP_REFERER`, `OPENROUTER_APP_TITLE` | unset | Attribution headers sent to OpenRouter |
 
-Keys are read server-side only (`apps/web/src/lib/agent/providers.ts`); the browser never sees them. Production also needs them set in the Vercel project's environment variables. Deployment details are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md), and editing the curriculum is covered in [docs/CURRICULUM.md](docs/CURRICULUM.md).
+Keys are read server-side only (`packages/tutor/src/providers.ts`); the browser never sees them. Production also needs them set in the Vercel project's environment variables. Deployment details are in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md), and editing the curriculum is covered in [docs/CURRICULUM.md](docs/CURRICULUM.md).
 
 ## Development
 

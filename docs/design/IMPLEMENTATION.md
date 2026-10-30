@@ -246,7 +246,7 @@ The pure helpers beside them:
 | [`@/lib/mastery-bucket`](../../apps/web/src/lib/mastery-bucket.ts) | `type MasteryBucket = "mastered" \| "learning" \| "untouched"`, `bucketOf({ mastery, observations? })`, `MASTERY_BUCKETS`, `MASTERY_BUCKET_LABEL`, `masteryCaption(bucket, pL?)` |
 | [`@/lib/nav`](../../apps/web/src/lib/nav.ts) | `DESTINATIONS`, `type DestinationKey`, `activeDestination(pathname)` |
 | [`@/lib/course-summary`](../../apps/web/src/lib/course-summary.ts) | `toCourseSummary(course, tags, coverSha256?)`, `coverUrl(slug, sha256)` (the cover route, versioned by the image's hash), `courseStatus(summary, completed, standing?)`, `continueLearning(...)` (the courses in progress, last opened first), `filterCourses(summaries, query, { tag })`, `coverLine(...)`, `courseCounts(...)`, `usedTags(...)`, `tagFilterOptions(tags, summaries)` (the Tag menu's options with their counts) |
-| [`@/lib/days`](../../apps/web/src/lib/days.ts) | `dayKey`, `type LogEvent`: what outlived the habit layer's `habit-core` |
+| [`@gnosia/tutor/days`](../../packages/tutor/src/days.ts) | `dayKey`, `type LogEvent`: what outlived the habit layer's `habit-core` |
 | [`@/lib/preferences`](../../apps/web/src/lib/preferences.ts) | the Settings vocabulary (`TUTOR_STYLES`, `MOTION_MODES`), and the validators the preference route runs (`validateTutorStyle`, `validateMotionMode`) |
 | [`@/lib/ask-core`](../../apps/web/src/lib/ask-core.ts) | the Ask box's search: `rankAsk`, `normalize`, `askTutorHref`, `type AskEntry` |
 | [`@/lib/home-core`](../../apps/web/src/lib/home-core.ts) | the Home model (`HomeModel`) and its pure parts: `homeThreads`, `conceptTouches`, `nextFromHere`, `nearThreads`, `recallPicks`, `recallHref`, `coursesInProgress`, `pastDayLabel`, `lastSeenLabel`, `clock` |
@@ -268,7 +268,7 @@ which reads the studio's conversations again on focus and on a change.
 Maths is typeset by KaTeX, through two files. [`@/lib/math`](../../apps/web/src/lib/math.ts)
 is React-free: `renderMath(source, display)` and `splitMath(text)`, which finds
 `$...$` and `$$...$$` with the same rules the note parser uses (`mathSpanAt` in
-`components/markdown.ts`). [`@/components/Math`](../../apps/web/src/components/Math.tsx)
+`@gnosia/tutor/markdown`). [`@/components/Math`](../../apps/web/src/components/Math.tsx)
 has `MathText({ text, className? })` for any plain string that may hold maths
 (a question, a choice, a summary, a chat bubble), and `InlineMath` and
 `DisplayMath` for one expression. No hooks, so they work in server and client
@@ -459,8 +459,8 @@ Removed 2026-10-04 (H1 of [the Home proposal](../proposals/home-page.md)):
 the streak, the daily target, `@/lib/habit`, the top bar's pills and
 Settings' Habit card. The `dailyTarget` and `dailyLeeway` preference rows are
 left in the database, unread, and the preference route no longer accepts
-them. What outlived it is the day key (`@/lib/days`) and the time zone
-(`appTimeZone()` in `@/lib/time-zone`), which still reads `HABIT_TIME_ZONE`
+them. What outlived it is the day key (`@gnosia/tutor/days`) and the time zone
+(`appTimeZone()` in `@gnosia/tutor/server/time-zone`), which still reads `HABIT_TIME_ZONE`
 so a deployment that sets it needs no change. Before then this section held
 the `Habit` shape and the streak's rules; they are in the history of this
 file.
@@ -567,7 +567,7 @@ anything is read), 403 `ORIGIN_MISMATCH`, 413 and 429 from the guards, 404
 `MISSING_API_KEY`, 502 `ALL_PROVIDERS_FAILED`.
 
 The system prompt is built on the server by `buildConceptSessionContext` in
-`lib/agent/prompt.ts` from `toConceptPromptInput(workspace)`: title,
+`@gnosia/tutor/prompt` from `toConceptPromptInput(workspace)`: title,
 summary, where it sits, requires, assumes and dependants with their mastery
 labels, the learner's p(L), counts, last seen and next review, the five most
 recent answers, the note body (frontmatter stripped, clipped at 8000
@@ -599,7 +599,7 @@ write path is the part to read first.
 | --- | --- |
 | [`state/observe.ts`](../../services/catalog/src/state/observe.ts) | `recordObservation(db, input)`: `learn observe` moved out of the CLI. The `observation` event (`correct`, `pLBefore`, `pLAfter`, `grade`, `scheduled`, `source`, `opportunity`, `question`, `answer`, `session`, and `chosen` and `requestId` when given), then the mastery row (a correct answer spread to the prerequisites with `propagateCorrect`), then the review card, all under the learner lock in one transaction. The CLI's `observe` now calls it; its `--json` shape is unchanged and still pinned. `openTutorSession` (the row and one `session-start`, idempotent) and `closeTutorSession` (one `session-close` and the row to `closed`, idempotent) are the database half of `learn session start` and `close` |
 | `readConceptGraph` in [`state/knowledge-base.ts`](../../services/catalog/src/state/knowledge-base.ts) | The graph `propagateCorrect` walks, built from the catalog's `concept_prerequisite` rows, the same edges every page's frontier uses. The CLI still builds its graph from the notes on disk; the two agree except between editing a note's `requires:` and the next `learn index` |
-| [`@/lib/session-core`](../../apps/web/src/lib/session-core.ts) | Pure. The step plan (`buildSessionPlan`), a check block as a question (`noteQuestion`), the wrong options (`distractorPool`, `wrongOptionsFor`), the teaching prose (`teachProse`), Keep going (`nextConcept`), and the feedback and close arithmetic |
+| [`@gnosia/tutor/session-core`](../../packages/tutor/src/session-core.ts) | Pure. The step plan (`buildSessionPlan`), a check block as a question (`noteQuestion`), the wrong options (`distractorPool`, `wrongOptionsFor`), the teaching prose (`teachProse`), Keep going (`nextConcept`), and the feedback and close arithmetic |
 | [`@gnosia/tutor/session-question`](../../packages/tutor/src/session-question.ts) | Pure. The question writer's system prompt and `parseSessionQuestion`, which accepts a JSON object (fenced or with a sentence around it) and refuses anything else rather than guess an answer key. It reshuffles the options, seeded by the question text, because models put the answer in slot one |
 | [`@/lib/session-page`](../../apps/web/src/lib/session-page.ts) | Server. The plan, the teach step's asset, whether a model is configured, and the next concept |
 | [`SessionFocus`](../../apps/web/src/components/session/SessionFocus.tsx), [`SessionClose`](../../apps/web/src/components/session/SessionClose.tsx) | The client session and its close screen |
@@ -958,7 +958,7 @@ frame. One PR fixed what that turned up.
 | --- | --- |
 | The Learn index's Mastery column showed the p(L) number and no bar | The 160px bar is sized on its wrapper; its `w-full` had won over the width passed in `className`, leaving a flex item of zero width (see Gotchas). Mastered fills with `--m-hi`, learning with `--m-mid`, untouched is an empty track labelled "–", as hi-fi 09 draws it. `ProgressBar` gained the `hi` tone for it |
 | The asset page's links to `/learn/<slug>` carried `prefetch={false}` | Removed. It was the stopgap for a route that did not exist yet. A dynamic route's default prefetch stops at the nearest `loading.js` (Next's `Link` docs), and the app has none, so the prefetch is cheap: in a browser the four prefetch requests from one asset page came back with empty bodies. The external link keeps it |
-| Settings stored `tutorStyle` and nothing read it | The concept tutor's system prompt carries one instruction per style (`TUTOR_STYLE_INSTRUCTIONS` in `lib/agent/prompt.ts`), and the session's question writer writes its explanation to match (`SESSION_EXPLANATION_RULES` in `@gnosia/tutor/session-question`). Both routes read the preference on the server with `readTutorStyle` in `lib/settings.ts`, after the concept read, and fall back to the concise guide if it cannot be read. The workspace's Tutor header shows the style, linking to Settings, and the Settings note says where it applies |
+| Settings stored `tutorStyle` and nothing read it | The concept tutor's system prompt carries one instruction per style (`TUTOR_STYLE_INSTRUCTIONS` in `@gnosia/tutor/prompt`), and the session's question writer writes its explanation to match (`SESSION_EXPLANATION_RULES` in `@gnosia/tutor/session-question`). Both routes read the preference on the server with `readTutorStyle` in `lib/settings.ts`, after the concept read, and fall back to the concise guide if it cannot be read. The workspace's Tutor header shows the style, linking to Settings, and the Settings note says where it applies |
 | The README's picture was the old sidebar catalog | A fresh 1440x900 light capture of Today, with alt text and the surfaces table to match |
 
 Left on purpose:

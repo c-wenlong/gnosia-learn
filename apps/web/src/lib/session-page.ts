@@ -3,10 +3,10 @@ import "server-only";
 import { conceptSummaries, type AssetRef, type ConceptSummary } from "@gnosia/catalog/state";
 
 import { tutorCredentials } from "@/lib/agent/credentials";
-import { isCallable } from "@/lib/agent/providers";
+import { isCallable } from "@gnosia/tutor/providers";
 import { readAssetAccess, readFileProblems } from "@/lib/asset-library";
-import type { RouteProblemCode } from "@/lib/asset-problems";
-import type { ConceptWorkspace } from "@/lib/concept-workspace-core";
+import type { RouteProblemCode } from "@gnosia/tutor/asset-problems";
+import type { ConceptWorkspace } from "@gnosia/tutor/concept-workspace-core";
 import { catalogDatabase, readKb } from "@/lib/learner-store";
 import { assetFileHref, assetPosterHref, assetStatusHref } from "@/lib/library";
 import { currentOwner, currentScope } from "@/lib/owner";
@@ -19,7 +19,7 @@ import {
   withoutEmptySteps,
   type ConceptSessionMode,
   type SessionStep,
-} from "@/lib/session-core";
+} from "@gnosia/tutor/session-core";
 
 /**
  * Everything a session page needs beyond the workspace object, read on the

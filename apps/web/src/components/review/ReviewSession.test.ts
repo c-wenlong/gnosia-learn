@@ -3,7 +3,7 @@ import { act, createElement, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ReviewItem } from "@/lib/review-core";
+import type { ReviewItem } from "@gnosia/tutor/review-core";
 
 /**
  * How the review moves from card to card (docs/design/IMPLEMENTATION.md,

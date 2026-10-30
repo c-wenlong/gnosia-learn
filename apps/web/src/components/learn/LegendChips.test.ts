@@ -4,10 +4,10 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { LearnIndex } from "./LearnIndex";
-import type { GraphEdge } from "@/lib/concept-graph";
+import type { GraphEdge } from "@gnosia/tutor/concept-graph";
 import { domainLayout, domainTree, type DomainNode, type DomainTopic } from "@/lib/domain-map";
 import { parseFilter, type IndexRow } from "@/lib/learn-index";
-import type { MasteryBucket } from "@/lib/mastery-bucket";
+import type { MasteryBucket } from "@gnosia/tutor/mastery-bucket";
 
 /**
  * Written before the legend chips (D9 of docs/proposals/domain-map.md): a

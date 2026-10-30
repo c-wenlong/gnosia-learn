@@ -5,7 +5,7 @@ import { readPreferences } from "@gnosia/catalog/state";
 
 import { catalogDatabase } from "@/lib/learner-store";
 import { currentOwner } from "@/lib/owner";
-import { parseMotionMode, type MotionMode } from "@/lib/preferences";
+import { parseMotionMode, type MotionMode } from "@gnosia/tutor/preferences";
 
 /**
  * The stored motion mode, which the `(app)` layout reads beside the learner

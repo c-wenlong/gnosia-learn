@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { GraphEdge, GraphNode } from "@/lib/concept-graph";
+import type { GraphEdge, GraphNode } from "@gnosia/tutor/concept-graph";
 import { arcLength, firstMatch, readyConcepts, relatedTo, servesCourses, standingLine } from "@/lib/map-reading";
 
 /**

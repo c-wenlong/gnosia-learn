@@ -19,18 +19,8 @@ import {
 } from "@/lib/studio-chat";
 import { jobCardSentence, jobStateInline } from "@/lib/studio-job-state";
 import { replacesJob } from "@/lib/studio-drafts";
-import type {
-  CostBand,
-  DraftKind,
-  DraftMention,
-  DraftSlot,
-  DraftView,
-  PendingTopic,
-  TagKind,
-  TranscriptBrief,
-  TranscriptEntry,
-  VideoAvailability,
-} from "@/lib/studio-drafts";
+import type { CostBand, DraftKind, DraftMention, DraftSlot, DraftView, PendingTopic, TagKind, TranscriptBrief, TranscriptEntry } from "@/lib/studio-drafts";
+import type { VideoAvailability } from "@/lib/studio-health";
 import { isTagKind, TAG_KINDS } from "@/lib/studio-drafts";
 
 /**

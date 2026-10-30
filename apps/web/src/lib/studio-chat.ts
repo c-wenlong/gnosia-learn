@@ -1,7 +1,8 @@
 import type { Brief, Job } from "@/lib/studio-jobs";
 import { jobPredicate } from "@/lib/studio-job-state";
-import type { DraftState, DraftView, PendingTopic, Refusal, TranscriptEntry } from "@/lib/studio-drafts";
-import { refusalNumber, refusalReason, refusalString } from "@/lib/studio-drafts";
+import type { DraftState, DraftView, PendingTopic, TranscriptEntry } from "@/lib/studio-drafts";
+import type { Refusal } from "@/lib/studio-client";
+import { refusalNumber, refusalReason, refusalString } from "@/lib/studio-client";
 import { sentence } from "@/lib/sentence";
 
 /**

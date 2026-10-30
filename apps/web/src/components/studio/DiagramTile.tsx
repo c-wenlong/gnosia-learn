@@ -8,13 +8,8 @@ import { TILE, TILE_ACTIONS, TILE_LIFT, TILE_WARNED } from "@/components/studio/
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { buttonClasses, cx } from "@/components/ui/classes";
-import {
-  canvasHref,
-  displayTitle,
-  formatBytes,
-  thumbnailHref,
-  type Diagram,
-} from "@/lib/studio-view";
+import { canvasHref, thumbnailHref } from "@/lib/studio-url";
+import { displayTitle, formatBytes, type Diagram } from "@/lib/studio-grid";
 
 /**
  * One diagram in the grid, or one row in the list.
