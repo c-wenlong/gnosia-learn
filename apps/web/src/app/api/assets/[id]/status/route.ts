@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { posterSource, resolveAsset, type AssetSourceResult } from "@/lib/asset-files";
+import { logLookupFailure } from "@/lib/asset-response";
 import type { RouteProblemCode } from "@gnosia/tutor/asset-problems";
 import { unauthenticated } from "@/lib/learner-api";
 import { withLearnerStore } from "@/lib/learner-store";
@@ -55,8 +56,7 @@ export async function GET(
     );
   } catch (error) {
     if (error instanceof NoOwnerError) return unauthenticated();
-    const message = error instanceof Error ? error.message : String(error);
-    console.warn(`asset status: catalog unreachable: ${message}`);
+    logLookupFailure("asset status", error);
     return answer(503, "catalog-unreachable");
   }
 

@@ -430,6 +430,20 @@ function cleanValue(text: string, prefix: string): string | null {
   return text;
 }
 
+/**
+ * The aria attributes whose value is element ids, by their plain name. Each
+ * is pointed at the prefixed ids, as `id` itself is: kept as written,
+ * `aria-owns="app-sidebar"` would move the page's own sidebar under the
+ * picture for a screen reader, and `aria-controls` or `aria-flowto` would
+ * point it at the page's controls.
+ */
+const ARIA_IDREFS = new Map(
+  ["labelledby", "describedby", "owns", "controls", "activedescendant", "flowto", "details", "errormessage"].map((word) => [
+    `aria${word}`,
+    `aria-${word}`,
+  ]),
+);
+
 /** An attribute's name and value after the rules: the kept prop, or null. */
 function cleanAttr(name: string, value: string, prefix: string): { name: string; value: string } | null {
   // An unquoted `=`-less name cannot smuggle anything either.
@@ -443,9 +457,10 @@ function cleanAttr(name: string, value: string, prefix: string): { name: string;
   if (key === "id") {
     return ID.test(text.trim()) ? { name: "id", value: `${prefix}${text.trim()}` } : null;
   }
-  if (key === "ariadescribedby" || key === "arialabelledby") {
+  const idref = ARIA_IDREFS.get(key);
+  if (idref !== undefined) {
     const ids = text.trim().split(/\s+/).filter((id) => ID.test(id));
-    return ids.length === 0 ? null : { name: key === "arialabelledby" ? "aria-labelledby" : "aria-describedby", value: ids.map((id) => prefix + id).join(" ") };
+    return ids.length === 0 ? null : { name: idref, value: ids.map((id) => prefix + id).join(" ") };
   }
   // Words a screen reader says, never parsed as CSS: "CPU (core 1)" is a label.
   if (/^aria-[a-z]+$/i.test(name)) return { name: name.toLowerCase(), value: text };
