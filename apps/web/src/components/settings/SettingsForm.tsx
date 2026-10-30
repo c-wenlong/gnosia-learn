@@ -65,9 +65,10 @@ export function usePreference<T>(key: string, initial: T) {
 export function GeneralSettings({ settings }: { settings: SettingsSnapshot }) {
   const motion = usePreference<MotionMode>(PREFERENCE_KEYS.reducedMotion, settings.motion);
 
-  // The stored row is the truth once it has been read: a browser whose
-  // cookie disagrees (a save that failed, a change made in another browser)
-  // is brought in line with what this page shows.
+  // The stored row wins, as the layout's `MotionSeed` has it. The layout
+  // stays mounted across client navigations and its seed does not run
+  // again, so this page brings the cookie in line with the row it read
+  // fresh: a refused save, or a change made in another browser.
   const storedMotion = settings.reachable ? settings.motion : null;
   useEffect(() => {
     if (storedMotion === null || readMotionCookie() === storedMotion) return;
@@ -355,7 +356,9 @@ function DataActions({ topicIds }: { topicIds: string[] }) {
       setConfirming(false);
       setStatus({ kind: "saved" });
     } else {
-      setStatus({ kind: "error", message: "Not reset: the write was not stored." });
+      // A long catalog resets in batches, and the ones before a refused batch
+      // stay cleared, so this does not promise nothing changed.
+      setStatus({ kind: "error", message: "Not reset: the write was not stored, so some ticks and notes may remain. Try again." });
     }
   };
 

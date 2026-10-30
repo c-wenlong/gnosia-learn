@@ -11,7 +11,7 @@ import {
   setLastVisited,
   setNote,
   setTheme,
-  toggleTopic,
+  setTopicCompleted,
 } from "@/lib/storage";
 import type { KnowledgeInput } from "@/lib/types";
 
@@ -37,11 +37,13 @@ describe("learner state reducers", () => {
     expect(state.epoch).toBe(0);
   });
 
-  it("toggles topic completion on and off", () => {
-    const on = toggleTopic(defaultState(), "topic-1");
+  it("ticks and unticks an item, the same however often it is applied", () => {
+    const on = setTopicCompleted(defaultState(), "topic-1", true);
     expect(on.completed["topic-1"]).toBe(true);
-    const off = toggleTopic(on, "topic-1");
+    expect(setTopicCompleted(on, "topic-1", true)).toEqual(on);
+    const off = setTopicCompleted(on, "topic-1", false);
     expect(off.completed["topic-1"]).toBeUndefined();
+    expect(setTopicCompleted(off, "topic-1", false)).toEqual(off);
   });
 
   it("sets and clears notes", () => {
@@ -71,7 +73,7 @@ describe("learner state reducers", () => {
 
   it("resets course progress and bumps epoch", () => {
     const seeded = setNote(
-      toggleTopic(defaultState(), "t1"),
+      setTopicCompleted(defaultState(), "t1", true),
       "t1",
       "keep? no",
     );
@@ -83,7 +85,7 @@ describe("learner state reducers", () => {
 
   it("preserves knowledge recaps across a progress reset", () => {
     const seeded = recordKnowledge(
-      toggleTopic(defaultState(), "t1"),
+      setTopicCompleted(defaultState(), "t1", true),
       "t1",
       sampleKnowledge(),
     );

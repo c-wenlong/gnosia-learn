@@ -442,9 +442,9 @@ Motion select (`reducedMotion`, `system` or `always`) writes the
 `gnosia-motion` cookie and sets `data-motion="reduce"` on `<html>` at
 once, before the save lands; the root layout reads the cookie, so the next
 page is still from its first paint (`lib/motion.ts`). The `(app)` layout
-reads the stored row only for a browser with no cookie yet, and `MotionSeed`
-writes it; Settings brings a cookie that disagrees with the row it read back
-in line. `globals.css` redefines Tailwind's `motion-reduce:` and
+reads the stored row on every render, and `MotionSeed` brings a cookie that
+is missing or disagrees in line with it: the row wins whenever the database
+answers, as it does for the theme. `globals.css` redefines Tailwind's `motion-reduce:` and
 `motion-safe:` to read `data-motion` beside the media query, and repeats the
 global rule (and the brand's and the studio's looping animations) under
 `:root[data-motion="reduce"]`. A theme change crossfades for 200ms

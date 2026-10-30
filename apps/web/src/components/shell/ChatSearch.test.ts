@@ -17,9 +17,9 @@ const mocks = vi.hoisted(() => ({ pathname: "/home", listDrafts: vi.fn(), fetchR
 // The account row names the learner; this suite is about the search.
 vi.mock("@/lib/learner-context", () => ({ useLearner: () => ({ state: { displayName: null } }) }));
 vi.mock("next/navigation", () => ({ usePathname: () => mocks.pathname }));
-vi.mock("@/lib/studio-drafts", () => ({ listDrafts: mocks.listDrafts }));
+vi.mock("@/lib/studio-drafts", async (importOriginal) => ({ runnerDown: (await importOriginal<typeof import("@/lib/studio-drafts")>()).runnerDown, listDrafts: mocks.listDrafts }));
 // The catalog's half of Recent: empty here, so every row is the runner's.
-vi.mock("@/lib/recent-client", () => ({ fetchRecent: mocks.fetchRecent, changeRecent: vi.fn(async () => true) }));
+vi.mock("@/lib/recent-client", () => ({ fetchRecent: mocks.fetchRecent, changeRecent: vi.fn(async () => true), VISIT_STORED_EVENT: "gnosia:visit-stored" }));
 vi.mock("next/image", () => ({ default: () => null }));
 vi.mock("@/components/brand", () => ({ GnosiaWordmark: () => createElement("span", null, "Gnosia") }));
 vi.mock("@/components/ThemeSwitch", () => ({ ThemeSwitch: () => null }));
@@ -161,6 +161,18 @@ describe("the history search", () => {
     expect(links().map((link) => link.textContent)).toEqual(["Conversation: TCP congestion window, In conversation", "Conversation: Why does TCP slow start double each round?, In conversation"]);
     // What matched is marked, in whichever case it was written.
     expect([...container.querySelectorAll("nav mark")].map((mark) => mark.textContent)).toEqual(["TCP", "TCP"]);
+  });
+
+  it("merges the catalog's matches with the runner's by the instant, however each spells it", async () => {
+    runnerWith([draft({ draftId: "r", title: "TCP handshake", updated: "2026-10-30T10:00:00.000Z" })]);
+    // 09:30 UTC, half an hour before the conversation, though its text sorts after it.
+    const older = { key: "concept:tcp", kind: "concept", title: "TCP basics", href: "/learn/tcp", detail: null, at: "2026-10-30T17:30:00+08:00" };
+    const newer = { key: "video:video:t", kind: "video", title: "TCP in pictures", href: "/library/video%3At", detail: null, at: "2026-10-30T19:00:00+08:00" };
+    mocks.fetchRecent.mockResolvedValue({ reachable: true, items: [newer, older], more: false, pinned: [], courses: [] });
+    const { field, links } = await mount();
+    type(field(), "tcp");
+    await settle();
+    expect(links().map((link) => link.getAttribute("href"))).toEqual(["/library/video%3At", "/studio?draft=r", "/learn/tcp"]);
   });
 
   it("works from a page that is not the studio: a match is a link to its conversation", async () => {

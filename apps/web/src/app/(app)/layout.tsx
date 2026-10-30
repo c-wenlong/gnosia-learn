@@ -10,6 +10,7 @@ import { asMotionMode, LEGACY_MOTION_COOKIE, MOTION_COOKIE, MOTION_REDUCE_SCRIPT
 import { readStoredMotion } from "@/lib/motion-preference";
 import { SIDEBAR_COOKIE, sidebarCollapsed } from "@/lib/sidebar-cookie";
 import { studioEnabled } from "@/lib/studio";
+import { runnerListening } from "@/lib/studio-runner";
 import { asThemeMode, LEGACY_THEME_COOKIE, THEME_COOKIE } from "@/lib/theme-cookie";
 
 /**
@@ -32,14 +33,26 @@ import { asThemeMode, LEGACY_THEME_COOKIE, THEME_COOKIE } from "@/lib/theme-cook
  * still holds if a matcher edit ever lets a page through, and it also means a
  * stranger's request never reaches Postgres.
  *
- * A browser with no motion cookie (`@/lib/motion`) has its stored motion
- * preference read once here, beside the snapshot, and `MotionSeed` writes the
- * cookie, so the root layout can apply "Always reduce motion" from then on.
- * For this first page, an inline script ahead of the shell marks `<html>`
- * while the document is parsed, so nothing under it paints moving first.
- * With scripts off neither runs, and nothing needs them to: the loading
- * frame's wait-then-fade (`PageLoading`) is CSS alone, so it still shows,
- * fully opaque, under the notice above.
+ * **The stored row wins over the browser's cookie**, for the theme and for
+ * motion alike, whenever the database answered: a choice made in another
+ * browser holds here too, and Settings never shows one value while the page
+ * wears another. The cookies are the root layout's copy for the first paint,
+ * and are brought in line here (the provider's theme effect, `MotionSeed`).
+ * When the database did not answer, the cookie is all there is, and stands.
+ * A theme write the database refused is kept and sent again by the provider,
+ * so a choice made during an outage is not undone by the row it never
+ * reached.
+ *
+ * The motion row is read beside the snapshot. When it says "Always reduce
+ * motion" and the cookie does not, an inline script ahead of the shell marks
+ * `<html>` while the document is parsed, so nothing under it paints moving
+ * first. With scripts off neither runs, and nothing needs them to: the
+ * loading frame's wait-then-fade (`PageLoading`) is CSS alone, so it still
+ * shows, fully opaque, under the notice above.
+ *
+ * With a studio, the runner's port is looked at beside both
+ * (`runnerListening`), so a sidebar on a page drawn while it was stopped
+ * does not ask it.
  */
 export default async function AppLayout({
   children,
@@ -50,24 +63,26 @@ export default async function AppLayout({
   const [cookieStore, requestHeaders] = await Promise.all([cookies(), headers()]);
   // The motion script needs the request's CSP nonce to run (`@/lib/auth/csp`).
   const nonce = requestHeaders.get(NONCE_HEADER) ?? undefined;
-  const motionKnown =
-    asMotionMode(cookieStore.get(MOTION_COOKIE)?.value ?? cookieStore.get(LEGACY_MOTION_COOKIE)?.value) !== null;
-  const [{ state, reachable }, storedMotion] = await Promise.all([
+  const cookieMotion = asMotionMode(cookieStore.get(MOTION_COOKIE)?.value ?? cookieStore.get(LEGACY_MOTION_COOKIE)?.value);
+  const studio = studioEnabled();
+  const [{ state, reachable }, storedMotion, runner] = await Promise.all([
     loadLearnerSnapshot(),
-    motionKnown ? Promise.resolve(null) : readStoredMotion(),
+    readStoredMotion(),
+    studio ? runnerListening() : Promise.resolve(false),
   ]);
 
-  // The cookie wins when both are present: it is what the browser last chose,
-  // and it may have been chosen while the database was unreachable.
-  const theme = asThemeMode(cookieStore.get(THEME_COOKIE)?.value ?? cookieStore.get(LEGACY_THEME_COOKIE)?.value) ?? state.theme;
+  const cookieTheme = asThemeMode(cookieStore.get(THEME_COOKIE)?.value ?? cookieStore.get(LEGACY_THEME_COOKIE)?.value);
+  const theme = reachable ? state.theme : (cookieTheme ?? state.theme);
   const initialState = theme === state.theme ? state : { ...state, theme };
 
   return (
     <>
-      {storedMotion === "always" && <script nonce={nonce} dangerouslySetInnerHTML={{ __html: MOTION_REDUCE_SCRIPT }} />}
+      {storedMotion === "always" && cookieMotion !== "always" && (
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: MOTION_REDUCE_SCRIPT }} />
+      )}
       <LearnerProvider initialState={initialState} reachable={reachable}>
         {storedMotion !== null && <MotionSeed mode={storedMotion} />}
-        <AppShell studio={studioEnabled()} collapsed={sidebarCollapsed(cookieStore.get(SIDEBAR_COOKIE)?.value)}>
+        <AppShell studio={studio} runner={runner} collapsed={sidebarCollapsed(cookieStore.get(SIDEBAR_COOKIE)?.value)}>
           <noscript>
             <p className="mb-6 rounded-xl border border-border bg-surface px-4 py-3 text-[14px] leading-5 text-text2">
               Gnosia needs JavaScript. Turn it on for this site and reload the page.

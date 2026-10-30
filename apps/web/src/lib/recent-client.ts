@@ -7,11 +7,13 @@ import { sendJson } from "@/lib/send-json";
  * runner instead (`renameDraft`), which keeps the name on the draft. Null when the server did not answer, or answered
  * with something other than a Recent, so a failed read keeps what is shown.
  */
-export async function fetchRecent(options: { pages: number; drafts: boolean; q?: string }): Promise<RecentModel | null> {
+export async function fetchRecent(options: { pages: number; drafts: boolean; q?: string; signal?: AbortSignal }): Promise<RecentModel | null> {
   const params = new URLSearchParams({ pages: String(options.pages) });
   if (!options.drafts) params.set("drafts", "0");
   if (options.q !== undefined && options.q !== "") params.set("q", options.q);
-  const answer = await sendJson<{ ok?: boolean; recent?: RecentModel }>("GET", `/api/learner/recent?${params}`);
+  const answer = await sendJson<{ ok?: boolean; recent?: RecentModel }>("GET", `/api/learner/recent?${params}`, undefined, {
+    signal: options.signal,
+  });
   const recent = answer?.ok === true ? answer.data.recent : undefined;
   return recent !== undefined && Array.isArray(recent.items) ? recent : null;
 }
@@ -24,4 +26,14 @@ export type RecentChange =
 export async function changeRecent(change: RecentChange): Promise<boolean> {
   const answer = await sendJson<{ ok?: boolean }>("POST", "/api/learner/recent", change);
   return answer?.ok === true && answer.data.ok === true;
+}
+
+/**
+ * Said on `window` once a module visit is stored (`markVisited`), so the
+ * sidebar reads Recent again with the module just opened in it.
+ */
+export const VISIT_STORED_EVENT = "gnosia:visit-stored";
+
+export function announceVisitStored(): void {
+  window.dispatchEvent(new Event(VISIT_STORED_EVENT));
 }

@@ -138,7 +138,8 @@ export function clock(seconds: number): string {
   return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${rest}` : `${m}:${rest}`;
 }
 
-function time(at: string): number {
+/** An instant's milliseconds, 0 when it does not parse: how every list here compares times, never as strings. */
+export function time(at: string): number {
   const ms = new Date(at).getTime();
   return Number.isNaN(ms) ? 0 : ms;
 }
@@ -320,6 +321,8 @@ export interface RecentModel {
   more: boolean;
   pinned: PinnedRow[];
   courses: SidebarCourse[];
+  /** Why there are no courses when the reason is the owner's to fix (a courses type nobody flipped), in a sentence that names the fix. */
+  coursesUnavailable?: string;
 }
 
 /* -------------------------------------------------------------------------- */

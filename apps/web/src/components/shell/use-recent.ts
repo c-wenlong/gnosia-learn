@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { changeRecent, fetchRecent, type RecentChange } from "@/lib/recent-client";
+import { changeRecent, fetchRecent, VISIT_STORED_EVENT, type RecentChange } from "@/lib/recent-client";
 import { withoutPin, withPin, type RecentModel } from "@/lib/recent-core";
 import { useDraftsWake } from "@/lib/use-drafts-wake";
 
@@ -20,17 +20,19 @@ export interface RecentState {
 }
 
 /**
- * Recent from the catalog (`GET /api/learner/recent`), for the sidebar:
- * every kind but the studio's conversations when the deployment has a studio,
- * since those come from the runner (`useConversations`).
+ * Recent from the catalog (`GET /api/learner/recent`), for the sidebar.
+ * `drafts` says whether it brings the studio's conversations too: not while
+ * the runner answers for them (`useConversations`), and yes without a studio
+ * or with a runner that is not answering, so the conversations the catalog's
+ * `draft` mirror holds still show.
  *
  * Read once the sidebar mounts, again a moment after each navigation (a
- * module page writes its visit as it opens, and a tutor session or an answer
- * moves a row), and when the window takes the focus back. Every read is
- * every page shown, from the top, and an answer older than the one on screen
- * is dropped.
+ * tutor session or an answer moves a row), once a module visit is stored
+ * (`VISIT_STORED_EVENT`: the module just opened tops the list), and when the
+ * window takes the focus back. Every read is every page shown, from the top,
+ * and an answer older than the one on screen is dropped.
  */
-export function useRecent(studio: boolean): RecentState {
+export function useRecent(drafts: boolean): RecentState {
   const pathname = usePathname();
   const [model, setModel] = useState<RecentModel | null>(null);
   const pages = useRef(1);
@@ -41,14 +43,14 @@ export function useRecent(studio: boolean): RecentState {
     async (count: number) => {
       issued.current += 1;
       const ticket = issued.current;
-      const next = await fetchRecent({ pages: count, drafts: !studio });
+      const next = await fetchRecent({ pages: count, drafts });
       if (next === null) return false;
       if (ticket < landed.current) return true;
       landed.current = ticket;
       setModel(next);
       return true;
     },
-    [studio],
+    [drafts],
   );
   const reread = useCallback(() => read(pages.current), [read]);
 
@@ -62,6 +64,14 @@ export function useRecent(studio: boolean): RecentState {
   }, [pathname, reread]);
 
   useDraftsWake(reread, true);
+
+  // The visit a module page writes as it opens has landed: read it. The
+  // navigation's own read above may have run before it did.
+  useEffect(() => {
+    const now = () => void reread();
+    window.addEventListener(VISIT_STORED_EVENT, now);
+    return () => window.removeEventListener(VISIT_STORED_EVENT, now);
+  }, [reread]);
 
   const showOlder = useCallback(async () => {
     const next = pages.current + 1;
@@ -118,11 +128,14 @@ export function useRecentSearch(words: string, studio: boolean): RecentSearch {
 
   useEffect(() => {
     if (words === "") return;
-    // Cleared when the words change: an answer for words typed over is dropped.
+    // Cleared when the words change: an answer for words typed over is
+    // dropped, and its request is called off, since the server builds the
+    // whole of Recent for each one.
     let live = true;
+    const abort = new AbortController();
     const timer = setTimeout(() => {
       // With a studio, the catalog leaves conversations to the runner's search.
-      void fetchRecent({ pages: 1, drafts: !studio, q: words }).then((answer) => {
+      void fetchRecent({ pages: 1, drafts: !studio, q: words, signal: abort.signal }).then((answer) => {
         if (!live) return;
         if (answer === null || !answer.reachable) {
           setFailed(words);
@@ -135,6 +148,7 @@ export function useRecentSearch(words: string, studio: boolean): RecentSearch {
     return () => {
       live = false;
       clearTimeout(timer);
+      abort.abort();
     };
   }, [words, studio]);
 
