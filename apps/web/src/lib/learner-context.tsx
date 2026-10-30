@@ -184,39 +184,68 @@ interface Kept extends Keep {
  * refusal. The next load sends them again, once, if they are under a day old.
  * Starting a queued write out of turn instead could let the older write in
  * flight land after it and overwrite it.
+ *
+ * Each page has its own box, `OUTBOX_KEY:<id>`, and writes or removes only
+ * that one, since every tab shares `localStorage`: with one box for all, a
+ * tab leaving with nothing pending, or one coming back from the back-forward
+ * cache, removed a box another tab had just closed on. A page takes every
+ * box when it loads, the old shared `OUTBOX_KEY` included.
  */
 export const OUTBOX_KEY = "gnosia:learner-outbox";
 const OUTBOX_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
-function writeOutbox(writes: readonly Outbound[]): void {
+/** A page's own box: a fresh id per page, so a duplicated tab does not share one. */
+function pageOutboxKey(): string {
+  return `${OUTBOX_KEY}:${randomToken()}`;
+}
+
+function writeOutbox(key: string, writes: readonly Outbound[]): void {
   try {
-    if (writes.length === 0) window.localStorage.removeItem(OUTBOX_KEY);
-    else window.localStorage.setItem(OUTBOX_KEY, JSON.stringify({ at: Date.now(), writes }));
+    if (writes.length === 0) window.localStorage.removeItem(key);
+    else window.localStorage.setItem(key, JSON.stringify({ at: Date.now(), writes }));
   } catch {
     /* site data blocked or full: nothing more this page can do */
   }
 }
 
-/** The outbox's writes, emptied as they are read; none when it is stale or not ours. */
-function takeOutbox(): Outbound[] {
-  let raw: string | null = null;
-  try {
-    raw = window.localStorage.getItem(OUTBOX_KEY);
-    if (raw !== null) window.localStorage.removeItem(OUTBOX_KEY);
-  } catch {
-    return [];
-  }
-  if (raw === null) return [];
+/** One box's writes and when it was saved; null when it is unreadable or stale. */
+function readOutbox(raw: string): { at: number; writes: Outbound[] } | null {
   try {
     const box = JSON.parse(raw) as { at?: unknown; writes?: unknown };
-    if (typeof box.at !== "number" || Date.now() - box.at > OUTBOX_MAX_AGE_MS || !Array.isArray(box.writes)) return [];
-    return box.writes.filter(
+    if (typeof box.at !== "number" || Date.now() - box.at > OUTBOX_MAX_AGE_MS || !Array.isArray(box.writes)) return null;
+    const writes = box.writes.filter(
       (w): w is Outbound =>
         w !== null && typeof w === "object" && ["note", "progress", "recap", "theme"].includes((w as { kind?: unknown }).kind as string),
     );
+    return { at: box.at, writes };
   } catch {
-    return [];
+    return null;
   }
+}
+
+/**
+ * Every box's writes, oldest box first so a newer write on a key is sent
+ * after an older one, each box removed as it is read; a stale or unreadable
+ * box is removed and sends nothing.
+ */
+function takeOutboxes(): Outbound[] {
+  const boxes: { at: number; writes: Outbound[] }[] = [];
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (key !== null && (key === OUTBOX_KEY || key.startsWith(`${OUTBOX_KEY}:`))) keys.push(key);
+    }
+    for (const key of keys) {
+      const raw = window.localStorage.getItem(key);
+      window.localStorage.removeItem(key);
+      const box = raw === null ? null : readOutbox(raw);
+      if (box !== null) boxes.push(box);
+    }
+  } catch {
+    /* site data blocked: whatever was read so far is sent */
+  }
+  return boxes.sort((a, b) => a.at - b.at).flatMap((box) => box.writes);
 }
 
 /** `state` with one item's recap set to `recap`, or removed when there is none. */
@@ -603,16 +632,18 @@ export function LearnerProvider({
   // was idle has already started, with `keepalive`; what is left is saved,
   // the newest write per key, kept refusals first so a queued write on the
   // same key wins. A page restored from the back-forward cache carries on
-  // with its queue in memory, so the copy goes.
+  // with its queue in memory, so the copy goes. Either way only this page's
+  // own box is written or removed (`OUTBOX_KEY`).
   useEffect(() => {
+    const box = pageOutboxKey();
     const leave = () => {
       const byKey = new Map<string, Outbound>();
       for (const [key, { outbound }] of unsaved.current) byKey.set(key, outbound);
       for (const left of waiting.current.values()) if (left !== null) byKey.set(left.key, left.outbound);
-      writeOutbox([...byKey.values()]);
+      writeOutbox(box, [...byKey.values()]);
     };
     const back = (event: PageTransitionEvent) => {
-      if (event.persisted) writeOutbox([]);
+      if (event.persisted) writeOutbox(box, []);
     };
     window.addEventListener("pagehide", leave);
     window.addEventListener("pageshow", back);
@@ -873,12 +904,12 @@ export function LearnerProvider({
 
   useLegacyImport(router.refresh, setSaveError);
 
-  // What the last page left in the outbox, sent again once, as it was made.
+  // What the pages before left in their outboxes, sent again once, as each was made.
   const resent = useRef(false);
   useEffect(() => {
     if (resent.current) return;
     resent.current = true;
-    for (const write of takeOutbox()) {
+    for (const write of takeOutboxes()) {
       if (write.kind === "note") updateNote(write.topicId, write.note);
       else if (write.kind === "progress") setCompleted(write.topicId, write.done);
       // An outbox from before request ids carries none, so it gets one here.

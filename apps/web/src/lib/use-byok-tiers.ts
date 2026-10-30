@@ -24,7 +24,8 @@ export interface ByokTiers {
  * nothing), `null` when nothing is configured, else the active provider's
  * model and tiers. A read that says nothing is configured clears what an
  * earlier one found, so a removed provider's tiers go with it. An answer
- * that lands after the hook stopped listening is dropped.
+ * that lands after the hook stopped listening, or after a newer read
+ * started, is dropped.
  */
 export function useByokTiers(
   enabled: boolean,
@@ -35,9 +36,13 @@ export function useByokTiers(
   useEffect(() => {
     if (!enabled) return;
     let alive = true;
+    // Only the newest read may answer: a write during the first read starts a
+    // second, and the first answering last would put back what the write changed.
+    let latest = 0;
     const run = async () => {
+      const mine = ++latest;
       const result = await getByokSettings();
-      if (!alive || !result.ok) return;
+      if (!alive || mine !== latest || !result.ok) return;
       const entry = result.data.configured ? result.data.providers.find((provider) => provider.provider === result.data.active) : undefined;
       setRead(entry === undefined ? null : { model: result.data.model, tiers: entry.models });
     };
