@@ -18,9 +18,9 @@
 // suite answers the studio's and the sidecar's routes from fixtures.
 
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, relative, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
@@ -32,7 +32,7 @@ const APP = join(ROOT, 'apps/macos');
 
 const { values } = parseArgs({ options: { out: { type: 'string' } } });
 const OUT = resolve(values.out ?? process.env.GNOSIA_SNAPSHOT_DIR ?? join(tmpdir(), 'gnosia-ui-snapshots'));
-if (!relative(ROOT, OUT).startsWith('..')) {
+if (inside(real(ROOT), real(OUT))) {
   console.error(`ui-snapshots: ${OUT} is inside the repository; the PNGs are not committed, so write them elsewhere.`);
   process.exit(2);
 }
@@ -40,9 +40,19 @@ if (!relative(ROOT, OUT).startsWith('..')) {
 /** The port the suite answers the studio's routes on; nothing listens there. */
 const STUDIO_PORT = '65231';
 
+// The fixture is rebuilt each run, but only a directory this script made is
+// ever removed: it carries a marker, and a `fixture` without one is refused.
 const FIXTURE = join(OUT, 'fixture');
-rmSync(FIXTURE, { recursive: true, force: true });
+const MARKER = join(FIXTURE, '.gnosia-ui-fixture');
+if (existsSync(FIXTURE)) {
+  if (!existsSync(MARKER)) {
+    console.error(`ui-snapshots: ${FIXTURE} exists and was not made by this script; choose another --out.`);
+    process.exit(2);
+  }
+  rmSync(FIXTURE, { recursive: true, force: true });
+}
 mkdirSync(FIXTURE, { recursive: true });
+writeFileSync(MARKER, 'made by apps/macos/scripts/ui-snapshots.mjs; removed and rebuilt on each run\n');
 const db = join(FIXTURE, 'catalog.db');
 const home = join(FIXTURE, 'home');
 const env = seedEnv({ root: ROOT, db, home, emptyRoot: mkdtempSync(join(FIXTURE, 'no-tools-')) });
@@ -82,6 +92,23 @@ const run = spawnSync('swift', ['test', '--filter', 'UISnapshots'], {
 });
 if (run.status === 0) console.log(`ui-snapshots: done, the PNGs are in ${OUT}`);
 process.exit(run.status ?? 1);
+
+/** `path` with links resolved, through its nearest existing ancestor when it does not exist yet. */
+function real(path) {
+  let head = path;
+  const rest = [];
+  while (!existsSync(head) && dirname(head) !== head) {
+    rest.unshift(head.slice(dirname(head).length + 1));
+    head = dirname(head);
+  }
+  return join(realpathSync(head), ...rest);
+}
+
+/** Whether `path` is `root` or under it, by whole path components. */
+function inside(root, path) {
+  const rel = relative(root, path);
+  return rel === '' || !(rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel));
+}
 
 /**
  * The `count` earliest review cards made due a minute ago. A throwaway

@@ -65,6 +65,16 @@ struct UISnapshots {
 
         let shooter = Shooter(out: out, store: store, learner: learner, sidecar: sidecar, studio: studio)
 
+        // The wait below keys on spinners, so it must be able to see one.
+        let probe = NSHostingView(rootView: ProgressView().frame(width: 40, height: 40))
+        let probeWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 40, height: 40),
+                                   styleMask: [.borderless], backing: .buffered, defer: false)
+        probeWindow.isReleasedWhenClosed = false
+        probeWindow.contentView = probe
+        probe.layoutSubtreeIfNeeded()
+        #expect(Shooter.spinning(probe), "a ProgressView is not an NSProgressIndicator here; the wait cannot see spinners")
+        probeWindow.close()
+
         let concept = try #require(store.concept("dot-product"))
         let course = try #require(store.courses.first)
         // The last module, so the module shot is not the course page's own
@@ -188,14 +198,26 @@ private final class Shooter {
             window.appearance = NSAppearance(named: appearance)
             window.contentView = hosting
             // Turn the run loop until the view's `.task` reads (the
-            // catalog, the fixture routes, an SVG raster) have landed.
-            // Both halves: suspending frees the main actor for the views'
-            // own jobs (a fixture reply resuming), and turning the run loop
-            // lets AppKit lay out and commit what they changed.
-            for _ in 0 ..< 40 {
+            // catalog, the fixture routes, an SVG raster) have landed: at
+            // least two seconds, then until no spinner is left (a loading
+            // screen, a picture still rasterizing), for at most ten. A
+            // screen still spinning then fails the run rather than being
+            // saved as if it were finished.
+            // Both halves of each turn matter: suspending frees the main
+            // actor for the views' own jobs (a fixture reply resuming), and
+            // turning the run loop lets AppKit lay out and commit them.
+            let started = Date()
+            while true {
                 try? await Task.sleep(for: .milliseconds(40))
                 Self.turnRunLoop()
                 hosting.layoutSubtreeIfNeeded()
+                let waited = Date().timeIntervalSince(started)
+                if waited < 2 { continue }
+                if !Self.spinning(hosting) { break }
+                if waited > 10 {
+                    Issue.record("\(name)-\(suffix) still shows a spinner after ten seconds")
+                    break
+                }
             }
             Self.flattenSelections(in: hosting)
             hosting.display()
@@ -205,6 +227,16 @@ private final class Shooter {
             window.contentView = nil
             window.close()
         }
+    }
+
+    /// Whether a progress spinner is still on screen: SwiftUI draws an
+    /// indeterminate `ProgressView` with an NSProgressIndicator.
+    static func spinning(_ view: NSView) -> Bool {
+        // Indeterminate only: a determinate one is a progress bar (Home's
+        // course meter), which is finished content.
+        if let indicator = view as? NSProgressIndicator, indicator.isIndeterminate,
+           !indicator.isHidden, indicator.window != nil { return true }
+        return view.subviews.contains(where: spinning)
     }
 
     /// A list's selected row is an NSVisualEffectView with the `.selection`

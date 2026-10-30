@@ -136,7 +136,7 @@ final class SvgRasterizer {
         html,body{margin:0;height:100%;background:#fdfcf8;display:flex;
                   align-items:center;justify-content:center}
         svg{max-width:96vw;max-height:96vh}
-        svg:not([width]){width:96vw;height:96vh}
+        body > svg:not([width]){width:96vw;height:96vh}
         </style></head><body>\(svg)</body></html>
         """
     }
