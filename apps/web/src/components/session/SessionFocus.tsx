@@ -8,6 +8,7 @@ import { Callout } from "@/components/ui/Callout";
 import { ChoiceRow, type ChoiceState } from "@/components/ui/ChoiceRow";
 import { Collapse } from "@/components/ui/Collapse";
 import { MathText } from "@/components/Math";
+import { WrongSourceNote } from "@/components/WrongSourceNote";
 import { FeedbackBar } from "@/components/ui/FeedbackBar";
 import { Placeholder } from "@/components/ui/Placeholder";
 import { cx } from "@/components/ui/classes";
@@ -31,7 +32,6 @@ import {
   canAskAgain,
   OPTIONS_WAIT_MS,
   sameCheck,
-  WRONG_SOURCE_NOTE,
 } from "@gnosia/tutor/session-core";
 import {
   outcomeOf,
@@ -806,9 +806,7 @@ function Question({
           </ChoiceRow>
         ))}
       </div>
-      {question.wrong !== undefined && question.wrong !== "tutor" && (
-        <p className="text-[12px] leading-snug text-text2">{WRONG_SOURCE_NOTE[question.wrong]}</p>
-      )}
+      <WrongSourceNote source={question.wrong} />
     </div>
   );
 }

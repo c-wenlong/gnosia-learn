@@ -51,14 +51,16 @@ target to promise. Reports are acknowledged as soon as I see them.
   SQLite file (`~/.gnosia/catalog.db` by default), which also means it has no
   backup beyond that machine; the nightly export (`npm run export:nightly`)
   writes its copy under `~/.gnosia/archive/` on the same machine.
-- **Learner progress is written by unauthenticated routes.** Checkboxes, notes
-  and recaps go through `POST /api/learner/*`, which are bounded the same way
-  the agent routes are and by the same helpers: same-origin (403), a bounded
-  body (400), a per-IP window (429). There is no account to check, so on a
-  deployment reachable by anyone those bounds are all that stands between a
-  stranger and the learner's checkboxes. They are enough because the blast
-  radius is a tick and a note on someone's study hub; they would not be enough
-  for anything else, and adding authentication is what would change that.
+- **Learner progress is written by signed-in routes only.** Checkboxes, notes
+  and recaps go through `POST /api/learner/*`. `apps/web/src/proxy.ts` answers
+  401 to any `/api/` request without a valid owner session (only `/api/auth/*`
+  is public), and each learner route resolves the owner again
+  (`requestOwner` in `apps/web/src/lib/learner-api.ts`), so a request with no
+  session never reaches the database and every write lands on the signed-in
+  owner's row. The same helpers that bound the agent routes still apply:
+  same-origin (403), a bounded body (400), and 60 writes a minute per owner
+  on each route, counted per route rather than across them (429). The same-origin check stops a cross-site page, not a `curl`
+  with a forged `Origin`; the session is what keeps a stranger out.
   `preference` takes an allow-list of keys rather than any key, so the route is
   not an open JSON store, and a stored resource URL must be `http(s)` so it
   cannot come back out as a `javascript:` href.
