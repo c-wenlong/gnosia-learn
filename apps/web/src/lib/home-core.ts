@@ -17,6 +17,7 @@
 import type { MasteryLabel } from "@gnosia/catalog/state";
 
 import { EMPTY_STANDING, itemDoneWith, type ItemStanding } from "@/lib/course-path";
+import { dayDiff, dayLabel } from "@/lib/day-groups";
 import { dayKey, type LogEvent } from "@/lib/days";
 import { bucketOf, type MasteryBucket } from "@/lib/mastery-bucket";
 import { recentItems, type ConceptTouch, type RecentItem, type RecentKind, type RecentSources } from "@/lib/recent-core";
@@ -110,28 +111,12 @@ export interface HomeModel {
 /* Days                                                                       */
 /* -------------------------------------------------------------------------- */
 
-const DAY_MS = 86_400_000;
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-function keyToUtc(key: string): number {
-  const [y, m, d] = key.split("-").map(Number);
-  return Date.UTC(y, m - 1, d);
-}
-
-/** Whole days from `from` to `to` (both `YYYY-MM-DD`); negative when `to` is earlier. */
-export function dayDiff(from: string, to: string): number {
-  return Math.round((keyToUtc(to) - keyToUtc(from)) / DAY_MS);
-}
+export { dayDiff };
 
 function weekdayOf(key: string): number {
-  return new Date(keyToUtc(key)).getUTCDay();
-}
-
-function shortDate(key: string, today: string): string {
-  const [y, m, d] = key.split("-").map(Number);
-  const base = `${d} ${MONTHS[m - 1]}`;
-  return key.slice(0, 4) === today.slice(0, 4) ? base : `${base} ${y}`;
+  return new Date(`${key}T12:00:00Z`).getUTCDay();
 }
 
 /** A past day, as a thread names it: "Today", "Yesterday", "Mon", "20 Aug". */
@@ -140,7 +125,7 @@ export function pastDayLabel(key: string, today: string): string {
   if (diff <= 0) return "Today";
   if (diff === 1) return "Yesterday";
   if (diff < 7) return WEEKDAYS[weekdayOf(key)].slice(0, 3);
-  return shortDate(key, today);
+  return dayLabel(key, today);
 }
 
 /** "today", "yesterday", "3 days ago", "on 20 Aug". */
@@ -154,7 +139,7 @@ export function lastSeenLabel(at: string | null, now: Date, timeZone?: string): 
   if (diff <= 0) return "today";
   if (diff === 1) return "yesterday";
   if (diff < 30) return `${diff} days ago`;
-  return `on ${shortDate(key, today)}`;
+  return `on ${dayLabel(key, today)}`;
 }
 
 /* -------------------------------------------------------------------------- */

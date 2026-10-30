@@ -11,6 +11,7 @@ import { readStoredMotion } from "@/lib/motion-preference";
 import { SIDEBAR_COOKIE, sidebarCollapsed } from "@/lib/sidebar-cookie";
 import { studioEnabled } from "@/lib/studio";
 import { runnerListening } from "@/lib/studio-runner";
+import { appTimeZone } from "@/lib/time-zone";
 import { asThemeMode, LEGACY_THEME_COOKIE, THEME_COOKIE } from "@/lib/theme-cookie";
 
 /**
@@ -82,7 +83,13 @@ export default async function AppLayout({
       )}
       <LearnerProvider initialState={initialState} reachable={reachable}>
         {storedMotion !== null && <MotionSeed mode={storedMotion} />}
-        <AppShell studio={studio} runner={runner} collapsed={sidebarCollapsed(cookieStore.get(SIDEBAR_COOKIE)?.value)}>
+        <AppShell
+          studio={studio}
+          runner={runner}
+          // Resolved here, so the browser counts days in the server's zone, as Home does.
+          timeZone={appTimeZone() ?? Intl.DateTimeFormat().resolvedOptions().timeZone}
+          collapsed={sidebarCollapsed(cookieStore.get(SIDEBAR_COOKIE)?.value)}
+        >
           <noscript>
             <p className="mb-6 rounded-xl border border-border bg-surface px-4 py-3 text-[14px] leading-5 text-text2">
               Gnosia needs JavaScript. Turn it on for this site and reload the page.

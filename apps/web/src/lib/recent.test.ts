@@ -200,6 +200,16 @@ describe("pages and day headings", () => {
     ]);
   });
 
+  it("counts the days in the zone it is given, as Home does, whatever the browser's zone", () => {
+    // 22:00 UTC on 9 Oct is 06:00 on 10 Oct in Singapore.
+    const now = new Date(Date.UTC(2026, 9, 10, 1));
+    const row = { at: new Date(Date.UTC(2026, 9, 9, 22)).toISOString() };
+    expect(recentGroups([row], now, "Asia/Singapore").map((g) => g.label)).toEqual(["Today"]);
+    expect(recentGroups([row], now, "UTC").map((g) => g.label)).toEqual(["Yesterday"]);
+    // An instant that does not parse is Older, never dropped.
+    expect(recentGroups([{ at: "not a time" }], now, "UTC").map((g) => g.label)).toEqual(["Older"]);
+  });
+
   it("merges two paged lists without showing a row the unread page of the other could outrank", () => {
     const row = (key: string, day: number): RecentItem => ({ key, kind: "concept", title: key, detail: null, href: "/", at: AT(day) });
     const merged = mergeStreams([

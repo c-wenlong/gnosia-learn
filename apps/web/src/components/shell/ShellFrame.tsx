@@ -24,12 +24,15 @@ import { PublishContext, ShellContext, type ShellControls, type StudioChats } fr
 export function ShellFrame({
   studio,
   runner = studio,
+  timeZone,
   initialCollapsed,
   children,
 }: {
   studio: boolean;
   /** Whether the studio's runner was listening when the server drew the page (`runnerListening`). */
   runner?: boolean;
+  /** The zone the server counts days in (`ShellControls.timeZone`). */
+  timeZone?: string;
   initialCollapsed: boolean;
   children: ReactNode;
 }) {
@@ -95,8 +98,8 @@ export function ShellFrame({
   if (!heard && (chats?.initial ?? null) !== null) setHeard(true);
   const answering = studio && (runner || heard);
   const controls = useMemo<ShellControls>(
-    () => ({ studio, runner: answering, drawer, openDrawer, closeDrawer, collapsed, setCollapsed, chats, setChats }),
-    [studio, answering, drawer, openDrawer, closeDrawer, collapsed, setCollapsed, chats],
+    () => ({ studio, runner: answering, timeZone, drawer, openDrawer, closeDrawer, collapsed, setCollapsed, chats, setChats }),
+    [studio, answering, timeZone, drawer, openDrawer, closeDrawer, collapsed, setCollapsed, chats],
   );
 
   return (

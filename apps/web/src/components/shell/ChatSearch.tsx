@@ -10,13 +10,14 @@ import { cx, STATUS_TEXT } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
 import { SearchField as KitSearchField } from "@/components/ui/SearchField";
 import { isCurrentRow } from "@/lib/nav";
+import { recentGlyph } from "@/lib/recent-glyphs";
 import { matchedTitle, time, type RecentItem } from "@/lib/recent-core";
 import { matchParts, searchRows, type SearchRow } from "@/lib/studio-draft-list";
 import { conversationHref, relativeTime } from "@/lib/studio-view";
 
-import { FADE, FADE_IN } from "./motion";
+import { LABEL_FADE, LABEL_SHOWN } from "./motion";
 import { rowClick } from "./row-click";
-import { recentGlyph, ROW, rowFill } from "./rows";
+import { ROW, rowFill } from "./rows";
 import { useRecentSearch } from "./use-recent";
 
 /**
@@ -81,8 +82,8 @@ export function SearchField({
         // so the placeholder does not move as the sidebar widens.
         inputClassName={cx(
           "pr-8 !h-[var(--shell-row,36px)] !rounded-[var(--shell-row-radius,10px)] !pl-[34px]",
-          FADE,
-          compact ? "opacity-0" : FADE_IN,
+          LABEL_FADE,
+          compact ? "opacity-0" : LABEL_SHOWN,
         )}
       />
     </div>

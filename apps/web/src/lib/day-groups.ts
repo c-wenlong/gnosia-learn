@@ -36,6 +36,15 @@ const DAY_MONTH_YEAR = new Intl.DateTimeFormat("en-GB", {
   timeZone: "UTC",
 });
 
+/** Whole days from `from` to `to` (both `YYYY-MM-DD`); negative when `to` is earlier. Exact across a clock change. */
+export function dayDiff(from: string, to: string): number {
+  const utc = (key: string) => {
+    const [y, m, d] = key.split("-").map(Number);
+    return Date.UTC(y, m - 1, d);
+  };
+  return Math.round((utc(to) - utc(from)) / 86_400_000);
+}
+
 function parsed(instant: string): Date | null {
   const time = Date.parse(instant);
   return Number.isNaN(time) ? null : new Date(time);
@@ -45,6 +54,8 @@ function parsed(instant: string): Date | null {
  * A day key as a heading: "4 Oct", or "4 Oct 2025" when its year is not the
  * year of `today` (another day key). The key is a calendar date already, so
  * it is formatted at UTC noon, where no zone can move it to another day.
+ * Home's thread days and its "on 20 Aug" use it too, so the two never spell
+ * a date differently.
  */
 export function dayLabel(key: string, today: string): string {
   const date = new Date(`${key}T12:00:00Z`);
