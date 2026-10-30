@@ -22,7 +22,7 @@ import { loadKnowledgeBase } from "@/lib/learner-store";
 import type { KbConcept } from "@gnosia/catalog/state";
 import {
   dueLabel,
-  lastSeenLabel,
+  seenAgo,
   parseFilter,
   parseLayout,
   parseScope,
@@ -58,7 +58,7 @@ function toRow(
     isDue: concept.due !== null && new Date(concept.due).getTime() <= now.getTime(),
     dueLabel: due.label,
     overdue: due.overdue,
-    lastSeenLabel: lastSeenLabel(concept.lastSeen, now, timeZone),
+    lastSeenLabel: seenAgo(concept.lastSeen, now, timeZone),
     leech: concept.leech,
     courseLabel: place ? `${place.courseCode} M${place.moduleOrder}` : null,
     courses: courseSlugsOf(courses, concept.topics),
