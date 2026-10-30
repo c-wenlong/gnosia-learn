@@ -93,7 +93,7 @@ another repo.
 | `apps/web/src/app/` | Routes in two groups — `(site)/` the signed-out landing and sign-in, `(app)/` the signed-in shell and its destinations (home, courses, learn, library, review, ask, studio, settings) — plus `api/` and the root layout and metadata |
 | `apps/web/src/proxy.ts` | The front door: the owner-cookie check that runs before every route the matcher lets through, including every `/api/` path |
 | `apps/web/src/components/` | Every React component: the shell (`AppShell` and `shell/`), the redesign's primitives (`ui/`), and one folder per surface (`home`, `courses`/`course-home`, `learn`/`workspace`, `library`, `session`, `review`, `ask`, `settings`, `studio`) |
-| `apps/web/src/lib/` | `learner-context.tsx` (the provider), `learner-store.ts` (the pool and the reads), `learner-api.ts` (`handler`, the shared route guard), `asset-files.ts` (an asset row to its bytes: the blob store, or the row for a note, a log or a `.tldr`, and a stored poster; nothing off the disk), `blob-store.ts` (the store the routes read), `asset-library.ts` (the library's reads of the content half), `library.ts` (what the library shows and how it links), `transcript.ts` (a sidecar to cues, defensively), `storage.ts` (the pure reducers), the surfaces' read models (`home`, `recent`, `ask`, `review-*`, `learn-index`, `domain-map`, `course-path`, `module-path`, `week-check`), the studio client and corpus reads (`studio*.ts`, `conversation-*.ts`), the settings seams (`settings.ts`, `provider-keys/`, `tutor-models/`, `custom-providers/`, `providers/`, `byok-*.ts`), `progress.ts`, `curriculum.ts`, `types.ts`, `theme-cookie.ts` |
+| `apps/web/src/lib/` | `learner-context.tsx` (the provider), `learner-store.ts` (the pool and the reads), `learner-api.ts` (`handler`, the shared route guard), `asset-files.ts` (an asset row to its bytes: the blob store, or the row for a note, a log or a `.tldr`, and a stored poster; nothing off the disk), `blob-store.ts` (the store the routes read), `asset-library.ts` (the library's reads of the content half), `library.ts` (what the library shows and how it links), `transcript.ts` (a sidecar to cues, defensively), `storage.ts` (the pure reducers), the surfaces' read models (`home`, `recent`, `ask`, `review-*`, `learn-index`, `domain-map`, `course-path`, `module-path`, `week-check`), the studio client and corpus reads (`studio*.ts`, `conversation-*.ts`), the settings seams (`settings.ts`, `provider-keys/`, `tutor-models/`, `custom-providers/`, `providers/`, `byok-*.ts`), `types.ts`, `theme-cookie.ts` |
 | `apps/web/src/lib/agent/` | The request side of the tutor. Most files are `export * from "@gnosia/tutor/…"` shims keeping the `@/lib/agent/*` paths working — the prompts, the providers cascade, the judge and session-question parsing moved to `packages/tutor` so the sidecar imports the same code. The web-only glue stays here: `guard.ts` (same-origin, rate limit), `courses.ts` (the route's course list), `credentials.ts` (BYOK against the app's pool), `env.ts` (`tutorDeps`, the `TutorDeps` builder) |
 | `apps/web/src/lib/kb/` | `load.ts` and `types.ts`: the concept graph as the hub reads it, straight from the catalog |
 | `apps/web/src/lib/auth/` | `core.ts` (the session cookie, `OWNER_PASSWORD`/`AUTH_SECRET` config) and `session.ts` (the server read) |
@@ -485,7 +485,7 @@ file cannot disagree about what a course means.
 `apps/web/src/data/courses/index.ts` is the app's view of that: `import "server-only"`,
 `getCourses()` (async, wrapped in React's `cache()` so a render reads once),
 and the lookups pages call: `getCourse`, `getModule`, `findTopic`,
-`getCourseTopicIds`, `getRelatedCourses`, `totalTopicCount`. The ones that need
+`getAllTopicIds`, `getRelatedCourses`. The ones that need
 every course take the list as an argument, so a page reads it once and the
 helpers under `lib/` stay synchronous. `apps/web/src/data/content.ts`
 (`getTags()`) and `apps/web/src/data/topics.ts` (`getTopics()`) are the same
@@ -507,9 +507,9 @@ components take what they need as props: the course page resolves the course,
 each topic's mastery and each module's assets and hands them to `CoursePath`;
 the session page resolves the course, module and topic for `AgentSession`; the
 Courses page projects each course into a `CourseSummary` for its card grid. The
-arithmetic those components still do lives in `apps/web/src/lib/curriculum.ts` and
-`apps/web/src/lib/progress.ts`, which are pure functions over a course the caller
-already holds.
+arithmetic those components still do lives in `apps/web/src/lib/course-path.ts`
+and `apps/web/src/lib/course-summary.ts`, which are pure functions over a course
+or a summary the caller already holds.
 
 Each course carries an `inferred` flag. `true` means the syllabus was
 reconstructed from the course announcement and the standard treatment of the
@@ -832,7 +832,6 @@ workspace, so `npm test` from the repo root is the whole suite.
 | File | Covers |
 | --- | --- |
 | `apps/web/src/lib/storage.test.ts` | Clamping and every pure state reducer |
-| `apps/web/src/lib/progress.test.ts` | Counting completed topics per module and course |
 | `apps/web/src/lib/course-path.test.ts` | The course path: a topic's concepts and its bucket, the active node, the lock rule, the labels and links |
 | `apps/web/src/lib/learner-store.test.ts` | Reads degrading to empty with no database, and a write refusing to |
 | `apps/web/src/app/(app)/learn/page.test.ts` | `/learn` rendering when the database is unreachable, and when it is simply empty |
@@ -1040,7 +1039,7 @@ with the command made for it (`learn concept show`, `catalog course export`).
    driver to the browser — and would only be noticed by whoever looked at a
    bundle report. With it the build fails and prints the import chain. Client
    components get resolved objects as props; pure arithmetic over a course they
-   already hold lives in `apps/web/src/lib/curriculum.ts`, and pure reducers over state
+   already hold lives in `apps/web/src/lib/course-path.ts`, and pure reducers over state
    they already hold live in `apps/web/src/lib/storage.ts`.
 6. **Nothing outside `src/learn/paths.ts` builds a path into a `LEARN_ROOT`
    tree.** Diagrams are outside the rule, for the same reason as rule 3: the

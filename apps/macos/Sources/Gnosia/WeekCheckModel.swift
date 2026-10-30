@@ -191,10 +191,8 @@ func weekCheckReason(_ plan: WeekCheckPlan) -> String? {
 /// its p(L) and its note's checks as questions ordered least recently
 /// asked first, then put in the check's order.
 ///
-/// The "least recently asked" history is every observation the store
-/// holds — the mirror's rows name no concept, so the match is the check's
-/// own question text, the approximation checkStatuses already makes and
-/// LearnModel.swift documents. Wrong options come as a concept session's
+/// The "least recently asked" history is the concept's own observations,
+/// matched by the check's question text, as checkStatuses matches them. Wrong options come as a concept session's
 /// do (`sessionDistractorPool`, `sessionWrongOptionsFor`), and the variant
 /// is "week" so a check asked here and in Quiz me is not laid out the same.
 @MainActor func moduleCheckPlan(module: CourseModule, store: CatalogStore, modelAvailable: Bool) -> WeekCheckPlan {
@@ -202,13 +200,15 @@ func weekCheckReason(_ plan: WeekCheckPlan) -> String? {
     for item in module.items {
         for slug in item.concepts where !taught.contains(slug) { taught.append(slug) }
     }
-    let history = store.events
-        .filter { $0.type == "observation" }
-        .map { (at: $0.at, question: $0.payload["question"] as? String) }
     var asked: [WeekCheckConcept] = []
     for slug in taught {
         guard let c = store.learn.byId[slug] else { continue }
         let checks = parseChecks(store.conceptBody(slug))
+        // This concept's own observations: another concept asking the same
+        // question does not make this one's check recently asked.
+        let history = store.events
+            .filter { observation($0, couldBeAbout: slug) }
+            .map { (at: $0.at, question: $0.payload["question"] as? String) }
         // The week check's neighbours: requires, assumes, and the concepts
         // that require or assume this one — distractorPool over the same
         // inputs week-check-page.ts passes (backlinks deliberately empty).
