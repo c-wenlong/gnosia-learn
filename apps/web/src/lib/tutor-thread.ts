@@ -174,31 +174,55 @@ function withCheckBlocks(turns: readonly Pick<TutorTurn, "role" | "content" | "c
   }));
 }
 
-/** The fewest characters of turns a topic request keeps, however long the learner's note. */
-const MIN_TURN_CHARS = 2_000;
+/**
+ * The route's payload bounds, `PAYLOAD_LIMITS` in `@gnosia/tutor/guards`
+ * (kept as numbers here, so this browser module imports nothing from the
+ * server's guards; `tutor-thread.test.ts` holds the two equal).
+ */
+export const ROUTE_LIMITS = { maxMessages: 40, maxTotalChars: 24_000 } as const;
+
+/**
+ * What the topic tutor is told stands before a trimmed thread that would
+ * otherwise open on its own turn: a conversation sent to a model starts on a
+ * user turn, and the turn that asked the latest check must not be dropped
+ * just to start on one. Never shown.
+ */
+export const TRIMMED_SEED = "(Earlier turns of this session were left out to fit. Carry on from here.)";
 
 /**
  * The turns the course topic tutor sends (`AgentSession`): as `requestTurns`
- * does, each card check's block put back, then the tail that fits the
- * route's bounds. The topic route counts the learner's note against the same
- * character budget, so the note's length comes off the turns' share. Without
- * this a long session reached the route's 40 messages or 24000 characters
- * and every turn after it was refused.
+ * does, each card check's block put back, then the newest turns that fit the
+ * route's bounds exactly. The topic route counts the learner's note against
+ * the same character budget, so the note's length comes off the turns'
+ * share. A tail that opens on the tutor's turn keeps it, behind
+ * `TRIMMED_SEED`, so an answer is never sent without the question it
+ * answers whenever the two fit. Without this a long session reached the
+ * route's 40 messages or 24000 characters and every turn after it was
+ * refused.
  */
 export function topicRequestTurns(
   turns: readonly Pick<TutorTurn, "role" | "content" | "check">[],
   learnerNote = "",
 ): TutorTurn[] {
-  return trimForRequest(withCheckBlocks(turns), { maxChars: Math.max(MIN_TURN_CHARS, 20_000 - learnerNote.length) });
+  const kept = tailOf(withCheckBlocks(turns), {
+    maxMessages: ROUTE_LIMITS.maxMessages - 1,
+    maxChars: Math.max(0, ROUTE_LIMITS.maxTotalChars - learnerNote.length - TRIMMED_SEED.length),
+  });
+  return kept[0]?.role === "assistant" ? [{ role: "user", content: TRIMMED_SEED }, ...kept] : kept;
 }
 
 /**
- * The transcript the topic tutor's recap is made from: the tail of the
- * session that fits the summarize route's bounds, each turn cut to role and
- * words. `partial` says older turns were left out.
+ * The transcript the topic tutor's recap is made from: the newest turns that
+ * fit the summarize route's bounds exactly, each cut to role and words. A
+ * transcript is one block of text to the model, so it may open on either
+ * voice; what matters is keeping every exchange that fits, since the route
+ * wants at least two turns. `partial` says older turns were left out.
  */
 export function recapTurns(turns: readonly Pick<TutorTurn, "role" | "content">[]): { turns: TutorTurn[]; partial: boolean } {
-  const kept = trimForRequest(turns.map(({ role, content }) => ({ role, content })));
+  const kept = tailOf(
+    turns.map(({ role, content }) => ({ role, content })),
+    { maxMessages: ROUTE_LIMITS.maxMessages, maxChars: ROUTE_LIMITS.maxTotalChars },
+  );
   return { turns: kept, partial: kept.length < turns.length };
 }
 
@@ -275,6 +299,13 @@ export function trimForRequest(
   turns: readonly TutorTurn[],
   { maxMessages = 30, maxChars = 20_000 }: { maxMessages?: number; maxChars?: number } = {},
 ): TutorTurn[] {
+  const kept = tailOf(turns, { maxMessages, maxChars });
+  while (kept.length > 1 && kept[0].role !== "user") kept.shift();
+  return kept;
+}
+
+/** The newest turns within both bounds, oldest dropped first; the newest always stays. */
+function tailOf(turns: readonly TutorTurn[], { maxMessages, maxChars }: { maxMessages: number; maxChars: number }): TutorTurn[] {
   const kept: TutorTurn[] = [];
   let chars = 0;
   for (let i = turns.length - 1; i >= 0; i -= 1) {
@@ -284,6 +315,5 @@ export function trimForRequest(
     kept.unshift(turn);
     chars += turn.content.length;
   }
-  while (kept.length > 1 && kept[0].role !== "user") kept.shift();
   return kept;
 }

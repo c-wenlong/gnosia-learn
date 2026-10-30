@@ -110,6 +110,16 @@ describe("splitTurnCheck", () => {
     expect(splitTurnCheck("```check\nq: Why?\na: Because.\n```").content).toBe("Why?");
   });
 
+  it("keeps a note-form question that holds braces or runs over several lines", () => {
+    // `$e^{x}$` reads as an object to the JSON search; the question still survives.
+    expect(splitTurnCheck("```check\nq: Why is $e^{x}$ positive?\na: exp is positive.\n```").check).toEqual({
+      question: "Why is $e^{x}$ positive?",
+    });
+    expect(splitTurnCheck("```check\nq: Evaluate this expression:\n  2 + 3 * 4\na: 14\n```").check).toEqual({
+      question: "Evaluate this expression: 2 + 3 * 4",
+    });
+  });
+
   it("reads only a block at the very end; a block mid-reply is prose, and the CHECK line still works", () => {
     const mid = `${block(choice)}\n\nMore words after it.`;
     expect(splitTurnCheck(mid)).toEqual({ content: mid.trim(), check: null, refused: null });

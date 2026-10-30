@@ -201,7 +201,7 @@ export function splitTurnCheck(reply: string, { cards = true }: { cards?: boolea
   const before = trimmed.slice(0, block.index).trim();
   const raw = firstObject(block.body);
   let outcome: BlockOutcome;
-  if (raw === null) outcome = { ok: false, reason: "The block held no JSON object.", fallback: noteFormQuestion(block.body) };
+  if (raw === null) outcome = { ok: false, reason: "The block held no JSON object.", fallback: null };
   else {
     try {
       outcome = readCheckBlock(JSON.parse(raw));
@@ -209,6 +209,9 @@ export function splitTurnCheck(reply: string, { cards = true }: { cards?: boolea
       outcome = { ok: false, reason: "The block's JSON did not parse.", fallback: null };
     }
   }
+  // A block in a note's own form can still hold braces (`$e^{x}$`), which
+  // `firstObject` takes for an object: whatever went wrong, its `q:` is the question.
+  if (!outcome.ok && outcome.fallback === null) outcome = { ...outcome, fallback: noteFormQuestion(block.body) };
 
   let check: TurnCheck | null;
   let refused: string | null = null;
@@ -234,9 +237,22 @@ export function splitTurnCheck(reply: string, { cards = true }: { cards?: boolea
  * something, and dropping the block would take the question with it.
  */
 function noteFormQuestion(body: string): TurnCheck | null {
-  const match = /^[ \t]*(?:q|question)[ \t]*:[ \t]*(.+)$/im.exec(body);
-  const question = match === null ? null : line(match[1]);
-  return question !== null && question !== "" && question.length <= CHECK_QUESTION_LIMIT ? { question } : null;
+  // Read as the note parser reads a check (`readCheck` in concept-note-core):
+  // a field runs on over the lines after it until the next field.
+  let question: string | null = null;
+  let inQuestion = false;
+  for (const text of body.split(/\r?\n/)) {
+    const pair = /^\s*(q|question|a|answer|why|source)\s*:\s*(.*)$/i.exec(text);
+    if (pair) {
+      inQuestion = pair[1].toLowerCase() === "q" || pair[1].toLowerCase() === "question";
+      if (inQuestion && question === null) question = pair[2];
+      else if (question !== null) inQuestion = false;
+    } else if (inQuestion && question !== null && text.trim()) {
+      question = `${question} ${text.trim()}`;
+    }
+  }
+  const flat = question === null ? null : line(question);
+  return flat !== null && flat !== "" && flat.length <= CHECK_QUESTION_LIMIT ? { question: flat } : null;
 }
 
 /** Whether prose already holds a question: its words, case and spacing aside. */
