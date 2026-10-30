@@ -474,7 +474,57 @@ struct StudioClient {
         let suggest: [String]?
         let pitch: String?
         let declined: [String]?
+        let `internal`: Bool?
         var id: Int { seq }
+
+        enum CodingKeys: String, CodingKey {
+            case seq, role, text, at, costUsd, superseded, interrupted, briefs, suggest, pitch, declined, `internal`
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            seq = try c.decode(Int.self, forKey: .seq)
+            role = try c.decode(String.self, forKey: .role)
+            text = try c.decode(String.self, forKey: .text)
+            at = try c.decodeIfPresent(String.self, forKey: .at)
+            costUsd = try? c.decodeIfPresent(Double.self, forKey: .costUsd)
+            superseded = try? c.decodeIfPresent(Bool.self, forKey: .superseded)
+            interrupted = try? c.decodeIfPresent(Bool.self, forKey: .interrupted)
+            briefs = try? c.decodeIfPresent([EntryBrief].self, forKey: .briefs)
+            // `suggestKinds` in studio-cards.ts: a list, or `{ kinds: [...] }`.
+            if let list = try? c.decodeIfPresent([String].self, forKey: .suggest) {
+                suggest = list
+            } else if let wrapped = try? c.decodeIfPresent([String: [String]].self, forKey: .suggest) {
+                suggest = wrapped["kinds"]
+            } else {
+                suggest = nil
+            }
+            pitch = try? c.decodeIfPresent(String.self, forKey: .pitch)
+            declined = try? c.decodeIfPresent([String].self, forKey: .declined)
+            `internal` = try? c.decodeIfPresent(Bool.self, forKey: .internal)
+        }
+    }
+
+    /// The offer the consent card draws (`suggestionsFor` in
+    /// apps/web/src/lib/studio-cards.ts): the newest visible planner reply's
+    /// kinds, under that reply only, and none while a turn is in flight or
+    /// once a person has written since. An older offer may no longer fit.
+    struct DraftOffer: Equatable {
+        let seq: Int
+        let kinds: [String]
+        let pitch: String?
+        let declined: [String]
+    }
+
+    static func offer(transcript: [TranscriptEntry], inFlight: Bool) -> DraftOffer? {
+        if inFlight { return nil }
+        let visible = transcript.filter { $0.superseded != true && $0.internal != true }.sorted { $0.seq < $1.seq }
+        guard let newest = visible.last(where: { $0.role == "planner" }) else { return nil }
+        if visible.last?.role == "person" { return nil }
+        var kinds: [String] = []
+        for kind in newest.suggest ?? [] where draftTagKinds.contains(kind) && !kinds.contains(kind) { kinds.append(kind) }
+        if kinds.isEmpty { return nil }
+        return DraftOffer(seq: newest.seq, kinds: kinds, pitch: newest.pitch, declined: (newest.declined ?? []).filter(draftTagKinds.contains))
     }
 
     /// What a make of a kind has cost on this machine (D107).

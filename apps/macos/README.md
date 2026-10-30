@@ -111,6 +111,6 @@ Writes reach the catalog only through the sidecar. The mirror is opened
 ## Later
 
 Day and conversation groupings, search across sidecar contents, and the
-studio's consent card for a tool the planner offers untagged. The read
+consent card's note for a kind the runner cannot make right now. The read
 model stays in `Sources/Gnosia/CatalogStore.swift`, so the mirrored schema
 stays the only storage the views read.

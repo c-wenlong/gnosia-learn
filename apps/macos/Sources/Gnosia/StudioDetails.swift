@@ -158,10 +158,15 @@ struct StudioConsentCard: View {
 struct PlannerPicture: View {
     let svg: String
     @State private var image: NSImage?
+    @State private var failed = false
 
     var body: some View {
         Group {
-            if let image {
+            if failed {
+                Text("The picture could not be drawn.")
+                    .font(.caption)
+                    .foregroundStyle(G.text3)
+            } else if let image {
                 Image(nsImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
@@ -171,7 +176,11 @@ struct PlannerPicture: View {
                 ProgressView().controlSize(.small)
             }
         }
-        .task(id: svg) { image = await SvgRasterizer.shared.image(for: svg, size: .preview) }
+        .task(id: svg) {
+            failed = false
+            image = await SvgRasterizer.shared.image(for: svg, size: .preview)
+            failed = image == nil
+        }
     }
 }
 
@@ -970,6 +979,8 @@ struct StudioDraftView: View {
     @State private var message = ""
     @State private var busy = false
     @State private var confirming = false
+    /// A kind whose Always allow write failed after its make was sent.
+    @State private var trustRetry: String?
     /// The home composer parks the opening message by draft id until the
     /// view has read its record — `leaveOpener` on the web — so the first
     /// turn lands as a turn rather than arriving in the POST. True while
@@ -986,6 +997,7 @@ struct StudioDraftView: View {
                             StudioBanner(text: outcome, tone: outcomeBad ? .danger : .quiet)
                         }
                         drawCards(draft)
+                        permissions(draft)
                         transcript(draft)
                     }
                     .padding(24)
@@ -1145,11 +1157,12 @@ struct StudioDraftView: View {
                                 .font(.caption)
                                 .foregroundStyle(G.accentText)
                         }
-                        ForEach(entry.role == "planner" ? (entry.suggest ?? []) : [], id: \.self) { kind in
+                        let offer = StudioClient.offer(transcript: draft.transcript ?? [], inFlight: draft.inFlight == true)
+                        ForEach(offer?.seq == entry.seq ? offer!.kinds : [], id: \.self) { kind in
                             StudioConsentCard(
                                 kind: kind,
-                                pitch: entry.pitch,
-                                declined: (entry.declined ?? []).contains(kind),
+                                pitch: offer?.pitch,
+                                declined: offer?.declined.contains(kind) == true,
                                 cost: consentCost(kind, band: draft.estimates?[kind] ?? nil),
                                 onAllow: { always in await allowOffer(kind, always: always) },
                                 onDecline: { await declineOffer(entry.seq, kind: kind) }
@@ -1224,16 +1237,65 @@ struct StudioDraftView: View {
         do {
             try await studio.client.sendDraftMessage(
                 draftId, text: tag, mentions: [["kind": kind, "start": 0, "end": tag.utf16.count]], make: true)
-            if always, kind != "svg" {
-                try await studio.client.setDraftTrust(draftId, kind: kind, trusted: true)
-            }
-            await load()
-            return true
         } catch {
             outcome = (error as? StudioError)?.errorDescription ?? "The studio did not answer."
             outcomeBad = true
             await load()
             return false
+        }
+        // The make is on its way; a failed trust write is owed on its own,
+        // with a retry that saves the permission and sends nothing again.
+        if always, kind != "svg" { await trust(kind) }
+        await load()
+        return true
+    }
+
+    /// Always allow's write (D108), and its retry after a refusal.
+    private func trust(_ kind: String) async {
+        do {
+            try await studio.client.setDraftTrust(draftId, kind: kind, trusted: true)
+            trustRetry = nil
+        } catch {
+            trustRetry = kind
+            outcome = (error as? StudioError)?.errorDescription ?? "The studio did not answer."
+            outcomeBad = true
+        }
+    }
+
+    /// Take back an always-allowed kind (D108): later offers ask again.
+    private func revoke(_ kind: String) {
+        Task {
+            do {
+                try await studio.client.setDraftTrust(draftId, kind: kind, trusted: false)
+            } catch {
+                outcome = (error as? StudioError)?.errorDescription ?? "The studio did not answer."
+                outcomeBad = true
+            }
+            await load()
+        }
+    }
+
+    /// The kinds this conversation may start on its own, each with a way to
+    /// take it back, and the retry a refused Always allow is owed.
+    @ViewBuilder
+    private func permissions(_ draft: StudioClient.DraftDetail) -> some View {
+        let trusted = (draft.trust ?? []).filter { $0 != "svg" }
+        if !trusted.isEmpty || trustRetry != nil {
+            HStack(spacing: 10) {
+                ForEach(trusted, id: \.self) { kind in
+                    Text("Starts \(kind == "video" ? "videos" : "diagrams") on its own")
+                        .font(.caption)
+                        .foregroundStyle(G.text2)
+                    Button("Stop allowing") { revoke(kind) }
+                        .buttonStyle(.plain)
+                        .font(.caption)
+                        .foregroundStyle(G.accentText)
+                }
+                if let kind = trustRetry {
+                    Button("Save Always allow again") { Task { await trust(kind); await load() } }
+                        .font(.caption)
+                }
+            }
         }
     }
 
