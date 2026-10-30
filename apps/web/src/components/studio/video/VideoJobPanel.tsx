@@ -840,7 +840,7 @@ function Landed({ job, path }: { job: VideoJob; path: string }) {
 /* -------------------------------------------------------------------------- */
 
 function Actions({ job, path, accept, discard, change }: { job: VideoJob; path: string; accept: boolean; discard: boolean; change: boolean }) {
-  const { run, busy, refresh } = useJobVerb(path);
+  const { run, busy } = useJobVerb(path);
   const router = useRouter();
   const [said, setSaid] = useState<{ ok: boolean; text: string } | null>(null);
   const [changing, setChanging] = useState(false);
@@ -850,8 +850,7 @@ function Actions({ job, path, accept, discard, change }: { job: VideoJob; path: 
     const result = await run(job.jobId, verb);
     setConfirmDiscard(false);
     setSaid(result.ok ? null : { ok: false, text: result.text });
-    await refresh();
-    // The grid changes: an accepted video gets its tile, a discarded one loses its job.
+    // `run` has already read the job list again. The grid changes: an accepted video gets its tile, a discarded one loses its job.
     router.refresh();
   };
 

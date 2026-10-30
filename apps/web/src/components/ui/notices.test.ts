@@ -133,6 +133,19 @@ describe("Banner", () => {
     expect(tokens(banner)).toContain("bg-danger/8");
   });
 
+  it("draws that link with the caller's link when it names one, with the same props", () => {
+    const seen: Array<Record<string, unknown>> = [];
+    const Own: NonNullable<BannerProps["dismissLink"]> = (props) => {
+      seen.push(props);
+      return createElement("a", { href: props.href, "data-own": "", className: props.className }, props.children);
+    };
+    const banner = dom(html(createElement(Banner, { dismissHref: "/studio", dismissLink: Own } as BannerProps, "Done."))).firstElementChild!;
+    const dismiss = banner.querySelector("a")!;
+    expect(dismiss.hasAttribute("data-own")).toBe(true);
+    expect(dismiss.textContent).toBe("Dismiss");
+    expect(seen[0]).toMatchObject({ href: "/studio", scroll: false });
+  });
+
   it("dismisses through a button, named for what goes, and can leave the announcing to its caller", () => {
     const out = html(
       createElement(

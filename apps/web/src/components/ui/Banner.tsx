@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { ReactNode } from "react";
+import type { ComponentType, ReactNode } from "react";
 
 import { BANNER_MARK, bannerClasses, cx, linkClasses, type BannerTone } from "./classes";
 import { TextLink } from "./TextLink";
@@ -13,7 +13,9 @@ import { TextLink } from "./TextLink";
  *
  * `onDismiss` puts a Dismiss button at the right; `dismissHref` a Dismiss
  * link, for a message a server render carries in its URL (the link drops it
- * without scrolling). Neither, and it stays until its state does.
+ * without scrolling). Neither, and it stays until its state does. The link is
+ * a `Link` unless `dismissLink` names another with its props, as the studio's
+ * `PanelLink` is, which drops the message without a server render.
  *
  * `role` is `status` by default. A caller that announces its words some other
  * way (the store banner's `sr-only` line, which is in the page while the
@@ -27,6 +29,7 @@ export function Banner({
   role = "status",
   onDismiss,
   dismissHref,
+  dismissLink: DismissLink = Link,
   dismissLabel = "Dismiss",
   dismissAriaLabel,
   className,
@@ -36,6 +39,8 @@ export function Banner({
   role?: "status" | "alert" | "none";
   onDismiss?: () => void;
   dismissHref?: string;
+  /** What draws the `dismissHref` link: `Link` when left out. */
+  dismissLink?: ComponentType<{ href: string; scroll?: boolean; "aria-label"?: string; className?: string; children?: ReactNode }>;
   /** The words of the Dismiss control. */
   dismissLabel?: string;
   /** Its accessible name, where "Dismiss" alone would not say what goes. */
@@ -52,14 +57,14 @@ export function Banner({
           {dismissLabel}
         </TextLink>
       ) : dismissHref !== undefined ? (
-        <Link
+        <DismissLink
           href={dismissHref}
           scroll={false}
           aria-label={dismissAriaLabel}
           className={linkClasses({ tone: "inherit", weight: "semibold", className: "shrink-0" })}
         >
           {dismissLabel}
-        </Link>
+        </DismissLink>
       ) : null}
     </div>
   );
