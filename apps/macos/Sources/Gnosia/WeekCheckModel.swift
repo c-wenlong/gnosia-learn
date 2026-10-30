@@ -193,8 +193,9 @@ func weekCheckReason(_ plan: WeekCheckPlan) -> String? {
 ///
 /// The "least recently asked" history is the concept's own observations,
 /// matched by the check's question text, as checkStatuses matches them. Wrong options come as a concept session's
-/// do (`sessionDistractorPool`, `sessionWrongOptionsFor`), and the variant
-/// is "week" so a check asked here and in Quiz me is not laid out the same.
+/// do (`sessionCheckQuestion`): the notes' here, with a rewrite asking the
+/// tutor for the check's own when a model can be asked. The variant is
+/// "week" so a check asked here and in Quiz me is not laid out the same.
 @MainActor func moduleCheckPlan(module: CourseModule, store: CatalogStore, modelAvailable: Bool) -> WeekCheckPlan {
     var taught: [String] = []
     for item in module.items {
@@ -224,17 +225,15 @@ func weekCheckReason(_ plan: WeekCheckPlan) -> String? {
             .map { $0.answer.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
         let questions = checksByLastAsked(checks: checks, history: history).compactMap { check in
-            sessionNoteQuestion(
+            sessionCheckQuestion(
                 slug: slug,
                 check: check,
-                pool: sessionWrongOptionsFor(
-                    check: check,
-                    otherAnswers: answers.filter {
-                        $0 != check.answer.trimmingCharacters(in: .whitespacesAndNewlines)
-                    },
-                    pool: pool
-                ),
                 variant: "week",
+                otherAnswers: answers.filter {
+                    $0 != check.answer.trimmingCharacters(in: .whitespacesAndNewlines)
+                },
+                pool: pool,
+                canWrite: modelAvailable,
                 summary: c.summary
             )
         }

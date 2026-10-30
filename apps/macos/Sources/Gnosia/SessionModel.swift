@@ -46,6 +46,39 @@ struct SessionQuestion: Hashable {
     /// The check's `source:` line, shown as a citation.
     let source: String?
     let origin: Origin
+    /// A note question's wrong options, where they came from — `wrong`:
+    /// the tutor's (stored per check on the catalog), the notes', or the
+    /// notes' padded with unrelated summaries. Nil on a question the tutor
+    /// wrote whole.
+    var wrong: WrongSource? = nil
+    /// A note question whose wrong options the tutor has not written yet:
+    /// the session asks the sidecar for them (`POST /api/agent/check-options`)
+    /// before showing it, and keeps the notes' options when it cannot.
+    var rewrite: Rewrite? = nil
+
+    /// `rewrite` in session-core.ts: the check, and the variant the
+    /// question was laid out under, so the tutor's options are laid out
+    /// the same way a later read of the store lays them out.
+    struct Rewrite: Hashable {
+        let concept: String
+        let check: String
+        let variant: String
+    }
+}
+
+/// Where a note question's wrong options came from — WrongSource.
+enum WrongSource: String, Hashable {
+    case tutor, notes, padded
+
+    /// The line under a question whose wrong options the tutor did not
+    /// write — WRONG_SOURCE_NOTE, word for word. Nil for the tutor's.
+    var note: String? {
+        switch self {
+        case .tutor: return nil
+        case .notes: return "Options made without the tutor, from related notes."
+        case .padded: return "Options made without the tutor. Some come from unrelated notes, so they may be easy to rule out."
+        }
+    }
 }
 
 /// A check block as a multiple-choice question — noteQuestion: its answer
@@ -75,6 +108,60 @@ func sessionNoteQuestion(
         explanation: trimmedSummary.isEmpty ? nil : "From your note: \(trimmedSummary)",
         source: source.isEmpty ? nil : source,
         origin: .note
+    )
+}
+
+/// The question a note's check becomes, with its wrong options from the
+/// best source there is — checkQuestion: the tutor's when stored for the
+/// check as it now reads (`written`), else the notes' (`sessionWrongOptionsFor`),
+/// marked, and with `rewrite` when the tutor can be asked (`canWrite`).
+func sessionCheckQuestion(
+    slug: String,
+    check: ConceptCheck,
+    variant: String,
+    otherAnswers: [String],
+    pool: SessionDistractorPool,
+    written: [String]? = nil,
+    canWrite: Bool = false,
+    summary: String = ""
+) -> SessionQuestion? {
+    if let written,
+       var tutored = sessionNoteQuestion(slug: slug, check: check, pool: written, variant: variant, summary: summary) {
+        tutored.wrong = .tutor
+        return tutored
+    }
+    guard var question = sessionNoteQuestion(
+        slug: slug, check: check,
+        pool: sessionWrongOptionsFor(check: check, otherAnswers: otherAnswers, pool: pool),
+        variant: variant, summary: summary
+    ) else { return nil }
+    func key(_ text: String) -> String {
+        text.trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(whereSeparator: \.isWhitespace).joined(separator: " ").lowercased()
+    }
+    let strong = Set((otherAnswers + pool.near).map(key))
+    let padded = question.choices.enumerated().contains { i, choice in
+        i != question.correct && !strong.contains(key(choice))
+    }
+    question.wrong = padded ? .padded : .notes
+    if canWrite { question.rewrite = .init(concept: slug, check: check.id, variant: variant) }
+    return question
+}
+
+/// A question carrying `rewrite`, laid out again with the wrong options
+/// the tutor wrote for its check — withWrittenOptions: the same order
+/// `sessionCheckQuestion` gives once they are stored. Nil when there is no
+/// rewrite or the options cannot make a question.
+func withWrittenOptions(_ question: SessionQuestion, _ options: [String]) -> SessionQuestion? {
+    guard let rewrite = question.rewrite, question.choices.indices.contains(question.correct) else { return nil }
+    let answer = question.choices[question.correct]
+    guard let mc = buildChoices(
+        conceptId: "\(rewrite.concept)#\(rewrite.check)#\(rewrite.variant)", answer: answer, pool: options
+    ) else { return nil }
+    return SessionQuestion(
+        id: question.id, prompt: question.prompt, choices: mc.choices, correct: mc.correct,
+        reason: question.reason, explanation: question.explanation, source: question.source,
+        origin: question.origin, wrong: .tutor, rewrite: nil
     )
 }
 
@@ -197,17 +284,24 @@ struct SessionStep: Hashable {
 ///
 /// Check (Quiz me): each of the note's checks in turn, up to
 /// `maxQuizChecks`, then close; with none, one question from the tutor.
-func buildSessionPlan(slug: String, mode: SessionMode = .learn, checks: [ConceptCheck], pool: SessionDistractorPool, summary: String = "") -> [SessionStep] {
+func buildSessionPlan(
+    slug: String,
+    mode: SessionMode = .learn,
+    checks: [ConceptCheck],
+    pool: SessionDistractorPool,
+    written: [String: [String]] = [:],
+    canWrite: Bool = false,
+    summary: String = ""
+) -> [SessionStep] {
     let answers = checks.map { $0.answer.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
-    func poolFor(_ check: ConceptCheck) -> [String] {
-        sessionWrongOptionsFor(
-            check: check,
-            otherAnswers: answers.filter { $0 != check.answer.trimmingCharacters(in: .whitespacesAndNewlines) },
-            pool: pool
-        )
-    }
     func ask(_ variant: String) -> [SessionQuestion] {
-        checks.compactMap { sessionNoteQuestion(slug: slug, check: $0, pool: poolFor($0), variant: variant, summary: summary) }
+        checks.compactMap { check in
+            sessionCheckQuestion(
+                slug: slug, check: check, variant: variant,
+                otherAnswers: answers.filter { $0 != check.answer.trimmingCharacters(in: .whitespacesAndNewlines) },
+                pool: pool, written: written[check.id], canWrite: canWrite, summary: summary
+            )
+        }
     }
 
     let close = SessionStep(kind: .close)

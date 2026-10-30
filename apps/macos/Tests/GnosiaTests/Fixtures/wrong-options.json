@@ -1,0 +1,191 @@
+[
+  {
+    "name": "two near options: padded, rewrite asked",
+    "slug": "dot-product",
+    "check": {
+      "id": "c1",
+      "question": "Why is the dot product zero for perpendicular vectors?",
+      "answer": "Because it measures alignment; orthogonal directions have no shared component.",
+      "why": "",
+      "source": ""
+    },
+    "variant": "probe",
+    "otherAnswers": [],
+    "pool": {
+      "near": [
+        "A vector is an element of a vector space; coordinates are a choice, not the object.",
+        "Attention weights are a softmax over scaled query-key dot products."
+      ],
+      "far": [
+        "Self-attention is permutation-equivariant, so order must be injected explicitly.",
+        "Big-O bounds growth from above.",
+        "The gradient points uphill."
+      ]
+    },
+    "canWrite": true,
+    "tutor": [
+      "Because it measures the angle itself, and a right angle is defined as zero.",
+      "Because it measures the product of their lengths, which cancels for perpendicular vectors.",
+      "Because perpendicular vectors always have at least one zero component in every coordinate system."
+    ],
+    "expected": {
+      "choices": [
+        "Self-attention is permutation-equivariant, so order must be injected explicitly.",
+        "A vector is an element of a vector space; coordinates are a choice, not the object.",
+        "Because it measures alignment; orthogonal directions have no shared component.",
+        "Attention weights are a softmax over scaled query-key dot products."
+      ],
+      "correct": 2,
+      "wrong": "padded",
+      "rewrite": {
+        "concept": "dot-product",
+        "check": "c1",
+        "variant": "probe"
+      }
+    },
+    "rewritten": {
+      "choices": [
+        "Because perpendicular vectors always have at least one zero component in every coordinate system.",
+        "Because it measures the angle itself, and a right angle is defined as zero.",
+        "Because it measures alignment; orthogonal directions have no shared component.",
+        "Because it measures the product of their lengths, which cancels for perpendicular vectors."
+      ],
+      "correct": 2,
+      "wrong": "tutor"
+    }
+  },
+  {
+    "name": "offline: padded, no rewrite",
+    "slug": "dot-product",
+    "check": {
+      "id": "c1",
+      "question": "Why is the dot product zero for perpendicular vectors?",
+      "answer": "Because it measures alignment; orthogonal directions have no shared component.",
+      "why": "",
+      "source": ""
+    },
+    "variant": "week",
+    "otherAnswers": [],
+    "pool": {
+      "near": [
+        "A vector is an element of a vector space; coordinates are a choice, not the object.",
+        "Attention weights are a softmax over scaled query-key dot products."
+      ],
+      "far": [
+        "Self-attention is permutation-equivariant, so order must be injected explicitly.",
+        "Big-O bounds growth from above.",
+        "The gradient points uphill."
+      ]
+    },
+    "canWrite": false,
+    "expected": {
+      "choices": [
+        "Self-attention is permutation-equivariant, so order must be injected explicitly.",
+        "A vector is an element of a vector space; coordinates are a choice, not the object.",
+        "Attention weights are a softmax over scaled query-key dot products.",
+        "Because it measures alignment; orthogonal directions have no shared component."
+      ],
+      "correct": 3,
+      "wrong": "padded",
+      "rewrite": null
+    }
+  },
+  {
+    "name": "three near options: from the notes",
+    "slug": "dot-product",
+    "check": {
+      "id": "c1",
+      "question": "Why is the dot product zero for perpendicular vectors?",
+      "answer": "Because it measures alignment; orthogonal directions have no shared component.",
+      "why": "",
+      "source": ""
+    },
+    "variant": "check",
+    "otherAnswers": [
+      "The sum of elementwise products."
+    ],
+    "pool": {
+      "near": [
+        "A vector is an element of a vector space; coordinates are a choice, not the object.",
+        "Attention weights are a softmax over scaled query-key dot products."
+      ],
+      "far": [
+        "Self-attention is permutation-equivariant, so order must be injected explicitly.",
+        "Big-O bounds growth from above.",
+        "The gradient points uphill."
+      ]
+    },
+    "canWrite": true,
+    "tutor": [
+      "Because it measures the angle itself, and a right angle is defined as zero.",
+      "Because it measures the product of their lengths, which cancels for perpendicular vectors.",
+      "Because perpendicular vectors always have at least one zero component in every coordinate system."
+    ],
+    "expected": {
+      "choices": [
+        "Because it measures alignment; orthogonal directions have no shared component.",
+        "A vector is an element of a vector space; coordinates are a choice, not the object.",
+        "Attention weights are a softmax over scaled query-key dot products.",
+        "The sum of elementwise products."
+      ],
+      "correct": 0,
+      "wrong": "notes",
+      "rewrite": {
+        "concept": "dot-product",
+        "check": "c1",
+        "variant": "check"
+      }
+    },
+    "rewritten": {
+      "choices": [
+        "Because it measures alignment; orthogonal directions have no shared component.",
+        "Because it measures the product of their lengths, which cancels for perpendicular vectors.",
+        "Because perpendicular vectors always have at least one zero component in every coordinate system.",
+        "Because it measures the angle itself, and a right angle is defined as zero."
+      ],
+      "correct": 0,
+      "wrong": "tutor"
+    }
+  },
+  {
+    "name": "stored options: the tutor's",
+    "slug": "dot-product",
+    "check": {
+      "id": "c1",
+      "question": "Why is the dot product zero for perpendicular vectors?",
+      "answer": "Because it measures alignment; orthogonal directions have no shared component.",
+      "why": "",
+      "source": ""
+    },
+    "variant": "check",
+    "otherAnswers": [],
+    "pool": {
+      "near": [
+        "A vector is an element of a vector space; coordinates are a choice, not the object.",
+        "Attention weights are a softmax over scaled query-key dot products."
+      ],
+      "far": [
+        "Self-attention is permutation-equivariant, so order must be injected explicitly.",
+        "Big-O bounds growth from above.",
+        "The gradient points uphill."
+      ]
+    },
+    "written": [
+      "Because it measures the angle itself, and a right angle is defined as zero.",
+      "Because it measures the product of their lengths, which cancels for perpendicular vectors.",
+      "Because perpendicular vectors always have at least one zero component in every coordinate system."
+    ],
+    "canWrite": true,
+    "expected": {
+      "choices": [
+        "Because it measures alignment; orthogonal directions have no shared component.",
+        "Because it measures the product of their lengths, which cancels for perpendicular vectors.",
+        "Because perpendicular vectors always have at least one zero component in every coordinate system.",
+        "Because it measures the angle itself, and a right angle is defined as zero."
+      ],
+      "correct": 0,
+      "wrong": "tutor",
+      "rewrite": null
+    }
+  }
+]
