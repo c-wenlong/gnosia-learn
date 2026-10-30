@@ -81,8 +81,8 @@ export interface CheckThreadOptions<T extends CheckItem> {
   sessionGoal?: string;
   /** The concept a check asked by this tutor turn records against, or null when it names none this thread may record. */
   conceptOf: (asked: T) => string | null;
-  /** A learner turn as the store keeps it; `concept` is the one it answers. */
-  newTurn: (fields: AnswerFields, concept: string) => T;
+  /** A learner turn as the store keeps it. */
+  newTurn: (fields: AnswerFields) => T;
 }
 
 /** What `checkSlots` draws a card or a row with. */
@@ -280,10 +280,10 @@ function createCheckThread<T extends CheckItem>() {
     const asked = askedAt === null ? undefined : items[askedAt];
     const concept = asked === undefined ? null : opts.conceptOf(asked);
     if (askedAt === null || !asked?.check || isCardCheck(asked.check) || concept === null) {
-      return opts.newTurn({ role: "user", content: text }, concept ?? "");
+      return opts.newTurn({ role: "user", content: text });
     }
     const verdict = newVerdict(asked.check.question, chatRequestId(), checkSource(items, askedAt));
-    return opts.newTurn({ role: "user", content: text, verdict }, concept);
+    return opts.newTurn({ role: "user", content: text, verdict });
   }
 
   /** Ask the judge for a typed answer's verdict, once its turn is stored. */
@@ -313,7 +313,7 @@ function createCheckThread<T extends CheckItem>() {
       recorded: null,
     };
     // `send` stores the turn before it awaits anything, so the write below finds it.
-    send(opts.newTurn({ role: "user", content: choiceAnswerText(asked.check, pick), choice }, concept), items);
+    send(opts.newTurn({ role: "user", content: choiceAnswerText(asked.check, pick), choice }), items);
     void recordChoice(choice.requestId);
   }
 
@@ -326,7 +326,7 @@ function createCheckThread<T extends CheckItem>() {
     if (pendingCheck(items) !== askedAt) return;
     const verdict = newVerdict(asked.check.question, chatRequestId(), checkSource(items, askedAt));
     // `send` stores the turn before it awaits anything, so the judge's verdict finds it.
-    send(opts.newTurn({ role: "user", content: recallAnswerText(pick), recall: pick, verdict }, concept), items);
+    send(opts.newTurn({ role: "user", content: recallAnswerText(pick), recall: pick, verdict }), items);
     void judge(verdict, concept, pick.answer, asked.check.answer);
   }
 
@@ -388,12 +388,6 @@ export function useCheckThread<T extends CheckItem>(options: CheckThreadOptions<
 /** The handlers `useCheckThread` returns. */
 export type CheckThread<T extends CheckItem> = ReturnType<typeof createCheckThread<T>>;
 
-/**
- * The card under each tutor turn that asked a card check, and the verdict
- * row under each typed answer: under the tutor's reply to it, or under the
- * answer itself while that reply is missing. Only the newest answer's row
- * stays open; an older untapped one folds.
- */
 /** Where a thread's cards and rows go, worked out once per render in one pass over the thread. */
 export interface SlotPlan {
   /** The tutor turn whose check is still waiting for an answer. */
@@ -423,7 +417,13 @@ export function slotPlan<T extends CheckItem>(items: readonly T[], conceptOf: (a
   return { pendingAt: pendingCheck(items), lastVerdict, rowsAfter };
 }
 
-export function checkSlots<T extends CheckItem>(
+/**
+ * The card under each tutor turn that asked a card check, and the verdict
+ * row under each typed answer: under the tutor's reply to it, or under the
+ * answer itself while that reply is missing. Only the newest answer's row
+ * stays open; an older untapped one folds.
+ */
+function checkSlots<T extends CheckItem>(
   items: readonly T[],
   thread: CheckThread<T>,
   conceptOf: (asked: T) => string | null,

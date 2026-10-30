@@ -44,6 +44,7 @@ import { scrollBehavior } from "@/lib/motion";
 import { tutorProblem } from "@/lib/tutor-errors";
 import { recapTurns, topicRequestTurns } from "@/lib/tutor-thread";
 import { ownValue } from "@gnosia/tutor/own-key";
+import { randomToken } from "@/lib/random-token";
 
 type Role = "user" | "assistant";
 
@@ -63,10 +64,6 @@ interface UiMessage {
    */
   choice?: ChoiceAnswer | null;
   recall?: RecallPick | null;
-}
-
-function uid() {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 export function AgentSession({
@@ -200,7 +197,7 @@ export function AgentSession({
       setMessages([
         ...store.read(),
         {
-          id: uid(),
+          id: randomToken(),
           role: "assistant",
           content,
           // The route keeps a check only when it names a concept this topic declares.
@@ -282,7 +279,7 @@ export function AgentSession({
     if (started || busy) return;
     setStarted(true);
     const seed: UiMessage = {
-      id: uid(),
+      id: randomToken(),
       role: "user",
       content: session.openingUserSeed,
     };
@@ -307,7 +304,7 @@ export function AgentSession({
     sessionTitle: `${course.code} · ${topic.title}`,
     sessionGoal: topic.id,
     conceptOf,
-    newTurn: (fields) => ({ id: uid(), ...fields }),
+    newTurn: (fields) => ({ id: randomToken(), ...fields }),
   });
 
   /** The composer's send: Enter, or the Send button. */

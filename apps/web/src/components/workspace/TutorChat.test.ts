@@ -2,7 +2,7 @@
 import type { ReactNode } from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { threadKey } from "@/lib/tutor-thread";
+import { RECALL_SEED, threadKey } from "@/lib/tutor-thread";
 
 /**
  * The concept tutor's wiring to the studio (docs/STUDIO-TUTOR-HANDOFF.md,
@@ -172,7 +172,9 @@ async function until(ready: () => boolean) {
 
 let slugs = 0;
 
-async function mount(props: { studio?: boolean; initialDraft?: string; slug?: string } = {}) {
+async function mount(
+  props: { studio?: boolean; initialDraft?: string; slug?: string; recall?: { question: string | null } | null } = {},
+) {
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
@@ -836,5 +838,81 @@ describe("a tutor turn", () => {
     // The thread ends on the question, for Try again to ask once more.
     const stored = JSON.parse(sessionStorage.getItem(threadKey("tcp-leave")) ?? "[]") as Array<{ role: string; content: string }>;
     expect(stored.map((t) => t.content)).toEqual(["What is a SYN?"]);
+  });
+});
+
+describe("a due review (R3)", () => {
+  const stored = (slug: string) => JSON.parse(sessionStorage.getItem(threadKey(slug)) ?? "[]") as Array<{ role: string; content: string }>;
+  const button = (host: HTMLElement, text: string) => [...host.querySelectorAll("button")].find((b) => b.textContent?.trim() === text);
+
+  it("opens an empty thread on the note's own check, asks no model for it, and sends the seed before it with the answer", async () => {
+    const host = await mount({ slug: "tcp-due", recall: { question: "What does the second packet carry?" } });
+    expect(chatCalls()).toEqual([]);
+    expect(host.textContent).toContain("Welcome back to The TCP handshake. Its review is due");
+    expect(host.textContent).toContain("What does the second packet carry?");
+
+    await typePlain(host, "SYN and ACK");
+    await act(async () => textarea(host)!.form!.requestSubmit());
+    await settle();
+    const sent = (chatCalls()[0].body as { messages: Array<{ role: string; content: string }> }).messages;
+    expect(sent.map((m) => m.role)).toEqual(["user", "assistant", "user"]);
+    expect(sent[0].content).toBe(RECALL_SEED);
+    expect(sent[2].content).toBe("SYN and ACK");
+    // The answer is the check's, so it has a row to record it with.
+    expect(host.querySelector('[aria-label="Record this answer"]')).not.toBeNull();
+  });
+
+  it("opens a new thread on recall again", async () => {
+    const host = await mount({ slug: "tcp-due-again", recall: { question: "What does the second packet carry?" } });
+    await typePlain(host, "SYN and ACK");
+    await act(async () => textarea(host)!.form!.requestSubmit());
+    await settle();
+    expect(stored("tcp-due-again")).toHaveLength(3);
+    await act(async () => [...host.querySelectorAll("a, button")].find((el) => el.textContent === "Start a new thread")!.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+    await settle();
+    expect(stored("tcp-due-again").map((t) => t.role)).toEqual(["assistant"]);
+    expect(stored("tcp-due-again")[0].content).toContain("What does the second packet carry?");
+  });
+
+  it("asks the model for a question when the note has none, and offers Try again when its reply asks nothing", async () => {
+    const replies = [
+      { message: { content: "Hello again." } },
+      { message: { content: "What does the second packet carry?" }, check: { question: "What does the second packet carry?" } },
+    ];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        fetched.push({ url, body: init?.body === undefined ? undefined : JSON.parse(String(init.body)) });
+        return new Response(JSON.stringify(replies.shift() ?? {}), { status: 200 });
+      }),
+    );
+    const host = await mount({ slug: "tcp-due-model", recall: { question: null } });
+    expect(chatCalls()).toHaveLength(1);
+    expect(chatCalls()[0].body).toEqual({ conceptSlug: "tcp-due-model", messages: [{ role: "user", content: RECALL_SEED }] });
+    // A reply with no check opens nothing: the thread stays empty, with a way to ask again.
+    expect(stored("tcp-due-model")).toEqual([]);
+    expect(host.textContent).toContain("the tutor could not open on a recall question");
+
+    await act(async () => button(host, "Try again")!.click());
+    await settle();
+    expect(chatCalls()).toHaveLength(2);
+    expect(stored("tcp-due-model").map((t) => t.content)).toEqual(["What does the second packet carry?"]);
+    expect(host.textContent).not.toContain("could not open on a recall question");
+  });
+
+  it("aborts the model's opening when the page goes away, so it never lands", async () => {
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string, init?: RequestInit) => {
+        if (url !== "/api/agent/chat") return Promise.resolve(new Response("{}", { status: 200 }));
+        signal = init?.signal ?? undefined;
+        return new Promise<Response>(() => {});
+      }),
+    );
+    await mount({ slug: "tcp-due-leave", recall: { question: null } });
+    expect(signal?.aborted).toBe(false);
+    mounted.pop()?.();
+    expect(signal?.aborted).toBe(true);
   });
 });
