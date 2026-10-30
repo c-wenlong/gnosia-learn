@@ -1,12 +1,13 @@
 "use server";
 
-import { readPreference, writePreference } from "@gnosia/catalog/state";
+import { readPreference, readPreferences, writePreference } from "@gnosia/catalog/state";
+import type { StudioAgentPreference } from "@gnosia/schema/shared";
 import { redirect } from "next/navigation";
 
 import type { AgentRow } from "@/components/studio/StudioSettings";
 import { noteBody } from "@/lib/concept-workspace-core";
 import { readConceptWorkspace } from "@/lib/concept-workspace";
-import { withLearnerStore } from "@/lib/learner-store";
+import { catalogDatabase, withLearnerStore } from "@/lib/learner-store";
 import { currentOwner } from "@/lib/owner";
 import { requireStudio, studioApi, type StudioResult } from "@/lib/studio";
 import {
@@ -20,9 +21,10 @@ import {
   rowWarning,
   runnerSettings,
   storedAgent,
+  type AgentKind,
 } from "@/lib/studio-agent-settings";
-import { readStudioAgents } from "@/lib/studio-agents";
-import { withOutcome } from "@/lib/studio-view";
+import { refusalReason } from "@/lib/studio-client";
+import { withOutcome } from "@/lib/studio-url";
 import { checkHandoffInput, type ConceptConversation } from "@/lib/tutor-handoff";
 
 /**
@@ -340,7 +342,7 @@ export async function openConceptConversation(raw: unknown): Promise<ConceptConv
   return {
     ok: false,
     where: "runner",
-    reason: result.reason === "down" ? "down" : detailReason(result.detail),
+    reason: result.reason === "down" ? "down" : result.refusal === undefined ? null : refusalReason(result.refusal),
     status: result.status,
     said: result.reason === "down" ? null : result.headline,
     // A timeout is not a runner that is off: the words differ (H3).
@@ -348,13 +350,26 @@ export async function openConceptConversation(raw: unknown): Promise<ConceptConv
   };
 }
 
-/** The `reason` in a refusal's detail, which `studioApi` hands back as JSON text. */
-function detailReason(detail: string): string | null {
+/**
+ * The two rows the studio's settings panel starts from (D53 of
+ * docs/STUDIO-VIDEOS.md): the signed-in owner's `studioVideoAgent` and
+ * `studioDiagramAgent` preferences, each read the way the runner reads it.
+ *
+ * A read, so it degrades as the Settings page's does: with the catalog down
+ * the panel shows the defaults and says the choices cannot be saved. Not
+ * exported: every export of a "use server" file is an endpoint.
+ */
+async function readStudioAgents(): Promise<{ reachable: boolean; values: Record<AgentKind, StudioAgentPreference> }> {
+  const owner = await currentOwner();
   try {
-    const parsed: unknown = JSON.parse(detail);
-    const reason = typeof parsed === "object" && parsed !== null ? (parsed as { reason?: unknown }).reason : undefined;
-    return typeof reason === "string" ? reason : null;
-  } catch {
-    return null;
+    const db = await catalogDatabase();
+    const stored = await readPreferences(db, owner);
+    return {
+      reachable: true,
+      values: { video: storedAgent("video", stored[AGENT_KEYS.video]), diagram: storedAgent("diagram", stored[AGENT_KEYS.diagram]) },
+    };
+  } catch (error) {
+    console.warn(`studio settings: preferences unavailable: ${error instanceof Error ? error.message : String(error)}`);
+    return { reachable: false, values: { video: storedAgent("video", null), diagram: storedAgent("diagram", null) } };
   }
 }
