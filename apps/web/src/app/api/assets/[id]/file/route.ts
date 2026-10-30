@@ -1,7 +1,5 @@
 import { createHash } from "node:crypto";
 
-import { NextResponse } from "next/server";
-
 import {
   blobStoreProblem,
   isRangeRefusal,
@@ -9,13 +7,11 @@ import {
   parseRange,
   resolveAsset,
   webStreamFrom,
-  type AssetFileProblem,
   type AssetRowText,
   type AssetSource,
   type AssetStored,
 } from "@/lib/asset-files";
-import { lookupFailed, matchesEtag } from "@/lib/asset-response";
-import { assetBlobStore, SIGNED_URL_TTL_SECONDS } from "@/lib/blob-store";
+import { lookupFailed, matchesEtag, problemResponse, signedRedirect } from "@/lib/asset-response";
 import { contentDisposition } from "@/lib/download-name";
 import { withLearnerStore } from "@/lib/learner-store";
 
@@ -193,13 +189,9 @@ export async function GET(
     return lookupFailed("asset file", error);
   }
 
-  if (resolved.ok === false) return problem(resolved);
+  if (resolved.ok === false) return problemResponse(resolved);
   if (resolved.source === "blob") return serveBlob(request, resolved);
   return serveRow(request, resolved);
-}
-
-function problem(p: AssetFileProblem): Response {
-  return NextResponse.json({ error: p.error, code: p.code, detail: p.detail }, { status: p.status });
 }
 
 /**
@@ -219,17 +211,11 @@ function problem(p: AssetFileProblem): Response {
  * would need to sign the disposition into its URL.
  */
 async function serveBlob(request: Request, stored: AssetStored): Promise<Response> {
-  let url: string | null;
   try {
-    url = await assetBlobStore().signedUrl(stored.key, SIGNED_URL_TTL_SECONDS);
+    const redirect = await signedRedirect(stored.key);
+    if (redirect !== null) return redirect;
   } catch (error) {
-    return problem(blobStoreProblem(error));
-  }
-  if (url !== null) {
-    return new Response(null, {
-      status: 302,
-      headers: { Location: url, "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" },
-    });
+    return problemResponse(blobStoreProblem(error));
   }
 
   const headers = baseHeaders(request, stored, `"${stored.sha256}"`);
@@ -267,7 +253,7 @@ async function serveBlob(request: Request, stored: AssetStored): Promise<Respons
         headers: { ...headers, "Content-Range": `bytes */${stored.bytes}` },
       });
     }
-    return problem(blobStoreProblem(error));
+    return problemResponse(blobStoreProblem(error));
   }
 }
 
