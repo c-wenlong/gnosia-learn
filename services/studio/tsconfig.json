@@ -1,5 +1,6 @@
 {
   "//": "Its own tsconfig, like every other workspace. The root config's `include` is flat (`*.ts`) and cannot reach here, so without this file nothing in this service is type-checked at all. The `typecheck` script in package.json is the other half: `npm run typecheck` at the root fans out through `--workspaces --if-present`.",
+  "//allowJs": "The runner opens the BYOK keys through @gnosia/catalog/state (docs/BYOK.md, D12), whose state modules import the learning pipeline's plain-ESM maths from scripts/learn/lib/*.mjs. allowJs lets TypeScript read them, as the catalog's own config does; checkJs stays off.",
   "compilerOptions": {
     "target": "ES2023",
     "lib": ["ES2023"],
@@ -12,7 +13,8 @@
     "skipLibCheck": true,
     "isolatedModules": true,
     "resolveJsonModule": true,
-    "allowImportingTsExtensions": true
+    "allowImportingTsExtensions": true,
+    "allowJs": true
   },
   "include": ["src/**/*.ts", "test/**/*.ts"]
 }

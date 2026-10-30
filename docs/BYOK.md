@@ -17,6 +17,7 @@ are written down here before anything else.
 | The one module that reads and writes it | `services/catalog/src/state/provider-keys.ts` |
 | Sealing and opening | `packages/tutor/src/server/seal.ts` (tests in `packages/tutor/test/seal.test.ts`) |
 | The web app's store, per owner | `apps/web/src/lib/provider-keys/store.ts` |
+| The studio runner's read of them (D12) | `services/studio/src/agent/byok-keys.ts`, the settings beside them in `services/studio/src/agent/byok.ts` |
 | The order the tutor tries keys in | `orderCredentials` in `packages/tutor/src/providers.ts`, `tutorCredentials` in `apps/web/src/lib/agent/credentials.ts` |
 | Save and remove | `POST` and `DELETE /api/learner/provider-key` |
 | Test | `POST /api/learner/provider-key/test` |
@@ -34,7 +35,7 @@ A key goes in once and never comes back out:
 ## Decisions
 
 These were made by the lead on the owner's behalf. D7 to D11 were added while
-building it.
+building it, and D12 after the 2026-10 security audit.
 
 **D1. Per owner, in its own table.** `provider_key`: `owner_id` (a foreign key
 to `learner`), `provider` (`nvidia`, `gemini` or `openrouter`), `ciphertext`,
@@ -78,18 +79,16 @@ printable ASCII with no spaces. The Test button is the real check. Saving and
 removing go through the same guards as every Settings write: same origin, a
 per-IP rate limit, and the session's owner.
 
-**D6. The studio's agents keep a plaintext copy.** By default they run
-`claude` under the machine's own login (AGENTS.md, "Diagram studio"), not
-these keys. But with `STUDIO_ENABLED` set, saving an OpenAI, Anthropic,
-Gemini, OpenRouter or NVIDIA key (`TUTOR_TO_BYOK` in
-`apps/web/src/lib/byok-providers.ts`) also sends the plaintext key to the
-runner, and `POST /api/learner/provider-key/sync` opens the saved keys and
-sends the one for the provider it names, the same way. The runner writes it to `$STUDIO_HOME/byok.json`,
-mode 0600, so its video agents can spend it. `STUDIO_HOME` defaults to
-`<repo>/.studio/`, which is gitignored but inside the checkout. So D3 and the
-first row of the threat model hold only while the studio is off. Where that
-file lives, or whether the runner should open the sealed rows itself, is
-open: see the threat model's last row.
+**D6. The studio's BYOK harness spends these same keys, and keeps no copy
+(amended 2026-10-30, D12).** By default the studio's agents run `claude`
+under the machine's own login (AGENTS.md, "Diagram studio"), not these keys.
+Its BYOK harness (Qwen Code on an OpenAI, Anthropic, Gemini, OpenRouter or
+NVIDIA key, `TUTOR_TO_BYOK` in `apps/web/src/lib/byok-providers.ts`) runs on
+the key the owner saved here. Until 2026-10-30 the web app sent each such key
+to the runner in the clear, and the runner kept it in `$STUDIO_HOME/byok.json`
+(mode 0600, inside the checkout by default), so D3 and the threat model's
+first row held only while the studio was off (audit finding S7-01). D12
+replaced that.
 
 **D7. The additional data binds each row to its owner, provider and
 version.** The GCM tag covers `["gnosia/provider-key", version, owner,
@@ -129,6 +128,48 @@ tables, or running `pg_dump`. Each file that does is listed in the test with
 what it does with the rows (`catalog status` counts them, the rehearsal's
 backup is a database dump), and a new one fails until someone has read it.
 
+**D12. The runner opens the sealed rows itself (2026-10-30).** The studio
+runner reads the owner's `provider_key` rows when a BYOK turn spawns, through
+`openSavedKeys` and `savedKeyStatuses` in
+`packages/tutor/src/server/provider-keys.ts` (the catalog's one door, D11,
+behind them), and opens them with the same `AUTH_SECRET`, held in
+`services/studio/src/agent/byok-keys.ts`. The opened key goes into that
+spawn's environment and nowhere else. What the runner keeps on disk is
+`$STUDIO_HOME/byok-settings.json`: which providers Studio uses, which one
+runs, and each one's Lite, Default and Max models, none of it a secret.
+
+- **Nothing sends a key to the runner.** After a save the web app tells it
+  only which provider joined (`PUT /api/settings/byok { provider, activate:
+  false }`), and the runner refuses any body that carries `apiKey`. A blank
+  key field in the studio's model list (`POST /api/settings/byok/models`)
+  lists on the saved key, opened for that one call.
+- **The old file is deleted at start.** The first start after the upgrade
+  deletes `byok.json` (and any temp file a write of it left), carries its
+  provider picks and tier models into `byok-settings.json` (never its keys),
+  and prints which providers had a key there but none saved in Settings, so
+  the owner knows which to enter again. It is deleted whether or not the
+  catalog can be read.
+- **The runner's secrets never reach a child.** At start the runner takes
+  `AUTH_SECRET`, `OWNER_PASSWORD`, `SESSION_EPOCH` and `GNOSIA_LOCAL_TOKEN`
+  out of its own environment (`takeKeySecret`), before anything is spawned,
+  so no agent, render or catalog CLI inherits them, whichever env builder
+  that spawn uses.
+- **Where the secret comes from.** The runner's environment first; a runner
+  started without one (`npm run dev:up` hands its pane the catalog's
+  variables, not `apps/web/.env.local`) asks
+  `services/sidecar/src/child-env.ts` once, which reads the data home's
+  `.env` and the web app's own files in the web's order, as the desktop shell
+  and the macOS app do, and keeps only that one value.
+- **Without it, BYOK is off and says why.** No `AUTH_SECRET` (or one too
+  short), or no catalog file, is `byokKeys: { ok: false, problem }` in the
+  runner's `/api/health` and the `error` of `GET /api/settings/byok`, which
+  the Settings card prints. A BYOK chat is refused with that sentence;
+  Claude and Codex chats, which never used these keys, run as before. The
+  runner never creates a catalog file that is not there.
+- **One more process opens the catalog.** The runner reached the catalog only
+  through its CLI before; this one read is in-process, because a CLI verb
+  that printed opened keys would be one any shell could call.
+
 ## Threat model
 
 What each kind of attacker gets.
@@ -142,7 +183,8 @@ What each kind of attacker gets.
 | Both the database and the environment | Every stored key, decrypted | Nothing more to protect. This is where the keys were before this change, when they sat in `.env` in the clear |
 | Code running on the server | Every key it touches, in memory | Out of scope: no design that lets the server call a provider can hide the key from the server |
 | Script running in the Settings page (an XSS) | A key while it is being typed, and the use of saved keys through Test | A saved key: no response carries one |
-| A copy of the checkout or of `STUDIO_HOME` while the studio is on (a backup, the homeserver copy, any agent session working in the repository) | Every key mirrored to the runner, in the clear, from `byok.json` (D6) | Keys for providers the runner does not take (custom providers). **Open**: moving the file's default out of the checkout, or having the runner open the sealed rows with `AUTH_SECRET`, is the owner's call |
+| A copy of the checkout or of `STUDIO_HOME` (a backup, the homeserver copy, any agent session working in the repository) | Which providers Studio uses and their models, from `byok-settings.json` | Any key: the runner keeps none (D12). A checkout that also holds `apps/web/.env.local` carries `AUTH_SECRET`, which is the environment row above, and still no ciphertext unless the catalog file is copied too |
+| A studio agent (a planner, diagram or video job, a BYOK turn) | A BYOK turn's own key, in its environment, which is what it runs on | `AUTH_SECRET` or any other saved key: the runner takes its secrets out of its environment before it spawns anything (D12) |
 
 So the design moves the keys from "anyone with the environment" to "anyone
 with the environment and the database". Keep the two apart: a database
@@ -190,6 +232,11 @@ each moves to version 2 when its key is next saved. No migration.
 
 **Rotating a provider key** is Replace in Settings, then Test.
 
+**The studio runner** opens the same rows for a BYOK turn (D12), so it needs
+the same `AUTH_SECRET` too: rotating it turns every Studio provider into
+"no key" until each key is re-entered in Settings, and the runner needs a
+restart to pick up a new value.
+
 **The macOS app's sidecar** (`services/sidecar`) opens and seals the same rows,
 so it needs the same `AUTH_SECRET`. It reads the environment the web reads, in
 the web's order: what the process exports, then `$GNOSIA_HOME/.env`, then
@@ -199,8 +246,6 @@ when it has none, and the app's Settings says so.
 
 ## Out of scope
 
-- The studio runner's own copy of the keys is described in D6, not designed
-  away.
 - Accounts beyond the one owner. The table and every function take the owner,
   so a second account needs nothing here, but `currentOwner()` still answers
   `local` for every signed-in request.

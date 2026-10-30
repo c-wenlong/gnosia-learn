@@ -20,8 +20,11 @@ import {
   removeByokProvider,
   saveByokModels,
   setByokActive,
+  type ByokInitial,
   type ByokProviderStatus,
+  type ByokSettingsView,
 } from "@/lib/studio-byok";
+import { runnerDown } from "@/lib/studio-client";
 
 type Tier = "default" | "lite" | "max";
 
@@ -45,17 +48,26 @@ function tiersOf(entry: ByokProviderStatus | null | undefined): Record<Tier, str
  * keys live on Providers above): no "+ Add provider", no key field, no
  * Connect and no Remove — the dropdown lists connected providers and the
  * tutor-saved ones that connect with their saved key.
+ *
+ * `initial` is the runner's answer as the server read it (the Settings page
+ * asks before it renders). Given, the card starts from it and sends nothing
+ * on mount; `down` draws the runner-down note straight away instead of a
+ * request the browser would log as a failed 502. Later re-reads skip while
+ * the runner is down, until Try again.
  */
 export function ByokConfig({
   onConnected,
   savedForTutor = [],
   manageKeys = true,
+  initial,
 }: {
   onConnected?: () => void;
   /** BYOK preset names with a key saved on the Providers card — listed so they connect with that key, no re-typing (D95). */
   savedForTutor?: string[];
   /** False hides every key control: the surface picks and models only. */
   manageKeys?: boolean;
+  /** The runner's settings as the server read them, or that it was down; absent, the card asks itself. */
+  initial?: ByokInitial;
 }) {
   const id = useId();
   const providerId = `${id}-provider`;
@@ -77,46 +89,73 @@ export function ByokConfig({
 
   // What the runner already holds: the dropdown lists only connected
   // providers (+ Add provider), and the selected one's tiers fill the fields.
-  // A key write on the Providers card mirrors into `byok.json` too, so the
-  // list re-reads whenever that lands.
+  // A key write on the Providers card changes Studio's list too, so the list
+  // re-reads whenever that lands.
+  const [down, setDown] = useState(initial?.state === "down");
+  const [keysProblem, setKeysProblem] = useState<string | null>(initial?.state === "up" ? initial.data.error ?? null : null);
   const loaded = useRef(false);
+  const downRef = useRef(initial?.state === "down");
+  const reload = useRef<(retry: boolean) => void>(() => {});
   useEffect(() => {
-    const load = () =>
+    const apply = (data: ByokSettingsView) => {
+      setConnected(data.providers);
+      setKeysProblem(data.error ?? null);
+      // Only the first read lands a pick: a later one (a key write
+      // announced from the Providers card) refreshes the list without
+      // moving the provider or retyping over edited tiers — unless the
+      // pick itself was deleted, which falls back to the active one.
+      const active = data.active ?? data.providers[0]?.provider ?? null;
+      if (!loaded.current) {
+        loaded.current = true;
+        const entry = data.providers.find((entry) => entry.provider === active);
+        setTiers(tiersOf(entry));
+        if (active !== null) {
+          setProvider(active);
+        } else if (manageKeys) {
+          setProvider(ADD_PROVIDER);
+          setAdding(true);
+        }
+        return;
+      }
+      setProvider((was) => {
+        if (was === "" || was === ADD_PROVIDER) return was;
+        if (data.providers.some((entry) => entry.provider === was)) return was;
+        // The pick itself was deleted: the fallback provider is a
+        // different account, so its tiers load and any typed key drops.
+        const entry = data.providers.find((entry) => entry.provider === active);
+        setTiers(tiersOf(entry));
+        setApiKey("");
+        return active ?? (manageKeys ? ADD_PROVIDER : "");
+      });
+      if (data.providers.length === 0 && manageKeys) setAdding(true);
+    };
+    const load = (retry: boolean) => {
+      // A runner known to be down is asked again only when the person asks.
+      if (downRef.current && !retry) return;
       void getByokSettings().then((result) => {
-        if (!result.ok) return;
-        setConnected(result.data.providers);
-        // Only the first read lands a pick: a later one (a key write
-        // announced from the Providers card) refreshes the list without
-        // moving the provider or retyping over edited tiers — unless the
-        // pick itself was deleted, which falls back to the active one.
-        const active = result.data.active ?? result.data.providers[0]?.provider ?? null;
-        if (!loaded.current) {
-          loaded.current = true;
-          const entry = result.data.providers.find((entry) => entry.provider === active);
-          setTiers(tiersOf(entry));
-          if (active !== null) {
-            setProvider(active);
-          } else if (manageKeys) {
-            setProvider(ADD_PROVIDER);
-            setAdding(true);
+        if (!result.ok) {
+          if (runnerDown(result.status, result.refusal)) {
+            downRef.current = true;
+            setDown(true);
+          } else {
+            setError(result.refusal.error);
           }
           return;
         }
-        setProvider((was) => {
-          if (was === "" || was === ADD_PROVIDER) return was;
-          if (result.data.providers.some((entry) => entry.provider === was)) return was;
-          // The pick itself was deleted: the fallback provider is a
-          // different account, so its tiers load and any typed key drops.
-          const entry = result.data.providers.find((entry) => entry.provider === active);
-          setTiers(tiersOf(entry));
-          setApiKey("");
-          return active ?? (manageKeys ? ADD_PROVIDER : "");
-        });
-        if (result.data.providers.length === 0 && manageKeys) setAdding(true);
+        downRef.current = false;
+        setDown(false);
+        apply(result.data);
       });
-    load();
-    window.addEventListener(BYOK_SETTINGS_CHANGED, load);
-    return () => window.removeEventListener(BYOK_SETTINGS_CHANGED, load);
+    };
+    reload.current = load;
+    if (initial?.state === "up" && !loaded.current) apply(initial.data);
+    else if (initial === undefined) load(false);
+    const onWrite = () => load(false);
+    window.addEventListener(BYOK_SETTINGS_CHANGED, onWrite);
+    return () => window.removeEventListener(BYOK_SETTINGS_CHANGED, onWrite);
+    // `initial` is read once, as the first answer; a re-render with a new
+    // object must not re-apply it over what the person has since picked.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [manageKeys]);
 
   const selected = connected?.find((entry) => entry.provider === provider) ?? null;
@@ -201,9 +240,9 @@ export function ByokConfig({
   }
 
   /**
-   * A provider whose key the tutor already has, connected by pushing that
-   * key to the runner (`/api/learner/provider-key/sync`) — the same key,
-   * never re-typed.
+   * A provider whose key the tutor already has, connected through
+   * `/api/learner/provider-key/sync`: the runner uses that same saved key,
+   * never re-typed and never sent to it.
    */
   async function connectSaved(byokName: string) {
     const tutor = byokToTutor(byokName);
@@ -240,10 +279,10 @@ export function ByokConfig({
   async function connect() {
     setSaving(true);
     setError(null);
-    // One key, both stores (D95): the tutor's `/api/learner/provider-key`
-    // seals it, and the route itself mirrors it into the runner's
-    // `byok.json`. The tutor write is the canonical one — a refusal there
-    // means nothing is connected anywhere.
+    // One key (D95): the tutor's `/api/learner/provider-key` seals it, and
+    // the route adds the provider to Studio's list; the runner opens the
+    // sealed row itself when a turn runs. A refusal there means nothing is
+    // connected anywhere.
     const tutor = byokToTutor(newProvider);
     const reply = await sendJson<{ ok?: boolean; error?: string; byok?: boolean }>("POST", "/api/learner/provider-key", {
       provider: tutor,
@@ -254,7 +293,7 @@ export function ByokConfig({
       setError(reply?.data.error ?? (reply === null ? "the server did not answer" : `not connected (HTTP ${reply.status})`));
       return;
     }
-    // The tutor route mirrors the key without moving Studio's pick; a
+    // The tutor route connects the provider without moving Studio's pick; a
     // provider just connected here is meant to run, so make it active now —
     // and a switch that failed is said rather than silently kept on the old
     // provider.
@@ -281,7 +320,7 @@ export function ByokConfig({
     onConnected?.();
   }
 
-  /** The selected provider leaves `byok.json` whole — key, tiers and the pick. */
+  /** The selected provider leaves Studio — its tiers and the pick; its key stays saved in Settings. */
   async function remove() {
     if (selected === null) return;
     setSaving(true);
@@ -302,7 +341,7 @@ export function ByokConfig({
     setError(null);
     // A typed key on a connected provider replaces the stored one first, so
     // a rotated key and new tier picks land together — through the tutor's
-    // route, which mirrors it into `byok.json`, keeping both stores on one key.
+    // route, the one store both read.
     if (apiKey.trim() !== "") {
       const keyResult = await sendJson<{ ok?: boolean; error?: string; byok?: boolean }>("POST", "/api/learner/provider-key", {
         provider: byokToTutor(provider),
@@ -313,12 +352,12 @@ export function ByokConfig({
         setError(keyResult?.data.error ?? (keyResult === null ? "the server did not answer" : `key not saved (HTTP ${keyResult.status})`));
         return;
       }
-      // The tutor write succeeded but the runner did not take its mirror:
-      // say the key Studio still uses is the old one, and do not save tiers
-      // against a provider whose key just did not land.
+      // The tutor write succeeded but the runner did not answer: the key
+      // is saved, and Studio reads it at its next turn; do not save tiers to
+      // a runner that is not answering.
       if (keyResult.data.byok === false) {
         setSaving(false);
-        setError("The key saved for the tutor, but the studio runner did not take it — Studio keeps the old key until the runner answers.");
+        setError("The key is saved, but the studio runner did not answer. Save the models again once it is running.");
         return;
       }
       setApiKey("");
@@ -341,8 +380,27 @@ export function ByokConfig({
     entry.label === null || entry.label === entry.value ? { value: entry.value, label: entry.value } : { value: entry.value, label: entry.label, detail: entry.value },
   );
 
+  if (down) {
+    return (
+      <div className="flex flex-col gap-3">
+        <p role="status" className="text-[13px] leading-5 text-text2">
+          The studio runner is not answering, so Studio&apos;s providers cannot be read or changed here. Start it with{" "}
+          <code>npm run studio</code>, then try again.
+        </p>
+        <Button className="self-start" onClick={() => reload.current(true)}>
+          Try again
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-5">
+      {keysProblem !== null && (
+        <p role="status" className="text-[13px] leading-5 text-text2">
+          Studio cannot use the saved keys yet: {keysProblem}.
+        </p>
+      )}
       <div className="flex flex-col gap-1.5">
         <label htmlFor={providerId} className={LABEL}>
           Provider
@@ -480,7 +538,7 @@ export function ByokConfig({
                 key={provider}
                 size="text"
                 label="Remove"
-                question={`Remove ${BYOK_PROVIDERS.find((known) => known.value === provider)?.label ?? provider}'s key from Studio?`}
+                question={`Stop using ${BYOK_PROVIDERS.find((known) => known.value === provider)?.label ?? provider} in Studio? Its key stays saved in Settings.`}
                 confirmLabel="Remove it"
                 onConfirm={() => void remove()}
                 busy={saving}
