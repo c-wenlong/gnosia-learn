@@ -31,6 +31,7 @@ import {
   setTheme,
   setTopicCompleted,
 } from "@/lib/storage";
+import { randomToken } from "@/lib/random-token";
 import { announceVisitStored } from "@/lib/recent-client";
 import { withDeadline } from "@/lib/send-json";
 import { applyThemeToDocument, followTheme, writeThemeCookie } from "@/lib/theme-cookie";
@@ -154,13 +155,20 @@ type Replay = (next: LearnerState) => (previous: LearnerState) => LearnerState;
 type Outbound =
   | { kind: "note"; topicId: string; note: string }
   | { kind: "progress"; topicId: string; done: boolean }
-  | { kind: "recap"; topicId: string; input: KnowledgeInput; countSession: boolean }
+  | { kind: "recap"; topicId: string; input: KnowledgeInput; countSession: boolean; requestId?: string }
   | { kind: "theme"; theme: ThemeMode };
 
 /** A write worth keeping: how to draw it again, and the same write as data. */
 interface Keep {
   replay: Replay;
   outbound: Outbound;
+  /**
+   * From the stored write's `result`, the reducer that draws what the server
+   * stored over the optimistic value, or null to keep that value. A recap
+   * sent again may already have been stored once, so the session it counted
+   * on the page is the server's to say.
+   */
+  adopt?: (result: unknown) => ((previous: LearnerState) => LearnerState) | null;
 }
 
 /** A refused write kept to be drawn and sent again: see `unsaved`. */
@@ -518,6 +526,12 @@ export function LearnerProvider({
         stored.current.set(keys.join("\n"), confirm(next));
         // A new write gets its own re-reads, whatever earlier ones used.
         rereads.current = 0;
+        // Only the newest write on its key: an older one's value is not on screen.
+        const settle = newest ? keep?.adopt?.(response.result) : null;
+        if (settle) {
+          current.current = settle(current.current);
+          setState(current.current);
+        }
       };
       const start = () => {
         waiting.current.delete(start);
@@ -555,9 +569,9 @@ export function LearnerProvider({
    */
   const retryUnsaved = useCallback(
     (skip: readonly string[] = []) => {
-      for (const [key, { reduce, send, confirm, replay, outbound }] of [...unsaved.current]) {
+      for (const [key, { reduce, send, confirm, replay, outbound, adopt }] of [...unsaved.current]) {
         if (skip.includes(key)) continue;
-        void commit(key, reduce, send, confirm, { replay, outbound });
+        void commit(key, reduce, send, confirm, { replay, outbound, adopt });
       }
     },
     [commit],
@@ -724,31 +738,42 @@ export function LearnerProvider({
     [commit],
   );
 
-  const saveKnowledge = useCallback(
-    (topicId: string, input: KnowledgeInput, options?: { countSession?: boolean }) => {
+  /**
+   * One recap, under the request id that names it. A kept write is sent again
+   * by the same `send`, and one left in the outbox carries its id, so every
+   * copy of one save goes under one id, and the route counts the session once
+   * even when the answer to a stored copy was lost.
+   */
+  const sendRecap = useCallback(
+    (topicId: string, input: KnowledgeInput, countSession: boolean, requestId: string) => {
       commit(
         `recap:${topicId}`,
-        (previous) => recordKnowledge(previous, topicId, input, options),
-        () =>
-          post("recap", {
-            curriculumItemId: topicId,
-            ...input,
-            countSession: options?.countSession !== false,
-          }),
+        (previous) => recordKnowledge(previous, topicId, input, { countSession }),
+        () => post("recap", { curriculumItemId: topicId, ...input, countSession, requestId }),
         same((state) => recapOf(state, topicId)),
         // The recap as the write made it, not the reducer again: it counts a
         // session each time it runs, and a kept recap is drawn over every
-        // snapshot until it is stored. The server counts the session when the
-        // write it is sent again is stored; one whose answer was lost after it
-        // was stored is counted twice, which only a request id on the route
-        // could tell apart.
+        // snapshot until it is stored.
+        // The recap as stored, once it is: a copy of a save the server had
+        // already stored counts no session there, while the reducer above
+        // counted one on whatever the page last read.
         {
           replay: (next) => (previous) => withRecap(previous, topicId, next.knowledge[topicId]),
-          outbound: { kind: "recap", topicId, input, countSession: options?.countSession !== false },
+          outbound: { kind: "recap", topicId, input, countSession, requestId },
+          adopt: (result) => {
+            const recap = (result as { recap?: LearnerState["knowledge"][string] | null } | undefined)?.recap;
+            return recap ? (previous) => withRecap(previous, topicId, recap) : null;
+          },
         },
       );
     },
     [commit],
+  );
+
+  const saveKnowledge = useCallback(
+    (topicId: string, input: KnowledgeInput, options?: { countSession?: boolean }) =>
+      sendRecap(topicId, input, options?.countSession !== false, randomToken()),
+    [sendRecap],
   );
 
   const forgetKnowledge = useCallback(
@@ -856,10 +881,11 @@ export function LearnerProvider({
     for (const write of takeOutbox()) {
       if (write.kind === "note") updateNote(write.topicId, write.note);
       else if (write.kind === "progress") setCompleted(write.topicId, write.done);
-      else if (write.kind === "recap") saveKnowledge(write.topicId, write.input, { countSession: write.countSession });
+      // An outbox from before request ids carries none, so it gets one here.
+      else if (write.kind === "recap") sendRecap(write.topicId, write.input, write.countSession, typeof write.requestId === "string" ? write.requestId : randomToken());
       else setThemeMode(write.theme);
     }
-  }, [updateNote, setCompleted, saveKnowledge, setThemeMode]);
+  }, [updateNote, setCompleted, sendRecap, setThemeMode]);
 
   const value = useMemo(
     () => ({

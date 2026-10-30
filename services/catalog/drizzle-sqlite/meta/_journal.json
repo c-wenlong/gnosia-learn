@@ -15,6 +15,13 @@
       "when": 1792519115741,
       "tag": "0001_catalog_armed_rule",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793346320860,
+      "tag": "0002_recap_request_id",
+      "breakpoints": true
     }
   ]
 }
