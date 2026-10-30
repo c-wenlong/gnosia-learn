@@ -99,14 +99,19 @@ struct HomeView: View {
     private func dueBanner(_ model: HomeModel) -> some View {
         if model.dueCount > 0 {
             HStack(spacing: 8) {
-                Image(systemName: "rectangle.stack.badge.clock")
-                    .foregroundStyle(.orange)
+                // "rectangle.stack.badge.clock" is not an SF Symbol, so the
+                // banner drew no glyph at all.
+                Image(systemName: "rectangle.stack")
+                    .foregroundStyle(G.streak)
                 Text("\(model.dueCount) \(model.dueCount == 1 ? "card is" : "cards are") due for review")
                     .font(.callout)
                 Spacer()
             }
             .padding(10)
-            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+            // The palette's card, not the system's grey fill, which reads
+            // as a disabled grey slab on the cream page.
+            .background(G.surface, in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(G.border, lineWidth: 1))
         }
     }
 
@@ -211,7 +216,10 @@ private struct NextUpRow: View {
                 }
             }
             .padding(10)
-            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
+            // The palette's card, not the system's grey fill, which reads
+            // as a disabled grey slab on the cream page.
+            .background(G.surface, in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(G.border, lineWidth: 1))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
