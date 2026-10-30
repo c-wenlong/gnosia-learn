@@ -400,7 +400,11 @@ the three wrong options come from one of two places, best first
    check's id and a sha256 of its question and answer, so a check is written
    once, and an edited check, or one that moved to another place in its
    note, is written again. One generation per check runs at a time in a
-   process.
+   process. An answer longer than 400 characters, the longest option kept,
+   asks no model and takes the notes' options. The page applies the options
+   only when the check's question and answer, as the server read them,
+   still match the question on screen, and gives up waiting after 70
+   seconds.
 2. **The notes'.** When no model can be asked (no key, every provider
    failed, a refused reply), the question uses the note's other checks'
    answers and its neighbours' summaries (requires, assumes, dependants,
