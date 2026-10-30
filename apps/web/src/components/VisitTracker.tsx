@@ -10,16 +10,15 @@ export function VisitTracker({
   courseSlug: string;
   moduleSlug?: string;
 }) {
-  const { ready, markVisited } = useLearner();
+  const { markVisited } = useLearner();
   const lastKey = useRef<string>("");
 
   useEffect(() => {
-    if (!ready) return;
     const key = `${courseSlug}:${moduleSlug ?? ""}`;
     if (lastKey.current === key) return;
     lastKey.current = key;
     markVisited(courseSlug, moduleSlug);
-  }, [ready, courseSlug, moduleSlug, markVisited]);
+  }, [courseSlug, moduleSlug, markVisited]);
 
   return null;
 }

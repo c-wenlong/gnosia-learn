@@ -12,7 +12,7 @@ import type { Course, Module, Topic } from "@/lib/types";
  * recorded against that concept under the topic's session.
  */
 
-const learner = { state: { notes: {}, knowledge: {} }, ready: true, saveKnowledge: vi.fn(), saveError: null };
+const learner = { state: { notes: {}, knowledge: {} }, saveKnowledge: vi.fn(), saveError: null };
 vi.mock("@/lib/learner-context", () => ({ useLearner: () => learner }));
 const router = { push: vi.fn(), replace: vi.fn(), refresh: vi.fn() };
 vi.mock("next/navigation", () => ({ useRouter: () => router }));

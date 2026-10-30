@@ -17,7 +17,6 @@ const learner = vi.hoisted(() => ({ resetCourse: vi.fn() }));
 vi.mock("@/lib/learner-context", () => ({
   useLearner: () => ({
     state: { theme: "light", displayName: undefined },
-    ready: true,
     setThemeMode: vi.fn(),
     setDisplayName: vi.fn(),
     resetCourse: learner.resetCourse,

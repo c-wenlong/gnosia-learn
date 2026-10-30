@@ -27,6 +27,9 @@ import { useShell } from "./shell-context";
 import { ShortcutsSheet } from "./ShortcutsSheet";
 import { isPhoneWidth, useShellShortcuts } from "./use-shortcuts";
 
+/** The nav's id, which the phone header's sidebar button controls. */
+export const SIDEBAR_NAV_ID = "app-sidebar";
+
 /**
  * The app's one sidebar, laid out the way a chat app's is: the wordmark and
  * the fold at the top, New chat (the studio, when this deployment has one),
@@ -241,8 +244,15 @@ export function AppSidebar() {
       {/* The sidebar's room beside the page, from 768px up: 260px open, 60px
           folded, whether or not the folded one is slid out over the page. The
           drawer takes no room; it is fixed over the page. */}
+      {/* The open drawer is a modal dialog around the navigation, so the nav
+          stays a navigation landmark inside it rather than turning into the
+          dialog. On a phone this box is `display: contents`, which every
+          current browser keeps in the accessibility tree with its role. */}
       <div
         ref={room}
+        role={drawer ? "dialog" : undefined}
+        aria-modal={drawer ? true : undefined}
+        aria-label={drawer ? "Sidebar" : undefined}
         className={cx(
           // A phone gives it no room: the drawer is fixed over the page.
           "max-md:contents",
@@ -277,9 +287,8 @@ export function AppSidebar() {
       >
         <nav
           ref={panel}
+          id={SIDEBAR_NAV_ID}
           aria-label="Primary"
-          aria-modal={drawer ? true : undefined}
-          role={drawer ? "dialog" : undefined}
           // Which of its four shapes it is in, for tests and styles that would
           // otherwise have to read it back out of the classes.
           data-state={drawer ? "drawer" : peeking ? "peek" : rail ? "rail" : "open"}

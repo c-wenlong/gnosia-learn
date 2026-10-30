@@ -72,23 +72,23 @@ export function AgentSession({
   /** The titles of the concepts the topic declares, by id, for the recorded-answer card; an id stands in for a missing one. */
   conceptTitles?: Record<string, string>;
 }) {
-  const { state, ready, saveKnowledge, saveError } = useLearner();
+  const { state, saveKnowledge, saveError } = useLearner();
   const learnerNote = state.notes[topic.id] ?? "";
   const storedKnowledge = state.knowledge[topic.id];
 
-  // Snapshot the recap once localStorage has hydrated, then hold it: the
-  // session resumes from what was known when it opened, so saving a recap
-  // mid-session doesn't rewrite the tutor's premise underneath it.
+  // Snapshot the recap on mount, then hold it: the session resumes from what
+  // was known when it opened, so saving a recap mid-session doesn't rewrite
+  // the tutor's premise underneath it.
   const [priorKnowledge, setPriorKnowledge] = useState<
     TopicKnowledge | undefined
   >(undefined);
   const priorFrozen = useRef(false);
 
   useEffect(() => {
-    if (priorFrozen.current || !ready) return;
+    if (priorFrozen.current) return;
     priorFrozen.current = true;
     setPriorKnowledge(storedKnowledge);
-  }, [ready, storedKnowledge]);
+  }, [storedKnowledge]);
 
   const session = useMemo(
     () =>
