@@ -89,23 +89,18 @@ struct VideoDetailView: View {
         url.map { FileManager.default.fileExists(atPath: $0.path) } ?? false
     }
 
-    /// Where the player opens: the watch row's position, except a finished
-    /// video starts over (the web's RESUME_TAIL rule — resumeAt in
-    /// playback.ts) and a barely started one needs no resume
-    /// (RESUME_HEAD_SECONDS).
+    /// Where the player opens: the web's resumeAt over the newer of this
+    /// app's watch row and the web's `playback:` row, so a video paused on
+    /// the web resumes here and the two never disagree on the rule.
     private var resumePoint: Double {
-        guard let mark = store.watchMark(asset.id), !mark.done, mark.seconds >= 5 else { return 0 }
-        return mark.seconds
+        resumeAt(store.playback(for: asset.id))
     }
 
-    /// The heartbeat's write: position into the `watch` row, `done` once the
-    /// playhead crosses watchedFraction of the duration — the web's coverage
-    /// rule approximated by position, since this app does not track ranges.
-    /// Done is sticky: a later partial position never un-watches.
-    private func save(position: Double, duration: Double) {
-        let done = (learner?.watchEntry(for: asset.id)?.done ?? false)
-            || position >= watchedFraction * duration
-        learner?.setWatch(asset.id, seconds: position, done: done, mirror: .position(duration: duration))
+    /// The heartbeat's write: position and the stretches that played into
+    /// the `watch` row, which decides `done` by their coverage, as the web's
+    /// route does. Done is sticky: a later save never un-watches.
+    private func save(position: Double, duration: Double, ranges: [[Double]]) {
+        learner?.setWatch(asset.id, seconds: position, done: false, mirror: .position(duration: duration, ranges: ranges))
         playhead = position
         store.refreshLearner()
     }
@@ -121,8 +116,8 @@ struct VideoDetailView: View {
                             url: url,
                             seekTo: $seekTo,
                             resumeAt: resumePoint,
-                            onPosition: { position, duration in
-                                save(position: position, duration: duration)
+                            onPosition: { position, duration, ranges in
+                                save(position: position, duration: duration, ranges: ranges)
                             },
                             onPlayhead: { seconds in
                                 live.seconds = seconds

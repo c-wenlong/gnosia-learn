@@ -284,15 +284,19 @@ struct CatalogMastery: Hashable {
     let lastSeen: Date?
 }
 
-/// One row of the mirrored event log. The snapshot ships only these fields —
-/// the catalog's promoted `concept_slug` and `session_id` columns are not
-/// mirrored — so `payload` is where `course`/`module`, `asset`, `goal` and
-/// `concepts` live, and an `observation` row cannot name its concept.
+/// One row of the event log, from the mirror or from learner.db. `payload`
+/// is where `course`/`module`, `asset`, `goal` and `concepts` live.
+/// `conceptSlug` and `sessionId` are the catalog's promoted columns
+/// (events.ts, toRow): the mirror carries them from schema 4, and a local
+/// row takes them from its payload's `concept` and `session`, so both
+/// sources answer in one shape. Nil on a mirror older than that.
 struct CatalogEvent {
     let id: Int64
     let at: Date
     let type: String
     let payload: [String: Any]
+    var conceptSlug: String? = nil
+    var sessionId: String? = nil
 }
 
 /// One SM-2 card: `due` is when the concept is next owed, the rest is the
@@ -433,11 +437,18 @@ final class CatalogStore {
     private(set) var meta: [String: String] = [:]
     private(set) var error: String?
     private(set) var loaded = false
+    /// Why the last snapshot refresh failed, for Settings; nil after one
+    /// that succeeded or found nothing to do.
+    var snapshotFailure: String?
+    /// When a refresh last started, so coming to the front repeatedly does
+    /// not spawn a run each time, and whether one is running now.
+    private var snapshotStarted: Date?
+    private var snapshotRunning = false
 
     // The learner tables (wave-1 surfaces). Every per-learner read scopes to
-    // 'local' — LOCAL_LEARNER_ID in packages/schema — because the file is
-    // this learner's mirror: another owner's rows must not leak into "due",
-    // "watched" or "starred". On a version-1 snapshot all of these stay
+    // the snapshot's owner (`snapshot_meta.owner`, `local` on a file that
+    // predates it), because the file is this learner's mirror: another
+    // owner's rows must not leak into "due", "watched" or "starred". On a version-1 snapshot all of these stay
     // empty; the file is asked which tables it has before any are read.
     private(set) var prerequisites: [CatalogPrerequisite] = []
     /// BKT state by concept slug: p(L), counts, last seen.
@@ -458,6 +469,10 @@ final class CatalogStore {
     private var snapshotReviews: [CatalogReview] = []
     private var snapshotReviewStamp: [String: Double] = [:]
     private var snapshotEvents: [CatalogEvent] = []
+    private var snapshotSessions: [CatalogSession] = []
+    /// The `requestId`s of the answers (observations and review grades) the
+    /// mirror holds: learner.db's own copies of these can go.
+    private(set) var mirroredRequestIds: Set<String> = []
     /// True once the first `learn` graph stands at the end of load() —
     /// loadLearner rebuilds it from then on, so a session write moves the
     /// frontier and the review queue without a catalog reload.
@@ -471,11 +486,9 @@ final class CatalogStore {
     private(set) var watchedAt: [String: Date] = [:]
     /// Asset id → the learner's own title, from the catalog's asset_name.
     private(set) var assetNames: [String: String] = [:]
-    /// The mirrored event log, in log order. The snapshot ships only
-    /// id/at/type/payload — the catalog's promoted `concept_slug` and
-    /// `session_id` columns stay behind (catalog-snapshot.mjs), so a surface
-    /// reads the payload for `course`/`module`/`asset`/`goal`/`concepts`
-    /// and accepts that an observation cannot name its concept.
+    /// The event log, the mirror's and learner.db's, in log order. A surface
+    /// reads the payload for `course`/`module`/`asset`/`goal`/`concepts`,
+    /// and `conceptSlug` for which concept an observation was about.
     private(set) var events: [CatalogEvent] = []
     /// Concept slug → its `concept_curriculum_item` links as
     /// (item id, authored position), item id ascending — the web's
@@ -491,8 +504,8 @@ final class CatalogStore {
     private(set) var favorites: Set<String> = []
     private(set) var watch: [String: WatchMark] = [:]
     private(set) var names: [String: String] = [:]
-    /// The tutor sessions learner.db holds — its `session` table, which the
-    /// snapshot does not ship. Newest `updated_at` first.
+    /// The tutor sessions: learner.db's and the mirror's, one per id, the
+    /// newer `updated_at` winning. Newest first.
     private(set) var sessions: [CatalogSession] = []
 
     /// slug → markdown, for the note detail pane. A note asset's body is
@@ -552,6 +565,26 @@ final class CatalogStore {
         location = CatalogLocation.resolve()
         loaded = false
         loadIfNeeded()
+    }
+
+    /// Refresh the mirror when the catalog has moved past it, then reload:
+    /// on launch, and each time the app comes to the front, at most once a
+    /// minute (`force` skips the wait, for launch).
+    func refreshSnapshot(force: Bool = false) async {
+        guard !snapshotRunning else { return }
+        if !force, let started = snapshotStarted, Date().timeIntervalSince(started) < 60 { return }
+        snapshotRunning = true
+        snapshotStarted = Date()
+        defer { snapshotRunning = false }
+        switch await CatalogSnapshot.refreshIfNeeded(location: location) {
+        case .fresh:
+            snapshotFailure = nil
+        case .refreshed:
+            snapshotFailure = nil
+            reload()
+        case .failed(let why):
+            snapshotFailure = why
+        }
     }
 
     func loadIfNeeded() {
@@ -677,6 +710,16 @@ final class CatalogStore {
         // snapshot (or one from a script that predates a table) loads with
         // the surface empty rather than failing the whole catalog.
         let tables = try db.tables()
+        // snapshot_meta first: it names the owner the learner rows below
+        // belong to (catalog-snapshot.mjs --owner). A file from before the
+        // owner was written is `local`'s, the only owner there was.
+        var meta: [String: String] = [:]
+        if let metaRows = try? db.query("SELECT key, value FROM snapshot_meta") {
+            while metaRows.next() {
+                if let key = metaRows.text(0), let value = metaRows.text(1) { meta[key] = value }
+            }
+        }
+        let owner = meta["owner"].flatMap { $0.isEmpty ? nil : $0 } ?? "local"
 
         var conceptList: [CatalogConcept] = []
         var conceptsBySlug: [String: CatalogConcept] = [:]
@@ -744,8 +787,8 @@ final class CatalogStore {
             let stamped = ((try? db.columns(of: "mastery")) ?? []).contains("updated_at")
             let rows = try db.query("""
                 SELECT concept_slug, p_l, observations, correct, last_seen\(stamped ? ", updated_at" : "")
-                FROM mastery WHERE learner_id = 'local'
-                """)
+                FROM mastery WHERE learner_id = ?
+                """, bind: [owner])
             while rows.next() {
                 guard let slug = rows.text(0) else { continue }
                 mastery[slug] = CatalogMastery(
@@ -766,9 +809,9 @@ final class CatalogStore {
             let rows = try db.query("""
                 SELECT concept_slug, repetitions, ease, interval_days, lapses,
                        due, last_reviewed, leech\(stamped ? ", updated_at" : "")
-                FROM review WHERE learner_id = 'local'
+                FROM review WHERE learner_id = ?
                 ORDER BY due
-                """)
+                """, bind: [owner])
             while rows.next() {
                 guard let slug = rows.text(0), let due = rows.double(5) else { continue }
                 reviews.append(CatalogReview(
@@ -789,8 +832,8 @@ final class CatalogStore {
         if tables.contains("progress") {
             let rows = try db.query("""
                 SELECT curriculum_item_id, completed_at, note, updated_at
-                FROM progress WHERE learner_id = 'local'
-                """)
+                FROM progress WHERE learner_id = ?
+                """, bind: [owner])
             while rows.next() {
                 guard let item = rows.text(0) else { continue }
                 progress[item] = CatalogProgress(
@@ -807,8 +850,8 @@ final class CatalogStore {
             let rows = try db.query("""
                 SELECT curriculum_item_id, summary, key_points, misconceptions,
                        open_questions, source, sessions
-                FROM recap WHERE learner_id = 'local'
-                """)
+                FROM recap WHERE learner_id = ?
+                """, bind: [owner])
             while rows.next() {
                 guard let item = rows.text(0) else { continue }
                 recaps[item] = CatalogRecap(
@@ -825,7 +868,7 @@ final class CatalogStore {
 
         var preferences: [String: String] = [:]
         if tables.contains("preference") {
-            let rows = try db.query("SELECT key, value FROM preference WHERE learner_id = 'local'")
+            let rows = try db.query("SELECT key, value FROM preference WHERE learner_id = ?", bind: [owner])
             while rows.next() {
                 if let key = rows.text(0), let value = rows.text(1) { preferences[key] = value }
             }
@@ -840,9 +883,9 @@ final class CatalogStore {
             let rows = try db.query("""
                 SELECT json_extract(payload, '$.asset'), MAX(at)
                 FROM event
-                WHERE type = 'watched' AND learner_id = 'local'
+                WHERE type = 'watched' AND learner_id = ?
                 GROUP BY 1
-                """)
+                """, bind: [owner])
             while rows.next() {
                 if let assetID = rows.text(0), let at = rows.double(1) {
                     watchedAt[assetID] = Date(timeIntervalSince1970: at)
@@ -853,21 +896,43 @@ final class CatalogStore {
         // The whole event log, newest surfaces need more than the `watched`
         // fold above: `visit` rows carry course/module, `session-start` a
         // `goal` concept slug, `session-close` a `concepts` list, and an
-        // `observation` its question text — which is as close as the mirror
-        // gets to naming the concept an observation belongs to.
+        // `observation` its question text and, from schema 4, its concept
+        // and session in their own columns.
         var events: [CatalogEvent] = []
         if tables.contains("event") {
+            let promoted = ((try? db.columns(of: "event")) ?? []).isSuperset(of: ["concept_slug", "session_id"])
             let rows = try db.query("""
-                SELECT id, at, type, payload FROM event
-                WHERE learner_id = 'local' ORDER BY at, id
-                """)
+                SELECT id, at, type, payload, \(promoted ? "concept_slug, session_id" : "NULL, NULL") FROM event
+                WHERE learner_id = ? ORDER BY at, id
+                """, bind: [owner])
             while rows.next() {
                 guard let at = rows.double(1) else { continue }
                 events.append(CatalogEvent(
                     id: rows.int64(0) ?? 0,
                     at: Date(timeIntervalSince1970: at),
                     type: rows.text(2) ?? "",
-                    payload: Self.jsonObject(rows.text(3))
+                    payload: Self.jsonObject(rows.text(3)),
+                    conceptSlug: rows.text(4),
+                    sessionId: rows.text(5)
+                ))
+            }
+        }
+
+        // The catalog's sessions (schema 4), so one started on the web shows
+        // beside the ones learner.db opened; loadLearner merges the two.
+        var catalogSessions: [CatalogSession] = []
+        if tables.contains("session") {
+            let rows = try db.query("""
+                SELECT id, title, goal, updated_at FROM session
+                WHERE learner_id = ? AND kind = 'tutor' ORDER BY updated_at DESC
+                """, bind: [owner])
+            while rows.next() {
+                guard let id = rows.text(0) else { continue }
+                catalogSessions.append(CatalogSession(
+                    id: id,
+                    title: rows.text(1).flatMap { $0.isEmpty ? nil : $0 },
+                    goal: rows.text(2).flatMap { $0.isEmpty ? nil : $0 },
+                    updatedAt: rows.double(3).map { Date(timeIntervalSince1970: $0) }
                 ))
             }
         }
@@ -890,7 +955,7 @@ final class CatalogStore {
 
         var assetNames: [String: String] = [:]
         if tables.contains("asset_name") {
-            let rows = try db.query("SELECT asset_id, title FROM asset_name WHERE learner_id = 'local'")
+            let rows = try db.query("SELECT asset_id, title FROM asset_name WHERE learner_id = ?", bind: [owner])
             while rows.next() {
                 if let id = rows.text(0), let title = rows.text(1) { assetNames[id] = title }
             }
@@ -911,13 +976,6 @@ final class CatalogStore {
             if let slug = assetConcepts[asset.id]?.first { noteConcepts[asset.id] = slug }
         }
 
-        var meta: [String: String] = [:]
-        if let metaRows = try? db.query("SELECT key, value FROM snapshot_meta") {
-            while metaRows.next() {
-                if let key = metaRows.text(0), let value = metaRows.text(1) { meta[key] = value }
-            }
-        }
-
         topics = topicsBySlug
         assets = ordered
         concepts = conceptList
@@ -933,6 +991,7 @@ final class CatalogStore {
         snapshotReviews = reviews
         snapshotReviewStamp = reviewStamp
         snapshotEvents = events
+        snapshotSessions = catalogSessions
         self.recaps = recaps
         self.preferences = preferences
         self.watchedAt = watchedAt
@@ -1541,6 +1600,38 @@ struct CatalogSession: Hashable {
     let updatedAt: Date?
 }
 
+/// The event types whose payload carries the `requestId` the write was
+/// replayed by: the same id in the mirror and in learner.db is one answer.
+private let answerTypes: Set<String> = ["observation", "review"]
+
+/// The `requestId`s of the answers in `events`.
+func mirroredRequests(in events: [CatalogEvent]) -> Set<String> {
+    Set(events.compactMap { answerTypes.contains($0.type) ? $0.payload["requestId"] as? String : nil })
+}
+
+/// Whether a local event is an answer the mirror already holds.
+func isMirroredAnswer(_ event: CatalogEvent, in mirrored: Set<String>) -> Bool {
+    guard answerTypes.contains(event.type), let id = event.payload["requestId"] as? String else { return false }
+    return mirrored.contains(id)
+}
+
+/// The mirror's sessions and learner.db's as one list: one row per id, the
+/// newer `updatedAt` winning (the local row on a tie, as it is the fresher
+/// write), newest first.
+func mergedSessions(_ catalog: [CatalogSession], _ local: [CatalogSession]) -> [CatalogSession] {
+    var byId: [String: CatalogSession] = [:]
+    for row in catalog { byId[row.id] = row }
+    for row in local {
+        if let seen = byId[row.id],
+           (seen.updatedAt ?? .distantPast) > (row.updatedAt ?? .distantPast) { continue }
+        byId[row.id] = row
+    }
+    return byId.values.sorted {
+        let a = $0.updatedAt ?? .distantPast, b = $1.updatedAt ?? .distantPast
+        return a != b ? a > b : $0.id < $1.id
+    }
+}
+
 extension CatalogStore {
     /// Re-read learner.db without reloading the catalog. The file is small
     /// and can change while the app is open — a writer lands in a sibling
@@ -1710,17 +1801,23 @@ extension CatalogStore {
             {
                 while rows.next() {
                     guard let at = rows.double(1) else { continue }
+                    let payload = Self.jsonObject(rows.text(3))
+                    // The catalog's toRow promotes these two out of the
+                    // payload; read them the same way so a local row
+                    // answers in the mirror's shape.
                     localEvents.append(CatalogEvent(
                         id: rows.int64(0) ?? 0,
                         at: Date(timeIntervalSince1970: at),
                         type: rows.text(2) ?? "",
-                        payload: Self.jsonObject(rows.text(3))
+                        payload: payload,
+                        conceptSlug: payload["concept"] as? String,
+                        sessionId: payload["session"] as? String
                     ))
                 }
             }
 
-            // The sessions recordSessionAnswer opened — the snapshot has no
-            // session table, so this file is the only read.
+            // The sessions recordSessionAnswer opened, merged below with the
+            // mirror's own.
             if (try? db.hasTable("session")) == true,
                let rows = try? db.query("""
                    SELECT id, title, goal, updated_at FROM session
@@ -1750,7 +1847,7 @@ extension CatalogStore {
         favorites = mergedFavorites
         watch = marks
         names = renames
-        sessions = localSessions
+        sessions = mergedSessions(snapshotSessions, localSessions)
 
         // Mastery and review merge the way progress does: per concept, the
         // row with the newer `updated_at` is the truth whichever file it
@@ -1780,9 +1877,16 @@ extension CatalogStore {
         // The event log appends, never merges rows: snapshot events first,
         // the session's own observations after them at the same instant —
         // chronological, so checkStatuses' latest-match reads the freshest.
+        // A local answer the mirror already carries (its observe or grade
+        // reached the catalog and a snapshot since picked it up) is the same
+        // event twice, so the local copy is left out, and the app prunes it
+        // from learner.db (`mirroredRequestIds`).
+        let mirrored = mirroredRequests(in: snapshotEvents)
+        mirroredRequestIds = mirrored
+        let unmirrored = localEvents.filter { !isMirroredAnswer($0, in: mirrored) }
         var ordered: [(event: CatalogEvent, source: Int, offset: Int)] =
             snapshotEvents.enumerated().map { ($0.element, 0, $0.offset) }
-            + localEvents.enumerated().map { ($0.element, 1, $0.offset) }
+            + unmirrored.enumerated().map { ($0.element, 1, $0.offset) }
         ordered.sort { a, b in
             if a.event.at != b.event.at { return a.event.at < b.event.at }
             if a.source != b.source { return a.source < b.source }
