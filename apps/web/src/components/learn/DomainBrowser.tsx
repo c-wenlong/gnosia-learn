@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { DomainGraph, type DomainGraphNode, type MapMark } from "@/components/learn/DomainGraph";
 import { LegendChips, useLegendPreview } from "@/components/learn/LegendChips";
@@ -13,7 +13,7 @@ import { SegmentedControl, type SegmentItem } from "@/components/ui/SegmentedCon
 import type { GraphEdge, GraphNode } from "@/lib/concept-graph";
 import type { DomainLayout, DomainMapData, DomainSummary } from "@/lib/domain-map";
 import { domainTitle, movedKey, readMoved } from "@/lib/domain-view";
-import { legendMembers, legendPress, type IndexFilter, type IndexRow, type MapLayout } from "@/lib/learn-index";
+import { legendMembers, legendPress, type IndexFilter, type IndexRow, type LegendGroup, type MapLayout } from "@/lib/learn-index";
 import { relatedTo, standingLine } from "@/lib/map-reading";
 import { MASTERY_BUCKET_LABEL } from "@/lib/mastery-bucket";
 import { prefersReducedMotion, scrollBehavior } from "@/lib/motion";
@@ -196,14 +196,16 @@ export function DomainView({
   const [pointerHover, setPointerHoverValue] = useState<string | null>(null);
   const [focusHover, setFocusHoverValue] = useState<string | null>(null);
   const [lastInput, setLastInput] = useState<"pointer" | "focus">("pointer");
-  const setPointerHover = (id: string | null) => {
+  // Stable, with the legend's counts and press below, so the list, the panel and
+  // the chips (all memoised) are not redrawn by every frame of a drag.
+  const setPointerHover = useCallback((id: string | null) => {
     setPointerHoverValue(id);
     if (id !== null) setLastInput("pointer");
-  };
-  const setFocusHover = (id: string | null) => {
+  }, []);
+  const setFocusHover = useCallback((id: string | null) => {
     setFocusHoverValue(id);
     if (id !== null) setLastInput("focus");
-  };
+  }, []);
   const hover = lastInput === "focus" ? (focusHover ?? pointerHover) : (pointerHover ?? focusHover);
   const [hoverTopic, setHoverTopic] = useState<string | null>(null);
   // The legend (D9): each group's concepts among those the picture shows, and the one a chip previews.
@@ -217,6 +219,11 @@ export function DomainView({
     () => (legend.group === null || members[legend.group].length === 0 ? null : new Set(members[legend.group])),
     [legend.group, members],
   );
+  const counts = useMemo(
+    () => ({ mastered: members.mastered.length, learning: members.learning.length, untouched: members.untouched.length, ready: members.ready.length }),
+    [members],
+  );
+  const onLegendPress = useCallback((group: LegendGroup) => onFilter(legendPress(filter, group)), [filter, onFilter]);
   const { moved, gliding, move, save, reset } = useMoved(domain.slug, layout);
   const onAxes = topic === null && arrangement === "axes";
   // The pill goes as Reset starts, not when the glide home ends. On the axes nothing has moved:
@@ -252,17 +259,7 @@ export function DomainView({
       <div className="@container">
         <div className="grid grid-cols-1 items-start gap-4 @4xl:grid-cols-[minmax(0,1fr)_300px]">
           <Card>
-            <LegendChips
-              counts={{
-                mastered: members.mastered.length,
-                learning: members.learning.length,
-                untouched: members.untouched.length,
-                ready: members.ready.length,
-              }}
-              filter={filter}
-              preview={legend}
-              onPress={(group) => onFilter(legendPress(filter, group))}
-            />
+            <LegendChips counts={counts} filter={filter} preview={legend} onPress={onLegendPress} />
             <DomainGraph
               layout={layout}
               title={domain.title}
@@ -452,7 +449,7 @@ function useMoved(domain: string, layout: DomainLayout) {
 }
 
 /** The domain's topics and concepts as buttons, in the picture's reading order (D7). */
-function ConceptList({
+const ConceptList = memo(function ConceptList({
   domain,
   layout,
   topic,
@@ -536,14 +533,14 @@ function ConceptList({
       ))}
     </section>
   );
-}
+});
 
 /**
  * The selected concept: how well it is known, when it is due, where it is
  * taught, what it needs and what leads on from it, a concept in another
  * domain saying which (D4). Choosing one of those moves to it.
  */
-export function MapPanel({
+export const MapPanel = memo(function MapPanel({
   focus,
   nodes,
   edges,
@@ -668,6 +665,6 @@ export function MapPanel({
       </div>
     </section>
   );
-}
+});
 
 export type { DomainMapData };

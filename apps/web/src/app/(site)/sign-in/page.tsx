@@ -14,6 +14,16 @@ function first(value: string | string[] | undefined): string | null {
 }
 
 /**
+ * The wait the sign-in route asked for, in whole minutes: at least one, and
+ * never more than the limiter's fifteen whatever the query string says.
+ */
+function waitMinutes(retry: string | null): number {
+  const seconds = Number.parseInt(retry ?? "", 10);
+  if (!Number.isFinite(seconds) || seconds <= 0) return 15;
+  return Math.min(15, Math.max(1, Math.ceil(seconds / 60)));
+}
+
+/**
  * The owner's door. One field, a plain form post to `/api/auth/sign-in`, and
  * no JavaScript in the path: the route answers with a redirect either way and
  * this page reads the outcome from the query string.
@@ -31,6 +41,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
   const missing = config.ok ? [] : config.missing;
   const unconfigured = missing.length > 0 || error === "unconfigured";
   const names = (missing.length > 0 ? missing : [OWNER_PASSWORD_VAR, AUTH_SECRET_VAR]).join(" and ");
+  const retryMinutes = waitMinutes(first(params.retry));
 
   return (
     <div
@@ -55,7 +66,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
           Gnosia has one reader for now. Enter the owner password to continue.
         </p>
 
-        <form method="post" action="/api/auth/sign-in" className="mt-8 flex w-full flex-col gap-4">
+        <form method="post" action={next === safeNextPath(null) ? "/api/auth/sign-in" : `/api/auth/sign-in?${new URLSearchParams({ next })}`} className="mt-8 flex w-full flex-col gap-4">
           <input type="hidden" name="next" value={next} />
           <label className="flex flex-col gap-2">
             <span className="text-[14px] font-medium text-brand-mist">Password</span>
@@ -74,6 +85,11 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
           {error === "password" && (
             <p id="sign-in-error" role="alert" className="text-[14px] text-danger">
               That is not the owner password.
+            </p>
+          )}
+          {error === "throttled" && !unconfigured && (
+            <p id="sign-in-error" role="alert" className="text-[14px] text-danger">
+              Too many sign-in attempts. Try again in {retryMinutes === 1 ? "a minute" : `${retryMinutes} minutes`}.
             </p>
           )}
           {unconfigured && (

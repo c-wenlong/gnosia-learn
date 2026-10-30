@@ -818,13 +818,18 @@ func normaliseQuestion(_ text: String) -> String {
         .joined(separator: " ")
 }
 
+/// Whether an observation can be about `slug`: one that names its concept
+/// must name this one, and one from a mirror older than schema 4, which
+/// names none, is matched by its question alone.
+func observation(_ event: CatalogEvent, couldBeAbout slug: String) -> Bool {
+    event.type == "observation" && (event.conceptSlug == nil || event.conceptSlug == slug)
+}
+
 /// Each check with what the latest matching observation said —
-/// checkStatuses. The mirror's `observation` rows carry no concept, so the
-/// match runs over every observation rather than the concept's own
-/// history; a question text is close to unique, and a reworded check reads
-/// as untried either way.
-func checkStatuses(_ checks: [ConceptCheck], events: [CatalogEvent]) -> [WorkspaceCheck] {
-    let observations = events.filter { $0.type == "observation" }.reversed()
+/// checkStatuses: the concept's own observations, matched by question text.
+/// Two concepts that ask the same question keep their own statuses.
+func checkStatuses(_ checks: [ConceptCheck], events: [CatalogEvent], slug: String) -> [WorkspaceCheck] {
+    let observations = events.filter { observation($0, couldBeAbout: slug) }.reversed()
     return checks.map { check in
         let question = normaliseQuestion(check.question)
         let latest = observations.first(where: {
@@ -1232,6 +1237,52 @@ func parsePlayback(_ raw: String?) -> Playback? {
         watchedAt: json["watchedAt"] as? String,
         updatedAt: json["updatedAt"] as? String ?? ""
     )
+}
+
+/// An instant as JavaScript's `toISOString` writes it, the form the web's
+/// `playback:` rows carry, so the two compare as text and as instants.
+func isoInstant(_ date: Date) -> String {
+    let f = ISO8601DateFormatter()
+    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return f.string(from: date)
+}
+
+func parseIsoInstant(_ text: String) -> Date? {
+    let f = ISO8601DateFormatter()
+    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    if let d = f.date(from: text) { return d }
+    f.formatOptions = [.withInternetDateTime]
+    return f.date(from: text)
+}
+
+/// One video's playback from both places it is written: the web's
+/// `playback:` row (from the mirror) and this app's `watch` row. The newer
+/// write says where the learner is; watched is sticky across both, the
+/// web's instant first. A watch row with no known duration cannot stand as
+/// a Playback on its own.
+func mergedPlayback(stored: Playback?, local: WatchMark?) -> Playback? {
+    guard let local else { return stored }
+    guard let duration = local.duration, duration > 0 else {
+        // A Mark watched before any heartbeat here knows no duration, but its
+        // verdict still stands on the web's row.
+        guard let stored, local.done, stored.watchedAt == nil else { return stored }
+        return Playback(position: stored.position, duration: stored.duration,
+                        watchedAt: isoInstant(local.updatedAt ?? Date()), updatedAt: stored.updatedAt)
+    }
+    let localAt = local.updatedAt ?? .distantPast
+    let mine = Playback(
+        position: min(max(0, local.seconds), duration),
+        duration: duration,
+        watchedAt: stored?.watchedAt ?? (local.done ? isoInstant(localAt) : nil),
+        updatedAt: isoInstant(localAt)
+    )
+    guard let stored else { return mine }
+    let storedAt = parseIsoInstant(stored.updatedAt) ?? .distantPast
+    if storedAt > localAt {
+        return Playback(position: stored.position, duration: stored.duration,
+                        watchedAt: mine.watchedAt, updatedAt: stored.updatedAt)
+    }
+    return mine
 }
 
 /// Where a stopped video resumes, or 0 for "start it over" — resumeAt:
@@ -2092,7 +2143,7 @@ extension CatalogStore {
             assumes: concept.assumes.compactMap(ref),
             dependants: dependantsOf(learn.edges, slug: slug).compactMap(ref),
             backlinks: backlinksOf(learn.concepts, slug: slug).compactMap(ref),
-            checks: checkStatuses(parseChecks(stored.body), events: events),
+            checks: checkStatuses(parseChecks(stored.body), events: events, slug: slug),
             review: card.map {
                 (due: $0.due, intervalDays: $0.intervalDays, ease: $0.ease,
                  repetitions: $0.repetitions, lapses: $0.lapses, leech: $0.leech)
@@ -2123,14 +2174,19 @@ extension CatalogStore {
         return learn.reviewCard(for: item, checks: checks, pool: learn.distractorPool(for: item, answers: answers))
     }
 
-    /// The playback rows the preferences hold — videoProgress' first half:
-    /// `playback:<asset>` keys with a usable payload, the asset's title
-    /// resolved (a missing asset leaves the title nil, and the row out).
+    /// One video's playback, the web's row and this app's merged
+    /// (`mergedPlayback`): what the player resumes from and Home lists.
+    func playback(for assetId: String) -> Playback? {
+        mergedPlayback(stored: parsePlayback(preferences["playback:\(assetId)"]), local: watch[assetId])
+    }
+
+    /// Every video with a playback row in either place — videoProgress'
+    /// first half — the asset's title resolved (a missing asset leaves the
+    /// title nil, and the row out).
     var videoProgress: [VideoProgress] {
-        preferences.compactMap { key, value in
-            guard key.hasPrefix("playback:") else { return nil }
-            let assetId = String(key.dropFirst("playback:".count))
-            guard let parsed = parsePlayback(value) else { return nil }
+        let fromWeb = preferences.keys.filter { $0.hasPrefix("playback:") }.map { String($0.dropFirst("playback:".count)) }
+        return Set(fromWeb).union(watch.keys).compactMap { assetId in
+            guard let parsed = playback(for: assetId) else { return nil }
             return VideoProgress(
                 assetId: assetId,
                 title: asset(assetId).map { displayTitle(for: $0) },

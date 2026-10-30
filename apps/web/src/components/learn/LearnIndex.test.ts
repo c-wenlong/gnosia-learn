@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 import { act, createElement, useState, type ReactNode } from "react";
-import { createRoot } from "react-dom/client";
+import { createRoot, hydrateRoot } from "react-dom/client";
+import { renderToString } from "react-dom/server";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { DomainMapData } from "@/lib/domain-map";
 import type { IndexRow } from "@/lib/learn-index";
 
-import { LearnIndex, MapPanel } from "./LearnIndex";
+import { LearnIndex, MapPanel, SERVER_ROWS } from "./LearnIndex";
 import type { GraphEdge, GraphNode } from "@/lib/concept-graph";
 
 /**
@@ -133,6 +134,54 @@ describe("LearnIndex table", () => {
     const ip = [...host.querySelectorAll("table a")].find((a) => a.textContent === "IP") as HTMLAnchorElement;
     act(() => ip.focus());
     expect(current()).toEqual([["IP", "true"]]);
+  });
+});
+
+describe("LearnIndex table on the server", () => {
+  const many = Array.from({ length: SERVER_ROWS + 40 }, (_, i) => row(`c${String(i).padStart(3, "0")}`, `Concept ${i}`));
+  const table = () =>
+    createElement(LearnIndex, {
+      rows: many,
+      edges: [],
+      map: { tree: [], layouts: {} } satisfies DomainMapData,
+      initial: { selected: null, view: "table", scope: "neighbourhood", filter: "all", domain: null, topic: null },
+    });
+  const titles = (root: ParentNode) => root.querySelectorAll("tbody a[href^='/learn/']").length;
+
+  it("draws a screenful of rows into the HTML, and every row once the page is live", () => {
+    const html = renderToString(table());
+    const parsed = new DOMParser().parseFromString(html, "text/html");
+    expect(titles(parsed)).toBe(SERVER_ROWS);
+    // The caption still counts every row the filter shows.
+    expect(parsed.querySelector("caption")?.textContent).toContain(`${many.length} of ${many.length} shown`);
+
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    act(() => root.render(table()));
+    mounted.push(() => {
+      act(() => root.unmount());
+      host.remove();
+    });
+    expect(titles(host)).toBe(many.length);
+  });
+
+  it("hydrates the server's rows without a mismatch, then draws the rest", () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const host = document.createElement("div");
+    host.innerHTML = renderToString(table());
+    document.body.append(host);
+    let root: ReturnType<typeof hydrateRoot> | undefined;
+    act(() => {
+      root = hydrateRoot(host, table());
+    });
+    mounted.push(() => {
+      act(() => root?.unmount());
+      host.remove();
+      errors.mockRestore();
+    });
+    expect(titles(host)).toBe(many.length);
+    expect(errors).not.toHaveBeenCalled();
   });
 });
 

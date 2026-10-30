@@ -22,9 +22,11 @@
 //  Where the native split differs from the web's, by design: "Give me a
 //  check" leaves the chat for the structured session — the graded walk
 //  TutorPanel swaps in — where the web sends the words to the tutor and
-//  lets its CHECK: machinery grade the answer in the thread. A check
-//  the tutor asks mid-chat here is conversation, not evidence; the
-//  graded path is the session. The thread itself is in-memory (the
+//  lets its CHECK: machinery grade the answer in the thread. A choice or
+//  recall check the tutor asks mid-chat is drawn as a card
+//  (TutorCheck.swift) and answered there, but it is conversation, not
+//  evidence: the tutor grades it in its next reply, and the graded path
+//  is the session. The thread itself is in-memory (the
 //  web's is sessionStorage): kept while the panel is mounted, gone with
 //  it, which is what the web's per-tab store already promised.
 //
@@ -117,6 +119,34 @@ func tutorRequestTurns(_ turns: [SidecarClient.ChatMessage]) -> [SidecarClient.C
     return kept
 }
 
+/// One turn of the thread: what it shows, and what the tutor reads when
+/// that differs — a card's answer goes as its `<check_answer>` block, and
+/// a reply that asked a check goes back with that check's block after it.
+struct TutorThreadTurn: Equatable {
+    let role: String
+    let content: String
+    /// A learner turn that answered a card: the block the tutor reads in place of `content`.
+    var sent: String? = nil
+    /// A tutor turn that asked a choice or recall check.
+    var check: TutorCardCheck? = nil
+    /// The order the card shows the options in, fixed when the turn arrives.
+    var order: [Int] = []
+    /// What the learner gave on this turn's card, once they have.
+    var answer: TutorCheckAnswer? = nil
+}
+
+/// `requestTurns` from lib/tutor-thread.ts: the thread as the tutor reads
+/// it, trimmed to the route's bounds. A turn that asked a card check goes
+/// back with its block, so the tutor sees the answer it committed to.
+func tutorRequestMessages(_ turns: [TutorThreadTurn]) -> [SidecarClient.ChatMessage] {
+    tutorRequestTurns(turns.map { turn in
+        if turn.role == "assistant", let check = turn.check {
+            return SidecarClient.ChatMessage(role: "assistant", content: "\(turn.content)\n\n\(check.blockText)")
+        }
+        return SidecarClient.ChatMessage(role: turn.role, content: turn.sent ?? turn.content)
+    })
+}
+
 /// `tutorStyleLabel` — the `tutorStyle` preference's label, the four
 /// styles of TUTOR_STYLES in lib/preferences.ts.
 func tutorStyleLabel(_ preferences: [String: String]) -> String {
@@ -149,7 +179,7 @@ struct TutorChatView: View {
     @State private var suggestions: [TutorSuggestion] = []
 
     // The thread and its field.
-    @State private var turns: [SidecarClient.ChatMessage] = []
+    @State private var turns: [TutorThreadTurn] = []
     @State private var draft = ""
     @State private var busy = false
     @State private var error: String? = nil
@@ -308,7 +338,7 @@ struct TutorChatView: View {
     /// One turn: the bubble as AskView draws it — the learner's right
     /// and tinted, the tutor's left on the surface — with the reply's
     /// citation chips under it, and Why? on the newest tutor turn.
-    private func turnView(_ turn: SidecarClient.ChatMessage, at i: Int) -> some View {
+    private func turnView(_ turn: TutorThreadTurn, at i: Int) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 if turn.role == "user" { Spacer(minLength: 60) }
@@ -317,6 +347,17 @@ struct TutorChatView: View {
                     role: turn.role == "user" ? .user : .assistant
                 )
                 if turn.role != "user" { Spacer(minLength: 60) }
+            }
+            if let check = turn.check {
+                TutorCheckCard(
+                    check: check,
+                    order: turn.order,
+                    answer: turn.answer,
+                    live: i == turns.count - 1 && !busy
+                ) { answer, shown, sent in
+                    answerCheck(at: i, answer, shown: shown, sent: sent)
+                }
+                .padding(.trailing, 60)
             }
             if turn.role == "assistant" {
                 HStack(spacing: 6) {
@@ -433,22 +474,32 @@ struct TutorChatView: View {
     private func ask(_ text: String) {
         let content = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !content.isEmpty, !busy else { return }
-        turns.append(SidecarClient.ChatMessage(role: "user", content: content))
+        turns.append(TutorThreadTurn(role: "user", content: content))
         draft = ""
+        error = nil
+        send()
+    }
+
+    /// A card answered: kept on the asking turn so the card draws its
+    /// result, and sent to the tutor as the next learner turn.
+    private func answerCheck(at i: Int, _ answer: TutorCheckAnswer, shown: String, sent: String) {
+        guard !busy, turns.indices.contains(i), turns[i].answer == nil else { return }
+        turns[i].answer = answer
+        turns.append(TutorThreadTurn(role: "user", content: shown, sent: sent))
         error = nil
         send()
     }
 
     /// One turn through the sidecar's `/api/agent/chat`: the thread's
     /// tail as the request, the reply's `message.content` appended as
-    /// the assistant turn, and a fresh `sources` list replacing the
+    /// the assistant turn with its `check` when it asked one, and a fresh `sources` list replacing the
     /// chips when it names them — the web's `ask`/`retry` halves. The
     /// refusal mapping is the web's `errorFor`.
     private func send() {
         guard !busy, turns.last?.role == "user" else { return }
         busy = true
         error = nil
-        let messages = tutorRequestTurns(turns)
+        let messages = tutorRequestMessages(turns)
         let slug = self.slug
         Task { @MainActor in
             do {
@@ -460,7 +511,13 @@ struct TutorChatView: View {
                     if let list = reply["sources"] as? [[String: Any]], !list.isEmpty {
                         sources = list.compactMap(Self.parseSource)
                     }
-                    turns.append(SidecarClient.ChatMessage(role: "assistant", content: content))
+                    // The check the reply asked, when the card can draw it;
+                    // an open check's question is in the prose already.
+                    let check = TutorCardCheck(json: reply["check"])
+                    turns.append(TutorThreadTurn(
+                        role: "assistant", content: content, check: check,
+                        order: check.map { Array($0.options.indices).shuffled() } ?? []
+                    ))
                 } else {
                     error = "The tutor sent an empty reply. Try asking again."
                 }

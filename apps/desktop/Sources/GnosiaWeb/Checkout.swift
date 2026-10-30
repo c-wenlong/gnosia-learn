@@ -54,27 +54,46 @@ enum Checkout {
     }
 
     /// KEY=VALUE pairs from `$GNOSIA_HOME/.env` (default `~/.gnosia/.env`).
-    /// Blanks and `#` comments skipped; quotes around a value are stripped.
     static func dataHomeEnv() -> [String: String] {
         guard let text = try? String(contentsOfFile: dataHome().appending(path: ".env").path, encoding: .utf8) else { return [:] }
+        return parseDotenv(text)
+    }
+
+    /// A dotenv file read as Node's `util.parseEnv` reads it, which is how
+    /// the macOS app's sidecar reads this same file
+    /// (services/sidecar/src/env.ts). The two must agree to the byte: the
+    /// AUTH_SECRET read here seals the provider keys the web saves, and the
+    /// sidecar opens them with its own read. Blanks and `#` lines skipped;
+    /// an `export ` prefix dropped; a value in matching quotes is what the
+    /// quotes hold, whatever follows them (a double-quoted `\n` is a
+    /// newline); an unquoted value ends at its first `#`. Pinned by
+    /// services/sidecar/test/fixtures/dotenv.json, which Node wrote.
+    static func parseDotenv(_ text: String) -> [String: String] {
         var env: [String: String] = [:]
-        for line in text.split(separator: "\n") {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            guard !trimmed.isEmpty, !trimmed.hasPrefix("#"),
-                  let eq = trimmed.firstIndex(of: "=") else { continue }
-            let key = String(trimmed[..<eq]).trimmingCharacters(in: .whitespaces)
-            var value = String(trimmed[trimmed.index(after: eq)...]).trimmingCharacters(in: .whitespaces)
-            // dotenv rules: matching single or double quotes come off
-            // wholesale; an unquoted value ends at ` #`.
-            if value.count >= 2,
-               (value.hasPrefix("\"") && value.hasSuffix("\"")) ||
-               (value.hasPrefix("'") && value.hasSuffix("'")) {
-                value = String(value.dropFirst().dropLast())
-            } else if let hash = value.range(of: " #") {
-                value = String(value[..<hash.lowerBound]).trimmingCharacters(in: .whitespaces)
+        for raw in text.split(omittingEmptySubsequences: true, whereSeparator: { $0 == "\n" || $0 == "\r\n" }) {
+            var line = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !line.isEmpty, !line.hasPrefix("#") else { continue }
+            if line.hasPrefix("export ") {
+                line = String(line.dropFirst("export ".count)).trimmingCharacters(in: .whitespaces)
             }
-            if !key.isEmpty { env[key] = value }
+            guard let eq = line.firstIndex(of: "=") else { continue }
+            let key = String(line[..<eq]).trimmingCharacters(in: .whitespaces)
+            guard !key.isEmpty else { continue }
+            let rest = String(line[line.index(after: eq)...]).trimmingCharacters(in: .whitespaces)
+            env[key] = dotenvValue(rest)
         }
         return env
+    }
+
+    private static func dotenvValue(_ rest: String) -> String {
+        if let quote = rest.first, quote == "\"" || quote == "'" || quote == "`" {
+            let body = rest.dropFirst()
+            if let close = body.firstIndex(of: quote) {
+                let inside = String(body[..<close])
+                return quote == "\"" ? inside.replacingOccurrences(of: "\\n", with: "\n") : inside
+            }
+        }
+        let cut = rest.firstIndex(of: "#").map { String(rest[..<$0]) } ?? rest
+        return cut.trimmingCharacters(in: .whitespaces)
     }
 }

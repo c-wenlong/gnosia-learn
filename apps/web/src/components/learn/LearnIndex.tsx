@@ -20,6 +20,7 @@ import { courseScope, neighbourhood, type GraphEdge, type GraphNode } from "@/li
 import type { DomainMapData } from "@/lib/domain-map";
 import { domainOfConcepts, matchCounts } from "@/lib/domain-view";
 import { firstMatch } from "@/lib/map-reading";
+import { useHydrated } from "@/lib/use-hydrated";
 import { MASTERY_BUCKET_LABEL } from "@/lib/mastery-bucket";
 import { LEECH_LABEL } from "@/lib/review-core";
 import {
@@ -318,6 +319,15 @@ export function LearnIndex({
   );
 }
 
+/**
+ * How many rows the server draws into the page's HTML: a screenful and some.
+ * The rest arrive with the first render after hydration (`useHydrated`), from
+ * the rows the page already carries for the search and the map, so a 500-row
+ * table costs the HTML about a tenth of the markup it did and looks the same
+ * once the page is live. A client-side navigation draws them all at once.
+ */
+export const SERVER_ROWS = 60;
+
 function ConceptTable({
   rows,
   selected,
@@ -330,6 +340,8 @@ function ConceptTable({
   total: number;
 }) {
   const th = cx("px-3 py-2.5 sm:px-4 text-left", LABEL);
+  const hydrated = useHydrated();
+  const drawn = hydrated ? rows : rows.slice(0, SERVER_ROWS);
   // The columns come in by the table's own width (container queries), so the
   // concept title keeps at least ~180px however the sidebar and the graph card
   // share the page: the mastery bar from 32rem, Last seen from 42rem, Course
@@ -356,7 +368,7 @@ function ConceptTable({
                 </td>
               </tr>
             )}
-            {rows.map((r) => (
+            {drawn.map((r) => (
               <tr
                 key={r.id}
                 onClick={() => onSelect(r.id)}
@@ -370,6 +382,10 @@ function ConceptTable({
                     <MasteryDot bucket={r.bucket} className="shrink-0" />
                     <Link
                       href={`/learn/${r.id}`}
+                      // Off, as in the library's long lists (L9): scrolling the table passes
+                      // hundreds of links through the viewport, and every page is dynamic, so
+                      // each prefetch was a server render nobody asked for.
+                      prefetch={false}
                       // The row the graph shows, said to a screen reader too: a plain table's
                       // row cannot carry aria-selected, and the tint alone is colour only.
                       aria-current={r.id === selected ? "true" : undefined}
@@ -428,8 +444,13 @@ function GraphCard({
   onScope: (scope: GraphScope) => void;
   onSelect: (id: string) => void;
 }) {
-  const course = focus ? courseScope(nodes, edges, focus.id) : null;
-  const shown = focus === null ? null : scope === "course" && course ? course : neighbourhood(nodes, edges, focus.id);
+  // Once per concept and scope, not per keystroke in the search beside it: both walk the whole graph.
+  const focusId = focus?.id ?? null;
+  const course = useMemo(() => (focusId === null ? null : courseScope(nodes, edges, focusId)), [nodes, edges, focusId]);
+  const shown = useMemo(
+    () => (focusId === null ? null : scope === "course" && course ? course : neighbourhood(nodes, edges, focusId)),
+    [nodes, edges, focusId, scope, course],
+  );
   const wider = course?.basis === "domain" ? "Folder" : "Course";
   const graphBox = useRef<HTMLDivElement>(null);
   /** A node was chosen from inside the graph, which its key then replaces whole. */

@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { resetRateLimits } from "@gnosia/tutor/guards";
 
 import { isCallable } from "@/lib/agent/providers";
 
@@ -7,6 +8,10 @@ import {
   probe,
   type Scratch,
 } from "../../../../../../../services/catalog/test/scratch-database";
+
+// Every request is the same owner, and the limiter is keyed by owner: each
+// test starts with fresh windows.
+beforeEach(() => resetRateLimits());
 
 /**
  * The model chain's routes (docs/TUTOR-MODELS.md), end to end against a

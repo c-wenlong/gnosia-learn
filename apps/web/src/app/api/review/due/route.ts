@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { enforceRateLimit } from "@/lib/agent/guard";
-import { LEARNER_RATE_LIMIT, MAX_ID_CHARS } from "@/lib/learner-api";
+import { LEARNER_RATE_LIMIT, MAX_ID_CHARS, requestOwner } from "@/lib/learner-api";
 import { readReviewSession } from "@/lib/review-queue";
 
 /**
@@ -24,7 +24,11 @@ import { readReviewSession } from "@/lib/review-queue";
  * since nothing here sets a CORS header.
  */
 export async function GET(req: Request): Promise<NextResponse> {
-  const limited = enforceRateLimit(req, "review:due", LEARNER_RATE_LIMIT);
+  // A 401 for a request with no session, rather than the reader's own
+  // NoOwnerError surfacing as a 500.
+  const owner = await requestOwner();
+  if (owner instanceof NextResponse) return owner;
+  const limited = enforceRateLimit(owner, "review:due", LEARNER_RATE_LIMIT);
   if (limited !== null) return limited;
 
   const focus = new URL(req.url).searchParams.get("concept");
