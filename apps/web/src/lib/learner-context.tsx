@@ -42,7 +42,7 @@ import { createWriteQueue } from "@/lib/write-queue";
  *
  * The shape of this context is unchanged from when the state lived in
  * localStorage: `state` plus named actions. What changed is underneath. A
- * server component reads the snapshot from Postgres and passes it in as
+ * server component reads the snapshot from the catalog database and passes it in as
  * `initialState`, each action applies the same pure reducer it always did and
  * then posts the change to `/api/learner/*`, and the server is the authority
  * on what was actually stored.
@@ -361,7 +361,7 @@ export function LearnerProvider({
   /**
    * Writes are ordered per target: see `createWriteQueue`. Without it two
    * edits to the same note can reach the server in the wrong order, and only
-   * the last one to arrive is what Postgres keeps.
+   * the last one to arrive is what the database keeps.
    */
   const queue = useRef(createWriteQueue<ApiResponse>());
 

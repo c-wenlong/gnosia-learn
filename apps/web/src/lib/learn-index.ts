@@ -1,3 +1,4 @@
+import { dayDiff, weekdayName } from "@/lib/day-groups";
 import { dayKey } from "@gnosia/tutor/days";
 import { MASTERY_BUCKET_LABEL, type MasteryBucket } from "@gnosia/tutor/mastery-bucket";
 
@@ -195,13 +196,7 @@ export function matchesQuery(row: IndexRow, query: string): boolean {
   return words.every((w) => hay.includes(w));
 }
 
-const WEEKDAY = new Intl.DateTimeFormat("en-GB", { weekday: "short", timeZone: "UTC" });
 const MONTH_DAY = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
-
-/** Whole days from `from` to `to`, both day keys. */
-function daysBetween(from: string, to: string): number {
-  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
-}
 
 /**
  * When a review falls due, the way the hi-fi says it: "overdue" for a day
@@ -217,19 +212,22 @@ export function dueLabel(
   if (due === null) return { label: "–", overdue: false };
   const today = dayKey(now, timeZone);
   const day = dayKey(due, timeZone);
-  const diff = daysBetween(today, day);
+  const diff = dayDiff(today, day);
   if (diff < 0) return { label: "overdue", overdue: true };
   if (diff === 0) return { label: "today", overdue: false };
   if (diff === 1) return { label: "tomorrow", overdue: false };
-  const at = new Date(`${day}T00:00:00Z`);
-  if (diff < 7) return { label: WEEKDAY.format(at), overdue: false };
-  return { label: MONTH_DAY.format(at), overdue: false };
+  if (diff < 7) return { label: weekdayName(day), overdue: false };
+  return { label: MONTH_DAY.format(new Date(`${day}T00:00:00Z`)), overdue: false };
 }
 
-/** "today", "yesterday", "3 days", "5 weeks", or "never". */
-export function lastSeenLabel(lastSeen: string | null, now: Date = new Date(), timeZone?: string): string {
+/**
+ * The Learn table's last-seen column, short for a narrow cell: "today",
+ * "yesterday", "3 days", "5 weeks", a date, or "never". Home words the same
+ * fact as a sentence (`lastSeenLabel` in `home-core.ts`, "3 days ago").
+ */
+export function seenAgo(lastSeen: string | null, now: Date = new Date(), timeZone?: string): string {
   if (lastSeen === null) return "never";
-  const diff = daysBetween(dayKey(lastSeen, timeZone), dayKey(now, timeZone));
+  const diff = dayDiff(dayKey(lastSeen, timeZone), dayKey(now, timeZone));
   if (diff <= 0) return "today";
   if (diff === 1) return "yesterday";
   if (diff < 28) return `${diff} days`;
