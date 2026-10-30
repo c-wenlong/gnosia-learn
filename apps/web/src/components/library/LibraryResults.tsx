@@ -318,11 +318,17 @@ export function LibraryResults({
   const moreRowsRef = use(LibraryMoreContext);
   useEffect(() => {
     if (moreRowsRef === null) return;
-    // A page already on its way: wait for it rather than answer that nothing came.
+    const last = () => drawn.current[drawn.current.length - 1].next;
+    const wait = () => new Promise<boolean>((resolve) => waiting.current.push(resolve));
+    // A page already on its way: wait for it rather than answer that nothing
+    // came. A refresh reading the held pages again adds no page of its own, so
+    // once it lands the next page is asked for, and the arrow press walks on.
     moreRowsRef.current = () =>
-      inFlight.current || refetching.current
-        ? new Promise<boolean>((resolve) => waiting.current.push(resolve))
-        : load(drawn.current[drawn.current.length - 1].next);
+      refetching.current
+        ? wait().then((read) => (read ? load(last()) : false))
+        : inFlight.current
+          ? wait()
+          : load(last());
     return () => {
       moreRowsRef.current = null;
     };

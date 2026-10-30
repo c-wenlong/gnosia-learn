@@ -345,6 +345,26 @@ describe("LibraryResults", () => {
     expect(links()).toEqual(["r 0", "r 1", "renamed 2", "renamed 3"]);
   });
 
+  it("walks the previewer on into the next page when its arrow is pressed during a refresh", async () => {
+    libraryPage.mockResolvedValueOnce(page([["4 Oct", 6, 2]], "c2", 2, "r", 2));
+    const more: { current: null | (() => Promise<boolean>) } = { current: null };
+    await mount({ first: page([["4 Oct", 6, 2]], "c1", 4) }, more);
+    await act(async () => button("Show older")?.click());
+    let reread: (page: Page) => void = () => undefined;
+    libraryPage.mockImplementationOnce(() => new Promise((resolve) => (reread = resolve)));
+    await mount({ first: page([["4 Oct", 6, 2]], "c1", 4) }, more);
+    // The arrow on the last row drawn, while page two is being read again.
+    let asked: Promise<boolean> | undefined;
+    await act(async () => {
+      asked = more.current?.();
+    });
+    libraryPage.mockResolvedValueOnce(page([["4 Oct", 6, 2]], null, 0, "r", 4));
+    await act(async () => reread(page([["4 Oct", 6, 2]], "c2", 2, "r", 2)));
+    expect(await asked).toBe(true);
+    expect(libraryPage).toHaveBeenLastCalledWith("/library?view=list", "c2", ["4 Oct"]);
+    expect(links()).toEqual(["r 0", "r 1", "r 2", "r 3", "r 4", "r 5"]);
+  });
+
   it("drops a page asked for under the old first page when it lands after a refresh", async () => {
     let answer: (page: Page) => void = () => undefined;
     libraryPage.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
