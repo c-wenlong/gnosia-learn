@@ -115,8 +115,13 @@ export function Previewer({
   // what the reader has since changed. `visit` numbers them, and an answer
   // is shown only for the visit it was asked for.
   const [visit, setVisit] = useState(0);
+  // The prop's body is this visit's answer only when it is for the asset the
+  // URL names: a cached render restored under a URL that `replaceState` has
+  // since moved on (an arrow, then Open page, then Back) hands in another
+  // asset's body, and taking it would leave the panel on its skeleton with
+  // nothing ever asked.
   const [held, setHeld] = useState<{ visit: number; answer: Answer } | null>(() =>
-    initial === null ? null : { visit: 0, answer: initial },
+    initial === null || initial.id !== openId ? null : { visit: 0, answer: initial },
   );
   const { mounted, leaving } = usePresence(openId !== null, DIALOG_CLOSE_MS);
   // Read by the dialog's cleanup, which runs after the render that unmounts it.
@@ -125,7 +130,12 @@ export function Previewer({
     shownIdRef.current = shownId;
   }, [shownId]);
 
+  // Counts every change of what is open, closing included, so a step that
+  // awaited the next page can tell the reader has moved on since it began.
+  const moves = useRef(0);
+
   const show = useCallback((id: string | null) => {
+    moves.current += 1;
     setOpenId(id);
     if (id === null) return;
     setShownId(id);
@@ -217,8 +227,13 @@ export function Previewer({
       };
       let next = neighbour(drawnIds(), openId, by);
       // Past the last row drawn: the next page, then the first row on it (L9).
-      if (next === null && by === 1 && moreRows.current !== null && (await moreRows.current())) {
-        next = neighbour(drawnIds(), openId, by);
+      if (next === null && by === 1 && moreRows.current !== null) {
+        const at = moves.current;
+        const more = await moreRows.current();
+        // Closed (or moved) while the page loaded: going on would write
+        // `?open=` onto whatever entry is current now and open the panel again.
+        if (moves.current !== at || goingBack.current) return;
+        if (more) next = neighbour(drawnIds(), openId, by);
       }
       if (next === null) return;
       const state: unknown = window.history.state;

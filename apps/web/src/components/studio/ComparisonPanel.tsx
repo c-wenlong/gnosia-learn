@@ -56,7 +56,7 @@ import { panelHref } from "@/lib/studio-url";
 type Which = "before" | "after";
 
 export function ComparisonPanel({ job, path }: { job: Job; path: string }) {
-  const { run, busy, refresh } = useJobVerb(path);
+  const { run, busy } = useJobVerb(path);
   const router = useRouter();
   const [said, setSaid] = useState<{ ok: boolean; text: string; recompare?: boolean } | null>(null);
   // Discard asks first, as a video's does: the candidate goes for good.
@@ -78,10 +78,11 @@ export function ComparisonPanel({ job, path }: { job: Job; path: string }) {
     setConfirmDiscard(false);
     const detail = (result.data.detail ?? {}) as { recompare?: boolean };
     setSaid({ ok: result.ok, text: result.text, recompare: detail.recompare === true });
-    await refresh();
-    // The canvas this accept closed (A6) is reopened by the server render, and
-    // an accepted job's panel is a different screen from the one that was here.
-    router.refresh();
+    // `run` has already read the job list again. Only an accept or a discard
+    // changes what the server draws: the canvas this accept closed (A6) is
+    // reopened by the server render, and the grid's tile changes. Compare and
+    // Reindex change the job's record alone, which that read brought in.
+    if (verb === "accept" || verb === "discard") router.refresh();
   };
 
   return (

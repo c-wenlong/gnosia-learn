@@ -70,6 +70,15 @@ export function VideoScrubber({
   // The preview stays mounted once shown, so its video keeps what it loaded;
   // leaving the bar only hides it.
   const [showing, setShowing] = useState(false);
+  // A player kept across a query-only navigation hands the bar the next
+  // video. The preview goes with the old one, so the new file is fetched for
+  // a preview only once the reader hovers it.
+  const [previewOf, setPreviewOf] = useState(src);
+  if (previewOf !== src) {
+    setPreviewOf(src);
+    setHover(null);
+    setShowing(false);
+  }
   const [dragging, setDragging] = useState(false);
   const known = Number.isFinite(duration) && duration > 0;
   const segments = chapterSegments(chapters, duration);

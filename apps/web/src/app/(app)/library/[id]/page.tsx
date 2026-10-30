@@ -60,8 +60,10 @@ import { assetBackLink, conceptHref, decodeAssetId, explainedConcepts, isCompani
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const id = decodeAssetId((await params).id);
-  const { asset } = await loadAssetDetail(id);
-  if (asset === null) return { title: "Asset not found" };
+  const { asset, reachable } = await loadAssetDetail(id);
+  // With the catalog down nothing is known about the asset, so the tab says
+  // where the reader is rather than that it does not exist (as the body does).
+  if (asset === null) return { title: reachable ? "Asset not found" : "Library" };
   return {
     title: assetDisplayTitle(asset).text,
     description: `${assetKindLabel(asset.kind)} in the Gnosia library.`,

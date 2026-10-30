@@ -477,7 +477,13 @@ export function VideoPlayer({
           preload="metadata"
           playsInline
           aria-label={title}
-          onClick={togglePlay}
+          // A double-click is click, click, dblclick: the second click
+          // (`detail` 2) is the double-click's, so only the first toggles,
+          // and the picture goes fullscreen in the state it was in.
+          onClick={(event) => {
+            if (event.detail > 1) return;
+            togglePlay();
+          }}
           onDoubleClick={toggleFullscreen}
           onTimeUpdate={(e) => {
             setTime(e.currentTarget.currentTime);

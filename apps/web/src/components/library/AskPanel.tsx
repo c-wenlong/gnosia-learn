@@ -11,6 +11,7 @@ import { isImeKey } from "@/components/ui/composer-keys";
 import { TutorMessage, UserMessage } from "@/components/ui/Message";
 import { tutorProblem } from "@/lib/tutor-errors";
 import { trimForRequest, type TutorTurn } from "@/lib/tutor-thread";
+import { takeUnanswered } from "@/components/workspace/unanswered";
 
 interface ChatReply {
   message?: { role: "assistant"; content: string };
@@ -62,6 +63,14 @@ export function AskPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const field = useRef<HTMLTextAreaElement | null>(null);
+  /**
+   * The turn in flight, aborted when the panel goes away (the previewer
+   * closes or steps to the next asset, the row holding it leaves the list,
+   * the page is left), so a reply nobody will see is not paid for to the end
+   * and never lands.
+   */
+  const inflight = useRef<AbortController | null>(null);
+  useEffect(() => () => inflight.current?.abort(), []);
 
   useEffect(() => {
     if (open) field.current?.focus();
@@ -78,6 +87,8 @@ export function AskPanel({
   };
 
   const send = async (thread: TutorTurn[]) => {
+    const controller = new AbortController();
+    inflight.current = controller;
     setBusy(true);
     setError(null);
     try {
@@ -85,24 +96,28 @@ export function AskPanel({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ assetId, at: position?.() ?? undefined, messages: trimForRequest(thread) }),
+        signal: controller.signal,
       });
       const data = (await res.json().catch(() => ({}))) as ChatReply;
+      if (controller.signal.aborted) return;
       if (!res.ok || data.message === undefined) {
         setError(tutorProblem(res.status, data));
         return;
       }
       setTurns([...thread, { role: "assistant", content: data.message.content }]);
     } catch {
-      setError("The tutor did not answer: the server could not be reached.");
+      if (!controller.signal.aborted) setError("The tutor did not answer: the server could not be reached.");
     } finally {
-      setBusy(false);
+      if (inflight.current === controller) inflight.current = null;
+      if (!controller.signal.aborted) setBusy(false);
     }
   };
 
   const ask = (text: string) => {
     const content = text.trim();
     if (content === "" || busy) return;
-    const thread: TutorTurn[] = [...turns, { role: "user", content }];
+    // A question after a failed one takes its place, so two learner turns never go out in a row.
+    const thread: TutorTurn[] = [...(takeUnanswered(turns)?.rest ?? turns), { role: "user", content }];
     setTurns(thread);
     setDraft("");
     void send(thread);
