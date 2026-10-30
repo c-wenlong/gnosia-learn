@@ -1,7 +1,7 @@
 import { validMentions, valueOf, type MentionValue } from "@/lib/mentions";
 import { safely } from "@/lib/storage-safe";
 import { isTagKind, type DraftKind, type DraftMention, type TagKind } from "@/lib/studio-drafts";
-import { runnerDown, type Refusal } from "@/lib/studio-client";
+import { runnerDown, runnerSlow, type Refusal } from "@/lib/studio-client";
 import { type VideoAvailability } from "@/lib/studio-health";
 
 /**
@@ -130,6 +130,17 @@ export interface ExtendRefusal {
  * paths, and a capital letter on a slug is a different slug.
  */
 export function extendRefusal(status: number, refusal: Refusal, title: string): ExtendRefusal {
+  // Past the deadline the runner is still at it (the proxy does not pass the
+  // abort on), so starting it is the wrong advice. Try again joins the read
+  // under way: the press's key is the same, and the runner answers it with
+  // the draft the first post is making.
+  if (runnerSlow(status, refusal)) {
+    return {
+      headline: `The studio is still reading ${title}.`,
+      detail: "It did not answer in time, but it may still be opening the diagram. Try again to keep waiting for the same read.",
+      actions: ["retry", "close"],
+    };
+  }
   if (runnerDown(status, refusal)) {
     return {
       headline: "The studio runner is not answering.",

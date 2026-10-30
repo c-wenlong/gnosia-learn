@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useState, type Dispatch, type RefObject, type SetStateAction } from "react";
+import { useCallback, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from "react";
 
 import type { SaveOutcome } from "@/components/studio/ConfirmCard";
 import { askToNotify } from "@/components/studio/JobsProvider";
@@ -9,7 +9,7 @@ import { usePanelHost } from "@/components/studio/panel-host";
 import { cardKey, type CardKey, type Value } from "@/components/studio/draft/thread";
 import { EMPTY_MENTION_VALUE, isEmptyValue, trimValue, valueOf } from "@/lib/mentions";
 import { kindDrawKey, valueBack, type LiveCard, type makeBoth } from "@/lib/studio-cards";
-import { drawRefusal, sendRefusal, startOverStep, type DrawRefusal } from "@/lib/studio-chat";
+import { drawRefusal, landedTurn, sendRefusal, startOverStep, turnKey, type DrawRefusal } from "@/lib/studio-chat";
 import {
   abandonDraft,
   declineSuggestion,
@@ -26,7 +26,7 @@ import {
   type TagKind,
   type TranscriptBrief,
 } from "@/lib/studio-drafts";
-import { refusalReason } from "@/lib/studio-client";
+import { idempotencyKey, refusalReason, runnerSlow } from "@/lib/studio-client";
 import type { Brief } from "@/lib/studio-jobs";
 import { panelHref } from "@/lib/studio-url";
 
@@ -83,6 +83,12 @@ export function useDraftVerbs({
   const [confirmStartOver, setConfirmStartOver] = useState(false);
   const [startOverError, setStartOverError] = useState<string | null>(null);
   const [waitError, setWaitError] = useState<string | null>(null);
+  /**
+   * The key of a send that timed out, with what it sent: the same words sent
+   * again reuse it, so the runner answers with the turn it already took
+   * instead of starting a second paid one.
+   */
+  const unanswered = useRef<{ print: string; key: string } | null>(null);
 
   /**
    * One person turn. `keepComposer` is for a turn that was not typed in the
@@ -98,7 +104,23 @@ export function useDraftVerbs({
     setTrustRetry(null);
     setPending({ value: body, seq: null });
     if (!keepComposer) setValue(EMPTY_MENTION_VALUE);
-    const result = await sendMessage(draftId, make ? { ...body, make: true } : body);
+    const message = make ? { ...body, make: true } : body;
+    const print = JSON.stringify(message);
+    const key = turnKey(unanswered.current, print, () => idempotencyKey("message"));
+    const after = view.transcript.reduce((latest, entry) => Math.max(latest, entry.seq), 0);
+    const result = await sendMessage(draftId, message, key);
+    if (!result.ok && runnerSlow(result.status, result.refusal)) {
+      unanswered.current = { print, key };
+      // The runner may have taken it: the proxy neither times out nor passes
+      // the abort on. When the record shows the turn, it was sent.
+      const fresh = await load();
+      const seq = fresh === null ? null : landedTurn(fresh.transcript, after, body.text);
+      if (seq !== null) {
+        unanswered.current = null;
+        setPending({ value: body, seq });
+        return true;
+      }
+    }
     if (!result.ok) {
       setPending(null);
       // Give the words and the chips back: a refused turn should not cost the typing (T17).
@@ -108,6 +130,7 @@ export function useDraftVerbs({
       void load();
       return false;
     }
+    unanswered.current = null;
     setPending({ value: body, seq: result.data.seq });
     void load();
     return true;
@@ -137,7 +160,7 @@ export function useDraftVerbs({
         // The send landed, so the card is gone: the owed write gets a retry
         // of its own on the error line instead of another make request.
         setTrustRetry(kind);
-        setSendError(sendRefusal(result.status, result.refusal));
+        setSendError(sendRefusal(result.status, result.refusal, "change"));
         void load();
         return false;
       }
@@ -153,7 +176,7 @@ export function useDraftVerbs({
     setSendError(null);
     const result = await setDraftTrust(draftId, kind, true);
     if (!result.ok) {
-      setSendError(sendRefusal(result.status, result.refusal));
+      setSendError(sendRefusal(result.status, result.refusal, "change"));
       void load();
       return;
     }
@@ -163,7 +186,7 @@ export function useDraftVerbs({
 
   async function declineOffer(replySeq: number, kind: TagKind): Promise<boolean> {
     const result = await declineSuggestion(draftId, replySeq, [kind]);
-    if (!result.ok) setSendError(sendRefusal(result.status, result.refusal));
+    if (!result.ok) setSendError(sendRefusal(result.status, result.refusal, "change"));
     void load();
     return result.ok;
   }
@@ -171,7 +194,7 @@ export function useDraftVerbs({
   /** Take back an always-allowed kind (D108): later offers ask again. */
   async function revokeTrust(kind: DraftKind) {
     const result = await setDraftTrust(draftId, kind, false);
-    if (!result.ok) setSendError(sendRefusal(result.status, result.refusal));
+    if (!result.ok) setSendError(sendRefusal(result.status, result.refusal, "change"));
     void load();
   }
 

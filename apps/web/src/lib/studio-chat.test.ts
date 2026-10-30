@@ -14,11 +14,13 @@ import {
   drawRefusal,
   isEmptyConversation,
   jobPatch,
+  landedTurn,
   refusalNoted,
   sendRefusal,
   sentence,
   startOverStep,
   turnIndicator,
+  turnKey,
   latestBriefSeq,
   modeLine,
   splitReply,
@@ -297,6 +299,10 @@ describe("sendRefusal", () => {
     expect(say(422, "turn-cap")).toBeNull();
     expect(say(429, "daily-cap")).toBeNull();
     expect(say(0, null)).toMatch(/still in the box/);
+    // Past the deadline the message may have landed, and a resend reuses its key.
+    const slow = { error: "the studio runner did not answer in time", detail: null };
+    expect(sendRefusal(0, slow)).toMatch(/may have gone through.*will not send it twice/);
+    expect(sendRefusal(0, slow, "change")).toMatch(/the change may still land/);
     expect(say(400, null, "text is over 8000 characters")).toBe("Text is over 8000 characters.");
   });
 
@@ -407,5 +413,31 @@ describe("the press refusals #207 adds", () => {
     expect(drawRefusal(409, { error: "x", detail: { reason: "not-briefed", kind: "video", state: "open" } }).text).toBe(
       "There is no video brief to make right now.",
     );
+  });
+});
+
+describe("a send that timed out (R2-1-01)", () => {
+  it("reuses the held key for the same words and makes a new one for others", () => {
+    let made = 0;
+    const fresh = () => `k${(made += 1)}`;
+    expect(turnKey(null, "a", fresh)).toBe("k1");
+    expect(turnKey({ print: "a", key: "held" }, "a", fresh)).toBe("held");
+    expect(turnKey({ print: "a", key: "held" }, "b", fresh)).toBe("k2");
+  });
+
+  it("finds the person turn that landed after the send began, and nothing older", () => {
+    const transcript = [entry(1, "person", "make it blue"), entry(2, "planner", "Done."), entry(3, "person", " make it blue ")];
+    expect(landedTurn(transcript, 2, "make it blue")).toBe(3);
+    expect(landedTurn(transcript, 3, "make it blue")).toBeNull();
+    expect(landedTurn(transcript, 0, "make it red")).toBeNull();
+  });
+});
+
+describe("a Draw past the deadline (R2-1-01)", () => {
+  it("does not say nothing was queued", () => {
+    const text = drawRefusal(0, { error: "the studio runner did not answer in time", detail: null }).text;
+    expect(text).toMatch(/may still be queuing/);
+    expect(text).not.toMatch(/nothing was queued/);
+    expect(drawRefusal(0, { error: "the studio runner is not answering", detail: null }).text).toMatch(/nothing was queued/);
   });
 });

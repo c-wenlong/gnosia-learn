@@ -2,7 +2,7 @@ import type { Brief, Job } from "@/lib/studio-jobs";
 import { jobPredicate } from "@/lib/studio-job-state";
 import type { DraftState, DraftView, PendingTopic, TranscriptEntry } from "@/lib/studio-drafts";
 import type { Refusal } from "@/lib/studio-client";
-import { refusalNumber, refusalReason, refusalString } from "@/lib/studio-client";
+import { refusalNumber, refusalReason, refusalString, runnerSlow } from "@/lib/studio-client";
 import { sentence } from "@/lib/sentence";
 
 /**
@@ -389,6 +389,12 @@ export function drawRefusal(status: number, refusal: Refusal): DrawRefusal {
     });
     return own(totalUsd === null || cap === null ? sentence(refusal.error) : capSentence(cap));
   }
+  if (runnerSlow(status, refusal)) {
+    // Past the deadline the runner may still create the topic and queue the
+    // job, so "nothing was queued" could be false. The press's key is the
+    // same, so pressing again cannot queue a second one.
+    return own("The studio runner did not answer in time, so it may still be queuing this. Check the job strip before pressing again.");
+  }
   if (status === 0) return own("The studio runner is not answering, so nothing was queued.");
   return own(sentence(refusal.error));
 }
@@ -400,9 +406,11 @@ function refusalDetailFlag(refusal: Refusal, field: string): boolean {
 
 /**
  * A refused message, in words. `null` for the daily cap, which the composer
- * itself then says (E3), so it is not said twice.
+ * itself then says (E3), so it is not said twice. `change` is for the
+ * conversation's other writes that show their refusal on the same line (the
+ * consent card's trust and decline), whose slow answer is not about a message.
  */
-export function sendRefusal(status: number, refusal: Refusal): string | null {
+export function sendRefusal(status: number, refusal: Refusal, what: "message" | "change" = "message"): string | null {
   if (status === 429) return null;
   switch (refusalReason(refusal)) {
     case "in-flight":
@@ -422,8 +430,38 @@ export function sendRefusal(status: number, refusal: Refusal): string | null {
     default:
       break;
   }
+  if (runnerSlow(status, refusal)) {
+    return what === "change"
+      ? "The studio runner did not answer in time, so the change may still land. Check the conversation before trying again."
+      : "The studio runner did not answer in time, so this message may have gone through. It is still in the box: sending it again will not send it twice.";
+  }
   if (status === 0) return "The studio runner is not answering. Your message is still in the box.";
   return sentence(refusal.error);
+}
+
+/**
+ * The idempotency key for a person turn: the one held from a send that timed
+ * out (`RUNNER_SLOW`) when these are the same words and chips, else a new one.
+ * The runner answers a held key with the message it already took, so sending
+ * the given-back words again cannot pay for a second turn; changed words are
+ * a new message and get their own key.
+ */
+export function turnKey(held: { print: string; key: string } | null, print: string, fresh: () => string): string {
+  return held !== null && held.print === print ? held.key : fresh();
+}
+
+/**
+ * The seq of a person turn that landed after `after` with `text`, or null:
+ * how a send that timed out finds out, from the record read after it, that
+ * the runner took it after all.
+ */
+export function landedTurn(
+  transcript: readonly Pick<TranscriptEntry, "seq" | "role" | "text">[],
+  after: number,
+  text: string,
+): number | null {
+  const words = text.trim();
+  return transcript.find((entry) => entry.role === "person" && entry.seq > after && entry.text.trim() === words)?.seq ?? null;
 }
 
 /**

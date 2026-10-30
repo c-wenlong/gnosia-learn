@@ -21,7 +21,7 @@ import {
   makeVideoValue,
 } from "./studio-extend";
 import { openerValue } from "./studio-cards";
-import { RUNNER_DOWN } from "@/lib/studio-client";
+import { RUNNER_DOWN, RUNNER_SLOW } from "@/lib/studio-client";
 
 /** A `Storage` in memory, and one whose every call throws like a blocked one. */
 function memory(): Storage {
@@ -94,6 +94,13 @@ describe("a refused Extend", () => {
     // A 502 the runner itself sent is about the diagram, not about the runner.
     expect(extendRefusal(502, refusal("dot-product would not inspect"), "x").actions).toContain("canvas");
     expect(extendRefusal(500, refusal("boom"), "x").headline).toBe("The runner answered 500.");
+  });
+
+  it("says a read past the deadline is still going, never that the runner is down (R2-1-01)", () => {
+    const slow = extendRefusal(0, refusal(RUNNER_SLOW, "The operation timed out."), "TCP handshake");
+    expect(slow.headline).toBe("The studio is still reading TCP handshake.");
+    expect(slow.detail).not.toContain("npm run studio");
+    expect(slow.actions).toEqual(["retry", "close"]);
   });
 });
 
