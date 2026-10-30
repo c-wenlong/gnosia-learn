@@ -176,6 +176,20 @@ export function Sections({ rail, onPick, search }: { rail: boolean; onPick: () =
     if (!server || !runner) setOlderError("Older rows could not be read. Try again in a moment.");
   }
 
+  // A pin or unpin the route refused is put back by the re-read; say so, or
+  // the row just jumps and returns with nothing said.
+  const [pinError, setPinError] = useState<string | null>(null);
+  // Only the newest change owns the message: an older refusal arriving late
+  // must not speak for a pin that has since worked.
+  const latestChange = useRef(0);
+  const change = async (change: RecentChange) => {
+    const mine = ++latestChange.current;
+    setPinError(null);
+    const saved = await recent.change(change);
+    if (!saved && mine === latestChange.current) setPinError(change.action === "pin" ? "Not pinned: Recent could not be saved." : "Not unpinned: Recent could not be saved.");
+    return saved;
+  };
+
   const current = (item: { key: string; href: string; kind: RecentKind }) => {
     if (item.kind === "draft") return active !== null && item.key === `draft:${active}`;
     return isCurrentRow(item.href, pathname, item.kind === "module");
@@ -195,7 +209,7 @@ export function Sections({ rail, onPick, search }: { rail: boolean; onPick: () =
       briefed={"briefed" in item && item.briefed === true}
       courseHref={item.kind === "module" ? courseOf(item.key) : null}
       onClick={item.kind === "draft" ? rowClick(chats?.navigate ?? null, linkFor(item), onPick) : onPick}
-      onChange={recent.change}
+      onChange={change}
       onRename={item.kind === "draft" ? (name) => void rename(item.key.slice("draft:".length), name) : null}
     />
   );
@@ -224,8 +238,15 @@ export function Sections({ rail, onPick, search }: { rail: boolean; onPick: () =
         <SectionLabel id="sidebar-recent" rail={rail}>
           Recent
         </SectionLabel>
+        {pinError !== null && (
+          <p role="alert" className={cx(STATUS_TEXT, "px-2 pt-1 text-danger", LABEL_FADE, rail ? "opacity-0" : LABEL_SHOWN)}>
+            {pinError}
+          </p>
+        )}
         {search.words !== "" ? (
-          <div inert={rail}>
+          // Faded out on the rail like every other label: the words stay
+          // after focus leaves the field and the peek ends.
+          <div inert={rail} className={cx(LABEL_FADE, rail ? "opacity-0" : LABEL_SHOWN)}>
             <SearchResults
               search={search}
               studio={fromRunnerLive}

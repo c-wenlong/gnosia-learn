@@ -25,6 +25,7 @@ import { META_GLYPH } from "./icons";
 import { ModulePath } from "./ModulePath";
 import { ROW_HOVER, ROW_META } from "./rows";
 import type { ModuleData } from "./types";
+import { ownValue } from "@gnosia/tutor/own-key";
 
 /**
  * The main column: one module, laid out as Coursera lays out a module on its
@@ -65,7 +66,7 @@ export function ModuleMain({
   const assets = data?.assets ?? null;
   const meta = moduleMeta({
     status,
-    concepts: moduleConceptCount(module.topics.map((t) => mastery[t.id])),
+    concepts: moduleConceptCount(module.topics.map((t) => ownValue(mastery, t.id))),
     assets: assetsReachable ? (assets?.count ?? 0) : null,
   });
 

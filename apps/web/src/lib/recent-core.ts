@@ -21,6 +21,7 @@
  */
 
 import { conversationTitle } from "@/lib/conversation-title";
+import { conceptHref } from "@/lib/course-path";
 import { dayDiff } from "@/lib/day-groups";
 import { dayKey, type LogEvent } from "@gnosia/tutor/days";
 import type { MasteryBucket } from "@gnosia/tutor/mastery-bucket";
@@ -286,7 +287,7 @@ export function recentItems(sources: RecentSources): RecentItem[] {
       kind: "concept",
       title: c.title,
       detail: null,
-      href: `/learn/${encodeURIComponent(c.id)}`,
+      href: conceptHref(c.id),
       at: c.at,
       bucket: c.bucket,
       pL: c.pL,
@@ -326,7 +327,6 @@ export function recentItems(sources: RecentSources): RecentItem[] {
 /* What the sidebar reads                                                     */
 /* -------------------------------------------------------------------------- */
 
-/** A course in the sidebar's Courses section, with its modules in order. */
 /**
  * A course in the sidebar: one row that opens where the owner left off. The
  * module list is the course page's own sidebar, so the app's sidebar does not
@@ -480,7 +480,6 @@ export function isAppPath(href: unknown): href is string {
     href.startsWith("/") &&
     !href.startsWith("//") &&
     !href.includes("\\") &&
-     
     !/[\u0000-\u001f\u007f]/.test(href)
   );
 }

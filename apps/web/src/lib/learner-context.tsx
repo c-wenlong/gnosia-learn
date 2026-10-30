@@ -32,6 +32,7 @@ import {
   setTopicCompleted,
 } from "@/lib/storage";
 import { randomToken } from "@/lib/random-token";
+import { ownValue } from "@gnosia/tutor/own-key";
 import { announceVisitStored } from "@/lib/recent-client";
 import { withDeadline } from "@/lib/send-json";
 import { applyThemeToDocument, followTheme, writeThemeCookie } from "@/lib/theme-cookie";
@@ -42,7 +43,7 @@ import { createWriteQueue } from "@/lib/write-queue";
  *
  * The shape of this context is unchanged from when the state lived in
  * localStorage: `state` plus named actions. What changed is underneath. A
- * server component reads the snapshot from Postgres and passes it in as
+ * server component reads the snapshot from the catalog database and passes it in as
  * `initialState`, each action applies the same pure reducer it always did and
  * then posts the change to `/api/learner/*`, and the server is the authority
  * on what was actually stored.
@@ -158,6 +159,12 @@ type Outbound =
   | { kind: "recap"; topicId: string; input: KnowledgeInput; countSession: boolean; requestId?: string }
   | { kind: "theme"; theme: ThemeMode };
 
+/** The write queue's key for a kept write, as the action that made it commits it. */
+function outboundKey(write: Outbound): string {
+  if (write.kind === "theme") return "preference:theme";
+  return `${write.kind}:${write.topicId}`;
+}
+
 /** A write worth keeping: how to draw it again, and the same write as data. */
 interface Keep {
   replay: Replay;
@@ -184,39 +191,82 @@ interface Kept extends Keep {
  * refusal. The next load sends them again, once, if they are under a day old.
  * Starting a queued write out of turn instead could let the older write in
  * flight land after it and overwrite it.
+ *
+ * Each page has its own box, `OUTBOX_KEY:<id>`, and writes or removes only
+ * that one, since every tab shares `localStorage`: with one box for all, a
+ * tab leaving with nothing pending, or one coming back from the back-forward
+ * cache, removed a box another tab had just closed on. A page takes every
+ * box when it loads, the old shared `OUTBOX_KEY` included, under a lock
+ * (`takeOutboxesLocked`).
  */
 export const OUTBOX_KEY = "gnosia:learner-outbox";
 const OUTBOX_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
-function writeOutbox(writes: readonly Outbound[]): void {
+/** A page's own box: a fresh id per page, so a duplicated tab does not share one. */
+function pageOutboxKey(): string {
+  return `${OUTBOX_KEY}:${randomToken()}`;
+}
+
+function writeOutbox(key: string, writes: readonly Outbound[]): void {
   try {
-    if (writes.length === 0) window.localStorage.removeItem(OUTBOX_KEY);
-    else window.localStorage.setItem(OUTBOX_KEY, JSON.stringify({ at: Date.now(), writes }));
+    if (writes.length === 0) window.localStorage.removeItem(key);
+    else window.localStorage.setItem(key, JSON.stringify({ at: Date.now(), writes }));
   } catch {
     /* site data blocked or full: nothing more this page can do */
   }
 }
 
-/** The outbox's writes, emptied as they are read; none when it is stale or not ours. */
-function takeOutbox(): Outbound[] {
-  let raw: string | null = null;
-  try {
-    raw = window.localStorage.getItem(OUTBOX_KEY);
-    if (raw !== null) window.localStorage.removeItem(OUTBOX_KEY);
-  } catch {
-    return [];
-  }
-  if (raw === null) return [];
+/** One box's writes and when it was saved; null when it is unreadable or stale. */
+function readOutbox(raw: string): { at: number; writes: Outbound[] } | null {
   try {
     const box = JSON.parse(raw) as { at?: unknown; writes?: unknown };
-    if (typeof box.at !== "number" || Date.now() - box.at > OUTBOX_MAX_AGE_MS || !Array.isArray(box.writes)) return [];
-    return box.writes.filter(
+    if (typeof box.at !== "number" || Date.now() - box.at > OUTBOX_MAX_AGE_MS || !Array.isArray(box.writes)) return null;
+    const writes = box.writes.filter(
       (w): w is Outbound =>
         w !== null && typeof w === "object" && ["note", "progress", "recap", "theme"].includes((w as { kind?: unknown }).kind as string),
     );
+    return { at: box.at, writes };
   } catch {
-    return [];
+    return null;
   }
+}
+
+/**
+ * Every box's writes, oldest box first so a newer write on a key is sent
+ * after an older one, each box removed as it is read; a stale or unreadable
+ * box is removed and sends nothing.
+ */
+function takeOutboxes(): Outbound[] {
+  const boxes: { at: number; writes: Outbound[] }[] = [];
+  try {
+    const keys: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const key = window.localStorage.key(i);
+      if (key !== null && (key === OUTBOX_KEY || key.startsWith(`${OUTBOX_KEY}:`))) keys.push(key);
+    }
+    for (const key of keys) {
+      const raw = window.localStorage.getItem(key);
+      window.localStorage.removeItem(key);
+      const box = raw === null ? null : readOutbox(raw);
+      if (box !== null) boxes.push(box);
+    }
+  } catch {
+    /* site data blocked: whatever was read so far is sent */
+  }
+  return boxes.sort((a, b) => a.at - b.at).flatMap((box) => box.writes);
+}
+
+/**
+ * `takeOutboxes` under a lock every page of the site shares (the Web Locks
+ * API), so two pages loading at once cannot split the boxes between them and
+ * each send its share through its own queue, where an older note could land
+ * after a newer one: one page takes every box and sends them in order, and
+ * the other finds none. A browser without the API takes them unlocked.
+ */
+function takeOutboxesLocked(): Promise<Outbound[]> {
+  const locks = typeof navigator === "undefined" ? undefined : navigator.locks;
+  if (locks === undefined || typeof locks.request !== "function") return Promise.resolve(takeOutboxes());
+  return locks.request(OUTBOX_KEY, () => takeOutboxes()).catch(() => takeOutboxes());
 }
 
 /** `state` with one item's recap set to `recap`, or removed when there is none. */
@@ -361,7 +411,7 @@ export function LearnerProvider({
   /**
    * Writes are ordered per target: see `createWriteQueue`. Without it two
    * edits to the same note can reach the server in the wrong order, and only
-   * the last one to arrive is what Postgres keeps.
+   * the last one to arrive is what the database keeps.
    */
   const queue = useRef(createWriteQueue<ApiResponse>());
 
@@ -394,6 +444,12 @@ export function LearnerProvider({
    * writes always have (`createWriteQueue`).
    */
   const unsaved = useRef(new Map<string, Kept>());
+  /**
+   * Every key this page has written, so the outbox replay, which waits for
+   * a lock (`takeOutboxesLocked`), skips a saved write on a key the learner
+   * changed in the meantime: the saved value is the older one.
+   */
+  const changed = useRef(new Set<string>());
   /**
    * Writes queued behind another on their key that have not started, with
    * the write as data when it is one worth keeping. On `pagehide` those go
@@ -506,7 +562,10 @@ export function LearnerProvider({
       current.current = next;
       setState(next);
       const keys = typeof key === "string" ? [key] : key;
-      for (const k of keys) unsaved.current.delete(k);
+      for (const k of keys) {
+        unsaved.current.delete(k);
+        changed.current.add(k);
+      }
       const record = (response: ApiResponse, newest: boolean) => {
         if (response.ok === false) {
           // Only the newest write on its key is kept: a newer one is on its
@@ -603,16 +662,18 @@ export function LearnerProvider({
   // was idle has already started, with `keepalive`; what is left is saved,
   // the newest write per key, kept refusals first so a queued write on the
   // same key wins. A page restored from the back-forward cache carries on
-  // with its queue in memory, so the copy goes.
+  // with its queue in memory, so the copy goes. Either way only this page's
+  // own box is written or removed (`OUTBOX_KEY`).
   useEffect(() => {
+    const box = pageOutboxKey();
     const leave = () => {
       const byKey = new Map<string, Outbound>();
       for (const [key, { outbound }] of unsaved.current) byKey.set(key, outbound);
       for (const left of waiting.current.values()) if (left !== null) byKey.set(left.key, left.outbound);
-      writeOutbox([...byKey.values()]);
+      writeOutbox(box, [...byKey.values()]);
     };
     const back = (event: PageTransitionEvent) => {
-      if (event.persisted) writeOutbox([]);
+      if (event.persisted) writeOutbox(box, []);
     };
     window.addEventListener("pagehide", leave);
     window.addEventListener("pageshow", back);
@@ -707,7 +768,7 @@ export function LearnerProvider({
         `note:${topicId}`,
         (previous) => setNote(previous, topicId, note),
         () => post("note", { curriculumItemId: topicId, note }),
-        same((state) => state.notes[topicId] ?? null),
+        same((state) => ownValue(state.notes, topicId) ?? null),
         { replay: () => (previous) => setNote(previous, topicId, note), outbound: { kind: "note", topicId, note } },
       );
     },
@@ -758,7 +819,7 @@ export function LearnerProvider({
         // already stored counts no session there, while the reducer above
         // counted one on whatever the page last read.
         {
-          replay: (next) => (previous) => withRecap(previous, topicId, next.knowledge[topicId]),
+          replay: (next) => (previous) => withRecap(previous, topicId, ownValue(next.knowledge, topicId)),
           outbound: { kind: "recap", topicId, input, countSession, requestId },
           adopt: (result) => {
             const recap = (result as { recap?: LearnerState["knowledge"][string] | null } | undefined)?.recap;
@@ -873,18 +934,23 @@ export function LearnerProvider({
 
   useLegacyImport(router.refresh, setSaveError);
 
-  // What the last page left in the outbox, sent again once, as it was made.
+  // What the pages before left in their outboxes, sent again once, as each was made.
   const resent = useRef(false);
   useEffect(() => {
     if (resent.current) return;
     resent.current = true;
-    for (const write of takeOutbox()) {
-      if (write.kind === "note") updateNote(write.topicId, write.note);
-      else if (write.kind === "progress") setCompleted(write.topicId, write.done);
-      // An outbox from before request ids carries none, so it gets one here.
-      else if (write.kind === "recap") sendRecap(write.topicId, write.input, write.countSession, typeof write.requestId === "string" ? write.requestId : randomToken());
-      else setThemeMode(write.theme);
-    }
+    void takeOutboxesLocked().then((writes) => {
+      // Keys written on this page while the lock was awaited hold a newer value.
+      const newer = new Set(changed.current);
+      for (const write of writes) {
+        if (newer.has(outboundKey(write))) continue;
+        if (write.kind === "note") updateNote(write.topicId, write.note);
+        else if (write.kind === "progress") setCompleted(write.topicId, write.done);
+        // An outbox from before request ids carries none, so it gets one here.
+        else if (write.kind === "recap") sendRecap(write.topicId, write.input, write.countSession, typeof write.requestId === "string" ? write.requestId : randomToken());
+        else setThemeMode(write.theme);
+      }
+    });
   }, [updateNote, setCompleted, sendRecap, setThemeMode]);
 
   const value = useMemo(

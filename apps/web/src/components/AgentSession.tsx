@@ -42,6 +42,7 @@ import type { TurnCheck, Verdict } from "@gnosia/tutor/tutor-check";
 import { scrollBehavior } from "@/lib/motion";
 import { tutorProblem } from "@/lib/tutor-errors";
 import { recapTurns, topicRequestTurns } from "@/lib/tutor-thread";
+import { ownValue } from "@gnosia/tutor/own-key";
 
 type Role = "user" | "assistant";
 
@@ -80,8 +81,8 @@ export function AgentSession({
   conceptTitles?: Record<string, string>;
 }) {
   const { state, saveKnowledge, saveError } = useLearner();
-  const learnerNote = state.notes[topic.id] ?? "";
-  const storedKnowledge = state.knowledge[topic.id];
+  const learnerNote = ownValue(state.notes, topic.id) ?? "";
+  const storedKnowledge = ownValue(state.knowledge, topic.id);
 
   // Snapshot the recap on mount, then hold it: the session resumes from what
   // was known when it opened, so saving a recap mid-session doesn't rewrite
