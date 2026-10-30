@@ -86,10 +86,13 @@ export default async function AssetPage({
       <span aria-hidden>←</span> {back.label}
     </TextLink>
   );
+  const detailRead = loadAssetDetail(id);
   const [detail, { kb }, lastWatched, playback, favorite] = await Promise.all([
-    loadAssetDetail(id),
+    detailRead,
     loadKnowledgeBase(),
-    loadLastWatched(id),
+    // Only Details' "Read" line wants it, and a video tracks itself instead:
+    // the whole event log is not read for a page that would not show it.
+    detailRead.then(({ asset }) => (asset === null || asset.kind === "video" ? undefined : loadLastWatched(id))),
     loadPlayback(id),
     loadFavorite(id),
   ]);

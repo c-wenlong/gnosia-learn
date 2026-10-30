@@ -24,6 +24,11 @@ vi.mock("@/lib/asset-library", async (importOriginal) => ({
   loadSearchText: async () => ({ texts: new Map(), sources: {}, searchedText: false, skipped: 0 }),
 }));
 vi.mock("@/lib/learner-store", () => ({ loadKnowledgeBase: async () => ({ reachable: true, kb: { concepts: [] } }) }));
+// A signed-in request: the view is kept per owner (`loadLibraryView`).
+vi.mock("@/lib/auth/session", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/session")>()),
+  isSignedIn: async () => true,
+}));
 vi.mock("@/data/courses", () => ({ getCourses: async () => [] }));
 vi.mock("@/data/topics", () => ({ getTopics: async () => [] }));
 vi.mock("@/components/library/RowMenu", () => ({ RowMenu: () => null }));
@@ -73,6 +78,11 @@ function html(page: LibraryPage<ReactNode>): string {
   return renderToStaticMarkup(createElement(Fragment, null, ...page.pieces.flatMap((p) => p.rows)));
 }
 
+/** Moves the clock on, so a kept view is past its minute. */
+function later(ms: number) {
+  vi.useFakeTimers({ toFake: ["Date"], now: Date.now() + ms });
+}
+
 const titles = (markup: string) => [...markup.matchAll(/>(Note \d{3})</g)].map(([, t]) => t);
 
 describe("libraryPage", () => {
@@ -81,6 +91,7 @@ describe("libraryPage", () => {
     vi.stubEnv("HABIT_TIME_ZONE", "UTC");
     loadLibrary.mockReset();
     loadLibrary.mockResolvedValue(library());
+    vi.useRealTimers();
   });
 
   it("draws the page after the cursor, under the day it goes on with, with the day's whole count", async () => {
@@ -124,13 +135,35 @@ describe("libraryPage", () => {
     expect((await libraryPage("/library", fine.next ?? "", fine.order)).state).toBe("ok");
     const one = await first("/library");
     loadLibrary.mockResolvedValue(library(ROWS.filter((r) => r.id.startsWith("note:2026-10-03"))));
+    // Past the minute the page's view is reused for, so the catalog is read again.
+    later(61_000);
     expect(await libraryPage("/library", one.next ?? "")).toEqual({ state: "stale" });
+  });
+
+  it("reuses the view the page worked out for the pages after it, for a minute", async () => {
+    const { libraryPage } = await import("./page-action");
+    const one = await first("/library?view=list");
+    expect(loadLibrary).toHaveBeenCalledTimes(1);
+    const two = await libraryPage("/library?view=list", one.next ?? "");
+    if (two.state !== "ok") throw new Error(two.state);
+    await libraryPage("/library?view=list", two.next ?? "");
+    expect(loadLibrary).toHaveBeenCalledTimes(1);
+    // Another view is its own read.
+    await libraryPage("/library?view=list&sort=title", one.next ?? "");
+    expect(loadLibrary).toHaveBeenCalledTimes(2);
+    // The page itself always reads, so a refresh after a write is fresh.
+    await first("/library?view=list");
+    expect(loadLibrary).toHaveBeenCalledTimes(3);
+    later(61_000);
+    await libraryPage("/library?view=list", one.next ?? "");
+    expect(loadLibrary).toHaveBeenCalledTimes(4);
   });
 
   it("answers unreachable when the catalog does not answer", async () => {
     const { libraryPage } = await import("./page-action");
     const one = await first("/library");
     loadLibrary.mockResolvedValue(library([], false));
+    later(61_000);
     expect(await libraryPage("/library", one.next ?? "")).toEqual({ state: "unreachable" });
   });
 

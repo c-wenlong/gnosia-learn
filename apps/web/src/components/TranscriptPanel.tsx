@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import {
   activeCueIndex,
   formatTimecode,
@@ -93,10 +93,16 @@ export function TranscriptPanel({
     setFollowing(activeVisible());
   }
 
-  function seekTo(seconds: number) {
+  // Stable across renders, so the lines below are not drawn again on every
+  // `timeupdate` just because the caller handed over a new `onSeek`.
+  const seekRef = useRef(onSeek);
+  useEffect(() => {
+    seekRef.current = onSeek;
+  });
+  const seekTo = useCallback((seconds: number) => {
     setFollowing(true);
-    onSeek?.(seconds);
-  }
+    seekRef.current?.(seconds);
+  }, []);
 
   const content = (
     <>
@@ -128,51 +134,7 @@ export function TranscriptPanel({
           aria-label="Transcript"
           className={cx("relative overflow-y-auto overscroll-contain", scrollerClassName)}
         >
-          {cues.map((cue, i) => {
-            const isActive = i === active;
-            const spoken = i < active;
-            const content = (
-              <>
-                <span className="pt-px text-[12px] tabular-nums text-text3">
-                  {formatTimecode(cue.start)}
-                </span>
-                {/* A spoken line across a full-width card is a line nobody reads. */}
-                <span className="max-w-[80ch]">{cue.text}</span>
-              </>
-            );
-            const tone = isActive
-              ? "bg-tint font-medium text-text"
-              : spoken
-                ? "text-text3"
-                : "text-text2";
-            return (
-              <li key={`${cue.start}-${i}`} ref={isActive ? activeRef : undefined}>
-                {onSeek ? (
-                  <button
-                    type="button"
-                    onClick={() => seekTo(cue.start)}
-                    aria-current={isActive ? "true" : undefined}
-                    className={cx(
-                      "grid w-full grid-cols-[3rem_minmax(0,1fr)] gap-2 rounded-lg px-2 py-1 text-left text-[14px] leading-[22px] transition-colors duration-150 hover:bg-surface2 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent motion-reduce:transition-none",
-                      tone,
-                    )}
-                  >
-                    {content}
-                  </button>
-                ) : (
-                  <p
-                    aria-current={isActive ? "true" : undefined}
-                    className={cx(
-                      "grid grid-cols-[3rem_minmax(0,1fr)] gap-2 rounded-lg px-2 py-1 text-[14px] leading-[22px] transition-colors duration-150 motion-reduce:transition-none",
-                      tone,
-                    )}
-                  >
-                    {content}
-                  </p>
-                )}
-              </li>
-            );
-          })}
+          <CueLines cues={cues} active={active} activeRef={activeRef} onSeek={onSeek ? seekTo : undefined} />
         </ol>
       )}
     </>
@@ -188,3 +150,82 @@ export function TranscriptPanel({
     </section>
   );
 }
+
+/**
+ * The lines themselves, apart from the panel so they are drawn again only
+ * when the line being spoken changes. `currentTime` moves about four times a
+ * second and the active line far less often, and a lecture's transcript is
+ * hundreds of rows: memoised on the active index rather than the time, the
+ * list is left alone between line changes, and each line on whether it is
+ * spoken, active or still to come.
+ */
+const CueLines = memo(function CueLines({
+  cues,
+  active,
+  activeRef,
+  onSeek,
+}: {
+  cues: TranscriptCue[];
+  active: number;
+  activeRef: RefObject<HTMLLIElement | null>;
+  onSeek?: (seconds: number) => void;
+}) {
+  return cues.map((cue, i) => (
+    <CueLine
+      key={`${cue.start}-${i}`}
+      cue={cue}
+      state={i === active ? "active" : i < active ? "spoken" : "upcoming"}
+      lineRef={i === active ? activeRef : undefined}
+      onSeek={onSeek}
+    />
+  ));
+});
+
+const CueLine = memo(function CueLine({
+  cue,
+  state,
+  lineRef,
+  onSeek,
+}: {
+  cue: TranscriptCue;
+  state: "active" | "spoken" | "upcoming";
+  lineRef?: RefObject<HTMLLIElement | null>;
+  onSeek?: (seconds: number) => void;
+}) {
+  const isActive = state === "active";
+  const content = (
+    <>
+      <span className="pt-px text-[12px] tabular-nums text-text3">{formatTimecode(cue.start)}</span>
+      {/* A spoken line across a full-width card is a line nobody reads. */}
+      <span className="max-w-[80ch]">{cue.text}</span>
+    </>
+  );
+  const tone = isActive ? "bg-tint font-medium text-text" : state === "spoken" ? "text-text3" : "text-text2";
+  return (
+    <li ref={lineRef}>
+      {onSeek ? (
+        <button
+          type="button"
+          onClick={() => onSeek(cue.start)}
+          aria-current={isActive ? "true" : undefined}
+          className={cx(
+            "grid w-full grid-cols-[3rem_minmax(0,1fr)] gap-2 rounded-lg px-2 py-1 text-left text-[14px] leading-[22px] transition-colors duration-150 hover:bg-surface2 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent motion-reduce:transition-none",
+            tone,
+          )}
+        >
+          {content}
+        </button>
+      ) : (
+        <p
+          aria-current={isActive ? "true" : undefined}
+          className={cx(
+            "grid grid-cols-[3rem_minmax(0,1fr)] gap-2 rounded-lg px-2 py-1 text-[14px] leading-[22px] transition-colors duration-150 motion-reduce:transition-none",
+            tone,
+          )}
+        >
+          {content}
+        </p>
+      )}
+    </li>
+  );
+});

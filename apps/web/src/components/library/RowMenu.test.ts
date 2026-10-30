@@ -18,6 +18,11 @@ import { RowMenu, rowMenuOwnsKey } from "./RowMenu";
 
 const refresh = vi.hoisted(() => vi.fn());
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh, push: vi.fn() }) }));
+// The Ask chat is loaded lazily in the app; here it is the module itself, drawn at once.
+vi.mock("next/dynamic", async () => {
+  const { AskPanel } = await import("./AskPanel");
+  return { default: () => AskPanel };
+});
 vi.mock("next/link", () => ({
   default: ({ href, children, ...rest }: { href: string; children: unknown }) =>
     createElement("a", { href, ...rest }, children as never),
