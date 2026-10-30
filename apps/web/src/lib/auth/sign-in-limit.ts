@@ -13,7 +13,7 @@ import { checkRateLimit, type RateLimitRule, type RateLimitStore } from "@gnosia
  *    exposed `next start` the forwarded headers are the client's own words,
  *    so every request shares one bucket and this limit counts everyone.
  * 2. **Everyone together**: `SIGN_IN_FAILURE_RULE` wrong passwords per
- *    window across all clients. Past it, every sign-in is refused until the
+ *    window across all clients, counting attempts still in flight. Past it, every sign-in is refused until the
  *    window ends, the owner's included. That is the trade: a stranger can keep
  *    the form shut, but cannot keep guessing. The desktop shell signs in with
  *    its launch token (`/api/auth/local`), which this does not touch.
@@ -41,8 +41,15 @@ let clients: RateLimitStore = new Map();
 let failures: FailureWindow | null = null;
 
 /**
- * Whether this client may try a password now. Counts the attempt against the
- * client when it may. Call before reading the body.
+ * Whether this client may try a password now. Call before reading the body.
+ *
+ * An admitted attempt is counted against the client, and it also takes a
+ * slot in everyone's window at once, before its password is known. Counting
+ * only when a password turned out wrong let parallel requests through: sixty
+ * posts that all pass this check before any of them finishes are sixty
+ * guesses against a cap of fifty. So every attempt in flight holds its slot,
+ * a wrong password keeps it, and `releaseSignIn` gives it back when the
+ * password was right or nothing was compared.
  */
 export function admitSignIn(client: string, now: number = Date.now()): SignInVerdict {
   if (failures !== null && failures.resetAt <= now) failures = null;
@@ -50,13 +57,20 @@ export function admitSignIn(client: string, now: number = Date.now()): SignInVer
     return { allowed: false, retryAfterSeconds: Math.max(1, Math.ceil((failures.resetAt - now) / 1000)) };
   }
   const verdict = checkRateLimit(clients, client, SIGN_IN_CLIENT_RULE, now);
-  return verdict.allowed ? { allowed: true } : { allowed: false, retryAfterSeconds: verdict.retryAfterSeconds };
+  if (!verdict.allowed) return { allowed: false, retryAfterSeconds: verdict.retryAfterSeconds };
+  failures ??= { count: 0, resetAt: now + SIGN_IN_FAILURE_RULE.windowMs };
+  failures.count += 1;
+  return { allowed: true };
 }
 
-/** Count one wrong password against everyone's window. */
-export function recordSignInFailure(now: number = Date.now()): void {
-  if (failures === null || failures.resetAt <= now) failures = { count: 0, resetAt: now + SIGN_IN_FAILURE_RULE.windowMs };
-  failures.count += 1;
+/**
+ * Give back the slot `admitSignIn` took in everyone's window: the password
+ * was right, or the server is not configured and nothing was compared. A
+ * wrong password, or a request that never finished its body, keeps it.
+ */
+export function releaseSignIn(now: number = Date.now()): void {
+  if (failures === null || failures.resetAt <= now) return;
+  failures.count = Math.max(0, failures.count - 1);
 }
 
 /** For tests: forget every attempt. */

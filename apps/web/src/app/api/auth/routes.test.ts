@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/core";
-import { recordSignInFailure, resetSignInLimits, SIGN_IN_CLIENT_RULE, SIGN_IN_FAILURE_RULE } from "@/lib/auth/sign-in-limit";
+import { admitSignIn, resetSignInLimits, SIGN_IN_CLIENT_RULE, SIGN_IN_FAILURE_RULE } from "@/lib/auth/sign-in-limit";
 
 import { GET as localAuth } from "./local/route";
 import { POST as signIn } from "./sign-in/route";
@@ -137,15 +137,33 @@ describe("POST /api/auth/sign-in", () => {
 
   it("closes sign-in for everyone after too many wrong passwords from all clients together", async () => {
     vi.stubEnv("TRUST_PROXY", "1");
-    // A wrong password counts against everyone's window; the per-client
-    // limit and the wait are covered above, so the failures are recorded
-    // directly rather than waited out fifty times.
+    // A wrong password keeps its slot in everyone's window; the per-client
+    // limit and the wait are covered above, so the other attempts are
+    // admitted directly rather than waited out fifty times.
     const wrong = await signIn(post("/api/auth/sign-in", { password: "guess" }, { "x-forwarded-for": "203.0.113.1" }));
     expect(wrong.headers.get("location")).toBe("/sign-in?error=password");
-    for (let i = 1; i < SIGN_IN_FAILURE_RULE.limit; i += 1) recordSignInFailure();
+    for (let i = 1; i < SIGN_IN_FAILURE_RULE.limit; i += 1) admitSignIn(`other-${i}`);
     const owner = await signIn(post("/api/auth/sign-in", { password: "correct horse battery staple" }, { "x-forwarded-for": "198.51.100.1" }));
     expect(owner.headers.get("location")).toMatch(/error=throttled/);
     expect(cookieOf(owner)).toBe("");
+  });
+
+  it("keeps the return page through a throttle, and still vets it", async () => {
+    vi.stubEnv("TRUST_PROXY", "1");
+    for (let i = 0; i < SIGN_IN_FAILURE_RULE.limit; i += 1) admitSignIn(`other-${i}`);
+    const kept = await signIn(post("/api/auth/sign-in?next=%2Freview", { password: "x", next: "/review" }));
+    expect(kept.headers.get("location")).toMatch(/^\/sign-in\?error=throttled&retry=\d+&next=%2Freview$/);
+    const offsite = await signIn(post("/api/auth/sign-in?next=%2F%2Fevil.example", { password: "x" }));
+    expect(offsite.headers.get("location")).toMatch(/^\/sign-in\?error=throttled&retry=\d+$/);
+  });
+
+  it("gives the shared slot back on a right password", async () => {
+    vi.stubEnv("TRUST_PROXY", "1");
+    for (let i = 1; i < SIGN_IN_FAILURE_RULE.limit; i += 1) admitSignIn(`other-${i}`);
+    const owner = await signIn(post("/api/auth/sign-in", { password: "correct horse battery staple" }, { "x-forwarded-for": "198.51.100.2" }));
+    expect(owner.headers.get("location")).toBe("/home");
+    const again = await signIn(post("/api/auth/sign-in", { password: "correct horse battery staple" }, { "x-forwarded-for": "198.51.100.3" }));
+    expect(again.headers.get("location")).toBe("/home");
   });
 
   it("refuses a sibling subdomain and an Origin of null", async () => {

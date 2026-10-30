@@ -66,7 +66,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
           Gnosia has one reader for now. Enter the owner password to continue.
         </p>
 
-        <form method="post" action="/api/auth/sign-in" className="mt-8 flex w-full flex-col gap-4">
+        <form method="post" action={next === safeNextPath(null) ? "/api/auth/sign-in" : `/api/auth/sign-in?${new URLSearchParams({ next })}`} className="mt-8 flex w-full flex-col gap-4">
           <input type="hidden" name="next" value={next} />
           <label className="flex flex-col gap-2">
             <span className="text-[14px] font-medium text-brand-mist">Password</span>
