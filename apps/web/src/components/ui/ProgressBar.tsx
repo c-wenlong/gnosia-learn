@@ -1,6 +1,3 @@
-import type { ProgressCounts } from "@/lib/types";
-import { formatProgress } from "@/lib/progress";
-
 import { cx, TRACK } from "./classes";
 
 /**
@@ -12,9 +9,8 @@ import { cx, TRACK } from "./classes";
  * The bar is `w-full` of its container. Size it with a wrapper: a width passed
  * in `className` sits beside that `w-full` and loses to it (docs/design/IMPLEMENTATION.md, Gotchas).
  *
- * Takes either `percent` (0 to 100) or the older `progress` counts. With
- * `progress` it prints the "3/17 · 18%" line above the bar, as it always did,
- * unless `showLabel` is false; with `percent` it prints nothing unless asked.
+ * Takes `percent` (0 to 100), and prints it above the bar only when
+ * `showLabel` asks.
  */
 export type ProgressTone = "accent" | "ok" | "hi" | "mid";
 
@@ -27,7 +23,6 @@ const TONE: Record<ProgressTone, string> = {
 
 export function ProgressBar({
   percent,
-  progress,
   showLabel,
   size = "md",
   tone = "accent",
@@ -35,7 +30,6 @@ export function ProgressBar({
   className,
 }: {
   percent?: number;
-  progress?: ProgressCounts;
   showLabel?: boolean;
   /** 8px (`md`) or 6px (`sm`). */
   size?: "sm" | "md";
@@ -44,16 +38,15 @@ export function ProgressBar({
   label: string;
   className?: string;
 }) {
-  const raw = percent ?? progress?.percent ?? 0;
+  const raw = percent ?? 0;
   const value = Math.max(0, Math.min(100, Number.isFinite(raw) ? raw : 0));
-  const withLabel = showLabel ?? progress !== undefined;
+  const withLabel = showLabel ?? false;
   const height = size === "sm" ? "h-1.5" : "h-2";
   return (
     <div className={cx("w-full", className)}>
       {withLabel && (
         <div className="mb-1 flex items-center justify-between text-xs text-text2 tabular-nums">
-          <span>{progress ? formatProgress(progress) : `${Math.round(value)}%`}</span>
-          {progress && <span>{progress.percent}%</span>}
+          <span>{`${Math.round(value)}%`}</span>
         </div>
       )}
       <div

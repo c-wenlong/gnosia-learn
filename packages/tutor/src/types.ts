@@ -25,9 +25,3 @@ export type {
   UserResource,
 } from "@gnosia/schema/shared";
 export { emptyLearnerState, LEGACY_STORAGE_KEY } from "@gnosia/schema/shared";
-
-export interface ProgressCounts {
-  completed: number;
-  total: number;
-  percent: number;
-}
