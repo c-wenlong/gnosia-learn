@@ -83,8 +83,8 @@ per-IP rate limit, and the session's owner.
 these keys. But with `STUDIO_ENABLED` set, saving an OpenAI, Anthropic,
 Gemini, OpenRouter or NVIDIA key (`TUTOR_TO_BYOK` in
 `apps/web/src/lib/byok-providers.ts`) also sends the plaintext key to the
-runner, and `POST /api/learner/provider-key/sync` opens every saved key and
-sends it the same way. The runner writes it to `$STUDIO_HOME/byok.json`,
+runner, and `POST /api/learner/provider-key/sync` opens the saved keys and
+sends the one for the provider it names, the same way. The runner writes it to `$STUDIO_HOME/byok.json`,
 mode 0600, so its video agents can spend it. `STUDIO_HOME` defaults to
 `<repo>/.studio/`, which is gitignored but inside the checkout. So D3 and the
 first row of the threat model hold only while the studio is off. Where that

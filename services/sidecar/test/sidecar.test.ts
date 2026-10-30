@@ -233,6 +233,11 @@ describe("the learner write routes, database down", () => {
     const nothing = await call("/api/learner/custom-provider", "PATCH", { provider: "custom-mine" });
     expect(nothing.status).toBe(400);
     expect(await nothing.json()).toMatchObject({ ok: false, code: "BAD_REQUEST" });
+    // The studio runner's port is no model provider, on either path.
+    const studio = { label: "Studio", baseUrl: "http://127.0.0.1:7250/v1", key: KEY };
+    expect((await call("/api/learner/custom-provider", "POST", studio)).status).toBe(400);
+    const moved = await call("/api/learner/custom-provider", "PATCH", { provider: "custom-mine", baseUrl: "http://localhost:7250" });
+    expect(moved.status).toBe(400);
   });
 
   it("answers a custom-provider add NO_SECRET without AUTH_SECRET, then STORE_UNAVAILABLE with one", async () => {
