@@ -580,7 +580,14 @@ function Figure({
   links: Resolvers;
   className: string;
 }) {
-  if (node.kind === "image" && links.imagesAsLinks === true) {
+  // An off-site picture is a link even under `images="show"`: the CSP's
+  // `img-src` allows this app's own origin only (`lib/auth/csp.ts`), so an
+  // `<img>` of another host would be blocked and read as "did not load" with
+  // no reason, where the link opens it.
+  if (
+    node.kind === "image" &&
+    (links.imagesAsLinks === true || isExternalHref(node.src))
+  ) {
     const href = safeHref(node.src);
     return (
       <p className={cx(className, "text-sm text-text2")}>

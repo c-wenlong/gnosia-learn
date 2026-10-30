@@ -105,14 +105,40 @@ export default async function SettingsPage() {
 }
 
 /**
+ * How long the page waits on the studio runner before drawing without its
+ * answer. The read is part of the one `Promise.all` every tab waits on, so a
+ * runner that accepts the connection and answers slowly would hold General,
+ * Profile and Data too.
+ */
+const BYOK_WAIT_MS = 1_000;
+
+/**
  * Studio's BYOK settings, read here so the Model selection card starts from
  * them: `down` when nothing listens on the runner's port, which the card
  * shows as such instead of sending a request from the browser that the
  * console would log as a failed 502. Any other refusal is left for the card
- * to read itself, and say.
+ * to read itself, and say, and so is an answer slower than `BYOK_WAIT_MS`:
+ * the read is dropped rather than cut short, since a deadline that passes
+ * reads as `down` and a runner that is only slow is not.
  */
 async function studioByok(): Promise<ByokInitial | undefined> {
-  const result = await studioApi<ByokSettingsView>("/api/settings/byok", { timeoutMs: 5_000 });
-  if (result.ok) return { state: "up", data: result.data };
-  return result.reason === "down" ? { state: "down" } : undefined;
+  const late = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const waited = new Promise<undefined>((resolve) => {
+    timer = setTimeout(() => {
+      resolve(undefined);
+      late.abort();
+    }, BYOK_WAIT_MS);
+  });
+  const read = studioApi<ByokSettingsView>("/api/settings/byok", { timeoutMs: 5_000, signal: late.signal }).then(
+    (result): ByokInitial | undefined => {
+      if (result.ok) return { state: "up", data: result.data };
+      return result.reason === "down" ? { state: "down" } : undefined;
+    },
+  );
+  try {
+    return await Promise.race([read, waited]);
+  } finally {
+    clearTimeout(timer);
+  }
 }

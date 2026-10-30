@@ -65,14 +65,21 @@ describe("AssetBody", () => {
     }
   });
 
-  it("shows a note's off-site picture, and makes a session log's a link", () => {
-    const source = "Before.\n\n![a picture](https://example.com/a.png)\n";
+  it("shows a note's picture, and makes a session log's a link", () => {
+    const source = "Before.\n\n![a picture](/a.png)\n";
     const note = draw(data({ id: "note:a", kind: "note", path: "learn/concepts/a.md" }, { text: source }));
-    expect(note).toMatch(/<img [^>]*src="https:\/\/example.com\/a.png"/);
+    expect(note).toMatch(/<img [^>]*src="\/a.png"/);
 
     const log = draw(data({ id: "session:a", kind: "session_log", path: "learn/sessions/a.md" }, { text: source }));
     expect(log).not.toContain("<img");
-    expect(log).toMatch(/<a [^>]*href="https:\/\/example.com\/a.png"/);
+    expect(log).toMatch(/<a [^>]*href="\/a.png"/);
+  });
+
+  it("makes a note's off-site picture a link too, since the CSP would block it", () => {
+    const source = "Before.\n\n![a picture](https://example.com/a.png)\n";
+    const note = draw(data({ id: "note:a", kind: "note", path: "learn/concepts/a.md" }, { text: source }));
+    expect(note).not.toContain("<img");
+    expect(note).toMatch(/<a [^>]*href="https:\/\/example.com\/a.png"/);
   });
 
   it("draws a note's embed the server knows is missing as the failure, without a request for it", () => {
