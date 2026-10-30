@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useRef, useState, type FormEvent, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent, type MouseEvent, type ReactNode } from "react";
 
 import { usePanelHost } from "@/components/studio/panel-host";
 import { PanelLink } from "@/components/studio/PanelLink";
@@ -99,6 +99,14 @@ export function KindSegments({ view }: { view: StudioView }) {
  */
 export function StudioSearch({ view }: { view: StudioView }) {
   const host = usePanelHost();
+  const field = useRef<HTMLInputElement | null>(null);
+  // Follows Back and Forward without remounting: a field keyed by the query
+  // was replaced on every Enter, and focus fell to the page body (R2-1-14).
+  // A field the person is typing in is left alone.
+  useEffect(() => {
+    const input = field.current;
+    if (input !== null && input.value !== view.query && document.activeElement !== input) input.value = view.query;
+  }, [view.query]);
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     const query = String(new FormData(event.currentTarget).get("q") ?? "").trim();
     if (host?.navigate(studioHref(view, { query, selected: null }))) event.preventDefault();
@@ -107,8 +115,8 @@ export function StudioSearch({ view }: { view: StudioView }) {
     <form action="/studio" method="get" onSubmit={onSubmit} className="min-w-0 flex-1 @[52rem]:flex-none">
       <ViewFields view={view} />
       <SearchField
+        ref={field}
         size="compact"
-        key={view.query}
         defaultValue={view.query}
         placeholder={SEARCH_WORDS[view.kind]}
         label={SEARCH_WORDS[view.kind]}

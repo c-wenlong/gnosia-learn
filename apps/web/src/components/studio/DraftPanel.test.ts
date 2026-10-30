@@ -599,6 +599,20 @@ describe("focus on opening", () => {
     expect(mocks.focus).toHaveBeenCalledTimes(1);
   });
 
+  it("stays where the person put it while a conversation with an opener's words loaded (R2-1-13)", async () => {
+    mocks.lateHandle = true;
+    leave({ compose: "Make it about TCP", source: null });
+    await mount(draft());
+    expect(mocks.composer!.value.text).toContain("Make it about TCP");
+    const search = document.createElement("input");
+    document.body.append(search);
+    mounted.push(() => search.remove());
+    search.focus();
+    await handOver();
+    expect(mocks.focus).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(search);
+  });
+
   it("stays where the person put it while the composer itself loaded", async () => {
     mocks.lateHandle = true;
     await mount(pair());

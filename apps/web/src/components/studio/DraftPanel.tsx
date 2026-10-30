@@ -55,7 +55,6 @@ import {
   modEnterPlan,
   suggestionsFor,
   topicSuggestionValue,
-  TWO_READY,
   valueSendBlock,
   waitingKinds,
   waitingLine,
@@ -380,7 +379,8 @@ export function DraftPanel({
       // Focus stays where it is: a paid button with focus is one stray Space
       // from a job. Said again even when the words have not changed.
       setAnnounce("");
-      requestAnimationFrame(() => setAnnounce(TWO_READY));
+      const text = plan.text;
+      requestAnimationFrame(() => setAnnounce(text));
     }
   }
 

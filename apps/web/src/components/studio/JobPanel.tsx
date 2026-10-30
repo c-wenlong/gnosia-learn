@@ -113,7 +113,7 @@ export function JobPanel(props: Omit<Parameters<typeof DiagramJobPanel>[0], "ini
   const found = answer !== null && answer.lookup.kind === "found" ? answer.lookup.body : null;
   const kind = row?.kind ?? found?.kind ?? null;
   if (kind === "video") {
-    return (
+    const view = (
       <VideoJobPanel
         jobId={props.jobId}
         path={props.path}
@@ -121,10 +121,40 @@ export function JobPanel(props: Omit<Parameters<typeof DiagramJobPanel>[0], "ini
         initial={row === undefined ? found : undefined}
       />
     );
+    if (props.embedded === true) return view;
+    // Beside the canvas, where no panel header carries a title and Close:
+    // the same header a diagram job draws there (R2-1-22).
+    const title = row?.title ?? (typeof (found as { title?: unknown } | null)?.title === "string" ? (found as { title: string }).title : null);
+    return (
+      <div className="flex h-full min-h-0 flex-col overflow-y-auto bg-surface-raised">
+        <div className="px-3 pt-3">
+          <JobPanelHeader title={title ?? props.jobId.slice(0, 8)} path={props.path} />
+        </div>
+        {view}
+      </div>
+    );
   }
   // Here the read answered: the job (a diagram's), or a 404, which is `null`.
   return (
     <DiagramJobPanel key={props.jobId} {...props} initial={row === undefined ? ((found as Job | null) ?? null) : undefined} />
+  );
+}
+
+/**
+ * A job's title and Close, where no panel around it has them: beside the
+ * canvas, for a diagram job and a video job alike.
+ */
+function JobPanelHeader({ title, path }: { title: string; path: string }) {
+  return (
+    <div className="mb-2 flex items-start gap-2">
+      <div className="min-w-0 flex-1">
+        <PanelHeading>Job</PanelHeading>
+        <h2 className="truncate text-sm font-medium">{title}</h2>
+      </div>
+      <PanelLink href={panelHref(path, { job: null })} scroll={false} className="shrink-0 text-xs text-text2 underline underline-offset-2">
+        Close
+      </PanelLink>
+    </div>
   );
 }
 
@@ -204,21 +234,7 @@ function DiagramJobPanel({
 
   return (
     <div className={shell}>
-      {!embedded && (
-      <div className="mb-2 flex items-start gap-2">
-        <div className="min-w-0 flex-1">
-          <PanelHeading>Job</PanelHeading>
-          <h2 className="truncate text-sm font-medium">{job.title ?? job.jobId.slice(0, 8)}</h2>
-        </div>
-        <PanelLink
-          href={panelHref(path, { job: null })}
-          scroll={false}
-          className="shrink-0 text-xs text-text2 underline underline-offset-2"
-        >
-          Close
-        </PanelLink>
-      </div>
-      )}
+      {!embedded && <JobPanelHeader title={job.title ?? job.jobId.slice(0, 8)} path={path} />}
 
       <div className="mb-3 flex flex-wrap items-center gap-1.5">
         <Badge tone={failed ? "danger" : job.state === "awaiting_review" ? "ok" : "accent"}>{jobStateLabel(job.state)}</Badge>

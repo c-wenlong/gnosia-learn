@@ -1,7 +1,7 @@
 import type { JobState } from "@gnosia/schema/shared";
 
 import { failureReport, isActive, jobKindOf, jobShotHref, PHASES, type Job } from "@/lib/studio-jobs";
-import { isVideoJob, type VideoJob } from "@/lib/studio-video-job";
+import { isVideoJob, videoFailureLine, videoHeadline, type VideoJob } from "@/lib/studio-video-job";
 
 /**
  * Which job the grid shows where, and what its loader says, for diagram and
@@ -197,6 +197,16 @@ export function rowWords(job: Job): string {
  */
 export function rowJobLabel(job: Job, title: string): string {
   return `${rowWords(job)}: open the job on ${title}`;
+}
+
+/** What a video's list row says about its job, as `rowWords` for a diagram's. */
+export function videoRowWords(job: VideoJob): string {
+  return tileStage(job) === "failed" ? videoFailureLine(job) : videoHeadline(job);
+}
+
+/** The accessible name of a video row's link to its job, as `rowJobLabel` for a diagram's (R2-1-24). */
+export function videoRowJobLabel(job: VideoJob, title: string): string {
+  return `${videoRowWords(job)}: open the job on ${title}`;
 }
 
 /* -------------------------------------------------------------------------- */
