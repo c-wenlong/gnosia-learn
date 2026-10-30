@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, createElement, type ComponentProps } from "react";
 import { createRoot } from "react-dom/client";
+import { renderToStaticMarkup } from "react-dom/server";
 import { beforeAll, describe, expect, it } from "vitest";
 
 import { Collapse } from "./Collapse";
@@ -63,5 +64,13 @@ describe("Collapse", () => {
     expect(classes).toContain("grid");
     expect(classes).toContain("grid-cols-[minmax(0,1fr)]");
     act(() => root.unmount());
+  });
+
+  it("puts its className on the inner box, where padding would hold a shut fold open", () => {
+    // jsdom lays nothing out, so the height itself cannot be measured here:
+    // the lint rule gnosia/kit-collapse-padding keeps padding off the box instead.
+    const html = renderToStaticMarkup(createElement(Collapse, { open: false, className: "min-w-0" } as ComponentProps<typeof Collapse>, createElement("p", { className: "pt-4" }, "x")));
+    expect(html).toContain("grid-rows-[0fr]");
+    expect(html).toMatch(/class="[^"]*\bmin-h-0 [^"]*min-w-0"><p class="pt-4">/);
   });
 });

@@ -26,7 +26,7 @@ import { Glyph } from "@/components/ui/Glyph";
  * small `Chip` (or `chipClasses` on a `PanelLink`) for a topic filter, an
  * `IconButton` for a mark. This file used to export its own `Button`,
  * `ButtonLink`, `Chip` and `ChipLink`, which shadowed the kit's names and
- * drew a 6px box with no focus ring; `studio-kit.test.ts` fails if a studio
+ * drew a 6px box with no focus ring; the lint rule `gnosia/studio-kit` fails if a studio
  * file exports one of those names again or hand-builds such a control. The
  * tile and the home view's sheet are studio-local surfaces, in `surfaces.ts`.
  */

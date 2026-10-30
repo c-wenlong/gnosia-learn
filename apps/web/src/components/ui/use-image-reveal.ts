@@ -23,7 +23,7 @@ export function revealClass(shown: boolean): string {
  * when its element is attached (the browser's cache, or one that loaded
  * before React hydrated and so before `onLoad` was listening) counts as
  * loaded at once, so it never fades in a second time or stays hidden. That
- * check lives here and nowhere else (`use-image-reveal.test.ts`).
+ * check lives here and nowhere else (the lint rule `gnosia/image-reveal`).
  *
  * A picture that fails stays hidden, so a cover's frame shows rather than the
  * browser's broken mark. `showOnError` shows it instead, for a picture whose

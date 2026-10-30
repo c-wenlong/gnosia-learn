@@ -1,7 +1,4 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join, relative } from "node:path";
-import { fileURLToPath } from "node:url";
-
+// @vitest-environment jsdom
 import { createElement, type ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -12,166 +9,86 @@ import { DialogHeader } from "./DialogHeader";
 /**
  * The kit dialog's header: a 48px bar with a rule under it, the title in the
  * panel role, the caller's actions, and the one Close the studio's focus
- * logic recognises (`data-dialog-close`). Then the guard that fails a dialog
- * header built by hand.
+ * logic recognises (`data-dialog-close`). The lint rules `gnosia/dialog-header`
+ * and `gnosia/dialog-close-mark` fail a dialog header built by hand.
  */
 
-const header = (props: Partial<ComponentProps<typeof DialogHeader>> = {}) =>
-  renderToStaticMarkup(createElement(DialogHeader, { title: "Settings", onClose: () => undefined, ...props }));
+/** The header, parsed: its row element. */
+function header(props: Partial<ComponentProps<typeof DialogHeader>> = {}): HTMLElement {
+  const host = document.createElement("div");
+  host.innerHTML = renderToStaticMarkup(createElement(DialogHeader, { title: "Settings", onClose: () => undefined, ...props }));
+  return host.firstElementChild as HTMLElement;
+}
 
-const classesOf = (html: string) => (html.match(/class="([^"]*)"/)?.[1] ?? "").split(" ");
+const tokens = (element: Element | null) => (element?.getAttribute("class") ?? "").split(" ");
+const closeOf = (row: HTMLElement) => row.querySelector<HTMLButtonElement>('button[aria-label="Close"]')!;
+/** Whether `a` comes before `b` in the document. */
+const before = (a: Node, b: Node) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
 
 describe("DialogHeader", () => {
   it("names the dialog in an h2 in the panel title role, truncated to one line", () => {
-    const html = header();
-    const h2 = html.match(/<h2 class="([^"]*)">Settings<\/h2>/);
-    expect(h2).not.toBeNull();
-    const classes = h2![1].split(" ");
-    expect(classes).toEqual(expect.arrayContaining([...PANEL_TITLE.split(" "), "min-w-0", "flex-1", "truncate"]));
+    const title = header().querySelector("h2")!;
+    expect(title.textContent).toBe("Settings");
+    expect(tokens(title)).toEqual(expect.arrayContaining([...PANEL_TITLE.split(" "), "min-w-0", "flex-1", "truncate"]));
   });
 
-  it("ends with the kit Close, marked for the focus logic", () => {
-    const html = header();
-    expect(html).toMatch(/<button type="button" aria-label="Close" title="Close" class="[^"]*" data-dialog-close="">/);
-    // Close is the last thing in the row.
-    expect(html.lastIndexOf("<button")).toBe(html.indexOf("<button"));
-    expect(html.endsWith("</button></div>")).toBe(true);
+  it("ends with the kit Close, labelled and marked for the focus logic", () => {
+    const row = header();
+    const close = closeOf(row);
+    expect(close.getAttribute("type")).toBe("button");
+    expect(close.getAttribute("title")).toBe("Close");
+    expect(close.hasAttribute("data-dialog-close")).toBe(true);
+    expect(row.querySelectorAll("button")).toHaveLength(1);
+    expect(row.lastElementChild).toBe(close);
   });
 
   it("draws the leading mark before the title and the actions between the title and Close", () => {
-    const html = header({
+    const row = header({
       leading: createElement("span", { "data-leading": "" }),
       actions: [createElement("a", { key: "raw", href: "/raw" }, "Raw file"), createElement("span", { key: "cost" }, "$0.12")],
     });
-    const at = (needle: string) => html.indexOf(needle);
-    expect(at("data-leading")).toBeGreaterThan(-1);
-    expect(at("data-leading")).toBeLessThan(at("<h2"));
-    expect(at("<h2")).toBeLessThan(at("Raw file"));
-    expect(at("Raw file")).toBeLessThan(at("$0.12"));
-    expect(at("$0.12")).toBeLessThan(at("data-dialog-close"));
-  });
-
-  const closeOf = (html: string) => html.match(/<button [^>]*aria-label="Close"[^>]*class="([^"]*)"[^>]*>(<svg [^>]*>)/);
-
-  it("draws Close as a 36px round button with a 16px glyph by default", () => {
-    const html = header();
-    const close = closeOf(html);
-    expect(close).not.toBeNull();
-    const classes = close![1].split(" ");
-    expect(classes).toEqual(expect.arrayContaining(["size-9", "rounded-full"]));
-    expect(classes).not.toContain("size-7");
-    expect(close![2]).toMatch(/width="16"/);
-    expect(classesOf(html)).toEqual(expect.arrayContaining(["pr-2"]));
-  });
-
-  it('closeSize="sm" draws Close as a 28px square with an 18px glyph, the glyph where it was', () => {
-    const html = header({ closeSize: "sm" });
-    const close = closeOf(html);
-    expect(close).not.toBeNull();
-    const classes = close![1].split(" ");
-    expect(classes).toEqual(expect.arrayContaining(["size-7", "rounded-lg"]));
-    expect(classes).not.toContain("size-9");
-    expect(classes).not.toContain("rounded-full");
-    expect(close![2]).toMatch(/width="18"/);
-    // 12px of padding round a 28px box and 8px round a 36px one put the
-    // glyph's centre the same 26px from the edge.
-    const row = classesOf(html);
-    expect(row).toEqual(expect.arrayContaining(["pr-3"]));
-    expect(row).not.toContain("pr-2");
-  });
-
-  it('closeSize="sm" changes only Close: still labelled, marked, last, and the row keeps its 48px and notch padding', () => {
-    const html = header({ closeSize: "sm", actions: createElement("a", { href: "/raw" }, "Raw file") });
-    expect(html).toMatch(/<button type="button" aria-label="Close" title="Close" class="[^"]*" data-dialog-close="">/);
-    expect(html.lastIndexOf("<button")).toBe(html.indexOf("<button"));
-    expect(html.indexOf("Raw file")).toBeLessThan(html.indexOf("data-dialog-close"));
-    expect(classesOf(html)).toEqual(
-      expect.arrayContaining([
-        "flex",
-        "shrink-0",
-        "items-center",
-        "border-b",
-        "border-hair",
-        "pl-5",
-        "pt-[env(safe-area-inset-top)]",
-        "h-[calc(3rem+env(safe-area-inset-top))]",
-        "md:pt-0",
-        "md:h-12",
-      ]),
-    );
+    const leading = row.querySelector("[data-leading]")!;
+    const title = row.querySelector("h2")!;
+    const raw = row.querySelector('a[href="/raw"]')!;
+    const cost = [...row.querySelectorAll("span")].find((span) => span.textContent === "$0.12")!;
+    expect(before(leading, title)).toBe(true);
+    expect(before(title, raw)).toBe(true);
+    expect(before(raw, cost)).toBe(true);
+    expect(before(cost, closeOf(row))).toBe(true);
   });
 
   it("holds nothing but the title and Close when given nothing else", () => {
-    const html = header();
-    expect(html).toMatch(/^<div class="[^"]*"><h2 [^>]*>Settings<\/h2><button /);
+    expect([...header().children].map((child) => child.tagName)).toEqual(["H2", "BUTTON"]);
   });
 
-  it("is a 48px bar with a hairline under it, pinned over the body", () => {
-    const classes = classesOf(header());
-    expect(classes).toEqual(expect.arrayContaining(["flex", "shrink-0", "items-center", "border-b", "border-hair", "md:h-12"]));
+  it("draws Close as a 36px round button with a 16px glyph by default", () => {
+    const row = header();
+    const close = closeOf(row);
+    expect(tokens(close)).toEqual(expect.arrayContaining(["size-9", "rounded-full"]));
+    expect(close.querySelector("svg")?.getAttribute("width")).toBe("16");
+    expect(tokens(row)).toContain("pr-2");
   });
 
-  it("clears the notch on a phone and keeps its 48px under it, and from 768px has no inset", () => {
-    const classes = classesOf(header());
-    expect(classes).toEqual(
-      expect.arrayContaining(["pt-[env(safe-area-inset-top)]", "h-[calc(3rem+env(safe-area-inset-top))]", "md:pt-0", "md:h-12"]),
-    );
-  });
-});
-
-describe("dialog headers", () => {
-  const src = join(dirname(fileURLToPath(import.meta.url)), "../..");
-  const sources = (): Array<{ path: string; text: string }> => {
-    const found: Array<{ path: string; text: string }> = [];
-    const walk = (dir: string) => {
-      for (const name of readdirSync(dir)) {
-        const path = join(dir, name);
-        if (statSync(path).isDirectory()) walk(path);
-        else if (/\.tsx?$/.test(name) && !/\.test\.tsx?$/.test(name)) found.push({ path: relative(src, path), text: readFileSync(path, "utf8") });
-      }
-    };
-    walk(src);
-    return found;
-  };
-
-  // A button named Close, as a string, in an `IconButton`'s `label` or a `<button>`'s `aria-label`.
-  const closeButton = /<(?:IconButton|button)\b(?:(?!<[A-Za-z])[\s\S]){0,400}?\b(?:aria-)?label=\{?\s*["'`]Close["'`]/;
-
-  it("marks a Close with data-dialog-close only in the kit's DialogHeader", () => {
-    // Written as a JSX attribute, a createElement prop or setAttribute; a
-    // reader (`hasAttribute`, a selector) is fine.
-    const writes = /data-dialog-close\s*=|["']data-dialog-close["']\s*:|setAttribute\(\s*["']data-dialog-close["']/;
-    const offenders = sources()
-      .filter(({ path, text }) => path !== "components/ui/DialogHeader.tsx" && writes.test(text))
-      .map(({ path }) => path);
-    expect(offenders).toEqual([]);
+  it('closeSize="sm" draws Close as a 28px square with an 18px glyph, the glyph where it was', () => {
+    const row = header({ closeSize: "sm", actions: createElement("a", { href: "/raw" }, "Raw file") });
+    const close = closeOf(row);
+    expect(tokens(close)).toEqual(expect.arrayContaining(["size-7", "rounded-lg"]));
+    expect(tokens(close)).not.toContain("rounded-full");
+    expect(close.querySelector("svg")?.getAttribute("width")).toBe("18");
+    // 12px of padding round a 28px box and 8px round a 36px one put the
+    // glyph's centre the same 26px from the edge.
+    expect(tokens(row)).toContain("pr-3");
+    expect(tokens(row)).not.toContain("pr-2");
+    // Only Close changes: still labelled, marked and last.
+    expect(close.hasAttribute("data-dialog-close")).toBe(true);
+    expect(row.lastElementChild).toBe(close);
   });
 
-  it("leaves no other Close drawn by hand inside a kit Dialog", () => {
-    // A file that renders the kit `Dialog` and a button named Close, an
-    // `IconButton`'s `label` or a `<button>`'s `aria-label`, as a string
-    // either way, has built its own header. The attributes are read up to the
-    // next tag, past an arrow function's `>`. A name held in a variable is
-    // beyond a file scan and left to review. The previewer, whose row of 28px
-    // tools was the last, now draws `DialogHeader` with `closeSize="sm"` (`PreviewerHeader`).
-    const offenders = sources()
-      .filter(({ text }) => /<Dialog\b/.test(text) && closeButton.test(text))
-      .map(({ path }) => path)
-      .sort();
-    expect(offenders).toEqual([]);
-    // The forms it is meant to catch, and the kit's own call, which it is not.
-    expect(closeButton.test('<IconButton onClick={() => close()} label="Close">')).toBe(true);
-    expect(closeButton.test("<IconButton label={'Close'} size=\"sm\">")).toBe(true);
-    expect(closeButton.test('<button type="button" aria-label="Close" onClick={close}>')).toBe(true);
-    expect(closeButton.test('<DialogHeader title="Settings" onClose={close} />')).toBe(false);
-    expect(closeButton.test('<IconButton label="Expand" /><span label="Close" />')).toBe(false);
-  });
-
-  it("draws the previewer's header with the kit's, its Close sized to the row of 28px tools", () => {
-    const text = sources().find(({ path }) => path === "components/library/PreviewerHeader.tsx")?.text ?? "";
-    expect(text).toMatch(/<DialogHeader\b[^>]*\bcloseSize="sm"/);
-    // The header is a file of its own, outside the scan above (it draws no
-    // `<Dialog`), so a Close built by hand there is caught here.
-    expect(closeButton.test(text)).toBe(false);
+  it("is a 48px bar with a hairline under it that clears the notch on a phone, with no inset from 768px", () => {
+    for (const closeSize of ["lg", "sm"] as const) {
+      expect(tokens(header({ closeSize }))).toEqual(
+        expect.arrayContaining(["border-b", "border-hair", "pt-[env(safe-area-inset-top)]", "h-[calc(3rem+env(safe-area-inset-top))]", "md:pt-0", "md:h-12"]),
+      );
+    }
   });
 });

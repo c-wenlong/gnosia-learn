@@ -105,7 +105,7 @@ function isMarker(t: unknown): t is HandoffMarker {
 /**
  * A marker's words cut at its chips, for drawing: each chip a range inside
  * the words reading exactly `@<kind>`, taken in order, overlaps and repeats
- * left as words. The rule `inlinePieces` in `mention-text.ts` applies, kept
+ * left as words. The rule `inlinePieces` in `mentions.ts` applies, kept
  * here because that module (the studio composer's rules) would add every one
  * of its exports to each concept page's first load, and a marker only needs
  * this.

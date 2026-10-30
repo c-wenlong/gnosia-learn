@@ -1,7 +1,3 @@
-import { readdirSync, readFileSync } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
 import { JOB_KINDS, JOB_STATES } from "@gnosia/schema/shared";
 import { describe, expect, it } from "vitest";
 
@@ -54,21 +50,6 @@ describe("job card sentences", () => {
     for (const state of ["accepted", "discarded", "failed", "cancelled", "interrupted"] as const) {
       expect(jobPredicate("diagram", state)).not.toMatch(/still|waiting|ready/);
     }
-  });
-});
-
-describe("no raw job state on screen", () => {
-  const here = path.dirname(fileURLToPath(import.meta.url));
-  const studio = path.join(here, "..", "components", "studio");
-  const files = (dir: string): string[] =>
-    readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
-      entry.isDirectory() ? files(path.join(dir, entry.name)) : entry.name.endsWith(".tsx") ? [path.join(dir, entry.name)] : [],
-    );
-
-  it("prints a job's state only through jobStateLabel", () => {
-    // `{job.state}` as a child prints the enum. Comparisons and props are fine.
-    const offenders = files(studio).filter((file) => /\{\s*(?:job|holder|entry)\.state\s*\}/.test(readFileSync(file, "utf8")));
-    expect(offenders).toEqual([]);
   });
 });
 
