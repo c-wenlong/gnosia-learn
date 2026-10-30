@@ -7,6 +7,7 @@ import { ExpandablePanel } from "@/components/library/ExpandablePanel";
 import { LibraryVideo } from "@/components/library/LibraryVideo";
 import { Notice } from "@/components/ui/Notice";
 import { NoteProse } from "@/components/NoteProse";
+import { safeHref } from "@/components/markdown";
 import { formatTimecode } from "@/components/media";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -44,7 +45,8 @@ export interface AssetBodyVideo {
  *
  * **Four shapes, and none of them is a broken version of another.** A video
  * gets `LibraryVideo`, with its chapters on the scrub bar and its transcript
- * beneath it. A diagram gets the drawing, on a light mat (`DiagramView`). A
+ * beneath it. A diagram, or a video's poster, gets the picture, on a light
+ * mat (`DiagramView`). A
  * text asset (a note, a session log, a caption track, a chapter list) gets
  * its own words, read on the server. A link gets the link, because a row
  * with a URL and no file has nothing else to give and a player over it would
@@ -122,6 +124,21 @@ export function AssetBody({
 
   if (asset.kind === "diagram_svg") {
     return servable ? <DiagramView src={fileHref} statusHref={statusHref} title={title} heading={false} /> : unavailable;
+  }
+
+  // A video's still: a picture, drawn on the same mat as a diagram.
+  if (asset.kind === "poster") {
+    return servable ? (
+      <DiagramView
+        src={fileHref}
+        statusHref={statusHref}
+        title={title}
+        heading={false}
+        failureHeadline="This picture did not load."
+      />
+    ) : (
+      unavailable
+    );
   }
 
   if (asset.kind === "pdf") return servable ? <PdfView src={fileHref} title={title} /> : unavailable;
@@ -231,7 +248,8 @@ function TextPanel({
  * takes the player's footprint, as the hi-fi's 400px placeholder does.
  */
 function Unavailable({ kind, code, sourceRepo }: { kind: string; code: RouteProblemCode; sourceRepo: string }) {
-  const subject = kind === "video" ? "This video" : kind === "diagram_svg" ? "This diagram" : "This file";
+  const subject =
+    kind === "video" ? "This video" : kind === "diagram_svg" ? "This diagram" : kind === "poster" ? "This picture" : "This file";
   return (
     <WidgetFailure
       headline={`${subject} cannot be shown here.`}
@@ -361,16 +379,28 @@ function LinkPanel({ url }: { url: string | null }) {
       </Notice>
     );
   }
-  let host = url;
+  // The notes' own scheme check: link rows come from course files and from
+  // `catalog import` of an export tree, which can come from anywhere, so a
+  // `javascript:` or `data:` URL is shown as text and never made a link.
+  const href = safeHref(url);
+  if (href === null) {
+    return (
+      <Notice title="This link is not a web address" className="border-dashed">
+        <p>Its URL uses a scheme this page does not open, so it is shown as text rather than as a link.</p>
+        <p className="mt-2 font-mono text-[12px] break-all text-text3">{url}</p>
+      </Notice>
+    );
+  }
+  let host = href;
   try {
-    host = new URL(url).host;
+    host = new URL(href).host;
   } catch {
     // A malformed URL is still shown as written, rather than hidden behind a
     // parse this page has no reason to insist on.
   }
   return (
     <Card title="On the web" className="items-start">
-      <Button variant="secondary" href={url} target="_blank" rel="noopener noreferrer" prefetch={false}>
+      <Button variant="secondary" href={href} target="_blank" rel="noopener noreferrer" prefetch={false}>
         Open {host}
         <span aria-hidden>↗</span>
       </Button>

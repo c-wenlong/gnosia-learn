@@ -195,7 +195,7 @@ export default async function AssetPage({
   // A picture reads like a video: the thing first, its title under it. Words
   // read like a page: the title and "Mark read" above them, where a reader
   // starts, rather than after a long note.
-  const pictureFirst = asset.kind === "diagram_svg" || asset.kind === "video";
+  const pictureFirst = asset.kind === "diagram_svg" || asset.kind === "poster" || asset.kind === "video";
   const leading = (
     <>
       {/* A video tracks itself (`LibraryVideo`); one that cannot be

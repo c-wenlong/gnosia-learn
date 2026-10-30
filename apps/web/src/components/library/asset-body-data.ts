@@ -75,7 +75,7 @@ export type Sidecars =
   | { state: "read"; chapters: VideoChapter[]; cues: ParsedTranscript["cues"]; dropped: number };
 
 /** The kinds drawn by something other than their words. */
-const RENDERED = new Set(["video", "diagram_svg", "link", "pdf"]);
+const RENDERED = new Set(["video", "diagram_svg", "poster", "link", "pdf"]);
 
 /** The asset id a note's `![[name]]` embed names: the diagram rows' own. */
 export function embedAssetId(embed: string): string {
@@ -104,10 +104,10 @@ export async function loadAssetBody(asset: AssetRef, derived: readonly AssetRef[
   // Anything that is neither a player nor a picture nor a bare URL has words,
   // so it is read on the server and the body arrives with them. Attempted for
   // any kind rather than a fixed list, so a kind a future indexer adds shows
-  // its contents instead of nothing; `resolveAsset`'s closed extension list is
-  // what refuses a binary, and `readAssetText` refuses anything over the
-  // preview cap. A null lands on `UnreadableFile`, which says so. A note or a
-  // log is read from its row.
+  // its contents instead of nothing; `readAssetText` refuses a type that is
+  // not text (a JPEG, a PNG, an MP4 and a PDF are all on the route's list)
+  // and anything over the preview cap. A null lands on `UnreadableFile`,
+  // which says so. A note or a log is read from its row.
   const text =
     servable && !RENDERED.has(asset.kind) ? await withCatalog((db) => readAssetText(db, asset.id)) : null;
 
