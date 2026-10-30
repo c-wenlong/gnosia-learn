@@ -432,9 +432,14 @@ port of `checkQuestion` (`apps/macos/Sources/Gnosia/SessionModel.swift`)
 is held to the web's by one fixture
 (`apps/macos/Tests/GnosiaTests/Fixtures/wrong-options.json`), and its
 concept session and module check ask the sidecar's
-`POST /api/agent/check-options`. Its review cards still take the notes'
-options, since they are read from the app's snapshot, which does not carry
-`check_distractor`.
+`POST /api/agent/check-options`. Its review cards read the store as the
+web's review queue does, and never ask: the app's snapshot mirrors this
+owner's `check_distractor` rows (`apps/macos/scripts/catalog-snapshot.mjs`,
+format 5), and the app keeps a row only while its hash matches the check as
+the note now reads (`StoredCheckOptions.swift`), held to `checkHash`,
+`readWrittenOptions` and `toReviewItem` by a second fixture
+(`apps/macos/Tests/GnosiaTests/Fixtures/review-options.json`). Options a
+session stored reach the review cards at the app's next snapshot refresh.
 
 ### Folders and ids
 

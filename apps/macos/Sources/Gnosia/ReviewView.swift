@@ -10,9 +10,11 @@
 //  is the way out — no due-list rail like the page has none.
 //
 //  A check card is the note's first ```check block asked as multiple
-//  choice — its wrong options are other notes' answers and summaries,
-//  drawn by the same seeded shuffle, so the web and this show the same
-//  ones — and it grades itself: a right pick suggests Good and a wrong
+//  choice — its wrong options are the ones the tutor wrote for the check
+//  when a session stored them (the snapshot's `check_distractor`), else
+//  other notes' answers and summaries under a line saying so, drawn by the
+//  same seeded shuffle, so the web and this show the same ones; the review
+//  never asks the tutor to write any — and it grades itself: a right pick suggests Good and a wrong
 //  one Again, drawn on the rating row and committed by Continue, while
 //  any of the four buttons overrides it. A card with no usable check
 //  asks as recall — the "Recall: <title>" prompt with the summary behind
@@ -69,9 +71,16 @@ func ratingForGrade(_ grade: Int) -> ReviewRating {
     return grade >= 4 ? .good : .hard
 }
 
+extension EnvironmentValues {
+    /// The queue slot the session opens on, so a card after the first can
+    /// be drawn: the UI snapshot harness's way to show one. Nil in the app.
+    @Entry var reviewSeedIndex: Int? = nil
+}
+
 struct ReviewView: View {
     @Environment(CatalogStore.self) private var store
     @Environment(LearnerStore.self) private var learner
+    @Environment(\.reviewSeedIndex) private var seedIndex
 
     /// What "Exit to Home" runs — the shell's section swap, passed in
     /// since the surface owns none of the chrome around it.
@@ -145,6 +154,7 @@ struct ReviewView: View {
         let queue = store.reviewQueue()
         firstNextDue = queue.nextDue
         items = queue.items.map { store.reviewCard(for: $0, in: queue) }
+        if let seedIndex, items.indices.contains(seedIndex) { index = seedIndex }
         loaded = true
     }
 
@@ -295,6 +305,13 @@ struct ReviewView: View {
 
             if item.kind == .check {
                 choicesBlock(item)
+                // Said only when the tutor did not write the options, under
+                // them, as the web's card says it.
+                if let note = item.wrong?.note {
+                    Text(note)
+                        .font(.caption)
+                        .foregroundStyle(G.text2)
+                }
                 if phase == .answered, let suggested {
                     feedbackBar(item, suggested: suggested)
                 }

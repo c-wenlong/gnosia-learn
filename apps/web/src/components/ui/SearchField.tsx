@@ -135,7 +135,7 @@ export function SearchField({
           aria-label={clearLabel}
           title={clearLabel}
           // A press keeps the focus in the field: a field that does something
-          // on blur (Home's Ask box closes its list) is not left mid-blur.
+          // when it loses focus (Home's Ask box's list closes on focusout) is not left mid-blur.
           onMouseDown={(event) => event.preventDefault()}
           onClick={clear}
           className={cx(
