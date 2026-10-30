@@ -41,7 +41,7 @@ import { scrollBehavior } from "@/lib/motion";
 import { quizKey } from "@/lib/quiz-keys";
 import { randomToken } from "@/lib/random-token";
 import { tutorProblem } from "@/lib/tutor-errors";
-import { closeChatSession, closeSessionNow, saveObservation } from "@/lib/chat-recall";
+import { closeChatSession, closeSessionNow, releaseScope, saveObservation } from "@/lib/chat-recall";
 
 import { SessionClose } from "./SessionClose";
 
@@ -179,7 +179,6 @@ export function SessionFocus({
    * close (the tutors' too): one per mount, so a reload starts a new session.
    */
   const [scope] = useState(() => `session:${slug}:${randomToken()}`);
-  const closed = useRef(false);
   const feedbackRef = useRef<HTMLDivElement>(null);
   /** The step's column, keyed on the step, so its heading can take the focus. */
   const columnRef = useRef<HTMLDivElement>(null);
@@ -365,28 +364,33 @@ export function SessionFocus({
    * (Exit, Ask the tutor, a closed tab), so answered sessions do not stay
    * `running`. A session no answer opened has nothing to close.
    */
+  // Both closes are chat-recall's, and both act only on a session an answer
+  // opened and nothing has closed yet: a scope with none sends nothing, and
+  // a second close finds the session already gone. So there is no "closed"
+  // flag here to go stale (a StrictMode remount, a close still retrying when
+  // the page goes away).
   const closeSession = useCallback(
     async (leaving: boolean): Promise<void> => {
-      if (closed.current) return;
-      closed.current = true;
       // Leaving: an answer still saving is resent with `closeSession`, so the
       // answer and the close commit together (see `closeChatSession`).
       if (leaving) closeChatSession(scope);
-      // A close that failed twice may be tried again when the page goes away.
-      else if (!(await closeSessionNow(scope))) closed.current = false;
+      else await closeSessionNow(scope);
     },
     [scope],
   );
 
-  // Leaving before the close screen still closes what was answered.
+  // Leaving before the close screen still closes what was answered. The
+  // scope is this visit's alone, so it is forgotten once its saves and
+  // closes are done.
   useEffect(() => {
     const onHide = () => void closeSession(true);
     window.addEventListener("pagehide", onHide);
     return () => {
       window.removeEventListener("pagehide", onHide);
       void closeSession(true);
+      releaseScope(scope);
     };
-  }, [closeSession]);
+  }, [closeSession, scope]);
 
   const advance = useCallback(() => {
     let walk = steps;

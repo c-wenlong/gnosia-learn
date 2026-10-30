@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, createElement, type ReactNode } from "react";
+import { act, createElement, StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
@@ -101,13 +101,14 @@ const WEEK_PLAN: WeekCheckPlan = {
   modelAvailable: false,
 };
 
-async function mount({ weekCheck = false } = {}) {
+async function mount({ weekCheck = false, strict = false } = {}) {
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
   await act(async () => {
+    const page = (element: ReactNode) => (strict ? createElement(StrictMode, null, element) : element);
     root.render(
-      createElement(SessionFocus, {
+      page(createElement(SessionFocus, {
         slug: weekCheck ? "networks-m1" : "tcp",
         title: weekCheck ? "Networks, module 1" : "The TCP handshake",
         mode: weekCheck ? "module" : "learn",
@@ -121,7 +122,7 @@ async function mount({ weekCheck = false } = {}) {
         weekCheck: weekCheck
           ? { moduleId: "networks-m1", plan: WEEK_PLAN, moduleHref: "/courses/networks/m1", reason: null }
           : null,
-      }),
+      })),
     );
   });
   mounted.push(() => {
@@ -381,5 +382,47 @@ describe("SessionFocus writing through chat-recall (S4-08)", () => {
     expect(resent?.requestId).toBe(refused?.requestId);
     expect(resent?.sessionId).not.toBe(refused?.sessionId);
     expect(host.querySelector('[role="alert"]')).toBeNull();
+  });
+});
+
+describe("SessionFocus closing its session", () => {
+  const closes = () =>
+    (fetch as unknown as Mock).mock.calls.filter(([url]) => url === "/api/learner/session/close") as [string, RequestInit][];
+
+  it("closes the session an answer opened on the close screen, under StrictMode's remount too", async () => {
+    const host = await mount({ strict: true });
+    await press(button(host, "Continue"));
+    await press(choice(host, "SYN"));
+    await press(button(host, "Check"));
+    await press(button(host, "Continue"));
+    const [close] = closes();
+    expect(close).toBeDefined();
+    expect(JSON.parse(close?.[1].body as string)).toEqual({ sessionId: observed()[0]?.sessionId });
+  });
+
+  it("still closes when the page goes away while the close screen's close waits to try again", async () => {
+    vi.mocked(fetch).mockImplementation(async (url) =>
+      url === "/api/learner/session/close"
+        ? new Response("{}", { status: 503 })
+        : new Response(
+            JSON.stringify({
+              ok: true,
+              result: { concept: "tcp", correct: true, pLBefore: 0.3, pLAfter: 0.5, propagated: [], card: null, replayed: false },
+            }),
+            { status: 200 },
+          ),
+    );
+    const host = await mount();
+    await press(button(host, "Continue"));
+    await press(choice(host, "SYN"));
+    await press(button(host, "Check"));
+    await press(button(host, "Continue"));
+    expect(closes()).toHaveLength(1);
+    // The first close failed and the retry is 1.5 s away; the tab closes now.
+    await act(async () => {
+      window.dispatchEvent(new Event("pagehide"));
+    });
+    const [, leaving] = closes();
+    expect(leaving?.[1].keepalive).toBe(true);
   });
 });

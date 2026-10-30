@@ -87,7 +87,22 @@ export function closeChatSession(scope: string): void {
  * one; false when both tries failed, which leaves a running row and no lost
  * evidence, since every answer is already recorded.
  */
-export async function closeSessionNow(scope: string, retryAfterMs = 1_500): Promise<boolean> {
+export function closeSessionNow(scope: string, retryAfterMs = 1_500): Promise<boolean> {
+  const run = closeAndConfirm(scope, retryAfterMs);
+  closing.set(scope, run);
+  void run.finally(() => {
+    if (closing.get(scope) === run) closing.delete(scope);
+  });
+  return run;
+}
+
+/**
+ * Closes the scope's session is waiting on, per scope, so `releaseScope`
+ * keeps the scope until they finish.
+ */
+const closing = new Map<string, Promise<boolean>>();
+
+async function closeAndConfirm(scope: string, retryAfterMs: number): Promise<boolean> {
   const id = readSession(scope);
   if (id === null) return true;
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -108,6 +123,38 @@ export async function closeSessionNow(scope: string, retryAfterMs = 1_500): Prom
     if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, retryAfterMs));
   }
   return false;
+}
+
+/**
+ * Forget a scope once its saves and closes have finished: its session id
+ * (memory and `sessionStorage`), its close count and its pending answer. The
+ * session page makes a scope per visit, so without this every visit would
+ * leave its entries behind for the life of the tab. A scope used again after
+ * this starts afresh, as a new visit would.
+ */
+export function releaseScope(scope: string): void {
+  const pending = [saveQueue.get(scope), closing.get(scope)].filter((p) => p !== undefined);
+  if (pending.length > 0) {
+    void Promise.allSettled(pending).then(() => releaseScope(scope));
+    return;
+  }
+  const k = sessionKey(scope);
+  sessionMemory.delete(k);
+  try {
+    window.sessionStorage.removeItem(k);
+  } catch {
+    // Nothing kept there.
+  }
+  closedTimes.delete(scope);
+  savingAnswer.delete(scope);
+}
+
+/** How many scopes this page still keeps anything for; for tests. */
+export function keptScopes(): number {
+  return new Set([
+    ...[...sessionMemory.keys()],
+    ...[...closedTimes.keys(), ...savingAnswer.keys(), ...saveQueue.keys(), ...closing.keys()].map(sessionKey),
+  ]).size;
 }
 
 /** The close request for a page going away: the answer still saving resent with `closeSession`, else a bare close. */
