@@ -217,6 +217,22 @@ export function isTerminal(state: JobState): boolean {
 }
 
 /**
+ * A job row's kind: its `kind` field, or for a row from a runner that predates
+ * the field, its target (`videos/<slug>.mp4` is a video, anything else a
+ * diagram). The one place a row's kind is decided, so the card, the strip and
+ * the grid cannot file the same row differently.
+ */
+export function jobKindOf(job: { kind?: string | null; target?: string | null }): string {
+  if (typeof job.kind === "string" && job.kind !== "") return job.kind;
+  return typeof job.target === "string" && job.target.endsWith(".mp4") ? "video" : "diagram";
+}
+
+/** A job's picture through the app's own proxy: the agent's newest (`live`), or the gate's before and after. */
+export function jobShotHref(jobId: string, which: "live" | "before" | "after"): string {
+  return `/studio/api/jobs/${encodeURIComponent(jobId)}/shot?which=${which}`;
+}
+
+/**
  * The newest job that still holds its target: the one the strip is about.
  *
  * Concurrency is 1 (D9), so at most one is `running`, but a queued job and a
@@ -639,16 +655,28 @@ export interface Announcement {
  * that cannot be denied.
  */
 export function announcement(job: Job): Announcement | null {
+  return announceStop(job, () => finishedHeadline(job), () => failureReport(job).headline);
+}
+
+/**
+ * The stop announcement for a job of any kind: `ready` and `failed` are that
+ * kind's own headlines, read only for the state that shows them.
+ */
+export function announceStop(
+  job: Pick<Job, "title" | "jobId" | "state" | "note">,
+  ready: () => string,
+  failed: () => string,
+): Announcement | null {
   const name = job.title ?? job.jobId.slice(0, 8);
   switch (job.state) {
     case "awaiting_review":
-      return { title: `✓ ${name} — ready to review`, body: finishedHeadline(job) };
+      return { title: `✓ ${name}: ready to review`, body: ready() };
     case "failed":
-      return { title: `✕ ${name} — failed`, body: failureReport(job).headline };
+      return { title: `✕ ${name}: failed`, body: failed() };
     case "cancelled":
-      return { title: `✕ ${name} — cancelled`, body: job.note };
+      return { title: `✕ ${name}: cancelled`, body: job.note };
     case "interrupted":
-      return { title: `✕ ${name} — interrupted`, body: job.note };
+      return { title: `✕ ${name}: interrupted`, body: job.note };
     default:
       return null;
   }

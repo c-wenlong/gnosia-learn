@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { readOutcome, withOutcome } from "./studio-view";
+import {
+  readOutcome,
+  withOutcome,
+} from "./studio-url";
 
 /**
  * A verb's answer, carried in the URL the action redirects to.

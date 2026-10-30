@@ -256,38 +256,6 @@ export function matchParts(text: string, q: string): TextPart[] {
   return parts.length === 0 ? [{ text, hit: false }] : parts;
 }
 
-/** A run of rows under one heading: the day they were last touched. */
-export interface HistoryGroup {
-  label: string;
-  rows: DraftRow[];
-}
-
-const GROUPS = ["Today", "Yesterday", "Previous 7 days", "Previous 30 days", "Older"] as const;
-
-/**
- * The rows under day headings, as a chat app's history reads: Today,
- * Yesterday, the previous 7 days, the previous 30, and Older, by the local
- * calendar day of `updated` against `now`. Keeps the rows' order, so the
- * groups come newest first; an empty group is left out.
- */
-export function historyGroups(rows: readonly DraftRow[], now: Date): HistoryGroup[] {
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const DAY = 86_400_000;
-  const groups = new Map<string, DraftRow[]>();
-  for (const row of rows) {
-    const at = new Date(row.updated);
-    const day = new Date(at.getFullYear(), at.getMonth(), at.getDate()).getTime();
-    // Calendar days, rounded: a day across a clock change is 23 or 25 hours.
-    const ago = Number.isNaN(day) ? Infinity : Math.round((today - day) / DAY);
-    const label = ago <= 0 ? GROUPS[0] : ago === 1 ? GROUPS[1] : ago <= 7 ? GROUPS[2] : ago <= 30 ? GROUPS[3] : GROUPS[4];
-    groups.set(label, [...(groups.get(label) ?? []), row]);
-  }
-  return GROUPS.flatMap((label) => {
-    const grouped = groups.get(label);
-    return grouped === undefined ? [] : [{ label, rows: grouped }];
-  });
-}
-
 /** One page of the runner's list, after `before` (or the newest), or null when it did not answer. */
 export type HistoryPage = (before: { updated: string; draftId: string } | undefined) => Promise<DraftSummary[] | null>;
 

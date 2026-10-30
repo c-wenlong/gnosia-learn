@@ -133,6 +133,10 @@ describe("openConceptConversation", () => {
       status: 404,
       headline: "no concept tcp-handshake that this studio's owner can read",
       detail: JSON.stringify({ reason: "no-concept", field: "concept", slug: "tcp-handshake" }),
+      refusal: {
+        error: "no concept tcp-handshake that this studio's owner can read",
+        detail: { reason: "no-concept", field: "concept", slug: "tcp-handshake" },
+      },
     });
     expect(await openConceptConversation({ slug: "tcp-handshake", tutor: [], idempotencyKey: "k" })).toEqual({
       ok: false,

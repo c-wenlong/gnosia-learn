@@ -110,7 +110,7 @@ const view = (over: Partial<DraftView> = {}): DraftView => ({
 const job = (over: Partial<Job>): Job =>
   ({
     jobId: "j1",
-    kind: "new",
+    kind: "diagram",
     state: "running",
     phase: null,
     title: "A job",
@@ -248,8 +248,11 @@ describe("pressing", () => {
   });
 
   it("lets a diagram and a video share a slug, but not two of one kind (T10)", () => {
-    const video = job({ jobId: "v1", target: "videos/attention-weights.mp4" });
+    const video = job({ jobId: "v1", kind: "video", target: "videos/attention-weights.mp4" });
     expect(jobKind(video)).toBe("video");
+    // The row's kind decides, as it does on the grid; the target only for a row with none.
+    expect(jobKind({ kind: "diagram", target: "videos/attention-weights.mp4" })).toBe("diagram");
+    expect(jobKind({ target: "videos/attention-weights.mp4" })).toBe("video");
     expect(kindDrawBlock("diagram", DIAGRAM, bothAsked(), [video], null, null)).toBeNull();
     expect(kindDrawBlock("video", VIDEO, bothAsked(), [video], null, null)?.holder).toBe("v1");
   });

@@ -19,7 +19,6 @@ interface Call {
 
 const mocks = vi.hoisted(() => ({ calls: [] as unknown[], studioApi: vi.fn(), requireStudio: vi.fn(), openShot: vi.fn() }));
 vi.mock("@/lib/studio", () => ({ studioApi: mocks.studioApi, requireStudio: mocks.requireStudio, openShot: mocks.openShot }));
-vi.mock("@/lib/studio-agents", () => ({ readStudioAgents: vi.fn() }));
 vi.mock("@/data/topics", async () => {
   const real = await vi.importActual<typeof import("@/data/topics")>("@/data/topics").catch(() => null);
   return {
