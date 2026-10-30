@@ -1,16 +1,11 @@
-import { setNote } from "@gnosia/catalog/state";
+import { noteTurn } from "@gnosia/tutor/server/learner-writes";
 
-import { handler, requireId, requireString, MAX_NOTE_CHARS } from "@/lib/learner-api";
+import { turnRoute } from "@/lib/learner-api";
 
-/** Write or clear the learner's scratch note on one curriculum item. */
-export const POST = handler(
-  "note",
-  (body) => ({
-    curriculumItemId: requireId(body, "curriculumItemId"),
-    note: requireString(body, "note", MAX_NOTE_CHARS),
-  }),
-  async (db, { curriculumItemId, note }, owner) => {
-    await setNote(db, curriculumItemId, note, owner);
-    return { curriculumItemId, cleared: note.trim() === "" };
-  },
-);
+/**
+ * Write or clear the learner's scratch note on one curriculum item.
+ *
+ * The parse and the write are `noteTurn` in
+ * `@gnosia/tutor/server/learner-writes`, which the sidecar runs too.
+ */
+export const POST = turnRoute("note", noteTurn);

@@ -108,6 +108,7 @@ describe.skipIf(!reachable.ok)("asset routes on a flipped database", () => {
   let FILE: Handler;
   let STATUS: Handler;
   let library: typeof import("@/lib/asset-library");
+  let thumbs: typeof import("@/lib/library-thumbnails");
   const saved: Record<string, string | undefined> = {};
 
   const call = (handler: Handler, suffix: string, id: string, headers: Record<string, string> = {}) =>
@@ -208,6 +209,7 @@ describe.skipIf(!reachable.ok)("asset routes on a flipped database", () => {
     ({ GET: FILE } = (await import("./[id]/file/route")) as { GET: Handler });
     ({ GET: STATUS } = (await import("./[id]/status/route")) as { GET: Handler });
     library = await import("@/lib/asset-library");
+    thumbs = await import("@/lib/library-thumbnails");
   }, 120_000);
 
   afterAll(async () => {
@@ -356,9 +358,9 @@ describe.skipIf(!reachable.ok)("asset routes on a flipped database", () => {
     ];
     const access = await library.readAssetAccess(rows);
     expect([...access.served].sort()).toEqual([NOTE_ID, SVG_ID].sort());
-    expect(library.unservedRows(rows, access).map((row) => row.id)).toEqual([UNUPLOADED_ID]);
-    expect(library.thumbnailFor(rows[0]!, access)).toBe(`/api/assets/${encodeURIComponent(SVG_ID)}/file`);
-    expect(library.thumbnailFor(rows[2]!, access)).toBeNull();
+    expect(thumbs.unservedRows(rows, access).map((row) => row.id)).toEqual([UNUPLOADED_ID]);
+    expect(thumbs.thumbnailFor(rows[0]!, access)).toBe(`/api/assets/${encodeURIComponent(SVG_ID)}/file`);
+    expect(thumbs.thumbnailFor(rows[2]!, access)).toBeNull();
   });
 
   it("draws a stored video's card from its stored poster, and none for one stored without a poster", async () => {
@@ -369,9 +371,9 @@ describe.skipIf(!reachable.ok)("asset routes on a flipped database", () => {
     const access = await library.readAssetAccess(rows);
     // Both play: their bytes are in the store.
     expect([...access.served].sort()).toEqual([BARE_ID, STORED_ID].sort());
-    expect(library.thumbnailFor(rows[0]!, access)).toBe(`/api/assets/${encodeURIComponent(STORED_ID)}/poster`);
+    expect(thumbs.thumbnailFor(rows[0]!, access)).toBe(`/api/assets/${encodeURIComponent(STORED_ID)}/poster`);
     // No stored poster, and nothing cuts one at request time any more.
-    expect(library.thumbnailFor(rows[1]!, access)).toBeNull();
+    expect(thumbs.thumbnailFor(rows[1]!, access)).toBeNull();
   });
 
   it("searches a row-backed note's words, and counts the transcript nobody uploaded", async () => {

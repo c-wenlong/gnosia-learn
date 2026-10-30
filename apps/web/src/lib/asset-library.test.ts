@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { searchableText } from "./library";
+
 // A signed-in request, so the owner seam (`@/lib/owner`) resolves `local`.
 vi.mock("@/lib/auth/session", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth/session")>()),
@@ -80,7 +82,7 @@ vi.mock("@gnosia/catalog/state", () => ({
 
 vi.mock("next/server", () => ({ connection: async () => undefined }));
 
-const { loadAssetParents, readLibrary, readAssetDetail, readSearchText, searchableText } = await import(
+const { loadAssetParents, readLibrary, readAssetDetail, readSearchText } = await import(
   "@/lib/asset-library"
 );
 

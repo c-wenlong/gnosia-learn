@@ -17,6 +17,7 @@ import { cardClasses, cx } from "@/components/ui/classes";
 import { useImageReveal } from "@/components/ui/use-image-reveal";
 import { useAssetFailure } from "@/components/use-asset-failure";
 import { WidgetFailure } from "@/components/WidgetFailure";
+import { conceptIsTitle } from "@/lib/library-source";
 import type { MasteryBucket } from "@/lib/mastery-bucket";
 import type { RowMenuSections } from "@/lib/row-menu";
 
@@ -122,8 +123,7 @@ export function AssetCard({
   const showThumb = previewable && Boolean(thumbnailSrc) && !thumbFailed;
   // A note explains its own concept, so the concept line would repeat the
   // title word for word; the dot then carries the mastery on its own label.
-  const conceptIsTitle =
-    concept !== undefined && concept.title.trim().toLowerCase() === name.text.trim().toLowerCase();
+  const namesItself = conceptIsTitle(concept, name.text);
 
   const nameClass =
     name.source === "title"
@@ -198,7 +198,7 @@ export function AssetCard({
       </div>
       {concept !== undefined ? (
         <p className="flex min-w-0 items-center gap-2 text-[12px] text-text2">
-          {conceptIsTitle ? (
+          {namesItself ? (
             <MasteryDot bucket={concept.bucket} size={12} showLabel />
           ) : (
             <>

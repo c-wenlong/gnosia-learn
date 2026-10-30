@@ -135,7 +135,9 @@ export function Sections({ rail, onPick, search }: { rail: boolean; onPick: () =
           }),
         );
   const streams = [
-    ...(model === null ? [] : [{ items: model.items, more: model.more }]),
+    // While the runner's list is used, the catalog's conversations are left
+    // out: a read from before the runner answered may still carry the mirror's.
+    ...(model === null ? [] : [{ items: fromRunner === null ? model.items : model.items.filter((item) => item.kind !== "draft"), more: model.more }]),
     ...(fromRunner === null || conversations.list === null ? [] : [{ items: fromRunner, more: conversations.list.more }]),
   ];
   const merged = mergeStreams(streams);

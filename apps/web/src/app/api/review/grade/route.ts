@@ -1,7 +1,6 @@
-import { gradeForRating, gradeReview, ratingForGrade } from "@gnosia/catalog/state";
+import { reviewGradeTurn } from "@gnosia/tutor/server/learner-writes";
 
-import { BadRequest, handler, MAX_ID_CHARS, requireId } from "@/lib/learner-api";
-import { isRating, type Rating } from "@/lib/review-core";
+import { turnRoute } from "@/lib/learner-api";
 
 /**
  * `POST /api/review/grade` with `{ conceptId, grade, requestId? }`, where
@@ -26,46 +25,8 @@ import { isRating, type Rating } from "@/lib/review-core";
  * write's, whatever the retry asked for, and the card is the schedule as it
  * stands now. Guarded like every `/api/learner/*` route: same origin, 60 a
  * minute, and a concept the catalog does not know is a 400, not a 503.
+ *
+ * The parse and the write are `reviewGradeTurn` in
+ * `@gnosia/tutor/server/learner-writes`, which the sidecar runs too.
  */
-export const POST = handler(
-  "review-grade",
-  (body) => {
-    const conceptId = requireId(body, "conceptId");
-    const rating = body.grade;
-    if (!isRating(rating)) {
-      throw new BadRequest(`"grade" must be 0, 1, 2 or 3 (Again, Hard, Good, Easy).`);
-    }
-    const requestId = body.requestId;
-    if (
-      requestId !== undefined &&
-      (typeof requestId !== "string" || !/^[A-Za-z0-9_-]+$/.test(requestId) || requestId.length > MAX_ID_CHARS)
-    ) {
-      throw new BadRequest(`"requestId" must be a short token of letters, digits, "-" and "_".`);
-    }
-    return { conceptId, rating, requestId };
-  },
-  async (db, { conceptId, rating, requestId }: { conceptId: string; rating: Rating; requestId?: string }, owner) => {
-    const recorded = await gradeReview(db, {
-      learnerId: owner,
-      conceptId,
-      grade: gradeForRating(rating),
-      now: new Date(),
-      requestId,
-    });
-    const { card, pL, replayed, grade } = recorded;
-    return {
-      concept: conceptId,
-      // On a replay, the rating that was recorded, not the one this retry
-      // asked for: the first write stands, and the page counts what stood.
-      rating: ratingForGrade(grade),
-      grade,
-      due: card.due,
-      intervalDays: card.intervalDays,
-      ease: Number(card.ease.toFixed(2)),
-      lapses: card.lapses,
-      leech: card.leech,
-      pL,
-      replayed,
-    };
-  },
-);
+export const POST = turnRoute("review-grade", reviewGradeTurn);

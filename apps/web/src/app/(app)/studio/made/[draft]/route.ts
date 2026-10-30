@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { conversationMade } from "@gnosia/catalog/state";
+import { failureCode } from "@gnosia/tutor/server/provider-keys";
 
 import { enforceRateLimit } from "@/lib/agent/guard";
 import { isDraftId } from "@/lib/conversation-made";
@@ -42,15 +43,4 @@ export async function GET(_req: Request, { params }: { params: Promise<{ draft: 
     console.warn(`studio made: the catalog read failed (${failureCode(error)})`);
     return NextResponse.json({ ok: true, reachable: false, made: [] }, { headers });
   }
-}
-
-/** The driver's code down the `cause` chain, or the error's name. */
-function failureCode(error: unknown): string {
-  let current: unknown = error;
-  for (let depth = 0; depth < 5 && current !== null && typeof current === "object"; depth += 1) {
-    const code = (current as { code?: unknown }).code;
-    if (typeof code === "string" && code !== "") return code;
-    current = (current as { cause?: unknown }).cause;
-  }
-  return error instanceof Error ? error.name : "unknown";
 }

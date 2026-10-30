@@ -1,6 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { chatRequestId, closeChatSession, judgeAnswer, recordAnswer, sessionRefused, type RecordInput } from "./chat-recall";
+import {
+  chatRequestId,
+  closeChatSession,
+  judgeAnswer,
+  keptScopes,
+  recordAnswer,
+  releaseScope,
+  sessionRefused,
+  type RecordInput,
+} from "./chat-recall";
 
 /**
  * The browser half both tutors share (recall in the chat). `fetch` is a
@@ -69,6 +78,24 @@ describe("chat recall", () => {
     const calls = fetchMock.mock.calls.length;
     closeChatSession(at.scope);
     expect(fetchMock.mock.calls.length).toBe(calls);
+  });
+
+  it("forgets a released scope, once its save in flight has finished", async () => {
+    const at = input();
+    const before = keptScopes();
+    let answer: (r: Response) => void = () => {};
+    fetchMock.mockResolvedValue(json(200, { ok: true }));
+    fetchMock.mockReturnValueOnce(new Promise<Response>((resolve) => (answer = resolve)));
+    const saving = recordAnswer(at);
+    await Promise.resolve();
+    closeChatSession(at.scope);
+    releaseScope(at.scope);
+    // The save is still in flight: the scope is kept until it lands.
+    expect(keptScopes()).toBeGreaterThan(before);
+    answer(json(200, { ok: true, result: RESULT }));
+    await saving;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(keptScopes()).toBe(before);
   });
 
   it("closes with the answer still saving, so the close cannot beat the answer that opens the session", async () => {
