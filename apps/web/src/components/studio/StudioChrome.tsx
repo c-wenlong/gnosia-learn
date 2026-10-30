@@ -119,13 +119,15 @@ export function VerbNotice({
   report,
   clearHref,
 }: {
-  report: { verb: string; ok: boolean; headline: string; detail: string | null };
+  report: { ok: boolean; headline: string; said: string | null; detail: string | null };
   clearHref: string;
 }) {
+  // The headline is the studio's own; the runner's words came through the
+  // URL, so they are quoted under it and never read as the studio speaking.
   return (
     <Banner tone={report.ok ? "ok" : "danger"} dismissHref={clearHref}>
-      <span className="font-semibold">{report.verb}: </span>
-      {report.headline}
+      <span className="font-semibold">{report.headline}</span>
+      {report.said !== null && <span className="block text-[12px] text-text2">The runner said: “{report.said}”</span>}
       {report.detail !== null && report.detail !== "" && (
         <span className="block font-mono text-[12px] text-text2">{report.detail}</span>
       )}

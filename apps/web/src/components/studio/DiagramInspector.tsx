@@ -6,6 +6,7 @@ import { ExtendLink } from "@/components/studio/ExtendLink";
 import { MetaRow, Mono, PanelHeading } from "@/components/studio/StudioChrome";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { VerbSubmit } from "@/components/studio/VerbSubmit";
 import { Glyph } from "@/components/ui/Glyph";
 import { buttonClasses, cx } from "@/components/ui/classes";
 import { jobStateLabel } from "@/lib/studio-job-state";
@@ -240,9 +241,9 @@ function SelectedDiagram({
               Open canvas
             </Button>
           )}
-          <VerbForm action={exportSvg} name={diagram.name} path={path} label="Export SVG" />
-          <VerbForm action={verifySvg} name={diagram.name} path={path} label="Verify" />
-          <VerbForm action={inspectDiagram} name={diagram.name} path={path} label="Inspect" />
+          <VerbForm action={exportSvg} name={diagram.name} path={path} label="Export SVG" pending="Exporting" />
+          <VerbForm action={verifySvg} name={diagram.name} path={path} label="Verify" pending="Verifying" />
+          <VerbForm action={inspectDiagram} name={diagram.name} path={path} label="Inspect" pending="Inspecting" />
         </div>
         <p className="mt-2 text-xs text-text2">
           Each one runs in the studio runner and launches its own Chromium, so it takes a few
@@ -266,8 +267,10 @@ function SelectedDiagram({
                   scroll={false}
                   className="flex h-8 items-center gap-2 rounded-md px-1 text-xs hover:bg-surface2"
                 >
+                  {/* The day in the app's zone, as every other time here, not
+                      the UTC date the timestamp starts with (R2-1-25). */}
                   <span className="w-20 shrink-0 text-text2">
-                    {job.requested.slice(0, 10)}
+                    <StudioTime at={job.requested} as="day" />
                   </span>
                   <span className="min-w-0 flex-1 truncate">{job.title ?? job.jobId}</span>
                   <Badge tone={job.state === "failed" ? "danger" : "muted"}>{jobStateLabel(job.state)}</Badge>
@@ -294,19 +297,19 @@ function VerbForm({
   name,
   path,
   label,
+  pending,
 }: {
   action: (formData: FormData) => Promise<void>;
   name: string;
   path: string;
   label: string;
+  pending: string;
 }) {
   return (
     <form action={action}>
       <input type="hidden" name="name" value={name} />
       <input type="hidden" name="path" value={path} />
-      <Button type="submit" variant="secondary" size="xs">
-        {label}
-      </Button>
+      <VerbSubmit pending={pending}>{label}</VerbSubmit>
     </form>
   );
 }

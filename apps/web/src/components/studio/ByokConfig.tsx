@@ -95,6 +95,8 @@ export function ByokConfig({
   const [keysProblem, setKeysProblem] = useState<string | null>(initial?.state === "up" ? initial.data.error ?? null : null);
   const loaded = useRef(false);
   const downRef = useRef(initial?.state === "down");
+  /** The refusal `load` last put on the error line, so a later good read clears that one and no other. */
+  const loadError = useRef<string | null>(null);
   const reload = useRef<(retry: boolean) => void>(() => {});
   useEffect(() => {
     const apply = (data: ByokSettingsView) => {
@@ -142,12 +144,18 @@ export function ByokConfig({
             // "not answering".
             downRef.current = false;
             setDown(false);
+            loadError.current = result.refusal.error;
             setError(result.refusal.error);
           }
           return;
         }
         downRef.current = false;
         setDown(false);
+        // A refusal this read's predecessor put up is answered by this read;
+        // a connect's or a save's own error stays (R2-1-10).
+        const stale = loadError.current;
+        loadError.current = null;
+        if (stale !== null) setError((held) => (held === stale ? null : held));
         apply(result.data);
       });
     };
@@ -244,6 +252,21 @@ export function ByokConfig({
   }
 
   /**
+   * Why Studio did not take a provider the tutor's route saved or synced:
+   * `synced: false` and `byok: false` mean the runner was not reached, or
+   * that it answered and cannot open the key saved in Settings (no
+   * `AUTH_SECRET`, a rotated one). Asked of the runner rather than guessed,
+   * so a running runner is not called down (R2-1-10).
+   */
+  async function notTaken(lead: string): Promise<string> {
+    const read = await getByokSettings();
+    if (!read.ok && runnerDown(read.status, read.refusal)) return `${lead}: the studio runner is not answering.`;
+    const why = read.ok ? (read.data.error ?? null) : read.refusal.error;
+    if (read.ok) setKeysProblem(read.data.error ?? null);
+    return `${lead}: the studio runner could not open the key saved in Settings${why === null ? "." : ` (${why.replace(/[.]$/, "")}).`}`;
+  }
+
+  /**
    * A provider whose key the tutor already has, connected through
    * `/api/learner/provider-key/sync`: the runner uses that same saved key,
    * never re-typed and never sent to it.
@@ -254,9 +277,15 @@ export function ByokConfig({
     setSaving(true);
     setError(null);
     const reply = await sendJson<{ ok?: boolean; synced?: boolean }>("POST", "/api/learner/provider-key/sync", { provider: tutor });
-    if (reply === null || reply.status !== 200 || reply.data.synced !== true) {
+    if (reply === null || reply.status !== 200) {
       setSaving(false);
-      setError("Not connected — the runner is not answering.");
+      setError(reply === null ? "Not connected: the app's server did not answer." : `Not connected (HTTP ${reply.status}).`);
+      return;
+    }
+    if (reply.data.synced !== true) {
+      const why = await notTaken("Not connected");
+      setSaving(false);
+      setError(why);
       return;
     }
     const switched = await setByokActive(byokName);
@@ -305,7 +334,15 @@ export function ByokConfig({
     const fresh = await getByokSettings();
     setSaving(false);
     if (!fresh.ok || !fresh.data.providers.some((entry) => entry.provider === newProvider)) {
-      setError("Saved, but the studio runner did not take it — the tutor can use the key; Studio will when the runner is reachable.");
+      // The tutor can use the key either way; say which of the two kept it
+      // from Studio, since only one of them is fixed by starting the runner.
+      if (!fresh.ok && runnerDown(fresh.status, fresh.refusal)) {
+        setError("Saved for the tutor, but the studio runner is not answering. Studio takes the key once the runner is running.");
+      } else {
+        const why = fresh.ok ? (fresh.data.error ?? null) : fresh.refusal.error;
+        if (fresh.ok) setKeysProblem(fresh.data.error ?? null);
+        setError(`Saved for the tutor, but the studio runner could not open it${why === null ? "." : ` (${why.replace(/[.]$/, "")}).`}`);
+      }
       return;
     }
     if (!switched.ok || fresh.data.active !== newProvider) {
@@ -335,8 +372,9 @@ export function ByokConfig({
       setError(result.refusal.error);
       return;
     }
+    // `removeByokProvider` announces the write itself; a second announcement
+    // made every listener read twice (R2-1-17).
     setNote(null);
-    window.dispatchEvent(new Event(BYOK_SETTINGS_CHANGED));
   }
 
   async function saveTiers() {
@@ -360,8 +398,9 @@ export function ByokConfig({
       // is saved, and Studio reads it at its next turn; do not save tiers to
       // a runner that is not answering.
       if (keyResult.data.byok === false) {
+        const why = await notTaken("The key is saved, but Studio did not take it");
         setSaving(false);
-        setError("The key is saved, but the studio runner did not answer. Save the models again once it is running.");
+        setError(`${why} Save the models again once that is fixed.`);
         return;
       }
       setApiKey("");

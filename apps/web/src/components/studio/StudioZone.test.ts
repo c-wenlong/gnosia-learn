@@ -5,6 +5,10 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { StudioTime, StudioZone } from "@/components/studio/StudioZone";
 
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn(), replace: vi.fn() }) }));
+
+const { DiagramInspector } = await import("@/components/studio/DiagramInspector");
+
 /**
  * The studio's times in a DOM: the zone the layout hands down decides the
  * day, a diagram's panel prints no raw ISO text, and with no provider the
@@ -49,5 +53,40 @@ describe("StudioTime", () => {
   it("words an age by calendar day in that zone", () => {
     // 01:00 on 4 Oct in Singapore, 37 hours before NOW.
     expect(render("Asia/Singapore", new Date(NOW - 37 * 3_600_000).toISOString(), "ago")).toBe("Yesterday");
+  });
+});
+
+describe("a diagram's job history (R2-1-25)", () => {
+  it("files each job under the app zone's day, not the UTC date its timestamp starts with", () => {
+    vi.useFakeTimers({ now: NOW });
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    const diagram = {
+      name: "dot-product",
+      tldr: { path: "learn/assets/dot-product.tldr", exists: true, modified: CREATED, bytes: 1 },
+      svg: { path: "learn/assets/dot-product.svg", exists: true, modified: CREATED, bytes: 1 },
+      title: "The dot product",
+      topic: "vectors",
+      concepts: [],
+      source: null,
+      shapes: 4,
+      created: CREATED,
+      svgState: "current" as const,
+    };
+    const job = { jobId: "j1", state: "accepted", title: "Dot product, take two", target: "learn/assets/dot-product.tldr", requested: CREATED };
+    act(() =>
+      root.render(
+        createElement(
+          StudioZone,
+          { timeZone: "Asia/Singapore" },
+          createElement(DiagramInspector, { listing: { dir: "x", diagrams: [], errors: [], counts: { total: 1, withTopic: 1, unreadable: 0 } }, diagram, jobs: [job], path: "/studio" }),
+        ),
+      ),
+    );
+    const row = [...host.querySelectorAll("li")].find((item) => item.textContent?.includes("Dot product, take two"));
+    expect(row?.textContent).toContain("30 Sept");
+    expect(row?.textContent).not.toContain("2026-09-29");
+    act(() => root.unmount());
   });
 });

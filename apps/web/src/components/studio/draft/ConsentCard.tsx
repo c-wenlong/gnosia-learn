@@ -21,6 +21,7 @@ export function ConsentCard({
   declined,
   cost,
   unavailable,
+  held = null,
   onAllow,
   onDecline,
 }: {
@@ -29,6 +30,8 @@ export function ConsentCard({
   declined: boolean;
   cost: string | null;
   unavailable: string | null;
+  /** Why Allow waits for now (a brief card is being edited), or null. Deny never waits. */
+  held?: string | null;
   onAllow: (always: boolean) => Promise<boolean>;
   onDecline: () => Promise<boolean>;
 }) {
@@ -59,8 +62,9 @@ export function ConsentCard({
       {pitch !== null && <p className="mt-1 text-[13px] leading-5 text-text2">{pitch}</p>}
       {cost !== null && <p className="mt-1 text-[12px] leading-4 text-text3">A make of this kind {cost}.</p>}
       {unavailable !== null && <p className="mt-1 text-[12px] leading-4 text-text3">{unavailable}</p>}
+      {unavailable === null && held !== null && <p className="mt-1 text-[12px] leading-4 text-text3">{held}</p>}
       <div className="mt-2.5 flex flex-wrap gap-2">
-        <Button size="sm" onClick={() => press("once")} disabled={answering !== null || unavailable !== null} title={unavailable ?? undefined}>
+        <Button size="sm" onClick={() => press("once")} disabled={answering !== null || unavailable !== null || held !== null} title={unavailable ?? undefined}>
           {answering === "once" ? "Sending…" : "Allow once"}
         </Button>
         {kind !== "svg" && (
@@ -68,7 +72,7 @@ export function ConsentCard({
             size="sm"
             variant="secondary"
             onClick={() => press("always")}
-            disabled={answering !== null || unavailable !== null}
+            disabled={answering !== null || unavailable !== null || held !== null}
             title={unavailable ?? "Let the planner start this kind on its own, on this conversation only"}
           >
             {answering === "always" ? "Allowing…" : "Always allow here"}

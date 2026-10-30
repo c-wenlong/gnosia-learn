@@ -112,3 +112,33 @@ export function videoAvailability(raw: unknown): Availability {
   const note = typeof video.note === "string" && video.note.trim() !== "" ? video.note : null;
   return { ok: false, reason: detail ?? note, ...tools };
 }
+
+/**
+ * What doctor says now, for a failed job's Recheck (R2-1-19). The job's row
+ * is terminal and never changes, so re-reading the job list showed nothing;
+ * health carries doctor's verdict (`tldrawkc` and its `checks`) and whether a
+ * diagram job can be queued (`diagramAgent`), which is what a person who
+ * fixed their toolchain wants to know before pressing Retry.
+ */
+export function doctorVerdict(raw: unknown): { ok: boolean; text: string } {
+  if (typeof raw !== "object" || raw === null) {
+    return { ok: false, text: "The studio runner did not answer, so doctor could not be read." };
+  }
+  const health = raw as { tldrawkc?: unknown; checks?: unknown; diagramAgent?: unknown };
+  const checks = Array.isArray(health.checks) ? (health.checks as { name?: unknown; status?: unknown; detail?: unknown }[]) : [];
+  const failing = checks.find((check) => check?.status === "fail");
+  if (failing !== undefined) {
+    const name = typeof failing.name === "string" ? failing.name : "a check";
+    const detail = typeof failing.detail === "string" && failing.detail.trim() !== "" ? `: ${failing.detail.trim().replace(/[.]$/, "")}` : "";
+    return { ok: false, text: `Doctor still fails on ${name}${detail}.` };
+  }
+  if (health.tldrawkc === false) return { ok: false, text: "Doctor still says tldrawkc cannot run on this machine." };
+  const agent = diagramAvailability(health.diagramAgent);
+  if (!agent.ok) return { ok: false, text: agent.reason === null ? "Diagram jobs still cannot be queued." : `Diagram jobs still cannot be queued: ${agent.reason.replace(/[.]$/, "")}.` };
+  return { ok: true, text: "Doctor passes now." };
+}
+
+/** Read health and say what doctor says now. */
+export async function recheckDoctor(): Promise<{ ok: boolean; text: string }> {
+  return doctorVerdict(await readHealth());
+}
