@@ -67,8 +67,11 @@ const USAGE = 'usage: node catalog-snapshot.mjs [--out PATH] [--owner ID] [--if-
 /** The owner whose rows every owner reads (COMMONS_OWNER in packages/schema/src/shared.ts). */
 const COMMONS = 'commons';
 
-/** Mirror format: 4 added event.concept_slug, event.session_id, `session` and the owner filter. */
-export const SCHEMA_VERSION = 4;
+/**
+ * Mirror format: 4 added event.concept_slug, event.session_id, `session` and
+ * the owner filter; 5 added `check_distractor`.
+ */
+export const SCHEMA_VERSION = 5;
 
 class Refusal extends Error {}
 
@@ -374,6 +377,21 @@ CREATE TABLE asset_name (
   updated_at REAL,
   PRIMARY KEY (learner_id, asset_id)
 );
+
+-- The tutor's wrong options per note check (docs/LEARN.md, "Wrong
+-- options"), so the app's review cards ask with the options the web's
+-- review queue reads. \`options\` is the JSON array of three strings as the
+-- catalog stores it; the app compares \`check_hash\` with the check as its
+-- note now reads, as readWrittenOptions does, and never writes a row.
+CREATE TABLE check_distractor (
+  learner_id   TEXT NOT NULL,
+  concept_slug TEXT NOT NULL,
+  check_id     TEXT NOT NULL,
+  check_hash   TEXT NOT NULL,
+  options      TEXT NOT NULL,
+  updated_at   REAL,
+  PRIMARY KEY (learner_id, concept_slug, check_id)
+);
 -- ==== courses ====
 -- The course tree and the link tables the course pages read, with the same
 -- columns the catalog has (packages/schema/src/content.ts). JSON columns
@@ -532,6 +550,8 @@ export async function snapshot(sourcePath, out, owner = 'local') {
   // owner the file is for.
   const scope = { owner, commons: COMMONS };
   const all = (sql) => (sql.includes('@') ? source.prepare(sql).all(scope) : source.prepare(sql).all());
+  const hasTable = (name) =>
+    source.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(name) !== undefined;
 
   const partial = `${out}.partial-${process.pid}`;
   rmSync(partial, { force: true });
@@ -546,7 +566,7 @@ export async function snapshot(sourcePath, out, owner = 'local') {
       const {
         assets, derivations, assetTopics, assetConcepts, topics, concepts,
         prerequisites, masteries, reviews, progress, recaps, preferences,
-        events, sessions, assetNames,
+        events, sessions, assetNames, checkDistractors,
         collections, curriculumItems, collectionItems, itemConcepts, itemAssets,
         tags, collectionTags,
       } = rows;
@@ -690,6 +710,14 @@ export async function snapshot(sourcePath, out, owner = 'local') {
       for (const n of assetNames) {
         nameInsert.run(n.learner_id, n.asset_id, n.title, n.created_at, n.updated_at);
       }
+
+      const distractorInsert = db.prepare(
+        `INSERT INTO check_distractor (learner_id, concept_slug, check_id, check_hash, options, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      );
+      for (const d of checkDistractors) {
+        distractorInsert.run(d.learner_id, d.concept_slug, d.check_id, d.check_hash, d.options, d.updated_at);
+      }
       // ==== courses ====
       const collectionInsert = db.prepare(
         `INSERT INTO collection (id, kind, slug, title, parent_id, position, metadata,
@@ -825,6 +853,15 @@ export async function snapshot(sourcePath, out, owner = 'local') {
         created_at / 1000.0 AS created_at,
         updated_at / 1000.0 AS updated_at FROM asset_name
         WHERE learner_id = @owner`),
+      // This learner's rows for notes the file mirrors. A catalog behind
+      // migration 0003 has no table, which is no rows: the cards fall back
+      // to the notes' options, as the web's do there.
+      checkDistractors: hasTable('check_distractor')
+        ? all(`SELECT learner_id, concept_slug, check_id, check_hash, options,
+            updated_at / 1000.0 AS updated_at FROM check_distractor
+            WHERE learner_id = @owner
+              AND concept_slug IN (SELECT slug FROM concept WHERE owner_id IN (@owner, @commons))`)
+        : [],
       // ==== courses ====
       // The tables readCourses joins to build a Course (readers/courses.ts):
       // the collection tree, the checklist rows, the membership rows that give
