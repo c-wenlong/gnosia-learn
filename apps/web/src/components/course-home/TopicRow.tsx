@@ -126,6 +126,18 @@ function TopicPanel({
   const { state, toggleTopicCompletion, updateNote } = useLearner();
   const saved = ownValue(state.notes, topic.id) ?? "";
   const [draft, setDraft] = useState(saved);
+  // An edit typed here and not yet saved. Only a keystroke sets it, never a
+  // difference from `saved`: the provider also moves `saved` when it adopts a
+  // newer snapshot (another tab or the terminal wrote the note), and that
+  // must not read as an edit, or the old draft would be written back over it.
+  const [edited, setEdited] = useState(false);
+  // The note as last seen from the provider. A newer one replaces the draft
+  // when nothing is being typed; an edit in progress keeps its text.
+  const [seen, setSeen] = useState(saved);
+  if (saved !== seen) {
+    setSeen(saved);
+    if (!edited) setDraft(saved);
+  }
   const checkboxId = useId();
   const noteId = useId();
 
@@ -145,17 +157,18 @@ function TopicPanel({
     if (pending.current === null) return;
     const note = pending.current;
     pending.current = null;
+    setEdited(false);
     target.current.updateNote(target.current.topicId, note);
   });
   useEffect(() => {
-    if (draft === saved) {
+    if (!edited) {
       pending.current = null;
       return;
     }
     pending.current = draft;
     const t = window.setTimeout(flush, 400);
     return () => window.clearTimeout(t);
-  }, [draft, saved, flush]);
+  }, [draft, edited, flush]);
   useEffect(() => flush, [flush]);
   // Closing the tab unmounts nothing, so the pending edit goes on `pagehide`,
   // where the provider sends it with `keepalive` to outlive the page.
@@ -199,7 +212,11 @@ function TopicPanel({
           <Textarea
             id={id}
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(e) => {
+              setDraft(e.target.value);
+              // Typed back to the saved note: nothing is left to save.
+              setEdited(e.target.value !== saved);
+            }}
             onBlur={flush}
             placeholder="Personal notes for this topic"
             rows={3}

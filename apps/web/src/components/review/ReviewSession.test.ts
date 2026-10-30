@@ -135,8 +135,8 @@ async function settle(run: () => void) {
 }
 
 /** A key pressed wherever the focus is, as a browser sends it. */
-function key(name: string) {
-  (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent("keydown", { key: name, bubbles: true }));
+function key(name: string, repeat = false) {
+  (document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent("keydown", { key: name, repeat, bubbles: true }));
 }
 
 describe("ReviewSession moving through the queue", () => {
@@ -231,6 +231,18 @@ describe("ReviewSession moving through the queue", () => {
     const done = host.querySelector('[data-step="done"]') as HTMLElement;
     expect(done.classList.contains("animate-enter")).toBe(true);
     expect(document.activeElement).toBe(done.querySelector("h1"));
+  });
+});
+
+describe("ReviewSession and a key held down", () => {
+  it("grades nothing from the repeats a held number key sends", async () => {
+    const host = await mount([CHECK, { ...CHECK, conceptId: "udp-2" }]);
+    await settle(() => key("2"));
+    // The pick moved the card to its verdict; the repeats must not rate it, nor answer the next.
+    await settle(() => key("2", true));
+    await settle(() => key("2", true));
+    expect(graded).toEqual([]);
+    expect(host.querySelector('[role="group"][aria-label="Rate your recall"]')).not.toBeNull();
   });
 });
 

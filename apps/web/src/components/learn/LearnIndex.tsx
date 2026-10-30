@@ -83,11 +83,14 @@ function placeOf(
   asked: { view: IndexView; selected: string | null; domain: string | null; topic: string | null },
 ): Place {
   if (asked.view !== "graph") return { domain: null, topic: null };
+  // Own keys only: both records are plain objects, so `in` or a bare index
+  // would take `constructor` or `__proto__` from a hand-typed URL for a
+  // domain, and the layout read below would throw during render.
   const domain =
-    asked.domain !== null && asked.domain in map.layouts
+    asked.domain !== null && Object.hasOwn(map.layouts, asked.domain)
       ? asked.domain
-      : asked.domain === null && asked.selected !== null
-        ? (domainOf[asked.selected] ?? null)
+      : asked.domain === null && asked.selected !== null && Object.hasOwn(domainOf, asked.selected)
+        ? domainOf[asked.selected]
         : null;
   const topic = domain !== null && asked.topic !== null && map.layouts[domain].groups.some((g) => g.topic === asked.topic) ? asked.topic : null;
   return { domain, topic };

@@ -13,6 +13,7 @@ const press = (key: string, over: Partial<QuizKeyEvent> = {}): QuizKeyEvent => (
   metaKey: false,
   ctrlKey: false,
   altKey: false,
+  repeat: false,
   target: target("BODY"),
   ...over,
 });
@@ -48,6 +49,8 @@ describe("quizKey", () => {
     expect(quizKey(press("1", { ctrlKey: true }), false)).toBeNull();
     expect(quizKey(press("Enter", { altKey: true }), false)).toBeNull();
     expect(quizKey(press("1"), true)).toBeNull();
+    expect(quizKey(press("2", { repeat: true }), false)).toBeNull();
+    expect(quizKey(press("Enter", { repeat: true }), false)).toBeNull();
   });
 
   it("is typing in a field, not a key for the page", () => {

@@ -217,6 +217,33 @@ describe("LearnIndex by domain", () => {
     expect(host.querySelector('button[data-list-topic="sorting"]')).not.toBeNull();
   });
 
+  it("opens on the cards when the URL names a domain that is a key every object has", () => {
+    for (const asked of ["constructor&topic=x", "__proto__", "toString", "hasOwnProperty&topic=sorting"]) {
+      window.history.replaceState(null, "", `/learn?domain=${asked}`);
+      const host = mountAtUrl();
+      expect(graph(host)).toBeNull();
+      expect(cards(host).map((c) => c.dataset.domainCard)).toEqual(["algorithms", "foundations"]);
+      expect(url().get("domain")).toBeNull();
+      mounted.pop()?.();
+    }
+  });
+
+  it("opens on the cards when the URL names only a concept that is a key every object has", () => {
+    window.history.replaceState(null, "", "/learn?concept=constructor");
+    const host = mountAtUrl();
+    expect(graph(host)).toBeNull();
+    expect(cards(host)).toHaveLength(2);
+  });
+
+  it("goes Back to a domain URL naming a key every object has without throwing", () => {
+    const host = mountAtUrl();
+    act(() => cards(host)[0].click());
+    window.history.replaceState(window.history.state, "", "/learn?domain=constructor&topic=x");
+    act(() => void window.dispatchEvent(new PopStateEvent("popstate")));
+    expect(graph(host)).toBeNull();
+    expect(cards(host)).toHaveLength(2);
+  });
+
   it("opens a concept's domain when the URL names only the concept", () => {
     window.history.replaceState(null, "", "/learn?concept=bfs");
     const host = mountAtUrl();

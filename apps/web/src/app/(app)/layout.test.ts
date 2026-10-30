@@ -20,18 +20,31 @@ const env = vi.hoisted(() => ({
   studio: false,
   runner: false,
   looked: 0,
+  signedIn: true,
+  /** Every check and read the layout made, in order. */
+  calls: [] as string[],
 }));
 
 vi.mock("next/headers", () => ({
   cookies: async () => ({ get: (name: string) => (env.cookies.has(name) ? { value: env.cookies.get(name) } : undefined) }),
   headers: async () => new Headers(env.nonce === null ? {} : { "x-nonce": env.nonce }),
 }));
-vi.mock("@/lib/auth/session", () => ({ requireSignedIn: async () => undefined }));
+vi.mock("@/lib/auth/session", () => ({
+  requireSignedIn: async () => {
+    env.calls.push("auth");
+    // As `redirect()` does: it throws, and nothing after it runs.
+    if (!env.signedIn) throw new Error("NEXT_REDIRECT");
+  },
+}));
 vi.mock("@/lib/learner-store", () => ({
-  loadLearnerSnapshot: async () => ({ state: { theme: env.theme }, reachable: env.reachable }),
+  loadLearnerSnapshot: async () => {
+    env.calls.push("snapshot");
+    return { state: { theme: env.theme }, reachable: env.reachable };
+  },
 }));
 vi.mock("@/lib/motion-preference", () => ({
   readStoredMotion: async () => {
+    env.calls.push("motion");
     env.asked += 1;
     return env.stored;
   },
@@ -39,6 +52,7 @@ vi.mock("@/lib/motion-preference", () => ({
 vi.mock("@/lib/studio", () => ({ studioEnabled: () => env.studio }));
 vi.mock("@/lib/studio-runner", () => ({
   runnerListening: async () => {
+    env.calls.push("runner");
     env.looked += 1;
     return env.runner;
   },
@@ -71,6 +85,24 @@ beforeEach(() => {
   env.studio = false;
   env.runner = false;
   env.looked = 0;
+  env.signedIn = true;
+  env.calls = [];
+});
+
+describe("the (app) layout's sign-in check", () => {
+  it("checks the session before it reads anything", async () => {
+    env.studio = true;
+    await render();
+    expect(env.calls[0]).toBe("auth");
+    expect(env.calls.slice(1).sort()).toEqual(["motion", "runner", "snapshot"]);
+  });
+
+  it("reads nothing when the check sends the visitor to sign in", async () => {
+    env.studio = true;
+    env.signedIn = false;
+    await expect(render()).rejects.toThrow("NEXT_REDIRECT");
+    expect(env.calls).toEqual(["auth"]);
+  });
 });
 
 describe("the (app) layout's motion seed", () => {
