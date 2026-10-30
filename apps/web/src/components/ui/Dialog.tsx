@@ -78,6 +78,30 @@ export function dialogClasses({ size = "default", tall = false, className }: { s
   );
 }
 
+/**
+ * The page's scroll lock, shared by every open dialog that asks for it: the
+ * first takes it and remembers `<html>`'s overflow, the last to close gives
+ * it back, whatever order they close in. Each keeping its own copy left the
+ * page locked for good when the first-opened closed last.
+ */
+let scrollLocks = 0;
+let overflowBeforeLocks = "";
+function lockPageScroll(): () => void {
+  const root = document.documentElement;
+  if (scrollLocks === 0) {
+    overflowBeforeLocks = root.style.overflow;
+    root.style.overflow = "hidden";
+  }
+  scrollLocks += 1;
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    scrollLocks -= 1;
+    if (scrollLocks === 0) root.style.overflow = overflowBeforeLocks;
+  };
+}
+
 type DialogName =
   /** The dialog's accessible name, as its `aria-label`. */
   | { label: string; labelledBy?: undefined }
@@ -187,13 +211,10 @@ export function Dialog({
     const focused = rememberFocus();
     if (!dialog.open) dialog.showModal();
     dialog.querySelector<HTMLElement>("[data-autofocus]")?.focus();
-    const root = document.documentElement;
-    const overflow = root.style.overflow;
-    const locked = lock.current;
-    if (locked) root.style.overflow = "hidden";
+    const unlock = lock.current ? lockPageScroll() : null;
     return () => {
       alive.current = false;
-      if (locked) root.style.overflow = overflow;
+      unlock?.();
       if (dialog.open) dialog.close();
       const named = latest.current.opener?.() ?? null;
       if (named !== null && named.isConnected) named.focus({ preventScroll: true });

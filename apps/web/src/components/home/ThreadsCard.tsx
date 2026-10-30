@@ -57,7 +57,7 @@ export function ThreadsCard({ threads, reachable }: { threads: Thread[]; reachab
                       {t.percent !== undefined && (
                         // ProgressBar fills its container, so the wrapper sizes it.
                         <span className="w-16 shrink-0 max-md:hidden">
-                          <ProgressBar percent={t.percent} size="sm" label={`${t.title}, ${t.percent}% watched`} />
+                          <ProgressBar percent={t.percent} size="sm" label={`${t.percent}% watched`} />
                         </span>
                       )}
                     </span>

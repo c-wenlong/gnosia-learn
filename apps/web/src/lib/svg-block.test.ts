@@ -298,6 +298,16 @@ describe("class and id are the picture's own (S2-04)", () => {
     const root = figure('<svg aria-describedby="d"><desc id="d">Two arrows</desc></svg>');
     expect(root.attrs["aria-describedby"]).toBe((root.children[0] as SvgNode).attrs.id);
   });
+
+  it("points every aria attribute that takes ids at the prefixed ids, so none reaches the page's own nodes", () => {
+    const names = ["aria-owns", "aria-controls", "aria-activedescendant", "aria-flowto", "aria-details", "aria-errormessage"];
+    const root = figure(`<svg ${names.map((name) => `${name}="app-sidebar d"`).join(" ")}><desc id="d">Two arrows</desc></svg>`);
+    const prefixed = (root.children[0] as SvgNode).attrs.id as string;
+    const prefix = prefixed.slice(0, -1);
+    for (const name of names) expect(root.attrs[name]).toBe(`${prefix}app-sidebar ${prefixed}`);
+    // A value with no id-shaped token is dropped, not kept raw.
+    expect(figure('<svg aria-owns="#x"></svg>').attrs["aria-owns"]).toBeUndefined();
+  });
 });
 
 describe("the picture's accessible name (S2-22)", () => {

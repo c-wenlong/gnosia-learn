@@ -4,6 +4,7 @@ import { readCheckDistractors, writeCheckDistractor, type CatalogDatabase } from
 
 import { CHECK_OPTIONS_VERSION } from "../check-options";
 import type { ConceptCheck } from "../concept-note-core";
+import { failureCode } from "./provider-keys";
 
 /**
  * The server half of the tutor's wrong options per note check: which stored
@@ -53,7 +54,9 @@ export async function readWrittenOptions(
       wanted.map((n) => n.slug),
     );
   } catch (error) {
-    console.warn(`check options: the stored wrong options are unavailable, ${error instanceof Error ? error.message : String(error)}`);
+    // The code only: a driver error's message is the failed SQL with its bind
+    // parameters (the learner id and slugs here), and hides why it failed.
+    console.warn(`check options: the stored wrong options are unavailable (${failureCode(error)})`);
     return out;
   }
   const byKey = new Map(rows.map((r) => [`${r.conceptSlug}\0${r.checkId}`, r]));
@@ -86,6 +89,47 @@ export function oncePerCheck<T>(key: string, generate: () => Promise<T>): Promis
   return started;
 }
 
+/**
+ * Generations that failed, by `generationKey`, remembered for
+ * `REFUSAL_TTL_MS`. The session page asks for the current step and the next
+ * two each time it mounts, so a check whose model reply never parses, or
+ * whose chain fails, would otherwise cost a model call on every page view.
+ * Within the window the turn answers the same refusal without calling the
+ * model, and the page keeps the options it built from the notes, as it does
+ * for any refusal. The key holds the check's hash, so editing the check asks
+ * again at once. Per process and bounded, oldest first, like `inFlight`.
+ */
+const refusals = new Map<string, { until: number; refusal: unknown }>();
+export const REFUSAL_TTL_MS = 10 * 60_000;
+const MAX_REFUSALS = 1_000;
+
+/** The refusal remembered for `key`, or undefined when there is none or it has run out. */
+export function rememberedRefusal<T>(key: string, now: number = Date.now()): T | undefined {
+  const held = refusals.get(key);
+  if (held === undefined) return undefined;
+  if (held.until <= now) {
+    refusals.delete(key);
+    return undefined;
+  }
+  return held.refusal as T;
+}
+
+/** Remember a failed generation's refusal for `REFUSAL_TTL_MS`. */
+export function rememberRefusal(key: string, refusal: unknown, now: number = Date.now()): void {
+  refusals.delete(key);
+  refusals.set(key, { until: now + REFUSAL_TTL_MS, refusal });
+  while (refusals.size > MAX_REFUSALS) {
+    const oldest = refusals.keys().next().value;
+    if (oldest === undefined) break;
+    refusals.delete(oldest);
+  }
+}
+
+/** Forget every remembered refusal. For tests. */
+export function forgetRefusals(): void {
+  refusals.clear();
+}
+
 /** The key `oncePerCheck` holds a generation under. */
 export function generationKey(learnerId: string, conceptSlug: string, checkId: string, hash: string): string {
   return [learnerId, conceptSlug, checkId, hash].join("\0");
@@ -107,7 +151,7 @@ export async function storeOptions(
     return true;
   } catch (error) {
     console.warn(
-      `check options: wrong options for ${row.conceptSlug}#${row.checkId} were written but not stored, ${error instanceof Error ? error.message : String(error)}`,
+      `check options: wrong options for ${row.conceptSlug}#${row.checkId} were written but not stored (${failureCode(error)})`,
     );
     return false;
   }

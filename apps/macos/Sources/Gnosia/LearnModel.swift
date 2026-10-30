@@ -739,16 +739,19 @@ struct ConceptCheck: Hashable {
 
 /// The ```check fences of a note body, in order. The web walks the parsed
 /// block tree so a check inside a list or a quote still counts; a line scan
-/// for the fence finds the same blocks either way.
+/// for the fence finds the same blocks either way. Lines split as
+/// parseNote splits them (`\r?\n`, a leading BOM dropped), so a note saved
+/// with CRLF endings still has its checks.
 private func checkBlockTexts(_ source: String) -> [String] {
     var texts: [String] = []
     var open: [String]? = nil
-    for line in source.components(separatedBy: "\n") {
-        let trimmed = line.trimmingCharacters(in: .whitespaces)
+    let body = source.unicodeScalars.first == "\u{FEFF}" ? String(source.unicodeScalars.dropFirst()) : source
+    for line in checkLines(body) {
+        let trimmed = jsTrim(line)
         if open == nil {
             if trimmed.hasPrefix("```") {
-                let info = trimmed.dropFirst(3).trimmingCharacters(in: .whitespaces)
-                    .components(separatedBy: .whitespaces).first?.lowercased() ?? ""
+                let info = jsTrim(String(trimmed.dropFirst(3))).unicodeScalars
+                    .split(whereSeparator: jsWhitespace).first.map { String(String.UnicodeScalarView($0)).lowercased() } ?? ""
                 if info == "check" { open = [] }
             }
         } else if trimmed.hasPrefix("```") {
@@ -763,24 +766,55 @@ private func checkBlockTexts(_ source: String) -> [String] {
 
 /// One check block's text to a check — `q:`/`a:`/`why:`/`source:` fields,
 /// continuation lines folding into the current field; nil with no
-/// question. readCheck in concept-note-core.ts.
+/// question. readCheck in concept-note-core.ts, down to its whitespace:
+/// lines split on `\r?\n`, and every trim is JavaScript's (`jsTrim`), so a
+/// field reads character for character as the web reads it and its hash
+/// matches the one the stored wrong options are kept under.
 private func readCheck(_ text: String) -> (question: String, answer: String, why: String, source: String)? {
     var fields: [String: String] = [:]
     var field: String? = nil
-    for line in text.components(separatedBy: "\n") {
-        let trimmed = line.trimmingCharacters(in: .whitespaces)
-        // `q`/`a`/`why`/`source` followed by a colon, case-insensitive.
-        if let split = trimmed.range(of: ":"),
-           ["q", "a", "why", "source"].contains(trimmed[..<split.lowerBound].lowercased()),
-           !trimmed[..<split.lowerBound].contains(" ") {
-            field = String(trimmed[..<split.lowerBound]).lowercased()
-            fields[field!] = String(trimmed[split.upperBound...]).trimmingCharacters(in: .whitespaces)
-        } else if let field, !trimmed.isEmpty {
-            fields[field] = "\(fields[field] ?? "") \(trimmed)".trimmingCharacters(in: .whitespaces)
+    for line in checkLines(text) {
+        if let (key, value) = checkField(line) {
+            field = key
+            fields[key] = jsTrim(value)
+        } else if let field, !jsTrim(line).isEmpty {
+            fields[field] = jsTrim("\(fields[field] ?? "") \(jsTrim(line))")
         }
     }
     guard let q = fields["q"], !q.isEmpty else { return nil }
     return (q, fields["a"] ?? "", fields["why"] ?? "", fields["source"] ?? "")
+}
+
+/// `text.split(/\r?\n/)`, on unicode scalars, since a Swift Character
+/// holds `\r\n` as one: split at each `\n`, and a `\r` right before one
+/// goes with it.
+private func checkLines(_ text: String) -> [String] {
+    let pieces = text.unicodeScalars.split(separator: "\n", omittingEmptySubsequences: false)
+    return pieces.enumerated().map { i, piece in
+        var line = String.UnicodeScalarView(piece)
+        if i < pieces.count - 1, line.last == "\r" { line.removeLast() }
+        return String(line)
+    }
+}
+
+/// `/^\s*(q|a|why|source):\s*(.*)$/i` on one line: the key, lowercased,
+/// and the rest after the colon. `.` matches no line terminator, so a line
+/// holding one is a continuation, as it is there.
+private func checkField(_ line: String) -> (String, String)? {
+    let scalars = Array(line.unicodeScalars)
+    var i = 0
+    while i < scalars.count, jsWhitespace(scalars[i]) { i += 1 }
+    for key in ["q", "a", "why", "source"] {
+        let keyScalars = Array(key.unicodeScalars)
+        let end = i + keyScalars.count
+        guard end < scalars.count, scalars[end] == ":" else { continue }
+        let word = String(String.UnicodeScalarView(scalars[i..<end])).lowercased()
+        guard word == key else { continue }
+        let rest = scalars[(end + 1)...]
+        if rest.contains(where: { [0x0A, 0x0D, 0x2028, 0x2029].contains($0.value) }) { return nil }
+        return (key, String(String.UnicodeScalarView(rest)))
+    }
+    return nil
 }
 
 /// The check blocks of a note body — parseChecks. The catalog stores the
@@ -1074,6 +1108,11 @@ struct ReviewCardModel: Hashable {
     let source: String?
     let choices: [String]?
     let correct: Int?
+    /// Check cards only: where the wrong options came from — `wrong` in
+    /// review-core.ts. `.tutor` when the tutor wrote them for this check (the
+    /// store a session fills), `.notes` when they are other notes' answers
+    /// and summaries; nil on a recall card.
+    var wrong: WrongSource? = nil
     /// How many check blocks the note holds.
     let checks: Int
     let intervals: [Int]
@@ -1092,11 +1131,14 @@ extension LearnGraph {
     /// A due item into a card face — toReviewItem. `checks` come from the
     /// concept's note body; `pool` is the distractor list distractorPool
     /// built (same-domain check answers first, then the rest, then
-    /// same-domain summaries, then the rest).
+    /// same-domain summaries, then the rest); `written` the tutor's stored
+    /// options per check id that still fit their checks (`writtenOptions`),
+    /// which come first. Nothing here asks the tutor to write any.
     func reviewCard(
         for item: ReviewQueueItem,
         checks: [ConceptCheck],
-        pool: [String]
+        pool: [String],
+        written: [String: [String]] = [:]
     ) -> ReviewCardModel {
         let check = checks.first { !$0.question.trimmingCharacters(in: .whitespaces).isEmpty }
         let base = (
@@ -1120,7 +1162,10 @@ extension LearnGraph {
         }
         let hasAnswer = !check.answer.trimmingCharacters(in: .whitespaces).isEmpty
         let answer = hasAnswer ? check.answer : item.summary
-        let mc = hasAnswer ? buildChoices(conceptId: item.conceptId, answer: check.answer, pool: pool) : nil
+        let fromTutor = hasAnswer
+            ? written[check.id].flatMap { buildChoices(conceptId: item.conceptId, answer: check.answer, pool: $0) }
+            : nil
+        let mc = fromTutor ?? (hasAnswer ? buildChoices(conceptId: item.conceptId, answer: check.answer, pool: pool) : nil)
         return ReviewCardModel(
             conceptId: item.conceptId, title: item.title, summary: item.summary,
             domain: item.domain, kind: mc == nil ? .recall : .check, prompt: check.question,
@@ -1128,6 +1173,7 @@ extension LearnGraph {
             why: check.why.trimmingCharacters(in: .whitespaces).isEmpty ? nil : check.why,
             source: check.source.trimmingCharacters(in: .whitespaces).isEmpty ? nil : check.source,
             choices: mc?.choices, correct: mc?.correct,
+            wrong: mc == nil ? nil : (fromTutor != nil ? .tutor : .notes),
             checks: checks.count, intervals: base.intervals, ease: base.ease,
             repetitions: base.repetitions, lapses: base.lapses, leech: base.leech,
             lastReviewed: base.lastReviewed, due: base.due
@@ -2159,7 +2205,9 @@ extension CatalogStore {
     }
 
     /// One due item into its card face — toReviewItem with this queue's
-    /// distractor pool.
+    /// distractor pool, and the tutor's options for the note's checks when
+    /// the snapshot holds ones that still fit (readReviewSession reads the
+    /// same store, and never generates either).
     func reviewCard(for item: ReviewQueueItem, in queue: ReviewQueue) -> ReviewCardModel {
         let checks = parseChecks(conceptBody(item.conceptId))
         let answers: [(conceptId: String, domain: String?, answer: String)] = queue.items.map { other in
@@ -2168,7 +2216,10 @@ extension CatalogStore {
                 .answer.trimmingCharacters(in: .whitespaces) ?? ""
             return (other.conceptId, other.domain, answer)
         }
-        return learn.reviewCard(for: item, checks: checks, pool: learn.distractorPool(for: item, answers: answers))
+        return learn.reviewCard(
+            for: item, checks: checks, pool: learn.distractorPool(for: item, answers: answers),
+            written: writtenOptions(checks: checks, stored: checkOptions[item.conceptId] ?? [:])
+        )
     }
 
     /// One video's playback, the web's row and this app's merged

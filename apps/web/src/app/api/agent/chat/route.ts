@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { CHAT_RATE_LIMIT, enforceRateLimit, enforceSameOrigin } from "@/lib/agent/guard";
 import { tutorDeps, turnResponse } from "@/lib/agent/env";
 import { chatTurn, payloadTooLarge, type ChatBody } from "@gnosia/tutor/server/turns";
+import { AGENT_BODY_LIMITS, readAgentBody } from "@/lib/agent/body";
 import { requestOwner } from "@/lib/learner-api";
 
 export const runtime = "nodejs";
@@ -24,7 +25,9 @@ export async function POST(req: Request): Promise<NextResponse> {
   const limited = enforceRateLimit(owner, "agent:chat", CHAT_RATE_LIMIT);
   if (limited) return limited;
 
-  const body = (await req.json().catch(() => null)) as ChatBody | null;
+  const read = await readAgentBody(req, AGENT_BODY_LIMITS.chat);
+  if (read instanceof NextResponse && read.status === 413) return read;
+  const body = (read instanceof NextResponse ? null : read.body) as ChatBody | null;
   if (body === null || typeof body !== "object" || !Array.isArray(body.messages)) {
     return NextResponse.json({ error: "The body must be a JSON object with a messages array" }, { status: 400 });
   }

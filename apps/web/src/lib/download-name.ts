@@ -34,17 +34,20 @@ function extensionOf(filename: string): string {
  * characters a file system refuses, runs of space collapsed, no leading or
  * trailing dots or spaces, at most `MAX_NAME` characters. Empty when nothing
  * is left.
+ *
+ * Well formed, so `filename*` can always be encoded: a lone surrogate (a
+ * learner's own name can hold one, since `JSON.parse` accepts `"\ud83c"`)
+ * becomes U+FFFD, and the cap counts code points, so it never splits an
+ * emoji in two. `encodeURIComponent` throws on either.
  */
 export function titleStem(title: string): string {
-  return (
-    title
-      .replace(/[\u0000-\u001f\u007f<>:"/\\|?*]/g, " ")
-      .replace(/\s+/g, " ")
-      .trim()
-      .replace(/^[.\s]+|[.\s]+$/g, "")
-      .slice(0, MAX_NAME)
-      .trim()
-  );
+  const cleaned = title
+    .toWellFormed()
+    .replace(/[\u0000-\u001f\u007f<>:"/\\|?*]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^[.\s]+|[.\s]+$/g, "");
+  return Array.from(cleaned).slice(0, MAX_NAME).join("").trim();
 }
 
 /**

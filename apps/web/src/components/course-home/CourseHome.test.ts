@@ -244,6 +244,28 @@ describe("CourseHome", () => {
   });
 });
 
+describe("CourseHome: lessons named like Object.prototype's members", () => {
+  it("draws a module whose lessons are slugged `constructor` and `toString`, neither ticked nor resolved", () => {
+    // Kebab ids admit `constructor`; `mastery[id]` and `completed[id]` used to answer with the Object function.
+    const odd = { ...mod(1), id: "constructor", slug: "constructor", topics: [topic("constructor"), topic("toString")] };
+    const oddCourse = { ...course, slug: "odd", modules: [odd] } as unknown as Course;
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    act(() =>
+      root.render(createElement(CourseHome, { course: oddCourse, moduleSlug: "constructor", mastery: {}, modules: {}, assetsReachable: true, related: [] })),
+    );
+    mounted.push(() => {
+      act(() => root.unmount());
+      host.remove();
+    });
+    expect(heading(host)).toBe("Module 1 title");
+    expect(["constructor", "toString"].map((id) => mark(topicToggle(host, id)))).toEqual(["Not started", "Not started"]);
+    act(() => topicToggle(host, "constructor").click());
+    expect([...host.querySelectorAll<HTMLInputElement>("input[type=checkbox]")].map((box) => box.checked)).toEqual([false]);
+  });
+});
+
 describe("CourseHome: the module as one path", () => {
   const pathModule = {
     id: "p1",

@@ -115,6 +115,13 @@ describe("POST /api/agent/judge", () => {
     readConceptWorkspace.mockResolvedValue({ state: "ok", workspace });
   });
 
+  it("refuses a body past its byte limit with a 413 before any read", async () => {
+    const { status, json } = await call({ conceptSlug: "dot-product", question: "Q?", answer: "x".repeat(70_000) });
+    expect(status).toBe(413);
+    expect(json.code).toBe("PAYLOAD_TOO_LARGE");
+    expect(readConceptWorkspace).not.toHaveBeenCalled();
+  });
+
   it("refuses another origin before reading anything", async () => {
     expect((await call(OK, "https://evil.example")).status).toBe(403);
     expect(readConceptWorkspace).not.toHaveBeenCalled();
