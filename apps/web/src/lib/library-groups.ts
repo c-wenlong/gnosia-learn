@@ -5,7 +5,7 @@ import { dayLabel } from "@/lib/day-groups";
 import { dayKey } from "@/lib/days";
 import { topicOrder } from "@/lib/domain-map";
 import { domainTitle } from "@/lib/domain-view";
-import { conversationLabel, orderedConcepts, pickPlace } from "@/lib/library-source";
+import { conversationLabel, courseCode, orderedConcepts, pickPlace } from "@/lib/library-source";
 import type { MasteryBucket } from "@/lib/mastery-bucket";
 
 /**
@@ -61,7 +61,6 @@ export const NO_GROUP = "none";
 /** Rows on the course itself, under no module: the first section, under this label. */
 export const WHOLE_COURSE = "Whole course";
 
-const codeOf = (place: AssetPlace) => place.code?.trim() || place.courseTitle;
 
 /**
  * `rows` grouped by the course (and inside it the module) each sits in.
@@ -94,8 +93,8 @@ export function courseGroups<T>(
 
   const groups: RowGroup<T>[] = [...courses.entries()]
     .sort(([aSlug, a], [bSlug, b]) => {
-      const ac = codeOf(a.place);
-      const bc = codeOf(b.place);
+      const ac = courseCode(a.place);
+      const bc = courseCode(b.place);
       if (ac !== bc) return ac < bc ? -1 : 1;
       return aSlug < bSlug ? -1 : aSlug > bSlug ? 1 : 0;
     })

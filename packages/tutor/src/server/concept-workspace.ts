@@ -3,15 +3,14 @@ import {
   type CatalogDatabase,
   EMPTY_KNOWLEDGE_BASE,
   type KnowledgeBase,
-  readEvents,
+  readConceptObservations,
   readKnowledgeBase,
-  readReviews,
+  readCards,
 } from "@gnosia/catalog/state";
 import type { ContentSource } from "@gnosia/content";
 import type { OwnerScope } from "@gnosia/schema/shared";
 
 import { findTopicAcrossCourses } from "../lookup";
-import { ownValue } from "../own-key";
 import type { Course } from "../types";
 import {
   buildConceptWorkspace,
@@ -92,10 +91,11 @@ export async function readConceptWorkspace(deps: WorkspaceDeps, slug: string): P
 
   try {
     const db = await deps.db;
-    const [note, events, reviews, assets, courses] = await Promise.all([
+    const [note, events, [card], assets, courses] = await Promise.all([
       readConceptNote(deps.source, slug),
-      readEvents(db, deps.owner),
-      readReviews(db, deps.owner),
+      // This concept's events and card, not the owner's whole log and every card.
+      readConceptObservations(db, deps.owner, [slug]),
+      readCards(db, [slug], deps.owner),
       assetsForConcept(db, slug, deps.scope),
       deps.source.courses(),
     ]);
@@ -108,7 +108,7 @@ export async function readConceptWorkspace(deps: WorkspaceDeps, slug: string): P
       frontmatter: note.ok ? { sources: note.frontmatter.sources, tags: note.frontmatter.tags } : null,
       checks: note.ok ? note.checks : [],
       events,
-      card: ownValue(reviews.cards, slug) ?? null,
+      card: card ?? null,
       assets,
       place: placeOf(courses, concept.topics),
     });
