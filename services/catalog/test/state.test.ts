@@ -196,6 +196,27 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
       ).toBe(2);
     });
 
+    it("counts a write sent again with the same request id once, and a new id again", async () => {
+      const base = { ...long, summary: "short" };
+      expect((await upsertRecap(scratch.db, ITEMS[0], base, { requestId: "a1" }))?.sessions).toBe(1);
+      const again = await upsertRecap(scratch.db, ITEMS[0], { ...base, summary: "short" }, { requestId: "a1" });
+      expect(again?.sessions).toBe(1);
+      expect(again?.summary).toBe("short");
+      expect((await upsertRecap(scratch.db, ITEMS[0], base, { requestId: "b2" }))?.sessions).toBe(2);
+      expect((await upsertRecap(scratch.db, ITEMS[0], base, { requestId: "b2" }))?.sessions).toBe(2);
+      // No id is never a repeat, of an id or of another write with none.
+      expect((await upsertRecap(scratch.db, ITEMS[0], base))?.sessions).toBe(3);
+      expect((await upsertRecap(scratch.db, ITEMS[0], base))?.sessions).toBe(4);
+      expect((await readLearnerSnapshot(scratch.db)).knowledge[ITEMS[0]]?.sessions).toBe(4);
+    });
+
+    it("refuses a request id the page could not have made, writing nothing", async () => {
+      for (const requestId of ["", "has space", "x".repeat(129)]) {
+        await expect(upsertRecap(scratch.db, ITEMS[0], long, { requestId })).rejects.toThrow(/requestId/);
+      }
+      expect((await readLearnerSnapshot(scratch.db)).knowledge).toEqual({});
+    });
+
     it("treats an entirely empty input as a delete", async () => {
       await upsertRecap(scratch.db, ITEMS[0], { ...long, summary: "there" });
       const cleared = await upsertRecap(scratch.db, ITEMS[0], {
