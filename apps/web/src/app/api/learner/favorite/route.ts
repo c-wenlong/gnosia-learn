@@ -1,9 +1,6 @@
-import { assetsByIds, clearPreference, StateError, writePreference } from "@gnosia/catalog/state";
+import { favoriteTurn } from "@gnosia/tutor/server/learner-writes";
 
-import { MAX_ASSET_ID_CHARS } from "@/app/api/learner/watched/route";
-import { favoriteKey } from "@/lib/favorite";
-import { BadRequest, handler } from "@/lib/learner-api";
-import { ownerScope } from "@/lib/owner";
+import { turnRoute } from "@/lib/learner-api";
 
 /**
  * Star or unstar a library asset (`@/lib/favorite`).
@@ -12,30 +9,8 @@ import { ownerScope } from "@/lib/owner";
  * `false` clears it. The asset is looked up under the owner's scope first, so
  * a star can only land on a row the owner can read, and an id from a stale
  * page is a 400 rather than a row pointing at nothing.
+ *
+ * The parse and the write are `favoriteTurn` in
+ * `@gnosia/tutor/server/learner-writes`, which the sidecar runs too.
  */
-export const POST = handler(
-  "favorite",
-  (body) => {
-    const assetId = body.assetId;
-    if (typeof assetId !== "string" || assetId.trim() === "") {
-      throw new BadRequest('"assetId" is required and must be a non-empty string.');
-    }
-    if (assetId.length > MAX_ASSET_ID_CHARS) {
-      throw new BadRequest(`"assetId" is longer than ${MAX_ASSET_ID_CHARS} characters.`);
-    }
-    if (typeof body.favorite !== "boolean") throw new BadRequest('"favorite" must be true or false.');
-    return { assetId, favorite: body.favorite };
-  },
-  async (db, input, owner) => {
-    const [row] = await assetsByIds(db, [input.assetId], ownerScope(owner));
-    if (row === undefined) throw new StateError(`no asset in the catalog for "${input.assetId}"`);
-    const key = favoriteKey(row.id);
-    if (!input.favorite) {
-      await clearPreference(db, key, owner);
-      return { assetId: row.id, favorite: false, at: null };
-    }
-    const at = new Date().toISOString();
-    await writePreference(db, key, { at }, owner);
-    return { assetId: row.id, favorite: true, at };
-  },
-);
+export const POST = turnRoute("favorite", favoriteTurn);
