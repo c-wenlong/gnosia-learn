@@ -297,7 +297,10 @@ export function phaseRows(
   const currentKey = job.state === "awaiting_review" ? "ready" : (job.phase ?? lastSeen ?? null);
   const current = phaseIndex(currentKey);
   const stopped = isTerminal(job.state);
-  const failedHere = stopped && job.state !== "accepted" && job.state !== "discarded";
+  // A discarded job reached review only when it got to `ready`; one
+  // discarded after an interrupt stopped in the phase it names.
+  const reviewed = job.state === "accepted" || (job.state === "discarded" && currentKey === "ready");
+  const failedHere = stopped && !reviewed;
 
   return PHASES.map((phase, at) => {
     const durationMs = durations.get(phase.key) ?? null;
@@ -310,8 +313,8 @@ export function phaseRows(
       status = "done";
     } else if (at > current) {
       status = "pending";
-    } else if (job.state === "awaiting_review" || job.state === "accepted" || job.state === "discarded") {
-      // A discarded job was finished and in review: it is over, not live.
+    } else if (job.state === "awaiting_review" || reviewed) {
+      // A job discarded from review is over, not live.
       status = "done";
     } else if (failedHere) {
       status = "failed";

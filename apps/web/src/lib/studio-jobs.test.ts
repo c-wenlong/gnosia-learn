@@ -115,6 +115,11 @@ describe("the phase list", () => {
     expect(rows.at(-1)?.status).toBe("done");
   });
 
+  it("shows an interrupted job discarded mid-phase as stopped there, not done", () => {
+    const rows = phaseRows(job({ state: "discarded", phase: "drawing" }), []);
+    expect(rows.map((row) => row.status)).toEqual(["done", "done", "failed", "pending", "pending", "pending", "pending"]);
+  });
+
   it("shows all seven from the first second, with the current one marked", () => {
     const rows = phaseRows(job({ phase: "drawing" }), [], T0 + 30_000);
     expect(rows).toHaveLength(7);

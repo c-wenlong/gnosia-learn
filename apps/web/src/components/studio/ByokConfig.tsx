@@ -459,12 +459,18 @@ export function ByokConfig({
             {/* Asks first, as every other press that cannot be undone here
                 does: the key, the tiers and the pick all leave at once. */}
             {manageKeys && selected !== null && (
+              // Keyed by provider: a question opened for one key is put
+              // away when the pick moves, so it never removes another.
+              // `busy`, not only `disabled`: an open question waits out a
+              // save, which could otherwise add the key back after Remove.
               <InlineConfirm
+                key={provider}
                 size="text"
                 label="Remove"
-                question="Remove this provider's key from Studio?"
+                question={`Remove ${BYOK_PROVIDERS.find((known) => known.value === provider)?.label ?? provider}'s key from Studio?`}
                 confirmLabel="Remove it"
                 onConfirm={() => void remove()}
+                busy={saving}
                 disabled={saving}
                 className="ml-auto text-[12px] leading-4"
               />
