@@ -35,6 +35,12 @@ struct SettingsView: View {
                         + Text(Date(timeIntervalSince1970: takenAt), style: .time)
                     }
                 }
+                if let failure = store.snapshotFailure {
+                    Label("The last refresh failed: \(failure)", systemImage: "exclamationmark.triangle")
+                        .font(.caption)
+                        .foregroundStyle(G.warnText)
+                        .textSelection(.enabled)
+                }
                 LabeledContent("Reading from") {
                     Text(store.location.catalogPath)
                         .font(.caption.monospaced())
