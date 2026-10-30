@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useRef, useState, type FormEvent, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent, type MouseEvent, type ReactNode } from "react";
 
 import { usePanelHost } from "@/components/studio/panel-host";
 import { PanelLink } from "@/components/studio/PanelLink";
@@ -99,6 +99,26 @@ export function KindSegments({ view }: { view: StudioView }) {
  */
 export function StudioSearch({ view }: { view: StudioView }) {
   const host = usePanelHost();
+  const field = useRef<HTMLInputElement | null>(null);
+  /** A query that changed while the field had focus: applied when it loses it. */
+  const owed = useRef<string | null>(null);
+  // Follows Back and Forward without remounting: a field keyed by the query
+  // was replaced on every Enter, and focus fell to the page body (R2-1-14).
+  // A field the person is typing in is left alone until they leave it.
+  useEffect(() => {
+    const input = field.current;
+    if (input === null || input.value === view.query) {
+      owed.current = null;
+      return;
+    }
+    if (document.activeElement === input) owed.current = view.query;
+    else input.value = view.query;
+  }, [view.query]);
+  function onBlur() {
+    const input = field.current;
+    if (input !== null && owed.current !== null) input.value = owed.current;
+    owed.current = null;
+  }
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     const query = String(new FormData(event.currentTarget).get("q") ?? "").trim();
     if (host?.navigate(studioHref(view, { query, selected: null }))) event.preventDefault();
@@ -107,8 +127,9 @@ export function StudioSearch({ view }: { view: StudioView }) {
     <form action="/studio" method="get" onSubmit={onSubmit} className="min-w-0 flex-1 @[52rem]:flex-none">
       <ViewFields view={view} />
       <SearchField
+        ref={field}
+        onBlur={onBlur}
         size="compact"
-        key={view.query}
         defaultValue={view.query}
         placeholder={SEARCH_WORDS[view.kind]}
         label={SEARCH_WORDS[view.kind]}

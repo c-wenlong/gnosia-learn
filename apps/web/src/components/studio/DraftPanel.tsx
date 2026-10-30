@@ -55,7 +55,6 @@ import {
   modEnterPlan,
   suggestionsFor,
   topicSuggestionValue,
-  TWO_READY,
   valueSendBlock,
   waitingKinds,
   waitingLine,
@@ -368,7 +367,8 @@ export function DraftPanel({
       if (card !== undefined && card.block === null) void press(card);
       return;
     }
-    const plan = modEnterPlan(isEmptyValue(value), cards);
+    // While a card is edited no press runs and Make both is not drawn, so that is what is said.
+    const plan = modEnterPlan(isEmptyValue(value), cards, editing ? EDITING_BRIEF : null);
     if (plan.action === "send") {
       // The composer's own Send rules hold from anywhere in the panel: words
       // are not sent while Send is held (a brief card being edited, a turn in
@@ -381,7 +381,8 @@ export function DraftPanel({
       // Focus stays where it is: a paid button with focus is one stray Space
       // from a job. Said again even when the words have not changed.
       setAnnounce("");
-      requestAnimationFrame(() => setAnnounce(TWO_READY));
+      const text = plan.text;
+      requestAnimationFrame(() => setAnnounce(text));
     }
   }
 

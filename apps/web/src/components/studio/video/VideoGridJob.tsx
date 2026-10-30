@@ -15,6 +15,7 @@ import {
   NewJobCard,
   NewJobRow,
 } from "@/components/studio/job-tile";
+import { JobRowLink } from "@/components/studio/GridJob";
 import { FADE_IN } from "@/components/studio/motion";
 import { FadeImg } from "@/components/studio/motion-parts";
 import { PanelLink } from "@/components/studio/PanelLink";
@@ -44,7 +45,7 @@ import {
   videoStepCount,
   type VideoJob,
 } from "@/lib/studio-video-job";
-import { newVideoJobs, videoJobForSlug, videoTileStage, type VideoTileStage } from "@/lib/studio-grid-jobs";
+import { newVideoJobs, videoJobForSlug, videoRowJobLabel, videoRowWords, videoTileStage, type VideoTileStage } from "@/lib/studio-grid-jobs";
 import { type StudioVideo } from "@/lib/studio-video-grid";
 import { conversationHref, gridHref, panelHref } from "@/lib/studio-url";
 
@@ -135,13 +136,9 @@ export function VideoRow({ video, path }: { video: StudioVideo; path: string }) 
         {title}
       </PanelLink>
       {job !== null && (
-        <PanelLink
-          href={panelHref(path, { job: job.jobId })}
-          scroll={false}
-          className="relative z-10 flex min-w-0 max-w-[45%] items-center rounded px-1 hover:bg-surface2"
-        >
+        <JobRowLink jobId={job.jobId} label={videoRowJobLabel(job, title)} path={path}>
           <RowWords job={job} />
-        </PanelLink>
+        </JobRowLink>
       )}
       <span className="hidden shrink-0 text-text2 sm:inline">{video.topic ?? ""}</span>
       <span className="w-24 shrink-0 text-right tabular-nums text-text2">{spokenLength(video.durationSeconds)}</span>
@@ -405,7 +402,7 @@ function RowWords({ job }: { job: VideoJob }) {
     <JobRowWords
       job={job}
       stage={stage}
-      words={stage === "failed" ? videoFailureLine(job) : videoHeadline(job)}
+      words={videoRowWords(job)}
       timed={stage === "working" && job.state !== "queued"}
     />
   );

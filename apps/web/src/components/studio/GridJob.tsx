@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 
 import {
   JobRowWords,
@@ -109,15 +109,29 @@ export function RowJob({ target, title, path }: { target: string; title: string;
   const job = jobForTarget(jobs, target, ended, dismissed);
   if (job === null) return null;
   return (
+    <JobRowLink jobId={job.jobId} label={rowJobLabel(job, title)} path={path}>
+      <RowWords job={job} />
+    </JobRowLink>
+  );
+}
+
+/**
+ * A list row's link to its job's panel, for a diagram's row and a video's
+ * alike: named for what it does and what it is about, and with a focus ring,
+ * so neither row's link is a bare status a screen reader cannot place
+ * (R2-1-24).
+ */
+export function JobRowLink({ jobId, label, path, children }: { jobId: string; label: string; path: string; children: ReactNode }) {
+  return (
     <PanelLink
-      href={panelHref(path, { job: job.jobId })}
+      href={panelHref(path, { job: jobId })}
       scroll={false}
-      aria-label={rowJobLabel(job, title)}
+      aria-label={label}
       // Shrinks before the title does, and never past about half the row:
-      // the diagram's name is what identifies the row, the status is extra.
+      // the row's name is what identifies it, the status is extra.
       className="relative z-10 flex min-w-0 max-w-[45%] items-center rounded px-1 hover:bg-surface2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
     >
-      <RowWords job={job} />
+      {children}
     </PanelLink>
   );
 }
