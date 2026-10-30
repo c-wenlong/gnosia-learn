@@ -17,7 +17,8 @@ import { contentSecurityPolicy, makeNonce, NONCE_HEADER } from "@/lib/auth/csp";
  * says which variable is missing. Failing closed is the point; a deployment
  * that forgot a variable must not be a deployment with no door, and removing
  * `OWNER_PASSWORD` has to end the sessions it once opened, since the API
- * routes have no second lock of their own.
+ * routes have no second lock of their own. Changing it, or `SESSION_EPOCH`,
+ * ends them too: the session key is derived from both (`sessionKey`).
  *
  * The matcher leaves out Next's own static output and the image files the
  * landing page and the social card need while signed out. Everything under
@@ -31,7 +32,7 @@ export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   const config = readAuthConfig(process.env);
   const token = request.cookies.get(SESSION_COOKIE)?.value;
-  const signedIn = config.ok && (await verifySession(config.config.secret, token, Math.floor(Date.now() / 1000)));
+  const signedIn = config.ok && (await verifySession(config.config, token, Math.floor(Date.now() / 1000)));
 
   if (pathname === "/" || pathname === "/sign-in") {
     return signedIn ? redirect(request, HOME_PATH) : pass(request);
