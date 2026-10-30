@@ -43,6 +43,13 @@ export interface ReviewItem {
   /** Check cards only: the options, and which one is right. */
   choices: string[] | null;
   correct: number | null;
+  /**
+   * Check cards only: where the wrong options came from. `tutor` when the
+   * tutor model wrote them for this check (the store a session fills,
+   * docs/LEARN.md "Wrong options"), `notes` when they are other notes'
+   * answers and summaries. A review never calls a model itself.
+   */
+  wrong?: "tutor" | "notes";
   /** How many check blocks the note holds. */
   checks: number;
   /** The interval each rating would give, in days, index = rating. */
@@ -120,9 +127,11 @@ const norm = (text: string) => text.trim().replace(/\s+/g, " ").toLowerCase();
  *
  * The notes hold no authored wrong options (a check block is `q`, `a`, `why`
  * and `source`), so the wrong ones are other notes' answers and summaries: real
- * statements about neighbouring ideas, never invented ones. `pool` is in
- * preference order; the caller puts other checks' answers and same-domain
- * summaries first, since those read most like an answer to this question.
+ * statements about neighbouring ideas, never invented ones; or, once a
+ * session has asked the check, the three the tutor wrote for it. `pool` is in
+ * preference order; the caller puts the tutor's options first when there are
+ * any, else other checks' answers and same-domain summaries, since those read
+ * most like an answer to this question.
  */
 export function buildChoices(
   conceptId: string,

@@ -21,6 +21,7 @@ import {
 } from "@gnosia/tutor/server/learner-writes";
 import {
   chatTurn,
+  checkOptionsTurn,
   customProviderAddTurn,
   customProviderChangeTurn,
   modelListTurn,
@@ -56,6 +57,7 @@ import { gradedExtras, observedExtras, withRecordedRows } from "./recorded";
  *
  *   POST   /api/agent/chat                     → chatTurn
  *   POST   /api/agent/session                  → sessionQuestionTurn
+ *   POST   /api/agent/check-options            → checkOptionsTurn (the tutor's wrong options for a note check, stored)
  *   POST   /api/learner/favorite               → favoriteTurn
  *   POST   /api/learner/watched                → watchedTurn
  *   POST   /api/learner/playback               → playbackTurn
@@ -95,6 +97,7 @@ type Turn = (deps: TutorDeps, body: unknown) => Promise<TurnReply>;
 const TURNS: Record<string, Record<string, Turn>> = {
   "/api/agent/chat": { POST: chatTurn as Turn },
   "/api/agent/session": { POST: sessionQuestionTurn },
+  "/api/agent/check-options": { POST: checkOptionsTurn },
   "/api/learner/favorite": { POST: favoriteTurn },
   "/api/learner/watched": { POST: watchedTurn },
   "/api/learner/playback": { POST: playbackTurn },

@@ -258,6 +258,7 @@ export {
 export { assetParents, type AssetConversation, type AssetOrigin, type AssetParents, type AssetPlace } from "./asset-parents";
 export { conversationMade, madeName, MADE_KINDS, type MadeAsset, type MadeKind } from "./conversation-made";
 export { readAssetNaming, writeAssetName, type AssetNaming } from "./asset-names";
+export { readCheckDistractors, writeCheckDistractor, type StoredCheckDistractor } from "./check-distractors";
 export {
   domainOf,
   dueConcepts,

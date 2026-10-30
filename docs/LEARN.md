@@ -386,6 +386,47 @@ why: Catches treating the scale factor as arbitrary.
 ```
 ````
 
+### Wrong options
+
+A check block holds a question and its answer, never wrong options. The web
+session, the week check and a review card ask a check as multiple choice, so
+the three wrong options come from one of two places, best first
+(`checkQuestion` in `packages/tutor/src/session-core.ts`):
+
+1. **The tutor's, stored.** The first time a session or a week check asks a
+   check, the page asks the tutor model for three plausible wrong answers to
+   it (`POST /api/agent/check-options`, served by the sidecar too), given the
+   question, the answer and the note. The reply must be exactly three
+   distinct options near the answer's length, none equal to the answer,
+   holding it, or a part of it (`parseCheckOptions` in
+   `packages/tutor/src/check-options.ts`); any other reply is refused. The
+   accepted ones are stored per learner in `check_distractor`, keyed by the
+   check's id and a sha256 of its question and answer, so a check is written
+   once, and an edited check, or one that moved to another place in its
+   note, is written again. One generation per check runs at a time in a
+   process. An answer longer than 400 characters, the longest option kept,
+   asks no model and takes the notes' options. The page applies the options
+   only when the check's question and answer, as the server read them,
+   still match the question on screen, and gives up waiting after 70
+   seconds.
+2. **The notes'.** When no model can be asked (no key, every provider
+   failed, a refused reply), the question uses the note's other checks'
+   answers and its neighbours' summaries (requires, assumes, dependants,
+   backlinks, then its folder), and only when those make fewer than three,
+   summaries of unrelated concepts closest in length to the answer. The page
+   says such options were made without the tutor, and that padded ones may
+   be easy to rule out, since an option about another course gives the
+   answer away by its shape.
+
+Pages only read the store. A model call happens when the session page asks
+for a step's options (the step on screen and the two after it) and waits for
+them, never while a page renders; a review card reads the store and never
+asks. The options are laid out by a seed of the concept, the check and where
+it is asked, so a check reads the same whether its options arrived on the
+page or came from the store. One generation sends the note (clipped to 8,000
+characters) and the check, roughly 1,000 to 3,000 input tokens and 100
+output tokens, once per check per learner.
+
 ### Folders and ids
 
 Concepts sit one folder deep, grouped by domain:
@@ -831,6 +872,11 @@ sync.
   while that evidence exists. That is the append-only rule doing its job, and
   it means renaming a concept id is a data migration rather than a file
   rename.
+- **A wrong option the tutor writes can be true.** `parseCheckOptions`
+  refuses an option that repeats, holds or is part of the answer, but not
+  one that is right in other words. A learner who picks it is graded wrong.
+  The prompt asks for options plainly wrong to someone who holds the idea;
+  nothing checks that.
 - **Self-assessment is self-reported.** LLM judgments of teaching quality
   agree with human raters weakly; treat the Close-phase scores as a trend,
   never a gate.

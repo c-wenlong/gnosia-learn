@@ -3,7 +3,7 @@ import { act, createElement, StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
-import type { SessionQuestion, SessionStep } from "@gnosia/tutor/session-core";
+import { OPTIONS_WAIT_MS, type SessionQuestion, type SessionStep } from "@gnosia/tutor/session-core";
 import type { WeekCheckPlan } from "@/lib/week-check";
 
 /**
@@ -357,6 +357,111 @@ describe("a question the tutor writes", () => {
     host.remove();
     expect(signals.length).toBeGreaterThan(0);
     expect(signals.every((s) => s.aborted)).toBe(true);
+  });
+});
+
+/**
+ * A note's check whose wrong options the tutor has not written (docs/LEARN.md,
+ * "Wrong options"): the page asks for them before showing the question, and
+ * when the tutor cannot answer it asks with the notes' options and says so.
+ */
+describe("wrong options the tutor writes", () => {
+  const PADDED: SessionQuestion = {
+    ...QUESTION,
+    choices: ["SYN", "ACK", "Self-attention is permutation-equivariant."],
+    wrong: "padded",
+    rewrite: { concept: "tcp", check: "c1", variant: "check" },
+  };
+  const WRITTEN = ["FIN", "RST", "PSH"];
+
+  async function mountWith(reply: () => Promise<Response>) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) => (url === "/api/agent/check-options" ? reply() : Promise.resolve(new Response("{}", { status: 200 })))),
+    );
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    await act(async () => {
+      root.render(
+        createElement(SessionFocus, {
+          slug: "tcp",
+          title: "The TCP handshake",
+          mode: "check",
+          plan: [
+            { kind: "check", question: PADDED, fallback: null },
+            { kind: "close", question: null, fallback: null },
+          ],
+          modelAvailable: true,
+          nothingToAsk: false,
+          teach: createElement("p", null, "Three packets."),
+          asset: null,
+          assetCompact: null,
+          next: null,
+        }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    mounted.push(() => {
+      act(() => root.unmount());
+      host.remove();
+    });
+    return host;
+  }
+
+  it("asks the tutor for the check's options and shows the question with them, unmarked", async () => {
+    const host = await mountWith(async () => new Response(JSON.stringify({ options: WRITTEN, question: QUESTION.prompt, answer: "SYN", cached: false }), { status: 200 }));
+    const asked = vi.mocked(fetch).mock.calls.filter(([url]) => url === "/api/agent/check-options");
+    expect(asked).toHaveLength(1);
+    expect(JSON.parse(String((asked[0]?.[1] as RequestInit).body))).toEqual({ conceptSlug: "tcp", checkId: "c1" });
+    for (const option of [...WRITTEN, "SYN"]) expect(choice(host, option)).toBeDefined();
+    expect(host.textContent).not.toContain("Self-attention");
+    expect(host.textContent).not.toContain("without the tutor");
+  });
+
+  it("asks with the notes' options, and says the tutor did not write them, when the tutor refuses", async () => {
+    const host = await mountWith(async () => new Response(JSON.stringify({ code: "MISSING_API_KEY", error: "No key" }), { status: 503 }));
+    expect(choice(host, "Self-attention is permutation-equivariant.")).toBeDefined();
+    expect(host.textContent).toContain("Options made without the tutor. Some come from unrelated notes");
+  });
+
+  it.each([
+    ["a new answer", { question: QUESTION.prompt, answer: "ACK" }],
+    ["a reworded question", { question: "Which packet closes the connection?", answer: "SYN" }],
+    ["no question at all", { answer: "SYN" }],
+  ])("keeps the notes' options when the tutor's are for a check with %s since the page drew", async (_, check) => {
+    const host = await mountWith(async () => new Response(JSON.stringify({ options: WRITTEN, ...check }), { status: 200 }));
+    expect(choice(host, "Self-attention is permutation-equivariant.")).toBeDefined();
+    expect(choice(host, "RST")).toBeUndefined();
+  });
+
+  it("stops waiting past the tutor's deadline and asks with the notes' options", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"], shouldAdvanceTime: true });
+    try {
+      const host = await mountWith(
+        () =>
+          new Promise<Response>((_, reject) => {
+            const signal = vi.mocked(fetch).mock.calls.at(-1)?.[1]?.signal;
+            signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+          }),
+      );
+      expect(host.textContent).toContain("The tutor is writing the options");
+      await act(async () => {
+        vi.advanceTimersByTime(OPTIONS_WAIT_MS);
+        await Promise.resolve();
+      });
+      await act(async () => undefined);
+      expect(choice(host, "Self-attention is permutation-equivariant.")).toBeDefined();
+      expect(host.textContent).toContain("Options made without the tutor");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("shows that the options are coming while the tutor writes them", async () => {
+    const host = await mountWith(() => new Promise<Response>(() => undefined));
+    expect(host.textContent).toContain("The tutor is writing the options");
+    expect(choice(host, "SYN")).toBeUndefined();
   });
 });
 

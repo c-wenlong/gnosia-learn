@@ -37,6 +37,8 @@ import {
   judgeRequest,
   parseVerdict,
 } from "../judge";
+import { buildCheckOptionsPrompt, canWriteOptionsFor, CHECK_OPTIONS_REQUEST, parseCheckOptions } from "../check-options";
+import { checkHash, generationKey, oncePerCheck, readWrittenOptions, storeOptions } from "./check-options";
 import {
   buildSessionQuestionPrompt,
   parseSessionQuestion,
@@ -751,6 +753,126 @@ export async function sessionQuestionTurn(deps: TutorDeps, body: unknown): Promi
     },
     { "Cache-Control": "no-store" },
   );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Check options: the tutor's wrong options for one of a note's checks         */
+/* -------------------------------------------------------------------------- */
+
+/** A check id as `parseConceptNote` numbers them: `c1`, `c2`, ... */
+const CHECK_ID = /^c[1-9][0-9]{0,3}$/;
+
+/** The 400 a check-options body earns, or null when it is well formed; the route's and the turn's one rule. */
+export function validateCheckOptionsBody(body: unknown): TurnReply | null {
+  if (body === null || typeof body !== "object" || Array.isArray(body)) return bad("The body must be a JSON object");
+  const { conceptSlug, checkId } = body as Record<string, unknown>;
+  if (!isConceptSlug(conceptSlug)) return bad("conceptSlug must be a concept id (lowercase letters, digits and hyphens)");
+  if (typeof checkId !== "string" || !CHECK_ID.test(checkId)) return bad("checkId must be a check id such as c1");
+  return null;
+}
+
+/**
+ * `POST /api/agent/check-options` with `{ conceptSlug, checkId }`: three
+ * wrong options for one of the note's own checks, written by the tutor model
+ * once and stored per learner (`check_distractor`), so the next session, week
+ * check or review card asks the same check with no model call
+ * (docs/LEARN.md, "Wrong options").
+ *
+ * Answers `{ options, question, answer, cached }`: `question` and `answer`
+ * are the check as the server read it, so a page whose note changed since it
+ * drew can tell the options are not for its question. An answer longer than
+ * an option may be (`canWriteOptionsFor`) is a 422 `CHECK_TOO_LONG` before
+ * any model call. A stored row whose hash still matches
+ * the check answers at once; otherwise one generation per check at a time
+ * (`oncePerCheck`), validated by `parseCheckOptions` and refused as a 502
+ * when the reply does not hold three usable options. No key is a 503 with
+ * the chain's reasons, as the session question's. The caller falls back to
+ * the options it built from the notes on any refusal.
+ */
+export async function checkOptionsTurn(deps: TutorDeps, body: unknown): Promise<TurnReply> {
+  const refused = validateCheckOptionsBody(body);
+  if (refused) return refused;
+  const { conceptSlug, checkId } = body as { conceptSlug: string; checkId: string };
+
+  const read = await workspaceOf(deps, conceptSlug);
+  if (read.state === "unreachable") {
+    return reply(503, {
+      error: "The knowledge base could not be reached, so there is no note to ask from.",
+      code: "CONCEPT_UNAVAILABLE",
+    });
+  }
+  if (read.state === "not-found") {
+    return reply(404, { error: "Concept not found", code: "CONCEPT_NOT_FOUND" });
+  }
+  const check = read.workspace.checks.find((c) => c.id === checkId);
+  const answer = check?.answer.trim() ?? "";
+  if (check === undefined || check.question.trim() === "" || answer === "") {
+    return reply(404, { error: "The note has no such check with a question and an answer.", code: "CHECK_NOT_FOUND" });
+  }
+
+  const question = check.question.trim();
+  const hash = checkHash(check);
+  const stored = (await readWrittenOptions(deps.db, deps.owner, [{ slug: conceptSlug, checks: [check] }])).get(conceptSlug)?.[checkId];
+  if (stored !== undefined) {
+    return reply(200, { options: stored, question, answer, cached: true }, { "Cache-Control": "no-store" });
+  }
+  if (!canWriteOptionsFor(answer)) {
+    return reply(422, {
+      error: "The check's answer is longer than a wrong option can be, so its options come from the notes.",
+      code: "CHECK_TOO_LONG",
+    });
+  }
+
+  return oncePerCheck(generationKey(deps.owner, conceptSlug, checkId, hash), async (): Promise<TurnReply> => {
+    const credentials = await credentialsOf(deps);
+    const outcome = await completeWith(
+      deps,
+      [
+        { role: "system", content: buildCheckOptionsPrompt(toConceptPromptInput(read.workspace), check) },
+        { role: "user", content: CHECK_OPTIONS_REQUEST },
+      ],
+      credentials,
+    );
+    if (!outcome.ok) {
+      return outcome.code === "MISSING_API_KEY"
+        ? reply(503, {
+            error: missingKeyMessage(credentials),
+            code: "MISSING_API_KEY",
+            attempts: outcome.attempts,
+            providers: availableProviderSummary(credentials),
+          })
+        : reply(502, { error: "All free providers failed", code: "ALL_PROVIDERS_FAILED", attempts: outcome.attempts });
+    }
+    const parsed = parseCheckOptions(outcome.result.content, answer);
+    if (!parsed.ok) {
+      return reply(502, {
+        error: `The tutor did not write usable wrong options. ${parsed.reason}`,
+        code: "UNSTRUCTURED_REPLY",
+      });
+    }
+    await storeOptions(deps.db, deps.owner, {
+      conceptSlug,
+      checkId,
+      checkHash: hash,
+      options: parsed.options,
+      model: outcome.result.model,
+      provider: outcome.result.provider,
+    });
+    return reply(
+      200,
+      {
+        options: parsed.options,
+        question,
+        answer,
+        cached: false,
+        model: outcome.result.model,
+        provider: outcome.result.provider,
+        providerLabel: outcome.result.providerLabel,
+        ...skippedEntries(outcome.attempts),
+      },
+      { "Cache-Control": "no-store" },
+    );
+  });
 }
 
 /* -------------------------------------------------------------------------- */

@@ -41,6 +41,7 @@ import {
 import { indexRun, mirror } from "./operations";
 import {
   assetName,
+  checkDistractor,
   event,
   learner,
   mastery,
@@ -95,6 +96,7 @@ export const tables = {
   customProvider,
   tutorModel,
   assetName,
+  checkDistractor,
   draft,
   job,
   assetJob,
@@ -174,6 +176,8 @@ export const STATE_TABLES = [
   "tutorModel",
   // A learner's own names for assets, read in place of `asset.title`.
   "assetName",
+  // The tutor's wrong options per note check, a cache: no exporter reads it.
+  "checkDistractor",
 ] as const satisfies readonly TableName[];
 
 /* Row and insert types, inferred from the tables above. These are the shapes
@@ -248,6 +252,8 @@ export type ProviderKey = typeof providerKey.$inferSelect;
 export type NewProviderKey = typeof providerKey.$inferInsert;
 export type AssetName = typeof assetName.$inferSelect;
 export type NewAssetName = typeof assetName.$inferInsert;
+export type CheckDistractor = typeof checkDistractor.$inferSelect;
+export type NewCheckDistractor = typeof checkDistractor.$inferInsert;
 export type TutorModel = typeof tutorModel.$inferSelect;
 export type NewTutorModel = typeof tutorModel.$inferInsert;
 

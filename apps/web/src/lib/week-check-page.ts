@@ -8,12 +8,12 @@ import { observationsOf } from "@gnosia/tutor/concept-workspace-core";
 import { moduleConcepts } from "@/lib/module-path";
 import { catalogDatabase, readKb } from "@/lib/learner-store";
 import { currentOwner } from "@/lib/owner";
+import { readWrittenOptions } from "@gnosia/tutor/server/check-options";
 import {
+  checkQuestion,
   distractorPool,
   NO_CONCEPTS_TO_CHECK,
   NOTHING_TO_ASK_MODULE,
-  noteQuestion,
-  wrongOptionsFor,
   type SessionQuestion,
 } from "@gnosia/tutor/session-core";
 import { readSummaries, tutorModelConfigured } from "@/lib/session-page";
@@ -30,10 +30,13 @@ import { checksByLastAsked, weekCheckOrder, type WeekCheckConcept, type WeekChec
  * (`weekCheckOrder`); and whether a tutor model can write the questions a
  * note runs out of.
  *
- * Wrong options come as they do in a concept session (`distractorPool`,
- * `wrongOptionsFor`), from the note's other checks and the other concepts'
- * summaries, and a check that cannot get two is not a question. The variant
- * is `week`, so a check asked here and in Quiz me is not laid out the same.
+ * Wrong options come as they do in a concept session (`checkQuestion`): the
+ * ones the tutor wrote for the check when they are stored, else the note's
+ * other checks' answers and the other concepts' summaries, and then, with a
+ * tutor model configured, the page asks the tutor for the check's options
+ * before showing it. A check that cannot get two is not a question. The
+ * variant is `week`, so a check asked here and in Quiz me is not laid out
+ * the same.
  *
  * A note that cannot be read leaves its concept to the tutor; a knowledge
  * base or event log that cannot be read is the page's "cannot start".
@@ -73,9 +76,18 @@ export async function loadWeekCheck(module: Pick<Module, "topics">): Promise<Wee
     tutorModelConfigured(),
   ]);
 
-  const asked: WeekCheckConcept[] = concepts.map((c, i) => {
+  const checksOf = (i: number) => {
     const note = notes[i];
-    const checks = note?.ok ? note.checks : [];
+    return note?.ok ? note.checks : [];
+  };
+  const written = await readWrittenOptions(
+    catalogDatabase(),
+    owner,
+    concepts.map((c, i) => ({ slug: c.id, checks: checksOf(i) })),
+  );
+
+  const asked: WeekCheckConcept[] = concepts.map((c, i) => {
+    const checks = checksOf(i);
     const pool = distractorPool(
       {
         slug: c.id,
@@ -90,17 +102,16 @@ export async function loadWeekCheck(module: Pick<Module, "topics">): Promise<Wee
     const answers = checks.map((check) => check.answer.trim()).filter((a) => a !== "");
     const questions = checksByLastAsked(checks, observationsOf(events, c.id))
       .map((check) =>
-        noteQuestion(
-          c.id,
+        checkQuestion({
+          slug: c.id,
           check,
-          wrongOptionsFor(
-            check,
-            answers.filter((a) => a !== check.answer.trim()),
-            pool,
-          ),
-          "week",
-          c.summary,
-        ),
+          variant: "week",
+          otherAnswers: answers.filter((a) => a !== check.answer.trim()),
+          pool,
+          written: written.get(c.id)?.[check.id],
+          canWrite: modelAvailable,
+          summary: c.summary,
+        }),
       )
       .filter((q): q is SessionQuestion => q !== null);
     return { slug: c.id, title: c.title, pL: c.pL, questions };

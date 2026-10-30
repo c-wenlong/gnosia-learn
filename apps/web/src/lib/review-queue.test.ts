@@ -40,6 +40,27 @@ const check = (overrides: Partial<ConceptCheck> = {}): ConceptCheck => ({
 
 const POOL = ["Softmax makes a distribution.", "Heads run in parallel.", "Values get mixed."];
 
+describe("toReviewItem with the tutor's options", () => {
+  const written = { c1: ["They point the same way.", "Their lengths cancel.", "One of them is zero."] };
+
+  it("uses the options the tutor wrote for the check, and only those, once a session stored them", () => {
+    const built = toReviewItem(item, [check()], POOL, written);
+    expect(built.wrong).toBe("tutor");
+    expect([...(built.choices ?? [])].sort()).toEqual([...written.c1, "They share no component."].sort());
+  });
+
+  it("falls back to the pool, marked as from the notes, when none are stored for this check", () => {
+    const built = toReviewItem(item, [check()], POOL, { c2: written.c1 });
+    expect(built.wrong).toBe("notes");
+    expect(built.choices).toContain("Softmax makes a distribution.");
+    expect(toReviewItem(item, [check()], POOL).wrong).toBe("notes");
+  });
+
+  it("marks nothing on a recall card", () => {
+    expect(toReviewItem(item, [], POOL, written).wrong).toBeUndefined();
+  });
+});
+
 describe("toReviewItem", () => {
   it("asks the first check as multiple choice when the pool can fill the options", () => {
     const built = toReviewItem(item, [check(), check({ id: "c2", question: "Second?" })], POOL);

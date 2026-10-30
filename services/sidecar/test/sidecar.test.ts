@@ -8,6 +8,7 @@ import {
   readModel,
   readPreference,
   readProgress,
+  readCheckDistractors,
   readProviderKeys,
   readReviews,
   type CatalogDatabase,
@@ -152,6 +153,13 @@ describe("the turn routes", () => {
     const response = await post("/api/agent/chat", { conceptSlug: "x" });
     expect(response.status).toBe(400);
   });
+
+  it("400s a check-options body without a check id, and 503s it with the knowledge base down", async () => {
+    expect((await post("/api/agent/check-options", { conceptSlug: "alpha" })).status).toBe(400);
+    const down = await post("/api/agent/check-options", { conceptSlug: "alpha", checkId: "c1" });
+    expect(down.status).toBe(503);
+    expect(((await down.json()) as { code?: string }).code).toBe("CONCEPT_UNAVAILABLE");
+  }, 30_000);
 
   it("answers MISSING_API_KEY with no keys configured, not a crash", async () => {
     const response = await post("/api/agent/chat", {
@@ -837,5 +845,94 @@ describe.skipIf(!reachable.ok)("the learner write routes, against a scratch data
         (await call2("/api/review/grade", "POST", { conceptId: "nope", grade: 2, requestId: "req-nope" })).status,
       ).toBe(400);
     });
+  });
+});
+
+/**
+ * The tutor's wrong options per note check through the sidecar, the macOS
+ * app's way to them (docs/LEARN.md, "Wrong options"): the same turn the web's
+ * route calls, so the first ask writes them once and stores them under the
+ * owner, and a second is answered from the store with no model call. The
+ * workspace read and the model are stand-ins; the store is a scratch catalog.
+ */
+describe.skipIf(!reachable.ok)("the tutor's wrong options, against a scratch database", () => {
+  let scratch: Scratch;
+  let server3: Server;
+  let base3: string;
+  let calls = 0;
+  const WRONG = ["The sine of the angle between them.", "The length of their sum.", "The area they span together."];
+
+  beforeAll(async () => {
+    scratch = await migratedScratchDatabase();
+    await seedContent(scratch.db);
+    const check = { id: "c1", question: "What does the dot product of unit vectors measure?", answer: "The cosine of the angle between them.", why: "", source: "" };
+    server3 = createApi({
+      ...stubDeps({}),
+      db: Promise.resolve(scratch.db),
+      seams: {
+        readWorkspace: async () => ({
+          state: "ok",
+          workspace: {
+            slug: "alpha",
+            title: "Alpha",
+            summary: "Measures alignment.",
+            domain: "fixtures",
+            bucket: "untouched",
+            pL: 0.25,
+            mastery: "gap",
+            observations: 0,
+            correct: 0,
+            lastSeen: null,
+            place: null,
+            note: { available: true, path: "learn/concepts/fixtures/alpha.md", source: "---\nid: alpha\n---\nThe body." },
+            sources: [],
+            tags: [],
+            requires: [],
+            assumes: [],
+            dependants: [],
+            backlinks: [],
+            checks: [check],
+            history: [],
+            review: null,
+            assets: [],
+            graph: { nodes: [], edges: [] },
+            frontier: true,
+          } as never,
+        }),
+        credentials: async () => [],
+        complete: async () => {
+          calls += 1;
+          return {
+            ok: true,
+            result: { content: JSON.stringify({ wrong: WRONG }), model: "m", provider: "nvidia", providerLabel: "NVIDIA NIM" },
+            attempts: [],
+          };
+        },
+      },
+    });
+    await new Promise<void>((resolve) => server3.listen(0, "127.0.0.1", resolve));
+    base3 = `http://127.0.0.1:${(server3.address() as AddressInfo).port}`;
+  }, 60_000);
+
+  afterAll(async () => {
+    server3?.closeAllConnections();
+    await new Promise((resolve) => server3?.close(resolve));
+    await scratch?.drop();
+  });
+
+  it("writes a check's options once, stores them for the owner, and answers the next ask from the store", async () => {
+    const ask = () =>
+      fetch(`${base3}/api/agent/check-options`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ conceptSlug: "alpha", checkId: "c1" }),
+      });
+    const first = await ask();
+    expect(first.status).toBe(200);
+    expect(await first.json()).toMatchObject({ options: WRONG, answer: "The cosine of the angle between them.", cached: false });
+    const second = await ask();
+    expect(await second.json()).toMatchObject({ options: WRONG, cached: true });
+    expect(calls).toBe(1);
+    expect(await readCheckDistractors(scratch.db, "local", ["alpha"])).toMatchObject([{ checkId: "c1", options: WRONG }]);
   });
 });

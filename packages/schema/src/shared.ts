@@ -743,6 +743,12 @@ export function cleanDisplayName(value: unknown): string | null {
   return cleaned === "" ? null : cleaned;
 }
 
+/**
+ * The tutor's wrong options for one note check (`check_distractor`): how many
+ * a row holds, and the longest one the parser and the table take.
+ */
+export const CHECK_DISTRACTOR_LIMITS = { options: 3, maxOptionChars: 400 } as const;
+
 /** The longest name `asset_name.title` takes, in characters. */
 export const ASSET_NAME_MAX = 200;
 
