@@ -21,8 +21,9 @@ import { readChain } from "@/lib/tutor-models/store";
  * The seams a tutor endpoint reads through, resolved for one request. The
  * sidecar builds the same object around its own pool and a fixed owner and
  * leaves `seams` unset, so the package's own readers answer; here each is
- * bound to the `@/lib/*` shim that re-exports it, which is the path this
- * app's route tests stub.
+ * bound to this app's own reader (`@/lib/*`, `@/data/*`) or the package's
+ * function, imported here by name, which is what this app's route tests
+ * stub.
  */
 export function tutorDeps(owner: string): TutorDeps {
   return {

@@ -81,7 +81,7 @@ export interface EntryActions {
 }
 
 /** The newest reply's offer, on that reply only: kinds, pitch, declines (D106). */
-export type EntrySuggestion = { seq: number; kinds: TagKind[]; pitch: string | null; declined: TagKind[] };
+type EntrySuggestion = { seq: number; kinds: TagKind[]; pitch: string | null; declined: TagKind[] };
 
 /**
  * One turn of the thread: the person's sentence, the planner's reply with

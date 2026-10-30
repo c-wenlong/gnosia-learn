@@ -2,9 +2,9 @@
  * What the comparison screen shows, decided here and nowhere else.
  *
  * Pure, the same way `studio-jobs.ts` and `studio-view.ts` are pure: no React,
- * no fetch. The panel is view code and untested by design, so the counts table,
- * the wording of an empty list and the `git add` line live on this side of the
- * line where they can be a test.
+ * no fetch. The panel is view code and untested by design, so the counts table
+ * and the wording of an empty list live on this side of the line where they
+ * can be a test.
  *
  * **Nothing here computes the comparison.** The runner did that, from the two
  * `inspect --json` runs it made, and it is on the job record — so this file
@@ -14,8 +14,6 @@
  */
 
 import { formatBytes } from "@gnosia/tutor/asset-meta";
-
-import { jobShotHref } from "@/lib/studio-jobs";
 
 /** Mirrors `services/studio/src/diagram/compare.ts`. Structural, not imported. */
 export interface LintRef {
@@ -158,22 +156,6 @@ export function emptyLintLine(which: "fixed" | "added", comparison: Comparison):
 /* -------------------------------------------------------------------------- */
 
 /**
- * The line a person copies, naming exactly the files that landed.
- *
- * D6: the runner has no mutating git access and the studio never runs `git
- * add`. The two files are sitting dirty in the working tree and committing them
- * is a human act, so the panel's job is to make that one paste rather than a
- * hunt through `git status`.
- *
- * Built from `job.written`, which the record holds, so it survives a reload and
- * says what actually moved — one file when the export had failed and the SVG
- * was never there to rename, two in the ordinary case.
- */
-export function gitAddLine(written: readonly string[]): string | null {
-  return written.length === 0 ? null : `git add ${written.join(" ")}`;
-}
-
-/**
  * The last catalog failure, short enough to read inside a 320px banner.
  *
  * The runner records the whole of what the CLI printed, which is right — it is
@@ -192,11 +174,6 @@ export function catalogErrorLine(errors: readonly string[] | undefined, cap = 14
   if (last === undefined || last.trim() === "") return null;
   const flat = last.replace(/\s+/g, " ").trim();
   return flat.length <= cap ? flat : `${flat.slice(0, cap - 1)}…`;
-}
-
-/** `/studio/api/jobs/<id>/shot?which=…`, through the app's own proxy. */
-export function shotSrc(jobId: string, which: "before" | "after"): string {
-  return jobShotHref(jobId, which);
 }
 
 /**

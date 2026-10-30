@@ -14,8 +14,11 @@ import { runnerSettings } from "@/lib/studio-agent-settings";
  */
 const CAP_READ_MS = 30_000;
 
-/** The picker's list and the Claude Code defaults, from health's `agent` (D90). */
-export type AgentMenu = ReturnType<typeof runnerSettings>;
+/**
+ * What the conversation's model picker reads from health's `agent` (D90):
+ * what each kind runs on, and the active BYOK provider's tier models.
+ */
+type AgentMenu = Pick<ReturnType<typeof runnerSettings>, "resolved" | "byokTiers">;
 
 /**
  * What the conversation's presses and pickers need from `/api/health`: the
@@ -43,13 +46,7 @@ export function useStudioHealth({
   const [cap, setCap] = useState<CapStatus | null>(initialCap);
   const [video, setVideo] = useState<VideoAvailability | null>(initialVideo);
   const [diagramAgent, setDiagramAgent] = useState<VideoAvailability | null>(initialDiagram);
-  const [agentMenu, setAgentMenu] = useState<AgentMenu>({
-    models: null,
-    defaults: null,
-    resolved: null,
-    byokModel: null,
-    byokTiers: null,
-  });
+  const [agentMenu, setAgentMenu] = useState<AgentMenu>({ resolved: null, byokTiers: null });
   // The BYOK tier models, read fresh: health's copy can be older than a
   // Connect that just wrote them. Every health read is followed by a fresh
   // read (it bumps `tiersAsked`), as when one callback read both: health's
@@ -95,7 +92,8 @@ export function useStudioHealth({
     if (next !== null) setCap(next);
     setVideo(videoAvailability(health.video));
     setDiagramAgent(diagramAvailability(health.diagramAgent));
-    setAgentMenu(runnerSettings(health.agent));
+    const { resolved, byokTiers } = runnerSettings(health.agent);
+    setAgentMenu({ resolved, byokTiers });
     // Health's copy until the fresh read that follows it answers.
     setTiersAsked((count) => count + 1);
   }, []);
@@ -140,6 +138,6 @@ export function useStudioHealth({
   const menu: AgentMenu =
     !byok || fresh === null || fresh.asked !== tiersAsked
       ? agentMenu
-      : { ...agentMenu, byokModel: fresh.tiers?.model ?? null, byokTiers: fresh.tiers?.tiers ?? null };
+      : { ...agentMenu, byokTiers: fresh.tiers?.tiers ?? null };
   return { cap, video, diagramAgent, agentMenu: menu, capRefused };
 }

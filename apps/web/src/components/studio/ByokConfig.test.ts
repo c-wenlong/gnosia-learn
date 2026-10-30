@@ -4,9 +4,9 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 /**
- * Remove takes a provider out of the runner's BYOK settings whole: its key,
- * its tier models and the active pick. Like every other press here that
- * cannot be undone, it asks first (S1-27 of the web audit).
+ * Remove stops Studio using a provider: its tier models and the active pick
+ * go, and its key stays saved in Settings (D94). Like every other press here
+ * that cannot be undone, it asks first (S1-27 of the web audit).
  */
 
 const mocks = vi.hoisted(() => ({
