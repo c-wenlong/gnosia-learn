@@ -259,5 +259,10 @@ describe("ReviewSession reading the state again", () => {
     await settle(() => rating(host, "Good").click());
     await settle(() => undefined);
     expect(host.textContent).toContain("1 card reviewed, and over 50 more are due.");
+    // The finished queue is fixed: the next batch is a fresh load of All reviews.
+    const assign = vi.fn();
+    vi.stubGlobal("location", { ...window.location, assign });
+    await settle(() => button(host, "Review the next batch").click());
+    expect(assign).toHaveBeenCalledWith("/review");
   });
 });

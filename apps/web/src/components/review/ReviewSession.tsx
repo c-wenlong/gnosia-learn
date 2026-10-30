@@ -331,6 +331,14 @@ export function ReviewSession({
               tone="accent"
             />
           </div>
+          {close !== null && close.remaining > 0 && (
+            // The queue on this page is fixed, so the next cards are a fresh
+            // load of All reviews: a full one, never a client navigation that
+            // would keep this finished queue.
+            <Button variant="secondary" onClick={() => window.location.assign("/review")}>
+              Review the next {close.more ? "batch" : close.remaining === 1 ? "card" : `${close.remaining}`}
+            </Button>
+          )}
         </Closing>
       </Frame>
     );
