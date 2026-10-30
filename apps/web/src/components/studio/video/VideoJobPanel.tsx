@@ -30,7 +30,35 @@ import { isActive, narration, type StudioEvent } from "@/lib/studio-jobs";
 import { jobVerbPath } from "@/lib/studio-job-verb";
 import { checkWord, progressWord } from "@/lib/studio-job-state";
 import { useElapsed } from "@/lib/use-elapsed";
-import { changedLines, changeHint, changeProblem, childJob, changeWord, CHANGE_LIMIT, formatSize, gateStepLabel, uniqueWarnings, libraryHref, logLine, mediaFiles, mediaHref, readyHeadline, reviewActions, sceneTitle, sheetSrc, sheetsInOrder, spokenLength, stepRows, storyboard, videoFailure, videoHeadline, videoStepCount, type ContactSheet, type StepRow, type VideoJob } from "@/lib/studio-video-job";
+import {
+  changedLines,
+  changeHint,
+  changeProblem,
+  childJob,
+  changeWord,
+  CHANGE_LIMIT,
+  formatSize,
+  gateStepLabel,
+  uniqueWarnings,
+  libraryHref,
+  logLine,
+  mediaFiles,
+  mediaHref,
+  readyHeadline,
+  reviewActions,
+  sceneTitle,
+  sheetSrc,
+  sheetsInOrder,
+  spokenLength,
+  stepRows,
+  storyboard,
+  videoFailure,
+  videoHeadline,
+  videoStepCount,
+  type ContactSheet,
+  type StepRow,
+  type VideoJob,
+} from "@/lib/studio-video-job";
 import { type VideoBrief } from "@/lib/studio-brief-video";
 import { conversationHref, panelHref } from "@/lib/studio-url";
 import { scrollBehavior } from "@/lib/motion";

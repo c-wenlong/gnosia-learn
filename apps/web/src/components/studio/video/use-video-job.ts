@@ -8,7 +8,16 @@ import type { TranscriptCue, VideoChapter } from "@gnosia/tutor/media";
 import { getJob } from "@/lib/studio-job-read";
 import { isActive, type StudioEvent } from "@/lib/studio-jobs";
 import { usePageVisible } from "@/lib/use-page-visible";
-import { asVideoJob, mediaFiles, mediaHref, readSheets, sheetsHref, SHEETS_POLL_MS, type ContactSheet, type VideoJob } from "@/lib/studio-video-job";
+import {
+  asVideoJob,
+  mediaFiles,
+  mediaHref,
+  readSheets,
+  sheetsHref,
+  SHEETS_POLL_MS,
+  type ContactSheet,
+  type VideoJob,
+} from "@/lib/studio-video-job";
 import { type VideoBrief } from "@/lib/studio-brief-video";
 import { parseVtt, readTranscript } from "@/lib/captions";
 

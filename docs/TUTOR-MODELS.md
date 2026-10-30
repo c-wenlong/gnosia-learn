@@ -21,7 +21,7 @@ prefix T to keep them apart from BYOK's D1 to D11.
 | The one module that writes it | `services/catalog/src/state/tutor-models.ts` |
 | The web app's store, per owner | `apps/web/src/lib/tutor-models/store.ts` |
 | The order the tutor tries | `tutorSteps` and `keyFor` in `packages/tutor/src/providers.ts`, `tutorCredentials` in `apps/web/src/lib/agent/credentials.ts` |
-| A provider's model list | `listProviderModels` in `providers.ts`, cached by `apps/web/src/lib/tutor-models/model-list.ts` |
+| A provider's model list | `listProviderModels` in `providers.ts`, cached by `cachedModelList` in `packages/tutor/src/server/model-list.ts` |
 | Add, remove, move | `POST`, `DELETE` and `PATCH /api/learner/tutor-model` |
 | Move or delete a whole provider | `PATCH` and `DELETE /api/learner/tutor-model/provider` (T12) |
 | Test one entry | `POST /api/learner/tutor-model/test` |

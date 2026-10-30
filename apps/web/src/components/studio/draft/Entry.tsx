@@ -29,7 +29,14 @@ import {
   type makeBoth,
 } from "@/lib/studio-cards";
 import { jobPatch, refusalNoted, splitReply, STILL_ANSWERING, type DrawBlock } from "@/lib/studio-chat";
-import { isDraftKind, type DraftKind, type DraftView, type TagKind, type TranscriptBrief, type TranscriptEntry } from "@/lib/studio-drafts";
+import {
+  isDraftKind,
+  type DraftKind,
+  type DraftView,
+  type TagKind,
+  type TranscriptBrief,
+  type TranscriptEntry,
+} from "@/lib/studio-drafts";
 import { type VideoAvailability } from "@/lib/studio-health";
 import { isTerminal, type Brief, type Job } from "@/lib/studio-jobs";
 import { panelHref } from "@/lib/studio-url";

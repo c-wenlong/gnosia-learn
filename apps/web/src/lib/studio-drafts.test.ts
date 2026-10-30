@@ -1,8 +1,27 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { abandonDraft, createDraft, drawBoth, drawDraft, drawResults, releaseHold, stopWaiting, getDraft, listDrafts, saveBrief, sendMessage } from "./studio-drafts";
+import {
+  abandonDraft,
+  createDraft,
+  drawBoth,
+  drawDraft,
+  drawResults,
+  releaseHold,
+  stopWaiting,
+  getDraft,
+  listDrafts,
+  saveBrief,
+  sendMessage,
+} from "./studio-drafts";
 import { videoAvailability, diagramAvailability, readStudioHealth } from "@/lib/studio-health";
-import { idempotencyKey, RUNNER_DOWN, runnerDown, refusalNumber, refusalReason, refusalString } from "@/lib/studio-client";
+import {
+  idempotencyKey,
+  RUNNER_DOWN,
+  runnerDown,
+  refusalNumber,
+  refusalReason,
+  refusalString,
+} from "@/lib/studio-client";
 import { openDraftEvents, reconnectDelay, type DraftEvent } from "@/lib/studio-events";
 
 /**
