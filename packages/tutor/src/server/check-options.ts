@@ -4,6 +4,7 @@ import { readCheckDistractors, writeCheckDistractor, type CatalogDatabase } from
 
 import { CHECK_OPTIONS_VERSION } from "../check-options";
 import type { ConceptCheck } from "../concept-note-core";
+import { failureCode } from "./provider-keys";
 
 /**
  * The server half of the tutor's wrong options per note check: which stored
@@ -53,7 +54,9 @@ export async function readWrittenOptions(
       wanted.map((n) => n.slug),
     );
   } catch (error) {
-    console.warn(`check options: the stored wrong options are unavailable, ${error instanceof Error ? error.message : String(error)}`);
+    // The code only: a driver error's message is the failed SQL with its bind
+    // parameters (the learner id and slugs here), and hides why it failed.
+    console.warn(`check options: the stored wrong options are unavailable (${failureCode(error)})`);
     return out;
   }
   const byKey = new Map(rows.map((r) => [`${r.conceptSlug}\0${r.checkId}`, r]));
@@ -148,7 +151,7 @@ export async function storeOptions(
     return true;
   } catch (error) {
     console.warn(
-      `check options: wrong options for ${row.conceptSlug}#${row.checkId} were written but not stored, ${error instanceof Error ? error.message : String(error)}`,
+      `check options: wrong options for ${row.conceptSlug}#${row.checkId} were written but not stored (${failureCode(error)})`,
     );
     return false;
   }

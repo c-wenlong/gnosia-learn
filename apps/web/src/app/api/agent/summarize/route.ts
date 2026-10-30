@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { tutorDeps, turnResponse } from "@/lib/agent/env";
 import { enforceRateLimit, enforceSameOrigin, SUMMARIZE_RATE_LIMIT } from "@/lib/agent/guard";
+import { AGENT_BODY_LIMITS, readAgentBody } from "@/lib/agent/body";
 import { requestOwner } from "@/lib/learner-api";
 import { payloadTooLarge, summarizeTurn, type SummarizeBody } from "@gnosia/tutor/server/turns";
 
@@ -26,12 +27,9 @@ export async function POST(req: Request) {
   const owner = await requestOwner();
   if (owner instanceof NextResponse) return owner;
 
-  let body: SummarizeBody;
-  try {
-    body = (await req.json()) as SummarizeBody;
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-  }
+  const read = await readAgentBody(req, AGENT_BODY_LIMITS.summarize);
+  if (read instanceof NextResponse) return read;
+  const body = read.body as SummarizeBody;
 
   const { courseSlug, moduleSlug, topicId, messages } = body ?? {};
   if (!courseSlug || !moduleSlug || !topicId || !Array.isArray(messages)) {

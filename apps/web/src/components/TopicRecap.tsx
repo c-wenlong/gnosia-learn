@@ -18,6 +18,7 @@ import type {
 } from "@gnosia/tutor/types";
 import { useLearner } from "@/lib/learner-context";
 import { formatKnowledgeMarkdown } from "@gnosia/tutor/summary";
+import { ownValue } from "@gnosia/tutor/own-key";
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
@@ -251,7 +252,7 @@ export function TopicRecap({
   topic: Topic;
 }) {
   const { state, saveKnowledge } = useLearner();
-  const knowledge = state.knowledge[topic.id];
+  const knowledge = ownValue(state.knowledge, topic.id);
   const [editing, setEditing] = useState(false);
 
   // The editor and the card take turns in place; each fades in rather than

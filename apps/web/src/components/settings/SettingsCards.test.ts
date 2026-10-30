@@ -171,6 +171,34 @@ describe("the Providers card", () => {
     expect(document.activeElement).toBe(button(container, "Add custom provider"));
   });
 
+  it("keeps a built-in's row after its key is deleted, saying so, with focus on its own button", async () => {
+    fetchMock.mockImplementation(() => Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 })));
+    const container = mount(createElement(Providers, { studio: true, view: view() }));
+    act(() => button(container, "Delete").click());
+    const group = container.querySelector('[role="group"][aria-label^="Confirm deleting"]')!;
+    const confirm = [...group.querySelectorAll("button")].find((b) => b.textContent === "Delete")!;
+    await act(async () => {
+      confirm.focus();
+      confirm.click();
+    });
+    expect(container.textContent).toContain("Deleted OpenRouter.");
+    expect(container.querySelector("li")).not.toBeNull();
+    expect(document.activeElement).toBe(button(container, "Edit"));
+  });
+
+  it.each([
+    ["is refused", () => Promise.resolve(new Response(JSON.stringify({ ok: false, status: 401, message: "Bad key." }), { status: 200 })), "The key was refused (HTTP 401): Bad key."],
+    ["could not be tried", () => Promise.resolve(new Response(JSON.stringify({ ok: false, message: "Timed out." }), { status: 200 })), "The key could not be tested: Timed out."],
+    ["gets no answer", () => Promise.reject(new TypeError("network")), "Not tested: the server did not answer."],
+    ["meets a server error", () => Promise.resolve(new Response(JSON.stringify({ error: "Catalog down." }), { status: 503 })), "Catalog down."],
+  ])("says so when Test the key %s", async (_name, answer, text) => {
+    const container = mount(createElement(Providers, { studio: true, view: view() }));
+    const base = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation((url, init) => (String(url).endsWith("/provider-key/test") ? answer() : base(url, init)));
+    await act(async () => button(container, "Test the key").click());
+    expect(container.textContent).toContain(text);
+  });
+
   it("opens Add custom provider as a dialog whose Escape and Close give the button back focus", async () => {
     const container = mount(createElement(Providers, { studio: true, view: view() }));
     const add = button(container, "Add custom provider");
@@ -251,6 +279,36 @@ describe("the Providers card", () => {
     expect(JSON.parse(String(write[1].body))).toEqual({ label: "My gateway", baseUrl: "https://gw.example/v1", key: "gw-key-0123456789abcdef" });
   });
 
+  it("puts focus in the key field when Add custom provider is refused, with the key emptied", async () => {
+    const container = mount(createElement(Providers, { studio: true, view: view() }));
+    act(() => button(container, "Add custom provider").click());
+    const form = container.querySelector<HTMLFormElement>('form[aria-label="Add a custom provider"]')!;
+    const set = (input: HTMLInputElement, value: string) => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+    const inputs = [...form.querySelectorAll("input")];
+    act(() => {
+      set(inputs.find((i) => i.placeholder === "My gateway")!, "My gateway");
+      set(inputs.find((i) => i.type === "url")!, "https://gw.example/v1");
+      set(inputs.find((i) => i.type === "password")!, "gw-key-0123456789abcdef");
+    });
+    const answer = fetchMock.getMockImplementation()!;
+    // A browser drops focus from the submit button when it is disabled; jsdom does not.
+    const refused = () => {
+      (document.activeElement as HTMLElement | null)?.blur();
+      return Promise.resolve(new Response(JSON.stringify({ error: "refused" }), { status: 400 }));
+    };
+    fetchMock.mockImplementation((url, init) =>
+      String(url) === "/api/learner/custom-provider" ? refused() : answer(url, init),
+    );
+    act(() => button(container, "Add provider").focus());
+    await act(async () => form.requestSubmit());
+    const key = form.querySelector<HTMLInputElement>('input[type="password"]')!;
+    expect(key.value).toBe("");
+    expect(document.activeElement).toBe(key);
+  });
+
   it("shows a custom provider's base URL, and its Edit takes the name and the URL with the key optional", () => {
     const container = mount(
       createElement(Providers, {
@@ -314,6 +372,68 @@ describe("the Model selection card", () => {
     const writes = chainWrites("PUT");
     expect(writes).toHaveLength(1);
     expect(JSON.parse(String((writes[0]?.[1] as RequestInit).body))).toEqual({ provider: "openrouter", model: "m-9" });
+  });
+
+  it("shows the newest provider's model list when an older provider's answer lands last", async () => {
+    // Opens a popover as a browser does; jsdom has none.
+    const proto = HTMLElement.prototype as unknown as { showPopover?: () => void; hidePopover?: () => void };
+    proto.showPopover ??= () => undefined;
+    proto.hidePopover ??= () => undefined;
+    Element.prototype.scrollIntoView ??= () => undefined;
+    let releaseSlow: (response: Response) => void = () => undefined;
+    const base = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation((url, init) => {
+      if (!String(url).includes("tutor-model/models")) return base(url, init);
+      const provider = JSON.parse(String((init as RequestInit).body)).provider;
+      return provider === "openrouter"
+        ? new Promise<Response>((resolve) => (releaseSlow = resolve))
+        : Promise.resolve(new Response(JSON.stringify({ ok: true, models: [{ id: "other-1" }] }), { status: 200 }));
+    });
+    const rows = [row(), row({ id: "openai", label: "OpenAI", saved: { last4: "wxyz", savedOn: "2 Oct 2026", readable: true } })];
+    const container = mount(selection({ rows }, [{ provider: "openrouter", model: "m-1" }]));
+    await act(async () => {});
+    expect(container.textContent).toContain("Loading OpenRouter");
+
+    act(() => container.querySelector<HTMLButtonElement>('button[aria-label^="Tutor provider"]')!.click());
+    const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((o) => o.textContent?.includes("OpenAI"))!;
+    await act(async () => option.click());
+    expect(container.textContent).toContain("1 model from OpenAI");
+
+    // The first provider's list arrives after the second's, and is not shown.
+    await act(async () => releaseSlow(new Response(JSON.stringify({ ok: true, models: [{ id: "a" }, { id: "b" }, { id: "c" }] }), { status: 200 })));
+    expect(container.textContent).toContain("1 model from OpenAI");
+    expect(container.textContent).not.toContain("3 models");
+  });
+
+  it("keeps focus on Test while it runs and after it answers", async () => {
+    const container = mount(selection());
+    await act(async () => {});
+    const test = button(container, "Test");
+    test.focus();
+    // A browser drops focus from a button that becomes disabled; jsdom does not, so say it.
+    const answer = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation((url, init) => {
+      if (String(url).endsWith("/tutor-model/test")) (document.activeElement as HTMLElement | null)?.blur();
+      return answer(url, init);
+    });
+    await act(async () => test.click());
+    expect(container.textContent).toContain("Works");
+    expect(document.activeElement).toBe(button(container, "Test"));
+  });
+
+  it("leaves focus where the person moved it while Test was still running", async () => {
+    const container = mount(selection());
+    await act(async () => {});
+    const test = button(container, "Test");
+    test.focus();
+    const input = container.querySelector<HTMLInputElement>('input[role="combobox"]')!;
+    const answer = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation((url, init) => {
+      if (String(url).endsWith("/tutor-model/test")) input.focus();
+      return answer(url, init);
+    });
+    await act(async () => test.click());
+    expect(document.activeElement).toBe(input);
   });
 
   it("asks before Remove model deletes anything", async () => {

@@ -206,6 +206,22 @@ describe("Dialog", () => {
     mount(dialogOf());
     expect(document.documentElement.style.overflow).toBe("");
   });
+
+  it("keeps the page held until the last of two dialogs has closed, in either order", () => {
+    const first = mount(dialogOf({ lockScroll: true }));
+    const second = mount(dialogOf({ lockScroll: true }));
+    first.unmount();
+    expect(document.documentElement.style.overflow).toBe("hidden");
+    second.unmount();
+    expect(document.documentElement.style.overflow).toBe("");
+
+    const a = mount(dialogOf({ lockScroll: true }));
+    const b = mount(dialogOf({ lockScroll: true }));
+    b.unmount();
+    expect(document.documentElement.style.overflow).toBe("hidden");
+    a.unmount();
+    expect(document.documentElement.style.overflow).toBe("");
+  });
 });
 
 /** A caller closing in motion, as `ExpandablePanel` does. */
