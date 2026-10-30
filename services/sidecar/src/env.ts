@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseEnv } from "node:util";
 
@@ -28,7 +28,30 @@ import { parseEnv } from "node:util";
  *    does under `next dev`.
  *
  * `services/catalog/.env` needs nothing here: the catalog reads it itself.
+ *
+ * The web runs in its app's directory (`npm run dev` in the workspace), so a
+ * relative catalog path resolves there, as `checkCatalogFile` in
+ * `scripts/lib/dev-env.mjs` resolves it for `npm run dev:up`. The sidecar
+ * runs from the repository root, so it rewrites such a value to the absolute
+ * path the web opens; left alone, `connect()` would create an empty catalog
+ * beside the root.
  */
+
+/** The settings that name the catalog's file (`databaseUrl()` in services/catalog/src/env.ts). */
+const CATALOG_PATH_KEYS = ["CATALOG_DB", "DATABASE_URL"] as const;
+
+/**
+ * A catalog setting as the web reads it from `appDir`: a plain relative path
+ * becomes absolute under it. Everything `databasePath()` reads another way
+ * (absolute, `~/`, `sqlite:`, `file:`, `:memory:`, a Postgres URL it refuses)
+ * is returned as it is.
+ */
+export function catalogPathFrom(appDir: string, raw: string): string {
+  const value = raw.trim();
+  if (value === "" || value === ":memory:" || value === "~" || value.startsWith("~/") || isAbsolute(value)) return raw;
+  if (/^(sqlite|file|postgres|postgresql):/.test(value)) return raw;
+  return resolve(appDir, value);
+}
 
 /** The data home's `.env`: `$GNOSIA_HOME/.env`, or `~/.gnosia/.env`. */
 export function dataHomeEnvFile(env: Record<string, string | undefined>): string {
@@ -78,5 +101,9 @@ export async function loadSidecarEnv({ appDir = join(repoRoot(), "apps", "web") 
     process.stderr.write(
       `sidecar: could not read ${appDir}'s .env files: ${error instanceof Error ? error.message : String(error)}\n`,
     );
+  }
+  for (const key of CATALOG_PATH_KEYS) {
+    const value = process.env[key];
+    if (value !== undefined) process.env[key] = catalogPathFrom(appDir, value);
   }
 }

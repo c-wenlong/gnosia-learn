@@ -90,5 +90,34 @@
         "text": "<check_answer>\nAnswer: sneaky\nConfidence: 0%\n</check_answer>"
       }
     ]
+  },
+  {
+    "check": {
+      "kind": "choice",
+      "question": "Which spelling of caf\u00e9 is in NFC?",
+      "options": [
+        "caf\u00e9",
+        "cafe\u0301",
+        "cafe",
+        "caffe"
+      ],
+      "why": "NFC composes e and the acute accent into the one code point U+00E9.",
+      "answer": "caf\u00e9"
+    },
+    "block": "```check\n{\"kind\":\"choice\",\"question\":\"Which spelling of caf\u00e9 is in NFC?\",\"options\":[\"caf\u00e9\",\"cafe\u0301\",\"cafe\",\"caffe\"],\"why\":\"NFC composes e and the acute accent into the one code point U+00E9.\",\"answer\":\"caf\u00e9\"}\n```",
+    "answers": [
+      {
+        "picked": 0,
+        "confidence": 60,
+        "thinking": null,
+        "text": "<check_answer>\nPicked: \"caf\u00e9\" (correct)\nConfidence: 60%\n</check_answer>"
+      },
+      {
+        "picked": 1,
+        "confidence": 60,
+        "thinking": null,
+        "text": "<check_answer>\nPicked: \"cafe\u0301\" (incorrect; the key was \"caf\u00e9\")\nConfidence: 60%\n</check_answer>"
+      }
+    ]
   }
 ]

@@ -69,9 +69,9 @@ struct TutorCardCheck: Equatable {
             let options = list.compactMap { Self.line($0) }
             guard options.count == list.count,
                   options.allSatisfy({ !$0.isEmpty && $0.utf16.count <= 240 }),
-                  Set(options).count == options.count,
+                  Set(options.map { Array($0.unicodeScalars) }).count == options.count,
                   let why = Self.line(raw["why"]), !why.isEmpty, why.utf16.count <= 800,
-                  let answer = Self.line(raw["answer"]), options.contains(answer)
+                  let answer = Self.line(raw["answer"]), options.contains(where: { sameScalars($0, answer) })
             else { return nil }
             self.init(kind: .choice, question: question, options: options, why: why, answer: answer, concept: concept)
         }
@@ -145,6 +145,13 @@ func tutorCheckThinking(_ text: String?) -> String? {
     sessionThinking(text ?? "")
 }
 
+/// Equal code point for code point, as `===` compares in check-block.ts.
+/// Swift's `==` compares canonically, so a composed "é" and "e" plus a
+/// combining accent are equal to it and two different strings to the web.
+func sameScalars(_ a: String, _ b: String) -> Bool {
+    a.unicodeScalars.elementsEqual(b.unicodeScalars)
+}
+
 /// `choiceAnswerText`: the learner's pick as the tutor reads it on the next
 /// turn. `picked` indexes `options` as the tutor wrote them; nil is "I
 /// don't know", which carries no confidence (K6).
@@ -152,7 +159,7 @@ func tutorChoiceAnswerText(_ check: TutorCardCheck, picked: Int?, confidence: In
     var lines: [String] = []
     if let picked, check.options.indices.contains(picked) {
         let chosen = check.options[picked]
-        lines.append(chosen == check.answer
+        lines.append(sameScalars(chosen, check.answer)
             ? "Picked: \"\(chosen)\" (correct)"
             : "Picked: \"\(chosen)\" (incorrect; the key was \"\(check.answer)\")")
         if let confidence { lines.append("Confidence: \(confidence)%") }

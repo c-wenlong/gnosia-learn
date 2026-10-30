@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { dataHomeEnvFile, readEnvFile } from "../src/env";
+import { catalogPathFrom, dataHomeEnvFile, readEnvFile } from "../src/env";
 
 /**
  * The sidecar's environment (S9-02): the web's, in the web's order, so the
@@ -60,6 +60,22 @@ describe("the sidecar's environment", () => {
     writeFileSync(join(app, ".env.local"), "AUTH_SECRET=from-the-app\nGEMINI_API_KEY=from-the-app\n");
     const env = await loaded({ GNOSIA_HOME: home }, app, ["AUTH_SECRET", "GEMINI_API_KEY"]);
     expect(env).toEqual({ AUTH_SECRET: "from-the-app", GEMINI_API_KEY: "from-home" });
+  });
+
+  it("resolves a relative catalog path against the web app's directory, as the web does", async () => {
+    const home = temp();
+    writeFileSync(join(home, ".env"), "DATABASE_URL=data/from-home.db\n");
+    const app = temp();
+    writeFileSync(join(app, ".env.local"), "CATALOG_DB=./data/catalog.db\n");
+    const env = await loaded({ GNOSIA_HOME: home }, app, ["CATALOG_DB", "DATABASE_URL"]);
+    expect(env).toEqual({ CATALOG_DB: join(app, "data/catalog.db"), DATABASE_URL: join(app, "data/from-home.db") });
+  });
+
+  it("leaves every other form of catalog path alone", () => {
+    for (const raw of ["/abs/catalog.db", "~/catalog.db", "~", "sqlite:///abs.db", "file:///abs.db", ":memory:", "postgres://x/y", ""]) {
+      expect(catalogPathFrom("/app", raw)).toBe(raw);
+    }
+    expect(catalogPathFrom("/app", "rel.db")).toBe("/app/rel.db");
   });
 
   it("starts with neither file", async () => {
