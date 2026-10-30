@@ -48,7 +48,7 @@ export { compareByKindThenId, isCompanionKind };
  * "which video is this transcript for", which is a different question and the
  * one it is used for on the detail page.
  *
- * Pure: no database, no React, no filesystem. `@/components/asset-meta`
+ * Pure: no database, no React, no filesystem. `@gnosia/tutor/asset-meta`
  * supplies the label vocabulary so a chip and a card cannot call the same kind
  * two different things — and it is that module rather than `AssetCard.tsx`
  * because a `"use client"` module's exports are client references, so a server
@@ -616,10 +616,8 @@ export function explainedConcepts(
   });
 }
 
-/** Where a concept's workspace lives (phase 1c's `/learn/[concept]`). */
-export function conceptHref(slug: string): string {
-  return `/learn/${encodeURIComponent(slug)}`;
-}
+/** Where a concept's workspace lives: one definition, in `course-path.ts`, for the pages that link it from here. */
+export { conceptHref } from "@/lib/course-path";
 
 /**
  * Where an asset page's back link goes, and what it says.

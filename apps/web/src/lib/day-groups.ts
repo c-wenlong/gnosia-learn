@@ -36,6 +36,13 @@ const DAY_MONTH_YEAR = new Intl.DateTimeFormat("en-GB", {
   timeZone: "UTC",
 });
 
+const WEEKDAY = new Intl.DateTimeFormat("en-GB", { weekday: "short", timeZone: "UTC" });
+
+/** A day key's weekday, short: "Mon". Formatted at UTC noon, where no zone can move it to another day. */
+export function weekdayName(key: string): string {
+  return WEEKDAY.format(new Date(`${key}T12:00:00Z`));
+}
+
 /** Whole days from `from` to `to` (both `YYYY-MM-DD`); negative when `to` is earlier. Exact across a clock change. */
 export function dayDiff(from: string, to: string): number {
   const utc = (key: string) => {

@@ -67,18 +67,21 @@ function parse(file: string, text = readFileSync(file, "utf8")): ts.SourceFile {
   return ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, file.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
 }
 
-function resolveModule(from: string, specifier: string): string | null {
+/** A module's source by path, or null when there is none: the files on disk, or a self-test's own. */
+type Reader = (file: string) => string | null;
+
+const disk: Reader = (file) => {
+  try {
+    return readFileSync(file, "utf8");
+  } catch {
+    return null;
+  }
+};
+
+function resolveModule(from: string, specifier: string, read: Reader = disk): string | null {
   if (!specifier.startsWith(".")) return null;
   const base = path.resolve(path.dirname(from), specifier);
-  for (const candidate of [`${base}.ts`, path.join(base, "index.ts")]) {
-    try {
-      readFileSync(candidate);
-      return candidate;
-    } catch {
-      // try the next
-    }
-  }
-  return null;
+  return [`${base}.ts`, path.join(base, "index.ts")].find((candidate) => read(candidate) !== null) ?? null;
 }
 
 /** Names bound to `learnerId` by destructuring `param` anywhere in `body`, or read as `param.learnerId`. */
@@ -110,8 +113,8 @@ function bodyTakesLearnerFrom(body: ts.Node, param: string): boolean {
   return found;
 }
 
-/** The owner slot of one function declaration, or null when it takes no owner. */
-function slotOf(fn: ts.FunctionDeclaration): OwnerSlot | null {
+/** The owner slot of one function, or null when it takes no owner. */
+function slotOf(fn: ts.FunctionLikeDeclaration): OwnerSlot | null {
   for (const [index, param] of fn.parameters.entries()) {
     if (ts.isIdentifier(param.name) && OWNER_PARAMS.has(param.name.text)) return { kind: "positional", index };
     if (ts.isObjectBindingPattern(param.name)) {
@@ -125,14 +128,32 @@ function slotOf(fn: ts.FunctionDeclaration): OwnerSlot | null {
   return null;
 }
 
+/**
+ * The functions a module declares at its top level, by name: a `function`
+ * declaration, or a `const` bound to an arrow or a function expression, so
+ * `export const f = async (db, learnerId) => …` is read as `function f` is.
+ */
+function declaredFunctions(source: ts.SourceFile): Map<string, { fn: ts.FunctionLikeDeclaration; exported: boolean }> {
+  const out = new Map<string, { fn: ts.FunctionLikeDeclaration; exported: boolean }>();
+  const exported = (node: ts.Statement) => (ts.canHaveModifiers(node) ? ts.getModifiers(node) : undefined)?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword) === true;
+  for (const node of source.statements) {
+    if (ts.isFunctionDeclaration(node) && node.name !== undefined) out.set(node.name.text, { fn: node, exported: exported(node) });
+    if (!ts.isVariableStatement(node)) continue;
+    for (const declaration of node.declarationList.declarations) {
+      const init = declaration.initializer;
+      if (!ts.isIdentifier(declaration.name) || init === undefined) continue;
+      if (ts.isArrowFunction(init) || ts.isFunctionExpression(init)) out.set(declaration.name.text, { fn: init, exported: exported(node) });
+    }
+  }
+  return out;
+}
+
 /** The owner-taking functions one module declares and exports itself, by name. */
-function moduleTable(file: string): Map<string, OwnerSlot> {
+function moduleTable(file: string, read: Reader = disk): Map<string, OwnerSlot> {
   const table = new Map<string, OwnerSlot>();
-  for (const node of parse(file).statements) {
-    if (!ts.isFunctionDeclaration(node) || node.name === undefined) continue;
-    if (!node.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword)) continue;
-    const slot = slotOf(node);
-    if (slot !== null) table.set(node.name.text, slot);
+  for (const [name, { fn, exported }] of declaredFunctions(parse(file, read(file) ?? ""))) {
+    const slot = exported ? slotOf(fn) : null;
+    if (slot !== null) table.set(name, slot);
   }
   return table;
 }
@@ -153,23 +174,28 @@ function tutorServerFiles(): string[] {
     .map((name) => path.join(TUTOR_SERVER, name));
 }
 
-/** Every function the door exports that takes an owner, by exported name. */
-function ownerTable(): Map<string, OwnerSlot> {
-  const door = parse(DOOR_INDEX);
+/**
+ * Every function the door exports that takes an owner, by exported name. An
+ * `export *` in the door is refused rather than skipped: it names none of
+ * the functions it passes on, so an owner-taking one behind it would never
+ * be checked.
+ */
+function ownerTable(doorFile = DOOR_INDEX, read: Reader = disk): Map<string, OwnerSlot> {
+  const door = parse(doorFile, read(doorFile) ?? "");
   const table = new Map<string, OwnerSlot>();
   for (const statement of door.statements) {
     if (!ts.isExportDeclaration(statement) || statement.moduleSpecifier === undefined) continue;
-    if (statement.exportClause === undefined || !ts.isNamedExports(statement.exportClause)) continue;
-    const target = resolveModule(DOOR_INDEX, (statement.moduleSpecifier as ts.StringLiteral).text);
-    if (target === null) continue;
-    const declarations = new Map<string, ts.FunctionDeclaration>();
-    for (const node of parse(target).statements) {
-      if (ts.isFunctionDeclaration(node) && node.name !== undefined) declarations.set(node.name.text, node);
+    const specifier = (statement.moduleSpecifier as ts.StringLiteral).text;
+    if (statement.exportClause === undefined || !ts.isNamedExports(statement.exportClause)) {
+      throw new Error(`${path.basename(doorFile)}: \`export *\` from "${specifier}" hides which functions take an owner; name each one`);
     }
+    const target = resolveModule(doorFile, specifier, read);
+    if (target === null) continue;
+    const declarations = declaredFunctions(parse(target, read(target) ?? ""));
     for (const element of statement.exportClause.elements) {
       const local = (element.propertyName ?? element.name).text;
-      const fn = declarations.get(local);
-      const slot = fn === undefined ? null : slotOf(fn);
+      const declared = declarations.get(local);
+      const slot = declared === undefined ? null : slotOf(declared.fn);
       if (slot !== null) table.set(element.name.text, slot);
     }
   }
@@ -381,6 +407,33 @@ describe("owner-bearing catalog calls in the web app", () => {
     expect(table.get("assetsForConcept")).toEqual({ kind: "positional", index: 2 });
     expect(table.get("dbSource")).toEqual({ kind: "positional", index: 1 });
     expect(table.size).toBeGreaterThan(40);
+  });
+
+  it("reads an owner-taking function written as an arrow or a function expression, in the door and the tutor's server", () => {
+    const files: Record<string, string> = {
+      "/door/index.ts": `export { arrow, expression, declared, none } from "./m";\nexport type { Row } from "./m";`,
+      "/door/m.ts": [
+        "export const arrow = async (db, learnerId) => db;",
+        "export const expression = function (db, { learnerId }) { return db; };",
+        "export function declared(db, scope) { return db; }",
+        "export const none = (db) => db;",
+        "const hidden = (db, owner) => db;",
+      ].join("\n"),
+    };
+    const read: Reader = (file) => files[file] ?? null;
+    expect(Object.fromEntries(ownerTable("/door/index.ts", read))).toEqual({
+      arrow: { kind: "positional", index: 1 },
+      expression: { kind: "option", index: 1 },
+      declared: { kind: "positional", index: 1 },
+    });
+    expect([...moduleTable("/door/m.ts", read).keys()]).toEqual(["arrow", "expression", "declared"]);
+  });
+
+  it("refuses an \`export *\` in the door, which would hide its functions from the table", () => {
+    const files: Record<string, string> = { "/door/index.ts": `export * from "./m";`, "/door/m.ts": "export const f = (db, learnerId) => db;" };
+    expect(() => ownerTable("/door/index.ts", (file) => files[file] ?? null)).toThrow(/export \*/);
+    files["/door/index.ts"] = `export * as m from "./m";`;
+    expect(() => ownerTable("/door/index.ts", (file) => files[file] ?? null)).toThrow(/export \*/);
   });
 
   it("catches a call that leaves the owner out, and one that passes it", () => {
