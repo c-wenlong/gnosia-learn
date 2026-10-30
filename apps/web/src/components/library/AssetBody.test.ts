@@ -8,7 +8,8 @@ import { AssetBody } from "./AssetBody";
 
 /**
  * `AssetBody` drawn from data the server already read: which shape each kind
- * gets. The reads themselves are `loadAssetBody`'s, tested through the routes.
+ * gets. The reads themselves are `loadAssetBody`'s, tested in
+ * asset-body-data.test.ts.
  */
 
 function data(asset: Partial<AssetRef> & Pick<AssetRef, "id" | "kind">, over: Partial<AssetBodyData> = {}): AssetBodyData {
@@ -62,5 +63,54 @@ describe("AssetBody", () => {
       expect(html, url).not.toMatch(/<a [^>]*href=/);
       expect(html, url).toContain("not a web address");
     }
+  });
+
+  it("shows a note's off-site picture, and makes a session log's a link", () => {
+    const source = "Before.\n\n![a picture](https://example.com/a.png)\n";
+    const note = draw(data({ id: "note:a", kind: "note", path: "learn/concepts/a.md" }, { text: source }));
+    expect(note).toMatch(/<img [^>]*src="https:\/\/example.com\/a.png"/);
+
+    const log = draw(data({ id: "session:a", kind: "session_log", path: "learn/sessions/a.md" }, { text: source }));
+    expect(log).not.toContain("<img");
+    expect(log).toMatch(/<a [^>]*href="https:\/\/example.com\/a.png"/);
+  });
+
+  it("draws a note's embed the server knows is missing as the failure, without a request for it", () => {
+    const html = draw(
+      data(
+        { id: "note:a", kind: "note", path: "learn/concepts/a.md" },
+        { text: "![[gone.svg]]\n", embedProblems: new Map([["diagram:learn/assets/gone.svg", "not-uploaded" as const]]) },
+      ),
+    );
+    expect(html).toContain('data-problem="not-uploaded"');
+    expect(html).not.toContain("<img");
+  });
+
+  it("lists a transcript and a chapter list by their timecodes", () => {
+    const transcript = draw(
+      data(
+        { id: "t", kind: "transcript", path: "out/a.transcript.json" },
+        { text: JSON.stringify({ segments: [{ start: 65, text: "The second minute." }] }) },
+      ),
+    );
+    expect(transcript).toContain("1:05");
+    expect(transcript).toContain("The second minute.");
+
+    const chapters = draw(
+      data({ id: "c", kind: "chapters", path: "out/a.chapters.json" }, { text: JSON.stringify([{ start: 0, title: "Opening" }]) }),
+    );
+    expect(chapters).toContain("Opening");
+    expect(chapters).toContain("<ol");
+  });
+
+  it("opens a PDF in the browser's own viewer", () => {
+    const html = draw(data({ id: "pdf:a", kind: "pdf", path: "out/a.pdf" }));
+    expect(html).toContain(`<object data="/api/assets/pdf%3Aa/file" type="application/pdf"`);
+  });
+
+  it("says a servable file whose words did not come back could not be read, and keeps the raw link", () => {
+    const html = draw(data({ id: "note:a", kind: "note", path: "learn/concepts/a.md" }, { text: null }));
+    expect(html).toContain("This file could not be read.");
+    expect(html).toContain(`href="/api/assets/note%3Aa/file"`);
   });
 });

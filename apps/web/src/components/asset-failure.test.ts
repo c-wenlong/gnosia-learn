@@ -317,7 +317,8 @@ describe("a note's embed", () => {
     expect(host.querySelector("figure img")?.getAttribute("src")).toBe("/a.svg");
   });
 
-  it("refuses a status URL the note gate would refuse, and still shows the picture", () => {
+  it("refuses a status URL the note gate would refuse, and still shows the picture", async () => {
+    const asked = statusAnswers({ ok: false, code: "not-uploaded" });
     const host = mount(
       createElement(NoteProse, {
         source: "![[a.svg]]",
@@ -325,5 +326,11 @@ describe("a note's embed", () => {
       }),
     );
     expect(host.querySelector("figure img")?.getAttribute("src")).toBe("/a.svg");
+
+    // The status URL is only ever asked after a failure, so fail the picture:
+    // with the URL refused there is nothing to ask, and the reason is unknown.
+    await failAndSettle(host.querySelector("figure img")!);
+    expect(asked).toEqual([]);
+    expect(panel(host)?.getAttribute("data-problem")).toBe("unknown");
   });
 });
