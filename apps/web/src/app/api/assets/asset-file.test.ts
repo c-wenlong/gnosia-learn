@@ -18,10 +18,12 @@ import {
   withoutConstraint,
 } from "../../../../../../services/catalog/test/scratch-database";
 
-// A signed-in request, so the owner seam (`@/lib/owner`) resolves `local`.
+// A signed-in request, so the owner seam (`@/lib/owner`) resolves `local`,
+// unless a test signs out.
+const session = vi.hoisted(() => ({ signedIn: true }));
 vi.mock("@/lib/auth/session", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth/session")>()),
-  isSignedIn: async () => true,
+  isSignedIn: async () => session.signedIn,
 }));
 
 /**
@@ -224,6 +226,20 @@ describe.skipIf(!reachable.ok)("asset file route", () => {
       const response = await call(SVG_ID, { range });
       expect(response.status, range).toBe(200);
       expect(response.headers.get("content-length"), range).toBe(String(SVG.length));
+    }
+  });
+
+  it("answers a request with no owner as signed out, not as a catalog that is down", async () => {
+    session.signedIn = false;
+    try {
+      for (const response of [await call(SVG_ID), await status(SVG_ID)]) {
+        expect(response.status).toBe(401);
+        expect(((await response.json()) as { error: string }).error).toBe("UNAUTHENTICATED");
+      }
+      const { readFileProblems } = await import("@/lib/asset-library");
+      await expect(readFileProblems([SVG_ID])).rejects.toMatchObject({ name: "NoOwnerError" });
+    } finally {
+      session.signedIn = true;
     }
   });
 

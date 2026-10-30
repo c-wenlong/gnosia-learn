@@ -167,6 +167,11 @@ function dayHeadings(html: string, level: "h2" | "h3" = "h2"): string[] {
   return [...html.matchAll(heading)].map(([, label, n]) => `${label.replace(/<[^>]*>/g, "").trim()} (${n})`);
 }
 
+/** The whole `<h2>` of the group whose label starts with `label`, or "". */
+function groupHeading(html: string, label: string): string {
+  return [...html.matchAll(/<h2(?: [^>]*)?>(?:(?!<\/h2>).)*<\/h2>/g)].map(([h]) => h).find((h) => h.replace(/<[^>]*>/g, "").startsWith(label)) ?? "";
+}
+
 describe("/library", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
@@ -369,9 +374,8 @@ describe("/library", () => {
     // none and is filed under Operating systems; the session log has neither.
     expect(dayHeadings(html)).toEqual(["Virtual memory (2)", "Operating systems (1)", "No topic (1)"]);
     // The topic heading carries its mastery dot, the topic with concepts only.
-    const heading = html.match(/<h2 id="group-topic-virtual-memory".*?<\/h2>/)?.[0] ?? "";
-    expect(heading).toContain('role="img"');
-    expect(html.match(/<h2 id="group-topic-operating-systems".*?<\/h2>/)?.[0] ?? "").not.toContain('role="img"');
+    expect(groupHeading(html, "Virtual memory")).toContain('role="img"');
+    expect(groupHeading(html, "Operating systems")).not.toContain('role="img"');
     // A search and the layout switch keep the grouping.
     expect(html).toMatch(/<input[^>]*type="hidden"[^>]*name="group"[^>]*value="topic"/);
     expect(html).toContain('href="/library?group=topic"');
@@ -500,7 +504,7 @@ describe("/library", () => {
     // is under Operating systems, so that name is the heading's alone.
     for (const view of ["list", "grid"]) {
       const html = await render({ group: "topic", view });
-      const section = html.slice(html.indexOf('id="group-topic-operating-systems"'));
+      const section = html.slice(html.indexOf(groupHeading(html, "Operating systems")));
       const ostep = section.slice(0, section.indexOf("</section>"));
       expect(ostep).toContain("OSTEP");
       expect(ostep.split("Operating systems").length - 1).toBe(1);

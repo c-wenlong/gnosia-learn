@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 
 import { posterSource, resolveAsset, type AssetSourceResult } from "@/lib/asset-files";
 import type { RouteProblemCode } from "@/lib/asset-problems";
-import { refuseWithoutOwner } from "@/lib/learner-api";
+import { unauthenticated } from "@/lib/learner-api";
 import { withLearnerStore } from "@/lib/learner-store";
+import { NoOwnerError } from "@/lib/owner";
 
 /**
  * `GET /api/assets/<encodeURIComponent(asset.id)>/status[?for=poster]`: why the
@@ -44,8 +45,6 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  const anonymous = await refuseWithoutOwner();
-  if (anonymous !== null) return anonymous;
   const { id } = await params;
   const forPoster = new URL(request.url).searchParams.get("for") === "poster";
 
@@ -55,6 +54,7 @@ export async function GET(
       forPoster ? posterSource(db, id) : resolveAsset(db, id),
     );
   } catch (error) {
+    if (error instanceof NoOwnerError) return unauthenticated();
     const message = error instanceof Error ? error.message : String(error);
     console.warn(`asset status: catalog unreachable: ${message}`);
     return answer(503, "catalog-unreachable");

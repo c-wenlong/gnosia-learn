@@ -379,9 +379,17 @@ export function safeHref(raw: string): string | null {
   return url;
 }
 
-/** Does this href leave the app? Used to decide `target` and `rel`. */
+/**
+ * Does this href leave the app? Used to decide `target` and `rel`.
+ *
+ * A protocol-relative `//host/x` leaves too, and so does `/\host/x`, since a
+ * browser reads a backslash in a URL as a slash. A browser also drops control
+ * characters and spaces at either end of a URL and tabs and newlines inside
+ * it before it parses one, so the same is done here first.
+ */
 export function isExternalHref(href: string): boolean {
-  return /^https?:/i.test(href);
+  const url = href.replace(/^[\u0000-\u0020]+|[\u0000-\u0020]+$/g, "").replace(/[\t\n\r]/g, "");
+  return /^(?:https?:|(?:https?:)?[\\/]{2})/i.test(url);
 }
 
 /** One maths span found at the start of a string, with how far it runs. */

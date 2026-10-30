@@ -35,6 +35,12 @@ describe("tabKeyIndex", () => {
     expect(tabKeyIndex("End", 0, 4, "both", false)).toBe(-1);
   });
 
+  it("starts before the first when none is chosen, so the previous arrow goes to the last", () => {
+    expect(tabKeyIndex("ArrowRight", -1, 3, "horizontal", true)).toBe(0);
+    expect(tabKeyIndex("ArrowLeft", -1, 3, "horizontal", true)).toBe(2);
+    expect(tabKeyIndex("ArrowUp", -1, 4, "both", false)).toBe(3);
+  });
+
   it("ignores every other key, and an empty row", () => {
     expect(tabKeyIndex("Enter", 0, 3, "both", true)).toBe(-1);
     expect(tabKeyIndex("a", 0, 3, "both", true)).toBe(-1);

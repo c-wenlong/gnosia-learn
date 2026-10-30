@@ -9,8 +9,8 @@ import {
   type AssetFileProblem,
   type AssetStored,
 } from "@/lib/asset-files";
+import { lookupFailed } from "@/lib/asset-response";
 import { assetBlobStore, SIGNED_URL_TTL_SECONDS } from "@/lib/blob-store";
-import { refuseWithoutOwner } from "@/lib/learner-api";
 import { withLearnerStore } from "@/lib/learner-store";
 
 /**
@@ -37,27 +37,14 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  const anonymous = await refuseWithoutOwner();
-  if (anonymous !== null) return anonymous;
   const { id } = await params;
 
   let target;
   try {
     target = await withLearnerStore((db) => pdfSource(db, id));
   } catch (error) {
-    // A read that cannot reach the database degrades and says so
-    // (ARCHITECTURE.md rule 14). There is no degraded version of a document,
-    // so what it degrades to is an honest 503.
-    const message = error instanceof Error ? error.message : String(error);
-    console.warn(`asset pdf: catalog unreachable: ${message}`);
-    return NextResponse.json(
-      {
-        error: "The catalog is unreachable.",
-        code: "catalog-unreachable",
-        detail: "Could not look this asset up.",
-      },
-      { status: 503 },
-    );
+    // No owner is a 401; a database that cannot be asked is a 503.
+    return lookupFailed("asset pdf", error);
   }
 
   if (target.ok === false) return problem(target);

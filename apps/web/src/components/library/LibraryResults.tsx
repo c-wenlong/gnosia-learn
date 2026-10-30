@@ -5,6 +5,7 @@ import {
   use,
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -410,7 +411,10 @@ function GroupSection({
   render: (rows: ReactNode[], last: boolean) => ReactNode;
 }) {
   const { group, sections } = held;
-  const id = `group-${(group.key || "none").replace(/[^A-Za-z0-9_-]/g, "-")}`;
+  // From React rather than the key: two keys that differ only in punctuation
+  // (`topic:a.b`, `topic:a-b`) would make one id, and two sections would name
+  // one heading.
+  const id = useId();
   const pad = inset && "px-[var(--shell-row-pad)]";
   const modules = sections.length > 0 && sections[0].section !== null;
   return (

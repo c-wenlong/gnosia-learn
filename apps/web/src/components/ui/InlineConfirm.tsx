@@ -21,14 +21,16 @@ const SWAP = "animate-fade-in motion-reduce:animate-none";
  * small ones. `tone="danger"` makes the confirming press the destructive one
  * (danger words, or the warn button); `neutral` an ordinary one.
  *
- * Uncontrolled by default, closing once `onConfirm` is called. A caller that
- * opens it from elsewhere too, or keeps the question up while the work runs
- * (`busy`, with `busyLabel` on the press), holds `open` and `onOpenChange`.
+ * Uncontrolled by default, closing once `onConfirm` is called, or once
+ * `busy` ends when `onConfirm` made it busy. A caller that opens it from
+ * elsewhere too, or decides itself when the question goes, holds `open` and
+ * `onOpenChange`.
  *
  * Focus follows the swap. The trigger leaves the page as the question
  * arrives, so focus that was on it goes to Keep it, the press that loses
  * nothing; opened from elsewhere, focus stays where it was. When the question
- * goes, focus that was in it comes back to the trigger. Escape in the
+ * goes, focus that was in it comes back to the trigger; while the work runs,
+ * focus on the disabled confirming press moves to Keep it. Escape in the
  * question is Keep it, which stays pressable while `busy`: putting the
  * question away does not stop the work, and the trigger stays disabled.
  */
@@ -70,6 +72,14 @@ export function InlineConfirm({
   className?: string;
 }) {
   const [own, setOwn] = useState(false);
+  // Uncontrolled, confirmed, and the work it started still running: the
+  // question stays up until `busy` ends. The trigger is disabled while busy
+  // and could not take focus back, which would drop it to the page.
+  const [held, setHeld] = useState(false);
+  if (held && !busy) {
+    setHeld(false);
+    setOwn(false);
+  }
   const controlled = openProp !== undefined;
   const open = controlled ? openProp : own;
   const setOpen = (next: boolean) => {
@@ -80,6 +90,7 @@ export function InlineConfirm({
   const questionId = useId();
   const trigger = useRef<HTMLButtonElement>(null);
   const keep = useRef<HTMLButtonElement>(null);
+  const confirmPress = useRef<HTMLButtonElement>(null);
   const was = useRef(open);
   useEffect(() => {
     if (was.current === open) return;
@@ -94,9 +105,18 @@ export function InlineConfirm({
     }
   }, [open]);
 
+  // The work starting disables the confirming press, which a browser then
+  // drops focus from: Keep it, which stays pressable, takes it instead.
+  useEffect(() => {
+    if (!open || !busy) return;
+    const at = document.activeElement;
+    if (at === null || at === document.body || at === confirmPress.current) keep.current?.focus();
+  }, [open, busy]);
+
   const confirm = () => {
     onConfirm();
-    if (!controlled) setOwn(false);
+    // Closed on the next render, unless `onConfirm` made it busy.
+    if (!controlled) setHeld(true);
   };
   const onKeyDown = (event: KeyboardEvent<HTMLSpanElement>) => {
     if (event.key !== "Escape") return;
@@ -131,7 +151,7 @@ export function InlineConfirm({
       </span>
       {size === "text" ? (
         <>
-          <TextLink onClick={confirm} tone={tone === "danger" ? "danger" : "accent"} pending={busy}>
+          <TextLink ref={confirmPress} onClick={confirm} tone={tone === "danger" ? "danger" : "accent"} pending={busy}>
             {confirmWords}
           </TextLink>
           <TextLink ref={keep} onClick={() => setOpen(false)} tone="muted" weight="normal">
@@ -140,7 +160,7 @@ export function InlineConfirm({
         </>
       ) : (
         <>
-          <Button size="sm" variant={tone === "danger" ? "warn" : "secondary"} disabled={busy} onClick={confirm}>
+          <Button ref={confirmPress} size="sm" variant={tone === "danger" ? "warn" : "secondary"} disabled={busy} onClick={confirm}>
             {confirmWords}
           </Button>
           <Button ref={keep} size="sm" variant="ghost" onClick={() => setOpen(false)}>

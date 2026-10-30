@@ -110,6 +110,18 @@ const links = () => [...container.querySelectorAll("a[href]")].map((a) => a.text
 const button = (name: string) => [...container.querySelectorAll("button")].find((b) => b.textContent === name);
 
 describe("LibraryResults", () => {
+  it("names each group by its own heading, even for keys that differ only in punctuation", async () => {
+    await mount({ first: page([["topic:a.b", 1, 1], ["topic:a-b", 1, 1]], null, 0) });
+    const sections = [...container.querySelectorAll("section[aria-labelledby]")];
+    expect(sections).toHaveLength(2);
+    const ids = sections.map((s) => s.getAttribute("aria-labelledby"));
+    expect(new Set(ids).size).toBe(2);
+    for (const [i, section] of sections.entries()) {
+      expect(container.querySelectorAll(`[id="${ids[i]}"]`)).toHaveLength(1);
+      expect(section.querySelector("h2")?.id).toBe(ids[i]);
+    }
+  });
+
   it("draws the first page under its headings with their whole counts, and watches a screen ahead", async () => {
     await mount();
     expect(headings()).toEqual(["4 Oct(3)"]);

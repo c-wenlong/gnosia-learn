@@ -291,6 +291,34 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
     expect(Buffer.from(await response.arrayBuffer()).equals(JPEG)).toBe(true);
   });
 
+  it("serves a stored PDF for the browser's viewer, without the sandbox an SVG needs", async () => {
+    const pdf = Buffer.from("%PDF-1.4\n%%EOF\n");
+    const key = await stored(pdf, "pdf");
+    const id = `pdf:${VIDEO_ID}`;
+    await scratch.db.insert(asset).values({
+      id,
+      kind: "pdf",
+      path: null,
+      url: null,
+      contentHash: sha256(pdf),
+      bytes: pdf.length,
+      title: "Demo (pages)",
+      sourceRepo: "gnosia",
+      blobKey: key,
+    });
+    try {
+      const response = await call(FILE, "file", id);
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toBe("application/pdf");
+      expect(response.headers.get("content-security-policy")).toBeNull();
+      expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+      // Everything else keeps the sandbox.
+      expect((await call(FILE, "file", POSTER_ID)).headers.get("content-security-policy")).toContain("sandbox");
+    } finally {
+      await scratch.db.delete(asset).where(eq(asset.id, id));
+    }
+  });
+
   it("answers not-uploaded for a video with no stored poster, and cuts none", async () => {
     const response = await call(POSTER, "poster", PENDING_ID);
     expect(response.status).toBe(404);
@@ -339,5 +367,11 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
     const read = await library.readAssetText(scratch.db, "manimkc:out/algorithms/demo/demo.transcript.json");
     expect(read).toBe(text.toString("utf8"));
     await scratch.db.delete(asset).where(eq(asset.id, "manimkc:out/algorithms/demo/demo.transcript.json"));
+  });
+
+  it("reads no text out of a stored picture or video, however small", async () => {
+    // A poster is well under the preview cap, and its bytes are not words.
+    expect(await library.readAssetText(scratch.db, POSTER_ID)).toBeNull();
+    expect(await library.readAssetText(scratch.db, VIDEO_ID)).toBeNull();
   });
 });

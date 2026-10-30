@@ -12,9 +12,9 @@ import {
   type AssetSource,
   type AssetStored,
 } from "@/lib/asset-files";
+import { lookupFailed } from "@/lib/asset-response";
 import { assetBlobStore, SIGNED_URL_TTL_SECONDS } from "@/lib/blob-store";
 import { contentDisposition } from "@/lib/download-name";
-import { refuseWithoutOwner } from "@/lib/learner-api";
 import { withLearnerStore } from "@/lib/learner-store";
 
 /**
@@ -39,7 +39,7 @@ import { withLearnerStore } from "@/lib/learner-store";
  * | --- | --- | --- |
  * | `Content-Type` | from a closed extension list | An unknown extension is refused, never guessed at as `application/octet-stream`. |
  * | `X-Content-Type-Options` | `nosniff` | The extension decides the type. Without it a `.json` transcript holding markup can be sniffed into a document in this origin. |
- * | `Content-Security-Policy` | see `ASSET_CSP` below | An SVG is a document, and one served from this origin could run script with this origin's storage. The sandbox drops it into an opaque origin with scripts off, which costs a video nothing. |
+ * | `Content-Security-Policy` | see `ASSET_CSP` below | An SVG is a document, and one served from this origin could run script with this origin's storage. The sandbox drops it into an opaque origin with scripts off, which costs a video nothing. Not sent for a PDF (`securityPolicy`). |
  * | `Content-Disposition` | `inline; filename="…"` | The point is a `<video>` and an `<img>`; `attachment` would break both. The filename is a sanitised basename so a saved file is named after itself. With `?download=1` (the Library row menu's Download) it is `attachment`, named after the asset's title (`contentDisposition` in `@/lib/download-name`). |
  * | `Accept-Ranges` | `bytes` | Without it a player will not offer a scrub bar at all. |
  * | `Cache-Control` | `private, no-store` | A re-render or a commit gives the same id new bytes, and the reason to open one of these is to look at the newest one. |
@@ -116,6 +116,18 @@ export const ASSET_CSP =
   "font-src data:; img-src data:; sandbox";
 
 /**
+ * A stored PDF is the one type served without that policy, as the sibling
+ * `/pdf` route serves the same documents. A PDF is drawn by the browser's own
+ * viewer, a plugin in WebKit (the desktop shell's engine), and a document
+ * under `sandbox` may not load a plugin; the bytes are ours, made by
+ * `catalog asset upload` or `catalog video put`, and carry nothing that runs
+ * in this origin. Chromium draws one either way.
+ */
+function securityPolicy(contentType: string): Record<string, string> {
+  return contentType === "application/pdf" ? {} : { "Content-Security-Policy": ASSET_CSP };
+}
+
+/**
  * `?download=1`: save the file rather than show it. Anything else, or no
  * parameter, is the inline answer every embed relies on.
  */
@@ -131,7 +143,7 @@ function baseHeaders(request: Request, file: AssetSource): Record<string, string
       ? contentDisposition("attachment", file.filename, file.title)
       : contentDisposition("inline", file.filename),
     "X-Content-Type-Options": "nosniff",
-    "Content-Security-Policy": ASSET_CSP,
+    ...securityPolicy(file.contentType),
     "Cache-Control": "private, no-store",
     "Accept-Ranges": "bytes",
   };
@@ -141,27 +153,14 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
-  const anonymous = await refuseWithoutOwner();
-  if (anonymous !== null) return anonymous;
   const { id } = await params;
 
   let resolved;
   try {
     resolved = await withLearnerStore((db) => resolveAsset(db, id));
   } catch (error) {
-    // The lookup is a read, and a read that cannot reach the database
-    // degrades and says so (ARCHITECTURE.md rule 14). There is no degraded
-    // version of a video, so what it degrades to is an honest 503.
-    const message = error instanceof Error ? error.message : String(error);
-    console.warn(`asset file: catalog unreachable: ${message}`);
-    return NextResponse.json(
-      {
-        error: "The catalog is unreachable.",
-        code: "catalog-unreachable",
-        detail: "Could not look this asset up.",
-      },
-      { status: 503 },
-    );
+    // No owner is a 401; a database that cannot be asked is a 503.
+    return lookupFailed("asset file", error);
   }
 
   if (resolved.ok === false) return problem(resolved);
