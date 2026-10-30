@@ -32,6 +32,7 @@ import {
   setTopicCompleted,
 } from "@/lib/storage";
 import { randomToken } from "@/lib/random-token";
+import { ownValue } from "@gnosia/tutor/own-key";
 import { announceVisitStored } from "@/lib/recent-client";
 import { withDeadline } from "@/lib/send-json";
 import { applyThemeToDocument, followTheme, writeThemeCookie } from "@/lib/theme-cookie";
@@ -189,7 +190,8 @@ interface Kept extends Keep {
  * that one, since every tab shares `localStorage`: with one box for all, a
  * tab leaving with nothing pending, or one coming back from the back-forward
  * cache, removed a box another tab had just closed on. A page takes every
- * box when it loads, the old shared `OUTBOX_KEY` included.
+ * box when it loads, the old shared `OUTBOX_KEY` included, under a lock
+ * (`takeOutboxesLocked`).
  */
 export const OUTBOX_KEY = "gnosia:learner-outbox";
 const OUTBOX_MAX_AGE_MS = 24 * 60 * 60 * 1000;
@@ -246,6 +248,19 @@ function takeOutboxes(): Outbound[] {
     /* site data blocked: whatever was read so far is sent */
   }
   return boxes.sort((a, b) => a.at - b.at).flatMap((box) => box.writes);
+}
+
+/**
+ * `takeOutboxes` under a lock every page of the site shares (the Web Locks
+ * API), so two pages loading at once cannot split the boxes between them and
+ * each send its share through its own queue, where an older note could land
+ * after a newer one: one page takes every box and sends them in order, and
+ * the other finds none. A browser without the API takes them unlocked.
+ */
+function takeOutboxesLocked(): Promise<Outbound[]> {
+  const locks = typeof navigator === "undefined" ? undefined : navigator.locks;
+  if (locks === undefined || typeof locks.request !== "function") return Promise.resolve(takeOutboxes());
+  return locks.request(OUTBOX_KEY, () => takeOutboxes()).catch(() => takeOutboxes());
 }
 
 /** `state` with one item's recap set to `recap`, or removed when there is none. */
@@ -738,7 +753,7 @@ export function LearnerProvider({
         `note:${topicId}`,
         (previous) => setNote(previous, topicId, note),
         () => post("note", { curriculumItemId: topicId, note }),
-        same((state) => state.notes[topicId] ?? null),
+        same((state) => ownValue(state.notes, topicId) ?? null),
         { replay: () => (previous) => setNote(previous, topicId, note), outbound: { kind: "note", topicId, note } },
       );
     },
@@ -789,7 +804,7 @@ export function LearnerProvider({
         // already stored counts no session there, while the reducer above
         // counted one on whatever the page last read.
         {
-          replay: (next) => (previous) => withRecap(previous, topicId, next.knowledge[topicId]),
+          replay: (next) => (previous) => withRecap(previous, topicId, ownValue(next.knowledge, topicId)),
           outbound: { kind: "recap", topicId, input, countSession, requestId },
           adopt: (result) => {
             const recap = (result as { recap?: LearnerState["knowledge"][string] | null } | undefined)?.recap;
@@ -909,13 +924,15 @@ export function LearnerProvider({
   useEffect(() => {
     if (resent.current) return;
     resent.current = true;
-    for (const write of takeOutboxes()) {
-      if (write.kind === "note") updateNote(write.topicId, write.note);
-      else if (write.kind === "progress") setCompleted(write.topicId, write.done);
-      // An outbox from before request ids carries none, so it gets one here.
-      else if (write.kind === "recap") sendRecap(write.topicId, write.input, write.countSession, typeof write.requestId === "string" ? write.requestId : randomToken());
-      else setThemeMode(write.theme);
-    }
+    void takeOutboxesLocked().then((writes) => {
+      for (const write of writes) {
+        if (write.kind === "note") updateNote(write.topicId, write.note);
+        else if (write.kind === "progress") setCompleted(write.topicId, write.done);
+        // An outbox from before request ids carries none, so it gets one here.
+        else if (write.kind === "recap") sendRecap(write.topicId, write.input, write.countSession, typeof write.requestId === "string" ? write.requestId : randomToken());
+        else setThemeMode(write.theme);
+      }
+    });
   }, [updateNote, setCompleted, sendRecap, setThemeMode]);
 
   const value = useMemo(

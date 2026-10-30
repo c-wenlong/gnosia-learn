@@ -207,6 +207,38 @@ describe("two tabs sharing the outbox", () => {
   });
 });
 
+describe("two pages loading at once", () => {
+  it("takes every box under one lock the pages share, so one page sends a note's writes in order and the other none", async () => {
+    // A lock that runs one holder at a time, each in a later task: two pages' takes cannot interleave.
+    let tail = Promise.resolve();
+    const request = vi.fn((_name: string, take: () => unknown) => {
+      const turn = tail.then(() => new Promise((resolve) => setTimeout(resolve, 0))).then(take);
+      tail = turn.then(() => undefined);
+      return turn;
+    });
+    Object.defineProperty(window.navigator, "locks", { value: { request }, configurable: true });
+    try {
+      const at = Date.now();
+      window.localStorage.setItem(`${OUTBOX_KEY}:a`, JSON.stringify({ at: at - 60_000, writes: [{ kind: "note", topicId: "t1", note: "older" }] }));
+      window.localStorage.setItem(`${OUTBOX_KEY}:b`, JSON.stringify({ at: at - 1_000, writes: [{ kind: "note", topicId: "t1", note: "newer" }] }));
+      const { calls } = mount(ok);
+      const other = createRoot(document.createElement("div"));
+      act(() =>
+        other.render(
+          createElement(LearnerProvider, { initialState: emptyLearnerState(), reachable: true } as ComponentProps<typeof LearnerProvider>, null),
+        ),
+      );
+      await vi.waitFor(() => expect(calls()).toHaveLength(2));
+      expect(request.mock.calls.map(([name]) => name)).toEqual([OUTBOX_KEY, OUTBOX_KEY]);
+      expect(calls().map(([, init]) => (JSON.parse(init.body as string) as { note: string }).note)).toEqual(["older", "newer"]);
+      expect(outboxes()).toEqual([]);
+      act(() => other.unmount());
+    } finally {
+      delete (window.navigator as { locks?: unknown }).locks;
+    }
+  });
+});
+
 describe("a kept recap", () => {
   it("is drawn again as the write made it, without counting another session each time", async () => {
     const { draw } = mount(() => Promise.resolve(new Response("{}", { status: 503 })));
