@@ -385,6 +385,103 @@ async function progressValue(bar) {
   return (await bar.getAttribute('aria-valuenow')) ?? '';
 }
 
+/**
+ * Wait for the sidebar's own transitions (its width, the fade of its labels,
+ * a row's height, the drawer's slide) to finish, so a box read afterwards is
+ * where it settles. An endless animation elsewhere on the page is not the
+ * sidebar's and is not waited for.
+ */
+function sidebarSettled(page) {
+  return page.evaluate(async () => {
+    const room = document.getElementById('app-sidebar')?.parentElement ?? null;
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const mine = document
+      .getAnimations()
+      .filter((a) => a.effect?.target instanceof Node && room?.contains(a.effect.target) && a.effect.getTiming().iterations !== Infinity);
+    await Promise.all(mine.map((a) => a.finished.catch(() => undefined)));
+  });
+}
+
+/**
+ * Press a button by its label, or send a key, from inside the page, and read
+ * the sidebar's box, visibility, focus and a destination label's opacity on
+ * every frame for `ms` after it.
+ * A frame between the two ends is how a transition is told from a jump. The
+ * press is the page's own rather than the mouse's, because a pointer resting
+ * on the folded rail slides it out.
+ */
+function pressAndWatch(page, press, ms = 700) {
+  return page.evaluate(
+    async ({ press, ms }) => {
+      const nav = document.getElementById('app-sidebar');
+      const label = [...nav.querySelectorAll('a[href="/library"] span')].find((s) => s.textContent === 'Library');
+      const read = () => {
+        const box = nav.getBoundingClientRect();
+        return {
+          left: box.left,
+          width: box.width,
+          visibility: getComputedStyle(nav).visibility,
+          focusInside: nav.contains(document.activeElement),
+          labelOpacity: label ? Number(getComputedStyle(label).opacity) : null,
+        };
+      };
+      if (press.key) window.dispatchEvent(new KeyboardEvent('keydown', { key: press.key, bubbles: true }));
+      else document.querySelector(`button[aria-label="${press.label}"]`).click();
+      const frames = [];
+      const until = performance.now() + ms;
+      while (performance.now() < until) {
+        await new Promise((r) => requestAnimationFrame(r));
+        frames.push(read());
+      }
+      return frames;
+    },
+    { press, ms },
+  );
+}
+
+/**
+ * The sidebar's boxes and the computed styles a reader sees: the nav, its
+ * room beside the page, the page's column, a course row that has the module
+ * visited last as a second line (and those two lines), and the opacity of a
+ * destination's label.
+ */
+function sidebarBoxes(page) {
+  return page.evaluate(() => {
+    const nav = document.getElementById('app-sidebar');
+    const room = nav.parentElement;
+    const box = (el) => {
+      const r = el.getBoundingClientRect();
+      return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height };
+    };
+    const twoLines = (a) => [...a.querySelectorAll('span')].find((s) => s.children.length === 2 && [...s.children].every((c) => c.tagName === 'SPAN'));
+    const course = [...nav.querySelectorAll('a[href^="/courses/"]')].find((a) => twoLines(a) !== undefined);
+    const lines = course && twoLines(course);
+    const label = [...nav.querySelectorAll('a[href="/library"] span')].find((s) => s.textContent === 'Library');
+    const style = getComputedStyle(nav);
+    return {
+      state: nav.dataset.state,
+      nav: box(nav),
+      room: box(room),
+      column: box(room.nextElementSibling),
+      overflow: [style.overflowX, style.overflowY],
+      row: course ? box(course) : null,
+      lines: lines ? [...lines.children].map(box) : null,
+      linesOpacity: lines ? getComputedStyle(lines).opacity : null,
+      labelOpacity: label ? getComputedStyle(label).opacity : null,
+    };
+  });
+}
+
+/** Within a pixel: a box's edge can land on a fraction. */
+function near(a, b) {
+  return Math.abs(a - b) < 1;
+}
+
+/** The distinct rounded values a run of frames went through, for a failure message. */
+function went(frames, key) {
+  return [...new Set(frames.map((f) => Math.round(f[key])))].join(', ');
+}
+
 async function run() {
   held.copying = createCopy();
   await held.copying;
@@ -1474,6 +1571,137 @@ async function run() {
       assert(Math.abs(m.sidebarBottom - m.viewport) <= 1, `at 1280x${height}, scrolled to the end, the sidebar ends at ${m.sidebarBottom}px of ${m.viewport}`);
     }
     await page.setViewportSize({ width: 1280, height: 860 });
+  });
+
+  await step('shell: open the sidebar is 260px with a course row on two lines, folded a 60px rail that clips nothing', page, async () => {
+    // What AppSidebar's class-string tests stood for (dropped in #558, since
+    // jsdom applies no CSS), measured on the built app instead. The week
+    // check above opened a module of cp4284, so its course row has that
+    // module under its title.
+    await page.setViewportSize({ width: 1280, height: 860 });
+    await go('/home');
+    // Off the rail, so it does not slide out under the pointer.
+    await page.mouse.move(1200, 600);
+    const fold = page.getByRole('button', { name: /^(Collapse|Expand) the sidebar$/ });
+    await hydrated(page, fold);
+    if ((await fold.getAttribute('aria-label')) === 'Expand the sidebar') await pressAndWatch(page, { label: 'Expand the sidebar' });
+    await sidebarSettled(page);
+
+    const open = await sidebarBoxes(page);
+    assert(open.state === 'open', `the sidebar is ${open.state}, expected open`);
+    assert(near(open.nav.width, 260) && near(open.room.width, 260), `open, the sidebar is ${open.nav.width}px in a ${open.room.width}px room, expected 260`);
+    assert(near(open.column.left, 260), `open, the page starts at ${open.column.left}px, expected 260`);
+    assert(open.labelOpacity === '1', `open, a destination's label has opacity ${open.labelOpacity}`);
+    assert(open.row !== null && open.lines !== null, 'no course row with a second line: the week check opened a module, so cp4284 should have one');
+    const [title, resume] = open.lines;
+    assert(near(open.row.height, 44), `open, the two-line course row is ${open.row.height}px tall, expected 44 (one row and 8px)`);
+    assert(title.height > 0 && resume.height > 0, `a line of the course row has no height (${title.height}, ${resume.height})`);
+    assert(resume.top >= title.bottom - 0.5, `the course row's second line starts at ${resume.top}px, over its first, which ends at ${title.bottom}px`);
+    assert(title.top >= open.row.top - 0.5 && resume.bottom <= open.row.bottom + 0.5, `the course row (${open.row.top} to ${open.row.bottom}) clips its lines (${title.top} to ${resume.bottom})`);
+    assert(open.linesOpacity === '1', `open, the course row's lines have opacity ${open.linesOpacity}`);
+
+    // Folding animates the width: some frame falls between the two.
+    const folding = await pressAndWatch(page, { label: 'Collapse the sidebar' });
+    assert(folding.some((f) => f.width > 61 && f.width < 259), `folding jumped: widths ${went(folding, 'width')}`);
+    await sidebarSettled(page);
+
+    const rail = await sidebarBoxes(page);
+    assert(rail.state === 'rail', `folded, the sidebar is ${rail.state}, expected rail`);
+    assert(near(rail.nav.width, 60) && near(rail.room.width, 60), `folded, the sidebar is ${rail.nav.width}px in a ${rail.room.width}px room, expected 60`);
+    assert(near(rail.column.left, 60), `folded, the page starts at ${rail.column.left}px, expected 60`);
+    assert(rail.labelOpacity === '0' && rail.linesOpacity === '0', `folded, the labels have opacity ${rail.labelOpacity} and ${rail.linesOpacity}, expected 0`);
+    assert(near(rail.row.height, 36), `folded, the two-line course row is ${rail.row.height}px tall, expected one row's 36`);
+
+    // Nothing on the nav clips: the account menu opens to the rail's right and is seen there.
+    assert(rail.overflow.every((o) => o === 'visible'), `the nav's overflow is ${rail.overflow.join(' ')}, expected visible`);
+    const account = page.getByRole('button', { name: /, account and settings$/ });
+    await account.evaluate((el) => el.click());
+    const menuId = await account.getAttribute('aria-controls');
+    assert(menuId !== null, 'the account button names no menu once pressed');
+    const menu = page.locator(`[id="${menuId}"]`);
+    await menu.getByRole('button', { name: 'Sign out' }).waitFor();
+    await sidebarSettled(page);
+    // Read at a point past the rail's edge, where a clipping nav would cut the menu off.
+    const seen = await menu.evaluate((el, edge) => {
+      const box = el.getBoundingClientRect();
+      const x = edge + (box.right - edge) / 2;
+      const hit = document.elementFromPoint(x, box.top + box.height / 2);
+      return { right: box.right, hit: el.contains(hit) };
+    }, rail.nav.right);
+    assert(seen.right > rail.nav.right + 100, `the account menu ends at ${seen.right}px, not past the ${rail.nav.right}px rail`);
+    assert(seen.hit, 'past the rail, a press lands on something other than the account menu');
+    await page.keyboard.press('Escape');
+    await menu.waitFor({ state: 'hidden' });
+
+    // Under reduced motion it unfolds at once: no frame between, and the label
+    // already shown on the first frame at the full width. With the fade, it
+    // would still be on its 100ms delay there.
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    try {
+      const unfolding = await pressAndWatch(page, { label: 'Expand the sidebar' }, 300);
+      const between = unfolding.filter((f) => f.width > 61 && f.width < 259);
+      assert(between.length === 0 && near(unfolding.at(-1).width, 260), `under reduced motion the unfold eased: widths ${went(unfolding, 'width')}`);
+      const wide = unfolding.find((f) => near(f.width, 260));
+      assert(wide.labelOpacity === 1, `under reduced motion a label has opacity ${wide.labelOpacity} on the first unfolded frame`);
+    } finally {
+      await page.emulateMedia({ reducedMotion: null });
+    }
+  });
+
+  await step('shell: on a phone the drawer slides in with focus inside, holds a flick past its end, and hides once out', page, async () => {
+    // 520px tall, so the drawer's list and the page behind it both scroll.
+    await page.setViewportSize({ width: 375, height: 520 });
+    try {
+      await go('/home');
+      const opener = page.getByRole('button', { name: 'Open the sidebar' });
+      await hydrated(page, opener);
+      await sidebarSettled(page);
+      const closed = await sidebarBoxes(page);
+      assert(closed.nav.right <= 0.5, `closed, the drawer reaches ${closed.nav.right}px into the screen`);
+      assert((await page.locator('#app-sidebar').evaluate((el) => getComputedStyle(el).visibility)) === 'hidden', 'closed, the drawer is not hidden');
+
+      // Visible from its first frame, so the focus it moves in on opening lands while it slides.
+      const opening = await pressAndWatch(page, { label: 'Open the sidebar' });
+      const last = opening.at(-1);
+      assert(opening[0].visibility === 'visible', `on its first frame the opening drawer is ${opening[0].visibility}`);
+      assert(opening.some((f) => f.left < -1 && f.left > -last.width + 1), `the drawer jumped in: lefts ${went(opening, 'left')}`);
+      assert(near(last.left, 0) && near(last.width, 300), `open, the drawer is at ${last.left}px and ${last.width}px wide, expected 0 and 300`);
+      assert(last.focusInside, 'focus did not land in the drawer as it opened');
+
+      // A flick past the end of its list stops there, rather than scrolling the page behind.
+      const flick = await page.evaluate(() => {
+        const nav = document.getElementById('app-sidebar');
+        const list = [...nav.querySelectorAll('*')].find((el) => getComputedStyle(el).overflowY === 'auto');
+        const box = list.getBoundingClientRect();
+        return {
+          contain: getComputedStyle(list).overscrollBehaviorY,
+          scrolls: list.scrollHeight > list.clientHeight,
+          x: box.left + box.width / 2,
+          y: box.top + box.height / 2,
+          pageScrolls: document.documentElement.scrollHeight > window.innerHeight,
+        };
+      });
+      assert(flick.contain === 'contain', `the drawer's list has overscroll-behavior ${flick.contain}`);
+      assert(flick.scrolls && flick.pageScrolls, `at 375x520 the drawer's list ${flick.scrolls ? 'scrolls' : 'does not scroll'} and the page ${flick.pageScrolls ? 'does' : 'does not'}`);
+      await page.mouse.move(flick.x, flick.y);
+      for (let i = 0; i < 4; i += 1) await page.mouse.wheel(0, 1500);
+      await page.waitForTimeout(400);
+      const scrolled = await page.evaluate(() => {
+        const nav = document.getElementById('app-sidebar');
+        const list = [...nav.querySelectorAll('*')].find((el) => getComputedStyle(el).overflowY === 'auto');
+        return { list: list.scrollTop, end: list.scrollHeight - list.clientHeight, page: window.scrollY };
+      });
+      assert(scrolled.list >= scrolled.end - 1, `the drawer's list stopped at ${scrolled.list}px of ${scrolled.end}`);
+      assert(scrolled.page === 0, `a flick past the drawer's end scrolled the page behind it to ${scrolled.page}px`);
+
+      // Closing, it stays visible while it slides out, and is hidden once out.
+      const closing = await pressAndWatch(page, { key: 'Escape' });
+      const out = closing.at(-1);
+      assert(closing.some((f) => f.left < -1 && f.left > -out.width + 1 && f.visibility === 'visible'), 'the closing drawer was not visible while it slid out');
+      assert(out.visibility === 'hidden' && out.left + out.width <= 0.5, `closed, the drawer is ${out.visibility} and reaches ${out.left + out.width}px`);
+    } finally {
+      await page.setViewportSize({ width: 1280, height: 860 });
+    }
   });
 
   await step('theme: Dark adds `dark` to <html>', page, async () => {
