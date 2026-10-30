@@ -1074,6 +1074,11 @@ struct ReviewCardModel: Hashable {
     let source: String?
     let choices: [String]?
     let correct: Int?
+    /// Check cards only: where the wrong options came from — `wrong` in
+    /// review-core.ts. `.tutor` when the tutor wrote them for this check (the
+    /// store a session fills), `.notes` when they are other notes' answers
+    /// and summaries; nil on a recall card.
+    var wrong: WrongSource? = nil
     /// How many check blocks the note holds.
     let checks: Int
     let intervals: [Int]
@@ -1092,11 +1097,14 @@ extension LearnGraph {
     /// A due item into a card face — toReviewItem. `checks` come from the
     /// concept's note body; `pool` is the distractor list distractorPool
     /// built (same-domain check answers first, then the rest, then
-    /// same-domain summaries, then the rest).
+    /// same-domain summaries, then the rest); `written` the tutor's stored
+    /// options per check id that still fit their checks (`writtenOptions`),
+    /// which come first. Nothing here asks the tutor to write any.
     func reviewCard(
         for item: ReviewQueueItem,
         checks: [ConceptCheck],
-        pool: [String]
+        pool: [String],
+        written: [String: [String]] = [:]
     ) -> ReviewCardModel {
         let check = checks.first { !$0.question.trimmingCharacters(in: .whitespaces).isEmpty }
         let base = (
@@ -1120,7 +1128,10 @@ extension LearnGraph {
         }
         let hasAnswer = !check.answer.trimmingCharacters(in: .whitespaces).isEmpty
         let answer = hasAnswer ? check.answer : item.summary
-        let mc = hasAnswer ? buildChoices(conceptId: item.conceptId, answer: check.answer, pool: pool) : nil
+        let fromTutor = hasAnswer
+            ? written[check.id].flatMap { buildChoices(conceptId: item.conceptId, answer: check.answer, pool: $0) }
+            : nil
+        let mc = fromTutor ?? (hasAnswer ? buildChoices(conceptId: item.conceptId, answer: check.answer, pool: pool) : nil)
         return ReviewCardModel(
             conceptId: item.conceptId, title: item.title, summary: item.summary,
             domain: item.domain, kind: mc == nil ? .recall : .check, prompt: check.question,
@@ -1128,6 +1139,7 @@ extension LearnGraph {
             why: check.why.trimmingCharacters(in: .whitespaces).isEmpty ? nil : check.why,
             source: check.source.trimmingCharacters(in: .whitespaces).isEmpty ? nil : check.source,
             choices: mc?.choices, correct: mc?.correct,
+            wrong: mc == nil ? nil : (fromTutor != nil ? .tutor : .notes),
             checks: checks.count, intervals: base.intervals, ease: base.ease,
             repetitions: base.repetitions, lapses: base.lapses, leech: base.leech,
             lastReviewed: base.lastReviewed, due: base.due
@@ -2159,7 +2171,9 @@ extension CatalogStore {
     }
 
     /// One due item into its card face — toReviewItem with this queue's
-    /// distractor pool.
+    /// distractor pool, and the tutor's options for the note's checks when
+    /// the snapshot holds ones that still fit (readReviewSession reads the
+    /// same store, and never generates either).
     func reviewCard(for item: ReviewQueueItem, in queue: ReviewQueue) -> ReviewCardModel {
         let checks = parseChecks(conceptBody(item.conceptId))
         let answers: [(conceptId: String, domain: String?, answer: String)] = queue.items.map { other in
@@ -2168,7 +2182,10 @@ extension CatalogStore {
                 .answer.trimmingCharacters(in: .whitespaces) ?? ""
             return (other.conceptId, other.domain, answer)
         }
-        return learn.reviewCard(for: item, checks: checks, pool: learn.distractorPool(for: item, answers: answers))
+        return learn.reviewCard(
+            for: item, checks: checks, pool: learn.distractorPool(for: item, answers: answers),
+            written: writtenOptions(checks: checks, stored: checkOptions[item.conceptId] ?? [:])
+        )
     }
 
     /// One video's playback, the web's row and this app's merged

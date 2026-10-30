@@ -94,7 +94,7 @@ asset's `blob_key` (`local/<sha256>.<ext>`) as the path under it.
 
 ### The mirrored schema
 
-`user_version = 4` (`SCHEMA_VERSION` in the script, which is the source
+`user_version = 5` (`SCHEMA_VERSION` in the script, which is the source
 for the full table list; below is the asset half). Timestamps are `REAL` seconds since 1970-01-01 UTC —
 the live schema's millisecond integers divided by 1000.0 at snapshot time.
 `asset.generated_by` is the one computed column (`manimkc` / `remotionkc` /

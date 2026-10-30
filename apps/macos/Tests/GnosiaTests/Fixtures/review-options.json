@@ -1,0 +1,326 @@
+{
+  "checkOptionsVersion": 1,
+  "hashes": [
+    {
+      "question": "Why is the dot product zero for perpendicular vectors?",
+      "answer": "Because orthogonal directions share no component.",
+      "hash": "bbbe8e607b8d47b7f1c4c42ba04392cfe07f5bdc1ab9e7be497dfa61dacbff82"
+    },
+    {
+      "question": "  Which packet opens a TCP connection?\n",
+      "answer": "\tSYN  ",
+      "hash": "4b4b74455ccfc397fda0fd05ddb3f1ef59f703d8725532f09827c24515466fa6"
+    },
+    {
+      "question": "\u00a0What does $\\nabla f$ point toward?\u00a0",
+      "answer": "The direction of steepest ascent.",
+      "hash": "e13e337b3afca95481ca0d3704e230b6c6ec1dd18b545f1d9eef2760130b7ebd"
+    },
+    {
+      "question": "\ufeffWhat is a BOM?\ufeff",
+      "answer": "\u00a0A byte order mark, U+FEFF.\u00a0",
+      "hash": "d0aba13c81c20433c48999049afd1b075ae491e56e0cb5fa0d41176a8abe35b9"
+    },
+    {
+      "question": "Ce que \u00ab\u2009l\u2019entropie\u2009\u00bb mesure ?",
+      "answer": "L\u2019incertitude moyenne, en bits. \ud83d\ude00",
+      "hash": "6da72a4b8df3d374dadc527d9cb737e96f041b5aec24279458fd250b3e6cc7f2"
+    },
+    {
+      "question": "Is NEL whitespace?\u0085",
+      "answer": "Not to JavaScript's trim.\u2028",
+      "hash": "be57c578f6f257b97e8ae8e77def85dbac8669b14e9dec6b5e63282739173a2f"
+    }
+  ],
+  "item": {
+    "title": "Dot product",
+    "summary": "The dot product measures alignment.",
+    "domain": "foundations",
+    "intervals": [
+      1,
+      12,
+      14,
+      15
+    ]
+  },
+  "pool": [
+    "Softmax makes a distribution.",
+    "Heads run in parallel.",
+    "Values get mixed.",
+    "Gradients point uphill."
+  ],
+  "cards": [
+    {
+      "name": "options stored for the first check and still matching: the tutor's",
+      "conceptId": "dot-product",
+      "checks": [
+        {
+          "id": "c1",
+          "question": "Why is the dot product zero for perpendicular vectors?",
+          "answer": "Because orthogonal directions share no component.",
+          "why": "",
+          "source": ""
+        },
+        {
+          "id": "c2",
+          "question": "What is the dot product of a vector with itself?",
+          "answer": "Its length squared.",
+          "why": "",
+          "source": ""
+        }
+      ],
+      "stored": [
+        {
+          "checkId": "c1",
+          "checkHash": "bbbe8e607b8d47b7f1c4c42ba04392cfe07f5bdc1ab9e7be497dfa61dacbff82",
+          "options": [
+            "Because their lengths cancel when multiplied.",
+            "Because one of the two vectors must be zero.",
+            "Because the angle between them is measured as zero."
+          ]
+        }
+      ],
+      "expected": {
+        "kind": "check",
+        "prompt": "Why is the dot product zero for perpendicular vectors?",
+        "answer": "Because orthogonal directions share no component.",
+        "choices": [
+          "Because orthogonal directions share no component.",
+          "Because one of the two vectors must be zero.",
+          "Because their lengths cancel when multiplied.",
+          "Because the angle between them is measured as zero."
+        ],
+        "correct": 0,
+        "wrong": "tutor"
+      }
+    },
+    {
+      "name": "options stored under an older wording: the notes'",
+      "conceptId": "inner-product",
+      "checks": [
+        {
+          "id": "c1",
+          "question": "Why is the dot product zero for perpendicular vectors?",
+          "answer": "Because orthogonal directions share no component.",
+          "why": "",
+          "source": ""
+        }
+      ],
+      "stored": [
+        {
+          "checkId": "c1",
+          "checkHash": "3ec0d8f2245888c6e8eb2f0c39949af1fe20e6fcde9d5d40eecab1d9307ea70f",
+          "options": [
+            "Because their lengths cancel when multiplied.",
+            "Because one of the two vectors must be zero.",
+            "Because the angle between them is measured as zero."
+          ]
+        }
+      ],
+      "expected": {
+        "kind": "check",
+        "prompt": "Why is the dot product zero for perpendicular vectors?",
+        "answer": "Because orthogonal directions share no component.",
+        "choices": [
+          "Because orthogonal directions share no component.",
+          "Heads run in parallel.",
+          "Values get mixed.",
+          "Softmax makes a distribution."
+        ],
+        "correct": 0,
+        "wrong": "notes"
+      }
+    },
+    {
+      "name": "nothing stored: the notes'",
+      "conceptId": "dot-product-zero",
+      "checks": [
+        {
+          "id": "c1",
+          "question": "Why is the dot product zero for perpendicular vectors?",
+          "answer": "Because orthogonal directions share no component.",
+          "why": "",
+          "source": ""
+        }
+      ],
+      "stored": [],
+      "expected": {
+        "kind": "check",
+        "prompt": "Why is the dot product zero for perpendicular vectors?",
+        "answer": "Because orthogonal directions share no component.",
+        "choices": [
+          "Softmax makes a distribution.",
+          "Because orthogonal directions share no component.",
+          "Gradients point uphill.",
+          "Values get mixed."
+        ],
+        "correct": 1,
+        "wrong": "notes"
+      }
+    },
+    {
+      "name": "options stored for another check than the one the card asks: the notes'",
+      "conceptId": "orthogonality",
+      "checks": [
+        {
+          "id": "c1",
+          "question": "",
+          "answer": "",
+          "why": "",
+          "source": ""
+        },
+        {
+          "id": "c2",
+          "question": "Why is the dot product zero for perpendicular vectors?",
+          "answer": "Because orthogonal directions share no component.",
+          "why": "",
+          "source": ""
+        },
+        {
+          "id": "c3",
+          "question": "What is the dot product of a vector with itself?",
+          "answer": "Its length squared.",
+          "why": "",
+          "source": ""
+        }
+      ],
+      "stored": [
+        {
+          "checkId": "c3",
+          "checkHash": "a24188b3d621914b5f8fa1f3cc0dc577e7c20e29b489123142b7d56944b55f89",
+          "options": [
+            "Because their lengths cancel when multiplied.",
+            "Because one of the two vectors must be zero.",
+            "Because the angle between them is measured as zero."
+          ]
+        }
+      ],
+      "expected": {
+        "kind": "check",
+        "prompt": "Why is the dot product zero for perpendicular vectors?",
+        "answer": "Because orthogonal directions share no component.",
+        "choices": [
+          "Heads run in parallel.",
+          "Softmax makes a distribution.",
+          "Because orthogonal directions share no component.",
+          "Gradients point uphill."
+        ],
+        "correct": 2,
+        "wrong": "notes"
+      }
+    },
+    {
+      "name": "options stored for the second check, which the card asks: the tutor's",
+      "conceptId": "projection",
+      "checks": [
+        {
+          "id": "c1",
+          "question": "",
+          "answer": "",
+          "why": "",
+          "source": ""
+        },
+        {
+          "id": "c2",
+          "question": "Why is the dot product zero for perpendicular vectors?",
+          "answer": "Because orthogonal directions share no component.",
+          "why": "",
+          "source": ""
+        }
+      ],
+      "stored": [
+        {
+          "checkId": "c2",
+          "checkHash": "bbbe8e607b8d47b7f1c4c42ba04392cfe07f5bdc1ab9e7be497dfa61dacbff82",
+          "options": [
+            "Because their lengths cancel when multiplied.",
+            "Because one of the two vectors must be zero.",
+            "Because the angle between them is measured as zero."
+          ]
+        }
+      ],
+      "expected": {
+        "kind": "check",
+        "prompt": "Why is the dot product zero for perpendicular vectors?",
+        "answer": "Because orthogonal directions share no component.",
+        "choices": [
+          "Because one of the two vectors must be zero.",
+          "Because orthogonal directions share no component.",
+          "Because their lengths cancel when multiplied.",
+          "Because the angle between them is measured as zero."
+        ],
+        "correct": 1,
+        "wrong": "tutor"
+      }
+    },
+    {
+      "name": "a check with no answer asks as recall, stored options or not",
+      "conceptId": "dot-product-recall",
+      "checks": [
+        {
+          "id": "c1",
+          "question": "Explain the dot product in your own words.",
+          "answer": "",
+          "why": "",
+          "source": ""
+        }
+      ],
+      "stored": [
+        {
+          "checkId": "c1",
+          "checkHash": "fb11e9b525b174d8663ced2319eff1ed24a33dd8f39d1691bb27f007b4128bb4",
+          "options": [
+            "Because their lengths cancel when multiplied.",
+            "Because one of the two vectors must be zero.",
+            "Because the angle between them is measured as zero."
+          ]
+        }
+      ],
+      "expected": {
+        "kind": "recall",
+        "prompt": "Explain the dot product in your own words.",
+        "answer": "The dot product measures alignment.",
+        "choices": null,
+        "correct": null,
+        "wrong": null
+      }
+    },
+    {
+      "name": "stored options that all repeat the answer fall back to the notes'",
+      "conceptId": "cosine-similarity",
+      "checks": [
+        {
+          "id": "c1",
+          "question": "Why is the dot product zero for perpendicular vectors?",
+          "answer": "Because orthogonal directions share no component.",
+          "why": "",
+          "source": ""
+        }
+      ],
+      "stored": [
+        {
+          "checkId": "c1",
+          "checkHash": "bbbe8e607b8d47b7f1c4c42ba04392cfe07f5bdc1ab9e7be497dfa61dacbff82",
+          "options": [
+            "Because orthogonal directions share no component.",
+            "because orthogonal directions share  no component.",
+            "Because orthogonal directions share no component. "
+          ]
+        }
+      ],
+      "expected": {
+        "kind": "check",
+        "prompt": "Why is the dot product zero for perpendicular vectors?",
+        "answer": "Because orthogonal directions share no component.",
+        "choices": [
+          "Softmax makes a distribution.",
+          "Values get mixed.",
+          "Heads run in parallel.",
+          "Because orthogonal directions share no component."
+        ],
+        "correct": 3,
+        "wrong": "notes"
+      }
+    }
+  ]
+}
