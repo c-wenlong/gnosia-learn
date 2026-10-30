@@ -19,9 +19,23 @@
  */
 export const RUNNER_DOWN = "the studio runner is not answering";
 
-/** True for either way the runner can be down. */
+/**
+ * What the app says when a call passed its deadline (`CALL_TIMEOUT_MS`, or a
+ * caller's own). Status 0 like a runner that is down, but a different fact:
+ * the runner took the request, and the proxy neither times it out nor passes
+ * the browser's abort on, so the runner may still finish it. Advice to start
+ * the runner would be wrong, and so would "nothing happened".
+ */
+export const RUNNER_SLOW = "the studio runner did not answer in time";
+
+/** True for either way the runner can be down. A runner that is only slow is not down. */
 export function runnerDown(status: number, refusal: Refusal): boolean {
-  return status === 0 || (status === 502 && refusal.error === RUNNER_DOWN);
+  return (status === 0 && refusal.error !== RUNNER_SLOW) || (status === 502 && refusal.error === RUNNER_DOWN);
+}
+
+/** True for a call that passed its deadline: the runner may still be doing what it was asked. */
+export function runnerSlow(status: number, refusal: Refusal): boolean {
+  return status === 0 && refusal.error === RUNNER_SLOW;
 }
 
 /** The runner's refusal envelope, on every route. */
@@ -66,9 +80,18 @@ export function asRefusal(status: number, body: unknown): Refusal {
  * How long a call waits for the runner's answer. The proxy sets no limit of
  * its own, so without one a runner that took the connection and hung left a
  * button's busy state spinning until the browser gave up. Generous, since a
- * conversation opened on a concept reads its note first.
+ * conversation opened on a concept reads its note first. A call that passes
+ * it is `RUNNER_SLOW`, never `RUNNER_DOWN`.
  */
 export const CALL_TIMEOUT_MS = 60_000;
+
+/** A fetch that failed, named: past its deadline (`RUNNER_SLOW`) or not reached at all (`RUNNER_DOWN`). */
+function unanswered<T>(error: unknown): ApiResult<T> {
+  const named = (typeof error === "object" && error !== null ? error : {}) as { name?: unknown; message?: unknown };
+  const message = typeof named.message === "string" ? named.message : String(error);
+  const timedOut = named.name === "TimeoutError";
+  return { ok: false, status: 0, refusal: { error: timedOut ? RUNNER_SLOW : RUNNER_DOWN, detail: message } };
+}
 
 /** One call to the runner through the studio proxy, with the failure named rather than thrown. */
 export async function call<T>(path: string, init: RequestInit = {}): Promise<ApiResult<T>> {
@@ -83,7 +106,7 @@ export async function call<T>(path: string, init: RequestInit = {}): Promise<Api
       headers: init.body === undefined ? init.headers : { "content-type": "application/json", ...init.headers },
     });
   } catch (error) {
-    return { ok: false, status: 0, refusal: { error: RUNNER_DOWN, detail: (error as Error).message } };
+    return unanswered(error);
   }
   // The deadline covers the body too: a body cut off mid-read is a runner
   // that stopped answering, never a success with nothing in it.
@@ -91,7 +114,7 @@ export async function call<T>(path: string, init: RequestInit = {}): Promise<Api
   try {
     text = await response.text();
   } catch (error) {
-    return { ok: false, status: 0, refusal: { error: RUNNER_DOWN, detail: (error as Error).message } };
+    return unanswered(error);
   }
   const body = parsed(text);
   if (!response.ok) return { ok: false, status: response.status, refusal: asRefusal(response.status, body) };

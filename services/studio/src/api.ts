@@ -1567,7 +1567,13 @@ async function draftRoutes(
         // `make` is the consent card's Allow once (D107 of
         // docs/STUDIO-CONSENT.md): the tagged kinds' briefs launch their jobs
         // as they validate, with no press to wait for.
-        const { seq } = await drafts.send(id, input.text, input.mentions, { make: input.make === true });
+        // `idempotencyKey` answers a resend with the first message's seq
+        // instead of a second paid turn.
+        const { seq, replayed } = await drafts.send(id, input.text, input.mentions, {
+          make: input.make === true,
+          idempotencyKey: input.idempotencyKey,
+        });
+        if (replayed === true) return send(response, 200, { draftId: id, seq, replayed: true, note: "this message was already sent; follow /events for its reply" });
         return send(response, 202, { draftId: id, seq, note: "the planner is answering; follow /events for its reply" });
       } catch (error) {
         return refusal(error);
