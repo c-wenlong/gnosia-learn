@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 
 import { tutorDeps, turnResponse } from "@/lib/agent/env";
-import { AGENT_BODY_LIMITS, CHAT_RATE_LIMIT, enforceRateLimit, enforceSameOrigin, readAgentBody } from "@/lib/agent/guard";
+import { CHAT_RATE_LIMIT, enforceRateLimit, enforceSameOrigin } from "@/lib/agent/guard";
+import { AGENT_BODY_LIMITS, readAgentBody } from "@/lib/agent/body";
 import { requestOwner } from "@/lib/learner-api";
 import { judgeTurn, validateJudgeBody } from "@gnosia/tutor/server/turns";
 

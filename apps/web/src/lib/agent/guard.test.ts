@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { CHAT_RATE_LIMIT, enforceRateLimit, enforceSameOrigin, readAgentBody, SUMMARIZE_RATE_LIMIT } from "@/lib/agent/guard";
+import { readAgentBody } from "@/lib/agent/body";
+import { CHAT_RATE_LIMIT, enforceRateLimit, enforceSameOrigin, SUMMARIZE_RATE_LIMIT } from "@/lib/agent/guard";
 import {
   checkRateLimit,
   clientIp,
