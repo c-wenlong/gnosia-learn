@@ -9,20 +9,13 @@ import { Callout } from "@/components/ui/Callout";
 import { Composer } from "@/components/ui/Composer";
 import { isImeKey } from "@/components/ui/composer-keys";
 import { TutorMessage, UserMessage } from "@/components/ui/Message";
+import { tutorProblem } from "@/lib/tutor-errors";
 import { trimForRequest, type TutorTurn } from "@/lib/tutor-thread";
 
 interface ChatReply {
   message?: { role: "assistant"; content: string };
   error?: string;
   code?: string;
-}
-
-function errorFor(status: number, data: ChatReply): string {
-  if (data.code === "MISSING_API_KEY") {
-    return data.error ?? "The tutor has no model provider key yet. Add one in Settings, under Providers.";
-  }
-  if (status === 429) return "That was a lot of questions in a minute. Wait a moment and try again.";
-  return data.error ?? `The tutor did not answer (HTTP ${status}).`;
 }
 
 /**
@@ -95,7 +88,7 @@ export function AskPanel({
       });
       const data = (await res.json().catch(() => ({}))) as ChatReply;
       if (!res.ok || data.message === undefined) {
-        setError(errorFor(res.status, data));
+        setError(tutorProblem(res.status, data));
         return;
       }
       setTurns([...thread, { role: "assistant", content: data.message.content }]);

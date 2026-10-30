@@ -56,6 +56,7 @@ import {
   type Verdict,
 } from "@/lib/tutor-check";
 import { scrollBehavior } from "@/lib/motion";
+import { tutorProblem } from "@/lib/tutor-errors";
 import { recapTurns, topicRequestTurns } from "@/lib/tutor-thread";
 
 type Role = "user" | "assistant";
@@ -199,7 +200,7 @@ export function AgentSession({
                 .join(" | ")}`
             : "";
         throw new Error(
-          (data.error ?? `The tutor did not answer (HTTP ${res.status}).`) +
+          tutorProblem(res.status, data) +
             (data.detail ? `: ${data.detail}` : "") +
             attemptHint +
             (data.code === "MISSING_API_KEY"

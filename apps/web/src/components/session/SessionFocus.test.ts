@@ -358,3 +358,28 @@ describe("a question the tutor writes", () => {
     expect(signals.every((s) => s.aborted)).toBe(true);
   });
 });
+
+describe("SessionFocus writing through chat-recall (S4-08)", () => {
+  it("sends the answer again under a fresh session when its session was closed elsewhere", async () => {
+    const recorded = { concept: "tcp", correct: true, pLBefore: 0.3, pLAfter: 0.5, propagated: [], card: null, replayed: false };
+    let first = true;
+    vi.mocked(fetch).mockImplementation(async (url) => {
+      if (url !== "/api/learner/observe") return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      if (first) {
+        first = false;
+        // The catalog's refusal for a session `learn session close` ended in another terminal.
+        return new Response(JSON.stringify({ error: 'session "s-1" is closed; start a new one.' }), { status: 400 });
+      }
+      return new Response(JSON.stringify({ ok: true, result: recorded }), { status: 200 });
+    });
+    const host = await mount();
+    await press(button(host, "Continue"));
+    await press(choice(host, "SYN"));
+    await press(button(host, "Check"));
+
+    const [refused, resent] = observed();
+    expect(resent?.requestId).toBe(refused?.requestId);
+    expect(resent?.sessionId).not.toBe(refused?.sessionId);
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+  });
+});
