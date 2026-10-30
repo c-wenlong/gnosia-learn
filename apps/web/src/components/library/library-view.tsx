@@ -297,7 +297,10 @@ async function workOutView(filters: ReturnType<typeof libraryFilters>) {
     facets,
     courseChips,
     chosenCourse,
-    search,
+    // Only what the page says about the search. The words of every note and
+    // transcript it read are folded into `matching` already, and a kept view
+    // (`recentViews`) holding them would hold the whole corpus for a minute.
+    search: search === null ? null : { searchedText: search.searchedText, skipped: search.skipped },
     matching,
     groups,
     renderRow,
