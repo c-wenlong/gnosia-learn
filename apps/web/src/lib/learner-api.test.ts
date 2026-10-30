@@ -1,6 +1,19 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { BodyTooLarge, readBodyText } from "./learner-api";
+import { resetRateLimits } from "@gnosia/tutor/guards";
+import { BodyTooLarge, handler, MAX_BODY_BYTES, readBodyText } from "./learner-api";
+
+vi.mock("@/lib/auth/session", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/session")>()),
+  isSignedIn: async () => true,
+}));
+
+// The write runs against whatever this hands it; no database is opened.
+const store = vi.hoisted(() => ({ write: null as null | (() => Promise<unknown>) }));
+vi.mock("@/lib/learner-store", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/learner-store")>()),
+  withLearnerStore: async () => (store.write as () => Promise<unknown>)(),
+}));
 
 function streamed(chunks: Uint8Array[]): { request: Request; pulled: () => number } {
   let pulled = 0;
@@ -45,5 +58,45 @@ describe("readBodyText", () => {
 
   it("reads an absent body as empty", async () => {
     await expect(readBodyText(new Request("http://localhost:3000/x", { method: "POST" }), 100)).resolves.toBe("");
+  });
+});
+
+describe("handler", () => {
+  afterEach(() => {
+    resetRateLimits();
+    store.write = null;
+    vi.restoreAllMocks();
+  });
+
+  function post(body: string): Request {
+    return new Request("http://localhost:3000/api/learner/x", {
+      method: "POST",
+      headers: { "content-type": "application/json", "sec-fetch-site": "same-origin" },
+      body,
+    });
+  }
+
+  it("takes a larger body only where the route asks for one", async () => {
+    store.write = async () => "written";
+    const big = JSON.stringify({ text: "x".repeat(MAX_BODY_BYTES) });
+    const small = handler("t", (body) => body, async () => "written");
+    expect((await small(post(big))).status).toBe(400);
+    const large = handler("t", (body) => body, async () => "written", { maxBodyBytes: 2 * MAX_BODY_BYTES });
+    const answer = await large(post(big));
+    expect(answer.status).toBe(200);
+    expect(await answer.json()).toEqual({ ok: true, result: "written" });
+  });
+
+  it("logs a failed write by its code, never the driver's message and its parameters", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    store.write = async () => {
+      throw new Error('Failed query: insert into note values (?) params: my private note', { cause: Object.assign(new Error("disk"), { code: "SQLITE_FULL" }) });
+    };
+    const route = handler("t", (body) => body, async () => undefined);
+    const answer = await route(post("{}"));
+    expect(answer.status).toBe(503);
+    const logged = warn.mock.calls.map((call) => call.join(" ")).join("\n");
+    expect(logged).toContain("SQLITE_FULL");
+    expect(logged).not.toContain("my private note");
   });
 });

@@ -3,6 +3,7 @@ import {
   clampKnowledgeList,
   clampSummary,
   curriculumItem,
+  keepValidUserResources,
   LOCAL_LEARNER_ID,
   PREFERENCE_KEYS,
   RECAP_SOURCES,
@@ -179,7 +180,9 @@ export async function importLegacyState(
     result,
   );
 
-  const resources = asUserResources(payload.userResources);
+  // Held to the preference route's rules (http(s) only, the caps), dropping
+  // what it would refuse rather than failing the whole import on one link.
+  const resources = keepValidUserResources(asUserResources(payload.userResources));
   await maybeSet(
     db,
     learnerId,
