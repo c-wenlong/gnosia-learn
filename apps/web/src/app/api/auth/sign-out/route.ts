@@ -8,7 +8,9 @@ import { redirectTo, sameOrigin, sessionCookie } from "../shared";
  * landing page. A POST, from the avatar menu's form, so a prefetched link or
  * an image tag on another site cannot sign the owner out. There is no
  * server-side session to revoke; a token that is no longer in any browser is
- * simply a token nobody presents.
+ * simply a token nobody presents. Ending every session, a copied cookie
+ * included, is a configuration change: a new `SESSION_EPOCH` or
+ * `OWNER_PASSWORD` (`sessionKey` in `@/lib/auth/core`, docs/DEPLOYMENT.md).
  */
 export async function POST(request: Request) {
   if (!sameOrigin(request)) {

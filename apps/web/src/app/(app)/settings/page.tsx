@@ -15,7 +15,8 @@ import { loadSettings } from "@/lib/settings";
 import { TUTOR_TO_BYOK } from "@/lib/byok-providers";
 import { providersView } from "@/lib/providers/view";
 import { isMacUserAgent } from "@/lib/shortcuts";
-import { studioEnabled } from "@/lib/studio";
+import { studioApi, studioEnabled } from "@/lib/studio";
+import type { ByokInitial, ByokSettingsView } from "@/lib/studio-byok";
 import { loadTutorModels } from "@/lib/tutor-models/settings";
 
 export const metadata: Metadata = { title: "Settings" };
@@ -45,16 +46,17 @@ export const metadata: Metadata = { title: "Settings" };
  */
 export default async function SettingsPage() {
   const owner = await currentOwner();
-  const [settings, courses, keys, request, models] = await Promise.all([
+  const studio = studioEnabled();
+  const [settings, courses, keys, request, models, byok] = await Promise.all([
     loadSettings(),
     getCourses(),
     loadProviderKeys(owner),
     headers(),
     loadTutorModels(owner),
+    studio ? studioByok() : Promise.resolve(undefined),
   ]);
   const mac = isMacUserAgent(request.get("user-agent"));
   const view = providersView(keys, models.chain, models.reachable);
-  const studio = studioEnabled();
   return (
     <div data-layout="app" className={cx("flex max-w-[1084px] flex-col gap-4", PAGE_ENTER)}>
       <h1 className={PAGE_TITLE}>Settings</h1>
@@ -82,6 +84,7 @@ export default async function SettingsPage() {
                 <ModelSelection
                   view={view}
                   studio={studio}
+                  byok={byok}
                   chain={models.chain}
                   tutorStyle={settings.tutorStyle}
                   savedForTutor={keys.rows
@@ -99,4 +102,17 @@ export default async function SettingsPage() {
       />
     </div>
   );
+}
+
+/**
+ * Studio's BYOK settings, read here so the Model selection card starts from
+ * them: `down` when nothing listens on the runner's port, which the card
+ * shows as such instead of sending a request from the browser that the
+ * console would log as a failed 502. Any other refusal is left for the card
+ * to read itself, and say.
+ */
+async function studioByok(): Promise<ByokInitial | undefined> {
+  const result = await studioApi<ByokSettingsView>("/api/settings/byok", { timeoutMs: 5_000 });
+  if (result.ok) return { state: "up", data: result.data };
+  return result.reason === "down" ? { state: "down" } : undefined;
 }

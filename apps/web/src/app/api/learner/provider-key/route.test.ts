@@ -174,6 +174,39 @@ describe.skipIf(!reachable.ok)("provider key routes and store", () => {
     expect(await store.openSavedKeys("local")).toEqual({});
   });
 
+  it("with the studio on, tells the runner which provider joined and never sends it the key (S7-01)", async () => {
+    const sent: { url: string; method: string; body: string }[] = [];
+    vi.stubGlobal("fetch", async (url: unknown, init?: RequestInit) => {
+      sent.push({ url: String(url), method: init?.method ?? "GET", body: typeof init?.body === "string" ? init.body : "" });
+      return new Response(JSON.stringify({ configured: false, active: null, model: null, providers: [], error: null }), { status: 200 });
+    });
+    const studio = process.env.STUDIO_ENABLED;
+    process.env.STUDIO_ENABLED = "1";
+    try {
+      const saved = await routes.POST(request("POST", { provider: "openrouter", key: KEY }));
+      expect(await expectNoSecret(saved)).toMatchObject({ ok: true, byok: true });
+      const removed = await routes.DELETE(request("DELETE", { provider: "openrouter" }));
+      expect(await removed.json()).toEqual({ ok: true, removed: true, byok: true });
+      const syncRoute = await import("./sync/route");
+      await routes.POST(request("POST", { provider: "gemini", key: KEY }));
+      expect(await (await syncRoute.POST(request("POST", { provider: "gemini" }))).json()).toEqual({ ok: true, synced: true });
+    } finally {
+      if (studio === undefined) delete process.env.STUDIO_ENABLED;
+      else process.env.STUDIO_ENABLED = studio;
+    }
+    expect(sent.map(({ method, body }) => [method, JSON.parse(body)])).toEqual([
+      ["PUT", { provider: "openrouter", activate: false }],
+      ["DELETE", { provider: "openrouter" }],
+      ["PUT", { provider: "google", activate: false }],
+      ["PUT", { provider: "google", activate: false }],
+    ]);
+    for (const request of sent) {
+      expect(request.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/api\/settings\/byok$/);
+      expect(request.body).not.toContain(KEY.slice(9, 30));
+      for (const form of await storedForms()) expect(request.body).not.toContain(form);
+    }
+  });
+
   it("never hands owner B owner A's key, even with A's row moved onto B", async () => {
     await scratch.pool.query("insert into learner (id) values ('owner-b') on conflict do nothing");
     await store.saveProviderKey("local", "nvidia", KEY);

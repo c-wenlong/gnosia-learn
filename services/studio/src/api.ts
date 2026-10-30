@@ -4,7 +4,8 @@ import { stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 
 import { BriefError, loadVocabulary, validateBrief, vocabularyStatusNow, type ValidBrief, type Vocabulary } from "./diagram/brief";
-import { byokStatus, checkByokProvider, listByokModels, loadByok, removeByokProvider, saveByok, saveByokModels, setByokActive } from "./agent/byok";
+import { byokStatus, checkByokProvider, listByokModels, removeByokProvider, saveByok, saveByokModels, setByokActive, storedKeyForModels } from "./agent/byok";
+import { keyAccessNow } from "./agent/byok-keys";
 import { canvas, doctor, doctorChecks, type DoctorCheck } from "./canvas/canvas";
 import { preferenceSet, videoList } from "./data/catalog";
 import { STUDIO_OWNER_HEADER, studioAgentPreference } from "@gnosia/schema/shared";
@@ -1844,9 +1845,11 @@ async function agentSettingsRoute(
 
 /**
  * `GET /api/settings/byok`: whether the open harness (`qwen`) can run and on
- * which provider and model, never the key. `PUT` with `{ provider, apiKey,
- * model }` writes `$STUDIO_HOME/byok.json` mode 0600 and answers as `GET`;
- * the key goes no further than that file and a spawn's env.
+ * which provider and model, never the key. `PUT` with `{ provider, model?,
+ * activate? }` connects a provider whose key is saved in Settings and answers
+ * as `GET`; `DELETE { provider }` stops Studio using it. The runner keeps no
+ * key (docs/BYOK.md, D12): a body carrying one is refused, and a spawn opens
+ * the saved one from the catalog.
  */
 async function byokSettingsRoute(
   request: IncomingMessage,
@@ -1878,7 +1881,7 @@ async function byokSettingsRoute(
 /**
  * `POST /api/settings/byok/models` `{ provider, apiKey? }`: the provider's own
  * `/models` on the key the dialog holds — typed, or the stored one when the
- * field was left blank on that provider (D93's combobox). A POST rather than a
+ * field was left blank (D93's combobox), which is the key saved in Settings. A POST rather than a
  * GET so the key is never in a URL. Answers `{ models: [{ value, label }] }`,
  * `label` null when the provider sends ids only.
  *
@@ -1904,14 +1907,9 @@ async function byokModelsRoute(request: IncomingMessage, response: ServerRespons
     if (method !== "POST") return fail(response, 405, `${method} is not a thing /api/settings/byok/models does`);
     const provider = checkByokProvider(body.provider);
     let apiKey = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
-    if (apiKey === "") {
-      const held = await loadByok();
-      const entry = held === null ? undefined : held.providers[provider];
-      if (entry === undefined) {
-        throw new JobRefused(400, `"apiKey" is the provider's key, or the stored one when the field is left blank`, { field: "apiKey" });
-      }
-      apiKey = entry.apiKey;
-    }
+    // A blank field lists on the key saved in Settings, opened for this one
+    // call and dropped.
+    if (apiKey === "") apiKey = await storedKeyForModels(provider);
     return send(response, 200, { models: await listByokModels(provider, apiKey) });
   } catch (error) {
     if (error instanceof JobRefused) return fail(response, error.status, error.message, error.detail);
@@ -2104,6 +2102,10 @@ async function health(
           : { ...videoReport, running: video.runner.busy, queueDepth: video.store.list({ state: "queued" }).length, tools: toolsHealth(toolVerdicts), narration: narrationHealth() },
     agent,
     diagramAgent: { ok: diagramAgentProblem === null, problem: diagramAgentProblem },
+    // Whether the BYOK harness can open the provider keys saved in Settings
+    // (docs/BYOK.md, D12): `problem` names a missing AUTH_SECRET or catalog
+    // file. Claude and codex chats do not depend on it.
+    byokKeys: (({ ok, problem }) => ({ ok, problem }))(keyAccessNow()),
     // When each answer above was checked. `stale` means it is older than that
     // check's own lifetime and a refresh is under way: the next call has it.
     // The video doctor carries its own `checkedAt`, and `vocabulary` its

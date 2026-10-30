@@ -11,7 +11,22 @@ export interface ByokProviderStatus {
   provider: string;
   last4: string;
   models: { default?: string; lite?: string; max?: string };
+  /** Its key is not saved in Settings or no longer opens: listed for its tiers, but it cannot run. */
+  keyMissing?: true;
 }
+
+/** `GET /api/settings/byok`'s answer: the connected providers, the active one, its Default model, and why the saved keys cannot be read (or null). */
+export interface ByokSettingsView {
+  configured: boolean;
+  active: string | null;
+  model: string | null;
+  providers: ByokProviderStatus[];
+  /** The runner's reason it cannot open the keys saved in Settings (no AUTH_SECRET, no catalog), or null. */
+  error?: string | null;
+}
+
+/** The runner's settings as a server page read them before rendering, or that it was not answering. */
+export type ByokInitial = { state: "up"; data: ByokSettingsView } | { state: "down" };
 
 /** Window event a successful BYOK write fires, so open composers and panes re-read the tiers (D94). */
 export const BYOK_SETTINGS_CHANGED = "gnosia:byok-settings";
@@ -27,13 +42,13 @@ function announceByokWrite<T>(result: Promise<T>): Promise<T> {
 
 /** `GET /api/settings/byok`: the connected providers, the active one, and its Default model. Never a key. */
 export function getByokSettings() {
-  return call<{ configured: boolean; active: string | null; model: string | null; providers: ByokProviderStatus[] }>("/studio/api/settings/byok");
+  return call<ByokSettingsView>("/studio/api/settings/byok");
 }
 
-/** `DELETE /api/settings/byok` (D94): unhook a provider — its key, tiers and the active pick go with it. */
+/** `DELETE /api/settings/byok` (D94): Studio stops using a provider — its tiers and the active pick go; its key stays saved in Settings. */
 export function removeByokProvider(provider: string) {
   return announceByokWrite(
-    call<{ configured: boolean; active: string | null; model: string | null; providers: ByokProviderStatus[] }>("/studio/api/settings/byok", {
+    call<ByokSettingsView>("/studio/api/settings/byok", {
       method: "DELETE",
       body: JSON.stringify({ provider }),
     }),
@@ -43,7 +58,7 @@ export function removeByokProvider(provider: string) {
 /** `PUT /api/settings/byok/active` (D94): which connected provider a `byok` turn runs on. */
 export function setByokActive(provider: string) {
   return announceByokWrite(
-    call<{ configured: boolean; active: string | null; model: string | null; providers: ByokProviderStatus[] }>("/studio/api/settings/byok/active", {
+    call<ByokSettingsView>("/studio/api/settings/byok/active", {
       method: "PUT",
       body: JSON.stringify({ provider }),
     }),
@@ -53,7 +68,7 @@ export function setByokActive(provider: string) {
 /** `PUT /api/settings/byok/models` (D94): a connected provider's tier picks; omitted keeps, empty clears. */
 export function saveByokModels(provider: string, models: { default?: string; lite?: string; max?: string }) {
   return announceByokWrite(
-    call<{ configured: boolean; active: string | null; model: string | null; providers: ByokProviderStatus[] }>("/studio/api/settings/byok/models", {
+    call<ByokSettingsView>("/studio/api/settings/byok/models", {
       method: "PUT",
       body: JSON.stringify({ provider, models }),
     }),
@@ -63,7 +78,8 @@ export function saveByokModels(provider: string, models: { default?: string; lit
 /**
  * `POST /api/settings/byok/models` (D93): the provider's own model list, on
  * the key typed into the dialog or the stored one when the field was left
- * blank. The key rides the POST body, never a URL.
+ * blank (the runner opens the one saved in Settings). The key rides the POST
+ * body, never a URL.
  */
 export function listByokModels(provider: string, apiKey?: string) {
   return call<{ models: { value: string; label: string | null }[] }>("/studio/api/settings/byok/models", {

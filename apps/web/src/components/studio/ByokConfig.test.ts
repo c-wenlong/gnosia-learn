@@ -90,7 +90,7 @@ describe("ByokConfig's Remove", () => {
 
     await act(async () => named(host, "Remove")!.click());
     expect(mocks.removeByokProvider).not.toHaveBeenCalled();
-    expect(host.textContent).toContain("Remove OpenRouter's key from Studio?");
+    expect(host.textContent).toContain("Stop using OpenRouter in Studio? Its key stays saved in Settings.");
 
     await act(async () => named(host, "Keep it")!.click());
     expect(mocks.removeByokProvider).not.toHaveBeenCalled();
@@ -99,5 +99,98 @@ describe("ByokConfig's Remove", () => {
     await act(async () => named(host, "Remove it")!.click());
     expect(mocks.removeByokProvider).toHaveBeenCalledTimes(1);
     expect(mocks.removeByokProvider).toHaveBeenCalledWith("openrouter");
+  });
+});
+
+describe("ByokConfig with the runner down", () => {
+  async function mount(props: Parameters<typeof ByokConfig>[0]): Promise<HTMLElement> {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    await act(async () => {
+      root.render(createElement(ByokConfig, props));
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    mounted.push(() => {
+      act(() => root.unmount());
+      host.remove();
+    });
+    return host;
+  }
+
+  it("shows the down state from the server's read and sends nothing until Try again", async () => {
+    mocks.getByokSettings.mockReset();
+    const host = await mount({ manageKeys: false, initial: { state: "down" } });
+    expect(host.textContent).toContain("The studio runner is not answering");
+    // A key saved on the Providers card announces a write; a runner known to be down is not asked.
+    await act(async () => {
+      window.dispatchEvent(new Event("gnosia:byok-settings"));
+    });
+    expect(mocks.getByokSettings).not.toHaveBeenCalled();
+
+    mocks.getByokSettings.mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: { configured: true, active: "openrouter", model: "m", providers: [{ provider: "openrouter", last4: "abcd", models: { default: "m" } }], error: null },
+    });
+    mocks.listByokModels.mockResolvedValue({ ok: true, status: 200, data: { models: [] } });
+    await act(async () => named(host, "Try again")!.click());
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(mocks.getByokSettings).toHaveBeenCalledTimes(1);
+    expect(host.textContent).not.toContain("not answering");
+    expect(host.textContent).toContain("··abcd");
+  });
+
+  it("starts from the server's answer without a request of its own, and says why keys cannot be read", async () => {
+    mocks.getByokSettings.mockReset();
+    mocks.listByokModels.mockResolvedValue({ ok: true, status: 200, data: { models: [] } });
+    const host = await mount({
+      manageKeys: false,
+      initial: {
+        state: "up",
+        data: { configured: false, active: null, model: null, providers: [], error: "AUTH_SECRET is not set for the runner" },
+      },
+    });
+    expect(mocks.getByokSettings).not.toHaveBeenCalled();
+    expect(host.textContent).toContain("Studio cannot use the saved keys yet: AUTH_SECRET is not set for the runner.");
+  });
+
+  it("says what a runner that came back refuses, instead of still looking down", async () => {
+    mocks.getByokSettings.mockReset().mockResolvedValue({ ok: false, status: 403, refusal: { error: "this runner serves another owner", detail: null } });
+    const host = await mount({ manageKeys: false, initial: { state: "down" } });
+    await act(async () => named(host, "Try again")!.click());
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(host.textContent).not.toContain("not answering");
+    expect(host.textContent).toContain("this runner serves another owner");
+  });
+
+  it("lists a provider whose key is missing with its tiers, and says so", async () => {
+    mocks.getByokSettings.mockReset();
+    mocks.listByokModels.mockReset();
+    const host = await mount({
+      manageKeys: false,
+      initial: {
+        state: "up",
+        data: { configured: false, active: "anthropic", model: null, providers: [{ provider: "anthropic", last4: "", models: { default: "claude-sonnet-4-5" }, keyMissing: true }], error: null },
+      },
+    });
+    expect(host.textContent).toContain("Anthropic · no key saved");
+    expect(host.textContent).toContain("No key is saved for this provider");
+    expect((host.querySelector("input[autocomplete=off]") as HTMLInputElement | null)?.value).toBe("claude-sonnet-4-5");
+    // No stored key to list models on, so none is asked for.
+    expect(mocks.listByokModels).not.toHaveBeenCalled();
+  });
+
+  it("shows the down state when its own read finds the runner down", async () => {
+    mocks.getByokSettings.mockReset().mockResolvedValue({ ok: false, status: 502, refusal: { error: "the studio runner is not answering", detail: null } });
+    const host = await mount({});
+    expect(host.textContent).toContain("The studio runner is not answering");
+    expect(named(host, "Try again")).toBeDefined();
   });
 });

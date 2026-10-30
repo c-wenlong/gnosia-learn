@@ -18,41 +18,68 @@ import {
 
 const SECRET = "0123456789abcdef0123456789abcdef";
 const NOW = 1_800_000_000;
+const CONFIG = { secret: SECRET, password: "correct horse battery staple", epoch: "" };
 
 describe("signSession / verifySession", () => {
   it("round-trips a token signed with the same secret", async () => {
-    const token = await signSession(SECRET, NOW);
+    const token = await signSession(CONFIG, NOW);
     expect(token).toMatch(/^1800000000\.[A-Za-z0-9_-]{43}$/);
-    await expect(verifySession(SECRET, token, NOW)).resolves.toBe(true);
-    await expect(verifySession(SECRET, token, NOW + SESSION_TTL_SECONDS)).resolves.toBe(true);
+    await expect(verifySession(CONFIG, token, NOW)).resolves.toBe(true);
+    await expect(verifySession(CONFIG, token, NOW + SESSION_TTL_SECONDS)).resolves.toBe(true);
   });
 
   it("refuses a different secret, a tampered time and a tampered signature", async () => {
-    const token = await signSession(SECRET, NOW);
-    await expect(verifySession(`${SECRET}x`, token, NOW)).resolves.toBe(false);
+    const token = await signSession(CONFIG, NOW);
+    await expect(verifySession({ ...CONFIG, secret: `${SECRET}x` }, token, NOW)).resolves.toBe(false);
     const [issuedAt, sig] = token.split(".");
-    await expect(verifySession(SECRET, `${Number(issuedAt) + 1}.${sig}`, NOW)).resolves.toBe(false);
+    await expect(verifySession(CONFIG, `${Number(issuedAt) + 1}.${sig}`, NOW)).resolves.toBe(false);
     const flipped = sig[0] === "A" ? "B" : "A";
-    await expect(verifySession(SECRET, `${issuedAt}.${flipped}${sig.slice(1)}`, NOW)).resolves.toBe(false);
+    await expect(verifySession(CONFIG, `${issuedAt}.${flipped}${sig.slice(1)}`, NOW)).resolves.toBe(false);
   });
 
   it("expires after the TTL and refuses a token from the future", async () => {
-    const token = await signSession(SECRET, NOW);
-    await expect(verifySession(SECRET, token, NOW + SESSION_TTL_SECONDS + 1)).resolves.toBe(false);
-    await expect(verifySession(SECRET, token, NOW - 61)).resolves.toBe(false);
-    await expect(verifySession(SECRET, token, NOW - 59)).resolves.toBe(true);
+    const token = await signSession(CONFIG, NOW);
+    await expect(verifySession(CONFIG, token, NOW + SESSION_TTL_SECONDS + 1)).resolves.toBe(false);
+    await expect(verifySession(CONFIG, token, NOW - 61)).resolves.toBe(false);
+    await expect(verifySession(CONFIG, token, NOW - 59)).resolves.toBe(true);
   });
 
   it("is false for anything malformed, without throwing", async () => {
     for (const bad of [undefined, null, "", ".", "abc", "123", "123.", ".abc", "1e5.abc", "-1.abc", "1800000000.abc def"]) {
-      await expect(verifySession(SECRET, bad, NOW)).resolves.toBe(false);
+      await expect(verifySession(CONFIG, bad, NOW)).resolves.toBe(false);
     }
-    await expect(verifySession("", await signSession(SECRET, NOW), NOW)).resolves.toBe(false);
+    await expect(verifySession({ ...CONFIG, secret: "" }, await signSession(CONFIG, NOW), NOW)).resolves.toBe(false);
+    await expect(verifySession({ ...CONFIG, password: "" }, await signSession(CONFIG, NOW), NOW)).resolves.toBe(false);
   });
 
-  it("refuses to sign a non-integer time", async () => {
-    await expect(signSession(SECRET, 1.5)).rejects.toThrow(RangeError);
-    await expect(signSession(SECRET, -1)).rejects.toThrow(RangeError);
+  it("refuses to sign a non-integer time, or without a secret and a password", async () => {
+    await expect(signSession(CONFIG, 1.5)).rejects.toThrow(RangeError);
+    await expect(signSession(CONFIG, -1)).rejects.toThrow(RangeError);
+    await expect(signSession({ ...CONFIG, password: "" }, NOW)).rejects.toThrow(RangeError);
+  });
+
+  it("ends every session when the password or the epoch changes, with AUTH_SECRET untouched (S7-03)", async () => {
+    const token = await signSession(CONFIG, NOW);
+    await expect(verifySession({ ...CONFIG, password: "a new password" }, token, NOW)).resolves.toBe(false);
+    await expect(verifySession({ ...CONFIG, epoch: "1" }, token, NOW)).resolves.toBe(false);
+    // A new session under the new epoch works, and the old configuration does not take it.
+    const bumped = await signSession({ ...CONFIG, epoch: "1" }, NOW);
+    await expect(verifySession({ ...CONFIG, epoch: "1" }, bumped, NOW)).resolves.toBe(true);
+    await expect(verifySession(CONFIG, bumped, NOW)).resolves.toBe(false);
+    // Back to the old values is back to the old sessions: the key is a function of the three.
+    await expect(verifySession(CONFIG, token, NOW)).resolves.toBe(true);
+  });
+
+  it("cannot be confused by an epoch that looks like a separator", async () => {
+    const a = await signSession({ ...CONFIG, password: "pw", epoch: '","x' }, NOW);
+    await expect(verifySession({ ...CONFIG, password: 'pw","', epoch: "x" }, a, NOW)).resolves.toBe(false);
+  });
+
+  it("refuses a token signed the old way, with AUTH_SECRET alone (sessions end once at deploy)", async () => {
+    const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    const mac = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`gnosia-session:${NOW}`)));
+    const legacy = `${NOW}.${btoa(String.fromCharCode(...mac)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")}`;
+    await expect(verifySession(CONFIG, legacy, NOW)).resolves.toBe(false);
   });
 });
 
@@ -114,9 +141,13 @@ describe("requestIsSameOrigin", () => {
 });
 
 describe("readAuthConfig", () => {
-  it("returns both values trimmed", () => {
+  it("returns both values trimmed, and the epoch, empty when unset", () => {
     const result = readAuthConfig({ OWNER_PASSWORD: " pw ", AUTH_SECRET: ` ${SECRET} ` });
-    expect(result).toEqual({ ok: true, config: { password: "pw", secret: SECRET } });
+    expect(result).toEqual({ ok: true, config: { password: "pw", secret: SECRET, epoch: "" } });
+    expect(readAuthConfig({ OWNER_PASSWORD: "pw", AUTH_SECRET: SECRET, SESSION_EPOCH: " 3 " })).toEqual({
+      ok: true,
+      config: { password: "pw", secret: SECRET, epoch: "3" },
+    });
   });
 
   it("names every missing variable, and treats a short secret as missing", () => {

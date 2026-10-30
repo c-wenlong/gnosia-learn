@@ -363,7 +363,7 @@ export interface PlannerArgvInput {
  *   same `system`/`assistant`/`result` NDJSON Claude Code does — init, deltas,
  *   usage included — so `PlannerRun`'s parser and the session log are
  *   unchanged.
- * - `--model`: the provider's own name for it, from `byok.json` — the draft's
+ * - `--model`: the provider's own name for it, from `byok-settings.json` — the draft's
  *   `model` pick names claude models, so it is not consulted here.
  * - `--max-session-turns`: per-run despite the name (the counter is the
  *   process's own `limitedTurnCount`), the cap `plannerArgv` passes as

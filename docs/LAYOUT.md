@@ -276,7 +276,8 @@ permission file naming this machine's home directory. `jobs/<id>/` one
 workspace per job (its `candidate/`, `scratch/`, `tmp/` and the before/after
 shots), `work/` the diagram checkouts the canvas verbs run on, `drafts/` the
 planner conversations, `manual/` the built manuals by hash, `cache/` the
-last-good topic vocabulary, `byok.json` the runner's own provider keys. It
+last-good topic vocabulary, `byok-settings.json` the BYOK harness's provider
+picks and tier models (never a key: BYOK.md, D12). It
 is created by `npm run studio` — a fresh clone has no `.studio/` — and
 deleted at will: nothing in it is the only copy of anything.
 
