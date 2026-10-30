@@ -10,6 +10,7 @@ import {
   type KnowledgeBase,
 } from "@gnosia/catalog/state";
 import { emptyLearnerState, type LearnerState } from "@gnosia/schema/shared";
+import { failureCode } from "@gnosia/tutor/server/provider-keys";
 
 import { currentOwner } from "@/lib/owner";
 
@@ -146,7 +147,7 @@ export function isBadRequest(error: unknown): boolean {
   return error instanceof StateError;
 }
 
+/** Logged by code only: a drizzle message carries the statement and its parameters. */
 function warn(what: string, error: unknown): void {
-  const message = error instanceof Error ? error.message : String(error);
-  console.warn(`learner store: ${what} unavailable — ${message}`);
+  console.warn(`learner store: ${what} unavailable (${failureCode(error)})`);
 }

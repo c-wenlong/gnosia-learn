@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { CatalogDatabase } from "@gnosia/catalog/state";
+import { failureCode } from "@gnosia/tutor/server/provider-keys";
 
 import { enforceRateLimit, enforceSameOrigin, type RateLimitRule } from "@/lib/agent/guard";
 import { isBadRequest, withLearnerStore } from "@/lib/learner-store";
@@ -87,12 +88,13 @@ export function badRequest(message: string): NextResponse {
 }
 
 /**
- * The message is logged, not returned. It is the driver's, and the driver's
- * message is the failed SQL with its bind parameters — useful in a server log
- * and no use at all to a learner looking at a banner.
+ * A write the database did not take: logged by its code only (`failureCode`,
+ * the driver's code down drizzle's `cause` chain), never by message. A
+ * drizzle message is the failed SQL with its bind parameters, which here are
+ * the learner's notes, recaps and answers.
  */
-export function unavailable(message: string): NextResponse {
-  console.warn(`learner write failed: ${message}`);
+export function unavailable(error: unknown): NextResponse {
+  console.warn(`learner write failed (${failureCode(error)})`);
   return NextResponse.json(
     { ok: false, error: "Not saved: the database is unreachable.", code: "STORE_UNAVAILABLE" },
     { status: 503 },
@@ -145,12 +147,12 @@ export async function readBodyText(req: Request, maxBytes: number): Promise<stri
   return new TextDecoder().decode(bytes);
 }
 
-async function readBody(req: Request): Promise<unknown> {
+async function readBody(req: Request, maxBytes: number): Promise<unknown> {
   let text: string;
   try {
-    text = await readBodyText(req, MAX_BODY_BYTES);
+    text = await readBodyText(req, maxBytes);
   } catch (error) {
-    if (error instanceof BodyTooLarge) throw new BadRequest(`Body too large (limit ${MAX_BODY_BYTES} bytes).`);
+    if (error instanceof BodyTooLarge) throw new BadRequest(`Body too large (limit ${maxBytes} bytes).`);
     throw error;
   }
   if (text.trim() === "") return {};
@@ -164,11 +166,14 @@ async function readBody(req: Request): Promise<unknown> {
 /**
  * Wrap a handler with the guards, the body parse and the error mapping. Every
  * route under `/api/learner/` is one call to this and one function.
+ * `maxBodyBytes` defaults to `MAX_BODY_BYTES`; the legacy import is the one
+ * route whose body is a whole study record.
  */
 export function handler<T>(
   bucket: string,
   parse: (body: Record<string, unknown>) => T,
   write: (db: CatalogDatabase, input: T, owner: string) => Promise<unknown>,
+  { maxBodyBytes = MAX_BODY_BYTES }: { maxBodyBytes?: number } = {},
 ): (req: Request) => Promise<NextResponse> {
   return async (req: Request) => {
     const origin = enforceSameOrigin(req);
@@ -180,7 +185,7 @@ export function handler<T>(
 
     let input: T;
     try {
-      const body = await readBody(req);
+      const body = await readBody(req, maxBodyBytes);
       if (body === null || typeof body !== "object" || Array.isArray(body)) {
         return badRequest("Body must be a JSON object.");
       }
@@ -199,7 +204,7 @@ export function handler<T>(
       // 400, not a 503, and the two must not be confused: the UI retries one
       // and gives up on the other.
       if (isBadRequest(error)) return badRequest((error as Error).message);
-      return unavailable(error instanceof Error ? error.message : String(error));
+      return unavailable(error);
     }
   };
 }

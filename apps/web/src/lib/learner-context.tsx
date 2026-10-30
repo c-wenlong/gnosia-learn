@@ -576,7 +576,7 @@ export function LearnerProvider({
     [commit],
   );
 
-  useLegacyImport(router.refresh);
+  useLegacyImport(router.refresh, setSaveError);
 
   const value = useMemo(
     () => ({
@@ -620,18 +620,24 @@ export function LearnerProvider({
   return <LearnerContext.Provider value={value}>{children}</LearnerContext.Provider>;
 }
 
+/** Where a legacy document the server refused is kept, so it is not posted on every load. */
+const LEGACY_REFUSED_KEY = `${LEGACY_STORAGE_KEY}:refused`;
+
 /**
  * Carry one browser's old localStorage document into the database, once.
  *
  * Every browser that used the app before bundle 5 is holding ticks, notes and
  * recaps that no database has. This posts them on first mount and removes the
- * key when the server confirms. The key is only removed on success, so a
- * failed attempt is retried on the next load rather than losing the document.
+ * key when the server confirms. A database that could not be reached keeps the
+ * key, so the attempt is retried on the next load rather than losing the
+ * document. A document the server refuses (a 400) would be refused again on
+ * every load, so it is moved aside to `LEGACY_REFUSED_KEY`, still in this
+ * browser, and `report` says so once.
  *
  * `refresh` afterwards, because the imported rows are in the snapshot the
  * server rendered *before* they existed.
  */
-function useLegacyImport(refresh: () => void): void {
+function useLegacyImport(refresh: () => void, report: (message: string) => void): void {
   const attempted = useRef(false);
 
   useEffect(() => {
@@ -646,6 +652,7 @@ function useLegacyImport(refresh: () => void): void {
       return;
     }
     if (raw === null) return;
+    const stored = raw;
 
     let payload: unknown;
     try {
@@ -663,7 +670,17 @@ function useLegacyImport(refresh: () => void): void {
     if (payload === null || typeof payload !== "object" || Array.isArray(payload)) return;
 
     void post("import", payload).then((response) => {
-      if (response.ok === false) return;
+      if (response.ok === false) {
+        if (response.code !== "BAD_REQUEST") return;
+        try {
+          window.localStorage.setItem(LEGACY_REFUSED_KEY, stored);
+          window.localStorage.removeItem(LEGACY_STORAGE_KEY);
+        } catch {
+          /* left where it was: it is retried, and refused, next time */
+        }
+        report(`Your study record saved in this browser could not be imported (${response.error ?? "refused"}). It is kept in this browser.`);
+        return;
+      }
       try {
         window.localStorage.removeItem(LEGACY_STORAGE_KEY);
       } catch {
