@@ -69,8 +69,10 @@ describe("the kit's elements", () => {
       jsx('<div role={"tab"} />'),
       jsx('<button role={wide ? "group" : "radio"} />'),
       "export const props = { role: 'tablist' };",
+      jsx("<div role={`tablist`} />"),
+      "export const props = { role: `radio` };",
     ],
-    good: [jsx('<div role="tabpanel" />'), jsx('<div role={wide ? undefined : "tabpanel"} />'), "export const p = { id, role: 'tabpanel' };", jsx('<div role="group" />')],
+    good: [jsx("<div role={`tabpanel`} />"), jsx('<div role="tabpanel" />'), jsx('<div role={wide ? undefined : "tabpanel"} />'), "export const p = { id, role: 'tabpanel' };", jsx('<div role="group" />')],
   });
   cases("gnosia/kit-popover", { bad: [jsx('<div popover="auto" />'), "export const open = (el) => el.showPopover();"] });
   cases("gnosia/kit-menu-box", {
@@ -82,7 +84,10 @@ describe("the kit's elements", () => {
     good: [`import { MENU_PANEL } from "@/components/ui/classes";\n${jsx('<div role="menu" className={MENU_PANEL} />')}`],
   });
   cases("gnosia/kit-focus-ring", {
-    bad: ['const RING = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";\nexport { RING };'],
+    bad: [
+      'const RING = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";\nexport { RING };',
+      "const RING = `focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`;\nexport { RING };",
+    ],
   });
   cases("gnosia/kit-text-link", {
     bad: [jsx('<a className="text-accent-text font-semibold hover:underline" />')],
@@ -110,6 +115,7 @@ describe("the kit's elements", () => {
       jsx('<p className={cx("rounded-xl px-4", ok ? "bg-ok-tint" : "bg-warn-tint")}>no</p>'),
       jsx('<p className="rounded-lg bg-warn-tint p-3">no</p>'),
       'export const BOX = "rounded-md bg-warn-tint p-3";',
+      "export const BOX = `rounded-md bg-warn-tint p-3`;",
     ],
     good: [jsx('<span className="rounded-full bg-warn-tint px-3" />'), jsx('<button className="inline-flex h-7 rounded-md bg-warn-tint px-2" />')],
   });
@@ -119,14 +125,14 @@ describe("the browser's confirm()", () => {
   const confirms = async (code) =>
     [
       ...(await broken(code, "no-restricted-globals", LIB)),
-      ...(await broken(code, "no-restricted-properties", LIB)),
-      ...(await broken(code, "gnosia/kit-confirm-chain", LIB)),
+      ...(await broken(code, "gnosia/kit-confirm", LIB)),
     ].length;
 
   it("is caught bare, through window, and through a chain of globals", async () => {
     expect(await confirms('export function drop() { if (confirm("Sure?")) return 1; }')).toBe(1);
     expect(await confirms("export const go = () => window.confirm('Sure?');")).toBe(1);
-    expect(await confirms("globalThis.window.confirm('Sure?');")).toBeGreaterThan(0);
+    expect(await confirms("globalThis.window.confirm('Sure?');")).toBe(1);
+    expect(await confirms("export const go = () => self.confirm('Sure?');")).toBe(1);
   });
 
   it("is told from a confirm of the file's own", async () => {
@@ -134,6 +140,8 @@ describe("the browser's confirm()", () => {
     expect(await confirms("declare const dialog: { confirm(x: string): void };\ndialog.confirm('Sure?');")).toBe(0);
     expect(await confirms("declare const api: { window: { confirm(x: string): void } };\napi.window.confirm('Sure?');")).toBe(0);
     expect(await confirms("declare const helpers: { confirm(n: number): void };\nconst { confirm } = helpers;\nconfirm(2);")).toBe(0);
+    // A parameter named window is the caller's, not the browser's (Greptile on #556).
+    expect(await confirms("type Api = { confirm(n: number): void; self: Api };\nexport function f(window: Api) { window.confirm(1); return window.self.confirm(2); }")).toBe(0);
   });
 });
 
@@ -176,6 +184,8 @@ describe("type", () => {
       'export const css = "a { font-size: 11px; }";',
       'export const css = "a { font-size: 0.625rem; }";',
       jsx("<text fontSize={11} />"),
+      jsx("<text fontSize={Math.min(11, size)} />"),
+      jsx("<p style={{ fontSize: big ? 14 : 10 }} />"),
       "export const f = (compact: boolean) => { const fontSize = compact ? 12 : 11.5; return fontSize; };",
     ],
     good: [
@@ -183,6 +193,8 @@ describe("type", () => {
       jsx('<span className="text-[12px] text-[1.0625rem] text-[0.8em]" />'),
       jsx("<p style={{ fontSize: Math.max(12, Math.round(size * 0.3)) }} />"),
       jsx("<text fontSize={12.5} />"),
+      jsx("<text fontSize={Math.max(12, size - 2)} />"),
+      jsx("<text fontSize={size - 2} />"),
       "/** no `text-[10px]` here */\n// nor text-[11px]\nexport const x = 1;",
     ],
   });
@@ -302,6 +314,7 @@ describe("the studio", () => {
       "export const ChipLink = () => null;",
       'export { Chip, Thing as ButtonLink } from "./x";',
       'export const C = "pointer-events-auto inline-flex h-7 shrink-0 items-center rounded-md border border-border bg-surface px-2 text-xs";',
+      "export const C = `inline-flex h-6 items-center rounded-md border px-2`;",
     ],
     good: [
       "// export function Button() {}\nexport function VideoChangeButton() { return null; }",
@@ -319,7 +332,12 @@ describe("the studio", () => {
     expect(await broken('export { default } from "./other";', "gnosia/studio-gate", page)).not.toEqual([]);
     const actions = "apps/web/src/app/(app)/studio/actions.ts";
     expect(await broken('"use server";\nexport async function a() { requireStudio(); }\nexport const b = async () => 1;', "gnosia/studio-gate", actions)).toHaveLength(1);
-    expect(await broken("export async function GET() { return new Response(); }", "gnosia/studio-gate", "apps/web/src/app/(app)/studio/x/[y]/route.ts")).toHaveLength(1);
+    const route = "apps/web/src/app/(app)/studio/x/[y]/route.ts";
+    expect(await broken("export async function GET() { return new Response(); }", "gnosia/studio-gate", route)).toHaveLength(1);
+    // An export list is followed to each function it names (Greptile on #556).
+    const mixed = 'import { requireStudio } from "@/lib/studio";\nexport async function GET() { requireStudio(); return new Response(); }\nasync function POST() { return new Response(); }\nconst PUT = async () => { requireStudio(); return new Response(); };\nexport { POST, PUT };';
+    expect(await broken(mixed, "gnosia/studio-gate", route)).toEqual([expect.stringContaining("POST")]);
+    expect(await broken('async function Page() { return null; }\nexport default Page;', "gnosia/studio-gate", page)).toHaveLength(1);
   });
   it("keeps TutorChat's first load free of the studio", async () => {
     const file = "apps/web/src/components/workspace/TutorChat.tsx";
@@ -363,6 +381,12 @@ describe("theme tokens", () => {
     expect(await broken('export const c = "#f7f6f3";', "gnosia/theme-tokens", "apps/web/src/app/(site)/page.tsx")).toEqual([]);
     expect(await broken('export const c = "#f7f6f3";', "gnosia/theme-tokens", "apps/web/src/components/avatar/sprites.ts")).toEqual([]);
     expect(await broken('export const c = "#f7f6f3";', "gnosia/theme-tokens", LIB)).toEqual([]);
+  });
+  it("still holds the brand pages and the pixel art to the token names (Greptile on #556)", async () => {
+    for (const file of ["apps/web/src/app/(site)/page.tsx", "apps/web/src/components/avatar/sprites.ts"]) {
+      expect(await broken('export const c = "text-[var(--muted)]";', "gnosia/theme-tokens", file)).not.toEqual([]);
+      expect(await broken('export const c = "bg-[var(--surface2)]";', "gnosia/theme-tokens", file)).not.toEqual([]);
+    }
   });
 });
 

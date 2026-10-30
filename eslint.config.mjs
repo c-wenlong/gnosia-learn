@@ -27,18 +27,10 @@ const houseRules = [
       "gnosia/cx-only": "error",
       "gnosia/sentence-case": "error",
       "gnosia/field-text": "error",
-      "gnosia/kit-confirm-chain": "error",
+      "gnosia/kit-confirm": "error",
       "no-restricted-globals": [
         "error",
         { name: "confirm", message: "Ask in place with ConfirmFold or InlineConfirm, never through the browser's confirm()." },
-      ],
-      "no-restricted-properties": [
-        "error",
-        ...["window", "globalThis", "self"].map((object) => ({
-          object,
-          property: "confirm",
-          message: "Ask in place with ConfirmFold or InlineConfirm, never through the browser's confirm().",
-        })),
       ],
     },
   },
@@ -143,14 +135,18 @@ const houseRules = [
   { files: [src("components/NoteProse.tsx")], rules: { "gnosia/h1-role": ["error", { allow: 1 }] } },
   {
     files: [src("components/**/*.{ts,tsx}"), src("app/**/*.{ts,tsx}")],
-    ignores: [
-      ...WEB_IGNORES,
+    ignores: WEB_IGNORES,
+    rules: { "gnosia/theme-tokens": "error" },
+  },
+  {
+    files: [
       // The public brand pages draw the Gnosia brand in its own colours.
-      src("app/(site)/**"),
+      src("app/(site)/**/*.{ts,tsx}"),
       // Pixel art: each familiar is a grid of fixed colours, and its palette is the picture.
       src("components/avatar/sprites.ts"),
     ],
-    rules: { "gnosia/theme-tokens": "error" },
+    ignores: WEB_IGNORES,
+    rules: { "gnosia/theme-tokens": ["error", { colours: false }] },
   },
   // Records keyed by a slug someone else chose; ?topic= on /library reaches titles straight from the URL.
   { files: [src("app/(app)/library/page.tsx")], rules: { "gnosia/own-key": ["error", { names: ["titles", "concepts"] }] } },

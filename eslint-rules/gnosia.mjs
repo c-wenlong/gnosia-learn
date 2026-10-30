@@ -37,6 +37,32 @@ function syntax(description, selectors) {
   };
 }
 
+/** One rule out of several, each of whose visitors runs on the same node. */
+function combine(description, ...rules) {
+  return {
+    meta: { type: "problem", docs: { description }, schema: [] },
+    create(context) {
+      const merged = {};
+      for (const rule of rules) {
+        for (const [selector, visit] of Object.entries(rule.create(context))) {
+          const before = merged[selector];
+          merged[selector] = before ? (node) => (before(node), visit(node)) : visit;
+        }
+      }
+      return merged;
+    },
+  };
+}
+
+/** Whether `name` at `node` is the global: no scope around it declares it. */
+function isGlobal(context, node, name) {
+  for (let scope = context.sourceCode.getScope(node); scope; scope = scope.upper) {
+    const variable = scope.set.get(name);
+    if (variable && variable.defs.length > 0) return false;
+  }
+  return true;
+}
+
 /** The text of a string literal, or of a template's literal parts joined by a space; null for anything else. */
 function literalText(node) {
   if (node?.type === "Literal" && typeof node.value === "string") return node.value;
@@ -149,6 +175,10 @@ const kitRoles = syntax("Radio groups and tab rows are SegmentedControl and TabL
     "Use SegmentedControl for a choice of one, TabList for a row that switches panels: each hand-drawn copy had its own track, keys and roles (#359).",
   [`Property[key.name="role"] > Literal[value=${ROLES}]`]:
     "Use SegmentedControl for a choice of one, TabList for a row that switches panels: each hand-drawn copy had its own track, keys and roles (#359).",
+  [`JSXAttribute[name.name="role"] TemplateLiteral[expressions.length=0] > TemplateElement[value.raw=${ROLES}]`]:
+    "Use SegmentedControl for a choice of one, TabList for a row that switches panels: each hand-drawn copy had its own track, keys and roles (#359).",
+  [`Property[key.name="role"] > TemplateLiteral[expressions.length=0] > TemplateElement[value.raw=${ROLES}]`]:
+    "Use SegmentedControl for a choice of one, TabList for a row that switches panels: each hand-drawn copy had its own track, keys and roles (#359).",
 });
 
 const kitPopover = syntax("A popover is shown only through the kit Popover.", {
@@ -186,10 +216,21 @@ const kitMenuPanel = {
   },
 };
 
-const kitFocusRing = syntax("The focus ring is declared once, in classes.ts.", {
-  'VariableDeclarator > Literal[value="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"]':
-    "The focus ring is FOCUS_RING in components/ui/classes.ts; import it rather than declaring a copy.",
-});
+const FOCUS_RING = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+const kitFocusRing = {
+  meta: { type: "problem", docs: { description: "The focus ring is declared once, in classes.ts." }, schema: [] },
+  create(context) {
+    return {
+      VariableDeclarator(node) {
+        const init = unwrapTs(node.init);
+        if (init?.type === "TemplateLiteral" && init.expressions.length > 0) return;
+        if (literalText(init) === FOCUS_RING) {
+          context.report({ node, message: "The focus ring is FOCUS in components/ui/classes.ts; import it rather than declaring a copy." });
+        }
+      },
+    };
+  },
+};
 
 const kitTextLink = strings("Accent text links are linkClasses or TextLink.", [
   {
@@ -237,11 +278,25 @@ const kitTypingDots = syntax("One typing indicator, the kit's TypingDots.", {
     "This is the typing indicator drawn again. Use the kit's TypingDots.",
 });
 
-/** `globalThis.window.confirm` and the like: a chain of globals ending in confirm. */
-const kitConfirmChain = syntax("Ask in place, never through the browser's confirm().", {
-  'CallExpression > MemberExpression.callee[property.name="confirm"][object.type="MemberExpression"][object.property.name=/^(window|self|globalThis)$/][object.object.name=/^(window|self|globalThis)$/]':
-    "Ask in place with ConfirmFold or InlineConfirm, never through the browser's confirm().",
-});
+const GLOBALS = new Set(["window", "self", "globalThis"]);
+/**
+ * `window.confirm(...)`, and a chain of globals ending in it
+ * (`globalThis.window.confirm`), rooted in a global no local binding shadows.
+ * A bare `confirm()` is `no-restricted-globals`, which reads scope the same way.
+ */
+const kitConfirm = {
+  meta: { type: "problem", docs: { description: "Ask in place, never through the browser's confirm()." }, schema: [] },
+  create(context) {
+    return {
+      'CallExpression > MemberExpression.callee[property.name="confirm"]'(node) {
+        let owner = node.object;
+        while (owner.type === "MemberExpression" && !owner.computed && GLOBALS.has(owner.property.name)) owner = owner.object;
+        if (owner.type !== "Identifier" || !GLOBALS.has(owner.name) || !isGlobal(context, owner, owner.name)) return;
+        context.report({ node, message: "Ask in place with ConfirmFold or InlineConfirm, never through the browser's confirm()." });
+      },
+    };
+  },
+};
 
 const WARN_TINT = /\bbg-warn-tint\b/;
 /** A box's radius: a pill (`rounded-full`) or a tag (`rounded-sm`) is not a box. */
@@ -272,8 +327,9 @@ const kitWarnBox = {
         if (node.parent.type === "JSXExpressionContainer" && node.parent.parent.type === "JSXAttribute" && jsxName(node.parent.parent.name) === "className") return;
         whole(node, { type: "ArrayExpression", elements: node.arguments });
       },
-      Literal(node) {
-        if (typeof node.value !== "string" || !warnBox(node.value)) return;
+      "Literal, TemplateLiteral"(node) {
+        const text = literalText(node);
+        if (text === null || !warnBox(text)) return;
         if (context.sourceCode.getAncestors(node).some((a) => (a.type === "JSXAttribute" && jsxName(a.name) === "className") || (a.type === "CallExpression" && a.callee.name === "cx"))) return;
         context.report({ node, message });
       },
@@ -398,25 +454,33 @@ const SMALL_STRING = [
   { pattern: /font-size:\s*(\d*\.?\d+)rem/g, px: (m) => Number(m[1]) * 16 },
 ];
 
-/** The smallest bare number in an expression, leaving out a factor (`size * 0.3`). */
-function smallestNumber(node) {
-  let min = Infinity;
-  const visit = (at, parent) => {
-    if (at == null || typeof at !== "object") return;
-    if (at.type === "Literal") {
-      const factor = parent?.type === "BinaryExpression" && (parent.operator === "*" || parent.operator === "/");
-      const value = typeof at.value === "number" ? at.value : typeof at.value === "string" && /^\d+(\.\d+)?$/.test(at.value.trim()) ? Number(at.value) : NaN;
-      if (!factor && Number.isFinite(value)) min = Math.min(min, value);
-      return;
-    }
-    for (const [key, value] of Object.entries(at)) {
-      if (key === "parent" || key === "loc" || key === "range") continue;
-      if (Array.isArray(value)) value.forEach((child) => visit(child, at));
-      else if (value && typeof value.type === "string") visit(value, at);
-    }
-  };
-  visit(node, undefined);
-  return min;
+/**
+ * The least size an expression can be, as far as its literals say, or null
+ * when they say nothing (a variable, arithmetic on one). `cond ? 12 : 11.5` is
+ * 11.5; `Math.max(12, size - 2)` is 12, whatever `size` is.
+ */
+function leastSize(raw) {
+  const node = unwrapTs(raw);
+  if (!node) return null;
+  if (node.type === "JSXExpressionContainer") return leastSize(node.expression);
+  if (node.type === "Literal") {
+    if (typeof node.value === "number") return node.value;
+    if (typeof node.value === "string" && /^\d+(\.\d+)?$/.test(node.value.trim())) return Number(node.value);
+    return null;
+  }
+  const known = (values) => values.filter((v) => v !== null);
+  if (node.type === "ConditionalExpression" || node.type === "LogicalExpression") {
+    const sides = known(node.type === "ConditionalExpression" ? [leastSize(node.consequent), leastSize(node.alternate)] : [leastSize(node.left), leastSize(node.right)]);
+    return sides.length ? Math.min(...sides) : null;
+  }
+  if (node.type === "CallExpression" && node.callee.type === "MemberExpression" && node.callee.object.name === "Math") {
+    const args = known(node.arguments.map(leastSize));
+    if (args.length === 0) return null;
+    const fn = node.callee.property.name;
+    if (fn === "max") return Math.max(...args);
+    if (fn === "min" || fn === "round" || fn === "floor" || fn === "ceil" || fn === "trunc") return Math.min(...args);
+  }
+  return null;
 }
 
 /**
@@ -449,7 +513,8 @@ const typeSize = {
       }
     };
     const checkFontSize = (node, value) => {
-      if (value && smallestNumber(value) < 12) report(node, context.sourceCode.getText(node));
+      const least = value ? leastSize(value) : null;
+      if (least !== null && least < 12) report(node, context.sourceCode.getText(node));
     };
     return {
       Literal(node) {
@@ -657,14 +722,22 @@ const studioJobState = syntax("A job's state is printed only through jobStateLab
 });
 
 const SHADOWING = "/^(Button|ButtonLink|Chip|ChipLink)$/";
-const studioKit = syntax("The studio's controls are the kit's.", {
+const studioExports = syntax("The studio exports none of the kit's names.", {
   [`ExportNamedDeclaration > FunctionDeclaration[id.name=${SHADOWING}]`]: "The studio uses the kit's Button, ButtonLink, Chip and ChipLink; do not export its own.",
   [`ExportNamedDeclaration > VariableDeclaration > VariableDeclarator[id.name=${SHADOWING}]`]:
     "The studio uses the kit's Button, ButtonLink, Chip and ChipLink; do not export its own.",
   [`ExportSpecifier[exported.name=${SHADOWING}]`]: "The studio uses the kit's Button, ButtonLink, Chip and ChipLink; do not export its own.",
-  "Literal[value=/^(?=.*(^|\\s)h-[5-9](\\s|$))(?=.*(^|\\s)rounded-md(\\s|$))(?=.*(^|\\s)border(\\s|$))/]":
-    "This is a small bordered control drawn by hand; use the kit's Button or Chip at the studio's density.",
 });
+const studioKit = combine(
+  "The studio's controls are the kit's.",
+  studioExports,
+  strings("A small bordered control is the kit's.", [
+    {
+      pattern: /^(?=.*(?:^|\s)h-[5-9](?:\s|$))(?=.*(?:^|\s)rounded-md(?:\s|$))(?=.*(?:^|\s)border(?:\s|$))/,
+      message: "This is a small bordered control drawn by hand; use the kit's Button or Chip at the studio's density.",
+    },
+  ]),
+);
 
 /** `requireStudio()` or `await requireStudio()` as a statement. */
 const isGate = (statement) => {
@@ -702,13 +775,30 @@ const studioGate = {
         }
       }
     };
+    /** A function this module declares at its top level, by name: `function f`, or `const f = () => {}`. */
+    const local = (name) => {
+      for (const statement of context.sourceCode.ast.body) {
+        const declaration = statement.type === "ExportNamedDeclaration" ? statement.declaration : statement;
+        if (declaration?.type === "FunctionDeclaration" && declaration.id?.name === name) return declaration;
+        if (declaration?.type === "VariableDeclaration") {
+          for (const d of declaration.declarations) if (d.id.type === "Identifier" && d.id.name === name) return unwrapTs(d.init);
+        }
+      }
+      return null;
+    };
+    const byName = (name, exportedAs, node) => {
+      const fn = local(name);
+      if (fn && (fn.type === "FunctionDeclaration" || fn.type === "ArrowFunctionExpression" || fn.type === "FunctionExpression")) check(fn, exportedAs, node);
+    };
     return {
       ExportNamedDeclaration(node) {
         if (node.source) context.report({ node, message: "A studio entry point re-exports nothing: write the function here, gated with requireStudio()." });
         exported(node.declaration, node);
+        if (!node.source) for (const specifier of node.specifiers) byName(specifier.local.name, specifier.exported.name, specifier);
       },
       ExportDefaultDeclaration(node) {
-        exported(node.declaration, node);
+        if (node.declaration.type === "Identifier") byName(node.declaration.name, "The default export", node);
+        else exported(node.declaration, node);
       },
       "Program:exit"(node) {
         if (entries === 0) context.report({ node, message: "No exported function found to hold the studio's gate; every entry point here calls requireStudio() first." });
@@ -769,10 +859,17 @@ function bracketedToken() {
  * picture that is the same in every mode.
  */
 const themeTokens = {
-  meta: { type: "problem", docs: { description: "Every colour is a theme token." }, schema: [] },
+  meta: {
+    type: "problem",
+    docs: { description: "Every colour is a theme token." },
+    schema: [{ type: "object", properties: { colours: { type: "boolean" } }, additionalProperties: false }],
+  },
   create(context) {
+    // `colours: false`: a file that draws in fixed colours on purpose (the brand
+    // pages, pixel art); the retired aliases and bracketed tokens stay banned.
+    const colours = context.options[0]?.colours !== false;
     const check = (node, text) => {
-      const colour = text.match(HEX) ?? text.match(FUNCTIONAL) ?? text.match(PALETTE);
+      const colour = colours ? (text.match(HEX) ?? text.match(FUNCTIONAL) ?? text.match(PALETTE)) : null;
       if (colour) {
         context.report({ node, message: `${colour[0]} is a colour typed in; read a token from app/globals.css (bg-ok, text-danger, var(--border)).` });
         return;
@@ -1028,7 +1125,7 @@ const plugin = {
     "kit-collapse-padding": kitCollapsePadding,
     "kit-card": kitCard,
     "kit-typing-dots": kitTypingDots,
-    "kit-confirm-chain": kitConfirmChain,
+    "kit-confirm": kitConfirm,
     "kit-warn-box": kitWarnBox,
     "cx-only": cxOnly,
     "type-size": typeSize,
