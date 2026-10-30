@@ -142,7 +142,8 @@ describe("loadCourseHome", () => {
 
   it("hands on the module's assets and path, and only the check counts of the concepts it teaches", async () => {
     const c = course([module("m1", "growth", ["theta"]), module("m2", "bounds", ["big-o"])]);
-    reads.courses.mockResolvedValue([c]);
+    const other = { ...course([module("other-m1", "growth", [])]), id: "c2", slug: "c2" };
+    reads.courses.mockResolvedValue([c, other]);
     const path = { byConcept: {}, listed: {}, topicVideos: [], topicShared: false };
     reads.assets.mockResolvedValue({
       reachable: true,
@@ -155,7 +156,7 @@ describe("loadCourseHome", () => {
     expect(data.modules.m1).toMatchObject({ assets: { count: 2 }, path, checks: { theta: 2 } });
     expect(data.modules.m2).toMatchObject({ assets: null, path: null, checks: { "big-o": 1 } });
     // Every live module of every course goes to the asset read, for the shared-topic rule.
-    expect(reads.assets.mock.calls[0]?.[1]).toEqual(c.modules);
+    expect(reads.assets.mock.calls[0]?.[1]).toEqual([...c.modules, ...other.modules]);
   });
 
   it("names related courses by the labels of the tags they share, and the ids when the tags cannot be read", async () => {
