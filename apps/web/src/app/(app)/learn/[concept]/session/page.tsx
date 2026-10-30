@@ -87,6 +87,8 @@ export default async function SessionPage({ params, searchParams }: Props) {
       <NoteProse
         source={prose}
         idPrefix="teach-"
+        // The concept's note: its author put any picture there.
+        images="show"
         resolveNote={(target) => (known.has(target) ? `/learn/${target}` : undefined)}
         resolveEmbed={resolveEmbed}
         className="md:text-[17px] md:leading-[27px]"
