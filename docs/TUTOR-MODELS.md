@@ -128,9 +128,10 @@ reads the owner's chain, computes the new order and writes the chain back in
 one transaction holding `withLearnerLock`. Two tabs changing the chain at
 once are serialised, and `position` is 0 to n-1 with no gaps after every
 change. Updating positions in place was the alternative, but a swap trips the
-unique `(owner_id, position)` index halfway, because Postgres checks a
-non-deferrable unique index row by row, and drizzle cannot declare a
-deferrable one. A rewrite keeps each entry's `created_at`.
+unique `(owner_id, position)` index halfway, because a unique index is
+checked row by row and cannot be deferred: on Postgres, where this was
+decided, drizzle could not declare a deferrable one, and SQLite has none.
+A rewrite keeps each entry's `created_at`.
 
 **T8. At most ten entries.** A failing turn walks the chain until an entry
 answers or the turn's deadline (T10) runs out, so the cap bounds how many

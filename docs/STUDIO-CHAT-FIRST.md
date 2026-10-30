@@ -163,7 +163,7 @@ that order. It adds no path from pasted text to a tool.
    with 409 if a turn is already in flight on this draft, with 429 if the daily
    cap is spent, and with 409 if the draft is `drawing`.
 2. It appends a `message` event to `drafts/<id>/transcript.ndjson` and rewrites
-   `draft.json`, then mirrors the row into Postgres. Disk first, as rule 7 of
+   `draft.json`, then mirrors the row into the catalog. Disk first, as rule 7 of
    the existing doc requires.
 3. It spawns `claude -p <text> --resume <plannerSessionId>`, or
    `--session-id <plannerSessionId>` on the first turn, with the id minted and
@@ -1034,7 +1034,7 @@ C for the chat and planner, M for the manual.
 | C2 | Two tabs post to one draft at once | The second gets 409 while a turn is in flight. Both tabs follow the same SSE stream, so both show the reply |
 | C3 | The planner's session cannot be resumed (the CLI's transcript was deleted) | The `--resume` exits without a turn, as the runner already detects for a revise. The runner starts a fresh session, replays the transcript into its first message as a fenced data block, and says so in a STUDIO note |
 | C4 | The topic vocabulary changes during a draft | The planner's snapshot is frozen, but Draw validates against `catalog topic ls` as it is. A brief naming a topic since archived is refused with the field named (E7). A topic added since is invisible to the planner until the runner notices the vocabulary hash changed and appends a STUDIO note listing what was added, changed and archived; it does so at the start of the draft's next turn, never by rewriting the system prompt, which the CLI replays as recorded. The check reuses a vocabulary read under a minute old, which saves a 0.5 to 0.7 second catalog spawn before every turn and can delay the note by one turn; the reply is still judged against a fresh read, so a brief naming an archived topic is refused and retried once rather than accepted. A note stays queued until a turn that carried it gets a reply. A proposed topic that someone else created in the meantime makes the Draw press's `topic add` refuse; the runner then re-validates the brief against the new vocabulary and, when it passes, clears `pending_topic` and says so in a STUDIO note, so the next press is a plain Draw |
-| C5 | Nothing in the vocabulary fits | The planner proposes a topic; the dry run checks it, the brief is stored with `pending_topic`, and the card's button is **Create topic and draw** (see the hand-off). With Postgres down the studio cannot create the topic, so that button is refused with the catalog's unreachable message, as Accept is (D16 of the existing doc) |
+| C5 | Nothing in the vocabulary fits | The planner proposes a topic; the dry run checks it, the brief is stored with `pending_topic`, and the card's button is **Create topic and draw** (see the hand-off). With the catalog unreachable the studio cannot create the topic, so that button is refused with the catalog's unreachable message, as Accept is (D16 of the existing doc) |
 | C6 | The planner proposes a slug that already exists, as `new` | `runner.enqueue` refuses it with 409, which reaches the planner as a STUDIO note. The CORPUS block exists so this is rare, and the refusal exists because the block can be a week old |
 | C7 | The target is held by another job | 409 naming the holder; the confirm card's Draw is disabled with the job's name and an Open link |
 | C8 | The person pastes a mermaid flowchart | The runner, not the planner, finds a fenced `mermaid` block in the person's own messages and attaches the latest one to the brief as `mermaid` at Draw, where it is written to scratch and lifted by `from-mermaid` as today. The confirm card says "Flowchart attached" with a way to drop it. The planner sees the text and plans around it, but never carries it |
@@ -1147,8 +1147,8 @@ session, the transcript path and the latest brief, pruned after seven days as
 refined by D40.
 
 **Why:** a lost planner session is a conversation paid for twice, and the
-studio already has one durable pattern: a disk record mirrored into Postgres
-(D3).
+studio already has one durable pattern: a disk record mirrored into the
+catalog (D3).
 
 **Rejected:** `sessionStorage`, as the tutor keeps its thread. The tutor's
 thread costs nothing to lose.
@@ -1281,7 +1281,7 @@ answers concern 2: the person is no longer limited to topics that exist.
 workspace, only when no job carries its id in either place a job lives: no
 `job` row (`NOT EXISTS (SELECT 1 FROM job WHERE draft_id = draft.id)`) and no
 `job.json` under `$STUDIO_HOME/jobs/` with that `draftId`. The disk check is
-required, since a job enqueued while Postgres was down has a workspace and no
+required, since a job enqueued while the catalog was unreachable has a workspace and no
 row (U3 of the existing doc), and the runner, which owns `JobStore`, is the
 pruner. The draft's state plays no part. A failed or cancelled drawing returns
 its draft to `briefed`, so a rule by state would prune exactly the
@@ -2166,8 +2166,8 @@ a pass at start and every `STUDIO_PRUNE_EVERY_MS` (a day), over drafts
 untouched for `STUDIO_DRAFT_TTL_MS` (seven days). The disk is asked first (a
 job the draft recorded, a job in memory, any `job.json` naming it), then the
 row's delete, which checks for a job row in the same transaction, with the
-draft row locked, since `job.draft_id` is `ON DELETE SET NULL`. With Postgres
-down the pass stops at the first delete it cannot make and prunes nothing. A
+draft row locked, since `job.draft_id` is `ON DELETE SET NULL`. With the catalog
+unreachable the pass stops at the first delete it cannot make and prunes nothing. A
 draft being pruned answers 404 on every route, so nothing starts on it while
 its row goes. Only drafts of the runner's own `STUDIO_OWNER` are considered,
 and a row the catalog says is another owner's (`other-owner`) is kept. The

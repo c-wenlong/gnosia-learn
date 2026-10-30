@@ -38,7 +38,6 @@ A fresh clone's database is this, imported and then flipped so the database
 owns every type (the web app reads nothing else):
 
 ```sh
-createdb gnosia
 npm run catalog -- migrate
 MANIMKC_ROOT=/nonexistent REMOTIONKC_ROOT=/nonexistent REVIDEOKC_ROOT=/nonexistent BLENDERKC_ROOT=/nonexistent npm run catalog -- import seed
 for t in topics tags concepts sessions courses diagrams; do npm run catalog -- flip $t; done
@@ -46,9 +45,13 @@ for t in topics tags concepts sessions courses diagrams; do npm run catalog -- f
 
 The flips go in the order `scripts/lib/flip-order.mjs` keeps: topics, tags,
 then concepts, sessions, courses and diagrams. `npm run e2e` builds exactly
-this database on its own, under a throwaway name. For a second database beside
-your own, put `DATABASE_URL=postgres://localhost:5432/gnosia_seed` in front
-of each command after a `createdb gnosia_seed`.
+this database on its own, in a throwaway file. There is no `createdb`: the
+catalog is one SQLite file, which `connect` creates, with its directory, the
+first time a command opens it, here `migrate`
+([docs/SQLITE-MIGRATION.md](../docs/SQLITE-MIGRATION.md)). For a second
+database beside your own, put `CATALOG_DB=~/.gnosia/seed.db` (any path) in
+front of each command (`databaseUrl()` in
+[services/catalog/src/env.ts](../services/catalog/src/env.ts)).
 
 `MANIMKC_ROOT` points at a directory with no manimkc CLI so the import leaves
 manimkc out, and `REMOTIONKC_ROOT`, `REVIDEOKC_ROOT` and `BLENDERKC_ROOT` do
@@ -92,7 +95,7 @@ Nothing a test runs may write here: `vitest.setup.ts` lists every file under
 
 ## The export format
 
-The content is rows in Postgres, and the database is its only truth. The
+The content is rows in the catalog database, and the database is its only truth. The
 export format is how those rows leave the database as files and come back:
 `catalog export --out <dir>` writes the layout below from the rows, and
 `catalog import <dir>` reads it into a database. The repository holds no copy

@@ -68,8 +68,9 @@ file (step 9 of [HOMESERVER.md](HOMESERVER.md) is the same claim).
 - Multi-event triggers are three SQLite triggers (`_ins`, `_upd`, `_del`).
 - `db.execute` keeps its `{ rows }` shape; JSON columns come back parsed,
   mirroring the pg driver's jsonb handling.
-- Migrations live in `services/catalog/drizzle-sqlite/` (two entries:
-  `0000_majestic_ronan`, the whole schema and seeds; `0001_catalog_armed_rule`).
+- Migrations live in `services/catalog/drizzle-sqlite/` (three entries:
+  `0000_majestic_ronan`, the whole schema and seeds; `0001_catalog_armed_rule`;
+  `0002_recap_request_id`).
   The old `drizzle/` folder is kept for the port script's reference and can be
   deleted once every active database has crossed.
 

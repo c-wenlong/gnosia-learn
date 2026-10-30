@@ -11,7 +11,7 @@ and `catalog export` turns the content back into plain files at any time.
 git clone https://github.com/c-wenlong/gnosia-learn.git
 cd gnosia-learn
 npm ci
-cp .env.example apps/web/.env.local   # then fix its DATABASE_URL line (see below)
+cp .env.example apps/web/.env.local   # then set OWNER_PASSWORD and AUTH_SECRET in it (see below)
 npm run dev
 npm test
 ```

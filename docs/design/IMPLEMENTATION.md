@@ -1033,9 +1033,10 @@ Left on purpose:
   date-bounded read to the catalog rather than caching in the layout.
 - **Driving `/review` or a session in a browser writes real evidence.** A
   rating is a `review` event in the learner's own log, which is append-only.
-  Screenshot a page that grades against a copy of the database
-  (`createdb -T gnosia gnosia_<phase>`, then start the server with
-  `DATABASE_URL` pointing at it), never against `gnosia`.
+  Screenshot a page that grades against a copy of the catalog file
+  (`sqlite3 ~/.gnosia/catalog.db ".backup <scratch>/gnosia_<phase>.db"`, then
+  start the server with `CATALOG_DB` naming the copy), never against the
+  catalog itself.
 - **On a check card the number keys mean two things.** Before the verdict 1
   to 4 pick an option; after it they rate. The review page keeps one phase
   per card so the second press of "2" is a rating, never a second pick.
