@@ -829,11 +829,17 @@ func sessionFeedbackNote(_ answer: SessionAnswerOutcome, now: Date = Date()) -> 
 /// The close screen's line under its numbers when any of them are still
 /// the app's estimate, or nil when the catalog recorded every answer.
 func sessionEstimateNote(_ answers: [SessionAnswerOutcome]) -> String? {
-    if answers.contains(where: { if case .notRecorded = $0.status { return true }; return false }) {
-        return "The catalog did not record every answer, so some of these numbers are this app's own."
+    estimateNote(answers.map(\.status), noun: "answer")
+}
+
+/// The same line over bare statuses: `noun` is what was recorded, an
+/// answer or (Review's close screen) a grade.
+func estimateNote(_ statuses: [AnswerStatus], noun: String) -> String? {
+    if statuses.contains(where: { if case .notRecorded = $0 { return true }; return false }) {
+        return "The catalog did not record every \(noun), so some of these numbers are this app's own."
     }
-    if answers.contains(where: { $0.status == .estimated }) {
-        return "Some answers are not recorded yet, so some of these numbers are this app's estimate."
+    if statuses.contains(.estimated) {
+        return "Some \(noun)s are not recorded yet, so some of these numbers are this app's estimate."
     }
     return nil
 }

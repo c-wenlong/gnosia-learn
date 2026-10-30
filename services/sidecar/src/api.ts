@@ -41,7 +41,7 @@ import {
 } from "@gnosia/tutor/server/turns";
 
 import { guard } from "./guard";
-import { gradedConcepts, observedConcepts, withRecordedRows } from "./recorded";
+import { gradedExtras, observedExtras, withRecordedRows } from "./recorded";
 
 /**
  * The HTTP surface: JSON in, JSON out, on `127.0.0.1` and an ephemeral port.
@@ -102,8 +102,8 @@ const TURNS: Record<string, Record<string, Turn>> = {
   "/api/learner/preference": { POST: preferenceTurn },
   "/api/learner/asset-name": { POST: assetNameTurn },
   "/api/learner/note": { POST: noteTurn },
-  "/api/learner/observe": { POST: withRecordedRows(observeTurn, observedConcepts) },
-  "/api/review/grade": { POST: withRecordedRows(reviewGradeTurn, gradedConcepts) },
+  "/api/learner/observe": { POST: withRecordedRows(observeTurn, observedExtras) },
+  "/api/review/grade": { POST: withRecordedRows(reviewGradeTurn, gradedExtras) },
   "/api/learner/session/close": { POST: sessionCloseTurn },
   "/api/learner/provider-key": {
     GET: providerKeyStatusTurn as Turn,

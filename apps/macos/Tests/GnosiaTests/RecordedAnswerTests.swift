@@ -62,7 +62,7 @@ private func pL(_ path: String, _ slug: String) throws -> Double? {
             "pLBefore": 0.6, "pLAfter": 0.81, "mastered": false,
             "propagated": [["concept": "beta", "hops": 1, "pLBefore": 0.5, "pLAfter": 0.52, "title": "Beta"]],
             "card": ["due": "2026-11-02T10:00:00.000Z", "intervalDays": 6, "created": false],
-            "replayed": false,
+            "replayed": false, "grade": 4,
             "rows": [
                 "mastery": [
                     ["conceptSlug": "gamma", "pL": 0.81, "observations": 4, "correct": 3, "lastSeen": "2026-10-30T10:00:00.000Z"],
@@ -113,6 +113,7 @@ private func pL(_ path: String, _ slug: String) throws -> Double? {
             SELECT json_extract(payload, '$.pLBefore'), json_extract(payload, '$.pLAfter')
             FROM event WHERE type = 'observation'
             """) == ["0.6", "0.81"])
+        #expect(try row(path, "SELECT json_extract(payload, '$.grade') FROM event WHERE type = 'observation'") == ["4"])
     }
 
     @Test func aConceptAStillQueuedAnswerMovesKeepsItsRowForThatReply() throws {
@@ -128,6 +129,27 @@ private func pL(_ path: String, _ slug: String) throws -> Double? {
         #expect(try pL(path, "gamma") == write.outcome.pLAfter)
         #expect(try row(path, "SELECT p_l FROM mastery WHERE concept_slug = 'beta'")[0] == "0.52")
         #expect(store.shown(write.outcome).status == .recorded)
+    }
+
+    @Test func aQueuedAnswerHoldsItsConceptAndThePrerequisitesItSpreadTo() {
+        let queued: [[String: Any]] = [
+            ["conceptSlug": "gamma", "requestId": "r2"],
+            ["conceptId": "alpha", "grade": 2, "requestId": "g1"],
+        ]
+        let held = LearnerStore.pendingConcepts(queued: queued) { $0 == "r2" ? ["beta", "delta"] : ["never"] }
+        #expect(held == ["gamma", "beta", "delta", "alpha"])
+    }
+
+    @Test func aCorrectionThatLandsEndsItsQueueRow() throws {
+        let (dir, _, store) = try tempStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let write = answer()
+        #expect(store.recordSessionAnswer(write))
+        let body = try #require(LearnerStore.observeJSON(write))
+        // No queue row by that id: the correction lands all the same.
+        #expect(store.applyRecorded(route: LearnerStore.observeRoute, body: body, reply: observeReply, queueRow: 999))
+        #expect(store.gradeStatus("req-gamma") == .recorded)
+        #expect(store.gradeStatus("nothing") == .estimated)
     }
 
     @Test func aGradeKeepsTheRatingTheCatalogRecorded() throws {
@@ -187,5 +209,7 @@ private func pL(_ path: String, _ slug: String) throws -> Double? {
         #expect(sessionFeedbackNote(refused).hasSuffix("· not recorded"))
         #expect(sessionEstimateNote([refused])?.hasPrefix("The catalog did not record every answer") == true)
         #expect(sessionEstimateNote([outcome])?.hasPrefix("Some answers are not recorded yet") == true)
+        #expect(estimateNote([.recorded, .estimated], noun: "grade")?.hasPrefix("Some grades are not recorded yet") == true)
+        #expect(estimateNote([.recorded], noun: "grade") == nil)
     }
 }

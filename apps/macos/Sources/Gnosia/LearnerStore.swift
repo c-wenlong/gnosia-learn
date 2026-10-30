@@ -996,6 +996,15 @@ final class LearnerStore {
         return nil
     }
 
+    /// Whose numbers a review grade's outcome is, by its request id.
+    func gradeStatus(_ requestId: String) -> AnswerStatus {
+        switch answerRecords[requestId] {
+        case .graded?, .observed?: return .recorded
+        case .notRecorded(let reason)?: return .notRecorded(reason)
+        case nil: return .estimated
+        }
+    }
+
     /// An observe or grade mirror landed: keep what the catalog said about
     /// the answer, and replace learner.db's estimated rows with the ones the
     /// reply carries (the sidecar reads them back after the write, so they
@@ -1006,28 +1015,42 @@ final class LearnerStore {
     /// `pending` names the concepts a still-queued answer will move: their
     /// rows are left to that answer's reply, since this one's predate it and
     /// would draw the concept back to before an answer the learner can see.
-    func applyRecorded(route: String, body: Data, reply: [String: Any], pending: Set<String> = []) {
+    ///
+    /// `queueRow` is the mirror row the reply answered: it is deleted in the
+    /// same transaction as the correction, so a correction that does not
+    /// land leaves the row to be sent again (the server answers a replay
+    /// with the same record). Returns whether the correction landed; the
+    /// record and `recordedVersion` move only when it did.
+    @discardableResult
+    func applyRecorded(
+        route: String, body: Data, reply: [String: Any],
+        pending: Set<String> = [], queueRow: Int64? = nil
+    ) -> Bool {
         guard
             let sent = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any],
             let requestId = sent["requestId"] as? String, !requestId.isEmpty,
             let result = reply["result"] as? [String: Any]
-        else { return }
+        else { return dropQueueRow(queueRow) }
 
         var eventType = "observation"
         var eventFields: [(key: String, value: Bind)] = []
+        let record: AnswerRecord
         if route == Self.observeRoute, let recorded = RecordedAnswer(result: result) {
-            answerRecords[requestId] = .observed(recorded)
+            record = .observed(recorded)
             eventFields = [("pLBefore", .real(recorded.pLBefore)), ("pLAfter", .real(recorded.pLAfter))]
+            // The grade the catalog scheduled with, which follows its own
+            // posterior; the sidecar adds it to the reply.
+            if let grade = (result["grade"] as? NSNumber)?.intValue { eventFields.append(("grade", .int(Int64(grade)))) }
         } else if route == Self.gradeRoute,
                   let raw = (result["rating"] as? NSNumber)?.intValue,
                   let rating = ReviewRating(rawValue: raw) {
-            answerRecords[requestId] = .graded(rating)
+            record = .graded(rating)
             eventType = "review"
             let grade = (result["grade"] as? NSNumber)?.intValue ?? rating.grade
             eventFields = [("grade", .int(Int64(grade)))]
             if let pL = (result["pL"] as? NSNumber)?.doubleValue { eventFields.append(("pLAfter", .real(pL))) }
         } else {
-            return
+            return dropQueueRow(queueRow)
         }
 
         let rows = result["rows"] as? [String: Any] ?? [:]
@@ -1036,7 +1059,8 @@ final class LearnerStore {
         let review = (rows["review"] as? [[String: Any]] ?? []).compactMap(Self.recordedReview)
             .filter { !pending.contains($0.conceptSlug) }
         let now = Date()
-        write { db in
+        let landed = write { db in
+            if let queueRow { try db.run("DELETE FROM mirror_queue WHERE id = ?", [.int(queueRow)]) }
             for row in mastery { try upsertMastery(db, row, at: now.timeIntervalSince1970) }
             for card in review { try upsertReview(db, card, reviewedFallback: now, at: now.timeIntervalSince1970) }
             for (key, value) in eventFields {
@@ -1046,23 +1070,61 @@ final class LearnerStore {
                 )
             }
         }
+        guard landed else { return false }
+        answerRecords[requestId] = record
         recordedVersion += 1
+        return true
     }
 
-    /// The concepts the answers still in the queue name — an observe's
-    /// `conceptSlug`, a grade's `conceptId`.
-    private func pendingAnswerConcepts() -> Set<String> {
+    /// A reply with nothing to correct still ends its queue row.
+    private func dropQueueRow(_ id: Int64?) -> Bool {
+        guard let id, let db else { return true }
+        try? db.run("DELETE FROM mirror_queue WHERE id = ?", [.int(id)])
+        return true
+    }
+
+    /// The concepts the answers still in the queue (other than `excluding`,
+    /// the one being answered) will move: an observe's `conceptSlug` and the
+    /// prerequisites its local estimate spread to (the event's
+    /// `propagated`), a grade's `conceptId`.
+    private func pendingAnswerConcepts(excluding: Int64) -> Set<String> {
         guard let db,
               let rows = try? db.query(
-                  "SELECT body FROM mirror_queue WHERE route IN (?, ?)",
-                  bind: [Self.observeRoute, Self.gradeRoute])
+                  "SELECT body FROM mirror_queue WHERE route IN (?, ?) AND id != ?",
+                  bind: [Self.observeRoute, Self.gradeRoute, String(excluding)])
         else { return [] }
-        var concepts: Set<String> = []
+        var bodies: [[String: Any]] = []
         while rows.next() {
-            guard let text = rows.text(0),
-                  let body = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any]
-            else { continue }
+            if let text = rows.text(0),
+               let body = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any] {
+                bodies.append(body)
+            }
+        }
+        return Self.pendingConcepts(queued: bodies) { requestId in
+            guard let events = try? db.query(
+                "SELECT payload FROM event WHERE type = 'observation' AND json_extract(payload, '$.requestId') = ?",
+                bind: [requestId])
+            else { return [] }
+            var spread: [String] = []
+            while events.next() {
+                guard let text = events.text(0),
+                      let payload = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any]
+                else { continue }
+                spread += (payload["propagated"] as? [[String: Any]] ?? []).compactMap { $0["concept"] as? String }
+            }
+            return spread
+        }
+    }
+
+    /// `pendingAnswerConcepts` over the queued bodies: each one's concept,
+    /// and for an observe the prerequisites `spreadOf` its request id names.
+    static func pendingConcepts(queued: [[String: Any]], spreadOf: (String) -> [String]) -> Set<String> {
+        var concepts: Set<String> = []
+        for body in queued {
             if let slug = (body["conceptSlug"] ?? body["conceptId"]) as? String { concepts.insert(slug) }
+            if body["conceptSlug"] != nil, let id = body["requestId"] as? String {
+                concepts.formUnion(spreadOf(id))
+            }
         }
         return concepts
     }
@@ -1268,10 +1330,16 @@ final class LearnerStore {
             if row.nextAt > now { break }
             do {
                 let reply = try await client.replay(route: row.route, body: Data(row.body.utf8))
-                try? db.run("DELETE FROM mirror_queue WHERE id = ?", [.int(row.id)])
                 if row.route == Self.observeRoute || row.route == Self.gradeRoute {
-                    applyRecorded(route: row.route, body: Data(row.body.utf8), reply: reply,
-                                  pending: pendingAnswerConcepts())
+                    // The row ends with the correction, in one transaction;
+                    // a correction that fails to land backs off like a send.
+                    guard applyRecorded(route: row.route, body: Data(row.body.utf8), reply: reply,
+                                        pending: pendingAnswerConcepts(excluding: row.id), queueRow: row.id)
+                    else {
+                        throw CatalogError(message: error ?? "the catalog's record could not be written to learner.db")
+                    }
+                } else {
+                    try? db.run("DELETE FROM mirror_queue WHERE id = ?", [.int(row.id)])
                 }
             } catch let refusal as SidecarClient.SidecarError where (400 ... 499).contains(refusal.status) {
                 dropMirror(row, because: refusal.errorDescription ?? "refused", db: db)

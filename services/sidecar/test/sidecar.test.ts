@@ -710,6 +710,10 @@ describe.skipIf(!reachable.ok)("the learner write routes, against a scratch data
       // A correct answer spread to the prerequisites: beta at one hop, alpha at two.
       expect(result.propagated.map((p) => p.concept).sort()).toEqual(["alpha", "beta"]);
       expect(result.card?.created).toBe(true);
+      // The grade the answer was recorded with, which observeTurn's own reply leaves out.
+      expect((result as unknown as { grade: number }).grade).toBe(
+        (await readEvents(scratch.db, "local")).find((e) => e.requestId === "req-gamma-1")?.grade,
+      );
 
       // The session row and its session-start event opened with the answer.
       const events = await readEvents(scratch.db, "local");

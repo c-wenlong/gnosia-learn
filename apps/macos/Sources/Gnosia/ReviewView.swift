@@ -606,6 +606,7 @@ struct ReviewView: View {
     private var closeScreen: some View {
         let outcomes = shownOutcomes
         let again = outcomes.filter { $0.rating == .again }.count
+        let estimate = estimateNote(outcomes.map { learner.gradeStatus($0.requestId) }, noun: "grade")
         // The next due is read after the last grade — the writes just
         // made are what moved it.
         let queue = store.reviewQueue()
@@ -628,6 +629,11 @@ struct ReviewView: View {
                 statTile("\(outcomes.count)", label: "Reviewed", tone: G.ok)
                 statTile("\(again)", label: "Again", tone: G.streak)
                 statTile(next, label: "Next due", tone: G.accent)
+            }
+            if let estimate {
+                Text(estimate)
+                    .font(.caption)
+                    .foregroundStyle(G.text2)
             }
             primaryButton("Back to Home") { onExit() }
         }
