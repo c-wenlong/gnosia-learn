@@ -56,7 +56,10 @@ export function ChoiceRow({
       onClick={onClick}
       disabled={disabled}
       aria-keyshortcuts={shortcut}
-      aria-pressed={state === "selected" ? true : undefined}
+      // Every row says whether it is the pick, so a screen reader hears the
+      // others as not chosen rather than as unrelated buttons. A graded row
+      // says it in words instead, with its tag.
+      aria-pressed={tag === undefined ? state === "selected" : undefined}
       className={cx(
         "flex min-h-14 w-full items-center gap-3 rounded-xl border-2 px-3.5 py-2 text-left transition-colors duration-100",
         "disabled:cursor-default",

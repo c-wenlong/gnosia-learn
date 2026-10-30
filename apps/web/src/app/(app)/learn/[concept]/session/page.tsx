@@ -171,9 +171,10 @@ function Unreachable({ slug }: { slug: string }) {
       <div className="mx-auto flex max-w-[720px] flex-col items-center gap-4 px-4 pt-16 text-center">
         <h1 className={PAGE_TITLE}>The session cannot start</h1>
         <p className="text-[14px] text-text2">
-          The database could not be reached, so there is no note to teach from and nowhere to record an answer. Nothing
-          is lost. Start Postgres and reload.
+          The catalog could not be read, so there is no note to teach from and nowhere to record an answer. Nothing is
+          lost. Check it with this, then reload.
         </p>
+        <pre className="overflow-x-auto rounded-lg bg-surface2 p-3 text-[12px]">npm run catalog -- status</pre>
         <TextLink href={`/learn/${slug}`} size="md">
           Back to the workspace
         </TextLink>

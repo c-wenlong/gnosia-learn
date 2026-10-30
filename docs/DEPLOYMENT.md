@@ -137,6 +137,20 @@ arrive, `apps/web/src/lib/auth/` is the module to replace (Auth.js reads the
 same `AUTH_SECRET` name) and `isSignedIn` in `session.ts` is the seam every
 caller already goes through.
 
+## Response headers
+
+Every response carries `X-Content-Type-Options: nosniff`, a
+`Referrer-Policy`, a `Permissions-Policy` that turns off the camera,
+microphone and location, and no `X-Powered-By`. Every page also carries a
+Content-Security-Policy and `X-Frame-Options: DENY`. The proxy writes the
+policy with a fresh nonce per request, so only the scripts Next and the two
+layouts write can run; images, media, fonts and fetches are limited to this
+origin (plus `data:` and `blob:`), and frames to this origin and the studio's
+loopback canvas. `apps/web/src/lib/auth/csp.ts` lists each directive and why.
+A new page that needs another host (an embed, a CDN, an image from elsewhere)
+fails with a console message naming the directive: widen it there, never by
+turning the policy off.
+
 ## Secrets and environment variables
 
 | Name | Purpose | Where it is needed |

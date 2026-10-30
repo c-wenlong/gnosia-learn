@@ -1575,7 +1575,7 @@ function Entry({
   const reply = splitReply(entry.text);
   return (
     <TutorMessage label="Planner">
-      {reply.prose !== "" && <NoteProse source={reply.prose} idPrefix={`p${entry.seq}-`} />}
+      {reply.prose !== "" && <NoteProse source={reply.prose} idPrefix={`p${entry.seq}-`} images="link" />}
       {entry.interrupted === true && <p className="mt-2 text-[13px] text-text3">The reply was cut off.</p>}
       {cardsHere !== null && <div className="mt-3">{cardsHere}</div>}
       {suggestion !== null && suggestion.kinds.length > 0 && (
@@ -1720,7 +1720,7 @@ function Streaming({ text, checking }: { text: string | null; checking: boolean 
   }
   return (
     <TutorMessage label="Planner">
-      {reply.prose !== "" && <NoteProse source={reply.prose} idPrefix="streaming-" />}
+      {reply.prose !== "" && <NoteProse source={reply.prose} idPrefix="streaming-" images="link" />}
       {reply.checking && (
         <p className="mt-3 flex items-center gap-2 rounded-xl border-2 border-dashed border-border px-4 py-3 text-[14px] text-text3" role="status">
           {CHECKING_BRIEF}
