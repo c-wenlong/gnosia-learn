@@ -1,10 +1,10 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { ASSET_NAME_MAX, cleanAssetName } from "@gnosia/schema/shared";
 
-import { AskPanel } from "@/components/library/AskPanel";
 import { Button } from "@/components/ui/Button";
 import { Dialog, DIALOG_CLOSE_MS, type DialogSize } from "@/components/ui/Dialog";
 import { DialogHeader } from "@/components/ui/DialogHeader";
@@ -15,6 +15,17 @@ import { cx, iconButtonClasses, inputClasses } from "@/components/ui/classes";
 import { usePresence } from "@/components/ui/use-presence";
 import type { AskSubject, RowMenuItem, RowMenuSections } from "@/lib/row-menu";
 import { sendJson } from "@/lib/send-json";
+
+
+/**
+ * The Ask chat, loaded the first time a row's Ask is chosen. Every card and
+ * row in the Library draws this menu, and the chat carries the markdown
+ * renderer and KaTeX, which nothing else in the grid needs.
+ */
+const AskPanel = dynamic(() => import("@/components/library/AskPanel").then((module) => module.AskPanel), {
+  ssr: false,
+  loading: () => <div className="min-h-32" aria-hidden />,
+});
 
 /** How long a confirmation ("Copied") stays beside the button. */
 const NOTICE_MS = 1800;

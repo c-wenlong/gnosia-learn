@@ -23,6 +23,11 @@ vi.mock("@/lib/asset-library", async (importOriginal) => ({
   loadSearchText: async () => ({ texts: {}, sources: {}, searchedText: false, skipped: 0 }),
 }));
 vi.mock("@/lib/learner-store", () => ({ loadKnowledgeBase }));
+// A signed-in request: the view is kept per owner (`loadLibraryView`).
+vi.mock("@/lib/auth/session", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/auth/session")>()),
+  isSignedIn: async () => true,
+}));
 vi.mock("@/data/courses", () => ({ getCourses: async () => [] }));
 const getTopics = vi.hoisted(() => vi.fn());
 vi.mock("@/data/topics", async (importOriginal) => ({
