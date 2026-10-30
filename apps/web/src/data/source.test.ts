@@ -252,12 +252,12 @@ describe("who owns each type", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
       catalog.ownership = async () => {
-        throw new Error("connect ECONNREFUSED 127.0.0.1:5432");
+        throw new Error("SQLITE_CANTOPEN: unable to open database file");
       };
       const error = await inRequest(() => getCourses()).catch((thrown: unknown) => thrown);
       expect(error).toBeInstanceOf(ContentUnavailableError);
       expect((error as InstanceType<typeof ContentUnavailableError>).reason).toBe("unreachable");
-      expect((error as Error).message).toContain("ECONNREFUSED");
+      expect((error as Error).message).toContain("SQLITE_CANTOPEN");
       expect(reads.courses).toBe(1);
     } finally {
       warn.mockRestore();
@@ -269,11 +269,11 @@ describe("who owns each type", () => {
     try {
       await inRequest(() => contentSource().resolution());
       const causes = [
-        "connect ECONNREFUSED 127.0.0.1:5432",
-        "connect ECONNREFUSED 127.0.0.1:5432",
-        'relation "content_source" does not exist',
-        'relation "content_source" does not exist',
-        "permission denied for table content_source",
+        "SQLITE_CANTOPEN: unable to open database file",
+        "SQLITE_CANTOPEN: unable to open database file",
+        "no such table: content_source",
+        "no such table: content_source",
+        "SQLITE_BUSY: database is locked",
       ];
       for (const message of causes) {
         catalog.ownership = async () => {
@@ -282,16 +282,16 @@ describe("who owns each type", () => {
         await expect(inRequest(() => contentSource().resolution())).rejects.toBeInstanceOf(ContentUnavailableError);
       }
       expect(warn.mock.calls.map((call) => String(call[0]).replace(/^.*could not be read\. /, ""))).toEqual([
-        "connect ECONNREFUSED 127.0.0.1:5432",
-        'relation "content_source" does not exist',
-        "permission denied for table content_source",
+        "SQLITE_CANTOPEN: unable to open database file",
+        "no such table: content_source",
+        "SQLITE_BUSY: database is locked",
       ]);
 
       // The database answers again, then goes away again with an old cause: a new outage, a new line.
       catalog.ownership = async () => ALL_DB;
       await inRequest(() => contentSource().resolution());
       catalog.ownership = async () => {
-        throw new Error("connect ECONNREFUSED 127.0.0.1:5432");
+        throw new Error("SQLITE_CANTOPEN: unable to open database file");
       };
       await expect(inRequest(() => contentSource().resolution())).rejects.toBeInstanceOf(ContentUnavailableError);
       expect(warn).toHaveBeenCalledTimes(4);
@@ -303,12 +303,12 @@ describe("who owns each type", () => {
   it("names the driver's code when the wrapped error says only which query failed", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {
-      const refused = Object.assign(new Error(""), { code: "ECONNREFUSED" });
+      const refused = Object.assign(new Error(""), { code: "SQLITE_CANTOPEN" });
       catalog.ownership = async () => {
         throw new Error('Failed query: select "type", "source" from "content_source"', { cause: refused });
       };
       const error = await inRequest(() => getTopics()).catch((thrown: unknown) => thrown);
-      expect((error as Error).message).toContain('from "content_source" (ECONNREFUSED)');
+      expect((error as Error).message).toContain('from "content_source" (SQLITE_CANTOPEN)');
     } finally {
       warn.mockRestore();
     }

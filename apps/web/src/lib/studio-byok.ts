@@ -40,6 +40,17 @@ function announceByokWrite<T>(result: Promise<T>): Promise<T> {
   return result;
 }
 
+/**
+ * The active provider's Default model and tier models from a settings read,
+ * or null when nothing is configured (no Default model, or a key that is
+ * missing or no longer opens): a conversation then offers no BYOK tier to
+ * pick, since a turn on one would be refused.
+ */
+export function activeByokTiers(view: ByokSettingsView): { model: string | null; tiers: ByokProviderStatus["models"] } | null {
+  const entry = view.configured ? view.providers.find((provider) => provider.provider === view.active) : undefined;
+  return entry === undefined ? null : { model: view.model, tiers: entry.models };
+}
+
 /** `GET /api/settings/byok`: the connected providers, the active one, and its Default model. Never a key. */
 export function getByokSettings() {
   return call<ByokSettingsView>("/studio/api/settings/byok");

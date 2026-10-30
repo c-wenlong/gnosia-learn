@@ -96,7 +96,8 @@ describe("useJobEventStream", () => {
       source.send("step", { seq: 2, type: "step" });
     });
     expect(seen.events.map((event) => event.seq)).toEqual([1, 2]);
-    expect(seen.heard).toHaveLength(3);
+    // A replayed seq is not news: the listener hears each once (R2-1-21).
+    expect(seen.heard.map((event) => event.seq)).toEqual([2, 1]);
     act(() => source.onerror?.());
     expect(seen.open).toBe(false);
   });

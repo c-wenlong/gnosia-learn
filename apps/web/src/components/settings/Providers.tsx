@@ -98,10 +98,10 @@ export function Providers({
         onSaving={setAddSaving}
         onClose={() => setAdding(false)}
         opener={() => document.getElementById(`${base}-add`)}
-        onAdded={(label, note) => {
+        onAdded={(label) => {
           setAdding(false);
-          setStatus({ kind: "done", text: note ?? `Added ${label}. Pick a model for it below.` });
-          // The key mirrored into `byok.json` — the Studio block reads it.
+          setStatus({ kind: "done", text: `Added ${label}. Pick a model for it below.` });
+          // Studio's provider list changed too; its block reads it again.
           window.dispatchEvent(new Event(BYOK_SETTINGS_CHANGED));
           router.refresh();
         }}

@@ -13,6 +13,7 @@ import { TextLink } from "@/components/ui/TextLink";
 import { topicMark, topicMeta, topicSessionHref, type TopicMastery } from "@/lib/course-path";
 import { useLearner } from "@/lib/learner-context";
 import type { Course, Module, Topic } from "@gnosia/tutor/types";
+import { ownValue } from "@gnosia/tutor/own-key";
 
 import { TopicMarkIcon } from "./icons";
 import { ROW_BOX, ROW_HOVER, ROW_META, ROW_TITLE, STRETCHED } from "./rows";
@@ -51,7 +52,7 @@ export function TopicRow({
   // the note's 400ms debounce still saves the last keystrokes.
   const [opened, setOpened] = useState(false);
   const panelId = useId();
-  const ticked = Boolean(state.completed[topic.id]);
+  const ticked = Boolean(ownValue(state.completed, topic.id));
 
   return (
     <li>
@@ -123,7 +124,7 @@ function TopicPanel({
   mastery: TopicMastery | undefined;
 }) {
   const { state, toggleTopicCompletion, updateNote } = useLearner();
-  const saved = state.notes[topic.id] ?? "";
+  const saved = ownValue(state.notes, topic.id) ?? "";
   const [draft, setDraft] = useState(saved);
   // An edit typed here and not yet saved. Only a keystroke sets it, never a
   // difference from `saved`: the provider also moves `saved` when it adopts a
@@ -176,7 +177,7 @@ function TopicPanel({
     return () => window.removeEventListener("pagehide", flush);
   }, [flush]);
 
-  const hasRecap = Boolean(state.knowledge[topic.id]);
+  const hasRecap = Boolean(ownValue(state.knowledge, topic.id));
 
   return (
     <div className="mb-2 ml-[40px] mr-2 mt-1 flex flex-col gap-4 rounded-xl bg-surface2 p-4 text-[14px]">
@@ -192,7 +193,7 @@ function TopicPanel({
       )}
 
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-        <Checkbox id={checkboxId} checked={Boolean(state.completed[topic.id])} onChange={() => toggleTopicCompletion(topic.id)}>
+        <Checkbox id={checkboxId} checked={Boolean(ownValue(state.completed, topic.id))} onChange={() => toggleTopicCompletion(topic.id)}>
           Mark done
         </Checkbox>
         <TextLink href={topicSessionHref(course.slug, module.slug, topic.id)}>

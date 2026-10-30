@@ -13,7 +13,7 @@ import {
  * `saveState` and `migrateState` read and wrote `self-learn:v1`, and the
  * reducers below existed to keep that testable without a DOM.
  *
- * What it is now: only the reducers. Postgres holds the state, the provider
+ * What it is now: only the reducers. The catalog database holds the state, the provider
  * applies these optimistically and posts the change to `/api/learner/*`, and
  * the server applies the equivalent write. They earn their place because the
  * optimistic half of every mutation still has to happen somewhere, and a UI

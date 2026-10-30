@@ -136,7 +136,7 @@ export function VideoControls({
                 </span>
               </ControlButton>
             )}
-            <ControlButton label="Playback speed" onClick={onCycleRate}>
+            <ControlButton label={`Playback speed, ${rate}×`} onClick={onCycleRate}>
               <span className="w-9 text-center text-[12px] font-semibold tabular-nums">{rate}×</span>
             </ControlButton>
             {canPip && (

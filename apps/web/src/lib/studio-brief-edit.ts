@@ -1,7 +1,7 @@
 import type { FilterOption } from "@/components/ui/filter-menu";
 import type { PendingTopic } from "@/lib/studio-drafts";
 import type { Refusal } from "@/lib/studio-client";
-import { refusalReason, refusalString } from "@/lib/studio-client";
+import { refusalReason, refusalString, runnerSlow } from "@/lib/studio-client";
 import { sentence } from "@/lib/studio-chat";
 import type { Brief } from "@/lib/studio-jobs";
 
@@ -248,6 +248,10 @@ export function saveRefusal(status: number, refusal: Refusal, edit: BriefEdit): 
       default:
         break;
     }
+  }
+  if (runnerSlow(status, refusal)) {
+    // The save may still land, so it is not called refused.
+    return { field: "general", message: "The studio runner did not answer in time, so the save may still land. Your edits are still here." };
   }
   if (status === 0 || status === 502) {
     return { field: "general", message: "The studio runner is not answering. Your edits are still here." };

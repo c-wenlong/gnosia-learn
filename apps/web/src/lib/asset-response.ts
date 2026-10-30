@@ -6,6 +6,7 @@ import { blobStoreProblem, openBlob, webStreamFrom, type AssetFileProblem, type 
 import { assetBlobStore, SIGNED_URL_TTL_SECONDS } from "@/lib/blob-store";
 import { unauthenticated } from "@/lib/learner-api";
 import { NoOwnerError } from "@/lib/owner";
+import { failureCode } from "@gnosia/tutor/server/provider-keys";
 
 /*
  * What the asset routes share (S6-09 of the library audit): the answer for a
@@ -31,8 +32,7 @@ import { NoOwnerError } from "@/lib/owner";
  */
 export function lookupFailed(route: string, error: unknown): Response {
   if (error instanceof NoOwnerError) return unauthenticated();
-  const message = error instanceof Error ? error.message : String(error);
-  console.warn(`${route}: catalog unreachable: ${message}`);
+  logLookupFailure(route, error);
   return NextResponse.json(
     {
       error: "The catalog is unreachable.",
@@ -41,6 +41,17 @@ export function lookupFailed(route: string, error: unknown): Response {
     },
     { status: 503 },
   );
+}
+
+/**
+ * The server log line for a lookup that could not reach the catalog: the
+ * failure's code (`SQLITE_CANTOPEN`, `SQLITE_BUSY`), never its message. A
+ * drizzle error's message is the failed SQL with its bind parameters (the
+ * asset id, the owner scope) and says nothing about why it failed (AGENTS.md,
+ * "A drizzle error's message never says why the database failed").
+ */
+export function logLookupFailure(route: string, error: unknown): void {
+  console.warn(`${route}: catalog unreachable (${failureCode(error)})`);
 }
 
 /**

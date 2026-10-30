@@ -518,15 +518,27 @@ export function toggleTopic(view: StudioView, slug: string): StudioView {
 export interface VerbReport {
   verb: string;
   ok: boolean;
+  /** The studio's own sentence for the verb and its result, never words from the URL. */
   headline: string;
+  /** What the runner said, as the URL carried it: drawn as a quote, never as the studio's words. */
+  said: string | null;
   detail: string | null;
 }
 
 /** The cap on each message put in a URL. A stack trace does not belong in one. */
 const MESSAGE_LIMIT = 300;
 
-/** The verbs whose outcome rides back on a redirect: the server actions' names. */
-const VERBS = new Set(["export", "verify", "inspect", "commit", "restart"]);
+/**
+ * The verbs whose outcome rides back on a redirect (the server actions'
+ * names), each with the banner's headline for a success and for a failure.
+ */
+const VERB_HEADLINES: Readonly<Record<string, { ok: string; failed: string }>> = {
+  export: { ok: "Export finished.", failed: "Export did not finish." },
+  verify: { ok: "Verify passed.", failed: "Verify did not pass." },
+  inspect: { ok: "Inspect finished.", failed: "Inspect did not finish cleanly." },
+  commit: { ok: "Committed.", failed: "The commit did not go through." },
+  restart: { ok: "The canvas was closed. A fresh one starts on this page.", failed: "The canvas could not be restarted." },
+};
 
 /**
  * A path a verb may redirect back to: one in the studio, else the studio
@@ -558,25 +570,33 @@ export function withOutcome(
   for (const name of OUTCOME_PARAMS) params.delete(name);
   params.set("v", verb);
   params.set("ok", outcome.ok ? "1" : "0");
-  params.set("m", outcome.headline.slice(0, MESSAGE_LIMIT));
+  // What the runner said, if anything; the page draws its own headline.
+  if (outcome.headline !== "") params.set("m", outcome.headline.slice(0, MESSAGE_LIMIT));
   if (outcome.detail !== null && outcome.detail !== "") params.set("d", outcome.detail.slice(0, MESSAGE_LIMIT));
   return `${base ?? "/studio"}?${params.toString()}`;
 }
 
 /**
  * Read one back, or null when the page was not reached through a verb. Only
- * a verb this studio has is read: the banner is drawn as the studio's own
- * words, so a hand-made link cannot put any sentence it likes in it.
+ * a verb this studio has is read, and the headline is the studio's own
+ * sentence for that verb and result. The runner's words (`m` and `d`) come
+ * from the URL, which anyone can write, so they are returned as `said` and
+ * `detail` and drawn as a quote under the headline, never as it: a hand-made
+ * link could otherwise put "Your session expired, sign in at ..." in the
+ * studio's banner (R2-1-06).
  */
 export function readOutcome(params: RawParams): VerbReport | null {
   const verb = one(params.v);
-  if (verb === null || !VERBS.has(verb)) return null;
-  const headline = (one(params.m) ?? "").slice(0, MESSAGE_LIMIT);
-  const detail = (one(params.d) ?? "").slice(0, MESSAGE_LIMIT);
+  if (verb === null || !Object.hasOwn(VERB_HEADLINES, verb)) return null;
+  const ok = one(params.ok) === "1";
+  const said = (one(params.m) ?? "").slice(0, MESSAGE_LIMIT).trim();
+  const detail = (one(params.d) ?? "").slice(0, MESSAGE_LIMIT).trim();
+  const headlines = VERB_HEADLINES[verb]!;
   return {
     verb,
-    ok: one(params.ok) === "1",
-    headline: headline === "" ? verb : headline,
+    ok,
+    headline: ok ? headlines.ok : headlines.failed,
+    said: said === "" ? null : said,
     detail: detail === "" ? null : detail,
   };
 }

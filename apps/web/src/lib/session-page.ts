@@ -2,6 +2,7 @@ import "server-only";
 
 import { conceptSummaries, type AssetRef, type ConceptSummary } from "@gnosia/catalog/state";
 
+import type { EmbedResolution } from "@/components/NoteProse";
 import { tutorCredentials } from "@/lib/agent/credentials";
 import { isCallable } from "@gnosia/tutor/providers";
 import { readWrittenOptions, type WrittenOptions } from "@gnosia/tutor/server/check-options";
@@ -10,6 +11,7 @@ import type { RouteProblemCode } from "@gnosia/tutor/asset-problems";
 import type { ConceptWorkspace } from "@gnosia/tutor/concept-workspace-core";
 import { catalogDatabase, readKb } from "@/lib/learner-store";
 import { assetFileHref, assetPosterHref, assetStatusHref } from "@/lib/library";
+import { embedTargets } from "@/lib/note-embeds";
 import { currentOwner, currentScope } from "@/lib/owner";
 import {
   asksNothing,
@@ -96,6 +98,48 @@ async function teachAsset(assets: readonly AssetRef[]): Promise<TeachAsset> {
   return { kind: "diagram", id: pick.id, title, src: assetFileHref(pick.id), statusHref: assetStatusHref(pick.id) };
 }
 
+/** How a note's `[[wikilinks]]` and `![[embeds]]` resolve on a concept's pages. */
+export interface NoteResolvers {
+  resolveNote: (target: string) => string | undefined;
+  resolveEmbed: (name: string) => EmbedResolution;
+}
+
+/**
+ * The resolvers for a concept's note, the same on the workspace and the
+ * session page, so a link in the note is a link on both or on neither.
+ *
+ * A wikilink resolves when it names the concept itself or one of its
+ * neighbours: what it requires and assumes, what requires it, and every
+ * concept whose `requires` or `assumes` names it (its backlinks). Each has a
+ * workspace; the note's session logs and anything else stay plain text.
+ *
+ * Each `![[embed]]` in `source` is decided here, on the server, exactly as
+ * the library decides it, per embed: one the server already knows will not
+ * load is its problem, never a broken picture, and the rest load from the
+ * asset routes. `source` is the text the page renders, which is the whole
+ * note on the workspace and the teaching prose on the session page, and an
+ * empty one reads nothing.
+ */
+export async function noteResolvers(
+  workspace: Pick<ConceptWorkspace, "slug" | "requires" | "assumes" | "dependants" | "backlinks">,
+  source: string,
+): Promise<NoteResolvers> {
+  const embedId = (name: string) => `diagram:learn/assets/${name}`;
+  const problems =
+    source === "" ? new Map<string, RouteProblemCode | null>() : await readFileProblems(embedTargets(source).map(embedId));
+  const { slug, requires, assumes, dependants, backlinks } = workspace;
+  const known = new Set([slug, ...[...requires, ...assumes, ...dependants, ...backlinks].map((r) => r.slug)]);
+  return {
+    resolveNote: (target) => (known.has(target) ? `/learn/${target}` : undefined),
+    resolveEmbed: (name) => {
+      const id = embedId(name);
+      const problem = problems.get(id) ?? null;
+      if (problem !== null) return { problem };
+      return { src: assetFileHref(id), statusHref: assetStatusHref(id) };
+    },
+  };
+}
+
 /**
  * Whether a tutor model can be asked at all: some entry the tutor would try
  * has a key, the owner's saved one that still decrypts or the server's
@@ -151,16 +195,20 @@ export async function sessionWillAsk(workspace: ConceptWorkspace): Promise<boole
 }
 
 export async function loadSessionPage(workspace: ConceptWorkspace, mode: ConceptSessionMode): Promise<SessionPageData> {
-  const [summaries, written] = await Promise.all([readSummaries(), readConceptOptions(workspace)]);
-
-  const [asset, { kb }] = await Promise.all([teachAsset(workspace.assets), readKb(await currentOwner())]);
+  // All five at once: none needs another's answer.
+  const [summaries, written, asset, { kb }, modelAvailable] = await Promise.all([
+    readSummaries(),
+    readConceptOptions(workspace),
+    teachAsset(workspace.assets),
+    currentOwner().then((owner) => readKb(owner)),
+    tutorModelConfigured(),
+  ]);
   const byId = new Map(kb.concepts.map((c) => [c.id, c]));
   const frontier = kb.frontier.flatMap((id) => {
     const c = byId.get(id);
     return c === undefined ? [] : [{ id: c.id, title: c.title, domain: c.domain }];
   });
 
-  const modelAvailable = await tutorModelConfigured();
   const plan = withoutEmptySteps(
     buildSessionPlan({
       slug: workspace.slug,

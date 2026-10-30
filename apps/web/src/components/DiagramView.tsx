@@ -65,9 +65,9 @@ export function DiagramView({
   // because a failure renders the panel *instead of* the `<img>`: with the
   // old status kept there is no element left to fire `onLoad` for the new
   // file, and the component is stuck on "This diagram did not load" for every
-  // diagram it is handed afterwards. A soft navigation between two library
-  // assets reuses the mounted instance (the route renders no `key`), so one
-  // missing file poisoned every diagram opened after it.
+  // diagram it is handed afterwards. A change of route param remounts the
+  // page, but a navigation that changes only the query string keeps the
+  // mounted instance and hands it the new `src`.
   //
   // Set during render rather than in an effect so the swapped-in diagram is
   // never painted through the previous file's status, and kept inside the

@@ -486,6 +486,10 @@ final class CatalogStore {
     private(set) var watchedAt: [String: Date] = [:]
     /// Asset id → the learner's own title, from the catalog's asset_name.
     private(set) var assetNames: [String: String] = [:]
+    /// Concept slug → check id → the tutor's stored wrong options
+    /// (`check_distractor`, schema 5), this owner's only. Whether a row still
+    /// fits its check is `writtenOptions`' call, made when a card is built.
+    private(set) var checkOptions: [String: [String: StoredCheckOptions]] = [:]
     /// The event log, the mirror's and learner.db's, in log order. A surface
     /// reads the payload for `course`/`module`/`asset`/`goal`/`concepts`,
     /// and `conceptSlug` for which concept an observation was about.
@@ -961,6 +965,21 @@ final class CatalogStore {
             }
         }
 
+        // The tutor's wrong options per note check (schema 5): the review
+        // cards ask with them, as the web's review queue does.
+        var checkOptions: [String: [String: StoredCheckOptions]] = [:]
+        if tables.contains("check_distractor") {
+            let rows = try db.query("""
+                SELECT concept_slug, check_id, check_hash, options
+                FROM check_distractor WHERE learner_id = ?
+                """, bind: [owner])
+            while rows.next() {
+                guard let slug = rows.text(0), let id = rows.text(1), let hash = rows.text(2),
+                      let options = parseStoredOptions(rows.text(3)) else { continue }
+                checkOptions[slug, default: [:]][id] = StoredCheckOptions(checkId: id, checkHash: hash, options: options)
+            }
+        }
+
         // Note bodies: a note asset is linked to exactly one concept — its
         // own — and the concept row's `body` is the markdown the web's file
         // route serves for the kind. Snapshots that predate the concept
@@ -998,6 +1017,7 @@ final class CatalogStore {
         self.events = events
         self.conceptItems = conceptItems
         self.assetNames = assetNames
+        self.checkOptions = checkOptions
         conceptBodies = bodies
         self.noteConcepts = noteConcepts
         self.meta = meta

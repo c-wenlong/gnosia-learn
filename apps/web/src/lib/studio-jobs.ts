@@ -1,6 +1,7 @@
 import { JOB_ACTIVE_STATES, type JobState } from "@gnosia/schema/shared";
 
 import type { Comparison } from "@/lib/studio-compare";
+import { jobStateInline } from "@/lib/studio-job-state";
 
 /**
  * What a job looks like to the UI, decided here and nowhere else.
@@ -194,7 +195,8 @@ export function phaseIndex(phase: string | null | undefined): number {
   return PHASES.findIndex((entry) => entry.key === phase);
 }
 
-export type PhaseStatus = "done" | "current" | "pending" | "failed";
+/** `stopped` is where a cancelled job stopped: the person's decision, not a failure (R2-1-11). */
+export type PhaseStatus = "done" | "current" | "pending" | "failed" | "stopped";
 
 export interface PhaseRow {
   key: string;
@@ -331,7 +333,7 @@ export function phaseRows(
       // A job discarded from review is over, not live.
       status = "done";
     } else if (failedHere) {
-      status = "failed";
+      status = job.state === "cancelled" ? "stopped" : "failed";
     } else {
       status = "current";
     }
@@ -355,7 +357,9 @@ export function phaseWords(job: Job): string {
   const key = job.state === "awaiting_review" ? "ready" : job.phase;
   const row = PHASES.find((phase) => phase.key === key);
   if (row !== undefined) return row.label.toLowerCase();
-  return job.state === "queued" ? "waiting for the runner" : job.state.replace("_", " ");
+  // Through the one state table: `replace("_", " ")` replaced only the first
+  // underscore, so a newer runner's state read half humanised (R2-1-28).
+  return job.state === "queued" ? "waiting for the runner" : jobStateInline(job.state);
 }
 
 /* -------------------------------------------------------------------------- */

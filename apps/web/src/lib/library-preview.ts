@@ -169,7 +169,6 @@ export function previewDate(
   };
 }
 
-/** What the panel's header shows for the asset open in it, as the server answers it. */
 /**
  * The previewer header's Conversation tool: the conversation the row menu's
  * Locate in conversation opens (`latestConversation`, the one whose job wrote

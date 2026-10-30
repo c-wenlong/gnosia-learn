@@ -71,7 +71,10 @@ export function MentionMenu<K extends string>({
       {drawn !== null && (
         <ul id={open ? listId : undefined} role="listbox" aria-label="What to make" className="flex flex-col gap-0.5">
           {drawn.options.length === 0 ? (
-            <li className="px-3 py-2.5 text-[13px] text-text2">Nothing matches</li>
+            // A listbox owns options only, so the empty state is a disabled one.
+            <li role="option" aria-disabled="true" aria-selected="false" className="px-3 py-2.5 text-[13px] text-text2">
+              Nothing matches
+            </li>
           ) : (
             drawn.options.map((option, at) => {
               const usable = isUsable(option);

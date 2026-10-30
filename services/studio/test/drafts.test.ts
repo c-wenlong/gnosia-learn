@@ -526,6 +526,33 @@ describe("the limits", () => {
     expect(await fake.argvs()).toHaveLength(1);
   });
 
+  it("answers a resend of one key with the first message, during its turn and after it, and pays for one turn", async () => {
+    await fake.script([{ text: "thinking about it", hangMs: 300 }]);
+    const { record } = await drafts.create({});
+    const [first, second] = await Promise.all([
+      drafts.send(record.id, "first", undefined, { idempotencyKey: "k1" }),
+      drafts.send(record.id, "first", undefined, { idempotencyKey: "k1" }),
+    ]);
+    expect(second).toEqual({ seq: first.seq, replayed: true });
+    // While its turn runs, a resend is not refused as a turn in flight.
+    expect(await drafts.send(record.id, "first", undefined, { idempotencyKey: "k1" })).toEqual({ seq: first.seq, replayed: true });
+    await drafts.settled(record.id);
+    // After it, from the transcript, even for a runner that restarted.
+    const again = build();
+    await again.load();
+    expect(await again.send(record.id, "first", undefined, { idempotencyKey: "k1" })).toEqual({ seq: first.seq, replayed: true });
+    expect(await fake.argvs()).toHaveLength(1);
+    expect(drafts.get(record.id)?.turns).toBe(1);
+    // The view carries the key, so a browser finds its own turn by it.
+    expect((await drafts.view(record.id)).transcript.find((entry) => entry.seq === first.seq)).toMatchObject({ role: "person", key: "k1" });
+    // Another key is another message.
+    await fake.script([{ text: "again" }]);
+    const other = await drafts.send(record.id, "first", undefined, { idempotencyKey: "k2" });
+    expect(other.seq).toBeGreaterThan(first.seq);
+    expect(other).not.toHaveProperty("replayed");
+    await drafts.settled(record.id);
+  });
+
   it("refuses a message past the turn cap with 422, and closes a conversation that never proposed", async () => {
     await fake.script([{ text: "which kind of diagram?" }]);
     const { record } = await drafts.create({});

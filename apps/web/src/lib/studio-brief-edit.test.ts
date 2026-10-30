@@ -122,6 +122,12 @@ describe("where a refusal lands", () => {
     expect(problem).toEqual({ field: "title", message: '"title" is required and must be a non-empty string.' });
   });
 
+  it("does not call a save past the deadline refused (R2-1-01)", () => {
+    const problem = saveRefusal(0, { error: "the studio runner did not answer in time", detail: null }, edit);
+    expect(problem).toEqual({ field: "general", message: expect.stringMatching(/may still land/) });
+    expect(saveRefusal(0, { error: "the studio runner is not answering", detail: null }, edit).message).toMatch(/not answering/);
+  });
+
   it("says a topic gone from the vocabulary without the CLI's advice", () => {
     const problem = saveRefusal(400, { error: 'no topic "networking" in the catalog\'s vocabulary. Add it with `catalog topic add`', detail: { field: "topic" } }, edit);
     expect(problem).toEqual({ field: "topic", message: "“networking” is not in the topic list any more. Pick another topic." });
