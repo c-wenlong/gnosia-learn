@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   conceptsForTopic,
   continueHref,
+  courseTopicIds,
   defaultModuleIndex,
   doneLine,
   EMPTY_STANDING,
@@ -36,6 +37,13 @@ function concept(slug: string, pL: number, bucket: PathConcept["bucket"]): PathC
 
 const mastered: TopicMastery = { bucket: "mastered", pL: 0.95, next: "a", concepts: [concept("a", 0.95, "mastered")] };
 const learning: TopicMastery = { bucket: "learning", pL: 0.4, next: "b", concepts: [concept("b", 0.4, "learning")] };
+
+describe("courseTopicIds", () => {
+  it("lists every topic id, module by module", () => {
+    const course = { modules: [{ topics: [{ id: "m1-a" }, { id: "m1-b" }] }, { topics: [] }, { topics: [{ id: "m3-a" }] }] } as unknown as Parameters<typeof courseTopicIds>[0];
+    expect(courseTopicIds(course)).toEqual(["m1-a", "m1-b", "m3-a"]);
+  });
+});
 
 describe("conceptsForTopic", () => {
   const concepts = [
