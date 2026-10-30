@@ -18,15 +18,10 @@ import { MasteryDot } from "@/components/ui/MasteryDot";
 import { SkeletonCard, SkeletonRow } from "@/components/ui/Skeleton";
 import { TextLink } from "@/components/ui/TextLink";
 import { cx } from "@/components/ui/classes";
-import type { LibraryView } from "@/lib/library";
-import {
-  cameBack,
-  foldPieces,
-  heldPagesKey,
-  parseHeldPages,
-  type FoldedGroup,
-  type LibraryPage,
-} from "@/lib/library-pages";
+import { ARRIVE } from "@/components/library/arrive";
+import type { LibraryLayout } from "@/lib/library";
+import { cameBack, heldPagesKey, parseHeldPages } from "@/lib/library-history";
+import { foldPieces, type FoldedGroup, type LibraryPage } from "@/lib/library-pages";
 
 type Page = LibraryPage<ReactNode>;
 type Status = "idle" | "loading" | "failed" | "stale";
@@ -119,7 +114,7 @@ export function LibraryResults({
 }: {
   /** The view's URL (`libraryHref`), which the server reads the filters from and the scroll is kept under. */
   href: string;
-  view: LibraryView;
+  view: LibraryLayout;
   /** The list's accessible name. */
   label: string;
   first: Page;
@@ -360,10 +355,9 @@ export function LibraryResults({
  */
 const RESULTS_MOTION =
   "transition-opacity duration-150 ease-out motion-reduce:transition-none group-has-[[data-pending]]/library:opacity-60";
-const ARRIVE = "animate-fade-in motion-reduce:animate-none";
 
 /** A group's rows, with the placeholders of a page still loading after them, in the layout's shape. */
-function RowList({ view, placeholders, children }: { view: LibraryView; placeholders: number; children: ReactNode[] }) {
+function RowList({ view, placeholders, children }: { view: LibraryLayout; placeholders: number; children: ReactNode[] }) {
   const skeletons = Array.from({ length: placeholders }, (_, i) =>
     view === "list" ? (
       <li key={`skeleton-${i}`} aria-hidden className="group/item">

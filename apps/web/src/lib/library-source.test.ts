@@ -64,6 +64,15 @@ describe("pickPlace", () => {
     expect(pickPlace([], null)).toBeNull();
   });
 
+  it("sorts a course whose code is only spaces by its title, as its label reads", () => {
+    const blank = place({ course: "zoo", code: "  ", courseTitle: "Zoology" });
+    const bio = place({ course: "bio101", code: "BIO101", courseTitle: "Biology" });
+    // "  " sorted before every code; read as "Zoology" it sorts after BIO101.
+    expect(pickPlace([blank, bio], null)).toBe(bio);
+    expect(pickPlace([bio, blank], null)).toBe(bio);
+    expect(placeLabel(blank)).toBe("Zoology · Week 3: Proof of correctness");
+  });
+
   it("takes the course the open filter names, wherever it was found", () => {
     expect(pickPlace([a, b, c], "cs4223")).toBe(a);
     expect(pickPlace([a, b, c], "cs9999")).toBe(c);

@@ -18,26 +18,15 @@ import {
   type CatalogDatabase,
 } from "@gnosia/catalog/state";
 
-import { resolveAsset, servedAssets, storedPosters } from "@/lib/asset-files";
+import { resolveAsset, seams, servedAssets, storedPosters } from "@/lib/asset-files";
 import type { RouteProblemCode } from "@/lib/asset-problems";
 import { catalogDatabase } from "@/lib/learner-store";
-import {
-  assetFileHref,
-  assetPosterHref,
-  assetStatusHref,
-  compareByKindThenId,
-  isCompanionKind,
-} from "@/lib/library";
+import { compareByKindThenId, isCompanionKind, searchableText } from "@/lib/library";
+import type { AssetAccess } from "@/lib/library-thumbnails";
 import { currentOwner, currentScope, NoOwnerError, type OwnerScope } from "@/lib/owner";
-import { contentSource } from "@/data/source";
-import { assetBlobStore } from "@/lib/blob-store";
 import { FAVORITE_PREFIX, favoriteKey, parseFavorite, type Favorite } from "@/lib/favorite";
 import { parsePlayback, playbackKey, type Playback } from "@/lib/playback";
-import { parseTranscript } from "@/lib/transcript";
-import type { AssetSeams } from "@gnosia/tutor/server/deps";
 import {
-  MAX_ASSET_ID_CHARS,
-  noteIndex,
   optionalParents,
   optionalTitles,
   readAssetDetail as readAssetDetailCore,
@@ -47,7 +36,6 @@ import {
   type AssetDetail,
 } from "@gnosia/tutor/server/asset-detail";
 
-export { MAX_ASSET_ID_CHARS, noteIndex, optionalParents, TEXT_PREVIEW_BYTES };
 export type { AssetDetail };
 
 /**
@@ -209,51 +197,24 @@ export async function loadLibrary(): Promise<LibrarySnapshot> {
 }
 
 
-
-
-
-
-
 /** This app's seams for the detail read, the same ones the sidecar builds around its own pool. */
-async function assetSeams(): Promise<{ db: Promise<CatalogDatabase>; owner: string; scope: OwnerScope }> {
+async function detailSeams(): Promise<{ db: Promise<CatalogDatabase>; owner: string; scope: OwnerScope }> {
   const owner = await currentOwner();
   return { db: catalogDatabase(), owner, scope: await currentScope() };
 }
 
 /** One asset's detail page, through the shared read in `@gnosia/tutor/server/asset-detail`. */
 export async function readAssetDetail(id: string): Promise<AssetDetail> {
-  return readAssetDetailCore(await assetSeams(), id);
+  return readAssetDetailCore(await detailSeams(), id);
 }
 
 /** As `readAssetText`, with this app's seams. */
 export async function readAssetText(db: CatalogDatabase, id: string, limit: number = TEXT_PREVIEW_BYTES): Promise<string | null> {
-  return readAssetTextCore(await seamsFor(), db, id, limit);
-}
-
-/**
- * A store that refuses on use: the text reads that need one answer
- * `blob-store-unavailable`, which is what a real `assetBlobStore()` failure
- * already means. Constructing it lazily also keeps a test double that has no
- * blob seam at all from failing reads it was never asked to serve.
- */
-const unavailableStore: AssetSeams["blobStore"] = new Proxy({} as AssetSeams["blobStore"], {
-  get: () => () => {
-    throw new Error("blob store unavailable");
-  },
-});
-
-async function seamsFor(): Promise<AssetSeams> {
-  let blobStore: AssetSeams["blobStore"];
-  try {
-    blobStore = assetBlobStore();
-  } catch {
-    blobStore = unavailableStore;
-  }
-  return { scope: await currentScope(), source: contentSource(), blobStore };
+  return readAssetTextCore(await seams(), db, id, limit);
 }
 
 async function readAssetTextForLocal(db: CatalogDatabase, id: string, limit: number = TEXT_PREVIEW_BYTES) {
-  return readAssetTextForCore(await seamsFor(), db, id, limit);
+  return readAssetTextForCore(await seams(), db, id, limit);
 }
 
 /**
@@ -266,24 +227,6 @@ export const loadAssetDetail = cache(async (id: string): Promise<AssetDetail> =>
   return readAssetDetail(id);
 });
 
-/**
- * Which rows' bytes the asset routes can hand over, decided per row.
- *
- * Since phase 2 there is nothing deployment-wide to say: the server reads no
- * files off its disk (the `ASSET_FILES_ENABLED` switch and the manimkc data
- * root it used to check are gone), so an asset is served exactly when its
- * bytes are a `present` blob or a row the database owns, which is what
- * `resolveAsset` decides for the route.
- */
-export interface AssetAccess {
-  served: ReadonlySet<string>;
-  /**
-   * The videos with a stored poster. Kept apart from `served`: a video whose
-   * bytes are in the store plays, and its card still has no picture unless a
-   * poster was stored too.
-   */
-  posters: ReadonlySet<string>;
-}
 
 const NO_ACCESS: AssetAccess = { served: new Set(), posters: new Set() };
 
@@ -310,59 +253,6 @@ export async function loadAssetAccess(rows: readonly Pick<AssetRef, "id" | "kind
   return readAssetAccess(rows);
 }
 
-/**
- * The rows among these that name bytes nobody can serve yet: a file-shaped
- * path (a link has none) and no stored copy. For the grid's one notice, which
- * says how many and what to run, instead of a card per row explaining the
- * same thing.
- */
-export function unservedRows<T extends Pick<AssetWithTopics, "id" | "path">>(
-  rows: readonly T[],
-  access: AssetAccess,
-): T[] {
-  return rows.filter((row) => row.path !== null && !access.served.has(row.id));
-}
-
-
-
-
-
-
-
-/**
- * What an `<img>` should point at for one row, or null for the placeholder.
- *
- * Shared by the grid and the related strip on the detail page, because two
- * copies of this rule would drift and the symptom is a card that shows a
- * picture in one place and a grey box in the other.
- *
- * A diagram is already an image, so it is served as itself, and so is a
- * stored poster in the companion rail. A video is not, and an `<img>` pointed
- * at an `.mp4` decodes nothing; `/poster` serves the still the upload stored
- * for it. Everything else has no picture to show and says so.
- *
- * Each depends on the route being able to answer for that row, which `access`
- * says per row. When it cannot, the placeholder is the correct output, not a
- * broken image.
- */
-export function thumbnailFor(row: Pick<AssetWithTopics, "id" | "kind">, access: AssetAccess): string | null {
-  // A video's picture is its stored poster: the video's own bytes being
-  // stored says nothing about whether a poster was.
-  if (row.kind === "video") return access.posters.has(row.id) ? assetPosterHref(row.id) : null;
-  if (!access.served.has(row.id)) return null;
-  if (row.kind === "diagram_svg" || row.kind === "poster") return assetFileHref(row.id);
-  return null;
-}
-
-/**
- * Where a card asks why its thumbnail failed, beside `thumbnailFor` so the two
- * cannot disagree about which route the picture came from: the file route for
- * a diagram, the poster route for a video.
- */
-export function thumbnailStatusFor(row: Pick<AssetWithTopics, "id" | "kind">, access: AssetAccess): string | undefined {
-  if (thumbnailFor(row, access) === null) return undefined;
-  return assetStatusHref(row.id, row.kind === "video" ? "poster" : "file");
-}
 
 /**
  * Why each of these assets' files would be refused, decided on the server
@@ -402,7 +292,6 @@ export async function readFileProblems(
 }
 
 
-
 /**
  * The kinds whose words the library search reads, beside every row's name.
  * Notes and transcripts: the two kinds whose text is what somebody would
@@ -410,7 +299,7 @@ export async function readFileProblems(
  * markdown too and is left out, because its text is mostly the tutor's own
  * turns, which would match nearly any query.
  */
-export const SEARCH_TEXT_KINDS: ReadonlySet<string> = new Set(["note", "transcript"]);
+const SEARCH_TEXT_KINDS: ReadonlySet<string> = new Set(["note", "transcript"]);
 
 /** What `readSearchText` read, for `searchHits` in `@/lib/library`. */
 export interface SearchText {
@@ -512,18 +401,6 @@ export async function loadSearchText(
   return readSearchText(rows, terms);
 }
 
-/** A file's words as search sees them: a transcript's lines, anything else as written. */
-export function searchableText(kind: string, raw: string): string {
-  if (kind === "transcript") {
-    const parsed = parseTranscript(raw);
-    if (parsed !== null) {
-      return [...parsed.chapters.map((c) => c.title), ...parsed.cues.map((c) => c.text)]
-        .join("\n")
-        .toLowerCase();
-    }
-  }
-  return raw.toLowerCase();
-}
 
 /**
  * When the learner last marked this asset watched, null for never, or
@@ -535,7 +412,7 @@ export function searchableText(kind: string, raw: string): string {
  * is one learner's and small. The payload's `asset` is the join, since a
  * `watched` event names no concept.
  */
-export async function readLastWatched(id: string): Promise<string | null | undefined> {
+async function readLastWatched(id: string): Promise<string | null | undefined> {
   const owner = await currentOwner();
   try {
     const events = await readEvents(await catalogDatabase(), owner);
