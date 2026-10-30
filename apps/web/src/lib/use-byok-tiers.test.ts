@@ -25,7 +25,11 @@ type Read = ReturnType<typeof useByokTiers>;
 beforeAll(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 });
-beforeEach(() => mocks.getByokSettings.mockReset());
+// A block, not an arrow returning the mock: vitest calls a function a hook
+// returns as its teardown, which would call the mock once more after each test.
+beforeEach(() => {
+  mocks.getByokSettings.mockReset();
+});
 
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
@@ -118,6 +122,18 @@ describe("useByokTiers", () => {
     expect(latest()).toBeUndefined();
     window.dispatchEvent(new Event(BYOK_SETTINGS_CHANGED));
     expect(mocks.getByokSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the newest read's answer when an older read answers after it", async () => {
+    const answers: ((value: unknown) => void)[] = [];
+    mocks.getByokSettings.mockImplementation(() => new Promise((resolve) => answers.push(resolve)));
+    await draw(true);
+    // A save right after the dialog opened: a second read while the first is in flight.
+    await act(async () => window.dispatchEvent(new Event(BYOK_SETTINGS_CHANGED)));
+    expect(answers).toHaveLength(2);
+    await act(async () => answers[1]!(configured({ default: "qwen-max", lite: "qwen-turbo" })));
+    await act(async () => answers[0]!(unconfigured));
+    expect(latest()).toEqual({ model: "qwen-max", tiers: { default: "qwen-max", lite: "qwen-turbo" } });
   });
 
   it("leaves a BYOK write to the caller when told not to listen", async () => {

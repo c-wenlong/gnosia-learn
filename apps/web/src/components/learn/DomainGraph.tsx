@@ -45,6 +45,7 @@ import {
 import type { MapLayout } from "@/lib/learn-index";
 import { arcLength } from "@/lib/map-reading";
 import { MASTERY_BUCKET_LABEL, type MasteryBucket } from "@gnosia/tutor/mastery-bucket";
+import { ownValue } from "@gnosia/tutor/own-key";
 import { prefersReducedMotion } from "@/lib/motion";
 
 /**
@@ -157,7 +158,7 @@ export function DomainGraph({
   const glide = useGlide(onAxes ? 1 : 0);
   const settled = glide === (onAxes ? 1 : 0);
   /** Where a concept is in groups: dragged there, or where the layout put it. The groups' boxes follow these. */
-  const home = (id: string) => moved[id] ?? layout.positions[id];
+  const home = (id: string) => ownValue(moved, id) ?? layout.positions[id];
   const at = (id: string) => (glide === 0 ? home(id) : mixPoint(home(id), layout.axes.positions[id] ?? home(id), glide));
   const topicOf = new Map(groups.flatMap((g) => g.concepts.map((id) => [id, g.topic] as const)));
   // Each concept's label as wrapped lines, once per set of nodes: a hover or a drag frame

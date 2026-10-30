@@ -88,6 +88,23 @@ describe("viewBoxFor (D2, D3)", () => {
     expect(box.y + box.height).toBeGreaterThan(400);
     expect(box.x).toBeLessThan(10);
   });
+
+  it("frames a topic holding concepts named like Object.prototype's members, with nothing moved", () => {
+    // `moved` defaults to `{}`, so `moved["constructor"]` used to be the Object function and the frame NaN.
+    const named = ["constructor", "toString", "__proto__"];
+    const odd = {
+      width: 400,
+      height: 300,
+      positions: Object.fromEntries(named.map((id, i) => [id, { x: 80 + 100 * i, y: 60 }])),
+      groups: [{ topic: "oop", title: "Objects", concepts: named }],
+    };
+    const box = viewBoxFor(odd, "oop");
+    for (const v of Object.values(box)) expect(Number.isFinite(v)).toBe(true);
+    const fit = groupBox(named.map((id) => odd.positions[id]!), titleWidth("Objects"));
+    expect(box).toEqual({ x: fit.x - VIEW_PAD, y: fit.y - VIEW_PAD, width: fit.width + 2 * VIEW_PAD, height: fit.height + 2 * VIEW_PAD });
+    // A moved key the layout does not hold is ignored, though `in` finds it on the prototype.
+    expect(viewBoxFor(layout, null, JSON.parse('{"constructor":{"x":9000,"y":9000}}'))).toEqual(viewBoxFor(layout, null));
+  });
 });
 
 describe("domainOfConcepts and matchCounts (D8)", () => {
