@@ -153,21 +153,24 @@ struct LearnView: View {
                         description: Text("Nothing here is in “\(filter.label)” under this search.")
                     )
                 } else {
-                    List(selection: railSelection) {
+                    // The web's ConceptList: rows on the `surface2`
+                    // ground, the selected one on `surface`.
+                    PaletteList(selection: railSelection, order: railOrder) {
                         if let d = openDomain, let layout = openLayout {
                             railGroups(d, layout: layout)
                         } else {
                             ForEach(railRows) { row in
-                                ConceptRow(row: row).tag(row.slug)
+                                PaletteRow(id: row.slug, selection: railSelection, fill: G.surface) {
+                                    ConceptRow(row: row)
+                                }
                             }
                         }
                     }
-                    .listStyle(.sidebar)
                 }
             }
             .frame(width: 300)
             .frame(maxHeight: .infinity)
-            .background(G.surface)
+            .background(G.surface2)
 
             Divider().overlay(G.border)
 
@@ -245,23 +248,36 @@ struct LearnView: View {
         })
         let byGroup = Dictionary(grouping: railRows, by: { topicOf[$0.slug] ?? "" })
         ForEach(groups, id: \.topic) { group in
-            Section {
-                ForEach(byGroup[group.topic] ?? []) { row in
-                    ConceptRow(row: row)
-                        .opacity(shown.contains(row.slug) ? 1 : 0.4)
-                        .tag(row.slug)
-                }
-            } header: {
-                Button {
-                    self.topic = self.topic == group.topic ? nil : group.topic
-                } label: {
-                    Text(group.title)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(G.text2)
-                }
-                .buttonStyle(.plain)
-                .disabled(topic != nil)
+            Button {
+                self.topic = self.topic == group.topic ? nil : group.topic
+            } label: {
+                Text(group.title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(G.text2)
+                    .padding(.horizontal, 8)
+                    .padding(.top, 10)
+                    .padding(.bottom, 2)
             }
+            .buttonStyle(.plain)
+            .disabled(topic != nil)
+            ForEach(byGroup[group.topic] ?? []) { row in
+                PaletteRow(id: row.slug, selection: railSelection, fill: G.surface) {
+                    ConceptRow(row: row)
+                }
+                .opacity(shown.contains(row.slug) ? 1 : 0.4)
+            }
+        }
+    }
+
+    /// The rail's rows in the order they draw, for the arrow keys: the
+    /// open domain's groups in turn, else `railRows` as they stand.
+    private var railOrder: [String] {
+        guard openDomain != nil, let layout = openLayout else { return railRows.map(\.slug) }
+        let scoped = Set(railRows.map(\.slug))
+        let groups = topic == nil ? layout.groups : layout.groups.filter { $0.topic == topic }
+        let rank = Dictionary(uniqueKeysWithValues: railRows.enumerated().map { ($1.slug, $0) })
+        return groups.flatMap { g in
+            g.concepts.filter(scoped.contains).sorted { rank[$0, default: 0] < rank[$1, default: 0] }
         }
     }
 
@@ -293,7 +309,7 @@ private struct ConceptRow: View {
                 HStack(spacing: 6) {
                     if row.isDue {
                         Text(row.dueLabel)
-                            .foregroundStyle(row.overdue ? .red : .orange)
+                            .foregroundStyle(row.overdue ? G.danger : G.warnText)
                     } else if row.due != nil {
                         Text("due \(row.dueLabel)")
                     }
@@ -301,15 +317,16 @@ private struct ConceptRow: View {
                     if let course = row.courseLabel { Text(course) }
                     if row.leech {
                         Text("Keeps slipping")
-                            .foregroundStyle(.red)
+                            .foregroundStyle(G.danger)
                     }
                     if row.ready {
                         Text("Ready")
-                            .foregroundStyle(.green)
+                            .foregroundStyle(G.okText)
                     }
                 }
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .fontWeight(.regular)
+                .foregroundStyle(G.text2)
                 .lineLimit(1)
             }
 

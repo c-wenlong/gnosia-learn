@@ -1496,6 +1496,19 @@ struct CatalogCourse: Identifiable, Hashable {
         let m = modules.count, t = itemCount
         return "\(m) \(m == 1 ? "module" : "modules") · \(t) \(t == 1 ? "topic" : "topics")"
     }
+
+    /// "Module 3 of 4" over a module's header: its authored `order` and the
+    /// module count, as the web's ModuleMain and CourseSidebar print it, so
+    /// the header and the sidebar row ("3. …") name the same number.
+    func place(of module: CourseModule) -> String {
+        "Module \(module.order) of \(modules.count)"
+    }
+}
+
+extension CourseModule {
+    /// "3. Agentic frameworks": the sidebar row and the neighbour links, the
+    /// web's `{m.order}. {m.title}`.
+    var numberedTitle: String { "\(order). \(title)" }
 }
 
 // MARK: - Kind vocabulary
