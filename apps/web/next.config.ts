@@ -2,6 +2,8 @@ import path from "node:path";
 
 import type { NextConfig } from "next";
 
+import { BASE_HEADERS, PAGE_SOURCE, pageHeaders } from "./src/lib/auth/csp";
+
 /**
  * The repository root, two levels above `apps/web/`.
  *
@@ -51,6 +53,25 @@ const nextConfig: NextConfig = {
    */
   async redirects() {
     return [{ source: "/today", destination: "/home", permanent: true }];
+  },
+
+  /** No `X-Powered-By: Next.js`: it tells a stranger which exploits to try. */
+  poweredByHeader: false,
+
+  /**
+   * Security headers (S7-04 of the 2026-10 audit). `src/lib/auth/csp.ts`
+   * says what each one allows and why. A later entry that sets the same key
+   * wins, so pages get `X-Frame-Options: DENY` over the base `SAMEORIGIN`.
+   *
+   * The page policy here carries no nonce. The proxy replaces it with one that
+   * does on every page it sees; this copy is for the pages its matcher skips.
+   */
+  async headers() {
+    const dev = process.env.NODE_ENV !== "production";
+    return [
+      { source: "/:path*", headers: [...BASE_HEADERS] },
+      { source: PAGE_SOURCE, headers: pageHeaders(dev) },
+    ];
   },
 };
 

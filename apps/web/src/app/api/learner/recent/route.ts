@@ -41,10 +41,10 @@ import {
  */
 
 export async function GET(req: Request): Promise<NextResponse> {
-  const limited = enforceRateLimit(req, "learner:recent-read", LEARNER_RATE_LIMIT);
-  if (limited !== null) return limited;
   const owner = await requestOwner();
   if (owner instanceof NextResponse) return owner;
+  const limited = enforceRateLimit(owner, "learner:recent-read", LEARNER_RATE_LIMIT);
+  if (limited !== null) return limited;
   const params = new URL(req.url).searchParams;
   const pages = Number.parseInt(params.get("pages") ?? "1", 10);
   const q = (params.get("q") ?? "").slice(0, 200);

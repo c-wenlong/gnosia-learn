@@ -540,7 +540,19 @@ export function TutorChat({
   const [openingFailed, setOpeningFailed] = useState(false);
   /** The model opening in flight, aborted if the page goes away so a late reply never lands in the thread. */
   const openingRequest = useRef<AbortController | null>(null);
-  useEffect(() => () => openingRequest.current?.abort(), []);
+  /**
+   * The learner's turn in flight, aborted the same way: a reply that landed
+   * after the page went away would be appended under a question the learner,
+   * back on the page, had already asked again.
+   */
+  const turnRequest = useRef<AbortController | null>(null);
+  useEffect(
+    () => () => {
+      openingRequest.current?.abort();
+      turnRequest.current?.abort();
+    },
+    [],
+  );
 
   /** Ask the model for the opening recall question (a note with no check). Retryable from the row it leaves on failure. */
   async function askOpening() {
@@ -631,6 +643,8 @@ export function TutorChat({
     setRefusal(null);
     dropAsk();
     swapIfIdle(true);
+    const controller = new AbortController();
+    turnRequest.current = controller;
     setBusy(true);
     setError(null);
     try {
@@ -640,8 +654,10 @@ export function TutorChat({
         // Markers are the person's record of a hand-off, not the tutor's turns.
         // A thread that opened on the tutor's recall question is sent with the seed before it.
         body: JSON.stringify({ conceptSlug: slug, messages: requestTurns(next) }),
+        signal: controller.signal,
       });
       const data = (await res.json().catch(() => ({}))) as ChatReply;
+      if (controller.signal.aborted) return;
       if (!res.ok) throw new Error(errorFor(res.status, data));
       const content = data.message?.content?.trim();
       if (!content) throw new Error("The tutor sent an empty reply. Try asking again.");
@@ -651,9 +667,11 @@ export function TutorChat({
       if (data.check?.question) reply.check = restoreCardCheck(data.check) ?? { question: data.check.question };
       setTurns([...current(), reply]);
     } catch (e) {
+      if (controller.signal.aborted) return;
       setError(e instanceof Error ? e.message : "The request failed.");
     } finally {
-      setBusy(false);
+      if (turnRequest.current === controller) turnRequest.current = null;
+      if (!controller.signal.aborted) setBusy(false);
     }
   }
 
@@ -825,7 +843,7 @@ export function TutorChat({
                 ) : undefined
               }
             >
-              <NoteProse source={turn.content} idPrefix={`t${i}-`} />
+              <NoteProse source={turn.content} idPrefix={`t${i}-`} images="link" />
             </TutorMessage>
           );
           return [item, cardAfter(i), rowAfter(i)];

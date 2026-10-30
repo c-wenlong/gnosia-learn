@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { isProviderName, PROVIDER_IDS, type ProviderName } from "@gnosia/schema/shared";
 
 import { enforceRateLimit, enforceSameOrigin, type RateLimitRule } from "@/lib/agent/guard";
-import { requestOwner } from "@/lib/learner-api";
+import { BodyTooLarge, readBodyText, requestOwner } from "@/lib/learner-api";
 
 /**
  * The guards in front of `/api/learner/provider-key` and its `test`, the same
@@ -33,7 +33,7 @@ export function refuse(error: string, code = "BAD_REQUEST", status = 400): NextR
 }
 
 /**
- * Origin, rate limit, owner. The owner, or the response to send instead.
+ * Origin, owner, then the owner's rate limit. The owner, or the response to send instead.
  * `scope` names the family of routes the bucket belongs to; the model chain's
  * routes (docs/TUTOR-MODELS.md) pass their own, so they count apart from these.
  */
@@ -45,22 +45,20 @@ export async function guard(
 ): Promise<string | NextResponse> {
   const origin = enforceSameOrigin(req);
   if (origin !== null) return origin;
-  const limited = enforceRateLimit(req, `${scope}:${bucket}`, rule);
-  if (limited !== null) return limited;
-  return requestOwner();
+  const owner = await requestOwner();
+  if (owner instanceof NextResponse) return owner;
+  return enforceRateLimit(owner, `${scope}:${bucket}`, rule) ?? owner;
 }
 
 /** The body as an object, or the 400 to answer with. Never echoes what was sent. */
 export async function readBody(req: Request): Promise<Record<string, unknown> | NextResponse> {
-  const declared = Number(req.headers.get("content-length") ?? "0");
-  if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) return refuse("The request is too large.");
   let text: string;
   try {
-    text = await req.text();
-  } catch {
+    text = await readBodyText(req, MAX_BODY_BYTES);
+  } catch (error) {
+    if (error instanceof BodyTooLarge) return refuse("The request is too large.");
     return refuse("The request body could not be read.");
   }
-  if (text.length > MAX_BODY_BYTES) return refuse("The request is too large.");
   try {
     const body: unknown = JSON.parse(text);
     if (body === null || typeof body !== "object" || Array.isArray(body)) return refuse("The body must be a JSON object.");
