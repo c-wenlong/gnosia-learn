@@ -5,7 +5,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import type { ConceptCheck } from "../src/concept-note-core";
 import type { ConceptWorkspace } from "../src/concept-workspace-core";
 import type { CompleteOutcome } from "../src/providers";
-import { checkHash, readWrittenOptions } from "../src/server/check-options";
+import { checkHash, readWrittenOptions, storeOptions } from "../src/server/check-options";
 import type { TutorDeps } from "../src/server/deps";
 import { checkOptionsTurn } from "../src/server/turns";
 import { migratedScratchDatabase, probe, type Scratch } from "../../../services/catalog/test/scratch-database";
@@ -194,6 +194,42 @@ describe.skipIf(!reachable.ok)("checkOptionsTurn", () => {
         body: { options: GOOD, cached: false },
       });
       expect((await readWrittenOptions(down, LOCAL_LEARNER_ID, [{ slug: "alpha", checks }])).size).toBe(0);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});
+
+describe("check options store failures in the log", () => {
+  it("log the failure's code, never the driver's message with its bind parameters", async () => {
+    // What drizzle throws: the failed SQL and its parameters as the message,
+    // the driver's error, which carries the code, as the cause.
+    const driver = Object.assign(new Error("database is locked"), { code: "SQLITE_BUSY" });
+    const failed = new Error("Failed query: select ... params: learner-secret-id,alpha", { cause: driver });
+    const down = Promise.reject(failed);
+    down.catch(() => undefined);
+    const checks: ConceptCheck[] = [{ id: "c1", question: "Q?", answer: "A.", why: "", source: "" }];
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      expect((await readWrittenOptions(down, "learner-secret-id", [{ slug: "alpha", checks }])).size).toBe(0);
+      expect(
+        await storeOptions(down, "learner-secret-id", {
+          conceptSlug: "alpha",
+          checkId: "c1",
+          checkHash: "h",
+          options: ["wrong one", "wrong two", "wrong three"],
+          model: null,
+          provider: null,
+        }),
+      ).toBe(false);
+      const logged = warn.mock.calls.map((call) => call.join(" "));
+      expect(logged).toHaveLength(2);
+      for (const line of logged) {
+        expect(line).toContain("SQLITE_BUSY");
+        expect(line).not.toContain("learner-secret-id");
+        expect(line).not.toContain("Failed query");
+        expect(line).not.toContain("wrong one");
+      }
     } finally {
       warn.mockRestore();
     }
