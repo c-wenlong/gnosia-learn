@@ -105,7 +105,7 @@ which brief produced them.
 | `mastery` | BKT belief per concept: `p_l`, observations, correct, last seen. Derived. |
 | `review` | SM-2 card per concept: repetitions, ease, interval, lapses, due, leech. Derived. |
 | `progress` | A ticked checklist row, plus the learner's note on it. |
-| `recap` | The durable "what I learnt" record per checklist row. |
+| `recap` | The durable "what I learnt" record per checklist row. `request_id` is the id of the write that last stored it, so a copy of that write sent again after a lost answer counts no second session. |
 | `preference` | Theme, epoch, last visited, and the studio's two agent settings (`studioVideoAgent`, `studioDiagramAgent`: `{ model, effort }`, D53 of docs/STUDIO-VIDEOS.md), which the runner reads with `catalog preference get`. Key/value, because these change with the UI. |
 | `provider_key` | An owner's own model provider API keys for the tutor, one per provider, AES-256-GCM encrypted by the web app (migration `0018_provider_key`, [docs/BYOK.md](../../docs/BYOK.md)). See "Provider keys" under the state half. |
 | `custom_provider` | The providers an owner added themselves: a name and an OpenAI-compatible base URL under an id `custom-<slug>`, which their `provider_key` row and `tutor_model` entries are filed under (migration `0028_custom_provider`, [docs/TUTOR-MODELS.md](../../docs/TUTOR-MODELS.md) T14). No secret. The base URL is `https://`, or `http://` to a loopback host, in the function and a CHECK. Written only by `src/state/custom-providers.ts`; a provider's Delete removes the row, its key and its models in one transaction (`deleteTutorProvider`). |
@@ -545,6 +545,7 @@ erDiagram
         jsonb open_questions "<= 8 items"
         text source "agent|manual"
         int sessions
+        text request_id "nullable"
     }
     preference {
         text learner_id PK_FK
