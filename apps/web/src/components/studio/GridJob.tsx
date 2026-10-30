@@ -16,6 +16,7 @@ import {
 import { FADE_IN } from "@/components/studio/motion";
 import { PanelLink } from "@/components/studio/PanelLink";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
+import { TILE_THUMB } from "@/components/studio/surfaces";
 import { cx } from "@/components/ui/classes";
 import { useImageReveal } from "@/components/ui/use-image-reveal";
 import { finishedHeadline, jobShotHref, type Job } from "@/lib/studio-jobs";
@@ -89,7 +90,7 @@ export function TileJob({
   return (
     // Fades in over the tile as the job starts; opacity only, since a scale
     // would show the thumbnail round its edges for a moment.
-    <div className={cx("absolute inset-x-0 top-0 aspect-[4/3] overflow-hidden border-b border-border", FADE_IN)}>
+    <div className={cx("absolute inset-x-0 top-0 overflow-hidden border-b border-border", TILE_THUMB, FADE_IN)}>
       {/* Keyed by job, so a second job on the same diagram starts from its own pictures. */}
       <JobStage key={job.jobId} job={job} title={title} thumbnail={thumbnail} path={path} isNew={false} />
     </div>

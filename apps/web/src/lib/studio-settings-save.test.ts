@@ -114,10 +114,14 @@ describe("saveStudioAgent", () => {
     expect(await saveStudioAgent(pick())).toEqual({ ok: false, error: "Not saved: the catalog did not answer." });
   });
 
-  it("says the same before calling the runner when the stored row cannot be read", async () => {
+  it("says the same, having only read the runner's menu, when the stored row cannot be read", async () => {
     mocks.readPreference.mockRejectedValue(new Error("connection refused"));
     expect(await saveStudioAgent(pick())).toEqual({ ok: false, error: "Not saved: the catalog did not answer." });
-    expect(puts()).toEqual([]);
+    // The menu's GET starts beside the row's read (S2-06); no write follows it.
+    expect(mocks.studioApi.mock.calls.map(([path, init]) => [path, (init as { method?: string } | undefined)?.method ?? "GET"])).toEqual([
+      ["/api/settings/agent", "GET"],
+    ]);
+    expect(mocks.writePreference).not.toHaveBeenCalled();
   });
 
   it("checks the value as before, so neither writer sees a model the menu does not offer", async () => {

@@ -7,7 +7,7 @@ import { FADE_IN, POP_IN } from "@/components/studio/motion";
 import { KindBadge } from "@/components/studio/KindBadge";
 import { PanelLink } from "@/components/studio/PanelLink";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
-import { JOB_BAR, JOB_CONTROL, TILE, TILE_LIFT } from "@/components/studio/surfaces";
+import { JOB_BAR, JOB_CONTROL, TILE, TILE_LIFT, TILE_THUMB } from "@/components/studio/surfaces";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { buttonClasses, cx } from "@/components/ui/classes";
@@ -270,7 +270,7 @@ export function NewJobCard({
 }) {
   return (
     <div className={cx(TILE, TILE_LIFT, POP_IN)}>
-      <div className="relative aspect-[4/3] overflow-hidden border-b border-border">
+      <div className={cx("relative overflow-hidden border-b border-border", TILE_THUMB)}>
         {stage}
         <KindBadge kind={kind} />
       </div>

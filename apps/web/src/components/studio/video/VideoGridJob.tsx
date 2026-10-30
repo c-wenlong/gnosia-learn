@@ -22,7 +22,7 @@ import { PanelLink } from "@/components/studio/PanelLink";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
 import { KindBadge, KindWord } from "@/components/studio/KindBadge";
 import { usePanelHost } from "@/components/studio/panel-host";
-import { TILE, TILE_ACTIONS, TILE_LIFT } from "@/components/studio/surfaces";
+import { TILE, TILE_ACTIONS, TILE_LIFT, TILE_THUMB } from "@/components/studio/surfaces";
 import { Badge } from "@/components/ui/Badge";
 import { buttonClasses, cx, linkClasses } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
@@ -81,7 +81,7 @@ export function VideoTile({ video, path }: { video: StudioVideo; path: string })
         aria-label={`Play video: ${title}`}
         className="flex min-w-0 flex-col"
       >
-        <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden border-b border-border bg-black">
+        <div className={cx("relative flex items-center justify-center overflow-hidden border-b border-border bg-black", TILE_THUMB)}>
           {video.posterAssetId !== null ? (
             // A blob behind the asset route, which the optimiser cannot resize; it fades in once loaded.
             <FadeImg src={posterHref(video.posterAssetId)} alt="" loading="lazy" decoding="async" className="h-full w-full object-contain" />
@@ -250,7 +250,7 @@ function TileVideoJob({ slug, title, poster, path }: { slug: string; title: stri
   if (job === null) return null;
   return (
     // Fades in over the poster as the job starts, as a diagram's does (`TileJob`).
-    <div className={cx("absolute inset-x-0 top-0 aspect-[4/3] overflow-hidden border-b border-border", FADE_IN)}>
+    <div className={cx("absolute inset-x-0 top-0 overflow-hidden border-b border-border", TILE_THUMB, FADE_IN)}>
       <VideoStage key={job.jobId} job={job} title={title} backdrop={poster} path={path} isNew={false} />
     </div>
   );
