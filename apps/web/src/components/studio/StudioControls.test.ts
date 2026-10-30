@@ -147,4 +147,23 @@ describe("the studio search (R2-1-14)", () => {
     act(() => root.render(createElement(StudioSearch, { view: { ...DEFAULT_VIEW, query: "udp" } })));
     expect(container.querySelector("input")!.value).toBe("udp");
   });
+
+  it("applies a query that changed while it had focus once it loses it", () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    mounted.push(() => {
+      act(() => root.unmount());
+      container.remove();
+    });
+    act(() => root.render(createElement(StudioSearch, { view: { ...DEFAULT_VIEW, query: "udp" } })));
+    const input = container.querySelector("input")!;
+    input.focus();
+    // Back, with the field still focused: what is typed is left alone...
+    act(() => root.render(createElement(StudioSearch, { view: { ...DEFAULT_VIEW, query: "tcp" } })));
+    expect(input.value).toBe("udp");
+    // ...until the person leaves it.
+    act(() => input.blur());
+    expect(input.value).toBe("tcp");
+  });
 });

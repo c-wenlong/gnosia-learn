@@ -364,6 +364,11 @@ describe("Cmd+Enter (T9)", () => {
     expect(modEnterPlan(true, [{ ...first!, block: held }, { ...second!, block: held }])).toEqual({ action: "announce", text: held.reason });
     // Two ready from different messages: no Make both to press.
     expect(modEnterPlan(true, [first!, { ...second!, requestSeq: 99 }])).toEqual({ action: "announce", text: TWO_READY_APART });
+    // A card being edited: no press runs and Make both is hidden, so the reason is said.
+    expect(modEnterPlan(true, cards, "Save or cancel your edits to the brief first.")).toEqual({
+      action: "announce",
+      text: "Save or cancel your edits to the brief first.",
+    });
   });
 });
 

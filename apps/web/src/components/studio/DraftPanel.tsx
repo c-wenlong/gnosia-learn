@@ -366,7 +366,8 @@ export function DraftPanel({
       if (card !== undefined && card.block === null) void press(card);
       return;
     }
-    const plan = modEnterPlan(isEmptyValue(value), cards);
+    // While a card is edited no press runs and Make both is not drawn, so that is what is said.
+    const plan = modEnterPlan(isEmptyValue(value), cards, editing ? EDITING_BRIEF : null);
     if (plan.action === "send") {
       // The composer's own Send rules hold from anywhere in the panel: words
       // are not sent while Send is held (a brief card being edited, a turn in

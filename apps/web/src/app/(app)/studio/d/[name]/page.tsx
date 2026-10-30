@@ -9,6 +9,7 @@ import { JobPanel } from "@/components/studio/JobPanel";
 import { JobStrip } from "@/components/studio/JobStrip";
 import { MirrorKeepAlive } from "@/components/studio/MirrorKeepAlive";
 import { FADE_IN } from "@/components/studio/motion";
+import { SheetFocus } from "@/components/studio/SheetFocus";
 import { ShotView } from "@/components/studio/ShotView";
 import { Badge } from "@/components/ui/Badge";
 import { Banner } from "@/components/ui/Banner";
@@ -294,14 +295,19 @@ export default async function CanvasPage({
                 : "hidden",
             )}
           >
-            {inspecting && (
-              <div className="flex justify-end px-3 pt-2 lg:hidden">
-                <Button href={path} variant="secondary" size="xs" scroll={false}>
-                  Close
-                </Button>
-              </div>
+            {inspecting ? (
+              // Focus moves into the sheet as it opens, and back to More as it closes.
+              <SheetFocus label="Diagram details" returnTo='button[aria-label="More actions"]' className="outline-none">
+                <div className="flex justify-end px-3 pt-2 lg:hidden">
+                  <Button href={path} variant="secondary" size="xs" scroll={false}>
+                    Close
+                  </Button>
+                </div>
+                <DiagramInspector listing={listed.data} diagram={diagram} jobs={jobs} path={path} />
+              </SheetFocus>
+            ) : (
+              <DiagramInspector listing={listed.data} diagram={diagram} jobs={jobs} path={path} />
             )}
-            <DiagramInspector listing={listed.data} diagram={diagram} jobs={jobs} path={path} />
           </aside>
         )}
       </div>

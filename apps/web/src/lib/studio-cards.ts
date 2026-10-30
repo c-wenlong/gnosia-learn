@@ -517,13 +517,16 @@ export function makeBoth(cards: readonly LiveCard[]): MakeBoth | null {
 export function modEnterPlan(
   empty: boolean,
   cards: readonly LiveCard[],
+  /** Why no card can be pressed now (a brief card being edited), which is what is said instead. */
+  held: string | null = null,
 ): { action: "send" } | { action: "none" } | { action: "press"; card: LiveCard } | { action: "announce"; text: string } {
   if (!empty) return { action: "send" };
+  if (held !== null && cards.length > 0) return { action: "announce", text: held };
   const ready = cards.filter((card) => card.block === null);
   if (ready.length === 1) return { action: "press", card: ready[0]! };
   if (ready.length >= 2) return { action: "announce", text: makeBoth(cards) !== null ? TWO_READY : TWO_READY_APART };
-  const held = cards.find((card) => card.block !== null);
-  return held === undefined ? { action: "none" } : { action: "announce", text: held.block!.reason };
+  const blocked = cards.find((card) => card.block !== null);
+  return blocked === undefined ? { action: "none" } : { action: "announce", text: blocked.block!.reason };
 }
 
 /* -------------------------------------------------------------------------- */

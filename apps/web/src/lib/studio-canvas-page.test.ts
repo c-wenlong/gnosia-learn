@@ -30,6 +30,7 @@ const page = await import("@/app/(app)/studio/d/[name]/page");
 const CanvasPage = page.default;
 const { JobPanel } = await import("@/components/studio/JobPanel");
 const { DiagramInspector } = await import("@/components/studio/DiagramInspector");
+const { SheetFocus } = await import("@/components/studio/SheetFocus");
 const { BlockedCard } = await import("@/components/studio/StudioBlocked");
 
 const calls = mocks.calls as Call[];
@@ -143,7 +144,9 @@ describe("the job panel on a small screen (S2-23)", () => {
     const aside = elements(tree).find((element) => element.type === "aside")!;
     expect(String(aside.props.className)).not.toMatch(/(^|\s)hidden(\s|$)/);
     expect(String(aside.props.className)).toContain("fixed");
-    const inside = elements(aside.props.children as ReactNode);
+    const sheet = elements(aside.props.children as ReactNode).find((element) => element.type === SheetFocus)!;
+    expect(sheet.props.returnTo).toBe('button[aria-label="More actions"]');
+    const inside = elements(sheet.props.children as ReactNode);
     expect(inside.some((element) => element.type === DiagramInspector)).toBe(true);
     expect(inside.some((element) => element.props.href === "/studio/d/dot-product")).toBe(true);
   });
