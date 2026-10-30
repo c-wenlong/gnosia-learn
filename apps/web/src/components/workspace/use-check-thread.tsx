@@ -387,27 +387,43 @@ export type CheckThread<T extends CheckItem> = ReturnType<typeof createCheckThre
  * answer itself while that reply is missing. Only the newest answer's row
  * stays open; an older untapped one folds.
  */
-export function checkSlots<T extends CheckItem>(
-  items: readonly T[],
-  thread: CheckThread<T>,
-  conceptOf: (asked: T) => string | null,
-  slot: SlotOptions<T>,
-) {
-  const { record, recordChoice, submitChoice, submitRecall } = thread;
-  const askedBefore = (at: number) => items.slice(0, Math.max(at, 0)).findLast((item) => item.role === "assistant");
-  const pendingAt = pendingCheck(items);
-  const lastVerdict = items.findLastIndex((t) => t.role === "user" && t.verdict);
-  const rowsAfter = new Map<number, { at: number; verdict: Verdict; concept: string | null }>();
+/** Where a thread's cards and rows go, worked out once per render in one pass over the thread. */
+export interface SlotPlan {
+  /** The tutor turn whose check is still waiting for an answer. */
+  pendingAt: number | null;
+  /** The newest answer with a verdict row: only its row stays open. */
+  lastVerdict: number;
+  /** Each verdict row by the item it is drawn after, with the answer's place and its concept. */
+  rowsAfter: Map<number, { at: number; verdict: Verdict; concept: string | null }>;
+}
+
+export function slotPlan<T extends CheckItem>(items: readonly T[], conceptOf: (asked: T) => string | null): SlotPlan {
+  const rowsAfter: SlotPlan["rowsAfter"] = new Map();
+  let lastVerdict = -1;
+  let asked: T | undefined;
   items.forEach((t, i) => {
+    if (t.role === "assistant") asked = t;
+    if (t.role !== "user" || !t.verdict) return;
+    lastVerdict = i;
     // A recall card draws its own answer's row.
-    if (t.role !== "user" || !t.verdict || t.recall) return;
-    const asked = askedBefore(i);
+    if (t.recall) return;
     rowsAfter.set(items[i + 1]?.role === "assistant" ? i + 1 : i, {
       at: i,
       verdict: t.verdict,
       concept: asked === undefined ? null : conceptOf(asked),
     });
   });
+  return { pendingAt: pendingCheck(items), lastVerdict, rowsAfter };
+}
+
+export function checkSlots<T extends CheckItem>(
+  items: readonly T[],
+  thread: CheckThread<T>,
+  conceptOf: (asked: T) => string | null,
+  slot: SlotOptions<T>,
+  { pendingAt, lastVerdict, rowsAfter }: SlotPlan = slotPlan(items, conceptOf),
+) {
+  const { record, recordChoice, submitChoice, submitRecall } = thread;
 
   const rowAfter = (i: number): ReactNode => {
     const row = rowsAfter.get(i);
@@ -473,14 +489,16 @@ interface SlotProps<T extends CheckItem> {
   thread: CheckThread<T>;
   conceptOf: (asked: T) => string | null;
   slot: SlotOptions<T>;
+  /** The thread's slot plan, built once per render (`slotPlan`), not once per slot. */
+  plan: SlotPlan;
 }
 
 /** The card under the tutor turn at `at`, when it asked a card check. */
-export function CheckCard<T extends CheckItem>({ items, at, thread, conceptOf, slot }: SlotProps<T>) {
-  return checkSlots(items, thread, conceptOf, slot).cardAfter(at);
+export function CheckCard<T extends CheckItem>({ items, at, thread, conceptOf, slot, plan }: SlotProps<T>) {
+  return checkSlots(items, thread, conceptOf, slot, plan).cardAfter(at);
 }
 
 /** The verdict row drawn after the item at `at`, if one belongs there. */
-export function CheckRow<T extends CheckItem>({ items, at, thread, conceptOf, slot }: SlotProps<T>) {
-  return checkSlots(items, thread, conceptOf, slot).rowAfter(at);
+export function CheckRow<T extends CheckItem>({ items, at, thread, conceptOf, slot, plan }: SlotProps<T>) {
+  return checkSlots(items, thread, conceptOf, slot, plan).rowAfter(at);
 }

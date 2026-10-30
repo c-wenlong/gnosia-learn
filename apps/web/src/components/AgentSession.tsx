@@ -25,7 +25,7 @@ import type {
 import { useLearner } from "@/lib/learner-context";
 import { buildAgentSessionContext } from "@/lib/agent/prompt";
 import { RecapCard, RecapEditor } from "@/components/TopicRecap";
-import { CheckCard, CheckRow, useCheckThread, useMemoryThread, type SlotOptions } from "@/components/workspace/use-check-thread";
+import { CheckCard, CheckRow, slotPlan, useCheckThread, useMemoryThread, type SlotOptions } from "@/components/workspace/use-check-thread";
 import {
   restoreCardCheck,
   type ChoiceAnswer,
@@ -337,7 +337,9 @@ export function AgentSession({
       void callAgent(history);
     },
   };
-  const slotProps = { items: messages, thread, conceptOf, slot };
+  // Where the cards and rows go, worked out once for the whole thread.
+  const plan = slotPlan(messages, conceptOf);
+  const slotProps = { items: messages, thread, conceptOf, slot, plan };
 
   return (
     // A 48rem reading measure, centred in the `app` layout's wider column.

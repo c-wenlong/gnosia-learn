@@ -36,7 +36,7 @@ import { closeChatSession } from "@/lib/chat-recall";
 import { restoreCardCheck } from "@/lib/check-block";
 import { CHAT_ANSWER_LIMIT, pendingCheck, recallOpening, type TurnCheck } from "@/lib/tutor-check";
 
-import { CheckCard, CheckRow, useCheckThread, type SlotOptions } from "./use-check-thread";
+import { CheckCard, CheckRow, slotPlan, useCheckThread, type SlotOptions } from "./use-check-thread";
 import { NOTE_HASH } from "./WorkspacePanels";
 
 /**
@@ -527,7 +527,9 @@ export function TutorChat({
     // `ask` stores the turn before it awaits anything, so the write and the judge find it.
     send: (turn, items) => void ask(turn.content, [...items], { carried: turn as TutorTurn }),
   };
-  const slotProps = { items: turns, thread, conceptOf, slot };
+  // Where the cards and rows go, worked out once for the whole thread.
+  const plan = slotPlan(turns, conceptOf);
+  const slotProps = { items: turns, thread, conceptOf, slot, plan };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3.5">
