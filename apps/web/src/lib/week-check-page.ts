@@ -5,6 +5,7 @@ import { connection } from "next/server";
 
 import { readConceptNote } from "@/lib/concept-note";
 import { observationsOf } from "@/lib/concept-workspace-core";
+import { moduleConcepts } from "@/lib/module-path";
 import { catalogDatabase, readKb } from "@/lib/learner-store";
 import { currentOwner } from "@/lib/owner";
 import {
@@ -49,9 +50,7 @@ export async function loadWeekCheck(module: Pick<Module, "topics">): Promise<Wee
   if (!reachable) return { state: "unreachable" };
 
   const byId = new Map(kb.concepts.map((c) => [c.id, c]));
-  const taught: string[] = [];
-  for (const item of module.topics) for (const slug of item.concepts) if (!taught.includes(slug)) taught.push(slug);
-  const concepts = taught.flatMap((slug) => {
+  const concepts = moduleConcepts(module).flatMap((slug) => {
     const c = byId.get(slug);
     return c === undefined ? [] : [c];
   });

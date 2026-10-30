@@ -10,7 +10,7 @@ import { Panel } from "@/components/ui/Panel";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { TextLink } from "@/components/ui/TextLink";
 import { Callout } from "@/components/ui/Callout";
-import { doneWord, moduleHref, topicMeta, type PathStatus, type TopicMastery } from "@/lib/course-path";
+import { courseTopicIds, doneWord, moduleHref, topicMeta, type PathStatus, type TopicMastery } from "@/lib/course-path";
 import type { Course, Module, Topic } from "@/lib/types";
 
 import type { RelatedCourse } from "./types";
@@ -48,7 +48,7 @@ export function CourseRail({
   related: RelatedCourse[];
   className?: string;
 }) {
-  const topicIds = course.modules.flatMap((m) => m.topics.map((t) => t.id));
+  const topicIds = courseTopicIds(course);
   const nextOpen = next !== null && showNext;
   const [lastNext, setLastNext] = useState(next);
   // Compared by the topic and module themselves: `next` is a new object on

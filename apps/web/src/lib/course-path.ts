@@ -1,6 +1,7 @@
 import type { MasteryLabel } from "@gnosia/catalog/state";
 
 import { bucketOf, MASTERY_BUCKET_LABEL, type MasteryBucket } from "@/lib/mastery-bucket";
+import type { Course } from "@/lib/types";
 
 /**
  * The course page's arithmetic: which mark each topic and module carries,
@@ -313,6 +314,11 @@ function plural(n: number, word: string): string {
 export function defaultModuleIndex(modules: readonly { id: string }[], status: Pick<PathStatus, "active">): number {
   const at = status.active ? modules.findIndex((m) => m.id === status.active!.moduleId) : -1;
   return at === -1 ? 0 : at;
+}
+
+/** Every curriculum item id of a course, in module then topic order: the ids a tick, a reset and the path key on. */
+export function courseTopicIds(course: Pick<Course, "modules">): string[] {
+  return course.modules.flatMap((m) => m.topics.map((t) => t.id));
 }
 
 /** `/courses/<course>/<module>`: one module of a course, on a page of its own. */
