@@ -3,7 +3,6 @@ import {
   CHAT_RATE_LIMIT,
   checkRateLimit,
   clientIp,
-  enforcePayloadBounds,
   enforceRateLimit,
   enforceSameOrigin,
   MAX_TRACKED_CLIENTS,
@@ -12,6 +11,7 @@ import {
   SUMMARIZE_RATE_LIMIT,
   type RateLimitStore,
 } from "@/lib/agent/guard";
+import { payloadTooLarge } from "@gnosia/tutor/server/turns";
 
 const post = (headers: Record<string, string> = {}) =>
   new Request("http://study.test/api/agent/chat", { method: "POST", headers });
@@ -98,39 +98,37 @@ describe("measurePayload", () => {
   });
 });
 
-describe("enforcePayloadBounds", () => {
+describe("payloadTooLarge (the 413 the chat and summarize routes answer)", () => {
   it("rejects a single message hiding its bulk in non-string content", () => {
     // One message, so the count cap cannot catch it: only measuring the
     // serialised content does.
-    const res = enforcePayloadBounds([
+    const res = payloadTooLarge([
       { content: new Array(5000).fill("aaaaaaaa") },
     ]);
     expect(res?.status).toBe(413);
   });
 
   it("allows a payload exactly at the message cap", () => {
-    expect(enforcePayloadBounds(turns(PAYLOAD_LIMITS.maxMessages, 1))).toBeNull();
+    expect(payloadTooLarge(turns(PAYLOAD_LIMITS.maxMessages, 1))).toBeNull();
   });
 
   it("allows a payload exactly at the character cap", () => {
     expect(
-      enforcePayloadBounds([
+      payloadTooLarge([
         { content: "x".repeat(PAYLOAD_LIMITS.maxTotalChars) },
       ]),
     ).toBeNull();
   });
 
   it("answers 413 one message over the cap", async () => {
-    const res = enforcePayloadBounds(turns(PAYLOAD_LIMITS.maxMessages + 1, 1));
+    const res = payloadTooLarge(turns(PAYLOAD_LIMITS.maxMessages + 1, 1));
     expect(res?.status).toBe(413);
-    await expect(res?.json()).resolves.toMatchObject({
-      code: "PAYLOAD_TOO_LARGE",
-    });
+    expect(res?.body).toMatchObject({ code: "PAYLOAD_TOO_LARGE" });
   });
 
   it("answers 413 one character over the cap", () => {
     expect(
-      enforcePayloadBounds([
+      payloadTooLarge([
         { content: "x".repeat(PAYLOAD_LIMITS.maxTotalChars + 1) },
       ])?.status,
     ).toBe(413);
@@ -138,7 +136,7 @@ describe("enforcePayloadBounds", () => {
 
   it("answers 413 when a huge learner note is what breaches the cap", () => {
     expect(
-      enforcePayloadBounds(
+      payloadTooLarge(
         turns(1, 1),
         "y".repeat(PAYLOAD_LIMITS.maxTotalChars),
       )?.status,
@@ -146,7 +144,7 @@ describe("enforcePayloadBounds", () => {
   });
 
   it("allows an empty payload, leaving the 400 to the route's own validation", () => {
-    expect(enforcePayloadBounds([])).toBeNull();
+    expect(payloadTooLarge([])).toBeNull();
   });
 });
 

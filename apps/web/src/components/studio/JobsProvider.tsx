@@ -196,13 +196,25 @@ export function JobsProvider({
    * tab was watching has stopped running.
    */
   const previous = useRef<Job[]>(initialJobs);
+  /**
+   * Each read's ticket, and the newest one whose answer was applied. The
+   * timer, a terminal event and a verb's own read can overlap, and an older
+   * answer landing last would put an accepted job back to awaiting review
+   * (and announce its transition twice), so an answer older than one already
+   * applied is dropped.
+   */
+  const issued = useRef(0);
+  const applied = useRef(0);
 
   const refresh = useCallback(async () => {
+    const ticket = (issued.current += 1);
     try {
       const response = await fetch("/studio/api/jobs?limit=50", { cache: "no-store" });
       if (!response.ok) return;
       const body = (await response.json()) as { jobs?: Job[] };
       if (!Array.isArray(body.jobs)) return;
+      if (ticket < applied.current) return;
+      applied.current = ticket;
       const next = body.jobs;
       const was = activeJob(previous.current);
       const stopped = previous.current

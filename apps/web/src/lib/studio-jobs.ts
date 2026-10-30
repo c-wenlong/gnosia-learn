@@ -313,7 +313,10 @@ export function phaseRows(
   const currentKey = job.state === "awaiting_review" ? "ready" : (job.phase ?? lastSeen ?? null);
   const current = phaseIndex(currentKey);
   const stopped = isTerminal(job.state);
-  const failedHere = stopped && job.state !== "accepted" && job.state !== "discarded";
+  // A discarded job reached review only when it got to `ready`; one
+  // discarded after an interrupt stopped in the phase it names.
+  const reviewed = job.state === "accepted" || (job.state === "discarded" && currentKey === "ready");
+  const failedHere = stopped && !reviewed;
 
   return PHASES.map((phase, at) => {
     const durationMs = durations.get(phase.key) ?? null;
@@ -326,7 +329,8 @@ export function phaseRows(
       status = "done";
     } else if (at > current) {
       status = "pending";
-    } else if (job.state === "awaiting_review" || job.state === "accepted") {
+    } else if (job.state === "awaiting_review" || reviewed) {
+      // A job discarded from review is over, not live.
       status = "done";
     } else if (failedHere) {
       status = "failed";
@@ -535,11 +539,17 @@ function rawFailureReport(job: Job): FailureReport {
       };
     case "not-claimed":
       return { code: null, headline: "the catalog would not hand this job over", detail, actions: ["retry"] };
+    case "internal":
+      // The runner itself threw: nothing about the drawing, so the error is
+      // the whole story and a fresh attempt is the way on.
+      return { code: null, headline: "the runner failed while running it", detail, actions: ["retry"] };
     default:
       return {
         code: null,
-        headline: job.gate === null ? "nothing was written" : "the check refused what it drew",
-        detail: job.gate?.findings.join(" ") ?? detail,
+        // Blame the check only when it refused: a job can fail after a
+        // check that passed, and then the runner's error is the reason.
+        headline: job.gate === null ? "nothing was written" : job.gate.ok ? "it failed after the check passed" : "the check refused what it drew",
+        detail: job.gate !== null && job.gate.findings.length > 0 ? job.gate.findings.join(" ") : detail,
         actions: ["retry", "talk"],
       };
   }

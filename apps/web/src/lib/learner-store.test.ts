@@ -1,27 +1,44 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+
 import { LOCAL_LEARNER_ID } from "@gnosia/schema/shared";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 /**
- * What the web app does when the database is not there.
+ * What the web app does when the database cannot be opened.
  *
- * Vercel has no database yet, and a laptop's Postgres is not always running,
- * so this is not an edge case: it is the state the app is in on a fresh clone
- * and on every deploy until the cloud database exists. Reads have to degrade
- * to empty and say so, because a page that renders zero progress and a page
- * that could not ask look identical to a learner and are not the same thing.
+ * A catalog file in a directory that cannot exist, a file that is locked or
+ * not a database: reads have to degrade to empty and say so, because a page
+ * that renders zero progress and a page that could not ask look identical to
+ * a learner and are not the same thing.
  *
- * `DATABASE_URL` is set to a port nothing is listening on before the module is
- * imported: the pool is opened once per process, on first use, and reads the
- * connection string then.
+ * `CATALOG_DB` names a path under a regular file before the module is
+ * imported, so `connect` cannot create it: the handle is opened once per
+ * process, on first use, and resolves the path then. `CATALOG_DB` wins over
+ * `DATABASE_URL`, so this is the variable to set, and an inherited
+ * `DATABASE_URL` is cleared so nothing real is reachable by accident.
  */
 describe("the learner store with no database", () => {
   let store: typeof import("@/lib/learner-store");
+  const saved = { catalog: process.env.CATALOG_DB, url: process.env.DATABASE_URL };
+  const scratch = mkdtempSync(path.join(tmpdir(), "learner-store-"));
 
   beforeAll(async () => {
-    process.env.DATABASE_URL = "postgres://localhost:59999/nothing";
-    // The connection attempt is expected, and its warning is noise here.
+    const notADirectory = path.join(scratch, "file");
+    writeFileSync(notADirectory, "");
+    process.env.CATALOG_DB = path.join(notADirectory, "catalog.db");
+    delete process.env.DATABASE_URL;
+    // The failed open is expected, and its warning is noise here.
     vi.spyOn(console, "warn").mockImplementation(() => {});
     store = await import("@/lib/learner-store");
+  });
+
+  afterAll(() => {
+    if (saved.catalog === undefined) delete process.env.CATALOG_DB;
+    else process.env.CATALOG_DB = saved.catalog;
+    if (saved.url !== undefined) process.env.DATABASE_URL = saved.url;
+    rmSync(scratch, { recursive: true, force: true });
   });
 
   it("returns an empty learner snapshot rather than throwing", async () => {

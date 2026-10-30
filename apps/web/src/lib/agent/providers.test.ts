@@ -7,7 +7,6 @@ import {
   orderCredentials,
   resetGoneModelReports,
   resolveProviders,
-  serverCredentials,
   providerMessage,
   testProviderKey,
 } from "@/lib/agent/providers";
@@ -172,7 +171,7 @@ describe("completeWithFallback", () => {
   it("returns MISSING_API_KEY when no keys are configured", async () => {
     const outcome = await completeWithFallback(
       [{ role: "user", content: "hi" }],
-      serverCredentials({}),
+      orderCredentials({}, {}),
     );
     expect(outcome.ok).toBe(false);
     if (!outcome.ok) expect(outcome.code).toBe("MISSING_API_KEY");
@@ -190,7 +189,7 @@ describe("completeWithFallback", () => {
 
     const outcome = await completeWithFallback(
       [{ role: "user", content: "hi" }],
-      serverCredentials({
+      orderCredentials({}, {
         NVIDIA_API_KEY: "nv",
         GEMINI_API_KEY: "gm",
       }),
@@ -224,7 +223,7 @@ describe("completeWithFallback", () => {
 
     const outcome = await completeWithFallback(
       [{ role: "user", content: "hi" }],
-      serverCredentials({
+      orderCredentials({}, {
         NVIDIA_API_KEY: "nv",
         GEMINI_API_KEY: "gm",
         OPENROUTER_API_KEY: "or",
@@ -259,7 +258,7 @@ describe("completeWithFallback", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    const credentials = serverCredentials({
+    const credentials = orderCredentials({}, {
       NVIDIA_API_KEY: "nv",
       GEMINI_API_KEY: "gm",
     });
@@ -297,7 +296,7 @@ describe("completeWithFallback", () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     await completeWithFallback(
       [{ role: "user", content: "hi" }],
-      serverCredentials({
+      orderCredentials({}, {
         NVIDIA_API_KEY: "nv",
         NVIDIA_BASE_URL: "https://user:pw@gateway.example/t0k3n-path/v1?key=q5",
       }),
@@ -327,7 +326,7 @@ describe("completeWithFallback", () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     await completeWithFallback(
       [{ role: "user", content: "hi" }],
-      serverCredentials({ NVIDIA_API_KEY: "nv" }),
+      orderCredentials({}, { NVIDIA_API_KEY: "nv" }),
     );
     expect(errorSpy).not.toHaveBeenCalled();
   });

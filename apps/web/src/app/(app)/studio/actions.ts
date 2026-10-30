@@ -24,7 +24,7 @@ import {
   type AgentKind,
 } from "@/lib/studio-agent-settings";
 import { refusalReason } from "@/lib/studio-client";
-import { withOutcome } from "@/lib/studio-view";
+import { withOutcome } from "@/lib/studio-url";
 import { checkHandoffInput, type ConceptConversation } from "@/lib/tutor-handoff";
 
 /**
@@ -158,6 +158,9 @@ export interface AgentSaved {
  */
 const RUNNER_SAVE_MS = 20_000;
 
+/** How long a save waits for the runner's model list before checking against the built-in one. */
+const RUNNER_MENU_MS = 5_000;
+
 /**
  * The settings panel's save: one row's model and effort (D53 of
  * docs/STUDIO-VIDEOS.md), as the `studioVideoAgent` or `studioDiagramAgent`
@@ -200,10 +203,15 @@ export async function saveStudioAgent(formData: FormData): Promise<AgentSaved> {
   const sent = { model: String(formData.get("model") ?? ""), effort: String(formData.get("effort") ?? "") };
   try {
     // A model the menu offers, `default`, or the one already stored: a
-    // typo stored here would fail every job of this kind at spawn.
-    const value = await withLearnerStore(async (db) =>
-      checkedAgent(sent, storedAgent(kind, await readPreference(db, AGENT_KEYS[kind], owner))),
-    );
+    // typo stored here would fail every job of this kind at spawn. The menu
+    // the panel drew is the runner's list when it answers, so that is the
+    // list a save is checked against; the built-in copy only without it.
+    const [menu, stored] = await Promise.all([
+      studioApi<unknown>("/api/settings/agent", { timeoutMs: RUNNER_MENU_MS }),
+      withLearnerStore((db) => readPreference(db, AGENT_KEYS[kind], owner)),
+    ]);
+    const offered = runnerSettings(menu.ok ? menu.data : null).models;
+    const value = checkedAgent(sent, storedAgent(kind, stored), offered);
     if (value === null) return { ok: false, error: "That model or effort is not one the agent can run with." };
 
     const viaRunner = await studioApi<unknown>("/api/settings/agent", {

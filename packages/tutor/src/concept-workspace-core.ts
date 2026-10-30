@@ -14,8 +14,8 @@ import { normaliseQuestion } from "./session-core";
  * Pure: `concept-workspace.ts` does the reading and hands the pieces here, so
  * the rules (what a backlink is, which observations make the history, which
  * checks count as passed) are tested without a database. The same object is
- * the page's props and the body of `GET /api/concepts/[slug]`, and the tutor's
- * prompt is built from it by `toConceptPromptInput`.
+ * the page's props, and the tutor's prompt is built from it by
+ * `toConceptPromptInput`.
  */
 
 export interface NeighbourRef {

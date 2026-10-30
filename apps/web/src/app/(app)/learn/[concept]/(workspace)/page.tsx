@@ -40,9 +40,8 @@ import { studioEnabled } from "@/lib/studio";
  * configured) the header says so under Teach me, before the learner starts.
  * The button stays live, because the session still teaches.
  *
- * Everything is read on the server through `loadConceptWorkspace`, the same
- * object `GET /api/concepts/[slug]` returns. Dynamic, like every page: it
- * reads the database.
+ * Everything is read on the server through `loadConceptWorkspace`. Dynamic,
+ * like every page: it reads the database.
  */
 
 type Params = {

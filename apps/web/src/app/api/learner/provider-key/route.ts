@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 
 import { dropByokProvider, pushByokKey } from "@/lib/byok-sync";
 import { KEY_WRITE_RATE_LIMIT, answer, guard, readBody, readProvider, refuse } from "@/lib/provider-keys/requests";
-import { checkKeyShape } from "@/lib/provider-keys/seal";
+import { checkKeyShape } from "@gnosia/tutor/server/seal";
 import { failureCode, NoKeySecretError, removeProviderKey, saveProviderKey } from "@/lib/provider-keys/store";
 
 export const runtime = "nodejs";

@@ -4,14 +4,14 @@ import { useId, useLayoutEffect, useRef, type FormEvent, type KeyboardEvent, typ
 
 import { Button } from "./Button";
 import { cx } from "./classes";
-import { ComposerBox, SendDisc } from "./ComposerBox";
+import { ComposerBox, ComposerReason, ComposerRow, SendDisc } from "./ComposerBox";
 import {
   COMPOSER_BOX_MIN_ROWS,
   COMPOSER_FRAME,
   COMPOSER_MAX_ROWS,
-  COMPOSER_REASON,
   COMPOSER_TEXT,
   composerBoxHeight,
+  composerGate,
   composerHeight,
   composerKey,
   modEnterTarget,
@@ -101,9 +101,7 @@ export function Composer({
   const fallback = useRef<HTMLTextAreaElement | null>(null);
   const own = inputRef ?? fallback;
   const reasonId = useId();
-  const reason = (disabled || sendDisabled) && disabledReason ? disabledReason : null;
-  const empty = value.trim() === "";
-  const blocked = disabled || sendDisabled || empty;
+  const { blocked, reason } = composerGate({ disabled, sendDisabled, empty: value.trim() === "", disabledReason });
 
   useLayoutEffect(() => {
     const box = own.current;
@@ -133,11 +131,7 @@ export function Composer({
   }
 
   const describedBy = reason === null ? undefined : reasonId;
-  const reasonLine = reason !== null && (
-    <p id={reasonId} className={quietReason ? "sr-only" : cx(COMPOSER_REASON, "animate-fade-in motion-reduce:animate-none")}>
-      {reason}
-    </p>
-  );
+  const reasonLine = <ComposerReason id={reasonId} reason={reason} quiet={quietReason} />;
 
   if (layout === "box") {
     return (
@@ -177,37 +171,37 @@ export function Composer({
 
   return (
     <form onSubmit={submit} className={cx("flex flex-col gap-1.5", className)}>
-      <div className="flex items-end gap-2.5">
-      <label className="min-w-0 flex-1">
-        <span className="sr-only">{label}</span>
-        <textarea
-          ref={own}
-          rows={1}
-          autoFocus={autoFocus}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          onKeyDown={onKeyDown}
-          maxLength={maxLength}
-          placeholder={placeholder}
-          disabled={disabled}
-          autoComplete="off"
-          aria-describedby={describedBy}
-          className={cx(
-            "block h-[52px] w-full min-w-0 resize-none px-4 py-3 outline-none",
-            COMPOSER_FRAME,
-            COMPOSER_TEXT,
-            "placeholder:text-text3 focus:border-accent disabled:cursor-not-allowed disabled:opacity-60",
-          )}
-        />
-      </label>
-      {/* The 2px under the button puts its face where the old centred row put
-          it: the textarea grows downwards and Send stays on its last line. */}
-      <div className="pb-0.5">
-        <Button type="submit" disabled={blocked} aria-describedby={describedBy}>
-          {sendLabel}
-        </Button>
-      </div>
-      </div>
+      <ComposerRow
+        send={
+          <Button type="submit" disabled={blocked} aria-describedby={describedBy}>
+            {sendLabel}
+          </Button>
+        }
+        field={
+          <label className="min-w-0 flex-1">
+            <span className="sr-only">{label}</span>
+            <textarea
+              ref={own}
+              rows={1}
+              autoFocus={autoFocus}
+              value={value}
+              onChange={(event) => onChange(event.target.value)}
+              onKeyDown={onKeyDown}
+              maxLength={maxLength}
+              placeholder={placeholder}
+              disabled={disabled}
+              autoComplete="off"
+              aria-describedby={describedBy}
+              className={cx(
+                "block h-[52px] w-full min-w-0 resize-none px-4 py-3 outline-none",
+                COMPOSER_FRAME,
+                COMPOSER_TEXT,
+                "placeholder:text-text3 focus:border-accent disabled:cursor-not-allowed disabled:opacity-60",
+              )}
+            />
+          </label>
+        }
+      />
       {reasonLine}
     </form>
   );
