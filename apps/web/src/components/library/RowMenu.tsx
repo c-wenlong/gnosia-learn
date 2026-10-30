@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { ASSET_NAME_MAX, cleanAssetName } from "@gnosia/schema/shared";
+import { ASSET_NAME_MAX } from "@gnosia/schema/shared";
 
 import { AskPanel } from "@/components/library/AskPanel";
 import { Button } from "@/components/ui/Button";
@@ -14,7 +14,7 @@ import { Menu, MenuDivider, MenuItem } from "@/components/ui/Menu";
 import { cx, iconButtonClasses, inputClasses } from "@/components/ui/classes";
 import { usePresence } from "@/components/ui/use-presence";
 import type { AskSubject, RowMenuItem, RowMenuSections } from "@/lib/row-menu";
-import { sendJson } from "@/lib/send-json";
+import { checkAssetName, markWatched, renameAsset, setFavorite } from "@/lib/asset-actions";
 
 /** How long a confirmation ("Copied") stays beside the button. */
 const NOTICE_MS = 1800;
@@ -90,28 +90,29 @@ export function RowMenu({
   const say = (text: string, tone: StatusTone = "ok") => setNotice((held) => ({ text, tone, at: (held?.at ?? 0) + 1 }));
   const moreButton = useCallback(() => root.current?.querySelector<HTMLButtonElement>("button[aria-haspopup]") ?? null, []);
 
+  // One star write at a time, as the asset page's star does: a second press
+  // while the first is in flight would race it and could leave the star
+  // showing what the server did not keep.
+  const starring = useRef(false);
   const favorite = async (on: boolean) => {
+    if (starring.current) return;
+    starring.current = true;
     setStarred(on);
-    try {
-      const response = await fetch("/api/learner/favorite", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ assetId, favorite: on }),
-      });
-      if (!response.ok) throw new Error(String(response.status));
+    const answer = await setFavorite(assetId, on);
+    starring.current = false;
+    if (answer.ok) {
       say(on ? "Starred" : "Unstarred");
       router.refresh();
-    } catch {
+    } else {
       setStarred(!on);
       say("Not saved. Try again.", "danger");
     }
   };
 
   const mark = async (verb: "watched" | "read") => {
-    const reply = await sendJson<{ ok?: boolean; error?: string }>("POST", "/api/learner/watched", { assetId });
-    if (reply === null) say("Not saved: the server could not be reached.", "danger");
-    else if (!reply.ok || reply.data.ok === false) say(reply.data.error ?? `Not saved (HTTP ${reply.status}).`, "danger");
-    else say(`Marked ${verb}`);
+    const answer = await markWatched(assetId);
+    if (answer.ok) say(`Marked ${verb}`);
+    else say(answer.message, "danger");
   };
 
   const copy = async (href: string) => {
@@ -380,38 +381,25 @@ function RenameForm({
   const [status, setStatus] = useState<{ text: string | null; tone: StatusTone }>({ text: null, tone: "muted" });
 
   const save = async () => {
-    const cleaned = cleanAssetName(draft);
-    if (cleaned !== null && cleaned.length > ASSET_NAME_MAX) {
-      setStatus({ text: `At most ${ASSET_NAME_MAX} characters.`, tone: "danger" });
+    const checked = checkAssetName(draft);
+    if (!checked.ok) {
+      setStatus({ text: checked.message, tone: "danger" });
       return;
     }
+    const cleaned = checked.value;
     if (cleaned === title) {
       onCancel();
       return;
     }
     setSaving(true);
     setStatus({ text: "Saving…", tone: "muted" });
-    try {
-      const response = await fetch("/api/learner/asset-name", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ assetId, name: cleaned }),
-      });
-      const payload = (await response.json().catch(() => ({}))) as {
-        ok?: boolean;
-        error?: string;
-        result?: { name: string | null };
-      };
-      if (!response.ok || payload.ok === false || payload.result === undefined) {
-        setStatus({ text: payload.error ?? `Not saved (HTTP ${response.status}).`, tone: "danger" });
-        return;
-      }
-      onDone(payload.result.name === null ? "Back to the original name" : "Renamed");
-    } catch {
-      setStatus({ text: "Not saved: the server could not be reached.", tone: "danger" });
-    } finally {
-      setSaving(false);
+    const answer = await renameAsset(assetId, cleaned);
+    setSaving(false);
+    if (!answer.ok) {
+      setStatus({ text: answer.message, tone: "danger" });
+      return;
     }
+    onDone(answer.value.name === null ? "Back to the original name" : "Renamed");
   };
 
   return (
