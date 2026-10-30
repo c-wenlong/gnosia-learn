@@ -48,13 +48,31 @@ export interface RowSource {
  * its tooltip carries what the ellipsis hides.
  */
 export function placeLabel(place: AssetPlace): string {
-  const course = place.code?.trim() || place.courseTitle;
+  const course = courseCode(place);
   return place.moduleTitle === null ? course : `${course} · ${place.moduleTitle.trim()}`;
 }
 
+/**
+ * Whether the concept a row names is the row's own title, case and spacing
+ * aside: a note explains its own concept, so the line would repeat the title
+ * word for word, and the card and the row show the mastery in its place.
+ */
+export function conceptIsTitle(concept: { title: string } | undefined, title: string): boolean {
+  return concept !== undefined && concept.title.trim().toLowerCase() === title.trim().toLowerCase();
+}
+
+/**
+ * What a place's course is called and sorted by: its code, trimmed, or its
+ * title when it has none. One rule for the row's line, its menu and the
+ * course headings (`@/lib/library-groups`), which computed it two ways.
+ */
+export function courseCode(place: Pick<AssetPlace, "code" | "courseTitle">): string {
+  return place.code?.trim() || place.courseTitle;
+}
+
 const byCode = (a: AssetPlace, b: AssetPlace): number => {
-  const ac = a.code ?? a.courseTitle;
-  const bc = b.code ?? b.courseTitle;
+  const ac = courseCode(a);
+  const bc = courseCode(b);
   if (ac !== bc) return ac < bc ? -1 : 1;
   return a.position - b.position;
 };
