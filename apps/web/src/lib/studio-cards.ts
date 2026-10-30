@@ -90,6 +90,8 @@ export const MENTION_HINT = "Tag as many as fit";
 /** T15: a bare tag in an empty conversation gives the planner nothing to go on. */
 export const SAY_WHAT = "Say what it should show";
 export const TWO_READY = "Two briefs are ready. Press Make both, or the card you want.";
+/** Two briefs, each with its own press and no Make both (they answered different messages). */
+export const TWO_READY_APART = "Two briefs are ready. Press the card you want.";
 
 /** The @ menu's entries (STUDIO-MENTIONS.md, "What is in it"; `svg` is D105). */
 const ENTRIES: Record<TagKind, MentionOption<TagKind>> = {
@@ -504,20 +506,27 @@ export function makeBoth(cards: readonly LiveCard[]): MakeBoth | null {
 
 /**
  * Cmd or Ctrl+Enter from the composer (T9). Words in the field are sent.
- * From an empty field, exactly one live and enabled card is pressed. With
- * two, nothing is pressed and focus stays in the composer: the person hears
- * that two briefs are ready and presses the one they mean. Moving focus to a
- * paid button would let the next keystroke (a Space) press it.
+ * From an empty field, exactly one live and enabled card is pressed, whether
+ * or not a second card is held. With two enabled, nothing is pressed and
+ * focus stays in the composer: the person hears that two briefs are ready
+ * and presses the one they mean. Moving focus to a paid button would let the
+ * next keystroke (a Space) press it. What is announced is what is on screen:
+ * Make both only when `makeBoth` draws it, and with every card held, why the
+ * first one is (R2-1-08).
  */
 export function modEnterPlan(
   empty: boolean,
   cards: readonly LiveCard[],
-): { action: "send" } | { action: "none" } | { action: "press"; card: LiveCard } | { action: "announce" } {
+  /** Why no card can be pressed now (a brief card being edited), which is what is said instead. */
+  held: string | null = null,
+): { action: "send" } | { action: "none" } | { action: "press"; card: LiveCard } | { action: "announce"; text: string } {
   if (!empty) return { action: "send" };
+  if (held !== null && cards.length > 0) return { action: "announce", text: held };
   const ready = cards.filter((card) => card.block === null);
-  if (ready.length === 1 && cards.length === 1) return { action: "press", card: ready[0]! };
-  if (cards.length >= 2) return { action: "announce" };
-  return { action: "none" };
+  if (ready.length === 1) return { action: "press", card: ready[0]! };
+  if (ready.length >= 2) return { action: "announce", text: makeBoth(cards) !== null ? TWO_READY : TWO_READY_APART };
+  const blocked = cards.find((card) => card.block !== null);
+  return blocked === undefined ? { action: "none" } : { action: "announce", text: blocked.block!.reason };
 }
 
 /* -------------------------------------------------------------------------- */

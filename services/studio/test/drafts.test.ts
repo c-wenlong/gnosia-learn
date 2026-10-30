@@ -529,11 +529,14 @@ describe("the limits", () => {
   it("answers a resend of one key with the first message, during its turn and after it, and pays for one turn", async () => {
     await fake.script([{ text: "thinking about it", hangMs: 300 }]);
     const { record } = await drafts.create({});
-    const [first, second] = await Promise.all([
+    const both = await Promise.all([
       drafts.send(record.id, "first", undefined, { idempotencyKey: "k1" }),
       drafts.send(record.id, "first", undefined, { idempotencyKey: "k1" }),
     ]);
-    expect(second).toEqual({ seq: first.seq, replayed: true });
+    // Either post can be the one that lands first (each reads the transcript
+    // before it checks): one made the message, the other joined it.
+    const first = both.find((answer) => answer.replayed !== true)!;
+    expect(both.filter((answer) => answer.replayed === true)).toEqual([{ seq: first.seq, replayed: true }]);
     // While its turn runs, a resend is not refused as a turn in flight.
     expect(await drafts.send(record.id, "first", undefined, { idempotencyKey: "k1" })).toEqual({ seq: first.seq, replayed: true });
     await drafts.settled(record.id);

@@ -18,8 +18,8 @@ import { readReviewSession } from "@/lib/review-queue";
  *
  * A read, so it degrades rather than fails: an unreachable database is a 200
  * with `reachable: false` and no items, the same answer the page renders.
- * Rate-limited like the learner routes, since every call reads each due note
- * off disk. There is no same-origin check: a browser sends no `Origin` on a
+ * Rate-limited like the learner routes, since every call reads each due
+ * note's row. There is no same-origin check: a browser sends no `Origin` on a
  * same-origin GET, and a cross-origin page cannot read the answer anyway,
  * since nothing here sets a CORS header.
  */
