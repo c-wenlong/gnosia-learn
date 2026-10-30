@@ -144,8 +144,9 @@ final class StudioRunner {
 
         exited = false
         let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        proc.arguments = ["-lc", "exec node --import tsx services/studio/src/index.ts"]
+        let shell = Checkout.shell("exec node --import tsx services/studio/src/index.ts")
+        proc.executableURL = shell.executable
+        proc.arguments = shell.arguments
         proc.currentDirectoryURL = root
         proc.environment = Checkout.childEnv()
         proc.standardOutput = log

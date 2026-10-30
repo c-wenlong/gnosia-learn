@@ -372,12 +372,32 @@ final class StudioManager {
 
         launching = true
         launchNote = nil
-        // A login shell so nvm/volta/homebrew PATH reaches npm, as with the
-        // sidecar; nohup + & detach the runner from this process entirely.
+        Task { [weak self] in
+            let env = await ChildEnvironment.resolve(root: root)
+            self?.spawnRunner(root: root, env: env)
+        }
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(150))
+            guard let self, self.launching else { return }
+            self.launching = false
+            self.launchNote = "still not answering after 2½ minutes — see .studio/runner.log"
+        }
+    }
+
+    /// The detached `npm run studio` itself, once the environment is known.
+    private func spawnRunner(root: URL, env: [String: String]?) {
+        // The resolved environment under a plain shell, or a login shell when
+        // there is none (ChildEnvironment.shell); nohup + & detach the runner.
         let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        proc.arguments = ["-lc", "nohup npm run studio >> .studio/runner.log 2>&1 &"]
+        let shell = ChildEnvironment.shell("nohup npm run studio >> .studio/runner.log 2>&1 &", env: env)
+        proc.executableURL = shell.executable
+        proc.arguments = shell.arguments
         proc.currentDirectoryURL = root
+        // The launchers' shared environment (S9-08): the data home's
+        // STUDIO_DAILY_USD, STUDIO_OWNER and the pinned catalog, as the
+        // desktop shell's runner gets them. Without it, whichever app
+        // started the runner first decided its spend cap and owner.
+        if let env { proc.environment = env }
         proc.standardOutput = FileHandle.nullDevice
         proc.standardError = FileHandle.nullDevice
         proc.terminationHandler = { [weak self] p in
@@ -395,13 +415,6 @@ final class StudioManager {
         } catch {
             launching = false
             launchNote = "Could not launch npm: \(error.localizedDescription)"
-            return
-        }
-        Task { [weak self] in
-            try? await Task.sleep(for: .seconds(150))
-            guard let self, self.launching else { return }
-            self.launching = false
-            self.launchNote = "still not answering after 2½ minutes — see .studio/runner.log"
         }
     }
 
