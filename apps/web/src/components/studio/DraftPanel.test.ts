@@ -29,7 +29,8 @@ const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   focus: vi.fn(),
   insertMention: vi.fn(),
-  readStudioHealth: vi.fn(async () => null),
+  readStudioHealth: vi.fn(async (): Promise<unknown> => null),
+  getByokSettings: vi.fn(),
   lateHandle: false,
   events: null as null | { onEvent: (event: { type: string; data: unknown }) => void },
   composer: null as null | {
@@ -95,6 +96,15 @@ vi.mock("@/lib/studio-events", async (importOriginal) => ({
     mocks.events = handlers;
     return () => {};
   },
+}));
+vi.mock("@/lib/studio-byok", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/studio-byok")>()),
+  getByokSettings: mocks.getByokSettings,
+}));
+// The model menu as its options, so a test can see which tiers can be picked.
+vi.mock("@/components/ui/FilterMenu", () => ({
+  FilterMenu: ({ label, options }: { label: string; options: unknown }) =>
+    createElement("div", { "data-menu": label, "data-options": JSON.stringify(options) }),
 }));
 vi.mock("@/lib/studio-health", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/studio-health")>()),
@@ -269,7 +279,7 @@ describe("the Extend opener", () => {
     leave({ send: "What should this diagram add?", source: "tcp-handshake" });
     await mount(draft({ source: "tcp-handshake" }));
     expect(mocks.sendMessage).toHaveBeenCalledTimes(1);
-    expect(mocks.sendMessage).toHaveBeenCalledWith("d1", { text: "What should this diagram add?", mentions: [] });
+    expect(mocks.sendMessage).toHaveBeenCalledWith("d1", { text: "What should this diagram add?", mentions: [] }, expect.any(String));
   });
 });
 
@@ -285,7 +295,7 @@ describe("the Extend opener with chips", () => {
     expect(mocks.sendMessage).toHaveBeenCalledWith("d1", {
       text: "A @video of how it opens",
       mentions: [{ kind: "video", start: 2, end: 8 }],
-    });
+    }, expect.any(String));
   });
 
   it("puts unsent words in the composer with their chip where it was typed, and sends nothing", async () => {
@@ -311,7 +321,7 @@ describe("the Extend opener with chips", () => {
       source: "tcp-handshake",
     });
     await mount(draft({ source: "tcp-handshake" }));
-    expect(mocks.sendMessage).toHaveBeenCalledWith("d1", { text: "@video first", mentions: [{ kind: "video", start: 0, end: 6 }] });
+    expect(mocks.sendMessage).toHaveBeenCalledWith("d1", { text: "@video first", mentions: [{ kind: "video", start: 0, end: 6 }] }, expect.any(String));
     expect(mocks.composer!.value).toEqual({ text: "and a @diagram", mentions: [{ kind: "diagram", start: 6, end: 14 }] });
   });
 });
@@ -407,7 +417,7 @@ describe("a conversation opened from the concept tutor (docs/STUDIO-TUTOR-HANDOF
     leave({ send: "@video", sendMentions: [{ kind: "video", start: 0, end: 6 }], source: null });
     await mount(draft({ concept }));
     expect(mocks.sendMessage).toHaveBeenCalledTimes(1);
-    expect(mocks.sendMessage).toHaveBeenCalledWith("d1", { text: "@video", mentions: [{ kind: "video", start: 0, end: 6 }] });
+    expect(mocks.sendMessage).toHaveBeenCalledWith("d1", { text: "@video", mentions: [{ kind: "video", start: 0, end: 6 }] }, expect.any(String));
   });
 
   it("pins the concept as a link back, with the exchanges that came along, and no topic suggestions", async () => {
@@ -765,7 +775,7 @@ describe("the consent card (D106–D110)", () => {
       text: "@video",
       mentions: [{ kind: "video", start: 0, end: 6 }],
       make: true,
-    });
+    }, expect.any(String));
     expect(mocks.composer!.value.text).toBe("half typed");
     expect(mocks.setDraftTrust).not.toHaveBeenCalled();
   });
@@ -775,7 +785,7 @@ describe("the consent card (D106–D110)", () => {
     await act(async () => button(host, "Always allow here")!.click());
     await settle();
     expect(mocks.setDraftTrust).toHaveBeenCalledWith("d1", "video", true);
-    expect(mocks.sendMessage).toHaveBeenCalledWith("d1", expect.objectContaining({ text: "@video", make: true }));
+    expect(mocks.sendMessage).toHaveBeenCalledWith("d1", expect.objectContaining({ text: "@video", make: true }), expect.any(String));
   });
 
   it("Deny tells the runner which reply's offer was refused, and sends nothing", async () => {
@@ -804,7 +814,7 @@ describe("the consent card (D106–D110)", () => {
     expect(button(host, "Always allow")).toBeUndefined();
     await act(async () => button(host, "Allow once")!.click());
     await settle();
-    expect(mocks.sendMessage).toHaveBeenCalledWith("d1", { text: "@svg", mentions: [{ kind: "svg", start: 0, end: 4 }], make: true });
+    expect(mocks.sendMessage).toHaveBeenCalledWith("d1", { text: "@svg", mentions: [{ kind: "svg", start: 0, end: 4 }], make: true }, expect.any(String));
     expect(mocks.setDraftTrust).not.toHaveBeenCalled();
   });
 
@@ -949,7 +959,7 @@ describe("Cmd+Enter from outside the composer (S1-15)", () => {
       outside.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }));
     });
     await settle();
-    expect(mocks.sendMessage).toHaveBeenCalledWith("d1", { text: "and make it blue", mentions: [] });
+    expect(mocks.sendMessage).toHaveBeenCalledWith("d1", { text: "and make it blue", mentions: [] }, expect.any(String));
   });
 });
 
@@ -975,3 +985,98 @@ describe("a brief that names two elements alike (S1-20)", () => {
   });
 });
 
+
+describe("a send the runner did not answer in time (R2-1-01)", () => {
+  /** The composer's own Send, with these words. */
+  const submit = async (value: { text: string; mentions: unknown[] }) => {
+    await act(async () => (mocks.composer as unknown as { onSubmit: (next: typeof value) => void }).onSubmit(value));
+    await settle();
+  };
+  const slow = { ok: false, status: 0, refusal: { error: "the studio runner did not answer in time", detail: "The operation timed out." } };
+
+  it("finds the turn in the record when the runner took it, and gives nothing back", async () => {
+    const view = draft({ transcript: [entry(1, "studio", "Opened.")] });
+    await mount(view);
+    // The record read after the timeout shows the message landed, under the key it was sent with.
+    mocks.sendMessage.mockImplementationOnce(async (_id: string, _body: unknown, key: string) => {
+      mocks.getDraft.mockResolvedValue({ ok: true, status: 200, data: { ...view, inFlight: true, transcript: [...view.transcript, { ...entry(2, "person", "and make it blue"), key }] } });
+      return slow;
+    });
+    await submit({ text: "and make it blue", mentions: [] });
+    const host = document.body;
+    expect(mocks.sendMessage).toHaveBeenCalledTimes(1);
+    expect(mocks.composer!.value).toEqual({ text: "", mentions: [] });
+    expect(host.textContent).not.toContain("did not answer in time");
+  });
+
+  it("does not take another tab's message with the same words for this one", async () => {
+    const view = draft({ transcript: [entry(1, "studio", "Opened.")] });
+    const host = await mount(view);
+    mocks.sendMessage.mockResolvedValueOnce(slow);
+    mocks.getDraft.mockResolvedValue({ ok: true, status: 200, data: { ...view, transcript: [...view.transcript, { ...entry(2, "person", "and make it blue"), key: "another-tab" }] } });
+    await submit({ text: "and make it blue", mentions: [] });
+    expect(mocks.composer!.value).toEqual({ text: "and make it blue", mentions: [] });
+    expect(host.textContent).toContain("sending it again will not send it twice");
+  });
+
+  it("reuses an Allow's key when its chip is sent again from the composer", async () => {
+    const host = await mount(
+      draft({
+        turns: 1,
+        transcript: [entry(1, "person", "how does TCP back off?"), entry(2, "planner", "A video would show it.", { suggest: ["video"], pitch: "the window" })],
+      }),
+    );
+    mocks.sendMessage.mockResolvedValueOnce(slow);
+    const allow = [...host.querySelectorAll("button")].find((candidate) => candidate.textContent?.includes("Allow once"))!;
+    await act(async () => allow.click());
+    await settle();
+    // The chip came back to the composer; sending it from there is the same message.
+    await submit(mocks.composer!.value);
+    const [first, second] = mocks.sendMessage.mock.calls as unknown as [string, { make?: boolean }, string][];
+    expect(first[1].make).toBe(true);
+    expect(second[2]).toBe(first[2]);
+  });
+
+  it("gives the words back when the record does not show them, and a resend of them reuses the key", async () => {
+    const host = await mount(draft({ transcript: [entry(1, "studio", "Opened.")] }));
+    mocks.sendMessage.mockResolvedValueOnce(slow);
+    await submit({ text: "and make it blue", mentions: [] });
+    expect(mocks.composer!.value).toEqual({ text: "and make it blue", mentions: [] });
+    expect(host.textContent).toContain("sending it again will not send it twice");
+    await submit(mocks.composer!.value);
+    expect(mocks.sendMessage).toHaveBeenCalledTimes(2);
+    const [first, second] = mocks.sendMessage.mock.calls as unknown as [string, unknown, string][];
+    expect(second[2]).toBe(first[2]);
+    // Changed words are a new message, with a key of their own.
+    await submit({ text: "and make it red", mentions: [] });
+    expect((mocks.sendMessage.mock.calls[2] as unknown as [string, unknown, string])[2]).not.toBe(first[2]);
+  });
+});
+
+describe("a BYOK conversation's tiers (R2-1-02)", () => {
+  const unconfigured = {
+    configured: false,
+    active: "openrouter",
+    model: null,
+    providers: [{ provider: "openrouter", last4: "abcd", models: { lite: "qwen/qwen3-coder" } }],
+  };
+
+  it("stay greyed after every health read while the runner says BYOK cannot run", async () => {
+    mocks.readStudioHealth.mockResolvedValue({ dailyCap: null, video: null, diagramAgent: null, agent: { byok: unconfigured } });
+    mocks.getByokSettings.mockResolvedValue({ ok: true, status: 200, data: unconfigured });
+    const host = await mount(draft({ harness: "byok" } as Partial<DraftView>));
+    const lite = () => {
+      const options = JSON.parse(host.querySelector('[data-menu="Model"]')!.getAttribute("data-options")!) as { value: string; disabled?: boolean }[];
+      return options.find((option) => option.value === "lite");
+    };
+    await settle();
+    expect(lite()).toMatchObject({ disabled: true });
+    // A BYOK write elsewhere reads health again, and the settings after it.
+    await act(async () => window.dispatchEvent(new Event("gnosia:byok-settings")));
+    await settle();
+    expect(mocks.readStudioHealth.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(mocks.getByokSettings.mock.calls.length).toBeGreaterThanOrEqual(2);
+    expect(lite()).toMatchObject({ disabled: true });
+    mocks.readStudioHealth.mockResolvedValue(null);
+  });
+});

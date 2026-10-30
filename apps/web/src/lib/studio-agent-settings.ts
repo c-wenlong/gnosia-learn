@@ -101,8 +101,12 @@ export function runnerSettings(raw: unknown): {
   // The active provider's tier picks, for a BYOK conversation's Lite/Default/
   // Max rows: read off the providers list, not the flat `model` (which is the
   // default tier only).
+  // Only when the runner says BYOK can run: with no Default model, or a key
+  // that is missing or no longer opens, `configured` is false and a tier
+  // picked from here would be refused on Send. The fresh settings read says
+  // null then too, so the two copies agree whichever is shown.
   const byokTiers = (() => {
-    if (byok === null || typeof byok.active !== "string" || !Array.isArray(byok.providers)) return null;
+    if (byok === null || byok.configured !== true || typeof byok.active !== "string" || !Array.isArray(byok.providers)) return null;
     const entry = byok.providers.find(
       (row): row is { provider: string; models: Record<string, unknown> } =>
         typeof row === "object" && row !== null && (row as { provider?: unknown }).provider === byok.active && typeof (row as { models?: unknown }).models === "object" && (row as { models?: unknown }).models !== null,

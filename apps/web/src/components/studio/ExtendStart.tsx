@@ -139,9 +139,13 @@ export function ExtendStart({
     // Its own print, so an Extend press on the same diagram a moment ago
     // (closed mid-read, its opener still waiting) is not the draft this one
     // opens, and its opener is never sent from here.
-    const key = extendKey(store, name, () => idempotencyKey(makeVideo ? "make-video" : "extend"), Date.now(), makeVideo ? "video" : undefined);
+    const print = makeVideo ? "video" : undefined;
+    const key = extendKey(store, name, () => idempotencyKey(makeVideo ? "make-video" : "extend"), Date.now(), print);
     const result = await createDraft({ source: name, idempotencyKey: key });
     running.current = false;
+    // Stamped again as the attempt ends, so a Try again after a wait of up to
+    // four minutes still joins the create the runner may be finishing.
+    if (!result.ok) extendKey(store, name, () => key, Date.now(), print);
     // Closed meanwhile. A draft that was made keeps its key for a while, so
     // pressing Extend on this diagram again opens that one, not a second.
     // The same for a Close, Escape or backdrop click whose navigation has not

@@ -106,6 +106,13 @@ export function JobDot({ job, size = "sm" }: { job: Pick<Job, "state">; size?: "
  * press until the runner refuses it, then for as long as the record carries
  * the request. The strip, the tiles and both panels post the same call, and a
  * second press anywhere finds the job already stopping.
+ *
+ * A refusal is said where the press was. A panel that shows the runner's
+ * words itself passes `onDone`; everywhere else (the strip, a tile, the video
+ * job panel) the button says it, so a refused stop never looks like one still
+ * on its way (R2-1-03). `problemAt` is where: `inline`, before the button in
+ * its row, or `above`, over it, for a tile's bar, which has no room beside
+ * the button and nothing but the picture above it.
  */
 export function CancelJobButton({
   job,
@@ -113,6 +120,7 @@ export function CancelJobButton({
   size = "xs",
   className,
   onDone,
+  problemAt = "inline",
 }: {
   job: Pick<Job, "jobId" | "cancelRequestedAt">;
   path: string;
@@ -120,11 +128,16 @@ export function CancelJobButton({
   className?: string;
   /** What the runner said, for a panel that shows it. */
   onDone?: (outcome: VerbOutcome) => void;
+  problemAt?: "inline" | "above";
 }) {
   const { run } = useJobVerb(path);
   const [asked, setAsked] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
   const stopping = asked || job.cancelRequestedAt !== null;
-  return (
+  // Gone once the job is stopping anyway (another tab's press, a retry that
+  // landed): the refusal is no longer the news.
+  const said = problem !== null && !stopping ? problem : null;
+  const button = (
     <Button
       variant="secondary"
       size={size}
@@ -132,12 +145,39 @@ export function CancelJobButton({
       className={className}
       onClick={async () => {
         setAsked(true);
+        setProblem(null);
         const outcome = await run(job.jobId, "cancel");
-        if (!outcome.ok) setAsked(false);
+        if (!outcome.ok) {
+          setAsked(false);
+          if (onDone === undefined) setProblem(outcome.text);
+        }
         onDone?.(outcome);
       }}
     >
       {stopping ? "Stopping" : "Cancel"}
     </Button>
+  );
+  if (said === null) return button;
+  if (problemAt === "above") {
+    return (
+      // `pointer-events-auto` on the button only: the bar under it takes no clicks.
+      <span className="relative inline-flex shrink-0">
+        {button}
+        <span
+          role="alert"
+          className="absolute right-0 bottom-full z-20 mb-1 w-max max-w-44 rounded-md border border-border bg-surface px-2 py-1.5 text-left text-xs leading-4 font-normal text-danger shadow-sm"
+        >
+          {said}
+        </span>
+      </span>
+    );
+  }
+  return (
+    <>
+      <span role="alert" title={said} className="min-w-0 max-w-[24rem] truncate text-xs text-danger">
+        {said}
+      </span>
+      {button}
+    </>
   );
 }
