@@ -87,8 +87,18 @@ jobs:
 
     # No database service: the catalog is a SQLite file
     # (docs/SQLITE-MIGRATION.md), and every catalog suite makes its own
-    # scratch file under the OS temp directory, so the job needs no server and
-    # no DATABASE_URL.
+    # scratch file under the OS temp directory, so the job needs no server.
+
+    env:
+      # A tripwire, not a database: nothing listens on it. The catalog refuses
+      # a postgres:// value before it opens anything (databasePath() in
+      # services/catalog/src/env.ts), so a test that opens the default catalog
+      # instead of a scratch file fails here by name. Unset, the same test
+      # would quietly create an empty catalog under the runner's home and
+      # pass, and on a laptop it would read the owner's real one (#508 fixed
+      # three route tests that did). A suite that wants a database sets
+      # DATABASE_URL or CATALOG_DB itself, which replaces this value.
+      DATABASE_URL: postgres://ci-has-no-default-database/
 
     steps:
       - name: Checkout
