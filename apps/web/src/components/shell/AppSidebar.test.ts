@@ -812,6 +812,23 @@ describe("the sections", () => {
     expect(mocks.listDrafts).toHaveBeenCalledWith(expect.objectContaining({ q: "transport" }));
   });
 
+  it("lets an older refused pin that answers late stay quiet once a newer change has gone out", async () => {
+    withRows();
+    const container = await mount(false);
+    let refuse: (saved: boolean) => void = () => undefined;
+    mocks.changeRecent.mockImplementationOnce(() => new Promise<boolean>((resolve) => (refuse = resolve)));
+    act(() => moreFor(container, "Master theorem").click());
+    act(() => {
+      (itemOf(container, "Master theorem", "Pin") as HTMLButtonElement).click();
+    });
+    act(() => moreFor(container, "Recurrences").click());
+    await act(async () => {
+      (itemOf(container, "Recurrences", "Pin") as HTMLButtonElement).click();
+    });
+    await act(async () => refuse(false));
+    expect(section(container, "sidebar-recent").querySelector('[role="alert"]')).toBeNull();
+  });
+
   it("fades search results out on the rail like every other label, once the words outlive the peek", async () => {
     const renamed = { ...DRAFT, name: "Transport layer" };
     mocks.listDrafts.mockImplementation(async (query: { q?: string }) => ({ ok: true, data: { drafts: query.q === "transport" || query.q === undefined ? [renamed] : [], note: "" } }));

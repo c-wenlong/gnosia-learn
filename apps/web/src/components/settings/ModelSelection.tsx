@@ -117,8 +117,12 @@ function TutorPick({ view, chain }: { view: ProvidersView; chain: ChainEntry[] }
   const focusNext = useRef<string | null>(null);
   useEffect(() => {
     if (focusNext.current === null || busy) return;
-    document.getElementById(focusNext.current)?.focus();
+    const target = focusNext.current;
     focusNext.current = null;
+    // Only focus that was dropped: a person who moved on while the request
+    // ran keeps where they are.
+    const at = document.activeElement;
+    if (at === null || at === document.body) document.getElementById(target)?.focus();
   }, [busy, chain]);
 
   const keyed = view.rows.filter((row) => row.inUse !== null);

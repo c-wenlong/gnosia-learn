@@ -179,10 +179,14 @@ export function Sections({ rail, onPick, search }: { rail: boolean; onPick: () =
   // A pin or unpin the route refused is put back by the re-read; say so, or
   // the row just jumps and returns with nothing said.
   const [pinError, setPinError] = useState<string | null>(null);
+  // Only the newest change owns the message: an older refusal arriving late
+  // must not speak for a pin that has since worked.
+  const latestChange = useRef(0);
   const change = async (change: RecentChange) => {
+    const mine = ++latestChange.current;
     setPinError(null);
     const saved = await recent.change(change);
-    if (!saved) setPinError(change.action === "pin" ? "Not pinned: Recent could not be saved." : "Not unpinned: Recent could not be saved.");
+    if (!saved && mine === latestChange.current) setPinError(change.action === "pin" ? "Not pinned: Recent could not be saved." : "Not unpinned: Recent could not be saved.");
     return saved;
   };
 

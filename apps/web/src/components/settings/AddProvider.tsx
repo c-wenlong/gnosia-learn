@@ -69,7 +69,10 @@ function AddProviderForm({
   useEffect(() => {
     if (saving || !refocus.current) return;
     refocus.current = false;
-    document.getElementById(keyId)?.focus();
+    // Only focus that was dropped: a person editing the name or URL while the
+    // request ran keeps where they are.
+    const at = document.activeElement;
+    if (at === null || at === document.body) document.getElementById(keyId)?.focus();
   }, [saving, keyId]);
 
   const save = async (event: FormEvent) => {

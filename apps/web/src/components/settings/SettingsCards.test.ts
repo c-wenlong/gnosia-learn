@@ -266,8 +266,13 @@ describe("the Providers card", () => {
       set(inputs.find((i) => i.type === "password")!, "gw-key-0123456789abcdef");
     });
     const answer = fetchMock.getMockImplementation()!;
+    // A browser drops focus from the submit button when it is disabled; jsdom does not.
+    const refused = () => {
+      (document.activeElement as HTMLElement | null)?.blur();
+      return Promise.resolve(new Response(JSON.stringify({ error: "refused" }), { status: 400 }));
+    };
     fetchMock.mockImplementation((url, init) =>
-      String(url) === "/api/learner/custom-provider" ? Promise.resolve(new Response(JSON.stringify({ error: "refused" }), { status: 400 })) : answer(url, init),
+      String(url) === "/api/learner/custom-provider" ? refused() : answer(url, init),
     );
     act(() => button(container, "Add provider").focus());
     await act(async () => form.requestSubmit());
@@ -355,6 +360,21 @@ describe("the Model selection card", () => {
     await act(async () => test.click());
     expect(container.textContent).toContain("Works");
     expect(document.activeElement).toBe(button(container, "Test"));
+  });
+
+  it("leaves focus where the person moved it while Test was still running", async () => {
+    const container = mount(selection());
+    await act(async () => {});
+    const test = button(container, "Test");
+    test.focus();
+    const input = container.querySelector<HTMLInputElement>('input[role="combobox"]')!;
+    const answer = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation((url, init) => {
+      if (String(url).endsWith("/tutor-model/test")) input.focus();
+      return answer(url, init);
+    });
+    await act(async () => test.click());
+    expect(document.activeElement).toBe(input);
   });
 
   it("asks before Remove model deletes anything", async () => {
