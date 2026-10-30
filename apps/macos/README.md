@@ -1,8 +1,10 @@
 # Gnosia
 
-The native macOS reader for the gnosia catalog: the library surface of
-`apps/web` reimplemented as a real SwiftUI app, not a webview. A work in
-progress — v1 is the video library.
+The native macOS app for gnosia: the web app's surfaces reimplemented in
+SwiftUI, not a webview. It reads a mirror of the catalog, keeps the
+learner's own writes in a local file, and mirrors those writes into the
+catalog through the sidecar. A work in progress; the web app is the
+reference for every rule it shares.
 
 ## Build and run
 
@@ -10,7 +12,7 @@ progress — v1 is the video library.
 cd apps/macos
 swift build          # the gate; headless, no Xcode project needed
 swift run Gnosia     # opens the window (runs unbundled)
-swift test           # GnosiaTests: the session arithmetic and learner.db writes
+swift test           # GnosiaTests: the session arithmetic, learner.db writes and the data contracts
 ```
 
 macOS 14+, Swift 6 toolchain. There are no external SPM dependencies: the app
@@ -19,11 +21,27 @@ only Foundation, SwiftUI, AVKit/AVFoundation, PDFKit and ImageIO.
 
 ## Where the data comes from
 
+Three paths, each one way:
+
+| Path | What | Where |
+| --- | --- | --- |
+| Read | Courses, topics, concepts, assets, sessions and the learner's catalog rows, mirrored by the snapshot script and opened read-only | `<data home>/app-catalog.db`, `CatalogStore.swift` |
+| Local write | Every learner write the app makes (answers, review grades, favourites, playback, progress, notes, names, visits), so it shows at once and survives an outage | `<data home>/learner.db`, `LearnerStore.swift` |
+| Mirror | Each local write sent to the catalog through the sidecar's web routes, queued and retried until it lands | `services/sidecar`, `SidecarManager.swift`, `SidecarClient.swift` |
+
+The sidecar is a loopback service the app spawns (`npx tsx
+services/sidecar/src/index.ts`): the tutor (chat, session questions) and
+the learner writes run the web's own code there, so Swift never
+reimplements a route. The studio surface talks to `services/studio`; the
+app starts that runner, detached, only when asked from the studio screen.
+
 The catalog itself is one SQLite file (`CATALOG_DB`, else `DATABASE_URL`,
 else `$GNOSIA_HOME/catalog.db`), but the app does not open it directly: the
 live schema stores instants as millisecond integers and carries tables the
 app never draws, so the app reads a smaller mirror of it, written by the
-snapshot script and opened read-only:
+snapshot script. The app runs the script itself on launch and when it comes
+to the front (`--if-stale`, so it writes only when the mirror is behind);
+by hand:
 
 ```sh
 # from the repo root
@@ -37,7 +55,10 @@ does — `CATALOG_DB`, then `services/catalog/.env`'s `DATABASE_URL` — and
 mirrors the parts the app draws into `<data home>/app-catalog.db` (not
 `catalog.db`: the live database owns that name, and the script refuses to
 snapshot a file onto itself).
-Re-run it whenever the catalog moves; the file is disposable.
+The file is disposable. The app and the desktop shell take the
+environment they hand the script, the studio runner and the sidecar from
+one resolver, `services/sidecar/src/child-env.ts`, so all of them open the
+same catalog file.
 
 Where the app looks for the mirror, in order:
 
@@ -51,7 +72,8 @@ asset's `blob_key` (`local/<sha256>.<ext>`) as the path under it.
 
 ### The mirrored schema
 
-`user_version = 3`. Timestamps are `REAL` seconds since 1970-01-01 UTC —
+`user_version = 4` (`SCHEMA_VERSION` in the script, which is the source
+for the full table list; below is the asset half). Timestamps are `REAL` seconds since 1970-01-01 UTC —
 the live schema's millisecond integers divided by 1000.0 at snapshot time.
 `asset.generated_by` is the one computed column (`manimkc` / `remotionkc` /
 `revideokc` / `blenderkc` / `video` / `other`, from the id's prefix after
@@ -71,20 +93,24 @@ concept          (slug, title, summary, topic_slug, path, domain, body,
 snapshot_meta    (key, value)     -- generator, schema_version, taken_at, ...
 ```
 
-## What works today (v1)
+## What works today
 
-- Library list of every `kind='video'` asset, grouped by tool or by topic,
-  with a search box and poster thumbnails (downsampled via ImageIO).
-- Detail pane: AVPlayer playback straight from the blob file, the catalog's
-  PDF as a second pane via PDFKit, transcript/chapters/captions presence
-  badges, and the row's provenance.
-- Read-only: the app opens the database `SQLITE_OPEN_READONLY` and never
-  writes to the blob store.
+- Home, Learn (the map and the board), Review, Courses (modules, lessons,
+  progress ticks and notes, the week check), the Library (videos, PDFs,
+  links, favourites, names), the Studio and Ask, in one sidebar.
+- The concept tutor's chat, with the tutor's choice and recall checks drawn
+  as cards, and the session page's steps with confidence.
+- Video playback from the blob store, resuming where the web or the app
+  last stopped; only the stretches actually played count as watched.
+- Settings: the catalog mirror's path and its last refresh, provider keys
+  and the tutor's model chain (through the sidecar).
+
+Writes reach the catalog only through the sidecar. The mirror is opened
+`SQLITE_OPEN_READONLY`, and the app never writes to the blob store.
 
 ## Later
 
-Notes/concepts/link assets in the list, day/course/conversation groupings,
-transcript and chapter display in the player, collections, search across
-sidecar contents, and an .app bundle once the surface settles. The read model
-stays in `Sources/Gnosia/CatalogStore.swift` so the snapshot's transport —
-the mirrored schema above — stays the only storage the views know about.
+Day and conversation groupings, search across sidecar contents, and the
+studio's consent card for a tool the planner offers untagged. The read
+model stays in `Sources/Gnosia/CatalogStore.swift`, so the mirrored schema
+stays the only storage the views read.

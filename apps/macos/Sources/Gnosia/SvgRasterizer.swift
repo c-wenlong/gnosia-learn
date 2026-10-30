@@ -95,6 +95,11 @@ final class SvgRasterizer {
     private func prepared() -> WKWebView {
         if let webview { return webview }
         let config = WKWebViewConfiguration()
+        // The markup is data: a runner export, or a planner's picture, which
+        // is model output (D105). No script runs, and the page's CSP below
+        // lets nothing load from anywhere, so a snapshot is all it can be.
+        config.defaultWebpagePreferences.allowsContentJavaScript = false
+        config.websiteDataStore = .nonPersistent()
         let view = WKWebView(frame: NSRect(origin: .zero, size: CGSize(width: 480, height: 340)), configuration: config)
         view.setValue(false, forKey: "drawsBackground")
         let host = NSWindow(
@@ -123,7 +128,9 @@ final class SvgRasterizer {
     /// export's pixel size is, it fits the tile.
     private static func page(for svg: String) -> String {
         """
-        <!doctype html><html><head><meta charset="utf-8"><style>
+        <!doctype html><html><head><meta charset="utf-8">
+        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:">
+        <style>
         html,body{margin:0;height:100%;background:#fdfcf8;display:flex;
                   align-items:center;justify-content:center}
         svg{max-width:96vw;max-height:96vh}

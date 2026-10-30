@@ -10,7 +10,6 @@ import { keySecret } from "@gnosia/tutor/server/provider-keys";
 import {
   assetNameTurn,
   favoriteTurn,
-  nameTurn,
   noteTurn,
   observeTurn,
   playbackTurn,
@@ -24,14 +23,12 @@ import {
   chatTurn,
   customProviderAddTurn,
   customProviderChangeTurn,
-  judgeTurn,
   modelListTurn,
   providerKeyRemoveTurn,
   providerKeySaveTurn,
   providerKeyStatusTurn,
   providerKeyTestTurn,
   sessionQuestionTurn,
-  summarizeTurn,
   tutorModelAddTurn,
   tutorModelChainTurn,
   tutorModelMoveTurn,
@@ -57,9 +54,7 @@ import { guard } from "./guard";
  * The mapping keeps the web paths so the contract documents itself:
  *
  *   POST   /api/agent/chat                     → chatTurn
- *   POST   /api/agent/judge                    → judgeTurn
  *   POST   /api/agent/session                  → sessionQuestionTurn
- *   POST   /api/agent/summarize                → summarizeTurn
  *   POST   /api/learner/favorite               → favoriteTurn
  *   POST   /api/learner/watched                → watchedTurn
  *   POST   /api/learner/playback               → playbackTurn
@@ -67,7 +62,6 @@ import { guard } from "./guard";
  *   POST   /api/learner/preference             → preferenceTurn (lastVisited — the app's module visits)
  *   POST   /api/learner/asset-name             → assetNameTurn
  *   POST   /api/learner/note                   → noteTurn
- *   POST   /api/learner/name                   → nameTurn
  *   POST   /api/learner/observe                → observeTurn
  *   POST   /api/review/grade                   → reviewGradeTurn (the app's review cards)
  *   POST   /api/learner/session/close          → sessionCloseTurn
@@ -99,9 +93,7 @@ type Turn = (deps: TutorDeps, body: unknown) => Promise<TurnReply>;
 /** The routes, in one table so the surface is one list a reader can audit: path, then method. */
 const TURNS: Record<string, Record<string, Turn>> = {
   "/api/agent/chat": { POST: chatTurn as Turn },
-  "/api/agent/judge": { POST: judgeTurn },
   "/api/agent/session": { POST: sessionQuestionTurn },
-  "/api/agent/summarize": { POST: summarizeTurn as Turn },
   "/api/learner/favorite": { POST: favoriteTurn },
   "/api/learner/watched": { POST: watchedTurn },
   "/api/learner/playback": { POST: playbackTurn },
@@ -109,7 +101,6 @@ const TURNS: Record<string, Record<string, Turn>> = {
   "/api/learner/preference": { POST: preferenceTurn },
   "/api/learner/asset-name": { POST: assetNameTurn },
   "/api/learner/note": { POST: noteTurn },
-  "/api/learner/name": { POST: nameTurn },
   "/api/learner/observe": { POST: observeTurn },
   "/api/review/grade": { POST: reviewGradeTurn },
   "/api/learner/session/close": { POST: sessionCloseTurn },

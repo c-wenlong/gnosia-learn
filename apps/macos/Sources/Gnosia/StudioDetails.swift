@@ -23,11 +23,17 @@
 import AppKit
 import SwiftUI
 
-/// `@diagram`/`@video` tags in a message, as the runner's `{kind,start,end}`
-/// triples. Positions are UTF-16 offsets, the units the Node side counts in.
+/// The kinds a message can tag: TAG_KINDS in
+/// services/studio/src/drafts/planner-prompt.ts (D105), the brief kinds
+/// plus `svg`, the picture a reply draws itself.
+let draftTagKinds = ["diagram", "video", "svg"]
+
+/// `@diagram`/`@video`/`@svg` tags in a message, as the runner's
+/// `{kind,start,end}` triples. Positions are UTF-16 offsets, the units the
+/// Node side counts in.
 func draftMentions(_ text: String) -> [[String: Any]] {
     var mentions: [[String: Any]] = []
-    for kind in ["diagram", "video"] {
+    for kind in draftTagKinds {
         let needle = "@\(kind)"
         var search = text.startIndex
         outer: while let range = text.range(of: needle, range: search ..< text.endIndex) {
@@ -43,6 +49,130 @@ func draftMentions(_ text: String) -> [[String: Any]] {
         }
     }
     return mentions
+}
+
+/// A planner reply split into its prose and its picture: the first fenced
+/// `svg` block (D105), drawn as an image under the words. A block still
+/// open (a reply cut off) has no picture yet; its words stay prose.
+func plannerReplyParts(_ text: String) -> (prose: String, svg: String?) {
+    guard let open = text.range(of: "```svg"),
+          let close = text.range(of: "```", range: open.upperBound ..< text.endIndex)
+    else { return (text, nil) }
+    let markup = text[open.upperBound ..< close.lowerBound].trimmingCharacters(in: .whitespacesAndNewlines)
+    let prose = [text[..<open.lowerBound], text[close.upperBound...]]
+        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .filter { !$0.isEmpty }
+        .joined(separator: "\n\n")
+    return (prose, markup.isEmpty ? nil : markup)
+}
+
+/// The consent card's title (`suggestionTitle` in apps/web/src/lib/studio-cards.ts).
+func consentTitle(_ kind: String) -> String {
+    switch kind {
+    case "svg": return "The planner wants to draw an SVG"
+    case "video": return "The planner wants to make a video"
+    default: return "The planner wants to make a diagram"
+    }
+}
+
+/// The card's cost line (`suggestionCost`, D107): the recorded band of
+/// finished makes of the kind, else a broad fallback. SVG spends nothing.
+func consentCost(_ kind: String, band: StudioClient.CostBand?) -> String? {
+    if kind == "svg" { return nil }
+    if let band {
+        let makes = band.n == 1 ? "make" : "makes"
+        return String(format: "A make of this kind has cost $%.2f–$%.2f here, over %d %@.", band.low, band.high, band.n, makes)
+    }
+    return kind == "video"
+        ? "A make of this kind usually costs a dollar or two; narration is the dear part."
+        : "A make of this kind usually costs a few cents."
+}
+
+/// The consent card (D106): the planner's offer of a make, with Allow once,
+/// Always allow here (paid kinds only) and Deny. A declined offer collapses
+/// to a quiet line. A refused answer re-arms the card, so it never sits
+/// disabled on a consent that did not land.
+struct StudioConsentCard: View {
+    let kind: String
+    let pitch: String?
+    let declined: Bool
+    let cost: String?
+    let onAllow: (_ always: Bool) async -> Bool
+    let onDecline: () async -> Bool
+
+    @State private var answering: String?
+
+    var body: some View {
+        if declined {
+            Text("\(kindName) declined. The planner will not offer it again.")
+                .font(.caption)
+                .foregroundStyle(G.text3)
+        } else {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(consentTitle(kind))
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(G.text)
+                if let pitch, !pitch.isEmpty {
+                    Text(pitch).font(.callout).foregroundStyle(G.text2)
+                }
+                if let cost {
+                    Text(cost).font(.caption).foregroundStyle(G.text3)
+                }
+                HStack(spacing: 8) {
+                    Button(answering == "once" ? "Sending…" : "Allow once") { press("once") }
+                        .buttonStyle(.borderedProminent)
+                        .tint(G.btnFace)
+                    if kind != "svg" {
+                        Button(answering == "always" ? "Allowing…" : "Always allow here") { press("always") }
+                            .help("Let the planner start this kind on its own, on this conversation only")
+                    }
+                    Button(answering == "deny" ? "Noting…" : "Deny") { press("deny") }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(G.text2)
+                }
+                .disabled(answering != nil)
+                .padding(.top, 2)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(G.surface, in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).stroke(G.border))
+        }
+    }
+
+    private var kindName: String {
+        kind == "svg" ? "SVG" : kind.prefix(1).uppercased() + kind.dropFirst()
+    }
+
+    private func press(_ answer: String) {
+        answering = answer
+        Task {
+            let ok = answer == "deny" ? await onDecline() : await onAllow(answer == "always")
+            if !ok { answering = nil }
+        }
+    }
+}
+
+/// A planner's picture: the markup rasterized off-screen (no script, no
+/// network), shown at the thread's width.
+struct PlannerPicture: View {
+    let svg: String
+    @State private var image: NSImage?
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: 480)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+            } else {
+                ProgressView().controlSize(.small)
+            }
+        }
+        .task(id: svg) { image = await SvgRasterizer.shared.image(for: svg, size: .preview) }
+    }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -992,9 +1122,11 @@ struct StudioDraftView: View {
                             .foregroundStyle(G.text3)
                             .frame(maxWidth: .infinity, alignment: .center)
                     } else {
+                        let parts: (prose: String, svg: String?) = entry.role == "planner"
+                            ? plannerReplyParts(entry.text) : (prose: entry.text, svg: nil)
                         HStack {
                             if entry.role == "person" { Spacer(minLength: 80) }
-                            Text(entry.text)
+                            Text(parts.prose)
                                 .font(.body)
                                 .foregroundStyle(entry.role == "person" ? G.btnText : G.text)
                                 .textSelection(.enabled)
@@ -1007,10 +1139,22 @@ struct StudioDraftView: View {
                             if entry.role != "person" { Spacer(minLength: 80) }
                         }
                         .opacity(entry.superseded == true ? 0.55 : 1)
+                        if let svg = parts.svg { PlannerPicture(svg: svg) }
                         ForEach(entry.briefs ?? [], id: \.kind) { brief in
                             Text("left a \(brief.kind ?? "") brief")
                                 .font(.caption)
                                 .foregroundStyle(G.accentText)
+                        }
+                        ForEach(entry.role == "planner" ? (entry.suggest ?? []) : [], id: \.self) { kind in
+                            StudioConsentCard(
+                                kind: kind,
+                                pitch: entry.pitch,
+                                declined: (entry.declined ?? []).contains(kind),
+                                cost: consentCost(kind, band: draft.estimates?[kind] ?? nil),
+                                onAllow: { always in await allowOffer(kind, always: always) },
+                                onDecline: { await declineOffer(entry.seq, kind: kind) }
+                            )
+                            .frame(maxWidth: 520, alignment: .leading)
                         }
                     }
                 }
@@ -1024,11 +1168,11 @@ struct StudioDraftView: View {
         .frame(maxWidth: 720, alignment: .leading)
     }
 
-    /// The composer's minimum: a field and a send. `@diagram` and `@video`
-    /// in the text tag the brief kind, the way the web's mention chips do.
+    /// The composer's minimum: a field and a send. `@diagram`, `@video` and
+    /// `@svg` in the text tag a kind, the way the web's mention chips do.
     private func composer(_ draft: StudioClient.DraftDetail) -> some View {
         HStack(spacing: 10) {
-            TextField("Say something, or tag @diagram / @video", text: $message, axis: .vertical)
+            TextField("Say something, or tag @diagram, @video or @svg", text: $message, axis: .vertical)
                 .textFieldStyle(.plain)
                 .lineLimit(1 ... 6)
                 .padding(.horizontal, 12)
@@ -1066,6 +1210,43 @@ struct StudioDraftView: View {
                 outcomeBad = true
             }
             busy = false
+        }
+    }
+
+    /// The consent card's Allow (D106, D107): a message that is only the
+    /// kind's tag, what the person would have typed, marked `make` so the
+    /// brief it earns starts its own job. Always then trusts the kind on
+    /// this conversation (D108); the send goes first, so another turn cannot
+    /// take the slot between the trust and the message. False on a refusal.
+    private func allowOffer(_ kind: String, always: Bool) async -> Bool {
+        let tag = "@\(kind)"
+        outcome = nil
+        do {
+            try await studio.client.sendDraftMessage(
+                draftId, text: tag, mentions: [["kind": kind, "start": 0, "end": tag.utf16.count]], make: true)
+            if always, kind != "svg" {
+                try await studio.client.setDraftTrust(draftId, kind: kind, trusted: true)
+            }
+            await load()
+            return true
+        } catch {
+            outcome = (error as? StudioError)?.errorDescription ?? "The studio did not answer."
+            outcomeBad = true
+            await load()
+            return false
+        }
+    }
+
+    /// Deny (D109): the runner marks the reply's offer declined.
+    private func declineOffer(_ replySeq: Int, kind: String) async -> Bool {
+        do {
+            try await studio.client.declineSuggestion(draftId, replySeq: replySeq, kinds: [kind])
+            await load()
+            return true
+        } catch {
+            outcome = (error as? StudioError)?.errorDescription ?? "The studio did not answer."
+            outcomeBad = true
+            return false
         }
     }
 

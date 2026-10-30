@@ -5,9 +5,9 @@
 //  The courses surface: every course as a cover card in a grid, under a tag
 //  filter and a search field — the shape of the web app's /courses page (a
 //  compact cover card per course, the way Coursera's explore carousels look).
-//  What it leaves out is learner state: no Continue learning, no progress
-//  ticks, no inactive fold — those tables belong to the learner half of the
-//  snapshot, not this one. Selecting a card pushes the course home
+//  The cards carry no learner state; a module's progress ticks and notes
+//  are ModuleView's, written to learner.db and mirrored through the
+//  sidecar. Selecting a card pushes the course home
 //  (CourseDetailView); a video anywhere under it pushes VideoDetailView.
 //
 //  Stands alone: CoursesView().environment(store) is a complete surface, so

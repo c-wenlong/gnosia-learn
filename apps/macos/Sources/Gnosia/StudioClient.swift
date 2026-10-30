@@ -469,7 +469,19 @@ struct StudioClient {
         let superseded: Bool?
         let interrupted: Bool?
         let briefs: [EntryBrief]?
+        /// On a planner reply: the kinds it offers untagged (D58, D105), the
+        /// consent card's pitch line (D106), and the ones declined (D109).
+        let suggest: [String]?
+        let pitch: String?
+        let declined: [String]?
         var id: Int { seq }
+    }
+
+    /// What a make of a kind has cost on this machine (D107).
+    struct CostBand: Decodable {
+        let low: Double
+        let high: Double
+        let n: Int
     }
 
     /// `GET /api/drafts/{id}`, the conversation view.
@@ -501,6 +513,10 @@ struct StudioClient {
         let waiting: [String]?
         let slots: [String: Slot]?
         let transcript: [TranscriptEntry]?
+        /// The kinds this conversation may start unprompted (D108).
+        let trust: [String]?
+        /// Per kind, the recorded cost band, or null under three finished jobs.
+        let estimates: [String: CostBand?]?
         let error: DraftError?
         let note: String?
     }
@@ -718,9 +734,24 @@ struct StudioClient {
     }
 
     /// `POST /api/drafts/{id}/messages`: one person turn. `mentions` are the
-    /// `{kind,start,end}` triples the runner checks against the text.
-    func sendDraftMessage(_ id: String, text: String, mentions: [[String: Any]] = []) async throws {
-        try await post("api/drafts/\(id)/messages", body: ["text": text, "mentions": mentions])
+    /// `{kind,start,end}` triples the runner checks against the text. `make`
+    /// is the consent card's mark (D107): the brief the message earns starts
+    /// its job without a second press.
+    func sendDraftMessage(_ id: String, text: String, mentions: [[String: Any]] = [], make: Bool = false) async throws {
+        var body: [String: Any] = ["text": text, "mentions": mentions]
+        if make { body["make"] = true }
+        try await post("api/drafts/\(id)/messages", body: body)
+    }
+
+    /// `PUT /api/drafts/{id}/trust` (D108): Always allow on a consent card.
+    func setDraftTrust(_ id: String, kind: String, trusted: Bool) async throws {
+        try await post("api/drafts/\(id)/trust", body: ["kind": kind, "trusted": trusted], method: "PUT")
+    }
+
+    /// `POST /api/drafts/{id}/declined` (D109): the consent card's Deny. The
+    /// reply reads declined and the planner is told not to offer it again.
+    func declineSuggestion(_ id: String, replySeq: Int, kinds: [String]) async throws {
+        try await post("api/drafts/\(id)/declined", body: ["replySeq": replySeq, "kinds": kinds])
     }
 
     /// `POST /api/drafts/{id}/draw`: turn the in-force brief of `kind` into a
@@ -774,9 +805,9 @@ struct StudioClient {
     }
 
     @discardableResult
-    private func post(_ path: String, body: [String: Any]) async throws -> [String: Any] {
+    private func post(_ path: String, body: [String: Any], method: String = "POST") async throws -> [String: Any] {
         var request = URLRequest(url: baseURL.appending(path: path))
-        request.httpMethod = "POST"
+        request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "content-type")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, response) = try await session.data(for: request)
