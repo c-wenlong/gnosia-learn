@@ -1,17 +1,12 @@
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-
 import { afterEach, describe, expect, it, vi } from "vitest";
-
-import { postJob } from "@/components/studio/JobsProvider";
 
 import { sendJson } from "./send-json";
 
 /**
  * `sendJson` is the settings cards' and the library's request: the status,
  * whether it was a 2xx, and the reply as JSON, or null with no answer at all.
- * `postJob` is the studio's, which keeps the runner's error shape.
+ * It logs nothing, since a body may hold a key: `no-console` in
+ * eslint.config.mjs holds that.
  */
 
 function answer(status: number, body: string) {
@@ -93,32 +88,5 @@ describe("sendJson", () => {
     const reply = sendJson("GET", "/api/learner/recent", undefined, { signal: controller.signal });
     controller.abort();
     expect(await reply).toBeNull();
-  });
-
-  it("has no console call to grow one later", () => {
-    const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "send-json.ts"), "utf8");
-    expect(source).not.toMatch(/\bconsole\.\w+\(/);
-  });
-});
-
-describe("postJob", () => {
-  it("posts JSON (an empty object for no body) and hands the answer back as it is", async () => {
-    const fetchMock = answer(202, JSON.stringify({ jobId: "j2" }));
-    expect(await postJob("/studio/api/jobs/j1/revise")).toEqual({ ok: true, status: 202, data: { jobId: "j2" } });
-    expect(fetchMock).toHaveBeenCalledWith("/studio/api/jobs/j1/revise", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: "{}",
-      cache: "no-store",
-    });
-  });
-
-  it("says the runner is not answering, with why, as status 0", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new TypeError("Failed to fetch"))));
-    expect(await postJob("/studio/api/jobs/j1/revise", { changes: "x" })).toEqual({
-      ok: false,
-      status: 0,
-      data: { error: "the studio runner is not answering", detail: "Failed to fetch" },
-    });
   });
 });

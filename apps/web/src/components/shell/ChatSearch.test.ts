@@ -18,7 +18,7 @@ const mocks = vi.hoisted(() => ({ pathname: "/home", listDrafts: vi.fn(), fetchR
 vi.mock("@/lib/learner-context", () => ({ useLearner: () => ({ state: { displayName: null } }) }));
 vi.mock("next/navigation", () => ({ usePathname: () => mocks.pathname }));
 vi.mock("@/lib/studio-drafts", async (importOriginal) => ({ runnerDown: (await importOriginal<typeof import("@/lib/studio-drafts")>()).runnerDown, listDrafts: mocks.listDrafts }));
-// The catalog's half of Recent: empty here, so every row is the runner's.
+// The catalog's half of Recent: empty unless a test gives it rows.
 vi.mock("@/lib/recent-client", () => ({ fetchRecent: mocks.fetchRecent, changeRecent: vi.fn(async () => true), VISIT_STORED_EVENT: "gnosia:visit-stored" }));
 vi.mock("next/image", () => ({ default: () => null }));
 vi.mock("@/components/brand", () => ({ GnosiaWordmark: () => createElement("span", null, "Gnosia") }));
@@ -42,7 +42,7 @@ beforeAll(() => {
 beforeEach(() => {
   mocks.pathname = "/home";
   listMock.mockReset().mockResolvedValue({ ok: true, status: 200, data: { drafts: [], note: "" } });
-  mocks.fetchRecent.mockReset().mockResolvedValue({ reachable: true, items: [], more: false, pinned: [], names: {}, courses: [] });
+  mocks.fetchRecent.mockReset().mockResolvedValue({ reachable: true, items: [], more: false, pinned: [], courses: [] });
 });
 
 const mounted: Array<() => void> = [];
@@ -260,6 +260,20 @@ describe("the history search", () => {
     await settle();
     expect(container.querySelector('[role="alert"]')?.textContent).toContain("did not answer");
     expect(container.textContent).not.toContain("Nothing matches");
+  });
+
+  it("still lists the runner's matches when the catalog did not answer, and says only conversations were searched", async () => {
+    runnerWith([...loaded, unloaded], loaded);
+    mocks.fetchRecent.mockImplementation(async (options: { q?: string }) =>
+      options.q === undefined
+        ? { reachable: true, items: [], more: false, pinned: [], courses: [] }
+        : { reachable: false, items: [], more: false, pinned: [], courses: [] },
+    );
+    const { field, links, container } = await mount();
+    type(field(), "tcp");
+    await settle();
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe("Recent could not be read, so only conversations were searched.");
+    expect(links().map((link) => link.getAttribute("href"))).toEqual(["/studio?draft=b", "/studio?draft=z"]);
   });
 
   it("drops an answer for words that are no longer in the field", async () => {
