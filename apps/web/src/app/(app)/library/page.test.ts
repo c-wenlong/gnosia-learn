@@ -14,13 +14,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const loadLibrary = vi.hoisted(() => vi.fn());
 const loadKnowledgeBase = vi.hoisted(() => vi.fn());
 const loadFavorites = vi.hoisted(() => vi.fn());
+// The words each searched row holds, keyed by id, as the real read returns them (a Map).
+const searchText = vi.hoisted(() => ({ texts: new Map<string, string>() }));
 
 vi.mock("@/lib/asset-library", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/asset-library")>()),
   loadLibrary,
   loadFavorites,
   loadAssetAccess: async () => ({ served: new Set<string>(), posters: new Set<string>() }),
-  loadSearchText: async () => ({ texts: {}, sources: {}, searchedText: false, skipped: 0 }),
+  loadSearchText: async () => ({ texts: searchText.texts, sources: {}, searchedText: true, skipped: 0 }),
 }));
 vi.mock("@/lib/learner-store", () => ({ loadKnowledgeBase }));
 vi.mock("@/data/courses", () => ({ getCourses: async () => [] }));
@@ -254,6 +256,24 @@ describe("/library", () => {
     const narrowed = toolbar.mock.calls.at(-1)?.[0] as { tab: string; menus: { label: string; value: string }[] };
     expect(narrowed.tab).toBe("other");
     expect(narrowed.menus[0]).toMatchObject({ label: "Kind", value: "captions" });
+  });
+
+  it("searches with ?q= by a row's name and by the words it holds, and keeps the query in the box", async () => {
+    searchText.texts = new Map([["session:2026-09-29-tlb", "the translation lookaside buffer caches page table entries"]]);
+    try {
+      // By the words: only the log says "lookaside".
+      const byWords = await render({ q: "lookaside", view: "list" });
+      expect(byWords).toContain("Session log");
+      expect(byWords).not.toContain("Paging, step by step");
+      expect(byWords).not.toContain("OSTEP");
+      expect(byWords).toMatch(/<input[^>]*name="q"[^>]*value="lookaside"/);
+      // By the name, case aside.
+      const byName = await render({ q: "ostep", view: "list" });
+      expect(byName).toContain("OSTEP");
+      expect(byName).not.toContain("Session log");
+    } finally {
+      searchText.texts = new Map();
+    }
   });
 
   it("renders one row per asset with ?view=list, under its day, newest day first", async () => {

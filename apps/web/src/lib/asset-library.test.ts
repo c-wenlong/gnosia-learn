@@ -153,6 +153,8 @@ describe("the wikilink index", () => {
 
 describe("a failing concept-link lookup", () => {
   it("still returns the rows, with no concept chips", async () => {
+    // The Library's concepts come from the parents read now, so that is the one to fail.
+    assetParents.mockRejectedValueOnce(new Error("parents unavailable"));
     const snapshot = await readLibrary();
     expect(snapshot.reachable).toBe(true);
     expect(snapshot.rows).toHaveLength(1);

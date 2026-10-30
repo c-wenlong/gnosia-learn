@@ -1,8 +1,6 @@
 // @vitest-environment jsdom
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { libraryTabs } from "@/lib/library";
@@ -148,10 +146,16 @@ describe("LibraryToolbar's type row", () => {
   });
 
   it("stays the kit's control: no hand-built strip of links comes back", () => {
-    const source = readFileSync(join(process.cwd(), "apps/web/src/components/library/LibraryToolbar.tsx"), "utf8");
-    expect(source).toContain('mode="links"');
-    expect(source).not.toMatch(/<nav\b/);
-    // The old strip drew its own current style and its own bold-copy width trick.
-    expect(source).not.toContain("invisible col-start-1");
+    const c = toolbar("note", true);
+    // The kit's SegmentedControl in links mode: a group with its sliding
+    // thumb, each tab a link, the current one marked for assistive tech.
+    expect(c.querySelector("nav")).toBeNull();
+    const thumb = c.querySelector("[data-segment-thumb]");
+    expect(thumb).not.toBeNull();
+    const group = thumb!.closest('[role="group"]')!;
+    expect([...group.querySelectorAll("a")].map((a) => a.textContent)).toEqual(links(c).map((a) => a.textContent));
+    expect(group.querySelector('a[aria-current="page"]')?.textContent).toContain("Notes");
+    // The old strip drew its own bold-copy width trick.
+    expect(c.querySelector(".invisible.col-start-1")).toBeNull();
   });
 });
