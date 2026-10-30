@@ -14,7 +14,14 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { afterAll, afterEach, beforeEach, expect } from "vitest";
+import { afterAll, expect, vi } from "vitest";
+
+import { isolateCatalog } from "./services/catalog/test/catalog-isolation";
+
+/** Where vitest.setup.ts leaves the open check for the `better-sqlite3` mock below. */
+interface CatalogGuardGlobal {
+  __refuseForbiddenCatalog?: (file: unknown) => void;
+}
 
 /**
  * Nothing a test runs may write into the tracked tree.
@@ -112,8 +119,9 @@ if (!root.startsWith(`${temp}${path.sep}`)) {
 }
 process.env.STUDIO_REPO_ROOT = root;
 
-// The catalog and the blob store, before anything below can import the
-// catalog's env.ts (it fixes which dotenv it reads at import). Every setting
+// The catalog and the blob store, before anything can import the catalog's
+// env.ts (it fixes which dotenv it reads at import, which is why
+// catalog-isolation.ts imports nothing from it). Every setting
 // that could name the owner's real catalog is replaced, whatever the shell or
 // services/catalog/.env says: `CATALOG_DB` blank, the dotenv pointed at
 // nothing, `DATABASE_URL` a value the catalog refuses, and `GNOSIA_HOME` a
@@ -126,26 +134,32 @@ process.env.STUDIO_REPO_ROOT = root;
 // sets one (services/catalog/test/catalog-isolation.ts says why each).
 const shellEnv = { ...process.env };
 const blobHome = mkdtempSync(path.join(temp, "gnosia-home-"));
-const isolation = await import("./services/catalog/test/catalog-isolation");
-isolation.isolateCatalog(process.env, blobHome);
-const forbiddenCatalogs = isolation.forbiddenCatalogs(shellEnv, REPO_ROOT);
+isolateCatalog(process.env, blobHome);
+// Only now: the guard imports env.ts, which reads CATALOG_ENV_FILE at import.
+const guard = await import("./services/catalog/test/catalog-guard");
+const forbiddenCatalogs = guard.forbiddenCatalogs(shellEnv, REPO_ROOT);
+(globalThis as CatalogGuardGlobal).__refuseForbiddenCatalog = (file) => guard.refuseForbiddenOpen(file, forbiddenCatalogs);
 
-// Asked of the catalog's own resolver, around every test: a suite that sets
-// `DATABASE_URL` and loses to a `CATALOG_DB`, or that deletes the variables
-// it saved and falls back to `~/.gnosia`, is stopped before its writes land.
-function refuseRealCatalog(when: string): void {
-  const file = isolation.catalogInUse();
-  if (file !== null && forbiddenCatalogs.has(file)) {
-    throw new Error(
-      `${when}, the catalog resolves to ${file}, a file this test did not make (the default, ` +
-        `or one the shell or a .env names). Point CATALOG_DB or DATABASE_URL at a scratch ` +
-        `file (services/catalog/test/scratch-database.ts) before opening it.`,
-    );
+// The check sits at the open, inside the driver, so it runs before any
+// write: a suite that sets `DATABASE_URL` and loses to a `CATALOG_DB`, passes
+// the owner's file as an explicit url, or deletes the variables it saved and
+// falls back to `~/.gnosia` is stopped there, whatever it restores
+// afterwards. A subclass keeps `instanceof`, the prototype and the statics.
+// The factory reads the check from globalThis because a mock factory is
+// hoisted above everything in this file.
+vi.mock("better-sqlite3", async (importOriginal) => {
+  const real = (await importOriginal<{ default: typeof import("better-sqlite3") }>()).default;
+  class GuardedDatabase extends real {
+    constructor(file?: string | Buffer, options?: import("better-sqlite3").Options) {
+      const refuse = (globalThis as CatalogGuardGlobal).__refuseForbiddenCatalog;
+      // Fail closed: a missing check is a broken setup, never a pass.
+      if (refuse === undefined) throw new Error("vitest.setup.ts did not install the catalog open check");
+      refuse(file);
+      super(file, options);
+    }
   }
-}
-refuseRealCatalog("Before this test file ran");
-beforeEach(() => refuseRealCatalog("Before this test"));
-afterEach(() => refuseRealCatalog("After this test"));
+  return { default: GuardedDatabase };
+});
 
 // The variable being set proves nothing on its own, so ask the module that
 // reads it. A `paths.ts` that had stopped honouring the override would send

@@ -6,8 +6,9 @@ import { promisify } from "node:util";
 
 import { afterAll, describe, expect, it } from "vitest";
 
-import { REPO_ROOT } from "../src/env";
-import { catalogInUse, forbiddenCatalogs, NO_DEFAULT_CATALOG } from "./catalog-isolation";
+import { databasePath, ENV_FILE, REPO_ROOT } from "../src/env";
+import { canonical, forbiddenCatalogs, refuseForbiddenOpen } from "./catalog-guard";
+import { NO_DEFAULT_CATALOG } from "./catalog-isolation";
 
 /**
  * The guarantee vitest.setup.ts gives every suite: whatever the shell or
@@ -29,7 +30,7 @@ afterAll(() => {
 const ROUTE_SUITE = "apps/web/src/lib/learner-context.recap-retry.test.ts";
 
 /** Runs one suite in a vitest of its own, under `env` as its shell, and says whether it passed. */
-async function runSuite(env: NodeJS.ProcessEnv): Promise<{ passed: boolean; output: string }> {
+async function runSuite(env: NodeJS.ProcessEnv, suite = ROUTE_SUITE): Promise<{ passed: boolean; output: string }> {
   // The child is a fresh run, not a worker of this one, so nothing of this
   // run's own vitest bookkeeping goes with it.
   const clean = Object.fromEntries(
@@ -38,7 +39,7 @@ async function runSuite(env: NodeJS.ProcessEnv): Promise<{ passed: boolean; outp
   try {
     const { stdout, stderr } = await execFileAsync(
       process.execPath,
-      [path.join(REPO_ROOT, "node_modules", "vitest", "vitest.mjs"), "run", ROUTE_SUITE],
+      [path.join(REPO_ROOT, "node_modules", "vitest", "vitest.mjs"), "run", suite],
       { cwd: REPO_ROOT, env: clean, timeout: 150_000, maxBuffer: 16 * 1024 * 1024 },
     );
     return { passed: true, output: stdout + stderr };
@@ -72,11 +73,33 @@ describe("a route suite run under a machine's own catalog settings", () => {
   }, 160_000);
 });
 
+describe("a test that opens a forbidden catalog itself", () => {
+  it("is stopped at the open, before anything is written, by url or by a default it fell back to", async () => {
+    const sentinel = path.join(scratch, "forbidden", "catalog.db");
+    const home = path.join(scratch, "forbidden-home");
+    mkdirSync(path.dirname(sentinel), { recursive: true });
+    mkdirSync(home, { recursive: true });
+    const run = await runSuite(
+      { CATALOG_GUARD_FIXTURE: "1", CATALOG_GUARD_SENTINEL: sentinel, CATALOG_DB: sentinel, HOME: home },
+      "services/catalog/test/catalog-guard-fixture.test.ts",
+    );
+    expect(existsSync(sentinel), run.output).toBe(false);
+    expect(existsSync(path.join(home, ".gnosia", "catalog.db")), run.output).toBe(false);
+    expect(run.passed, run.output).toBe(true);
+    expect(run.output).toMatch(/2 passed/);
+  }, 160_000);
+});
+
 describe("the catalog settings every test file starts with", () => {
   it("open nothing: the default is refused by name rather than created", () => {
     expect(process.env.CATALOG_DB).toBe("");
     expect(process.env.DATABASE_URL).toBe(NO_DEFAULT_CATALOG);
-    expect(catalogInUse()).toBeNull();
+    expect(() => databasePath()).toThrow(/Postgres URL/);
+  });
+
+  it("never read the machine's services/catalog/.env: env.ts was first imported with the dotenv pointed at nothing", () => {
+    expect(ENV_FILE).toBe(process.env.CATALOG_ENV_FILE);
+    expect(existsSync(ENV_FILE)).toBe(false);
   });
 
   it("put the data home in a temp directory, whatever the shell exported", () => {
@@ -118,8 +141,24 @@ describe("forbiddenCatalogs", () => {
       "/srv/from-named.db",
       "/srv/named-home/catalog.db",
     ]) {
-      expect(forbidden, file).toContain(file);
+      // canonical: /home is a symlink on macOS, and /srv may be one anywhere.
+      expect(forbidden, file).toContain(canonical(file));
     }
-    expect(forbidden).not.toContain("/srv/from-example.db");
+    expect(forbidden).not.toContain(canonical("/srv/from-example.db"));
+  });
+});
+
+describe("refuseForbiddenOpen", () => {
+  const forbidden = new Set(["/srv/owner/catalog.db"]);
+
+  it("refuses a forbidden file, however the path is spelled", () => {
+    expect(() => refuseForbiddenOpen("/srv/owner/catalog.db", forbidden)).toThrow(/did not make/);
+    expect(() => refuseForbiddenOpen("/srv/owner/../owner/catalog.db", forbidden)).toThrow(/did not make/);
+  });
+
+  it("lets every other open through: scratch files, :memory:, SQLite's temp database and buffers", () => {
+    for (const file of ["/srv/owner/scratch.db", ":memory:", "", undefined, Buffer.from("")]) {
+      expect(() => refuseForbiddenOpen(file, forbidden)).not.toThrow();
+    }
   });
 });
