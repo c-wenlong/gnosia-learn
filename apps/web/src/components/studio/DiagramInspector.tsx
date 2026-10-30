@@ -241,9 +241,9 @@ function SelectedDiagram({
               Open canvas
             </Button>
           )}
-          <VerbForm action={exportSvg} name={diagram.name} path={path} label="Export SVG" pending="Exporting" />
-          <VerbForm action={verifySvg} name={diagram.name} path={path} label="Verify" pending="Verifying" />
-          <VerbForm action={inspectDiagram} name={diagram.name} path={path} label="Inspect" pending="Inspecting" />
+          <VerbForm action={exportSvg} name={diagram.name} path={path} label="Export SVG" verb="export" pending="Exporting" />
+          <VerbForm action={verifySvg} name={diagram.name} path={path} label="Verify" verb="verify" pending="Verifying" />
+          <VerbForm action={inspectDiagram} name={diagram.name} path={path} label="Inspect" verb="inspect" pending="Inspecting" />
         </div>
         <p className="mt-2 text-xs text-text2">
           Each one runs in the studio runner and launches its own Chromium, so it takes a few
@@ -297,19 +297,23 @@ function VerbForm({
   name,
   path,
   label,
+  verb,
   pending,
 }: {
   action: (formData: FormData) => Promise<void>;
   name: string;
   path: string;
   label: string;
+  verb: string;
   pending: string;
 }) {
   return (
     <form action={action}>
       <input type="hidden" name="name" value={name} />
       <input type="hidden" name="path" value={path} />
-      <VerbSubmit pending={pending}>{label}</VerbSubmit>
+      <VerbSubmit verb={verb} pending={pending}>
+        {label}
+      </VerbSubmit>
     </form>
   );
 }

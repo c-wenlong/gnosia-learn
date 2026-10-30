@@ -127,9 +127,10 @@ export function VerbNotice({
   return (
     <Banner tone={report.ok ? "ok" : "danger"} dismissHref={clearHref}>
       <span className="font-semibold">{report.headline}</span>
-      {report.said !== null && <span className="block text-[12px] text-text2">The runner said: “{report.said}”</span>}
-      {report.detail !== null && report.detail !== "" && (
-        <span className="block font-mono text-[12px] text-text2">{report.detail}</span>
+      {(report.said !== null || (report.detail !== null && report.detail !== "")) && (
+        <span className="block text-[12px] text-text2">
+          The runner said: “{[report.said, report.detail].filter((part) => part !== null && part !== "").join(" · ")}”
+        </span>
       )}
     </Banner>
   );

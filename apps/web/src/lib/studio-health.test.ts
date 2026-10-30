@@ -16,6 +16,11 @@ describe("doctorVerdict (R2-1-19)", () => {
       text: "Doctor still fails on chromium: not installed.",
     });
     expect(doctorVerdict({ tldrawkc: false, checks: [] }).text).toMatch(/tldrawkc cannot run/);
+    // Health's own shape: `claude` beside the checks, not among them.
+    expect(doctorVerdict({ ok: false, tldrawkc: true, claude: false, checks: [{ name: "node", status: "pass", detail: "" }] })).toEqual({
+      ok: false,
+      text: "The claude CLI is still not on the runner's PATH, so no job can start.",
+    });
     expect(doctorVerdict({ tldrawkc: true, checks: [], diagramAgent: { ok: false, problem: "the home path holds a quote" } }).text).toBe(
       "Diagram jobs still cannot be queued: the home path holds a quote.",
     );

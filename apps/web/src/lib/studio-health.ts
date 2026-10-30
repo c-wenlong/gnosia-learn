@@ -116,15 +116,16 @@ export function videoAvailability(raw: unknown): Availability {
 /**
  * What doctor says now, for a failed job's Recheck (R2-1-19). The job's row
  * is terminal and never changes, so re-reading the job list showed nothing;
- * health carries doctor's verdict (`tldrawkc` and its `checks`) and whether a
- * diagram job can be queued (`diagramAgent`), which is what a person who
+ * health carries doctor's verdict (`tldrawkc` and its `checks`), whether the
+ * agent's CLI is there (`claude`) and whether a diagram job can be queued
+ * (`diagramAgent`), which is what a person who
  * fixed their toolchain wants to know before pressing Retry.
  */
 export function doctorVerdict(raw: unknown): { ok: boolean; text: string } {
   if (typeof raw !== "object" || raw === null) {
     return { ok: false, text: "The studio runner did not answer, so doctor could not be read." };
   }
-  const health = raw as { tldrawkc?: unknown; checks?: unknown; diagramAgent?: unknown };
+  const health = raw as { tldrawkc?: unknown; claude?: unknown; checks?: unknown; diagramAgent?: unknown };
   const checks = Array.isArray(health.checks) ? (health.checks as { name?: unknown; status?: unknown; detail?: unknown }[]) : [];
   const failing = checks.find((check) => check?.status === "fail");
   if (failing !== undefined) {
@@ -133,6 +134,9 @@ export function doctorVerdict(raw: unknown): { ok: boolean; text: string } {
     return { ok: false, text: `Doctor still fails on ${name}${detail}.` };
   }
   if (health.tldrawkc === false) return { ok: false, text: "Doctor still says tldrawkc cannot run on this machine." };
+  // Reported beside doctor's checks, not in them: a job that never started
+  // most often failed on this (the Greptile review of #595).
+  if (health.claude === false) return { ok: false, text: "The claude CLI is still not on the runner's PATH, so no job can start." };
   const agent = diagramAvailability(health.diagramAgent);
   if (!agent.ok) return { ok: false, text: agent.reason === null ? "Diagram jobs still cannot be queued." : `Diagram jobs still cannot be queued: ${agent.reason.replace(/[.]$/, "")}.` };
   return { ok: true, text: "Doctor passes now." };

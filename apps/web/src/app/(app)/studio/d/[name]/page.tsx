@@ -312,10 +312,10 @@ function Shell({ children }: { children: React.ReactNode }) {
  */
 function Strip({ diagram, path, uncommitted, videos }: { diagram: Diagram; path: string; uncommitted: boolean; videos: boolean }) {
   const pill = freshness(diagram.svgState);
-  const verbs: Array<{ action: (formData: FormData) => Promise<void>; label: string; pending: string }> = [
-    { action: exportSvg, label: "Export SVG", pending: "Exporting" },
-    { action: verifySvg, label: "Verify", pending: "Verifying" },
-    { action: inspectDiagram, label: "Inspect", pending: "Inspecting" },
+  const verbs: Array<{ action: (formData: FormData) => Promise<void>; verb: string; label: string; pending: string }> = [
+    { action: exportSvg, verb: "export", label: "Export SVG", pending: "Exporting" },
+    { action: verifySvg, verb: "verify", label: "Verify", pending: "Verifying" },
+    { action: inspectDiagram, verb: "inspect", label: "Inspect", pending: "Inspecting" },
   ];
   return (
     <StudioStrip>
@@ -331,7 +331,7 @@ function Strip({ diagram, path, uncommitted, videos }: { diagram: Diagram; path:
             <form action={exportSvg} className="shrink-0">
               <input type="hidden" name="name" value={diagram.name} />
               <input type="hidden" name="path" value={path} />
-              <VerbSubmit pending="Exporting" variant={pill.tone === "ok" ? "secondary" : "warn"} title={`${pill.title} Click to export it again.`}>
+              <VerbSubmit verb="export" pending="Exporting" variant={pill.tone === "ok" ? "secondary" : "warn"} title={`${pill.title} Click to export it again.`}>
                 {pill.tone === "ok" && <span aria-hidden className="size-2 rounded-full bg-ok" />}
                 {pill.label}
               </VerbSubmit>
@@ -353,7 +353,7 @@ function Strip({ diagram, path, uncommitted, videos }: { diagram: Diagram; path:
                 aria-label="Why this change"
                 className="w-full min-w-0 @[48rem]:w-44"
               />
-              <VerbSubmit pending="Committing" className="shrink-0">
+              <VerbSubmit verb="commit" pending="Committing" className="shrink-0">
                 Commit
               </VerbSubmit>
             </form>
@@ -361,7 +361,7 @@ function Strip({ diagram, path, uncommitted, videos }: { diagram: Diagram; path:
                 flex item of the row as before. */}
             <div className="hidden @[80rem]:contents">
               {verbs.map((verb) => (
-                <VerbForm key={verb.label} action={verb.action} name={diagram.name} path={path} label={verb.label} pending={verb.pending} />
+                <VerbForm key={verb.label} action={verb.action} name={diagram.name} path={path} label={verb.label} verb={verb.verb} pending={verb.pending} />
               ))}
               {/* The same conversation, with the Video chip waiting in its composer
                   (D86). Left out when the video doctor fails: the strip has no room
@@ -377,7 +377,7 @@ function Strip({ diagram, path, uncommitted, videos }: { diagram: Diagram; path:
             <div className="contents @[80rem]:hidden">
               <StripMenu label="More" name="More actions">
                 {verbs.map((verb) => (
-                  <VerbForm key={verb.label} action={verb.action} name={diagram.name} path={path} label={verb.label} pending={verb.pending} row />
+                  <VerbForm key={verb.label} action={verb.action} name={diagram.name} path={path} label={verb.label} verb={verb.verb} pending={verb.pending} row />
                 ))}
                 {videos && (
                   <ExtendLink href={extendHref(diagram.name, { video: true })} label="Make a video" className={menuRowClasses()} />
@@ -401,6 +401,7 @@ function VerbForm({
   name,
   path,
   label,
+  verb,
   pending,
   row = false,
 }: {
@@ -408,6 +409,8 @@ function VerbForm({
   name: string;
   path: string;
   label: string;
+  /** The action's name, shared by every button that runs it (`VerbSubmit`). */
+  verb: string;
   /** What its button says while the action runs (`VerbSubmit`). */
   pending: string;
   row?: boolean;
@@ -416,7 +419,7 @@ function VerbForm({
     <form action={action} className={row ? undefined : "shrink-0"}>
       <input type="hidden" name="name" value={name} />
       <input type="hidden" name="path" value={path} />
-      <VerbSubmit pending={pending} row={row}>
+      <VerbSubmit verb={verb} pending={pending} row={row}>
         {label}
       </VerbSubmit>
     </form>

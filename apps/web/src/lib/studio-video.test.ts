@@ -198,6 +198,10 @@ describe("the step list", () => {
     const rows = stepRows(job({ state: "cancelled", finished: at(90) }));
     expect(rows.find((row) => row.key === "preview")?.status).toBe("stopped");
     expect(rows.filter((row) => row.status === "failed")).toHaveLength(0);
+    // Cancelled while queued, before any step ran.
+    const queued = stepRows(job({ state: "cancelled", steps: [], finished: at(5) }));
+    expect(queued.filter((row) => row.status === "failed")).toHaveLength(0);
+    expect(queued.filter((row) => row.status === "stopped")).toHaveLength(1);
   });
 
   it("marks one step, never two, and the runner's own failed step over a running one", () => {

@@ -536,11 +536,14 @@ describe("a malformed video brief", () => {
       { ...VIDEO, scenes: [{ ...scene, beats: [{ show: "A sentence.", labels: [] }] }] },
       { ...VIDEO, scenes: [{ ...scene, beats: [{ say: "Words.", show: "A sentence." }] }] },
       { ...VIDEO, concepts: "attention" },
+      { ...VIDEO, voice: "none", scenes: [{ ...scene, beats: [{ ...scene.beats[0]!, seconds: {} }] }] },
     ];
     for (const brief of broken) {
       expect(entryBriefs({ briefs: [{ kind: "video", brief: brief as never, requestSeq: 1 }] })).toEqual([]);
     }
     expect(entryBriefs({ briefs: [{ kind: "video", brief: VIDEO, requestSeq: 1 }] }).map((item) => item.kind)).toEqual(["video"]);
+    const silent = { ...VIDEO, voice: "none", scenes: [{ ...scene, beats: [{ ...scene.beats[0]!, seconds: 4 }] }] };
+    expect(entryBriefs({ briefs: [{ kind: "video", brief: silent, requestSeq: 1 }] }).map((item) => item.kind)).toEqual(["video"]);
   });
 });
 

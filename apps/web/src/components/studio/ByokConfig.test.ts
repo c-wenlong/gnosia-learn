@@ -265,6 +265,38 @@ describe("ByokConfig's errors (R2-1-10)", () => {
     expect(host.textContent).toContain("Not connected: the studio runner is not answering.");
   });
 
+  it("says a read that timed out as no answer, not as a key the runner cannot open", async () => {
+    mocks.selects.length = 0;
+    mocks.getByokSettings.mockReset().mockResolvedValue(up());
+    mocks.sendJson.mockReset().mockResolvedValue({ status: 200, data: { ok: true, synced: false } });
+    const host = await mount({ manageKeys: false, savedForTutor: ["openrouter"] });
+    mocks.getByokSettings.mockResolvedValue({ ok: false, status: 0, refusal: { error: "the studio runner did not answer in time", detail: null } });
+    const provider = mocks.selects.filter((select) => select.label === "Provider").at(-1)!;
+    await act(async () => provider.onChange("saved:openrouter"));
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(host.textContent).toContain("Not connected: the studio runner did not answer in time.");
+    expect(host.textContent).not.toContain("could not open the key");
+  });
+
+  it("keeps a write's error through a later good read, even with the read's words", async () => {
+    const host = await mountConnected();
+    const connected = mocks.getByokSettings.getMockImplementation();
+    // A read the runner refuses puts its words up...
+    mocks.getByokSettings.mockResolvedValue({ ok: false, status: 403, refusal: { error: "this runner serves another owner", detail: null } });
+    await act(async () => window.dispatchEvent(new Event("gnosia:byok-settings")));
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    // ...then a Remove fails with the same words.
+    mocks.removeByokProvider.mockResolvedValue({ ok: false, status: 403, refusal: { error: "this runner serves another owner", detail: null } });
+    await act(async () => named(host, "Remove")!.click());
+    await act(async () => named(host, "Remove it")!.click());
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    // A good read now answers the read, not the Remove, which was never retried.
+    if (connected !== undefined) mocks.getByokSettings.mockImplementation(connected);
+    await act(async () => window.dispatchEvent(new Event("gnosia:byok-settings")));
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(host.textContent).toContain("this runner serves another owner");
+  });
+
   it("clears a refusal its own read put up once a later read answers", async () => {
     mocks.getByokSettings.mockReset().mockResolvedValue({ ok: false, status: 403, refusal: { error: "this runner serves another owner", detail: null } });
     const host = await mount({});

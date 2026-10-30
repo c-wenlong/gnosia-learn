@@ -24,7 +24,7 @@ import {
   type ByokProviderStatus,
   type ByokSettingsView,
 } from "@/lib/studio-byok";
-import { runnerDown } from "@/lib/studio-client";
+import { runnerDown, runnerSlow } from "@/lib/studio-client";
 
 type Tier = "default" | "lite" | "max";
 
@@ -97,6 +97,14 @@ export function ByokConfig({
   const downRef = useRef(initial?.state === "down");
   /** The refusal `load` last put on the error line, so a later good read clears that one and no other. */
   const loadError = useRef<string | null>(null);
+  /**
+   * A write's or a connect's own error: the read's marker goes, so a later
+   * good read never clears it, even when its words match the read's.
+   */
+  const writeFailed = (text: string) => {
+    loadError.current = null;
+    setError(text);
+  };
   const reload = useRef<(retry: boolean) => void>(() => {});
   useEffect(() => {
     const apply = (data: ByokSettingsView) => {
@@ -244,7 +252,7 @@ export function ByokConfig({
     setTiers(tiersOf(entry));
     const result = await setByokActive(next);
     if (!result.ok) {
-      setError(result.refusal.error);
+      writeFailed(result.refusal.error);
       return;
     }
     // Picking a connected provider is picking the harness it runs on.
@@ -261,6 +269,8 @@ export function ByokConfig({
   async function notTaken(lead: string): Promise<string> {
     const read = await getByokSettings();
     if (!read.ok && runnerDown(read.status, read.refusal)) return `${lead}: the studio runner is not answering.`;
+    // No answer in time says nothing about the key either.
+    if (!read.ok && runnerSlow(read.status, read.refusal)) return `${lead}: the studio runner did not answer in time. Try again in a moment.`;
     const why = read.ok ? (read.data.error ?? null) : read.refusal.error;
     if (read.ok) setKeysProblem(read.data.error ?? null);
     return `${lead}: the studio runner could not open the key saved in Settings${why === null ? "." : ` (${why.replace(/[.]$/, "")}).`}`;
@@ -279,24 +289,24 @@ export function ByokConfig({
     const reply = await sendJson<{ ok?: boolean; synced?: boolean }>("POST", "/api/learner/provider-key/sync", { provider: tutor });
     if (reply === null || reply.status !== 200) {
       setSaving(false);
-      setError(reply === null ? "Not connected: the app's server did not answer." : `Not connected (HTTP ${reply.status}).`);
+      writeFailed(reply === null ? "Not connected: the app's server did not answer." : `Not connected (HTTP ${reply.status}).`);
       return;
     }
     if (reply.data.synced !== true) {
       const why = await notTaken("Not connected");
       setSaving(false);
-      setError(why);
+      writeFailed(why);
       return;
     }
     const switched = await setByokActive(byokName);
     const fresh = await getByokSettings();
     setSaving(false);
     if (!fresh.ok || !fresh.data.providers.some((entry) => entry.provider === byokName)) {
-      setError("Connected, but the studio runner did not answer — try again.");
+      writeFailed("Connected, but the studio runner did not answer — try again.");
       return;
     }
     if (!switched.ok || fresh.data.active !== byokName) {
-      setError("Connected, but Studio chats still run on the previous provider — pick it again from the dropdown to switch.");
+      writeFailed("Connected, but Studio chats still run on the previous provider — pick it again from the dropdown to switch.");
       setConnected(fresh.data.providers);
       return;
     }
@@ -323,7 +333,7 @@ export function ByokConfig({
     });
     if (reply === null || reply.status !== 200 || reply.data.ok !== true) {
       setSaving(false);
-      setError(reply?.data.error ?? (reply === null ? "the server did not answer" : `not connected (HTTP ${reply.status})`));
+      writeFailed(reply?.data.error ?? (reply === null ? "the server did not answer" : `not connected (HTTP ${reply.status})`));
       return;
     }
     // The tutor route connects the provider without moving Studio's pick; a
@@ -336,17 +346,19 @@ export function ByokConfig({
     if (!fresh.ok || !fresh.data.providers.some((entry) => entry.provider === newProvider)) {
       // The tutor can use the key either way; say which of the two kept it
       // from Studio, since only one of them is fixed by starting the runner.
-      if (!fresh.ok && runnerDown(fresh.status, fresh.refusal)) {
-        setError("Saved for the tutor, but the studio runner is not answering. Studio takes the key once the runner is running.");
+      if (!fresh.ok && runnerSlow(fresh.status, fresh.refusal)) {
+        writeFailed("Saved for the tutor, but the studio runner did not answer in time. Pick the provider again in a moment.");
+      } else if (!fresh.ok && runnerDown(fresh.status, fresh.refusal)) {
+        writeFailed("Saved for the tutor, but the studio runner is not answering. Studio takes the key once the runner is running.");
       } else {
         const why = fresh.ok ? (fresh.data.error ?? null) : fresh.refusal.error;
         if (fresh.ok) setKeysProblem(fresh.data.error ?? null);
-        setError(`Saved for the tutor, but the studio runner could not open it${why === null ? "." : ` (${why.replace(/[.]$/, "")}).`}`);
+        writeFailed(`Saved for the tutor, but the studio runner could not open it${why === null ? "." : ` (${why.replace(/[.]$/, "")}).`}`);
       }
       return;
     }
     if (!switched.ok || fresh.data.active !== newProvider) {
-      setError("Connected, but Studio chats still run on the previous provider — pick it again from the dropdown to switch.");
+      writeFailed("Connected, but Studio chats still run on the previous provider — pick it again from the dropdown to switch.");
       setConnected(fresh.data.providers);
       return;
     }
@@ -369,7 +381,7 @@ export function ByokConfig({
     const result = await removeByokProvider(provider);
     setSaving(false);
     if (!result.ok) {
-      setError(result.refusal.error);
+      writeFailed(result.refusal.error);
       return;
     }
     // `removeByokProvider` announces the write itself; a second announcement
@@ -391,7 +403,7 @@ export function ByokConfig({
       });
       if (keyResult === null || keyResult.status !== 200 || keyResult.data.ok !== true) {
         setSaving(false);
-        setError(keyResult?.data.error ?? (keyResult === null ? "the server did not answer" : `key not saved (HTTP ${keyResult.status})`));
+        writeFailed(keyResult?.data.error ?? (keyResult === null ? "the server did not answer" : `key not saved (HTTP ${keyResult.status})`));
         return;
       }
       // The tutor write succeeded but the runner did not answer: the key
@@ -400,7 +412,7 @@ export function ByokConfig({
       if (keyResult.data.byok === false) {
         const why = await notTaken("The key is saved, but Studio did not take it");
         setSaving(false);
-        setError(`${why} Save the models again once that is fixed.`);
+        writeFailed(`${why} Save the models again once that is fixed.`);
         return;
       }
       setApiKey("");
@@ -412,7 +424,7 @@ export function ByokConfig({
     });
     setSaving(false);
     if (!result.ok) {
-      setError(result.refusal.error);
+      writeFailed(result.refusal.error);
       return;
     }
     setConnected(result.data.providers);

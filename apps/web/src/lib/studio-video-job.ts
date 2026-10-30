@@ -441,7 +441,9 @@ export function stepRows(job: VideoJob): StepRow[] {
       if (row.key !== "lines" && row.status === "done") reached = at;
     });
     const next = rows.slice(reached + 1).find((row) => row.status === "pending");
-    if (next !== undefined) next.status = "failed";
+    // A cancel is the person's decision here too, not a failure (R2-1-11),
+    // including a job cancelled before any step ran.
+    if (next !== undefined) next.status = job.state === "cancelled" ? "stopped" : "failed";
   }
   return rows;
 }

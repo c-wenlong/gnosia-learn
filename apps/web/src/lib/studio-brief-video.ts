@@ -248,6 +248,8 @@ function isBeat(value: unknown): boolean {
     typeof beat.say === "string" &&
     typeof beat.show === "string" &&
     Array.isArray(beat.labels) &&
-    beat.labels.every((label) => typeof label === "string")
+    beat.labels.every((label) => typeof label === "string") &&
+    // A silent beat's hold, drawn as written: anything but a number throws there.
+    (beat.seconds === undefined || (typeof beat.seconds === "number" && Number.isFinite(beat.seconds)))
   );
 }
