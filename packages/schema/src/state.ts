@@ -296,6 +296,15 @@ export const recap = sqliteTable(
     source: text("source").notNull(),
     /** How many agent sessions have been folded in. */
     sessions: integer("sessions").notNull().default(0),
+    /**
+     * The caller's name for the write that last stored this row, or null. A
+     * write that arrives again with the same id stores its content and counts
+     * no session: the page sends a recap again when its answer was lost, and
+     * the first copy may already have been stored. Only the last id is kept,
+     * which is all a retry needs, since the page sends one key's writes in
+     * order and a newer write drops an older one it was keeping.
+     */
+    requestId: text("request_id"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
