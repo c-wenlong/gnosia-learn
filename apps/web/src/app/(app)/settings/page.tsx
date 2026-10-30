@@ -45,9 +45,14 @@ export const metadata: Metadata = { title: "Settings" };
  */
 export default async function SettingsPage() {
   const owner = await currentOwner();
-  const [settings, courses, keys, request] = await Promise.all([loadSettings(), getCourses(), loadProviderKeys(owner), headers()]);
+  const [settings, courses, keys, request, models] = await Promise.all([
+    loadSettings(),
+    getCourses(),
+    loadProviderKeys(owner),
+    headers(),
+    loadTutorModels(owner),
+  ]);
   const mac = isMacUserAgent(request.get("user-agent"));
-  const models = await loadTutorModels(owner);
   const view = providersView(keys, models.chain, models.reachable);
   const studio = studioEnabled();
   return (

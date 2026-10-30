@@ -7,7 +7,7 @@ import { iconButtonClasses } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
 import { IconButton } from "@/components/ui/IconButton";
 
-import { ComposeIcon, NewChatLink } from "./AppSidebar";
+import { ComposeIcon, NewChatLink, SIDEBAR_NAV_ID } from "./AppSidebar";
 import { useShell } from "./shell-context";
 
 /**
@@ -23,7 +23,7 @@ export function PhoneHeader() {
   return (
     <header className="sticky top-0 z-30 border-b border-hair bg-surface pt-[env(safe-area-inset-top)] md:hidden">
       <div className="flex h-14 items-center gap-2 px-2">
-        <IconButton label="Open the sidebar" size="xl" onClick={shell?.openDrawer} aria-expanded={shell?.drawer ?? false}>
+        <IconButton label="Open the sidebar" size="xl" onClick={shell?.openDrawer} aria-expanded={shell?.drawer ?? false} aria-controls={SIDEBAR_NAV_ID}>
           <Glyph name="menu" />
         </IconButton>
         <Link

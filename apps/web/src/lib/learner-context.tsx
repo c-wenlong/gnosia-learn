@@ -74,13 +74,6 @@ import { createWriteQueue } from "@/lib/write-queue";
 
 interface LearnerContextValue {
   state: LearnerState;
-  /**
-   * Always true now. It meant "localStorage has hydrated" and gated the first
-   * paint; the server renders the real state, so there is nothing to wait for.
-   * Kept because several components read it and a constant is cheaper than
-   * touching all of them to delete a branch that is now always taken.
-   */
-  ready: boolean;
   /** False when the server could not reach the database while rendering. */
   reachable: boolean;
   /** Non-null when the last write did not reach the database. */
@@ -780,7 +773,6 @@ export function LearnerProvider({
   const value = useMemo(
     () => ({
       state,
-      ready: true,
       reachable,
       saveError,
       dismissSaveError: () => setSaveError(null),

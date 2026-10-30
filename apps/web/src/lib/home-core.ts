@@ -18,9 +18,9 @@ import type { MasteryLabel } from "@gnosia/catalog/state";
 
 import { EMPTY_STANDING, itemDoneWith, type ItemStanding } from "@/lib/course-path";
 import { dayDiff, dayLabel } from "@/lib/day-groups";
-import { dayKey, type LogEvent } from "@/lib/days";
+import { dayKey } from "@/lib/days";
 import { bucketOf, type MasteryBucket } from "@/lib/mastery-bucket";
-import { recentItems, type ConceptTouch, type RecentItem, type RecentKind, type RecentSources } from "@/lib/recent-core";
+import { recentItems, type RecentItem, type RecentKind, type RecentSources } from "@/lib/recent-core";
 
 /* -------------------------------------------------------------------------- */
 /* The model                                                                  */
@@ -113,7 +113,6 @@ export interface HomeModel {
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-export { dayDiff };
 
 function weekdayOf(key: string): number {
   return new Date(`${key}T12:00:00Z`).getUTCDay();
@@ -145,40 +144,6 @@ export function lastSeenLabel(at: string | null, now: Date, timeZone?: string): 
 /* -------------------------------------------------------------------------- */
 /* Pick up where you left off                                                 */
 /* -------------------------------------------------------------------------- */
-
-export type { ConceptTouch, DraftTouch, ModulePlace, ModuleVisit, SessionTouch, VideoProgress } from "@/lib/recent-core";
-export { clock } from "@/lib/recent-core";
-
-/**
- * The latest answer per concept, from the event log: `observation` events
- * only, since a review grade is a schedule's business and a watched asset has
- * no concept, and none inside a session a `void` retracted.
- */
-export function conceptTouches(
-  events: readonly LogEvent[],
-  concept: (id: string) => { title: string; bucket: MasteryBucket; pL: number } | null,
-): ConceptTouch[] {
-  const voided = new Set(
-    events
-      .filter((e) => e.type === "void" && typeof e.session === "string" && e.session !== "")
-      .map((e) => e.session as string),
-  );
-  const latest = new Map<string, string>();
-  for (const e of events) {
-    if (e.type !== "observation" || typeof e.concept !== "string" || e.concept === "") continue;
-    if (typeof e.session === "string" && voided.has(e.session)) continue;
-    const at = new Date(e.at).getTime();
-    if (Number.isNaN(at)) continue;
-    const seen = latest.get(e.concept);
-    if (seen === undefined || at > new Date(seen).getTime()) latest.set(e.concept, e.at);
-  }
-  const out: ConceptTouch[] = [];
-  for (const [id, at] of latest) {
-    const known = concept(id);
-    if (known !== null) out.push({ id, at, ...known });
-  }
-  return out;
-}
 
 /**
  * What to go back to, newest first: the first `limit` rows of Recent

@@ -20,13 +20,13 @@ import {
 
 import { getCourses } from "@/data/courses";
 import { ContentUnavailableError } from "@/data/source";
-import { conceptTouches } from "@/lib/home-core";
 import { catalogDatabase } from "@/lib/learner-store";
 import { bucketOf } from "@/lib/mastery-bucket";
 import { currentOwner, ownerScope, type OwnerScope } from "@/lib/owner";
 import { parsePlayback } from "@/lib/playback";
 import {
   asPinned,
+  conceptTouches,
   moduleVisits,
   recentItems,
   recentPage,

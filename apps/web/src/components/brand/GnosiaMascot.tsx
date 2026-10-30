@@ -28,7 +28,7 @@ import sleepy from "../../../public/brand/mascot/sleepy.png";
  * four-hour TTL, and its pixel size comes from the file itself, so
  * `MASCOT_POSES` cannot drift from the art.
  */
-export const MASCOT_POSES = { neutral, happy, reading, curious, excited, sleepy } as const;
+const MASCOT_POSES = { neutral, happy, reading, curious, excited, sleepy } as const;
 
 export type MascotPose = keyof typeof MASCOT_POSES;
 

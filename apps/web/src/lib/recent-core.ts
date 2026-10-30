@@ -22,7 +22,7 @@
 
 import { conversationTitle } from "@/lib/conversation-title";
 import { dayDiff } from "@/lib/day-groups";
-import { dayKey } from "@/lib/days";
+import { dayKey, type LogEvent } from "@/lib/days";
 import type { MasteryBucket } from "@/lib/mastery-bucket";
 import { resumeAt } from "@/lib/playback";
 
@@ -144,6 +144,37 @@ export function clock(seconds: number): string {
 export function time(at: string): number {
   const ms = new Date(at).getTime();
   return Number.isNaN(ms) ? 0 : ms;
+}
+
+/**
+ * The latest answer per concept, from the event log: `observation` events
+ * only, since a review grade is a schedule's business and a watched asset has
+ * no concept, and none inside a session a `void` retracted.
+ */
+export function conceptTouches(
+  events: readonly LogEvent[],
+  concept: (id: string) => { title: string; bucket: MasteryBucket; pL: number } | null,
+): ConceptTouch[] {
+  const voided = new Set(
+    events
+      .filter((e) => e.type === "void" && typeof e.session === "string" && e.session !== "")
+      .map((e) => e.session as string),
+  );
+  const latest = new Map<string, string>();
+  for (const e of events) {
+    if (e.type !== "observation" || typeof e.concept !== "string" || e.concept === "") continue;
+    if (typeof e.session === "string" && voided.has(e.session)) continue;
+    const at = new Date(e.at).getTime();
+    if (Number.isNaN(at)) continue;
+    const seen = latest.get(e.concept);
+    if (seen === undefined || at > new Date(seen).getTime()) latest.set(e.concept, e.at);
+  }
+  const out: ConceptTouch[] = [];
+  for (const [id, at] of latest) {
+    const known = concept(id);
+    if (known !== null) out.push({ id, at, ...known });
+  }
+  return out;
 }
 
 /**

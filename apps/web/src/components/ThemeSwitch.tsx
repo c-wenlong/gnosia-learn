@@ -46,7 +46,7 @@ export function ThemeSwitch({
   size?: "sm" | "md";
   className?: string;
 }) {
-  const { state, ready, setThemeMode } = useLearner();
+  const { state, setThemeMode } = useLearner();
   const palette = paletteOf(state.theme);
   const appearance = appearanceOf(state.theme);
   const small = size === "sm";
@@ -68,7 +68,6 @@ export function ThemeSwitch({
           fadeThemeChange();
           setThemeMode(themeModeFor(next, appearance));
         }}
-        disabled={!ready}
         small={small}
       />
       <Segments
@@ -80,7 +79,6 @@ export function ThemeSwitch({
           fadeThemeChange();
           setThemeMode(themeModeFor(palette, next));
         }}
-        disabled={!ready}
         small={small}
       />
     </div>
@@ -94,7 +92,6 @@ function Segments<T extends string>({
   labels,
   value,
   onChange,
-  disabled,
   small,
 }: {
   label: string;
@@ -102,7 +99,6 @@ function Segments<T extends string>({
   labels: Record<T, string>;
   value: T;
   onChange: (next: T) => void;
-  disabled: boolean;
   small: boolean;
 }) {
   const captionId = useId();
@@ -117,7 +113,6 @@ function Segments<T extends string>({
         items={options.map((option) => ({ id: option, label: labels[option] }))}
         value={value}
         onChange={onChange}
-        disabled={disabled}
         size={small ? "sm" : "md"}
         block
       />

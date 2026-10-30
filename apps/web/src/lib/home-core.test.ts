@@ -1,12 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { dayLabel } from "@/lib/day-groups";
+import { dayDiff, dayLabel } from "@/lib/day-groups";
 import type { LogEvent } from "@/lib/days";
 import {
-  clock,
-  conceptTouches,
   coursesInProgress,
-  dayDiff,
   homeThreads,
   lastSeenLabel,
   nearThreads,
@@ -17,11 +14,10 @@ import {
   recallPicks,
   shouldRefresh,
   type GraphConcept,
-  type ModulePlace,
-  type ModuleVisit,
   type PathCourse,
   type Thread,
 } from "@/lib/home-core";
+import { clock, conceptTouches, type ModulePlace, type ModuleVisit } from "@/lib/recent-core";
 
 // Every date here is read in UTC so the suite means the same on any machine.
 const TZ = "UTC";

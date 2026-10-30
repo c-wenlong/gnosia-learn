@@ -154,14 +154,14 @@ describe("the sidebar", () => {
 
   it("is a drawer on a phone, opened from the header and closed by Escape", async () => {
     const container = await mount(true);
-    expect(nav(container).getAttribute("role")).toBeNull();
+    expect(nav(container).parentElement!.getAttribute("role")).toBeNull();
     act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Open the sidebar"]')!.click());
-    expect(nav(container).getAttribute("role")).toBe("dialog");
+    expect(nav(container).parentElement!.getAttribute("role")).toBe("dialog");
     expect(container.querySelector("[inert]")).not.toBeNull();
     act(() => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     });
-    expect(nav(container).getAttribute("role")).toBeNull();
+    expect(nav(container).parentElement!.getAttribute("role")).toBeNull();
   });
 
   it("closes the account menu on Escape and leaves the drawer around it open, until the next Escape", async () => {
@@ -176,9 +176,9 @@ describe("the sidebar", () => {
       });
     escape();
     expect(account.getAttribute("aria-expanded")).toBe("false");
-    expect(nav(container).getAttribute("role")).toBe("dialog");
+    expect(nav(container).parentElement!.getAttribute("role")).toBe("dialog");
     escape();
-    expect(nav(container).getAttribute("role")).toBeNull();
+    expect(nav(container).parentElement!.getAttribute("role")).toBeNull();
   });
 
   it("shows the learner's name on the account row, and Account until there is one", async () => {
@@ -225,11 +225,11 @@ describe("the sidebar", () => {
   it("closes the drawer on Back or Forward, which can change the studio's view without its path", async () => {
     const container = await mount(true);
     act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Open the sidebar"]')!.click());
-    expect(nav(container).getAttribute("role")).toBe("dialog");
+    expect(nav(container).parentElement!.getAttribute("role")).toBe("dialog");
     act(() => {
       window.dispatchEvent(new PopStateEvent("popstate"));
     });
-    expect(nav(container).getAttribute("role")).toBeNull();
+    expect(nav(container).parentElement!.getAttribute("role")).toBeNull();
   });
 
   it("keeps Recent mounted while folded to the rail, its rows drawn as glyphs", async () => {
@@ -961,10 +961,10 @@ describe("the shortcuts", () => {
     });
 
     act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Open the sidebar"]')!.click());
-    expect(nav(container).getAttribute("role")).toBe("dialog");
+    expect(nav(container).parentElement!.getAttribute("role")).toBe("dialog");
     more().focus();
     key({ key: "Escape" }, more());
-    expect(nav(container).getAttribute("role")).toBeNull();
+    expect(nav(container).parentElement!.getAttribute("role")).toBeNull();
   });
 
   it("binds nothing while a row's menu is open, so the fold cannot move the menu's anchor", async () => {
@@ -1065,9 +1065,9 @@ describe("the shortcuts", () => {
   it("closes the phone's drawer before opening the sheet, so its Tab trap lets the sheet be", async () => {
     const container = await mount(true);
     act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Open the sidebar"]')!.click());
-    expect(nav(container).getAttribute("role")).toBe("dialog");
+    expect(nav(container).parentElement!.getAttribute("role")).toBe("dialog");
     key({ key: "?", shiftKey: true });
-    expect(nav(container).getAttribute("role")).toBeNull();
+    expect(nav(container).parentElement!.getAttribute("role")).toBeNull();
     expect(document.querySelector("dialog[open]")).not.toBeNull();
   });
 

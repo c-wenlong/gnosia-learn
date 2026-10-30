@@ -1,4 +1,4 @@
-// Write the flat Gnosia mark as SVG tiles (512 rounded, 180 full-bleed) from the paths in GnosiaMark.tsx, for render.mjs.
+// Write the flat Gnosia mark as SVG tiles (512 rounded, 180 full-bleed) from the paths in GnosiaMark.ts, for render.mjs.
 // usage: node docs/design/kit/gen-icons.mjs <out-dir>   (the shipped icon.png and apple-icon.png are cut from the owner's art, not from this)
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -13,7 +13,7 @@ if (!outDir) {
 mkdirSync(outDir, { recursive: true });
 
 // Read the paths from the component so this can never draw a different mark.
-const tsx = readFileSync(join(here, '../../../apps/web/src/components/brand/GnosiaMark.tsx'), 'utf8');
+const tsx = readFileSync(join(here, '../../../apps/web/src/components/brand/GnosiaMark.ts'), 'utf8');
 const constant = (name) => {
   const m = tsx.match(new RegExp(`export const ${name} =([^;]+);`));
   return [...m[1].matchAll(/"([^"]*)"/g)].map((x) => x[1]).join('');

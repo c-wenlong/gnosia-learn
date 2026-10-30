@@ -93,7 +93,7 @@ reduction of it, and where the two disagree the art wins.
 
 | File | What it is | Used for |
 | --- | --- | --- |
-| [docs/design/brand/logo-sheet.png](brand/logo-sheet.png) | The primary lockup, the symbol alone, the wordmark alone, both on light and dark, and the app icon | The original lockup reference; superseded for the interface by the logo files below. `GnosiaMark`, the flat SVG reduction, is drawn from it and now only feeds the preview kit |
+| [docs/design/brand/logo-sheet.png](brand/logo-sheet.png) | The primary lockup, the symbol alone, the wordmark alone, both on light and dark, and the app icon | The original lockup reference; superseded for the interface by the logo files below. The flat SVG reduction drawn from it is three paths in `GnosiaMark.ts` (no component any more): the landing page draws the star, and the preview kit reads all three |
 | [docs/design/brand/app-icon.png](brand/app-icon.png) | The first app icon: the old mark on a navy-to-teal rounded square, 1254px | Reference only. Every shipped icon is now cut from `logo/mark.png` |
 | [docs/design/brand/mascot-sheet.png](brand/mascot-sheet.png) | The mascot in six poses: neutral, happy, reading, curious, excited, sleepy | Reference only; the shipped poses come from the renders below |
 | [docs/design/brand/mascot/](brand/mascot/) `{neutral,happy,reading,curious,excited,sleepy}.png` | The six poses as separate renders, one file per pose, 1254px square on a transparent ground | Source of the shipped poses below |
@@ -113,7 +113,7 @@ The two icon files, the social card and the banner are cut by hand from
 the art; do not regenerate them from code. [kit/render.mjs](kit/render.mjs)
 (SVG or HTML to PNG, fonts loaded, optional transparent ground) and
 [kit/gen-icons.mjs](kit/gen-icons.mjs) (the flat mark on a tile, read from
-`GnosiaMark.tsx`) exist for previews and for any size the art does not cover.
+`GnosiaMark.ts`) exist for previews and for any size the art does not cover.
 
 ## The mark
 
@@ -127,7 +127,7 @@ spine. The book is accumulated knowledge, the star is insight rising out of
 it, and the G makes the symbol Gnosia's own.
 
 The art is rendered with gradients (teal into a lighter green along the
-ribbon, a glow on the star). [GnosiaMark.tsx](../../apps/web/src/components/brand/GnosiaMark.tsx)
+ribbon, a glow on the star). [GnosiaMark.ts](../../apps/web/src/components/brand/GnosiaMark.ts)
 is a flat, three-fill reduction of it on a 64 unit grid. The interface no
 longer draws it (it shows the owner's `logo/mark.png`); it stays because the
 preview kit renders from it, and its star (`MARK_STAR`) is the landing
