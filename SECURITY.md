@@ -60,7 +60,8 @@ target to promise. Reports are acknowledged as soon as I see them.
   owner's row. The same helpers that bound the agent routes still apply:
   same-origin (403), a bounded body (400), and a per-owner window of 60 writes
   a minute (429). The same-origin check stops a cross-site page, not a `curl`
-  with a forged `Origin`; the session is what keeps a stranger out. `preference` takes an allow-list of keys rather than any key, so the route is
+  with a forged `Origin`; the session is what keeps a stranger out.
+  `preference` takes an allow-list of keys rather than any key, so the route is
   not an open JSON store, and a stored resource URL must be `http(s)` so it
   cannot come back out as a `javascript:` href.
 - **A recap leaves the deployment only when the agent needs it.** It is
