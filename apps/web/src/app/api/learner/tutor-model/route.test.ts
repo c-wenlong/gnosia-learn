@@ -256,13 +256,13 @@ describe.skipIf(!reachable.ok)("tutor model routes", () => {
     expect((await twice.json()).code).toBe("DUPLICATE");
   });
 
-  it("refuses a model id that is, holds or is part of one of the owner's keys, and never repeats it", async () => {
+  it("refuses a model id that is or holds one of the owner's keys, and never repeats it", async () => {
     // A key with no key-like shape, so only the comparison with the stored key can catch it.
     const plain = "my-own-gateway-token-for-gemini";
     await store.addChainEntry("local", "nvidia", "a/one", true);
     const { saveProviderKey } = await import("@/lib/provider-keys/store");
     await saveProviderKey("local", "gemini", plain);
-    for (const model of [plain, `prefix/${plain}`, plain.slice(3, 20), SERVER_NVIDIA, KEY]) {
+    for (const model of [plain, `prefix/${plain}`, SERVER_NVIDIA, KEY]) {
       const response = await routes.POST(request("", "POST", { provider: "nvidia", model }));
       expect(response.status, model).toBe(400);
       const text = await response.text();
@@ -270,6 +270,30 @@ describe.skipIf(!reachable.ok)("tutor model routes", () => {
       expect(text).toMatch(/API key/);
     }
     expect(await store.readChain("local")).toEqual([{ provider: "nvidia", model: "a/one" }]);
+  });
+
+  it("answers a part of a key as it answers an id unrelated to any key", async () => {
+    // Refusing a part of a key answered guesses at it: a session could slide
+    // a fragment along a saved key one character at a time and read the key
+    // out of refused versus accepted. Every fragment `checkModelId` passes
+    // must get the answer an unrelated id gets, here an add.
+    const plain = "my-own-gateway-token-for-gemini";
+    const { saveProviderKey } = await import("@/lib/provider-keys/store");
+    await saveProviderKey("local", "gemini", plain);
+    await saveProviderKey("local", "openrouter", KEY);
+    const fragments = [
+      plain.slice(3, 20),
+      plain.slice(0, 12),
+      plain.slice(1),
+      KEY.slice(1, 13),
+      KEY.slice(2, 21),
+      SERVER_NVIDIA.slice(1, 15),
+    ];
+    for (const model of ["unrelated/model-id-17", ...fragments]) {
+      const response = await routes.POST(request("", "POST", { provider: "gemini", model }));
+      expect(response.status, model).toBe(200);
+    }
+    expect((await store.readChain("local")).map((entry) => entry.model)).toEqual(["unrelated/model-id-17", ...fragments]);
   });
 
   it("has the provider-key routes' guards: same origin, a session, and a rate limit", async () => {
