@@ -176,10 +176,10 @@ export function parseSort(value: string | null | undefined): LibrarySort {
 }
 
 /** The two layouts: the card grid, the default, and a dense list of rows. */
-export type LibraryView = "grid" | "list";
+export type LibraryLayout = "grid" | "list";
 
 /** Anything but `list` is the grid, so a hand-typed `?view=` cannot break the page. */
-export function parseView(value: string | null | undefined): LibraryView {
+export function parseView(value: string | null | undefined): LibraryLayout {
   return value === "list" ? "list" : "grid";
 }
 
@@ -213,7 +213,7 @@ export interface LibraryFilters {
   q?: string | null;
   sort?: LibrarySort | null;
   /** The layout. Not a filter, but URL state like one, so a list view is linkable too. */
-  view?: LibraryView | null;
+  view?: LibraryLayout | null;
   /** Only the assets the owner starred (`?favorites=1`). */
   favorites?: boolean | null;
   /** The grouping (`?group=`); the day, the default, is never written. */

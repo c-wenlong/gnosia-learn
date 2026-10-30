@@ -3,6 +3,7 @@ import "server-only";
 import type { ReactNode } from "react";
 
 import { AssetCard, type CardConcept } from "@/components/AssetCard";
+import { ARRIVE } from "@/components/library/arrive";
 import { AssetRow } from "@/components/library/AssetRow";
 import { cx } from "@/components/ui/classes";
 import { getCourses } from "@/data/courses";
@@ -324,6 +325,3 @@ export function renderLibraryPage(
     pieces: page.pieces.map((piece) => ({ ...piece, rows: piece.rows.map(view.renderRow) })),
   };
 }
-
-/** A row that arrives (a tab, a filter, a page of older rows) fades in. */
-export const ARRIVE = "animate-fade-in motion-reduce:animate-none";
