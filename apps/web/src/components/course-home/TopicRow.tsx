@@ -160,7 +160,10 @@ function TopicPanel({
     target.current.updateNote(target.current.topicId, note);
   });
   useEffect(() => {
-    if (!edited) return;
+    if (!edited) {
+      pending.current = null;
+      return;
+    }
     pending.current = draft;
     const t = window.setTimeout(flush, 400);
     return () => window.clearTimeout(t);
@@ -210,7 +213,8 @@ function TopicPanel({
             value={draft}
             onChange={(e) => {
               setDraft(e.target.value);
-              setEdited(true);
+              // Typed back to the saved note: nothing is left to save.
+              setEdited(e.target.value !== saved);
             }}
             onBlur={flush}
             placeholder="Personal notes for this topic"

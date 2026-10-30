@@ -273,6 +273,24 @@ describe("CourseHome", () => {
     }
   });
 
+  it("saves nothing when an edit is typed back to the saved note", () => {
+    vi.useFakeTimers();
+    try {
+      learner.state.notes = { "m1-a": "x" };
+      const { host } = render("m1");
+      act(() => topicToggle(host, "m1-a").click());
+      const field = host.querySelector("textarea")!;
+      type(field, "x and a typo");
+      type(field, "x");
+      act(() => void vi.advanceTimersByTime(1_000));
+      act(() => field.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
+      act(() => mounted.pop()?.());
+      expect(learner.updateNote).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("saves a note at once when the field loses focus, and only once", () => {
     const { host } = render("m1");
     act(() => topicToggle(host, "m1-a").click());

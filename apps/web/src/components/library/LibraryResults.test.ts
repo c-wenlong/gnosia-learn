@@ -329,16 +329,36 @@ describe("LibraryResults", () => {
     expect(headings()).toEqual(["4 Oct(2)"]);
   });
 
-  it("keeps the later pages after a refresh while they still follow the new first page", async () => {
+  it("reads the later pages again after a refresh, keeping the old ones drawn until the new ones land", async () => {
     libraryPage.mockResolvedValueOnce(page([["4 Oct", 4, 2]], null, 0, "r", 2));
     await mount({ first: page([["4 Oct", 4, 2]], "c1", 2) });
     await act(async () => button("Show older")?.click());
     expect(links()).toEqual(["r 0", "r 1", "r 2", "r 3"]);
-    // A rename on the first page: the same cursor follows it, so page two stays.
-    await mount({ first: page([["4 Oct", 4, 2]], "c1", 2, "renamed") });
-    expect(links()).toEqual(["renamed 0", "renamed 1", "r 2", "r 3"]);
-    // The first page now ends somewhere else: the held pages no longer follow it.
-    await mount({ first: page([["4 Oct", 3, 2]], "c2", 1, "moved") });
-    expect(links()).toEqual(["moved 0", "moved 1"]);
+
+    // A rename on page two: the refresh brings a new first page, and page two is read again from its cursor.
+    let answer: (page: Page) => void = () => undefined;
+    libraryPage.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
+    await mount({ first: page([["4 Oct", 4, 2]], "c1", 2) });
+    expect(libraryPage).toHaveBeenLastCalledWith("/library?view=list", "c1", ["4 Oct"]);
+    expect(links()).toEqual(["r 0", "r 1", "r 2", "r 3"]);
+    await act(async () => answer(page([["4 Oct", 4, 2]], null, 0, "renamed", 2)));
+    expect(links()).toEqual(["r 0", "r 1", "renamed 2", "renamed 3"]);
+  });
+
+  it("drops a page asked for under the old first page when it lands after a refresh", async () => {
+    let answer: (page: Page) => void = () => undefined;
+    libraryPage.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
+    await mount({ first: page([["4 Oct", 4, 2]], "c1", 2) });
+    await act(async () => button("Show older")?.click());
+    // An unstar refreshes the page before the older rows arrive: the new first page already holds "r 2".
+    await mount({ first: page([["4 Oct", 3, 2]], "c2", 1, "new") });
+    await act(async () => answer(page([["4 Oct", 4, 2]], null, 0, "r", 2)));
+    expect(links()).toEqual(["new 0", "new 1"]);
+    expect(container.querySelector("[data-skeleton]")).toBeNull();
+    // Show older works again, from the new cursor.
+    libraryPage.mockResolvedValueOnce(page([["4 Oct", 3, 1]], null, 0, "next", 2));
+    await act(async () => button("Show older")?.click());
+    expect(libraryPage).toHaveBeenLastCalledWith("/library?view=list", "c2", ["4 Oct"]);
+    expect(links()).toEqual(["new 0", "new 1", "next 2"]);
   });
 });

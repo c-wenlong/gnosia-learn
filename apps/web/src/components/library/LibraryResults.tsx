@@ -125,13 +125,13 @@ export function LibraryResults({
   const [status, setStatus] = useState<Status>("idle");
   // A refresh (a star, an unstar or a rename from a row's menu) draws the
   // page again under the same URL, so the list is not remounted: the server's
-  // new first page arrives here as a prop. Take it, and keep the later pages
-  // only while they still follow it (the cursor after the first page is the
-  // same); otherwise start again from the new first page.
+  // new first page arrives here as a prop, and is drawn at once. The later
+  // pages the reader had loaded stay on screen until they have been read
+  // again after it (the effect below), so the list does not jump.
   const [seen, setSeen] = useState(first);
   if (first !== seen) {
     setSeen(first);
-    setPages((held) => (held.length > 1 && held[0].next === first.next ? [first, ...held.slice(1)] : [first]));
+    setPages((held) => [first, ...held.slice(1)]);
   }
   const last = pages[pages.length - 1];
   const next = last.next;
@@ -155,17 +155,32 @@ export function LibraryResults({
   // The link to focus once a page Show older asked for is drawn: its index among the list's links.
   const focusFrom = useRef<number | null>(null);
   const storeKey = heldPagesKey(href);
+  // Which first page a load was asked under. A refresh moves it on, and a
+  // page asked for under the old one is dropped when it lands: its cursor
+  // may now point at a row the new first page already holds.
+  const generation = useRef(0);
+  const firstShown = useRef(first);
+  // Set while the pages after a refreshed first page are read again, so nothing appends to the old ones.
+  const refetching = useRef(false);
 
   const load = useCallback(
     async (cursor: string | null): Promise<boolean> => {
-      if (cursor === null || inFlight.current) return false;
+      if (cursor === null || inFlight.current || refetching.current) return false;
       inFlight.current = true;
       setStatus("loading");
+      const asked = generation.current;
       let answer: LibraryPageAnswer | null = null;
       try {
         answer = await libraryPage(href, cursor, order);
       } catch {
         answer = null;
+      }
+      if (generation.current !== asked) {
+        // Asked under the old first page; the refresh that replaced it owns the list now.
+        inFlight.current = false;
+        setStatus("idle");
+        for (const resolve of waiting.current.splice(0)) resolve(false);
+        return false;
       }
       if (answer === null || answer.state !== "ok") {
         inFlight.current = false;
@@ -190,7 +205,7 @@ export function LibraryResults({
   /** The next page when the sentinel is within a screen of the viewport and nothing else is loading. */
   const loadIfNear = useCallback(() => {
     const sentinel = sentinelRef.current;
-    if (sentinel === null || restoring.current || inFlight.current) return;
+    if (sentinel === null || restoring.current || inFlight.current || refetching.current) return;
     if (statusRef.current === "failed" || statusRef.current === "stale") return;
     if (sentinel.getBoundingClientRect().top > window.innerHeight * 2) return;
     void load(drawn.current[drawn.current.length - 1].next);
@@ -238,6 +253,47 @@ export function LibraryResults({
     if (!restoring.current) writeHeld(storeKey, pages.length, window.scrollY);
   }, [pages, storeKey]);
 
+  // A new first page from a refresh: the pages after it are read again from
+  // its cursor, as many as were held, and swapped in together; a page that
+  // does not load ends the list there, where Show older takes over. Nothing
+  // else loads meanwhile, and a load already out is dropped (`generation`).
+  useEffect(() => {
+    if (firstShown.current === first) return;
+    firstShown.current = first;
+    generation.current += 1;
+    const asked = generation.current;
+    if (refetching.current) {
+      // An earlier refresh's read is dropped; whoever waited on it hears that nothing came.
+      refetching.current = false;
+      for (const resolve of waiting.current.splice(0)) resolve(false);
+    }
+    const later = drawn.current.length - 1;
+    if (later === 0) return;
+    refetching.current = true;
+    void (async () => {
+      const fresh: Page[] = [];
+      let cursor = first.next;
+      while (fresh.length < later && cursor !== null) {
+        let answer: LibraryPageAnswer | null = null;
+        try {
+          answer = await libraryPage(href, cursor, order);
+        } catch {
+          answer = null;
+        }
+        if (generation.current !== asked) return;
+        if (answer === null || answer.state !== "ok") break;
+        fresh.push(answer);
+        cursor = answer.next;
+      }
+      if (generation.current !== asked) return;
+      refetching.current = false;
+      startTransition(() => {
+        setPages([first, ...fresh]);
+        setStatus("idle");
+      });
+    })();
+  }, [first, href, order]);
+
   // A page landed and the reader is still within a screen of the end: the next.
   useEffect(() => {
     statusRef.current = status;
@@ -264,7 +320,7 @@ export function LibraryResults({
     if (moreRowsRef === null) return;
     // A page already on its way: wait for it rather than answer that nothing came.
     moreRowsRef.current = () =>
-      inFlight.current
+      inFlight.current || refetching.current
         ? new Promise<boolean>((resolve) => waiting.current.push(resolve))
         : load(drawn.current[drawn.current.length - 1].next);
     return () => {
