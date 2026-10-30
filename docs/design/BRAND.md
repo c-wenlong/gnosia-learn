@@ -306,13 +306,10 @@ matches.
 | `--btn-lip` | `#0d1c2b` | `#000000` | `--brand-navy` |
 | `--btn-text` | `#faf6ec` | `#ffffff` | `--brand-cream` |
 | `--m-hi` | `#0f5f61` | `#4168fa` | Mastered: `--brand-teal` |
-| `--m-hi-lip` | `#0a4244` | `#2e4fd1` | A darker teal |
 | `--m-mid` | `#529798` | `#a9b9ff` | Learning: a soft teal |
-| `--m-mid-lip` | `#3b7475` | `#7e93e6` | A darker soft teal |
 | `--m-lo` | `#ddd5c4` | `#e5e5e5` | Untouched: warm grey |
 | `--lip-shade` | `#cbc1ad` | `#d4d4d4` | Under an untouched path node |
 | `--streak` | `#b3842c` | `#ff9600` | `--brand-gold` |
-| `--streak-text` | `#916a23` | `#b35a00` | The streak as small text: each palette's streak hue darkened until 11px text clears 4.5:1 on the card. `.dark` keeps its `--streak`, `#ffab33`, which is already 8.83:1 |
 | `--ok-text` | `#008024` | `#009b2b` | Darkened to pass on cream and on its tint |
 | `--ok-on` | `#0b2e14` | `#ffffff` | The dark label `.dark` already uses |
 
@@ -379,9 +376,6 @@ light, for comparison; several of its pairs are still under the minimum
 | `--m-mid` against `--m-lo` | 2.31 | 1.74 | (gap) | 1.51 | 1.58 |
 | `--streak` on `--page` (the dot, the day rings) | 3.11 | 9.86 | 3 | 2.06 | 9.76 |
 | `--streak` on `--surface` | 3.30 | 8.83 | 3 | 2.18 | 8.83 |
-| `--streak-text` on `--surface` (today's day letter, 11px) | 4.82 | 8.83 | 4.5 | 4.80 | 8.83 |
-| `--streak-text` on `--page` | 4.54 | 9.86 | 4.5 | 4.52 | 9.76 |
-| Check on a `--streak` disc (`--streak-on`) | 3.36 | 9.86 | 3 | 2.18 | 9.76 |
 | Mark on a mastered path node (`--m-hi-on`) | 7.42 | 7.94 | 3 | 4.58 | 6.35 |
 | White mark on a learning path node | 3.37 | 5.07 | 3 | 1.90 | 5.44 |
 
@@ -417,19 +411,13 @@ that, since `:root`'s learning blue is only 1.90:1 on the white card itself.
 The fix for those belongs to the light mastery ramp. Every bar that
 shows p(L) prints the number beside it, and no page draws the green tone.
 
-Two pairs used to fall short. Each was fixed without moving a token another
+One pair used to fall short, and was fixed without moving a token another
 component depends on:
 
 1. **The stat tile's "right" strip.** Darkening `--ok-text` so the answer
    text passes brings the black `--on-tone` label on it to 4.11:1, and no
    green can do both jobs over a visible tint. `StatTile` frames the `ok`
    tile in `--ok`, the green face, instead (black on it is 9.9:1).
-2. **Today's day letter in the streak strip.** It is 11px text, and in
-   `--streak` it was 3.30:1 on the card here and 2.18:1 in orange under
-   `:root`. It reads `--streak-text` now, a darker step of the same hue in
-   every palette, so the gold and the orange stay the fill (discs, rings,
-   and the large streak number, which is large text at 3:1) and only the
-   small letter darkens.
 
 ### The primary button
 
@@ -502,15 +490,11 @@ rules the later one wins.
 | `--btn-lip` | `#33686a` | The teal sunk halfway into navy, as `variant="brand"` draws it |
 | `--btn-text` | `#0a1621` | Navy label |
 | `--m-hi` | `#5cbab3` | Mastered: the lifted brand teal |
-| `--m-hi-lip` | `#36908a` | A darker teal |
 | `--m-hi-on` | `#0a1621` | The mark on a mastered node turns navy, since white on the bright teal is 2.30:1 |
 | `--m-mid` | `#187b78` | Learning: a deep teal |
-| `--m-mid-lip` | `#025f5d` | A darker deep teal |
 | `--m-lo` | `#3d4c5b` | Untouched: the border's navy-grey |
 | `--lip-shade` | `#05101c` | Under an untouched path node, darker than the page |
 | `--streak` | `#e2b95e` | `--brand-gold` in dark |
-| `--streak-text` | `#e2b95e` | The same gold: 8.83:1 on the card, so the letter needs no darker step |
-| `--streak-on` | `#0a1621` | The check on a done day turns navy, since white on the bright gold is 1.85:1 |
 | Signal colours | as `.dark` | `--ok`, `--ok-lip`, `--ok-text`, `--ok-tint`, `--ok-on`, `--warn`, `--warn-lip`, `--warn-text`, `--warn-tint`, `--warn-on`, `--danger`, `--violet`, `--on-tone`: every pair passes on navy, so none moved |
 
 **The mastery ramp on navy.** Mastered is the brightest step, as in `.dark`,
@@ -521,11 +505,10 @@ still sit clearly below mastered, or much darker and still clear 3:1 on the
 card, so the bottom gap is the narrower one. Untouched is the border colour,
 as it is in `.dark`, since it is drawn as an empty ring.
 
-**Marks on a bright fill.** A bright mastered teal and a bright gold carry a
-white mark at only 2.30:1 and 1.85:1. `--m-hi-on` and `--streak-on` name
-those two marks: white in both light palettes, so they are declared once on
-`:root`, and navy here (7.94:1 and 9.86:1). Classic dark has the same
-problem and the same fix, in its own page colour.
+**Marks on a bright fill.** A bright mastered teal carries a white mark at
+only 2.30:1. `--m-hi-on` names that mark: white in both light palettes and
+navy here (7.94:1). Classic dark has the same problem and the same fix, in
+its own page colour.
 
 ### Classic light
 
@@ -565,7 +548,7 @@ both appearances, as Gnosia does.
 | `--m-hi` on `--track` (a mastered bar) | 3.41 | 3.64 | 3 |
 | White mark on a mastered node (`--m-hi-on`) | 4.30 | 4.58 | 3 |
 | `--m-hi` against `--m-mid` (the ramp's top step) | 2.27 | 2.41 | (gap) |
-| `--accent-lip` and `--m-hi-lip` (`#2e4fd1`) against the face | 1.55 | 1.45 | (a darker lip) |
+| `--accent-lip` (`#2e4fd1`) against the face | 1.55 | 1.45 | (a darker lip) |
 | `--accent-text` (`#294bc6`, links) on `--page`, `--surface`, `--tint` | 6.78, 7.20, 6.40 | unchanged | 4.5 |
 
 Every pair still passes. Two went down: the black strip, still over 4.5,
@@ -611,8 +594,6 @@ pair in the table was re-measured after the change and still passes.
 | --- | --- | --- | --- |
 | `--accent` | `#456dff` | `#4168fa` | The same hue and chroma, a step darker (OKLCH L 0.592 to 0.577), to the one luminance where a white label and the black stat-tile strip both clear 4.5:1 (4.58 and 4.59). The focus ring stays over 3:1 on the card (3.64), the page (4.02) and the tint (3.05) |
 | `--m-mid` | `#3a4a8f` | `#5266ad` | Learning, the same hue and chroma lifted until it clears 3:1 on the card (3.07) and the page (3.39) |
-| `--m-mid-lip` | `#7e93e6` (from `:root`) | `#3a4a8f` | The lip under a learning node. `.dark` never set it, so it fell through to the light value, a lip lighter than its face; the old learning blue is the darker shade now |
-| `--streak-on` | `#ffffff` (from `:root`) | `#141414` | The check on the orange disc is the page colour, 9.76:1 |
 | `--m-hi-on` | `#ffffff` (from `:root`) | `#141414` | The mark on a mastered node is the page colour, 6.35:1 |
 | `--track` | `#4c4c4c` (the bars read `--border`) | `#000000` | The empty part of a bar. The accent fill was 1.88:1 on the border; on black it is 4.59, and learning, the lowest fill, 3.86. Black is 1.26:1 from the card, as `:root`'s track is from its white card ([the track](#contrast-checked-1)) |
 
