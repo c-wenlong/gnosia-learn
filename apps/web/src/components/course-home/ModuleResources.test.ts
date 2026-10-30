@@ -32,6 +32,11 @@ function mount() {
     act(() => root.unmount());
     host.remove();
   });
+  // Open the form the way a reader does, so every field below is one they can reach.
+  const toggle = [...host.querySelectorAll("button")].find((b) => b.textContent === "Add a resource") as HTMLButtonElement;
+  act(() => toggle.click());
+  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+  expect(host.querySelector("form")?.closest("[inert]")).toBeNull();
   return host;
 }
 
