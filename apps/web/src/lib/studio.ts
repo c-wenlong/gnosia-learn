@@ -4,6 +4,7 @@ import { STUDIO_OWNER_HEADER } from "@gnosia/schema/shared";
 import { notFound } from "next/navigation";
 
 import { currentOwner } from "@/lib/owner";
+import { asRefusal, type Refusal } from "@/lib/studio-client";
 import type { Comparison } from "@/lib/studio-compare";
 
 /**
@@ -76,7 +77,14 @@ export type StudioResult<T> =
        */
       undelivered?: boolean;
       headline: string;
+      /** The detail as text a page prints: the runner's sentence, or its detail object as JSON. */
       detail: string;
+      /**
+       * On `refused`: the runner's envelope as it came, its `detail` not turned
+       * into text, so a caller reads `reason` with `refusalReason` the way the
+       * browser's callers do.
+       */
+      refusal?: Refusal;
     };
 
 /** Socket error codes that mean no request was delivered. */
@@ -153,13 +161,14 @@ export async function studioApi<T>(
 
   const body: unknown = await response.json().catch(() => null);
   if (!response.ok) {
-    const envelope = body as { error?: unknown; detail?: unknown } | null;
+    const refusal = asRefusal(response.status, body);
     return {
       ok: false,
       reason: "refused",
       status: response.status,
-      headline: typeof envelope?.error === "string" ? envelope.error : `the runner answered ${response.status}`,
-      detail: typeof envelope?.detail === "string" ? envelope.detail : JSON.stringify(envelope?.detail ?? {}),
+      headline: refusal.error,
+      detail: typeof refusal.detail === "string" ? refusal.detail : JSON.stringify(refusal.detail ?? {}),
+      refusal,
     };
   }
   return { ok: true, data: body as T };

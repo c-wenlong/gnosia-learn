@@ -13,6 +13,10 @@
  * number beside them comes from the tool.
  */
 
+import { formatBytes } from "@gnosia/tutor/asset-meta";
+
+import { jobShotHref } from "@/lib/studio-jobs";
+
 /** Mirrors `services/studio/src/diagram/compare.ts`. Structural, not imported. */
 export interface LintRef {
   rule: string;
@@ -53,12 +57,9 @@ export interface CountRow {
   direction: "up" | "down" | "flat";
 }
 
-/** `213 kB`, `1.2 MB`, `—`. Decimal, because that is what a file manager says. */
-export function formatBytes(bytes: number | null | undefined): string {
-  if (typeof bytes !== "number" || !Number.isFinite(bytes)) return "—";
-  if (bytes < 1000) return `${bytes} B`;
-  if (bytes < 1_000_000) return `${Math.round(bytes / 1000)} kB`;
-  return `${(bytes / 1_000_000).toFixed(1)} MB`;
+/** `214 kB`, `1.4 MB`, as the library and the inspector size a file, or `—` with no size. */
+function sizeText(bytes: number | null | undefined): string {
+  return (typeof bytes === "number" ? formatBytes(bytes) : null) ?? "—";
 }
 
 function formatCount(value: number | null | undefined): string {
@@ -116,9 +117,9 @@ export function countRows(comparison: Comparison): CountRow[] {
     },
     {
       label: "SVG bytes",
-      before: formatBytes(before?.svgBytes),
-      after: formatBytes(after?.svgBytes),
-      delta: signed(before?.svgBytes, after?.svgBytes, (value) => formatBytes(value)),
+      before: sizeText(before?.svgBytes),
+      after: sizeText(after?.svgBytes),
+      delta: signed(before?.svgBytes, after?.svgBytes, sizeText),
       direction: direction(before?.svgBytes, after?.svgBytes),
     },
   ];
@@ -195,7 +196,7 @@ export function catalogErrorLine(errors: readonly string[] | undefined, cap = 14
 
 /** `/studio/api/jobs/<id>/shot?which=…`, through the app's own proxy. */
 export function shotSrc(jobId: string, which: "before" | "after"): string {
-  return `/studio/api/jobs/${encodeURIComponent(jobId)}/shot?which=${which}`;
+  return jobShotHref(jobId, which);
 }
 
 /**

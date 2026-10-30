@@ -1,4 +1,5 @@
 import { validMentions, valueOf, type MentionValue } from "@/lib/mentions";
+import { safely } from "@/lib/storage-safe";
 import { isTagKind, runnerDown, type DraftKind, type DraftMention, type Refusal, type TagKind, type VideoAvailability } from "@/lib/studio-drafts";
 
 /**
@@ -215,15 +216,6 @@ export const EXTEND_KEY_TTL_MS = 5 * 60_000;
 
 const KEY_PREFIX = "studio:extend-key:";
 const OPENER_PREFIX = "studio:extend-opener:";
-
-/** A read or write that throws (a private window, blocked site data) is a convenience lost, never an error. */
-function safely<T>(run: () => T, fallback: T): T {
-  try {
-    return run();
-  } catch {
-    return fallback;
-  }
-}
 
 /**
  * The key for this press: the one a recent press on the same diagram left, or
