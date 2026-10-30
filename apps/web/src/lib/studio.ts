@@ -193,7 +193,8 @@ export async function studioApi<T>(
       reason: "refused",
       status: response.status,
       headline: refusal.error,
-      detail: typeof refusal.detail === "string" ? refusal.detail : JSON.stringify(refusal.detail ?? {}),
+      // No detail is no text: `{}` under a verb's banner read as a broken answer.
+      detail: typeof refusal.detail === "string" ? refusal.detail : refusal.detail == null ? "" : JSON.stringify(refusal.detail),
       refusal,
     };
   }

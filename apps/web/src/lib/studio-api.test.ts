@@ -79,7 +79,7 @@ describe("studioApi failures", () => {
 
   it("still reads a refusal with no JSON body as the runner's status", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 503 })));
-    expect(await studioApi("/api/jobs")).toMatchObject({ ok: false, reason: "refused", status: 503, headline: "the runner answered 503" });
+    expect(await studioApi("/api/jobs")).toMatchObject({ ok: false, reason: "refused", status: 503, headline: "the runner answered 503", detail: "" });
   });
 
   it("names the signed-in owner over any the caller passed", async () => {
