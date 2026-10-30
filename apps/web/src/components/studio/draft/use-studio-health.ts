@@ -63,7 +63,9 @@ export function useStudioHealth({
   // that read fails, so a failed settings read never leaves older tiers
   // over newer ones.
   const [tiersAsked, setTiersAsked] = useState(0);
-  const fresh = useByokTiers(byok, tiersAsked);
+  // Not listening itself: the health read below answers a BYOK write and
+  // asks for the tiers after it, so a save is read once.
+  const fresh = useByokTiers(byok, tiersAsked, { listen: false });
   const [healthLast, setHealthLast] = useState(false);
   const [seenFresh, setSeenFresh] = useState(fresh);
   if (fresh !== seenFresh) {

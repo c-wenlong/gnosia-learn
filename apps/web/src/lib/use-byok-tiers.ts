@@ -16,7 +16,9 @@ export interface ByokTiers {
  * older than a Connect that just wrote them. Read when `enabled` turns on and
  * again whenever a BYOK write lands (`BYOK_SETTINGS_CHANGED`), so tiers set in
  * the dialog or Settings can be picked at once. A change of `readKey` reads
- * again too, for a caller whose own reads can carry an older copy.
+ * again too, for a caller whose own reads can carry an older copy. A caller
+ * that already re-reads on a BYOK write (by changing `readKey`) passes
+ * `listen: false`, so a save is read once.
  *
  * The answer: `undefined` until a read has answered (a failed read changes
  * nothing), `null` when nothing is configured, else the active provider's
@@ -24,7 +26,11 @@ export interface ByokTiers {
  * earlier one found, so a removed provider's tiers go with it. An answer
  * that lands after the hook stopped listening is dropped.
  */
-export function useByokTiers(enabled: boolean, readKey: unknown = null): ByokTiers | null | undefined {
+export function useByokTiers(
+  enabled: boolean,
+  readKey: unknown = null,
+  { listen = true }: { listen?: boolean } = {},
+): ByokTiers | null | undefined {
   const [read, setRead] = useState<ByokTiers | null | undefined>(undefined);
   useEffect(() => {
     if (!enabled) return;
@@ -37,11 +43,11 @@ export function useByokTiers(enabled: boolean, readKey: unknown = null): ByokTie
     };
     const onWrite = () => void run();
     void run();
-    window.addEventListener(BYOK_SETTINGS_CHANGED, onWrite);
+    if (listen) window.addEventListener(BYOK_SETTINGS_CHANGED, onWrite);
     return () => {
       alive = false;
       window.removeEventListener(BYOK_SETTINGS_CHANGED, onWrite);
     };
-  }, [enabled, readKey]);
+  }, [enabled, readKey, listen]);
   return read;
 }

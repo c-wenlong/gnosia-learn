@@ -38,18 +38,18 @@ afterEach(() => {
   seen = [];
 });
 
-function Reader({ enabled, readKey }: { enabled: boolean; readKey?: number }): ReactElement | null {
-  seen.push(useByokTiers(enabled, readKey));
+function Reader({ enabled, readKey, listen }: { enabled: boolean; readKey?: number; listen?: boolean }): ReactElement | null {
+  seen.push(useByokTiers(enabled, readKey, { listen }));
   return null;
 }
 
-async function draw(enabled: boolean, readKey?: number) {
+async function draw(enabled: boolean, readKey?: number, listen?: boolean) {
   if (container === null) {
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
   }
-  await act(async () => root!.render(createElement(Reader, { enabled, readKey })));
+  await act(async () => root!.render(createElement(Reader, { enabled, readKey, listen })));
 }
 
 const latest = () => seen.at(-1);
@@ -117,6 +117,13 @@ describe("useByokTiers", () => {
     await act(async () => answer(configured({ default: "qwen-max" })));
     expect(latest()).toBeUndefined();
     window.dispatchEvent(new Event(BYOK_SETTINGS_CHANGED));
+    expect(mocks.getByokSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves a BYOK write to the caller when told not to listen", async () => {
+    mocks.getByokSettings.mockResolvedValue(configured({ default: "qwen-max" }));
+    await draw(true, 0, false);
+    await act(async () => window.dispatchEvent(new Event(BYOK_SETTINGS_CHANGED)));
     expect(mocks.getByokSettings).toHaveBeenCalledTimes(1);
   });
 });
