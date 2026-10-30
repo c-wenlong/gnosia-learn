@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import type { ProviderName } from "@gnosia/schema/shared";
@@ -49,8 +49,12 @@ export interface ByokStatus {
   active: string | null;
   /** The active provider's default-tier model, for the row that says what runs. */
   model: string | null;
-  /** The providers Studio uses whose saved key opens; a tail of each key, never the key. */
-  providers: { provider: string; last4: string; models: ByokTierModels }[];
+  /**
+   * The providers Studio uses, with a tail of each saved key, never the key.
+   * `keyMissing` marks one whose key is not saved in Settings or no longer
+   * opens: listed so its tiers stay visible, but it cannot run.
+   */
+  providers: { provider: string; last4: string; models: ByokTierModels; keyMissing?: true }[];
   /** Why the saved keys cannot be read (no `AUTH_SECRET`, no catalog), or null. */
   error: string | null;
 }
@@ -177,7 +181,12 @@ function readModels(raw: unknown): ByokTierModels {
   return models;
 }
 
-/** `{ active, providers: { name: { models } } }`, providers the table does not have dropped, and any `apiKey` ignored. */
+/**
+ * `{ active, providers: { name: { models } } }`, providers the table does not
+ * have dropped, and any `apiKey` ignored. With no valid `active`, the first
+ * provider is the active one, as it always was: a provider connected after a
+ * key save (`activate: false`) into an empty list runs without another pick.
+ */
 function readSettings(raw: unknown): ByokSettings | null {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null;
   const input = raw as Record<string, unknown>;
@@ -187,7 +196,10 @@ function readSettings(raw: unknown): ByokSettings | null {
     if (!Object.hasOwn(BYOK_PROVIDERS, name) || typeof entry !== "object" || entry === null) continue;
     providers[name as ByokProviderName] = { models: readModels((entry as { models?: unknown }).models) };
   }
-  const active = typeof input.active === "string" && Object.hasOwn(providers, input.active) ? (input.active as ByokProviderName) : null;
+  const active =
+    typeof input.active === "string" && Object.hasOwn(providers, input.active)
+      ? (input.active as ByokProviderName)
+      : ((Object.keys(providers)[0] as ByokProviderName | undefined) ?? null);
   return { active, providers };
 }
 
@@ -220,34 +232,73 @@ export interface LegacyByokMigration {
  * models (never its keys) into `byok-settings.json` when that does not exist
  * yet. Each provider's key is the one saved in Settings from now on; one the
  * old file held and Settings does not is named in the answer, so the start-up
- * line says which to enter again. The file is deleted whether or not the
- * catalog can be asked, and so is any temp file a write of it left behind.
+ * line says which to enter again.
+ *
+ * The keys going is the point, so every step that can fail is kept apart
+ * from the deletion: a file that cannot be read is still deleted, each temp
+ * file a write of it left is deleted on its own, and the settings are
+ * written before the file goes. When they cannot be written, the old file is
+ * replaced by a copy with the keys taken out, so the next start can carry
+ * the picks over again; when even that fails, it is deleted anyway. Throws,
+ * naming the files, only when a file holding a key could not be deleted.
  */
 export async function migrateLegacyByok(): Promise<LegacyByokMigration> {
   const legacy = legacyByokPath();
-  let raw: string | null = null;
-  try {
-    raw = await readFile(legacy, "utf8");
-  } catch {
-    raw = null;
-  }
+  const stuck: string[] = [];
+  const remove = async (file: string) => {
+    try {
+      await rm(file, { force: true });
+    } catch {
+      stuck.push(file);
+    }
+  };
   const leftovers = (await readdir(studioHome()).catch(() => [] as string[])).filter((name) => /^byok\.json\..+\.tmp$/.test(name));
-  for (const name of leftovers) await rm(path.join(studioHome(), name), { force: true });
-  if (raw === null) return { removed: false, carried: [], keyless: [] };
+  for (const name of leftovers) await remove(path.join(studioHome(), name));
+
+  const present = await lstat(legacy).then(
+    () => true,
+    (error: NodeJS.ErrnoException) => error.code !== "ENOENT",
+  );
+  if (!present) {
+    if (stuck.length > 0) throw new Error(`could not delete ${stuck.join(", ")}`);
+    return { removed: false, carried: [], keyless: [] };
+  }
 
   let old: ReturnType<typeof readLegacyFile> = null;
   try {
-    old = readLegacyFile(JSON.parse(raw));
+    old = readLegacyFile(JSON.parse(await readFile(legacy, "utf8")));
   } catch {
+    // Unreadable or not JSON: nothing to carry, and still a file to delete.
     old = null;
   }
-  // Gone before anything else can fail: the point of the step is that no
-  // plaintext key outlives it.
-  await rm(legacy, { force: true });
+  const carried = old === null ? [] : (Object.keys(old.settings.providers) as ByokProviderName[]);
+  let staged = true;
+  if (old !== null && carried.length > 0 && (await loadByokSettings()) === null) {
+    staged = await persistSettings(old.settings).then(
+      () => true,
+      () => false,
+    );
+  }
+  if (!staged && old !== null) {
+    // The picks could not be written: leave them where the next start finds
+    // them, without the keys, or delete the file when even that fails.
+    const temporary = `${legacy}.${process.pid}.tmp`;
+    const stripped = await writeFile(temporary, `${JSON.stringify(old.settings, null, 1)}\n`, { encoding: "utf8", mode: 0o600 })
+      .then(() => rename(temporary, legacy))
+      .then(
+        () => true,
+        () => false,
+      );
+    if (!stripped) {
+      await remove(temporary);
+      await remove(legacy);
+    }
+  } else {
+    await remove(legacy);
+  }
+  if (stuck.length > 0) throw new Error(`could not delete ${stuck.join(", ")}, which may hold provider keys in the clear: delete them by hand`);
   if (old === null) return { removed: true, carried: [], keyless: [] };
 
-  const carried = Object.keys(old.settings.providers) as ByokProviderName[];
-  if ((await loadByokSettings()) === null && carried.length > 0) await persistSettings(old.settings);
   let keyless: ByokProviderName[] | null;
   try {
     const saved = await savedKeys();
@@ -255,7 +306,7 @@ export async function migrateLegacyByok(): Promise<LegacyByokMigration> {
   } catch {
     keyless = null;
   }
-  return { removed: true, carried, keyless };
+  return { removed: true, carried: staged ? carried : [], keyless };
 }
 
 /**
@@ -476,18 +527,21 @@ export async function resolveByok(tier: string | null): Promise<ByokSpawn | { pr
 }
 
 function statusOf(settings: ByokSettings | null, keys: Map<ProviderName, { last4: string; readable: boolean }>, access: KeyAccess): ByokStatus {
-  // A provider is listed only while its saved key opens: one removed in
-  // Settings, or unreadable after an `AUTH_SECRET` rotation, cannot run.
+  // Every provider Studio uses is listed, its tiers with it; one whose saved
+  // key is gone (removed in Settings, or unreadable after an `AUTH_SECRET`
+  // rotation) is marked, and cannot run until the key is back.
   const providers =
     settings === null
       ? []
-      : (Object.entries(settings.providers) as [ByokProviderName, { models: ByokTierModels }][]).flatMap(([provider, entry]) => {
+      : (Object.entries(settings.providers) as [ByokProviderName, { models: ByokTierModels }][]).map(([provider, entry]) => {
           const key = keys.get(BYOK_PROVIDERS[provider].tutor);
-          return key?.readable === true ? [{ provider, last4: key.last4, models: { ...entry.models } }] : [];
+          return key?.readable === true
+            ? { provider, last4: key.last4, models: { ...entry.models } }
+            : { provider, last4: "", models: { ...entry.models }, keyMissing: true as const };
         });
   const active = settings?.active ?? null;
   const running = active !== null ? providers.find((entry) => entry.provider === active) : undefined;
-  const model = running?.models.default ?? null;
+  const model = running !== undefined && !("keyMissing" in running) ? (running.models.default ?? null) : null;
   return { configured: model !== null, active, model, providers, error: access.problem };
 }
 

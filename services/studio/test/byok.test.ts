@@ -236,8 +236,14 @@ describe("the settings file and the saved keys (D12)", () => {
     expect((await byokStatus()).providers[0]!.last4).toBe("0009");
     await removeProviderKey(scratch.db, OWNER, "openrouter");
     const status = await byokStatus();
-    expect(status.providers).toEqual([]);
+    // Still listed, tiers and all, so nothing is lost while the key is away; it cannot run.
+    expect(status.providers).toEqual([{ provider: "openrouter", last4: "", models: { default: "anthropic/claude-sonnet-4.5" }, keyMissing: true }]);
     expect(status.configured).toBe(false);
+    expect(status.model).toBeNull();
+    // Back in Settings, back in Studio with the same tiers.
+    await saveProviderKey(scratch.db, OWNER, "openrouter", "sk-or-v1-returned-key-0010", { AUTH_SECRET: SECRET });
+    expect(await byokStatus()).toMatchObject({ configured: true, providers: [{ provider: "openrouter", last4: "0010", models: { default: "anthropic/claude-sonnet-4.5" } }] });
+    await removeProviderKey(scratch.db, OWNER, "openrouter");
     expect(await resolveByok(null)).toEqual({ problem: expect.stringMatching(/no openrouter key is saved/) });
     // Studio's Remove takes the provider out of Studio and leaves the key in Settings alone.
     await connect("openai", "gpt-5.4");
@@ -249,7 +255,8 @@ describe("the settings file and the saved keys (D12)", () => {
     await connect("openrouter", "anthropic/claude-sonnet-4.5");
     keys.setKeySecret("a-different-auth-secret-0123456789abcdef");
     const status = await byokStatus();
-    expect(status.providers).toEqual([]);
+    expect(status.providers).toEqual([{ provider: "openrouter", last4: "", models: { default: "anthropic/claude-sonnet-4.5" }, keyMissing: true }]);
+    expect(status.configured).toBe(false);
     expect(status.error).toBeNull();
     expect(await resolveByok(null)).toEqual({ problem: expect.stringMatching(/no openrouter key is saved/) });
   });
@@ -268,6 +275,41 @@ describe("the settings file and the saved keys (D12)", () => {
     // A Claude conversation does not depend on it.
     await expect(drafts.create({ idempotencyKey: "k-claude" })).resolves.toMatchObject({ created: true });
     expect((await loadByokSettings())?.providers.openrouter).toBeDefined();
+  });
+
+  it("makes the first provider connected after a key save the one that runs", async () => {
+    // The web's call after a key save does not move the pick; into an empty list, the first provider is the pick.
+    await saveByok({ provider: "openrouter", activate: false });
+    await saveByokModels({ provider: "openrouter", models: { default: "anthropic/claude-sonnet-4.5" } });
+    expect(await byokStatus()).toMatchObject({ configured: true, active: "openrouter" });
+    expect(await resolveByok(null)).toMatchObject({ provider: "openrouter", apiKey: OPENROUTER_KEY });
+  });
+
+  it("reports a catalog it cannot read as a reason, in the status and in health, until a read succeeds", async () => {
+    await connect("openrouter", "anthropic/claude-sonnet-4.5");
+    const garbage = path.join(process.env.STUDIO_HOME!, "not-a-catalog.db");
+    await writeFile(garbage, "this is not a SQLite file at all, but it is long enough to look like one".repeat(20));
+    process.env.CATALOG_DB = garbage;
+    const status = await byokStatus();
+    expect(status.configured).toBe(false);
+    expect(status.error).toMatch(/the catalog could not be read for the saved provider keys \(SQLITE_NOTADB\)/);
+    expect(keys.keyAccessNow()).toMatchObject({ ok: false, reason: "catalog-unreadable" });
+    expect(await resolveByok(null)).toEqual({ problem: expect.stringMatching(/BYOK cannot run: the catalog could not be read/) });
+    process.env.CATALOG_DB = scratch.url;
+    expect((await byokStatus()).configured).toBe(true);
+    expect(keys.keyAccessNow()).toMatchObject({ ok: true });
+  });
+
+  it("opens keys from the web's catalog file when the runner was given one", async () => {
+    await connect("openrouter", "anthropic/claude-sonnet-4.5");
+    process.env.CATALOG_DB = path.join(process.env.STUDIO_HOME!, "elsewhere", "catalog.db");
+    expect((await byokStatus()).error).toMatch(/does not exist/);
+    keys.setCatalogFile(scratch.url);
+    try {
+      expect(await byokStatus()).toMatchObject({ configured: true, error: null });
+    } finally {
+      keys.setCatalogFile(null);
+    }
   });
 
   it("never creates a catalog where none is", async () => {
@@ -332,8 +374,14 @@ describe("the first start after the upgrade", () => {
     });
     const disk = await everythingOnDisk();
     for (const key of [OPENROUTER_KEY, "sk-ant-only-in-the-old-file-0003", "sk-half-written-0004"]) expect(disk).not.toContain(key);
-    // The provider whose key Settings has runs; the other waits for its key.
-    expect((await byokStatus()).providers.map((entry) => entry.provider)).toEqual(["openrouter"]);
+    // The provider whose key Settings has can run; the other waits for its key, its tiers kept.
+    const status = await byokStatus();
+    expect(status.providers.map((entry) => [entry.provider, entry.keyMissing ?? false])).toEqual([
+      ["openrouter", false],
+      ["anthropic", true],
+    ]);
+    // The active one is the keyless Anthropic, so nothing runs until its key is saved.
+    expect(status.configured).toBe(false);
     // Nothing to do the second time.
     expect(await migrateLegacyByok()).toEqual({ removed: false, carried: [], keyless: [] });
   });
@@ -347,6 +395,30 @@ describe("the first start after the upgrade", () => {
     expect(existsSync(legacy())).toBe(false);
     expect((await loadByokSettings())?.active).toBe("openai");
     expect(await everythingOnDisk()).not.toContain("sk-old-v1-key-0005");
+  });
+
+  it("deletes a file it cannot read, and each leftover on its own", async () => {
+    await writeFile(legacy(), JSON.stringify({ provider: "openrouter", apiKey: "sk-unreadable-0007", model: "m" }), { mode: 0o000 });
+    await writeFile(`${legacy()}.1.tmp`, "sk-left-over-0008");
+    const migrated = await migrateLegacyByok();
+    expect(migrated.removed).toBe(true);
+    expect(existsSync(legacy())).toBe(false);
+    expect(existsSync(`${legacy()}.1.tmp`)).toBe(false);
+  });
+
+  it("keeps the picks, without the keys, when the settings cannot be written", async () => {
+    await writeFile(legacy(), JSON.stringify({ active: "openrouter", providers: { openrouter: { apiKey: "sk-stranded-0009", models: { default: "m-keep" } } } }));
+    // A directory where the settings file goes makes its rename fail.
+    await mkdir(path.join(process.env.STUDIO_HOME!, "byok-settings.json"));
+    const migrated = await migrateLegacyByok();
+    expect(migrated).toMatchObject({ removed: true, carried: [] });
+    expect(await everythingOnDisk()).not.toContain("sk-stranded-0009");
+    expect(JSON.parse(await readFile(legacy(), "utf8"))).toEqual({ active: "openrouter", providers: { openrouter: { models: { default: "m-keep" } } } });
+    // The next start, with the way clear, carries them over and deletes the file.
+    await rm(path.join(process.env.STUDIO_HOME!, "byok-settings.json"), { recursive: true });
+    expect(await migrateLegacyByok()).toMatchObject({ removed: true, carried: ["openrouter"] });
+    expect(existsSync(legacy())).toBe(false);
+    expect((await loadByokSettings())?.providers.openrouter?.models.default).toBe("m-keep");
   });
 
   it("deletes a file it cannot parse", async () => {

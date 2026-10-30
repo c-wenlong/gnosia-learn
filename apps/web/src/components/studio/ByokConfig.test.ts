@@ -159,6 +159,34 @@ describe("ByokConfig with the runner down", () => {
     expect(host.textContent).toContain("Studio cannot use the saved keys yet: AUTH_SECRET is not set for the runner.");
   });
 
+  it("says what a runner that came back refuses, instead of still looking down", async () => {
+    mocks.getByokSettings.mockReset().mockResolvedValue({ ok: false, status: 403, refusal: { error: "this runner serves another owner", detail: null } });
+    const host = await mount({ manageKeys: false, initial: { state: "down" } });
+    await act(async () => named(host, "Try again")!.click());
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(host.textContent).not.toContain("not answering");
+    expect(host.textContent).toContain("this runner serves another owner");
+  });
+
+  it("lists a provider whose key is missing with its tiers, and says so", async () => {
+    mocks.getByokSettings.mockReset();
+    mocks.listByokModels.mockReset();
+    const host = await mount({
+      manageKeys: false,
+      initial: {
+        state: "up",
+        data: { configured: false, active: "anthropic", model: null, providers: [{ provider: "anthropic", last4: "", models: { default: "claude-sonnet-4-5" }, keyMissing: true }], error: null },
+      },
+    });
+    expect(host.textContent).toContain("Anthropic · no key saved");
+    expect(host.textContent).toContain("No key is saved for this provider");
+    expect((host.querySelector("input[autocomplete=off]") as HTMLInputElement | null)?.value).toBe("claude-sonnet-4-5");
+    // No stored key to list models on, so none is asked for.
+    expect(mocks.listByokModels).not.toHaveBeenCalled();
+  });
+
   it("shows the down state when its own read finds the runner down", async () => {
     mocks.getByokSettings.mockReset().mockResolvedValue({ ok: false, status: 502, refusal: { error: "the studio runner is not answering", detail: null } });
     const host = await mount({});

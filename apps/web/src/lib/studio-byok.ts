@@ -11,6 +11,8 @@ export interface ByokProviderStatus {
   provider: string;
   last4: string;
   models: { default?: string; lite?: string; max?: string };
+  /** Its key is not saved in Settings or no longer opens: listed for its tiers, but it cannot run. */
+  keyMissing?: true;
 }
 
 /** `GET /api/settings/byok`'s answer: the connected providers, the active one, its Default model, and why the saved keys cannot be read (or null). */

@@ -138,6 +138,10 @@ export function ByokConfig({
             downRef.current = true;
             setDown(true);
           } else {
+            // The runner answered, with a refusal of its own: say that, not
+            // "not answering".
+            downRef.current = false;
+            setDown(false);
             setError(result.refusal.error);
           }
           return;
@@ -165,7 +169,7 @@ export function ByokConfig({
   const modelHint = BYOK_PROVIDERS.find((entry) => entry.value === listProvider)?.modelHint ?? "e.g. a model name";
   // The stored key stands in for its own provider; another's is a different
   // secret the dialog has to be given.
-  const keyHeld = selected !== null;
+  const keyHeld = selected !== null && selected.keyMissing !== true;
 
   const [listed, setListed] = useState<{ sig: string; models: { value: string; label: string | null }[] } | null>(null);
   const [modelsNote, setModelsNote] = useState<string | null>(null);
@@ -411,7 +415,7 @@ export function ByokConfig({
           options={[
             ...(connected ?? []).map((entry) => ({
               value: entry.provider,
-              label: `${BYOK_PROVIDERS.find((known) => known.value === entry.provider)?.label ?? entry.provider} ··${entry.last4}`,
+              label: `${BYOK_PROVIDERS.find((known) => known.value === entry.provider)?.label ?? entry.provider} ${entry.keyMissing === true ? "· no key saved" : `··${entry.last4}`}`,
             })),
             ...tutorSaved.map((p) => ({
               value: `saved:${p}`,
@@ -423,6 +427,12 @@ export function ByokConfig({
           onChange={(next) => void chooseProvider(next)}
           placeholder={connected === null ? "Loading…" : "Select a provider"}
         />
+        {!adding && selected?.keyMissing === true && (
+          <p className="text-[12px] leading-4 text-text3">
+            No key is saved for this provider, so Studio chats cannot run on it.{" "}
+            {manageKeys ? "Enter its key below." : "Add it under Providers above."}
+          </p>
+        )}
         {!manageKeys && connected !== null && connected.length === 0 && tutorSaved.length === 0 && (
           <p className="text-[12px] leading-4 text-text3">No provider has a key yet — add one under Providers above.</p>
         )}
@@ -461,7 +471,7 @@ export function ByokConfig({
               type={show ? "text" : "password"}
               value={apiKey}
               onChange={(event) => setApiKey(event.target.value)}
-              placeholder={selected !== null ? `Leave blank to keep ··${selected.last4}` : "Enter your API key"}
+              placeholder={selected !== null && selected.keyMissing !== true ? `Leave blank to keep ··${selected.last4}` : "Enter your API key"}
               autoComplete="off"
               spellCheck={false}
               className="pr-11"

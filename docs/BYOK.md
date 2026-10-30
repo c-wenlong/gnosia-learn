@@ -148,18 +148,26 @@ runs, and each one's Lite, Default and Max models, none of it a secret.
   provider picks and tier models into `byok-settings.json` (never its keys),
   and prints which providers had a key there but none saved in Settings, so
   the owner knows which to enter again. It is deleted whether or not the
-  catalog can be read.
+  catalog can be read, and whether or not it can be read itself. The settings
+  are written first; when they cannot be, the old file is rewritten without
+  its keys so the next start can carry them, and deleted if even that fails.
+  A file that cannot be deleted stops nothing but is printed on stderr.
+- **A provider whose key goes stays listed.** Removed in Settings, or
+  unreadable after a rotation, it is marked "no key saved" with its tiers
+  kept, and cannot run until the key is back.
 - **The runner's secrets never reach a child.** At start the runner takes
   `AUTH_SECRET`, `OWNER_PASSWORD`, `SESSION_EPOCH` and `GNOSIA_LOCAL_TOKEN`
   out of its own environment (`takeKeySecret`), before anything is spawned,
   so no agent, render or catalog CLI inherits them, whichever env builder
   that spawn uses.
-- **Where the secret comes from.** The runner's environment first; a runner
-  started without one (`npm run dev:up` hands its pane the catalog's
-  variables, not `apps/web/.env.local`) asks
-  `services/sidecar/src/child-env.ts` once, which reads the data home's
-  `.env` and the web app's own files in the web's order, as the desktop shell
-  and the macOS app do, and keeps only that one value.
+- **Where the secret comes from.** The runner's environment first (the
+  desktop shell and the macOS app hand it the web's). A runner started
+  without one (`npm run dev:up` hands its pane the catalog's variables, not
+  `apps/web/.env.local`) asks `scripts/lib/dev-env.mjs` once, the helper
+  `scripts/dev.sh` already uses: it reads the app's files with Next's own
+  loader as `next dev` does, and resolves the catalog file the app opens. The
+  runner keeps the secret and opens that same file, so it reads the rows the
+  web wrote with the secret the web sealed them under.
 - **Without it, BYOK is off and says why.** No `AUTH_SECRET` (or one too
   short), or no catalog file, is `byokKeys: { ok: false, problem }` in the
   runner's `/api/health` and the `error` of `GET /api/settings/byok`, which

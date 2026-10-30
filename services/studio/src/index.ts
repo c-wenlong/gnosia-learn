@@ -2,7 +2,7 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 
 import { migrateLegacyByok } from "./agent/byok";
-import { closeKeys, hasKeySecret, secretFromWebEnv, setKeySecret, takeKeySecret } from "./agent/byok-keys";
+import { closeKeys, fromWebEnv, hasKeySecret, setCatalogFile, setKeySecret, takeKeySecret } from "./agent/byok-keys";
 import { agentSettingsView, createApi } from "./api";
 import type { SpendEntry } from "./cost";
 import { Drafts } from "./drafts/drafts";
@@ -90,10 +90,15 @@ async function main(): Promise<void> {
   // AUTH_SECRET opens the provider keys saved in Settings for a BYOK turn
   // (docs/BYOK.md, D12). It is taken out of the environment before anything
   // is spawned, with the session's own inputs, so no agent, render or CLI
-  // inherits it; a runner started without it asks the web's environment
-  // once. Without one, BYOK is off and says why in /api/health, and every
-  // other harness runs as before.
-  if (takeKeySecret() === null) setKeySecret(await secretFromWebEnv());
+  // inherits it; a runner started without it (`npm run dev:up`) asks the
+  // web app's own environment once, for the secret and the catalog file the
+  // web opens, so both read the same rows. Without one, BYOK is off and says
+  // why in /api/health, and every other harness runs as before.
+  if (takeKeySecret() === null) {
+    const web = await fromWebEnv();
+    setKeySecret(web.secret);
+    if (web.secret !== null) setCatalogFile(web.catalog);
+  }
   process.stdout.write(hasKeySecret() ? "provider keys: opened from the catalog with AUTH_SECRET when a BYOK turn runs\n" : "provider keys: no AUTH_SECRET, so BYOK chats are off\n");
 
   await mkdir(path.join(studioHome(), "jobs"), { recursive: true });

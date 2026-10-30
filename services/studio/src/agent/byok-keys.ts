@@ -49,6 +49,10 @@ let secret: string | null = null;
 /** Set when an `AUTH_SECRET` was found but is too short to seal with, so health says which. */
 let shortSecret = false;
 let connection: { file: string; handle: Connection } | null = null;
+/** The catalog file the web app opens, when the runner had to ask the web's environment for it (`fromWebEnv`). */
+let catalogFile: string | null = null;
+/** The last read's failure, so health reports a catalog that exists but cannot be read; cleared by the next good read. */
+let lastReadProblem: string | null = null;
 
 /**
  * Take the secret from `env` and remove every `RUNNER_SECRET_VARS` name from
@@ -77,35 +81,37 @@ export function hasKeySecret(): boolean {
 }
 
 /**
- * The web's `AUTH_SECRET` when the runner was started without one, as
- * `npm run dev:up` starts it (its pane gets the catalog's variables, not the
- * app's `.env.local`): the environment every launcher hands the services it
- * spawns, from `services/sidecar/src/child-env.ts`, which reads the data
- * home's `.env` and the web app's own files in the web's order
- * (docs/BYOK.md, "Rotation"). One child process at start, its output read
- * for that one value and dropped. Null when it cannot run or names none.
+ * The web's `AUTH_SECRET`, and the catalog file it opens, when the runner was
+ * started without a secret, as `npm run dev:up` starts it: its pane gets the
+ * catalog's variables, not the app's `.env.local`, which `next dev` reads
+ * itself. Asked of `scripts/lib/dev-env.mjs`, the helper `scripts/dev.sh`
+ * already uses, which reads the app's files with Next's own loader in dev
+ * mode and resolves the catalog the way the app does: so the runner gets the
+ * secret and the file the web started beside it got, in the same order
+ * (`$GNOSIA_HOME/.env` is not part of it, as it is not for `next dev`). Each
+ * answer is read for its one value and dropped. Nulls when the helper cannot
+ * run or names none; the catalog is null too when its check fails, and the
+ * runner's own resolution then answers (and says why in health).
  */
-export function secretFromWebEnv(env: NodeJS.ProcessEnv = process.env, timeoutMs = 20_000): Promise<string | null> {
-  const script = path.join(REPO_ROOT, "services", "sidecar", "src", "child-env.ts");
-  if (!existsSync(script)) return Promise.resolve(null);
-  return new Promise((resolve) => {
-    execFile(
-      process.execPath,
-      ["--import", "tsx", script],
-      { cwd: REPO_ROOT, env, timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024, encoding: "utf8" },
-      (error, stdout) => {
+export async function fromWebEnv(env: NodeJS.ProcessEnv = process.env, timeoutMs = 20_000): Promise<{ secret: string | null; catalog: string | null }> {
+  const script = path.join(REPO_ROOT, "scripts", "lib", "dev-env.mjs");
+  const app = path.join(REPO_ROOT, "apps", "web");
+  if (!existsSync(script) || !existsSync(app)) return { secret: null, catalog: null };
+  const ask = (args: string[], key: string): Promise<string | null> =>
+    new Promise((resolve) => {
+      execFile(process.execPath, [script, ...args], { cwd: REPO_ROOT, env, timeout: timeoutMs, maxBuffer: 1024 * 1024, encoding: "utf8" }, (error, stdout) => {
         if (error !== null) return resolve(null);
-        const line = stdout.trim().split("\n").at(-1) ?? "";
-        try {
-          const parsed = JSON.parse(line) as Record<string, unknown>;
-          const value = parsed[AUTH_SECRET_VAR];
-          resolve(typeof value === "string" ? keySecret({ [AUTH_SECRET_VAR]: value }) : null);
-        } catch {
-          resolve(null);
-        }
-      },
-    );
-  });
+        const line = stdout.split("\n").find((entry) => entry.startsWith(`${key}=`));
+        resolve(line === undefined ? null : line.slice(key.length + 1));
+      });
+    });
+  const [raw, catalog] = await Promise.all([ask(["get", app, AUTH_SECRET_VAR], AUTH_SECRET_VAR), ask(["db", app], "FILE")]);
+  return { secret: raw === null ? null : keySecret({ [AUTH_SECRET_VAR]: raw }), catalog: catalog !== null && catalog !== "" ? catalog : null };
+}
+
+/** Open keys from this catalog file rather than the runner's own resolution (the web's, from `fromWebEnv`); null goes back to that. */
+export function setCatalogFile(file: string | null): void {
+  catalogFile = file;
 }
 
 /** Whether the keys could be read now, without reading them: health's answer, synchronous. */
@@ -121,13 +127,14 @@ export function keyAccessNow(): KeyAccess {
   }
   let file: string;
   try {
-    file = databasePath();
+    file = databasePath(catalogFile ?? undefined);
   } catch (error) {
     return { ok: false, reason: "no-catalog", problem: `the catalog cannot be opened: ${(error as Error).message}` };
   }
   if (file !== ":memory:" && !existsSync(file)) {
     return { ok: false, reason: "no-catalog", problem: `the catalog file ${file} does not exist, so the runner has no saved provider keys to open` };
   }
+  if (lastReadProblem !== null) return { ok: false, reason: "catalog-unreadable", problem: lastReadProblem };
   return { ok: true, problem: null };
 }
 
@@ -138,43 +145,50 @@ export function keyAccessNow(): KeyAccess {
  * `CATALOG_DB`) gets a fresh handle.
  */
 function catalog(): { db: CatalogDatabase; owner: string; env: Record<string, string> } {
+  // Whatever was wrong last time is asked again: a read is the only way to
+  // find out it is fixed.
+  lastReadProblem = null;
   const access = keyAccessNow();
   if (!access.ok) throw new KeysUnavailable(access.reason, access.problem);
-  const file = databasePath();
+  const file = databasePath(catalogFile ?? undefined);
   if (connection === null || connection.file !== file) {
     connection?.handle.close().catch(() => undefined);
-    connection = { file, handle: connect() };
+    connection = null;
+    connection = { file, handle: connect(catalogFile === null ? {} : { url: catalogFile }) };
   }
   // Only the secret: `keySecret` reads this map, and nothing else of the
   // runner's environment has any business in it.
   return { db: connection.handle.db, owner: studioOwner(), env: { [AUTH_SECRET_VAR]: secret! } };
 }
 
-function unreadable(error: unknown): KeysUnavailable {
-  // A code, never the message: a driver error on this table quotes its bind
-  // parameters (docs/BYOK.md, "Logs").
-  return new KeysUnavailable("catalog-unreadable", `the catalog could not be read for the saved provider keys (${failureCode(error)})`);
+/**
+ * One read of the saved keys: opening the catalog and the read both inside
+ * the guard, so a corrupt, locked or unmigrated file is `KeysUnavailable`
+ * with a reason, never a raw driver error, and health remembers it.
+ */
+async function guarded<T>(read: (handle: ReturnType<typeof catalog>) => Promise<T>): Promise<T> {
+  try {
+    return await read(catalog());
+  } catch (error) {
+    if (error instanceof KeysUnavailable) throw error;
+    // A code, never the message: a driver error on this table quotes its
+    // bind parameters (docs/BYOK.md, "Logs").
+    lastReadProblem = `the catalog could not be read for the saved provider keys (${failureCode(error)})`;
+    throw new KeysUnavailable("catalog-unreadable", lastReadProblem);
+  }
 }
 
 /** Each saved key's tail and whether it opens, by tutor provider. Never a key. Throws `KeysUnavailable`. */
 export async function savedKeys(): Promise<Map<ProviderName, { last4: string; readable: boolean }>> {
-  const { db, owner, env } = catalog();
-  try {
+  return guarded(async ({ db, owner, env }) => {
     const rows = await savedKeyStatuses(db, owner, env);
     return new Map(rows.map((row) => [row.provider, { last4: row.last4, readable: row.readable }]));
-  } catch (error) {
-    throw unreadable(error);
-  }
+  });
 }
 
 /** One saved key, opened, or null when there is none or it no longer opens. Throws `KeysUnavailable`. */
 export async function openSavedKey(provider: ProviderName): Promise<string | null> {
-  const { db, owner, env } = catalog();
-  try {
-    return (await openSavedKeys(db, owner, env))[provider] ?? null;
-  } catch (error) {
-    throw unreadable(error);
-  }
+  return guarded(async ({ db, owner, env }) => (await openSavedKeys(db, owner, env))[provider] ?? null);
 }
 
 /** Close the catalog handle, for shutdown and the tests. */
