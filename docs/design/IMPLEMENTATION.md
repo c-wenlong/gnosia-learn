@@ -179,7 +179,6 @@ barrel. `MentionComposer` carries Lexical, so the one page that uses it
 imports it lazily. The
 class strings live in the React-free [classes.ts](../../apps/web/src/components/ui/classes.ts),
 so a client component, a server component or a test can compose them.
-Import from `@/components/ui` or from the file.
 
 | Component | Props | Kit |
 | --- | --- | --- |

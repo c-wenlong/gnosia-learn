@@ -67,6 +67,9 @@ describe("typeaheadStep", () => {
     const cs = typeaheadStep(c, "s", 5000 + TYPEAHEAD_RESET_MS);
     expect(cs).toEqual({ buffer: "cs", at: 5000 + TYPEAHEAD_RESET_MS });
     expect(typeaheadStep(cs, "m", 5001 + 2 * TYPEAHEAD_RESET_MS)).toEqual({ buffer: "m", at: 5001 + 2 * TYPEAHEAD_RESET_MS });
+    // A new state each time: the empty one every list starts from is never written to.
+    expect(NO_TYPEAHEAD).toEqual({ buffer: "", at: 0 });
+    expect(c).not.toBe(NO_TYPEAHEAD);
   });
 });
 
