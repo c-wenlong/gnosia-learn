@@ -1,9 +1,15 @@
 import { NextResponse } from "next/server";
 import type { CatalogDatabase } from "@gnosia/catalog/state";
+import { ownerScope } from "@gnosia/schema/shared";
+import type { TutorDeps } from "@gnosia/tutor/server/deps";
+import { BadRequest, MAX_ID_CHARS, MAX_NOTE_CHARS } from "@gnosia/tutor/server/learner-writes";
 import { failureCode } from "@gnosia/tutor/server/provider-keys";
+import type { TurnReply } from "@gnosia/tutor/server/turns";
 
+import { contentSource } from "@/data/source";
 import { enforceRateLimit, enforceSameOrigin, type RateLimitRule } from "@/lib/agent/guard";
-import { isBadRequest, withLearnerStore } from "@/lib/learner-store";
+import { assetBlobStore } from "@/lib/blob-store";
+import { catalogDatabase, isBadRequest, withLearnerStore } from "@/lib/learner-store";
 import { currentOwner, NoOwnerError } from "@/lib/owner";
 
 /**
@@ -49,13 +55,15 @@ export const LEARNER_RATE_LIMIT: RateLimitRule = { limit: 60, windowMs: 60_000 }
 /** Bodies are small: a recap is the biggest and `KNOWLEDGE_LIMITS` bounds it. */
 export const MAX_BODY_BYTES = 64_000;
 
-/** The longest scratch note the checklist will store. */
-export const MAX_NOTE_CHARS = 20_000;
+/**
+ * The longest scratch note, and the longest curriculum item id (authored,
+ * `cs4263-m1-t1`, so short). One copy, in the learner writes the sidecar
+ * shares.
+ */
+export { MAX_ID_CHARS, MAX_NOTE_CHARS };
 
-/** Curriculum item ids are authored (`cs4263-m1-t1`), so they are short. */
-export const MAX_ID_CHARS = 128;
-
-export class BadRequest extends Error {}
+/** A payload's fault: a 400. The learner writes' own class, so a shared validator's refusal is caught here too. */
+export { BadRequest };
 
 /** The proxy's answer to a request with no session, for one that got past it. */
 export function unauthenticated(): NextResponse {
@@ -209,6 +217,59 @@ export function handler<T>(
   };
 }
 
+/**
+ * The seams a learner write reads, for one owner. Lazy on purpose: a write
+ * uses the database, the scope and the time zone, and a body refused before
+ * the write must not open the database (a rejected promise nobody awaits) or
+ * build a content source and a blob store it never reads.
+ */
+function learnerDeps(owner: string): TutorDeps {
+  return {
+    owner,
+    scope: ownerScope(owner),
+    env: process.env,
+    get db() {
+      return catalogDatabase();
+    },
+    get source() {
+      return contentSource();
+    },
+    get blobStore() {
+      return assetBlobStore();
+    },
+  };
+}
+
+/**
+ * A route that is one of the shared learner writes
+ * (`@gnosia/tutor/server/learner-writes`, the sidecar's too), with this app's
+ * guards in front: same origin, the session's owner, a rate limit on
+ * `learner:<bucket>`, and the bounded body read. The parse, the write and the
+ * answer are the turn's, so the web and the native app speak one protocol.
+ */
+export function turnRoute(
+  bucket: string,
+  turn: (deps: TutorDeps, body: unknown) => Promise<TurnReply>,
+): (req: Request) => Promise<NextResponse> {
+  return async (req: Request) => {
+    const origin = enforceSameOrigin(req);
+    if (origin !== null) return origin;
+    const owner = await requestOwner();
+    if (owner instanceof NextResponse) return owner;
+    const limited = enforceRateLimit(owner, `learner:${bucket}`, LEARNER_RATE_LIMIT);
+    if (limited !== null) return limited;
+    let body: unknown;
+    try {
+      body = await readBody(req, MAX_BODY_BYTES);
+    } catch (error) {
+      if (error instanceof BadRequest) return badRequest(error.message);
+      throw error;
+    }
+    const { status, body: answer, headers } = await turn(learnerDeps(owner), body);
+    return NextResponse.json(answer, { status, headers });
+  };
+}
+
 /* -------------------------------------------------------------------------- */
 /* Field readers                                                              */
 /* -------------------------------------------------------------------------- */
@@ -224,14 +285,6 @@ export function requireId(body: Record<string, unknown>, field: string): string 
   return value;
 }
 
-export function requireBoolean(body: Record<string, unknown>, field: string): boolean {
-  const value = body[field];
-  if (typeof value !== "boolean") {
-    throw new BadRequest(`"${field}" is required and must be a boolean.`);
-  }
-  return value;
-}
-
 export function optionalBoolean(
   body: Record<string, unknown>,
   field: string,
@@ -240,21 +293,6 @@ export function optionalBoolean(
   const value = body[field];
   if (value === undefined) return fallback;
   if (typeof value !== "boolean") throw new BadRequest(`"${field}" must be a boolean.`);
-  return value;
-}
-
-export function requireString(
-  body: Record<string, unknown>,
-  field: string,
-  max: number,
-): string {
-  const value = body[field];
-  if (typeof value !== "string") {
-    throw new BadRequest(`"${field}" is required and must be a string.`);
-  }
-  if (value.length > max) {
-    throw new BadRequest(`"${field}" is longer than ${max} characters.`);
-  }
   return value;
 }
 

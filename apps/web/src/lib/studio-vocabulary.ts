@@ -1,5 +1,7 @@
 import type { TopicEntry } from "@gnosia/content";
 
+import type { FormatTime } from "@/lib/studio-chat";
+
 /**
  * The topic vocabulary as the studio screens get it: from the runner, never
  * from the app's own content read.
@@ -35,8 +37,6 @@ function isState(value: unknown): value is VocabularyState {
 }
 
 /** A readAt as a person reads it. Injected so the tests do not depend on the machine's zone. */
-export type FormatTime = (iso: string) => string;
-
 const localTime: FormatTime = (iso) => {
   const at = new Date(iso);
   return Number.isNaN(at.getTime()) ? iso : at.toLocaleString();

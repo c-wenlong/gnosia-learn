@@ -7,9 +7,8 @@
  * the runner's: the speech rate is not a constant here but the one health's
  * `video.narration.charsPerSecond` reports, which the runner takes from
  * gnosia-audio, so the card predicts the minutes the runner's validator
- * judged. `lib/studio-video.ts` (the video job view, 2c) declares
- * the same shape; whichever PR lands second imports the other's so there is
- * one definition.
+ * judged. This is the one definition of the brief's shape and its pure
+ * helpers: the video job view (`studio-video-job.ts`) imports them.
  */
 
 export type VideoAudience = "new" | "familiar" | "expert";

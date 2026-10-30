@@ -10,6 +10,8 @@ import {
   finishedHeadline,
   formatDuration,
   isActive,
+  jobKindOf,
+  jobShotHref,
   lastGateCode,
   narration,
   PHASES,
@@ -443,9 +445,29 @@ describe("what is said when nobody is looking", () => {
     );
   });
 
+  it("titles the tab with a colon, the punctuation the video job's title uses too", () => {
+    const named = job({ state: "awaiting_review", title: "Dot product", gate: gate() });
+    expect(announcement(named)?.title).toBe("✓ Dot product: ready to review");
+    expect(announcement({ ...named, state: "cancelled", note: "stopped" })).toEqual({ title: "✕ Dot product: cancelled", body: "stopped" });
+  });
+
   it("says nothing about a job that is still going", () => {
     expect(announcement(job({ state: "running" }))).toBeNull();
     expect(announcement(job({ state: "queued" }))).toBeNull();
   });
 });
 
+describe("a row's kind and its pictures", () => {
+  it("reads the kind field, and the target only for a row from a runner before it", () => {
+    expect(jobKindOf({ kind: "video", target: "learn/assets/a.tldr" })).toBe("video");
+    expect(jobKindOf({ kind: "diagram", target: "videos/a.mp4" })).toBe("diagram");
+    expect(jobKindOf({ target: "videos/a.mp4" })).toBe("video");
+    expect(jobKindOf({ target: "learn/assets/a.tldr" })).toBe("diagram");
+    expect(jobKindOf({})).toBe("diagram");
+  });
+
+  it("builds every shot URL one way, through the proxy", () => {
+    expect(jobShotHref("j/1", "live")).toBe("/studio/api/jobs/j%2F1/shot?which=live");
+    expect(jobShotHref("j1", "before")).toBe("/studio/api/jobs/j1/shot?which=before");
+  });
+});

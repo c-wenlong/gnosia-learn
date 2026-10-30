@@ -3,11 +3,13 @@ import "server-only";
 import type { ReactNode } from "react";
 
 import { AssetCard, type CardConcept } from "@/components/AssetCard";
+import { ARRIVE } from "@/components/library/arrive";
 import { AssetRow } from "@/components/library/AssetRow";
 import { cx } from "@/components/ui/classes";
 import { getCourses } from "@/data/courses";
 import { getTopics } from "@/data/topics";
-import { loadAssetAccess, loadFavorites, loadLibrary, loadSearchText, thumbnailFor, thumbnailStatusFor } from "@/lib/asset-library";
+import { loadAssetAccess, loadFavorites, loadLibrary, loadSearchText } from "@/lib/asset-library";
+import { thumbnailFor, thumbnailStatusFor } from "@/lib/library-thumbnails";
 import { dayGroups, editedLabel, timeOfDay } from "@/lib/day-groups";
 import { loadKnowledgeBase } from "@/lib/learner-store";
 import {
@@ -324,6 +326,3 @@ export function renderLibraryPage(
     pieces: page.pieces.map((piece) => ({ ...piece, rows: piece.rows.map(view.renderRow) })),
   };
 }
-
-/** A row that arrives (a tab, a filter, a page of older rows) fades in. */
-export const ARRIVE = "animate-fade-in motion-reduce:animate-none";

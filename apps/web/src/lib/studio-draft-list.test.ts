@@ -5,14 +5,12 @@ import type { DraftSummary } from "@/lib/studio-drafts";
 import {
   draftMatches,
   draftRows,
-  historyGroups,
   listPath,
   matchParts,
   readHistory,
   searchRows,
   searchText,
   stateWords,
-  type DraftRow,
 } from "./studio-draft-list";
 
 /** The drafts list above the studio grid (phase 3): which rows, called what. */
@@ -135,50 +133,6 @@ describe("kinds (docs/STUDIO-MENTIONS.md)", () => {
     expect(row!.state).toBe("Ready to make");
     expect(draftRows([base])[0]!.kinds).toEqual([]);
     expect(stateWords("briefed", ["diagram"])).toBe("Ready to draw");
-  });
-});
-
-
-describe("historyGroups", () => {
-  const row = (draftId: string, updated: string): DraftRow => ({
-    draftId,
-    heading: draftId,
-    quoted: false,
-    state: "In conversation",
-    briefed: false,
-    updated,
-    kinds: [],
-  });
-  // Local times, so the test holds in any time zone.
-  const at = (y: number, m: number, d: number, h = 12) => new Date(y, m - 1, d, h).toISOString();
-  const now = new Date(2026, 9, 4, 9);
-
-  it("files rows under the day they were last touched, in order, leaving out empty groups", () => {
-    const groups = historyGroups(
-      [
-        row("early-today", at(2026, 10, 4, 0)),
-        row("yesterday-late", at(2026, 10, 3, 23)),
-        row("week", at(2026, 9, 27)),
-        row("month", at(2026, 9, 10)),
-        row("old", at(2026, 8, 1)),
-      ],
-      now,
-    );
-    expect(groups.map((group) => [group.label, group.rows.map((entry) => entry.draftId)])).toEqual([
-      ["Today", ["early-today"]],
-      ["Yesterday", ["yesterday-late"]],
-      ["Previous 7 days", ["week"]],
-      ["Previous 30 days", ["month"]],
-      ["Older", ["old"]],
-    ]);
-  });
-
-  it("counts a row from a clock running ahead as today, and an unreadable time as older", () => {
-    const groups = historyGroups([row("ahead", at(2026, 10, 5)), row("bad", "not a time")], now);
-    expect(groups.map((group) => [group.label, group.rows.map((entry) => entry.draftId)])).toEqual([
-      ["Today", ["ahead"]],
-      ["Older", ["bad"]],
-    ]);
   });
 });
 

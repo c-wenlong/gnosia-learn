@@ -1,7 +1,6 @@
-import { cleanDisplayName, DISPLAY_NAME_MAX } from "@gnosia/schema/shared";
-import { writeDisplayName } from "@gnosia/catalog/state";
+import { nameTurn } from "@gnosia/tutor/server/learner-writes";
 
-import { BadRequest, handler } from "@/lib/learner-api";
+import { turnRoute } from "@/lib/learner-api";
 
 /**
  * What the learner asked to be called: `learner.display_name`, set on
@@ -9,17 +8,8 @@ import { BadRequest, handler } from "@/lib/learner-api";
  * empty one to clear it; stored cleaned (`cleanDisplayName`) and refused past
  * `DISPLAY_NAME_MAX` characters rather than cut, so what is saved is what was
  * typed. Answers with the stored value.
+ *
+ * The parse and the write are `nameTurn` in
+ * `@gnosia/tutor/server/learner-writes`, which the sidecar runs too.
  */
-export const POST = handler(
-  "name",
-  (body) => {
-    const name = body.name;
-    if (name !== null && typeof name !== "string") throw new BadRequest('"name" must be a string, or null to clear it.');
-    const cleaned = cleanDisplayName(name);
-    if (cleaned !== null && cleaned.length > DISPLAY_NAME_MAX) {
-      throw new BadRequest(`"name" must be at most ${DISPLAY_NAME_MAX} characters.`);
-    }
-    return cleaned;
-  },
-  (db, name, owner) => writeDisplayName(db, name, owner),
-);
+export const POST = turnRoute("name", nameTurn);

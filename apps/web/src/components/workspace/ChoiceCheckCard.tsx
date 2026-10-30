@@ -5,18 +5,15 @@ import { useId, useState } from "react";
 import { MathText } from "@/components/Math";
 import { Button } from "@/components/ui/Button";
 import { ChoiceRow, type ChoiceState } from "@/components/ui/ChoiceRow";
-import { cx, LABEL, STATUS_TEXT } from "@/components/ui/classes";
-import { SegmentedControl } from "@/components/ui/SegmentedControl";
-import { Textarea } from "@/components/ui/Textarea";
+import { cx, STATUS_TEXT } from "@/components/ui/classes";
 import {
-  CONFIDENCE_STOPS,
   DEFAULT_CONFIDENCE,
   type ChoiceAnswer,
   type ChoiceCheck,
   type ChoicePick,
 } from "@/lib/check-block";
-import { SESSION_TEXT_LIMIT } from "@/lib/session-core";
 
+import { ConfidenceField, ReasoningField } from "./SurenessFields";
 import { RecordedCard } from "./VerdictRow";
 
 /**
@@ -32,7 +29,6 @@ import { RecordedCard } from "./VerdictRow";
  * (a message typed in the composer instead): the card folds to "Not answered"
  * and nothing is written, as an untapped verdict row folds to "Not recorded".
  */
-export const STOP_ITEMS = CONFIDENCE_STOPS.map((stop) => ({ id: String(stop), label: `${stop}%` }));
 
 export function ChoiceCheckCard({
   check,
@@ -137,35 +133,9 @@ export function ChoiceCheckCard({
             </Button>
           </div>
 
-          {!dontKnow && (
-            <div className="flex flex-col gap-1.5">
-              <p id={`${id}-sure`} className={LABEL}>
-                How sure are you?
-              </p>
-              <SegmentedControl
-                label="How sure are you?"
-                labelledBy={`${id}-sure`}
-                items={STOP_ITEMS}
-                value={String(confidence)}
-                onChange={(next) => setConfidence(Number(next))}
-                size="sm"
-                block
-                disabled={disabled}
-              />
-            </div>
-          )}
+          {!dontKnow && <ConfidenceField value={confidence} onChange={setConfidence} disabled={disabled} />}
 
-          <label className="flex flex-col gap-1.5">
-            <span className={LABEL}>Your reasoning (optional)</span>
-            <Textarea
-              value={thinking}
-              onChange={(e) => setThinking(e.target.value)}
-              maxLength={SESSION_TEXT_LIMIT}
-              rows={2}
-              disabled={disabled}
-              placeholder="Why you picked it, or what you were unsure about"
-            />
-          </label>
+          <ReasoningField value={thinking} onChange={setThinking} disabled={disabled} />
 
           <div className="flex flex-wrap items-center gap-3">
             <Button variant="primary" size="sm" onClick={submit} disabled={disabled}>

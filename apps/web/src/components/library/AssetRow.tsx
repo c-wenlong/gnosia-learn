@@ -7,7 +7,7 @@ import { Glyph } from "@/components/ui/Glyph";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import { cx } from "@/components/ui/classes";
 import type { LibraryGroup } from "@/lib/library";
-import type { RowSource } from "@/lib/library-source";
+import { conceptIsTitle, type RowSource } from "@/lib/library-source";
 import { masteryCaption } from "@/lib/mastery-bucket";
 import type { RowMenuSections } from "@/lib/row-menu";
 
@@ -162,8 +162,7 @@ export function sourceText(source: RowSource | null, title: string): string | un
   const concept = source.concept;
   let conceptText: string | undefined;
   if (concept !== undefined) {
-    const isTitle = concept.title.trim().toLowerCase() === title.trim().toLowerCase();
-    conceptText = isTitle ? masteryCaption(concept.bucket) : concept.title;
+    conceptText = conceptIsTitle(concept, title) ? masteryCaption(concept.bucket) : concept.title;
     if (concept.more > 0) conceptText += ` +${concept.more}`;
   }
   const parts = [source.place, conceptText].filter((t): t is string => t !== undefined);
@@ -191,13 +190,12 @@ function sourceLine(source: RowSource | null, title: string, conceptFirst = fals
     );
   }
   const concept = source.concept;
-  const conceptIsTitle =
-    concept !== undefined && concept.title.trim().toLowerCase() === title.trim().toLowerCase();
+  const namesItself = conceptIsTitle(concept, title);
   if (conceptFirst && concept !== undefined) {
     return (
       <>
-        <MasteryDot bucket={concept.bucket} size={12} showLabel={conceptIsTitle} />
-        {!conceptIsTitle && <span className="min-w-0 truncate">{concept.title}</span>}
+        <MasteryDot bucket={concept.bucket} size={12} showLabel={namesItself} />
+        {!namesItself && <span className="min-w-0 truncate">{concept.title}</span>}
         {concept.more > 0 && <span className="shrink-0 text-text3">+{concept.more}</span>}
         {source.place !== undefined && (
           <>
@@ -221,7 +219,7 @@ function sourceLine(source: RowSource | null, title: string, conceptFirst = fals
         </span>
       )}
       {concept !== undefined &&
-        (conceptIsTitle ? (
+        (namesItself ? (
           <MasteryDot bucket={concept.bucket} size={12} showLabel />
         ) : (
           <>

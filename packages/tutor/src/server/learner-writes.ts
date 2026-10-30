@@ -7,7 +7,6 @@ import {
   closeTutorSession,
   gradeForRating,
   gradeReview,
-  inTransaction,
   ratingForGrade,
   readConceptGraph,
   readPreference,
@@ -54,31 +53,33 @@ import {
 } from "../session-core";
 import { MAX_ASSET_ID_CHARS } from "./asset-detail";
 import type { TutorDeps } from "./deps";
+import { failureCode } from "./provider-keys";
 import { appTimeZone } from "./time-zone";
 import type { TurnReply } from "./turns";
 
 /**
- * The request-independent core of the learner-state write routes under
- * `/api/learner/` — the ones `apps/web`'s `handler` (`src/lib/learner-api.ts`)
- * wraps, ported to the sidecar so the native app can write the same Postgres
- * the web writes. Bodies, field refusals, the `{ ok, result }` / `{ ok, error,
- * code }` envelopes and the statuses are the routes' own, so a reader sees one
- * protocol.
+ * The learner-state writes behind `/api/learner/*`: one copy, which both the
+ * web routes and the sidecar call, so the native app and the web write the
+ * same rows through the same parser. Bodies, field refusals, the
+ * `{ ok, result }` / `{ ok, error, code }` envelopes and the statuses are the
+ * protocol; a change here changes both at once (S9-07 of the 2026-10 audit:
+ * two copies had drifted apart before, and a macOS write the sidecar refused
+ * with a 4xx was dropped for good).
  *
- * What is not ported is what a loopback single-owner service does not have:
- * the same-origin check (`guard.ts` has its own), the rate limit, and the
- * session — `deps.owner` is the owner every write lands against.
+ * What each caller adds is its own: the web's `turnRoute`
+ * (`apps/web/src/lib/learner-api.ts`) checks the origin, resolves the owner
+ * from the session and applies the rate limit; the sidecar's `guard.ts` has
+ * its own origin check and a fixed owner. `deps.owner` is the owner every
+ * write lands against.
  *
- * The skip list, and why each is absent: `preference` carries only the one
- * key the native app writes — `lastVisited`, so a module visit the app
- * records reaches the same event log and `recentModules` list the web's
- * route keeps (the rest of the allow-list is the browser's own: theme,
- * resources, Settings choices), `recent` (pins are the web sidebar's),
- * `avatar`, `export`,
- * `import`, `reset`, `recap`, `home` and `ask` (reads, destructive resets or
- * surfaces the app has no equivalent of). `custom-provider` is a Settings
- * write rather than a learner-state one, so it lives in `turns.ts` with the
- * provider-key and tutor-model routes.
+ * Not here, because the web keeps them to itself: `preference`'s other keys
+ * (theme, resources, Settings choices; `preferenceTurn` takes only
+ * `lastVisited`, the one the native app writes, and the web route reuses
+ * `rememberVisit` and `lastVisitedValue` for it), `recent` (pins are the web
+ * sidebar's), `avatar`, `export`, `import`, `reset`, `recap`, `home` and
+ * `ask` (reads, destructive resets or surfaces the app has no equivalent of).
+ * `custom-provider` is a Settings write rather than a learner-state one, so it
+ * lives in `turns.ts` with the provider-key and tutor-model routes.
  */
 
 function reply(status: number, body: unknown): TurnReply {
@@ -90,14 +91,18 @@ function badRequest(error: string): TurnReply {
   return reply(400, { ok: false, error, code: "BAD_REQUEST" });
 }
 
-/** `unavailable` there: the message is logged, never returned — it is the driver's. */
+/**
+ * A write the database did not take: logged by its code only, never by
+ * message. A drizzle message is the failed SQL with its bind parameters,
+ * which here are the learner's notes, recaps and answers.
+ */
 function unavailable(error: unknown): TurnReply {
-  console.warn(`learner write failed: ${error instanceof Error ? error.message : String(error)}`);
+  console.warn(`learner write failed (${failureCode(error)})`);
   return reply(503, { ok: false, error: "Not saved: the database is unreachable.", code: "STORE_UNAVAILABLE" });
 }
 
-/** `BadRequest` there: a payload's fault, so a 400, never a 503. */
-class BadRequest extends Error {}
+/** A payload's fault, so a 400, never a 503. The web's `learner-api.ts` re-exports this one class, so either side's parsers can throw it. */
+export class BadRequest extends Error {}
 
 /**
  * `handler` in learner-api.ts, minus the guards the sidecar does not carry:
@@ -136,10 +141,10 @@ async function learnerWrite<T>(
 /* -------------------------------------------------------------------------- */
 
 /** The longest scratch note the checklist will store. */
-const MAX_NOTE_CHARS = 20_000;
+export const MAX_NOTE_CHARS = 20_000;
 
 /** Curriculum item ids are authored (`cs4263-m1-t1`), so they are short. */
-const MAX_ID_CHARS = 128;
+export const MAX_ID_CHARS = 128;
 
 function requireId(body: Record<string, unknown>, field: string): string {
   const value = body[field];
@@ -656,8 +661,8 @@ function object(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-/** `lastVisited` in the web route: the visit's validator, verbatim. */
-function lastVisitedValue(value: unknown): LastVisited {
+/** A `lastVisited` value: the visit's validator, for the preference turn and the web route's same key. */
+export function lastVisitedValue(value: unknown): LastVisited {
   const raw = object(value);
   const courseSlug = raw.courseSlug;
   if (typeof courseSlug !== "string" || courseSlug === "" || courseSlug.length > MAX_ID_CHARS) {
@@ -677,54 +682,34 @@ function lastVisitedValue(value: unknown): LastVisited {
   };
 }
 
-/** A failed write's SQLSTATE, read down drizzle's `cause` chain; never its message, which carries the bind parameters. */
-function failureCode(error: unknown): string {
-  for (let at: unknown = error; at instanceof Error; at = at.cause) {
-    const code = (at as { code?: unknown }).code;
-    if (typeof code === "string") return code;
-  }
-  return "unknown";
-}
-
-/** Whether a failed write names `constraint`, down the same chain. */
-function mentions(error: unknown, constraint: string): boolean {
-  for (let at: unknown = error; at instanceof Error; at = at.cause) {
-    if ((at as { constraint?: unknown }).constraint === constraint) return true;
-  }
-  return false;
-}
-
 /**
- * `rememberVisit` in the web route: `lastVisited` written is also a `visit`
- * event appended and the front of `recentModules`, in the one transaction
- * under the learner's row lock so two module pages opened together cannot
- * drop each other's entry. The event goes in a nested transaction — a
- * savepoint, which `inTransaction` opens inside one — so a database
- * that has not taken migration 0025 loses the event and still keeps the
- * preferences, which Recent reads as well; any other refusal fails the
- * write. A `lastVisited` that is no visit still lands as the preference,
- * which is the web route's own last branch.
+ * `lastVisited` written is also a `visit` event appended and the front of
+ * `recentModules`, in one transaction under the learner's row lock so two
+ * module pages opened together cannot drop each other's entry. The event is
+ * stamped by the server, as `watched` is: the log orders by it, and a
+ * browser's clock is not the log's. A write that fails fails the whole visit,
+ * so a log that has stopped taking visits is a 503 someone sees, not a quiet
+ * gap in Recent. A `lastVisited` that is no visit still lands as the
+ * preference.
+ *
+ * The event is what the sidebar's Recent and Home read (`apps/web/src/lib/recent.ts`,
+ * L7 of docs/proposals/library-by-type-and-day.md). Before the first such
+ * write an owner has `lastVisited` and no list, so the list starts from the
+ * visit `lastVisited` held until now.
  */
-async function rememberVisit(db: CatalogDatabase, value: unknown, owner: string): Promise<void> {
+export async function rememberVisit(db: CatalogDatabase, value: unknown, owner: string): Promise<void> {
   const visit = asLastVisited(value);
   await withLearnerLock(db, owner, async (tx) => {
     if (visit !== undefined) {
-      try {
-        await inTransaction(tx, async (savepoint) =>
-          appendEvent(
-            savepoint,
-            {
-              type: "visit",
-              course: visit.courseSlug,
-              ...(visit.moduleSlug === undefined ? {} : { module: visit.moduleSlug }),
-            },
-            owner,
-          ),
-        );
-      } catch (error) {
-        if (failureCode(error) !== "23514" || !mentions(error, "event_type_check")) throw error;
-        console.warn("preference: visit event not written, the database has not taken migration 0025");
-      }
+      await appendEvent(
+        tx,
+        {
+          type: "visit",
+          course: visit.courseSlug,
+          ...(visit.moduleSlug === undefined ? {} : { module: visit.moduleSlug }),
+        },
+        owner,
+      );
       const stored = asRecentModules(await readPreference(tx, PREFERENCE_KEYS.recentModules, owner));
       const previous = asLastVisited(await readPreference(tx, PREFERENCE_KEYS.lastVisited, owner));
       const list = stored ?? (previous !== undefined ? [previous] : []);

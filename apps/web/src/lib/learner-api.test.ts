@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { resetRateLimits } from "@gnosia/tutor/guards";
-import { BodyTooLarge, handler, MAX_BODY_BYTES, readBodyText } from "./learner-api";
+import { BodyTooLarge, handler, MAX_BODY_BYTES, readBodyText, turnRoute } from "./learner-api";
 
 vi.mock("@/lib/auth/session", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth/session")>()),
@@ -9,10 +9,14 @@ vi.mock("@/lib/auth/session", async (importOriginal) => ({
 }));
 
 // The write runs against whatever this hands it; no database is opened.
-const store = vi.hoisted(() => ({ write: null as null | (() => Promise<unknown>) }));
+const store = vi.hoisted(() => ({ write: null as null | (() => Promise<unknown>), opened: 0 }));
 vi.mock("@/lib/learner-store", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/learner-store")>()),
   withLearnerStore: async () => (store.write as () => Promise<unknown>)(),
+  catalogDatabase: async () => {
+    store.opened += 1;
+    return {};
+  },
 }));
 
 function streamed(chunks: Uint8Array[]): { request: Request; pulled: () => number } {
@@ -98,5 +102,47 @@ describe("handler", () => {
     const logged = warn.mock.calls.map((call) => call.join(" ")).join("\n");
     expect(logged).toContain("SQLITE_FULL");
     expect(logged).not.toContain("my private note");
+  });
+});
+
+describe("turnRoute", () => {
+  afterEach(() => {
+    resetRateLimits();
+    store.opened = 0;
+  });
+
+  const post = (body: string) =>
+    new Request("http://localhost:3000/api/learner/x", {
+      method: "POST",
+      headers: { "content-type": "application/json", "sec-fetch-site": "same-origin" },
+      body,
+    });
+
+  it("hands the turn the session's owner and answers with its reply", async () => {
+    const route = turnRoute("t", async (deps, body) => ({ status: 200, body: { ok: true, result: { owner: deps.owner, body } } }));
+    const answer = await route(post('{"a":1}'));
+    expect(answer.status).toBe(200);
+    expect(await answer.json()).toEqual({ ok: true, result: { owner: "local", body: { a: 1 } } });
+  });
+
+  it("opens the database only when the turn asks for it", async () => {
+    const refusing = turnRoute("t", async () => ({ status: 400, body: { ok: false, error: "no", code: "BAD_REQUEST" } }));
+    expect((await refusing(post("{}"))).status).toBe(400);
+    expect(store.opened).toBe(0);
+    const writing = turnRoute("t", async (deps) => {
+      await deps.db;
+      return { status: 200, body: { ok: true } };
+    });
+    expect((await writing(post("{}"))).status).toBe(200);
+    expect(store.opened).toBe(1);
+  });
+
+  it("refuses a cross-site post and bad JSON before the turn runs", async () => {
+    const turn = vi.fn(async () => ({ status: 200, body: { ok: true } }));
+    const route = turnRoute("t", turn);
+    const crossSite = new Request("http://localhost:3000/api/learner/x", { method: "POST", headers: { "sec-fetch-site": "cross-site" }, body: "{}" });
+    expect((await route(crossSite)).status).toBe(403);
+    expect((await route(post("{not json"))).status).toBe(400);
+    expect(turn).not.toHaveBeenCalled();
   });
 });

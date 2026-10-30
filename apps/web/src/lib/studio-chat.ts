@@ -1,8 +1,8 @@
 import type { Brief, Job } from "@/lib/studio-jobs";
-import { isActive } from "@/lib/studio-jobs";
-import { jobPredicate, jobStateInline } from "@/lib/studio-job-state";
+import { jobPredicate } from "@/lib/studio-job-state";
 import type { DraftState, DraftView, PendingTopic, Refusal, TranscriptEntry } from "@/lib/studio-drafts";
 import { refusalNumber, refusalReason, refusalString } from "@/lib/studio-drafts";
+import { sentence } from "@/lib/sentence";
 
 /**
  * What the studio's conversation shows, decided here and nowhere else.
@@ -18,21 +18,6 @@ import { refusalNumber, refusalReason, refusalString } from "@/lib/studio-drafts
 /* -------------------------------------------------------------------------- */
 /* The words                                                                  */
 /* -------------------------------------------------------------------------- */
-
-/** The unpaid opening turn the studio writes into an empty conversation. */
-/**
- * The composer after a refused turn. A turn typed in the composer comes back
- * unless something new was typed meanwhile (the person's newer words win, as
- * before). A turn that was never in the composer (the Extend opener) goes back
- * in front of whatever it holds, so neither is lost.
- */
-export function wordsBack(held: string, body: string, keptComposer: boolean): string {
-  if (held === "") return body;
-  return keptComposer ? `${body}\n${held}` : held;
-}
-
-export const OPENING_TURN =
-  "Tell me what the diagram should make clear. A sentence is enough; I'll ask if I need more.";
 
 export const THINKING = "The planner is thinking";
 export const CHECKING_BRIEF = "Checking the brief";
@@ -147,20 +132,9 @@ export function cardStatus(view: Pick<DraftView, "state" | "transcript">, seq: n
   return "closed";
 }
 
-/** Whether a card in this state may be edited: the brief in force, or the newest one to put back. */
-export function cardEditable(status: CardStatus): boolean {
-  return status === "live" || status === "held";
-}
-
 /** Whether the conversation has anything in it yet, which decides the opening turn. */
 export function isEmptyConversation(transcript: readonly TranscriptEntry[]): boolean {
   return visibleEntries(transcript).every((entry) => entry.role === "studio");
-}
-
-/** The last thing the person said, for Try again (E1, E2). */
-export function lastPersonText(transcript: readonly TranscriptEntry[]): string | null {
-  const people = visibleEntries(transcript).filter((entry) => entry.role === "person");
-  return people.at(-1)?.text ?? null;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -195,6 +169,7 @@ export function capFrom(value: unknown): CapStatus | null {
   };
 }
 
+/** A time as a person reads it. Injected so the tests do not depend on the machine's zone. */
 export type FormatTime = (iso: string) => string;
 
 const localTime: FormatTime = (iso) => {
@@ -306,33 +281,6 @@ export interface DrawBlock {
   holder: string | null;
 }
 
-/**
- * Why Draw cannot be pressed right now, or null when it can.
- *
- * Re-derived from the jobs list and the cap whenever either changes, which the
- * panel refreshes when it regains focus. The runner checks all of it again on
- * the press, so this is the courtesy and the 409 or 429 is the rule.
- */
-export function drawBlock(
-  brief: Brief,
-  view: Pick<DraftView, "inFlight">,
-  jobs: readonly Job[],
-  cap: CapStatus | null,
-): DrawBlock | null {
-  if (view.inFlight) return { reason: STILL_ANSWERING, holder: null };
-  const holder = jobs.find((job) => isActive(job.state) && targetSlug(job.target) === brief.slug);
-  if (holder !== undefined) {
-    const name = holder.title ?? holder.jobId.slice(0, 8);
-    const state = jobStateInline(holder.state);
-    return {
-      reason: `“${name}” already holds ${brief.slug} (${state}). Accept or discard it first.`,
-      holder: holder.jobId,
-    };
-  }
-  if (cap !== null && cap.exceeded) return { reason: capSentence(cap), holder: null };
-  return null;
-}
-
 /** The button's words: a proposed topic is created by the same press. */
 export function drawLabel(pending: PendingTopic | null | undefined): string {
   return pending ? "Create topic and draw" : "Draw";
@@ -343,13 +291,7 @@ export function modeLine(brief: Pick<Brief, "mode" | "slug">): { lead: string; s
   return brief.mode === "extend" ? { lead: "Extends", slug: brief.slug } : { lead: "New diagram, saved as", slug: brief.slug };
 }
 
-/** The runner's refusal text as a sentence: a capital first, a full stop last. */
-export function sentence(text: string): string {
-  const trimmed = text.trim();
-  if (trimmed === "") return trimmed;
-  const capital = trimmed[0]!.toUpperCase() + trimmed.slice(1);
-  return /[.!?]$/.test(capital) ? capital : `${capital}.`;
-}
+export { sentence };
 
 export interface DrawRefusal {
   text: string;
@@ -498,22 +440,6 @@ export function refusalNoted(
 }
 
 /**
- * The idempotency key for one press of Draw: the brief it draws and the job
- * the draft had before it. A double press, or a press repeated after a reload,
- * is the same key and gets the first press's job back; Draw again after that
- * job failed is a new key, because the draft's newest job has changed.
- */
-export function drawKey(draftId: string, briefSeq: number, previousJobId: string | null): string {
-  return `draw:${draftId}:${briefSeq}:${previousJobId ?? "none"}`;
-}
-
-/** Cmd or Ctrl+Enter: Draw only from an empty composer; words there are sent. */
-export function modEnterAction(text: string, drawLive: boolean): "draw" | "send" | "none" {
-  if (text.trim() !== "") return "send";
-  return drawLive ? "draw" : "none";
-}
-
-/**
  * The line under a planner turn in progress. "Thinking" until words arrive;
  * once the reply has landed and the turn is still open, the runner is
  * checking its brief (and may be asking the planner to fix it).
@@ -527,20 +453,6 @@ export function turnIndicator(
   const lastPerson = visible.filter((entry) => entry.role === "person").at(-1)?.seq ?? 0;
   const replied = visible.some((entry) => entry.role === "planner" && entry.seq > lastPerson);
   return replied ? "checking" : "thinking";
-}
-
-/**
- * The topic a brief card shows as "New topic". The live card (and a held
- * one, which a save puts back in force) reads the draft's own `pendingTopic`, which the runner clears once the topic exists,
- * so its button stops saying "Create topic and draw". An older card keeps
- * what its reply proposed, as the record of that reply.
- */
-export function cardPendingTopic(
-  status: CardStatus,
-  entry: Pick<TranscriptEntry, "pendingTopic">,
-  view: Pick<DraftView, "pendingTopic">,
-): PendingTopic | null {
-  return cardEditable(status) ? view.pendingTopic : (entry.pendingTopic ?? null);
 }
 
 /**
@@ -604,11 +516,6 @@ export function threadProblem(view: Pick<DraftView, "error" | "transcript" | "in
   if (error.kind === "agent") return { case: "E1", text: error.message };
   if (error.kind === "timeout" || error.kind === "interrupted") return { case: "E2", text: CUT_OFF };
   return { case: "E6", text: error.field ? `${error.field}: ${error.message}` : error.message, field: error.field ?? null };
-}
-
-/** E6's paid "Ask again": one turn, with the validator's sentence attached. */
-export function askAgainText(problem: Extract<ThreadProblem, { case: "E6" }>): string {
-  return `The studio refused that brief: ${problem.text}. Please fix that and send the whole brief again.`;
 }
 
 /* -------------------------------------------------------------------------- */

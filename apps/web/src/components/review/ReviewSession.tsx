@@ -10,10 +10,10 @@ import { Collapse } from "@/components/ui/Collapse";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { MathText } from "@/components/Math";
 import { FeedbackBar } from "@/components/ui/FeedbackBar";
+import { FocusFrame } from "@/components/session/FocusFrame";
 import { RatingButton } from "@/components/ui/RatingButton";
 import { StatTile } from "@/components/ui/StatTile";
-import { CLOSE_TITLE, cx, TRACK } from "@/components/ui/classes";
-import { TextLink } from "@/components/ui/TextLink";
+import { CLOSE_TITLE, cx } from "@/components/ui/classes";
 import { scrollBehavior } from "@/lib/motion";
 import { quizKey } from "@/lib/quiz-keys";
 import { randomToken } from "@/lib/random-token";
@@ -261,18 +261,18 @@ export function ReviewSession({
 
   if (!initial.reachable) {
     return (
-      <Frame percent={0} label="Review" exit={exit} stepKey="empty" columnRef={columnRef}>
+      <FocusFrame percent={0} label="Review" exit={exit} progressLabel="Review progress" stepKey="empty" columnRef={columnRef}>
         <Closing
           title="Reviews are unavailable"
           lead="The catalog could not be read, so there is no queue to show and nothing could be graded. Check it with npm run catalog -- status, then reload."
         />
-      </Frame>
+      </FocusFrame>
     );
   }
 
   if (total === 0 && selected) {
     return (
-      <Frame percent={0} label="Review" exit={exit} stepKey="empty" columnRef={columnRef}>
+      <FocusFrame percent={0} label="Review" exit={exit} progressLabel="Review progress" stepKey="empty" columnRef={columnRef}>
         <Closing
           title="Already reviewed"
           lead="The cards picked for you are not due any more, so there is nothing to ask here. Any others that are due are under All reviews."
@@ -281,19 +281,19 @@ export function ReviewSession({
             All reviews
           </Button>
         </Closing>
-      </Frame>
+      </FocusFrame>
     );
   }
 
   if (total === 0) {
     const next = formatDue(initial.nextDue, now);
     return (
-      <Frame percent={0} label="Review" exit={exit} stepKey="empty" columnRef={columnRef}>
+      <FocusFrame percent={0} label="Review" exit={exit} progressLabel="Review progress" stepKey="empty" columnRef={columnRef}>
         <Closing
           title="Nothing due"
           lead={next === null ? "No review is scheduled yet. Cards appear here once a concept has been taught or probed." : `The next card is due ${next}.`}
         />
-      </Frame>
+      </FocusFrame>
     );
   }
 
@@ -301,7 +301,8 @@ export function ReviewSession({
     const again = outcomes.filter((o) => o.rating === 0).length;
     const next = close === null ? "…" : (formatDue(close.nextDue, new Date()) ?? "none");
     return (
-      <Frame
+      <FocusFrame
+        progressLabel="Review progress"
         percent={100}
         label={`Review · ${total} of ${total}`}
         short={`${total} of ${total}`}
@@ -340,7 +341,7 @@ export function ReviewSession({
             </Button>
           )}
         </Closing>
-      </Frame>
+      </FocusFrame>
     );
   }
 
@@ -351,7 +352,8 @@ export function ReviewSession({
   const eyebrow = cardEyebrow(item);
 
   return (
-    <Frame
+    <FocusFrame
+      progressLabel="Review progress"
       percent={(position / total) * 100}
       label={`Review · ${position} of ${total}`}
       short={`${position} of ${total}`}
@@ -445,7 +447,7 @@ export function ReviewSession({
         <p>{keysHint(item, phase)}</p>
         <p suppressHydrationWarning>{cardStats(item, now)}</p>
       </div>
-    </Frame>
+    </FocusFrame>
   );
 }
 
@@ -467,69 +469,6 @@ function keysHint(item: ReviewItem, phase: Phase): string {
   return phase === "ask" ? "Keys 1 to 4 pick an answer" : "Keys 1 to 4 rate · enter continues";
 }
 
-/**
- * The focus-mode frame: the step bar, the label and exit row, the 720px column.
- * The column is keyed on `stepKey`, so each card mounts afresh and rises in;
- * the bar above it stays, and its fill slides to the new width.
- */
-function Frame({
-  percent,
-  label,
-  short,
-  exit,
-  stepKey,
-  columnRef,
-  children,
-}: {
-  percent: number;
-  label: string;
-  short?: string;
-  exit: { href: string; label: string };
-  stepKey: number | string;
-  columnRef: RefObject<HTMLDivElement | null>;
-  children: ReactNode;
-}) {
-  const value = Math.max(0, Math.min(100, percent));
-  return (
-    // On a phone the column fills what the shell's header and store banner
-    // leave, less the page's bottom padding (the page's root is a flex column
-    // there, `AppShell`), so the rating row sits at the bottom where a thumb
-    // is (hi-fi 14).
-    <div className="flex flex-1 flex-col">
-      <div
-        className={cx("h-2 w-full md:h-3", TRACK)}
-        role="progressbar"
-        aria-label="Review progress"
-        aria-valuenow={Math.round(value)}
-        aria-valuemin={0}
-        aria-valuemax={100}
-      >
-        <div
-          className="h-full rounded-r-[4px] bg-accent transition-[width] duration-300 ease-soft motion-reduce:transition-none md:rounded-r-md"
-          style={{ width: `${value}%` }}
-        />
-      </div>
-      <div className="flex items-center justify-between gap-4 px-3.5 py-2 text-[12px] font-medium text-text2 md:px-6 md:py-3">
-        <p>
-          <span className="md:hidden">{short ?? label}</span>
-          <span className="hidden md:inline">{label}</span>
-        </p>
-        <TextLink href={exit.href} tone="muted">
-          <span className="md:hidden">Exit</span>
-          <span className="hidden md:inline">{exit.label}</span>
-        </TextLink>
-      </div>
-      <div
-        key={stepKey}
-        ref={columnRef}
-        data-step={stepKey}
-        className="mx-auto flex w-full max-w-[720px] flex-1 animate-enter flex-col gap-3 px-3.5 pt-1 pb-3.5 motion-reduce:animate-none md:flex-none md:gap-[22px] md:px-0 md:pt-0 md:pb-10"
-      >
-        {children}
-      </div>
-    </div>
-  );
-}
 
 /**
  * The tinted answer panel: the answer, its citation, Why? and Open concept.

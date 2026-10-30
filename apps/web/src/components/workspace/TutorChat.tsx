@@ -19,6 +19,7 @@ import type { CitationSource } from "@/lib/agent/prompt";
 import { prefersReducedMotion, scrollBehavior } from "@/lib/motion";
 import type { TagKind } from "@/lib/studio-drafts";
 import { useHydrated } from "@/lib/use-hydrated";
+import { tutorProblem } from "@/lib/tutor-errors";
 import { HEALTH_READ_MS, readHealth, studioCanTag, whenIdle } from "@/lib/tutor-studio";
 import {
   chatTurns,
@@ -157,17 +158,6 @@ function writeTurns(key: string, turns: ThreadItem[]): void {
     // A full or refused store costs persistence, not the conversation.
   }
   for (const listener of listeners) listener();
-}
-
-function errorFor(status: number, data: ChatReply): string {
-  if (data.code === "MISSING_API_KEY") {
-    // The server says which case it is: no key anywhere, or a model list
-    // whose providers have none (docs/TUTOR-MODELS.md, T4).
-    return data.error ?? "The tutor has no model provider key yet. Add one in Settings, under Providers.";
-  }
-  if (data.code === "CONCEPT_UNAVAILABLE") return "The knowledge base is unreachable, so the tutor has no note to read.";
-  if (status === 429) return "That was a lot of questions in a minute. Wait a moment and try again.";
-  return data.error ?? `The tutor did not answer (HTTP ${status}).`;
 }
 
 type Value = MentionValue<TagKind>;
@@ -450,7 +440,7 @@ export function TutorChat({
       });
       const data = (await res.json().catch(() => ({}))) as ChatReply;
       if (controller.signal.aborted) return;
-      if (!res.ok) throw new Error(errorFor(res.status, data));
+      if (!res.ok) throw new Error(tutorProblem(res.status, data));
       const content = data.message?.content?.trim();
       if (!content) throw new Error("The tutor sent an empty reply. Try asking again.");
       if (Array.isArray(data.sources) && data.sources.length > 0) setSources(data.sources);
