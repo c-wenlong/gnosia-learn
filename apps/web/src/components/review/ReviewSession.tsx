@@ -12,6 +12,8 @@ import { MathText } from "@/components/Math";
 import { WrongSourceNote } from "@/components/WrongSourceNote";
 import { FeedbackBar } from "@/components/ui/FeedbackBar";
 import { FocusFrame } from "@/components/session/FocusFrame";
+import { useWrittenOptions } from "@/components/session/use-written-options";
+import { Placeholder } from "@/components/ui/Placeholder";
 import { RatingButton } from "@/components/ui/RatingButton";
 import { StatTile } from "@/components/ui/StatTile";
 import { CLOSE_TITLE, cx } from "@/components/ui/classes";
@@ -29,10 +31,12 @@ import {
   RATING_IF_CORRECT,
   RATING_IF_WRONG,
   RATING_LABEL,
+  withTutorOptions,
   type Rating,
   type ReviewItem,
   type ReviewSessionData,
 } from "@gnosia/tutor/review-core";
+import { sameCheck } from "@gnosia/tutor/session-core";
 
 
 /**
@@ -44,6 +48,16 @@ import {
  * right pick suggests Good and a wrong one Again, shown on the rating row and
  * committed by Continue, and any of the four buttons overrides it. Keys 1 to 4
  * pick an option before the verdict and rate after it.
+ *
+ * A check card whose wrong options came from other notes, when a tutor model
+ * can be asked, carries `rewrite`: the page asks the tutor for the check's
+ * options (`useWrittenOptions`, the session page's request, stored per check
+ * on the server) for the card on screen and the two after it, so the next
+ * card is usually ready by the time it comes up. The card on screen waits for
+ * them, and is laid out with the tutor's options when they arrive in time;
+ * when the tutor refuses or does not answer within `OPTIONS_WAIT_MS`, it is
+ * asked with the notes' options and the line that says so (docs/LEARN.md,
+ * "Wrong options"). Never during a render: the page asks from the browser.
  *
  * The queue is fixed when the page renders. Each rating is one
  * `POST /api/review/grade`, and the card advances only once it has been
@@ -126,7 +140,26 @@ export function ReviewSession({
   const attempt = useRef(randomToken());
 
   const now = useMemo(() => new Date(asOf), [asOf]);
-  const item: ReviewItem | undefined = items[index];
+  const optionsAt = useCallback((at: number) => {
+    const card = items[at];
+    return card?.rewrite === undefined ? null : { concept: card.conceptId, check: card.rewrite.check };
+  }, [items]);
+  const written = useWrittenOptions(index, optionsAt, true);
+  /** A card's layout with the tutor's options, by place in the queue, or null when they cannot be used. */
+  const tutored = useMemo(() => {
+    const out: Record<number, ReviewItem | null> = {};
+    for (const [at, answer] of Object.entries(written)) {
+      const card = items[Number(at)];
+      // Options for the check as the server read it now: a note edited since
+      // the page drew asks a different question, so they are not used.
+      out[Number(at)] = answer !== null && card !== undefined && sameCheck(card, answer) ? withTutorOptions(card, answer.options) : null;
+    }
+    return out;
+  }, [written, items]);
+  const queued: ReviewItem | undefined = items[index];
+  /** The card on screen is still waiting for the tutor's options. */
+  const writing = queued?.rewrite !== undefined && written[index] === undefined;
+  const item: ReviewItem | undefined = queued?.rewrite === undefined ? queued : (tutored[index] ?? queued);
   const total = items.length;
   const done = initial.reachable && index >= total;
 
@@ -233,7 +266,7 @@ export function ReviewSession({
   }, [done, total, router]);
 
   useEffect(() => {
-    if (item === undefined) return;
+    if (item === undefined || writing) return;
     const onKey = (event: KeyboardEvent) => {
       const pressed = quizKey(event, pending);
       if (pressed === null) return;
@@ -258,7 +291,7 @@ export function ReviewSession({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [item, phase, pending, suggested, rate, reveal, pick]);
+  }, [item, writing, phase, pending, suggested, rate, reveal, pick]);
 
   if (!initial.reachable) {
     return (
@@ -380,7 +413,9 @@ export function ReviewSession({
         </h1>
       </section>
 
-      {item.kind === "check" ? (
+      {writing ? (
+        <Placeholder label="The tutor is writing the options…" height={180} className="motion-safe:animate-pulse" />
+      ) : item.kind === "check" ? (
         <CheckBody
           item={item}
           phase={phase}
@@ -430,7 +465,7 @@ export function ReviewSession({
           <Button block onClick={reveal} aria-keyshortcuts="Space">
             Show answer
           </Button>
-        ) : (
+        ) : writing ? null : (
           <div className="flex">
             <Button variant="secondary" onClick={() => pick(null)} disabled={pending}>
               I don&apos;t know
@@ -445,7 +480,7 @@ export function ReviewSession({
       </div>
 
       <div className="hidden items-center justify-between gap-4 text-[12px] text-text3 md:flex">
-        <p>{keysHint(item, phase)}</p>
+        <p>{writing ? "" : keysHint(item, phase)}</p>
         <p suppressHydrationWarning>{cardStats(item, now)}</p>
       </div>
     </FocusFrame>

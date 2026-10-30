@@ -47,9 +47,17 @@ export interface ReviewItem {
    * Check cards only: where the wrong options came from. `tutor` when the
    * tutor model wrote them for this check (the store a session fills,
    * docs/LEARN.md "Wrong options"), `notes` when they are other notes'
-   * answers and summaries. A review never calls a model itself.
+   * answers and summaries. A review never calls a model while it renders.
    */
   wrong?: "tutor" | "notes";
+  /**
+   * Check cards whose wrong options came from the notes, when the check's
+   * answer is short enough and a tutor model can be asked: the note's check,
+   * by id. The page asks the tutor to write its options
+   * (`POST /api/agent/check-options`, stored per check) before showing the
+   * card, and lays it out again with them (`withTutorOptions`).
+   */
+  rewrite?: { check: string };
   /** How many check blocks the note holds. */
   checks: number;
   /** The interval each rating would give, in days, index = rating. */
@@ -155,6 +163,23 @@ export function buildChoices(
   const wrong = shuffled(candidates.slice(0, (MAX_CHOICES - 1) * 2), seed).slice(0, MAX_CHOICES - 1);
   const choices = shuffled([answer.trim(), ...wrong], seed ^ 0x9e3779b9);
   return { choices, correct: choices.indexOf(answer.trim()) };
+}
+
+/**
+ * A check card carrying `rewrite`, laid out again with the wrong options the
+ * tutor wrote for its check: the same order the queue gives the card once
+ * they are stored, since both seed `buildChoices` with the concept. Null when
+ * the card asks for no rewrite or the options cannot make one, and the page
+ * keeps the card it has.
+ */
+export function withTutorOptions(item: ReviewItem, options: readonly string[]): ReviewItem | null {
+  const { rewrite, ...rest } = item;
+  if (rewrite === undefined || item.choices === null || item.correct === null) return null;
+  const answer = item.choices[item.correct];
+  if (answer === undefined) return null;
+  const mc = buildChoices(item.conceptId, answer, options);
+  if (mc === null) return null;
+  return { ...rest, choices: mc.choices, correct: mc.correct, wrong: "tutor" };
 }
 
 /** Compact for the phone's rating buttons ("4d"), words for the desktop ("4 days"). */

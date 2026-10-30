@@ -11,6 +11,8 @@ import {
 import type { ConceptCheck } from "@gnosia/tutor/concept-note-core";
 import { readConceptNote } from "@/lib/concept-note";
 import { readWrittenOptions } from "@gnosia/tutor/server/check-options";
+import { canWriteOptionsFor } from "@gnosia/tutor/check-options";
+import { tutorModelConfigured } from "@/lib/session-page";
 import { catalogDatabase } from "@/lib/learner-store";
 import { currentOwner, ownerScope } from "@/lib/owner";
 import { buildChoices, recallPrompt, type ReviewItem, type ReviewSessionData } from "@gnosia/tutor/review-core";
@@ -20,8 +22,10 @@ import { buildChoices, recallPrompt, type ReviewItem, type ReviewSessionData } f
  * each concept's note read for its check blocks, and every card turned into
  * either a multiple-choice check or a recall prompt. A check's wrong options
  * are the ones the tutor wrote for it when a session stored them
- * (docs/LEARN.md, "Wrong options"), else other notes' answers and summaries;
- * the review reads that store and never calls a model to fill it.
+ * (docs/LEARN.md, "Wrong options"), else other notes' answers and summaries.
+ * The review reads that store and never calls a model while it renders: a
+ * card with the notes' options carries `rewrite` when a tutor model can be
+ * asked, and the page asks for the tutor's options from the browser.
  *
  * Shared by the `/review` page (through `loadReviewSession`, which marks the
  * request as dynamic) and `GET /api/review/due` (through `readReviewSession`,
@@ -64,6 +68,8 @@ export function toReviewItem(
   pool: readonly string[],
   /** The tutor's wrong options per check id, stored and still matching their checks. */
   written: Readonly<Record<string, readonly string[]>> = {},
+  /** A tutor model can be asked, so a check with no options written carries `rewrite`. */
+  canWrite = false,
 ): ReviewItem {
   const check = firstCheck(checks);
   const base = {
@@ -108,7 +114,16 @@ export function toReviewItem(
     choices: mc?.choices ?? null,
     correct: mc?.correct ?? null,
     ...(mc === null ? {} : { wrong: fromTutor !== null ? ("tutor" as const) : ("notes" as const) }),
+    ...(mc !== null && fromTutor === null && canWrite && canWriteOptionsFor(check.answer) ? { rewrite: { check: check.id } } : {}),
   };
+}
+
+/** A card without its `rewrite`, for a session with no tutor model to ask. */
+function withoutRewrite(item: ReviewItem): ReviewItem {
+  if (item.rewrite === undefined) return item;
+  const rest = { ...item };
+  delete rest.rewrite;
+  return rest;
 }
 
 /**
@@ -168,11 +183,15 @@ export async function readReviewSession(
     answer: firstCheck(checks[i] ?? [])?.answer.trim() ?? "",
   }));
 
+  const items = queue.items.map((item, i) =>
+    toReviewItem(item, checks[i] ?? [], reviewDistractorPool(item, answers, summaries), written.get(item.conceptId), true),
+  );
+  // Whether a model can be asked is read only when some card would ask one.
+  const canWrite = items.some((item) => item.rewrite !== undefined) && (await tutorModelConfigured().catch(() => false));
+
   return {
     reachable: true,
-    items: queue.items.map((item, i) =>
-      toReviewItem(item, checks[i] ?? [], reviewDistractorPool(item, answers, summaries), written.get(item.conceptId)),
-    ),
+    items: canWrite ? items : items.map(withoutRewrite),
     nextDue: queue.nextDue,
     ...(more ? { more } : {}),
   };
