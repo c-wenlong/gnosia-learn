@@ -18,6 +18,11 @@ import { RowMenu, rowMenuOwnsKey } from "./RowMenu";
 
 const refresh = vi.hoisted(() => vi.fn());
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh, push: vi.fn() }) }));
+// The Ask chat is loaded lazily in the app; here it is the module itself, drawn at once.
+vi.mock("next/dynamic", async () => {
+  const { AskPanel } = await import("./AskPanel");
+  return { default: () => AskPanel };
+});
 vi.mock("next/link", () => ({
   default: ({ href, children, ...rest }: { href: string; children: unknown }) =>
     createElement("a", { href, ...rest }, children as never),
@@ -131,6 +136,24 @@ describe("RowMenu", () => {
     await choose("Unfavorite");
     expect(refresh).not.toHaveBeenCalled();
     expect(status()).toBe("Not saved. Try again.");
+  });
+
+  it("sends one star write at a time, and a retry after a refusal sends again", async () => {
+    let release: (response: Response) => void = () => {};
+    fetchMock.mockImplementationOnce(() => new Promise<Response>((resolve) => (release = resolve)));
+    const { choose, status } = mount(false);
+    const favoriteCalls = () => fetchMock.mock.calls.filter(([path]) => path === "/api/learner/favorite").length;
+    await choose("Favorite");
+    // The star shows at once, so the menu offers Unfavorite; pressing it while
+    // the first write is out sends nothing.
+    await choose("Unfavorite");
+    expect(favoriteCalls()).toBe(1);
+    await act(async () => release(new Response("{}", { status: 500 })));
+    expect(status()).toBe("Not saved. Try again.");
+    // Refused and put back: a press now is a new write.
+    await choose("Favorite");
+    expect(favoriteCalls()).toBe(2);
+    expect(status()).toBe("Starred");
   });
 
   it("marks a note read through the watched event", async () => {

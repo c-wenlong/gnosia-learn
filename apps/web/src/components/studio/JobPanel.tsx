@@ -30,7 +30,7 @@ import {
   type PhaseRow,
   type StudioEvent,
 } from "@/lib/studio-jobs";
-import { jobStateLabel } from "@/lib/studio-job-state";
+import { jobStateLabel, progressWord } from "@/lib/studio-job-state";
 import { createDraft, idempotencyKey } from "@/lib/studio-drafts";
 import { leaveOpener, leavePrefill, sessionStore, talkItThroughText, talkTarget } from "@/lib/studio-extend";
 import { conversationHref, extendFromHref, panelHref } from "@/lib/studio-view";
@@ -422,7 +422,10 @@ function PhaseList({ rows, live }: { rows: PhaseRow[]; live: boolean }) {
             <span aria-hidden className="w-4 shrink-0 text-center">
               {row.status === "done" ? "✓" : row.status === "failed" ? "✕" : row.status === "current" ? "•" : "·"}
             </span>
-            <span className="min-w-0 flex-1 truncate">{row.label}</span>
+            <span className="min-w-0 flex-1 truncate">
+              <span className="sr-only">{progressWord(row.status)}</span>
+              {row.label}
+            </span>
             {row.status === "current" && live && <IndeterminateBar />}
             <span className="shrink-0 tabular-nums text-text2">
               {row.status === "pending" ? "" : formatDuration(row.durationMs)}

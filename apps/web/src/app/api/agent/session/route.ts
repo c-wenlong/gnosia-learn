@@ -2,14 +2,10 @@ import { NextResponse } from "next/server";
 
 import { tutorDeps, turnResponse } from "@/lib/agent/env";
 import { CHAT_RATE_LIMIT, enforceRateLimit, enforceSameOrigin } from "@/lib/agent/guard";
-import { isConceptSlug } from "@/lib/concept-workspace-core";
 import { requestOwner } from "@/lib/learner-api";
-import { sessionQuestionTurn } from "@gnosia/tutor/server/turns";
+import { sessionQuestionTurn, validateSessionBody } from "@gnosia/tutor/server/turns";
 
 export const runtime = "nodejs";
-
-/** The most questions a caller may ask the generator to avoid repeating. */
-const MAX_AVOID = 12;
 
 /**
  * `POST /api/agent/session` with `{ conceptSlug, step, avoid? }`: one
@@ -19,8 +15,8 @@ const MAX_AVOID = 12;
  *
  * The turn itself — the workspace read, the prompt, the model chain and the
  * parsed question — is `sessionQuestionTurn` in `@gnosia/tutor/server`.
- * This file keeps the request-side guards and the validation that must
- * answer before the limiter is touched.
+ * This file keeps the request-side guards, and answers the turn's own
+ * validation (`validateSessionBody`) before the limiter is touched.
  */
 export async function POST(req: Request) {
   const crossOrigin = enforceSameOrigin(req);
@@ -34,13 +30,9 @@ export async function POST(req: Request) {
   } catch {
     return bad("Invalid JSON body");
   }
-  if (body === null || typeof body !== "object" || Array.isArray(body)) return bad("The body must be a JSON object");
-  const { conceptSlug, step, avoid } = body as Record<string, unknown>;
-  if (!isConceptSlug(conceptSlug)) return bad("conceptSlug must be a concept id (lowercase letters, digits and hyphens)");
-  if (step !== "probe" && step !== "check") return bad('step must be "probe" or "check"');
-  if (avoid !== undefined && (!Array.isArray(avoid) || avoid.length > MAX_AVOID || avoid.some((q) => typeof q !== "string"))) {
-    return bad(`avoid must be a list of at most ${MAX_AVOID} questions`);
-  }
+  // The turn's own rules, before the limiter: a body the turn would refuse spends no token.
+  const refused = validateSessionBody(body);
+  if (refused) return turnResponse(refused);
 
   // Before the read, so an unknown slug is not a free way to spin the limiter.
   const limited = enforceRateLimit(owner, "session", CHAT_RATE_LIMIT);

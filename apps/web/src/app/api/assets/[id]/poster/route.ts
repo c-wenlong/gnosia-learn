@@ -1,16 +1,7 @@
 import { POSTER_CONTENT_TYPE } from "@gnosia/catalog/state";
-import { NextResponse } from "next/server";
 
-import {
-  blobStoreProblem,
-  openBlob,
-  posterSource,
-  webStreamFrom,
-  type AssetFileProblem,
-  type AssetStored,
-} from "@/lib/asset-files";
-import { lookupFailed } from "@/lib/asset-response";
-import { assetBlobStore, SIGNED_URL_TTL_SECONDS } from "@/lib/blob-store";
+import { posterSource } from "@/lib/asset-files";
+import { lookupFailed, problemResponse, serveStoredWhole } from "@/lib/asset-response";
 import { withLearnerStore } from "@/lib/learner-store";
 
 /**
@@ -53,7 +44,7 @@ export const runtime = "nodejs";
  * direct navigation into an opaque origin, which costs an `<img>` embed nothing
  * because an image never consults this header at all.
  */
-export const POSTER_CSP = "default-src 'none'; script-src 'none'; sandbox";
+const POSTER_CSP = "default-src 'none'; script-src 'none'; sandbox";
 
 export async function GET(
   request: Request,
@@ -69,69 +60,6 @@ export async function GET(
     return lookupFailed("asset poster", error);
   }
 
-  if (target.ok === false) return problem(target);
-  return serveStored(request, target);
-}
-
-function problem(p: AssetFileProblem): Response {
-  return NextResponse.json({ error: p.error, code: p.code, detail: p.detail }, { status: p.status });
-}
-
-function posterHeaders(filename: string, etag: string): Record<string, string> {
-  return {
-    "Content-Type": POSTER_CONTENT_TYPE,
-    "Content-Disposition": `inline; filename="${filename}"`,
-    "X-Content-Type-Options": "nosniff",
-    "Content-Security-Policy": POSTER_CSP,
-    "Cache-Control": "private, max-age=0, must-revalidate",
-    ETag: etag,
-  };
-}
-
-/**
- * The stored poster. Its tag is the object's sha256, so it changes exactly when
- * the upload stores a different picture, and a grid revalidating thirty of
- * them costs thirty 304s and no reads. A signed URL is a 302 with `no-store`,
- * as in the file route; otherwise the whole object is streamed, since a poster
- * is tens of kilobytes and there is nothing to seek in it.
- */
-async function serveStored(request: Request, stored: AssetStored): Promise<Response> {
-  const etag = `"${stored.sha256}"`;
-  const headers = posterHeaders(stored.filename, etag);
-  if (matchesEtag(request.headers.get("if-none-match"), etag)) {
-    return new Response(null, { status: 304, headers });
-  }
-  try {
-    const url = await assetBlobStore().signedUrl(stored.key, SIGNED_URL_TTL_SECONDS);
-    if (url !== null) {
-      return new Response(null, {
-        status: 302,
-        headers: { Location: url, "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" },
-      });
-    }
-    const read = await openBlob(stored.key);
-    return new Response(webStreamFrom(read.body), {
-      status: 200,
-      headers: { ...headers, "Content-Length": String(read.size) },
-    });
-  } catch (error) {
-    return problem(blobStoreProblem(error));
-  }
-}
-
-/**
- * Does `If-None-Match` name this tag?
- *
- * The header is a comma-separated list, `*` matches anything, and a browser
- * that revalidates a response it received compressed sends the tag back with a
- * `W/` on it. Comparing the whole header against one tag would miss all three
- * and re-send a picture the client already has, every time.
- */
-function matchesEtag(header: string | null, etag: string): boolean {
-  if (header === null) return false;
-  const strip = (tag: string) => (tag.startsWith("W/") ? tag.slice(2) : tag);
-  return header
-    .split(",")
-    .map((tag) => strip(tag.trim()))
-    .some((tag) => tag === "*" || tag === strip(etag));
+  if (target.ok === false) return problemResponse(target);
+  return serveStoredWhole(request, target, { contentType: POSTER_CONTENT_TYPE, csp: POSTER_CSP });
 }

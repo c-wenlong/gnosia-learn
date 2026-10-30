@@ -267,6 +267,16 @@ describe("pressing", () => {
     ).toMatch(/daily cap is spent/);
   });
 
+  it("words a blank reason itself rather than throwing (S2-09)", () => {
+    const blank = [{ name: "revideokc" as const, strength: "", available: false, reason: "  " }];
+    expect(kindDrawBlock("video", { ...VIDEO, tool: "revideokc" }, bothAsked(), [], null, { ok: true, reason: null, tools: blank })?.reason).toBe(
+      "revideokc videos are not available on this machine.",
+    );
+    expect(kindDrawBlock("diagram", DIAGRAM, bothAsked(), [], null, null, { ok: false, reason: "" })?.reason).toBe(
+      "Diagrams cannot be drawn on this machine right now.",
+    );
+  });
+
   it("presses a video on its own tool's doctor: revideokc's verdict for a revideokc brief, manimkc's for the rest (D75)", () => {
     const tools = (revideokc: boolean) => [
       { name: "manimkc" as const, strength: "", available: false, reason: "this machine cannot make manimkc videos right now: render profile: no Metal" },

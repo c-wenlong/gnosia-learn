@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { AssetBlob, AssetRef, CatalogDatabase } from "@gnosia/catalog/state";
+import type { AssetRef, CatalogDatabase } from "@gnosia/catalog/state";
 import type { BlobRead, BlobStore } from "@gnosia/blob";
 import type { AssetSeams } from "@gnosia/tutor/server/deps";
 import {
@@ -8,8 +8,6 @@ import {
   posterSource as posterSourceCore,
   pdfSource as pdfSourceCore,
   resolveAsset as resolveAssetCore,
-  resolveBlob as resolveBlobCore,
-  resolveRowText as resolveRowTextCore,
   servedAssets as servedAssetsCore,
   storedPdfs as storedPdfsCore,
   storedPosters as storedPostersCore,
@@ -24,12 +22,10 @@ import { currentScope } from "@/lib/owner";
 
 export {
   BYTE_QUEUE,
-  CONTENT_TYPES,
   contentTypeFor,
   blobStoreProblem,
   isRangeRefusal,
   parseRange,
-  rowTypeFor,
   safeFilename,
   webStreamFrom,
 } from "@gnosia/tutor/server/asset-files";
@@ -39,7 +35,6 @@ export type {
   AssetSource,
   AssetSourceResult,
   AssetStored,
-  RangeRequest,
 } from "@gnosia/tutor/server/asset-files";
 
 /**
@@ -71,16 +66,15 @@ function lazyBlobStore(): BlobStore {
   };
 }
 
-async function seams(): Promise<AssetSeams> {
+/**
+ * This app's seams for the shared asset reads: the request's owner scope,
+ * the selected content source and the deferred blob store. The one builder
+ * every asset read uses, the file routes' and the library's text reads alike
+ * (S6-12 of the library audit), so a bad `GNOSIA_HOME` reads as
+ * `blob-store-unavailable` everywhere.
+ */
+export async function seams(): Promise<AssetSeams> {
   return { scope: await currentScope(), source: contentSource(), blobStore: lazyBlobStore() };
-}
-
-export async function resolveBlob(blob: AssetBlob, name: string) {
-  return resolveBlobCore(await seams(), blob, name);
-}
-
-export async function resolveRowText(db: CatalogDatabase, row: AssetRef) {
-  return resolveRowTextCore(await seams(), db, row);
 }
 
 export async function resolveAsset(db: CatalogDatabase, id: string): Promise<AssetSourceResult> {

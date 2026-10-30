@@ -25,6 +25,12 @@ import { describe, expect, it } from "vitest";
  * day it lands. The content reads take a required `OwnerScope`, which the
  * compiler already enforces; they are checked here too, which costs nothing.
  *
+ * `@gnosia/tutor/server/<name>` is a second door: its modules call the
+ * catalog themselves, so a web call into one is held to the same rule, and
+ * the package's own catalog calls are checked against the catalog's door.
+ * Its turn functions take the owner inside a required `deps.owner`, which
+ * the compiler enforces.
+ *
  * The ways around that check are refused outright, since each one hands the
  * owner to something this test cannot follow: a hard-coded `'local'` or
  * `LOCAL_LEARNER_ID` outside `owner.ts`, a scope built by hand (an object with
@@ -39,6 +45,15 @@ const WEB_SRC = path.resolve(HERE, "..");
 const REPO = path.resolve(WEB_SRC, "..", "..", "..");
 const DOOR = "@gnosia/catalog/state";
 const DOOR_INDEX = path.join(REPO, "services", "catalog", "src", "state", "index.ts");
+
+/**
+ * The tutor package's server half, `@gnosia/tutor/server/<name>`: the second
+ * door. Its modules call the catalog themselves (provider keys, turns, learner
+ * writes, the concept workspace), so a web call into one that leaves the owner
+ * out reads the default learner just as a direct catalog call would.
+ */
+const TUTOR_SERVER = path.join(REPO, "packages", "tutor", "src", "server");
+const TUTOR_DOOR = "@gnosia/tutor/server/";
 
 const OWNER_PARAMS = new Set(["learnerId", "owner", "scope"]);
 
@@ -110,6 +125,34 @@ function slotOf(fn: ts.FunctionDeclaration): OwnerSlot | null {
   return null;
 }
 
+/** The owner-taking functions one module declares and exports itself, by name. */
+function moduleTable(file: string): Map<string, OwnerSlot> {
+  const table = new Map<string, OwnerSlot>();
+  for (const node of parse(file).statements) {
+    if (!ts.isFunctionDeclaration(node) || node.name === undefined) continue;
+    if (!node.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword)) continue;
+    const slot = slotOf(node);
+    if (slot !== null) table.set(node.name.text, slot);
+  }
+  return table;
+}
+
+/** Every `@gnosia/tutor/server/<name>` module with an owner-taking export, by specifier. */
+function tutorTables(): Map<string, Map<string, OwnerSlot>> {
+  const out = new Map<string, Map<string, OwnerSlot>>();
+  for (const file of tutorServerFiles()) {
+    const table = moduleTable(file);
+    if (table.size > 0) out.set(`${TUTOR_DOOR}${path.basename(file, ".ts")}`, table);
+  }
+  return out;
+}
+
+function tutorServerFiles(): string[] {
+  return readdirSync(TUTOR_SERVER)
+    .filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts") && !name.endsWith(".d.ts"))
+    .map((name) => path.join(TUTOR_SERVER, name));
+}
+
 /** Every function the door exports that takes an owner, by exported name. */
 function ownerTable(): Map<string, OwnerSlot> {
   const door = parse(DOOR_INDEX);
@@ -152,12 +195,23 @@ function hasLearnerKey(node: ts.Expression): boolean {
   );
 }
 
-/** The calls in one file that leave the owner to a default, or hand an owner-taking function on uncalled. */
-function violationsIn(file: string, text: string, table: ReadonlyMap<string, OwnerSlot>): Violation[] {
+/**
+ * The calls in one file that leave the owner to a default, or hand an
+ * owner-taking function on uncalled. `table` is the catalog door's; `tutor`
+ * holds the tutor server's modules, checked the same way.
+ */
+function violationsIn(
+  file: string,
+  text: string,
+  table: ReadonlyMap<string, OwnerSlot>,
+  tutor: ReadonlyMap<string, ReadonlyMap<string, OwnerSlot>> = new Map(),
+): Violation[] {
   const source = parse(file, text);
-  const bound = new Map<string, string>();
+  const bound = new Map<string, { name: string; slot: OwnerSlot }>();
   const bindFrom = (specifier: string, local: string, imported: string) => {
-    if (specifier === DOOR && table.has(imported)) bound.set(local, imported);
+    const doorTable = specifier === DOOR ? table : tutor.get(specifier);
+    const slot = doorTable?.get(imported);
+    if (slot !== undefined) bound.set(local, { name: imported, slot });
   };
   const visitImports = (node: ts.Node): void => {
     if (ts.isImportDeclaration(node) && node.importClause?.namedBindings && ts.isNamedImports(node.importClause.namedBindings)) {
@@ -207,7 +261,7 @@ function violationsIn(file: string, text: string, table: ReadonlyMap<string, Own
           // re-exported would be called where this check cannot see it.
           report(node, text, "a re-export hides the calls from this check; import where it is called");
         } else if (
-          text === DOOR &&
+          (text === DOOR || tutor.has(text)) &&
           ts.isImportDeclaration(node) &&
           node.importClause?.namedBindings !== undefined &&
           ts.isNamespaceImport(node.importClause.namedBindings)
@@ -265,8 +319,7 @@ function violationsIn(file: string, text: string, table: ReadonlyMap<string, Own
   const visit = (node: ts.Node): void => {
     if (ts.isIdentifier(node) && bound.has(node.text)) {
       const parent = node.parent;
-      const name = bound.get(node.text) as string;
-      const slot = table.get(name) as OwnerSlot;
+      const { name, slot } = bound.get(node.text) as { name: string; slot: OwnerSlot };
       // A binding, a `typeof` in a type, or a property that merely shares the
       // name (`{ dueReviews: n }`, `x.dueReviews`).
       const isBinding =
@@ -315,6 +368,7 @@ function sourceFiles(dir: string): string[] {
 
 describe("owner-bearing catalog calls in the web app", () => {
   const table = ownerTable();
+  const tutor = tutorTables();
 
   it("finds the owner in the catalog's own declarations", () => {
     // A handful the web app calls, so a change to how the table is read that
@@ -353,6 +407,32 @@ describe("owner-bearing catalog calls in the web app", () => {
       `export type { KnowledgeBase } from "${DOOR}";`,
     ].join("\n");
     expect(violationsIn("good.ts", good, table)).toEqual([]);
+  });
+
+  it("finds the owner in the tutor server's own declarations, and holds a web call into one to it", () => {
+    // A few the web app calls, so a change that empties the second table
+    // fails here rather than passing every file below.
+    expect(tutor.get("@gnosia/tutor/server/provider-keys")?.size ?? 0).toBeGreaterThan(0);
+    expect(tutor.get("@gnosia/tutor/server/tutor-models")?.size ?? 0).toBeGreaterThan(0);
+    const [specifier, functions] = [...tutor.entries()].find(([, t]) => [...t.values()].some((slot) => slot.kind === "positional")) as [
+      string,
+      Map<string, OwnerSlot>,
+    ];
+    const [name, slot] = [...functions.entries()].find(([, v]) => v.kind === "positional") as [string, OwnerSlot];
+    const args = (withOwner: boolean) =>
+      Array.from({ length: slot.index + (withOwner ? 1 : 0) }, (_, i) => (i === slot.index ? "owner" : `a${i}`)).join(", ");
+    expect(violationsIn("bad.ts", `import { ${name} } from "${specifier}";\nawait ${name}(${args(false)});`, table, tutor)).toHaveLength(1);
+    expect(violationsIn("bad.ts", `import * as t from "${specifier}";`, table, tutor)).toHaveLength(1);
+    expect(violationsIn("good.ts", `import { ${name} } from "${specifier}";\nawait ${name}(${args(true)});`, table, tutor)).toEqual([]);
+  });
+
+  it("passes an owner on every catalog call the tutor server makes", () => {
+    const violations = tutorServerFiles().flatMap((file) =>
+      violationsIn(file, readFileSync(file, "utf8"), table, tutor).map(
+        (v) => `${path.relative(REPO, v.file)}:${v.line} ${v.name}: ${v.why}`,
+      ),
+    );
+    expect(violations).toEqual([]);
   });
 
   it("catches the ways around the owner: literals, hand-built scopes, namespace imports, re-exports, raw queries", () => {
@@ -397,7 +477,7 @@ describe("owner-bearing catalog calls in the web app", () => {
 
   it("passes an owner on every call in apps/web/src", () => {
     const violations = sourceFiles(WEB_SRC).flatMap((file) =>
-      violationsIn(file, readFileSync(file, "utf8"), table).map(
+      violationsIn(file, readFileSync(file, "utf8"), table, tutor).map(
         (v) => `${path.relative(REPO, v.file)}:${v.line} ${v.name}: ${v.why}`,
       ),
     );

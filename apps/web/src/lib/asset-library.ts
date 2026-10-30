@@ -1,6 +1,7 @@
 import "server-only";
 
 import { connection } from "next/server";
+import { cache } from "react";
 import {
   assetCounts,
   assetParents,
@@ -17,7 +18,7 @@ import {
   type CatalogDatabase,
 } from "@gnosia/catalog/state";
 
-import { resolveAsset, servedAssets, storedPosters } from "@/lib/asset-files";
+import { resolveAsset, seams, servedAssets, storedPosters } from "@/lib/asset-files";
 import type { RouteProblemCode } from "@/lib/asset-problems";
 import { catalogDatabase } from "@/lib/learner-store";
 import {
@@ -28,15 +29,10 @@ import {
   isCompanionKind,
 } from "@/lib/library";
 import { currentOwner, currentScope, NoOwnerError, type OwnerScope } from "@/lib/owner";
-import { contentSource } from "@/data/source";
-import { assetBlobStore } from "@/lib/blob-store";
 import { FAVORITE_PREFIX, favoriteKey, parseFavorite, type Favorite } from "@/lib/favorite";
 import { parsePlayback, playbackKey, type Playback } from "@/lib/playback";
 import { parseTranscript } from "@/lib/transcript";
-import type { AssetSeams } from "@gnosia/tutor/server/deps";
 import {
-  MAX_ASSET_ID_CHARS,
-  noteIndex,
   optionalParents,
   optionalTitles,
   readAssetDetail as readAssetDetailCore,
@@ -46,7 +42,6 @@ import {
   type AssetDetail,
 } from "@gnosia/tutor/server/asset-detail";
 
-export { MAX_ASSET_ID_CHARS, noteIndex, optionalParents, TEXT_PREVIEW_BYTES };
 export type { AssetDetail };
 
 /**
@@ -214,52 +209,34 @@ export async function loadLibrary(): Promise<LibrarySnapshot> {
 
 
 /** This app's seams for the detail read, the same ones the sidecar builds around its own pool. */
-async function assetSeams(): Promise<{ db: Promise<CatalogDatabase>; owner: string; scope: OwnerScope }> {
+async function detailSeams(): Promise<{ db: Promise<CatalogDatabase>; owner: string; scope: OwnerScope }> {
   const owner = await currentOwner();
   return { db: catalogDatabase(), owner, scope: await currentScope() };
 }
 
 /** One asset's detail page, through the shared read in `@gnosia/tutor/server/asset-detail`. */
 export async function readAssetDetail(id: string): Promise<AssetDetail> {
-  return readAssetDetailCore(await assetSeams(), id);
+  return readAssetDetailCore(await detailSeams(), id);
 }
 
 /** As `readAssetText`, with this app's seams. */
 export async function readAssetText(db: CatalogDatabase, id: string, limit: number = TEXT_PREVIEW_BYTES): Promise<string | null> {
-  return readAssetTextCore(await seamsFor(), db, id, limit);
-}
-
-/**
- * A store that refuses on use: the text reads that need one answer
- * `blob-store-unavailable`, which is what a real `assetBlobStore()` failure
- * already means. Constructing it lazily also keeps a test double that has no
- * blob seam at all from failing reads it was never asked to serve.
- */
-const unavailableStore: AssetSeams["blobStore"] = new Proxy({} as AssetSeams["blobStore"], {
-  get: () => () => {
-    throw new Error("blob store unavailable");
-  },
-});
-
-async function seamsFor(): Promise<AssetSeams> {
-  let blobStore: AssetSeams["blobStore"];
-  try {
-    blobStore = assetBlobStore();
-  } catch {
-    blobStore = unavailableStore;
-  }
-  return { scope: await currentScope(), source: contentSource(), blobStore };
+  return readAssetTextCore(await seams(), db, id, limit);
 }
 
 async function readAssetTextForLocal(db: CatalogDatabase, id: string, limit: number = TEXT_PREVIEW_BYTES) {
-  return readAssetTextForCore(await seamsFor(), db, id, limit);
+  return readAssetTextForCore(await seams(), db, id, limit);
 }
 
-/** As `readAssetDetail`, with the marker that keeps it out of the build. */
-export async function loadAssetDetail(id: string): Promise<AssetDetail> {
+/**
+ * As `readAssetDetail`, with the marker that keeps it out of the build. Once
+ * per request and id: the asset page's `generateMetadata` and the page itself
+ * both ask, and React's `cache` hands the second the first one's read.
+ */
+export const loadAssetDetail = cache(async (id: string): Promise<AssetDetail> => {
   await connection();
   return readAssetDetail(id);
-}
+});
 
 /**
  * Which rows' bytes the asset routes can hand over, decided per row.
@@ -405,7 +382,7 @@ export async function readFileProblems(
  * markdown too and is left out, because its text is mostly the tutor's own
  * turns, which would match nearly any query.
  */
-export const SEARCH_TEXT_KINDS: ReadonlySet<string> = new Set(["note", "transcript"]);
+const SEARCH_TEXT_KINDS: ReadonlySet<string> = new Set(["note", "transcript"]);
 
 /** What `readSearchText` read, for `searchHits` in `@/lib/library`. */
 export interface SearchText {
@@ -438,11 +415,11 @@ const NO_TEXT: SearchText = { texts: new Map(), sources: {}, skipped: 0, searche
  * was said and its chapter titles, not by its JSON keys; one that does not
  * parse is searched as raw text rather than skipped.
  *
- * About fifty-five small files today, each one primary-key lookup and one read,
- * queued on the shared pool. There is no index and no cache, which is right
- * at this size and is the first thing to change if the catalog grows by an
- * order of magnitude: reading every file on every search is fine for a few
- * hundred rows and not for tens of thousands.
+ * About six hundred small files today, each one primary-key lookup and one
+ * read, `SEARCH_READS_AT_ONCE` at a time. There is no index; the view that
+ * holds the result is kept for a minute (`loadLibraryView`), so a search is
+ * read once for its first page and reused for the pages after. Reading every
+ * file per search is fine for hundreds of rows and not for tens of thousands.
  */
 export async function readSearchText(
   rows: readonly AssetWithTopics[],
@@ -454,12 +431,10 @@ export async function readSearchText(
   try {
     const db = await catalogDatabase();
     const [bodies, sources] = await Promise.all([
-      Promise.all(
-        candidates.map(async (row) => {
-          const { text: raw, unreadable } = await readAssetTextForLocal(db, row.id, TEXT_PREVIEW_BYTES);
-          return [row.id, raw === null ? null : searchableText(row.kind, raw), unreadable] as const;
-        }),
-      ),
+      mapLimited(candidates, SEARCH_READS_AT_ONCE, async (row) => {
+        const { text: raw, unreadable } = await readAssetTextForLocal(db, row.id, TEXT_PREVIEW_BYTES);
+        return [row.id, raw === null ? null : searchableText(row.kind, raw), unreadable] as const;
+      }),
       derivationSources(
         db,
         candidates.filter((row) => isCompanionKind(row.kind)).map((row) => row.id),
@@ -477,6 +452,27 @@ export async function readSearchText(
     warn("search text", error);
     return NO_TEXT;
   }
+}
+
+/**
+ * How many notes and transcripts one search reads at a time. Each is a row
+ * lookup and a store read; hundreds started at once only queue on the one
+ * database connection and the disk, and hold every body in memory together.
+ */
+const SEARCH_READS_AT_ONCE = 8;
+
+/** `items.map(fn)`, with at most `limit` calls in flight, in the input's order. */
+export async function mapLimited<T, R>(items: readonly T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return out;
 }
 
 /** As `readSearchText`, with the marker that keeps it out of the build. */
@@ -511,7 +507,7 @@ export function searchableText(kind: string, raw: string): string {
  * is one learner's and small. The payload's `asset` is the join, since a
  * `watched` event names no concept.
  */
-export async function readLastWatched(id: string): Promise<string | null | undefined> {
+async function readLastWatched(id: string): Promise<string | null | undefined> {
   const owner = await currentOwner();
   try {
     const events = await readEvents(await catalogDatabase(), owner);

@@ -326,8 +326,11 @@ export function rawParamsOf(search: URLSearchParams): RawParams {
   return raw;
 }
 
-/** The parameters that name a panel, and the three a verb's outcome rides on (`readOutcome`). */
-const PANEL_KEYS = new Set(["draft", "job", "extend", "talk", "make", "sel", "shot", "settings", "play", "v", "ok", "m"]);
+/** The parameters a verb's outcome rides on (`withOutcome`, `readOutcome`). */
+const OUTCOME_PARAMS = ["v", "ok", "m", "d"] as const;
+
+/** The parameters that name a panel, and the ones a verb's outcome rides on. */
+const PANEL_KEYS = new Set(["draft", "job", "extend", "talk", "make", "sel", "shot", "settings", "play", ...OUTCOME_PARAMS]);
 
 /** Everything but the panel: the filters, the sort and the layout, as one string. */
 function viewPart(search: URLSearchParams): string {
@@ -342,7 +345,7 @@ function viewPart(search: URLSearchParams): string {
 export function withoutOutcome(path: string): string {
   const [base, existing] = path.split("?");
   const params = new URLSearchParams(existing ?? "");
-  for (const name of ["v", "ok", "m"]) params.delete(name);
+  for (const name of OUTCOME_PARAMS) params.delete(name);
   const query = params.toString();
   return query === "" ? (base ?? "") : `${base}?${query}`;
 }
@@ -396,7 +399,7 @@ export function gridHref(path: string): string {
 
 /** The parameters Search, the kind filter, the topic chips, Display and Sort write. */
 const VIEW_KEYS = new Set(["topic", "q", "group", "sort", "dir", "chips", "view", "kind"]);
-const OUTCOME_KEYS = new Set(["v", "ok", "m"]);
+const OUTCOME_KEYS = new Set<string>(OUTCOME_PARAMS);
 
 /**
  * Whether going from `from` to `href` only changes what the grid shows of
@@ -508,7 +511,7 @@ export function panelHref(
   if (params.get("job") === null) params.delete("shot");
   // A stale verb outcome pinned beside a newly opened panel would read as
   // something the panel did, so opening one drops it.
-  for (const key of ["v", "ok", "m"]) params.delete(key);
+  for (const key of OUTCOME_PARAMS) params.delete(key);
   const query = params.toString();
   return query === "" ? (base ?? "/studio") : `${base ?? "/studio"}?${query}`;
 }
@@ -826,8 +829,20 @@ export interface VerbReport {
   detail: string | null;
 }
 
-/** The cap on a message put in a URL. A stack trace does not belong in one. */
+/** The cap on each message put in a URL. A stack trace does not belong in one. */
 const MESSAGE_LIMIT = 300;
+
+/** The verbs whose outcome rides back on a redirect: the server actions' names. */
+const VERBS = new Set(["export", "verify", "inspect", "commit", "restart"]);
+
+/**
+ * A path a verb may redirect back to: one in the studio, else the studio
+ * itself. The form posts it, so it is what a page sent, and `//host` or a
+ * full URL there would send the redirect off the site.
+ */
+export function studioPath(path: string): string {
+  return /^\/studio(?:[/?#]|$)/.test(path) ? path : "/studio";
+}
 
 /**
  * Add a verb's outcome to a path, so the redirect after a form carries it.
@@ -836,38 +851,40 @@ const MESSAGE_LIMIT = 300;
  * like a button that did nothing: a 409 saying there was no SVG to verify, or a
  * 502 carrying the snippet's own stack line, went nowhere. The outcome rides
  * back in the query string instead, which needs no client state and no toast
- * library, and is gone the moment the person navigates.
+ * library, and is gone the moment the person navigates. The headline and the
+ * detail are two parameters, so neither is cut where the other's words happen
+ * to hold a separator.
  */
 export function withOutcome(
   path: string,
   verb: string,
   outcome: { ok: boolean; headline: string; detail: string | null },
 ): string {
-  const [base, existing] = path.split("?");
+  const [base, existing] = studioPath(path).split("?");
   const params = new URLSearchParams(existing ?? "");
-  params.delete("v");
-  params.delete("ok");
-  params.delete("m");
+  for (const name of OUTCOME_PARAMS) params.delete(name);
   params.set("v", verb);
   params.set("ok", outcome.ok ? "1" : "0");
-  params.set(
-    "m",
-    [outcome.headline, outcome.detail].filter((part) => part !== null && part !== "").join(" — ").slice(0, MESSAGE_LIMIT),
-  );
+  params.set("m", outcome.headline.slice(0, MESSAGE_LIMIT));
+  if (outcome.detail !== null && outcome.detail !== "") params.set("d", outcome.detail.slice(0, MESSAGE_LIMIT));
   return `${base ?? "/studio"}?${params.toString()}`;
 }
 
-/** Read one back, or null when the page was not reached through a verb. */
+/**
+ * Read one back, or null when the page was not reached through a verb. Only
+ * a verb this studio has is read: the banner is drawn as the studio's own
+ * words, so a hand-made link cannot put any sentence it likes in it.
+ */
 export function readOutcome(params: RawParams): VerbReport | null {
   const verb = one(params.v);
-  if (verb === null) return null;
-  const message = one(params.m) ?? "";
-  const [headline, detail] = message.split(" — ");
+  if (verb === null || !VERBS.has(verb)) return null;
+  const headline = (one(params.m) ?? "").slice(0, MESSAGE_LIMIT);
+  const detail = (one(params.d) ?? "").slice(0, MESSAGE_LIMIT);
   return {
     verb,
     ok: one(params.ok) === "1",
-    headline: headline ?? verb,
-    detail: detail ?? null,
+    headline: headline === "" ? verb : headline,
+    detail: detail === "" ? null : detail,
   };
 }
 
