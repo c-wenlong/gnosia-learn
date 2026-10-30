@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 import { act, createElement, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ReviewItem } from "@gnosia/tutor/review-core";
+import { OPTIONS_WAIT_MS } from "@gnosia/tutor/session-core";
 
 /**
  * How the review moves from card to card (docs/design/IMPLEMENTATION.md,
@@ -280,5 +282,111 @@ describe("ReviewSession wrong-option line", () => {
     expect(tutor.textContent).not.toContain("Options made without the tutor");
     const plain = await mount([CHECK]);
     expect(plain.textContent).not.toContain("Options made without the tutor");
+  });
+});
+
+describe("ReviewSession asking the tutor for a check card's options", () => {
+  /** A card whose options came from the notes, with a model to ask: it carries `rewrite`. */
+  const asking = (conceptId: string): ReviewItem => ({ ...CHECK, conceptId, wrong: "notes", rewrite: { check: "c1" } });
+  const TUTOR = ["Only on a timeout", "Always, after three duplicate acks", "When the checksum fails"];
+
+  /** The check-options requests made, by concept, with a handle to answer each. */
+  let asked: Array<{ concept: string; answer: (status: number, body: unknown) => void }> = [];
+
+  beforeEach(() => {
+    asked = [];
+    const grade = globalThis.fetch;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string, init?: RequestInit) => {
+        if (url !== "/api/agent/check-options") return grade(url, init);
+        const { conceptSlug } = JSON.parse(String(init?.body)) as { conceptSlug: string };
+        return new Promise<Response>((resolve, reject) => {
+          // As a real fetch does, an abort rejects it.
+          init?.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
+          asked.push({ concept: conceptSlug, answer: (status, body) => resolve(new Response(JSON.stringify(body), { status })) });
+        });
+      }),
+    );
+  });
+
+  const choices = (host: HTMLElement) =>
+    [...host.querySelectorAll("button")].map((b) => b.textContent?.trim() ?? "").filter((t) => [...CHECK.choices!, ...TUTOR].some((c) => t.includes(c)));
+  const fits = { question: CHECK.prompt, answer: CHECK.answer };
+
+  it("asks for the card on screen and the two after it, never while rendering, then the next as the queue moves", async () => {
+    const cards = ["a", "b", "c", "d"].map(asking);
+    const html = renderToStaticMarkup(
+      createElement(ReviewSession, { initial: { reachable: true, items: cards, nextDue: null }, focus: null, asOf: "2026-10-04T00:00:00.000Z" }),
+    );
+    expect(asked).toEqual([]);
+    expect(html).toContain("The tutor is writing the options…");
+
+    const host = await mount(cards);
+    expect(asked.map((a) => a.concept)).toEqual(["a", "b", "c"]);
+    expect(host.textContent).toContain("The tutor is writing the options…");
+    // While it waits, no key picks an option.
+    await settle(() => key("2"));
+    expect(host.querySelector('[role="group"][aria-label="Rate your recall"]')).toBeNull();
+
+    await settle(() => asked[0].answer(200, { options: TUTOR, ...fits }));
+    await settle(() => key("2"));
+    await settle(() => key("Enter"));
+    expect(asked.map((a) => a.concept)).toEqual(["a", "b", "c", "d"]);
+  });
+
+  it("lays the card out with the tutor's options when they arrive, with no line under them", async () => {
+    const host = await mount([asking("a")]);
+    await settle(() => asked[0].answer(200, { options: TUTOR, ...fits }));
+    expect(host.textContent).not.toContain("The tutor is writing the options…");
+    const shown = choices(host);
+    expect(shown).toHaveLength(4);
+    for (const option of TUTOR) expect(shown.some((t) => t.includes(option))).toBe(true);
+    expect(shown.some((t) => t.includes("Sometimes"))).toBe(false);
+    expect(host.textContent).not.toContain(NOTE);
+
+    // The right answer is still the one graded right.
+    const right = [...host.querySelectorAll("button")].find((b) => b.textContent?.includes(CHECK.answer)) as HTMLButtonElement;
+    await settle(() => right.click());
+    await settle(() => key("Enter"));
+    expect(graded).toEqual([2]);
+  });
+
+  it("keeps the notes' options and their line when the tutor cannot write them", async () => {
+    const host = await mount([asking("a")]);
+    await settle(() => asked[0].answer(503, { error: "No key", code: "MISSING_API_KEY" }));
+    expect(host.textContent).not.toContain("The tutor is writing the options…");
+    expect(choices(host).some((t) => t.includes("Sometimes"))).toBe(true);
+    expect(host.textContent).toContain(NOTE);
+  });
+
+  it("keeps the notes' options when the tutor's were written for a check the note no longer asks", async () => {
+    const host = await mount([asking("a")]);
+    await settle(() => asked[0].answer(200, { options: TUTOR, question: "Does TCP retransmit?", answer: CHECK.answer }));
+    expect(choices(host).some((t) => t.includes("Sometimes"))).toBe(true);
+    expect(host.textContent).toContain(NOTE);
+  });
+
+  it("asks with the notes' options once the tutor has not answered in time", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      const host = await mount([asking("a")]);
+      expect(host.textContent).toContain("The tutor is writing the options…");
+      await act(async () => {
+        vi.advanceTimersByTime(OPTIONS_WAIT_MS);
+      });
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(host.textContent).not.toContain("The tutor is writing the options…");
+      expect(host.textContent).toContain(NOTE);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("asks nothing for a card without a rewrite", async () => {
+    await mount([{ ...CHECK, wrong: "notes" }, RECALL]);
+    expect(asked).toEqual([]);
   });
 });

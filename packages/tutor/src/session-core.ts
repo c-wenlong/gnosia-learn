@@ -208,8 +208,11 @@ export function withWrittenOptions(question: SessionQuestion, options: readonly 
  * question, or another check moved into this id) asks something else, and
  * options written for that are not used here.
  */
-export function sameCheck(question: SessionQuestion, server: { question: unknown; answer: unknown }): boolean {
-  const answer = question.choices[question.correct];
+export function sameCheck(
+  question: Pick<SessionQuestion, "prompt"> & { choices: readonly string[] | null; correct: number | null },
+  server: { question: unknown; answer: unknown },
+): boolean {
+  const answer = question.correct === null ? undefined : question.choices?.[question.correct];
   return (
     typeof server.question === "string" &&
     typeof server.answer === "string" &&
