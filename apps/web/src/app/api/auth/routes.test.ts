@@ -22,6 +22,17 @@ function post(path: string, fields: Record<string, string>, headers: Record<stri
   });
 }
 
+// A SESSION_EPOCH exported by the shell would sign every cookie below under
+// an epoch the assertions do not use; each test starts with none.
+const shellEpoch = process.env.SESSION_EPOCH;
+beforeEach(() => {
+  delete process.env.SESSION_EPOCH;
+});
+afterEach(() => {
+  if (shellEpoch === undefined) delete process.env.SESSION_EPOCH;
+  else process.env.SESSION_EPOCH = shellEpoch;
+});
+
 function cookieOf(response: Response): string {
   return response.headers.get("set-cookie") ?? "";
 }
