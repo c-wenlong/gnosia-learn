@@ -94,6 +94,15 @@ describe("GET /api/settings/agent (#207)", () => {
     expect(runnerSettings(null)).toEqual({ models: null, defaults: null, resolved: null, byokModel: null, byokTiers: null });
   });
 
+  it("offers BYOK tiers only when the runner says BYOK can run (R2-1-02)", () => {
+    const byok = (configured: boolean) => ({
+      byok: { configured, active: "openrouter", model: configured ? "qwen/qwen3-max" : null, providers: [{ provider: "openrouter", models: { lite: "qwen/qwen3-coder" } }] },
+    });
+    // No Default model, or a key that is missing or no longer opens.
+    expect(runnerSettings(byok(false)).byokTiers).toBeNull();
+    expect(runnerSettings(byok(true)).byokTiers).toEqual({ lite: "qwen/qwen3-coder" });
+  });
+
   it("names the conversation picker's default by what each part runs (D90)", () => {
     const read = runnerSettings({
       planner: "sonnet",

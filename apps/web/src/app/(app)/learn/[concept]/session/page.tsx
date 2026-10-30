@@ -3,18 +3,14 @@ import { notFound } from "next/navigation";
 
 import { EmbedImage } from "@/components/EmbedImage";
 import { MathText } from "@/components/Math";
-import { NoteProse, type EmbedResolution } from "@/components/NoteProse";
+import { NoteProse } from "@/components/NoteProse";
 import { SessionFocus } from "@/components/session/SessionFocus";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { WidgetFailure } from "@/components/WidgetFailure";
-import { readFileProblems } from "@/lib/asset-library";
-import type { RouteProblemCode } from "@gnosia/tutor/asset-problems";
 import { isConceptSlug } from "@gnosia/tutor/concept-workspace-core";
 import { loadConceptWorkspace } from "@/lib/concept-workspace";
-import { assetFileHref, assetStatusHref } from "@/lib/library";
-import { embedTargets } from "@/lib/note-embeds";
 import { parseMode, teachProse } from "@gnosia/tutor/session-core";
-import { loadSessionPage, type TeachAsset } from "@/lib/session-page";
+import { loadSessionPage, noteResolvers, type TeachAsset } from "@/lib/session-page";
 import { TextLink } from "@/components/ui/TextLink";
 import { PAGE_TITLE } from "@/components/ui/classes";
 
@@ -65,22 +61,11 @@ export default async function SessionPage({ params, searchParams }: Props) {
 
   const data = await loadSessionPage(w, mode);
 
-  // The note's own `![[embeds]]`, decided on the server exactly as the
-  // workspace decides them, so the prose never renders a broken picture, and
-  // per embed, so one in the blob store shows with the switch off.
+  // The note's own `![[embeds]]` and wikilinks, resolved exactly as the
+  // workspace resolves them, so the prose never renders a broken picture and
+  // a link is a link on both pages.
   const prose = w.note.available ? teachProse(w.note.source) : "";
-  const embedId = (name: string) => `diagram:learn/assets/${name}`;
-  const embedProblems =
-    prose !== ""
-      ? await readFileProblems(embedTargets(prose).map(embedId))
-      : new Map<string, RouteProblemCode | null>();
-  const resolveEmbed = (name: string): EmbedResolution => {
-    const id = embedId(name);
-    const problem = embedProblems.get(id) ?? null;
-    if (problem !== null) return { problem };
-    return { src: assetFileHref(id), statusHref: assetStatusHref(id) };
-  };
-  const known = new Set([w.slug, ...[...w.requires, ...w.assumes, ...w.dependants].map((r) => r.slug)]);
+  const { resolveNote, resolveEmbed } = await noteResolvers(w, prose);
 
   const teach =
     prose !== "" ? (
@@ -89,7 +74,7 @@ export default async function SessionPage({ params, searchParams }: Props) {
         idPrefix="teach-"
         // The concept's note: its author put any picture there.
         images="show"
-        resolveNote={(target) => (known.has(target) ? `/learn/${target}` : undefined)}
+        resolveNote={resolveNote}
         resolveEmbed={resolveEmbed}
         className="md:text-[17px] md:leading-[27px]"
       />

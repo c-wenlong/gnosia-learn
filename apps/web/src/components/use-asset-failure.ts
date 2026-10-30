@@ -22,11 +22,12 @@ export type AssetFailure = { code: AssetProblemCode | null } | null;
  * The server component has already decided everything it could before render;
  * this covers what nobody could know until the browser tried.
  *
- * **Tied to one `src`.** A soft navigation between two assets reuses the
- * mounted component, and a failure belongs to the file that failed, so a new
- * `src` clears it during render (the same reset `DiagramView` and
- * `VideoPlayer` already make for their own state) and aborts a probe still in
- * flight for the old one. A late answer for a file nobody is looking at any
+ * **Tied to one `src`.** A change of route param remounts the page, but a
+ * navigation that changes only the query string, or the studio swapping what
+ * it shows, hands the mounted component a new `src`. A failure belongs to the
+ * file that failed, so a new `src` clears it during render (the same reset
+ * `DiagramView` and `VideoPlayer` already make for their own state) and aborts
+ * a probe still in flight for the old one. A late answer for a file nobody is looking at any
  * more is dropped rather than painted onto the next one.
  *
  * **Asks once.** A `<video>` can fire `error` more than once for one failure;

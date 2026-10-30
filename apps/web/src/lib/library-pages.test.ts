@@ -9,8 +9,8 @@ import {
   MAX_ORDER,
   parseOrder,
   type LibraryPage,
-  type PageGroup,
 } from "./library-pages";
+import type { RowGroup } from "./library-groups";
 
 interface Row {
   id: string;
@@ -35,7 +35,7 @@ function rows(prefix: string, n: number, day = "2026-10-04"): Row[] {
   }));
 }
 
-function group(key: string, list: Row[]): PageGroup<Row> {
+function group(key: string, list: Row[]): RowGroup<Row> {
   return { key, label: key, rows: list };
 }
 
@@ -47,7 +47,7 @@ function ok(page: ReturnType<typeof pageOf<Row>>): LibraryPage<Row> {
 const ids = (page: LibraryPage<Row>) => page.pieces.flatMap((p) => p.rows.map((r) => r.id));
 
 /** Every page from the first, following the cursors. */
-function walk(groups: PageGroup<Row>[], size = 50, max = 100): LibraryPage<Row>[] {
+function walk(groups: RowGroup<Row>[], size = 50, max = 100): LibraryPage<Row>[] {
   const pages = [ok(pageOf(groups, sortKeyOf, "newest", null, { size, max }))];
   while (pages[pages.length - 1].next !== null) {
     pages.push(ok(pageOf(groups, sortKeyOf, "newest", parseCursor(pages[pages.length - 1].next), { size, max })));
@@ -117,7 +117,7 @@ describe("pageOf", () => {
     const first = ok(pageOf([group("a", rows("a", 120))], sortKeyOf, "newest", null));
     const cursor = parseCursor(first.next);
     expect(pageOf([group("b", rows("b", 10))], sortKeyOf, "newest", cursor).state).toBe("stale");
-    const withModules: PageGroup<Row>[] = [{ key: "a", label: "A", rows: [], sections: [{ key: "m1", label: "M1", rows: [] }] }];
+    const withModules: RowGroup<Row>[] = [{ key: "a", label: "A", rows: [], sections: [{ key: "m1", label: "M1", rows: [] }] }];
     expect(pageOf(withModules, sortKeyOf, "newest", cursor).state).toBe("stale");
     const sectioned = parseCursor(encodeCursor({ group: "a", section: "m9", key: sortKeyOf(rows("a", 1)[0]) }));
     expect(pageOf(withModules, sortKeyOf, "newest", sectioned).state).toBe("stale");
@@ -127,7 +127,7 @@ describe("pageOf", () => {
   it("pages a course's modules in order, each module once under its own heading", () => {
     const m1 = rows("m1", 40);
     const m2 = rows("m2", 40);
-    const course: PageGroup<Row> = {
+    const course: RowGroup<Row> = {
       key: "course:cs3230",
       label: "CS3230",
       detail: "Algorithms",
