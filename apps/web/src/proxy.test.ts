@@ -7,6 +7,8 @@ import { config, proxy } from "./proxy";
 
 const ORIGIN = "http://localhost:3000";
 const SECRET = "0123456789abcdef0123456789abcdef";
+const PASSWORD = "correct horse battery staple";
+const CONFIG = { secret: SECRET, password: PASSWORD, epoch: "" };
 
 function get(path: string, cookie?: string): NextRequest {
   const headers = new Headers();
@@ -15,16 +17,19 @@ function get(path: string, cookie?: string): NextRequest {
 }
 
 describe("proxy", () => {
-  const saved = { secret: process.env.AUTH_SECRET, password: process.env.OWNER_PASSWORD };
+  const saved = { secret: process.env.AUTH_SECRET, password: process.env.OWNER_PASSWORD, epoch: process.env.SESSION_EPOCH };
   let token: string;
   beforeEach(async () => {
     process.env.AUTH_SECRET = SECRET;
-    process.env.OWNER_PASSWORD = "correct horse battery staple";
-    token = await signSession(SECRET, Math.floor(Date.now() / 1000));
+    process.env.OWNER_PASSWORD = PASSWORD;
+    delete process.env.SESSION_EPOCH;
+    token = await signSession(CONFIG, Math.floor(Date.now() / 1000));
   });
   afterEach(() => {
     process.env.AUTH_SECRET = saved.secret;
     process.env.OWNER_PASSWORD = saved.password;
+    if (saved.epoch === undefined) delete process.env.SESSION_EPOCH;
+    else process.env.SESSION_EPOCH = saved.epoch;
   });
 
   it("lets an anonymous visitor see the landing page, sign-in and the auth routes", async () => {
@@ -60,10 +65,23 @@ describe("proxy", () => {
   });
 
   it("treats a forged or stale cookie as anonymous", async () => {
-    const forged = await signSession(`${SECRET}x`, Math.floor(Date.now() / 1000));
+    const forged = await signSession({ ...CONFIG, secret: `${SECRET}x` }, Math.floor(Date.now() / 1000));
     expect((await proxy(get("/home", forged))).status).toBe(307);
-    const stale = await signSession(SECRET, Math.floor(Date.now() / 1000) - 60 * 60 * 24 * 31);
+    const stale = await signSession(CONFIG, Math.floor(Date.now() / 1000) - 60 * 60 * 24 * 31);
     expect((await proxy(get("/home", stale))).status).toBe(307);
+  });
+
+  it("ends the session when OWNER_PASSWORD changes or SESSION_EPOCH is bumped (S7-03)", async () => {
+    expect((await proxy(get("/home", token))).status).toBe(200);
+    process.env.OWNER_PASSWORD = "a brand new password";
+    expect((await proxy(get("/home", token))).status).toBe(307);
+    expect((await proxy(get("/api/learner/settings", token))).status).toBe(401);
+    process.env.OWNER_PASSWORD = PASSWORD;
+    expect((await proxy(get("/home", token))).status).toBe(200);
+    process.env.SESSION_EPOCH = "2";
+    expect((await proxy(get("/home", token))).status).toBe(307);
+    const fresh = await signSession({ ...CONFIG, epoch: "2" }, Math.floor(Date.now() / 1000));
+    expect((await proxy(get("/home", fresh))).status).toBe(200);
   });
 
   it("fails closed when AUTH_SECRET is unset, even with a cookie", async () => {

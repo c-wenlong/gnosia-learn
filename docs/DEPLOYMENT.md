@@ -123,11 +123,29 @@ vercel env add AUTH_SECRET production         # openssl rand -base64 32
 
 Set both for Preview too if preview deployments should be usable. With either
 missing the deployment fails closed: every protected page redirects to
-`/sign-in`, which names the missing variable. Rotating `AUTH_SECRET` signs
-every browser out, and makes the provider keys saved in Settings unreadable
-until they are entered again ([docs/BYOK.md](BYOK.md), "Rotation"); changing
-`OWNER_PASSWORD` does neither, since the cookie is signed with the secret and
-not the password. Sessions last thirty days.
+`/sign-in`, which names the missing variable. Sessions last thirty days.
+
+The cookie is signed with a key derived from three values: `AUTH_SECRET`, the
+password (through PBKDF2, salted with the secret) and the optional
+`SESSION_EPOCH` (`sessionKey` in `apps/web/src/lib/auth/core.ts`). Nothing is
+stored server-side, so ending sessions means changing one of the three:
+
+| To | Do | Saved provider keys |
+| --- | --- | --- |
+| Sign one browser out | Sign out (clears that browser's cookie only; a copied cookie keeps working) | Untouched |
+| Sign every browser out (a lost laptop, a leaked cookie) | Set `SESSION_EPOCH` to a new value (`1`, then `2`, ...) and redeploy or restart | Untouched |
+| Sign every browser out and stop the old password working | Change `OWNER_PASSWORD` | Untouched |
+| Recover from a leaked `AUTH_SECRET` | Rotate `AUTH_SECRET` (this also signs every browser out) | Unreadable until each is entered again ([BYOK.md](BYOK.md), "Rotation") |
+
+```bash
+vercel env add SESSION_EPOCH production       # any new value ends every session
+```
+
+The desktop shell's launch token (`GNOSIA_LOCAL_TOKEN`, `/api/auth/local`)
+mints the same cookie under the same key, so it follows the epoch and the
+password like a sign-in does. Since 2026-10-30 the password and the epoch are
+part of the key; every session from before that ended once, at the deploy
+that brought it in.
 
 Password guessing is bounded in `apps/web/src/lib/auth/sign-in-limit.ts`:
 ten attempts per client in fifteen minutes, and fifty wrong passwords from
@@ -167,6 +185,7 @@ turning the policy off.
 | `DATABASE_URL` | Postgres holding the learner state and the catalog | Vercel (once a cloud database exists), CI, locally |
 | `OWNER_PASSWORD` | The one password that opens the app (see [Signing in](#signing-in)) | Vercel, locally |
 | `AUTH_SECRET` | Signs the session cookie, and seals the provider keys saved in Settings; 32+ characters from `openssl rand -base64 32` | Vercel, locally |
+| `SESSION_EPOCH` | Optional; change it to sign every browser out without touching the saved keys (see [Signing in](#signing-in)) | Vercel, locally (optional) |
 | `NVIDIA_API_KEY` | Provider 1 of the tutoring chat cascade, the fallback for an owner who saved no NVIDIA key | Vercel (optional) |
 | `GEMINI_API_KEY` | Provider 2, likewise | Vercel (optional) |
 | `OPENROUTER_API_KEY` | Provider 3, likewise | Vercel (optional) |
@@ -186,7 +205,8 @@ chat degrades to the copy-the-prompt fallbacks when there are none.
 
 Rotating `AUTH_SECRET` makes every saved provider key unreadable as well as
 signing every browser out. Settings then asks for each key again, and the
-tutor uses the server's keys meanwhile; nothing fails. A database backup is
+tutor uses the server's keys meanwhile; nothing fails. To sign everyone out
+without that, bump `SESSION_EPOCH` instead ([Signing in](#signing-in)). A database backup is
 safe to store only where `AUTH_SECRET` is not: the two together open every
 saved key.
 
