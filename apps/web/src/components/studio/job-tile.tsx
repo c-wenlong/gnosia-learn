@@ -195,7 +195,7 @@ export function JobTileStatus({
           </span>
           <JobStepAndTime job={job} step={step} />
         </span>
-        <CancelJobButton job={job} path={path} className="pointer-events-auto" />
+        <CancelJobButton job={job} path={path} className="pointer-events-auto" problemAt="above" />
       </div>
       {/* The only motion that says "running" without the light: a strip along
           the picture's foot, indeterminate like the panel's bar (D23). */}

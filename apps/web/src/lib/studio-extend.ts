@@ -1,7 +1,7 @@
 import { validMentions, valueOf, type MentionValue } from "@/lib/mentions";
 import { safely } from "@/lib/storage-safe";
 import { isTagKind, type DraftKind, type DraftMention, type TagKind } from "@/lib/studio-drafts";
-import { runnerDown, type Refusal } from "@/lib/studio-client";
+import { runnerDown, runnerSlow, type Refusal } from "@/lib/studio-client";
 import { type VideoAvailability } from "@/lib/studio-health";
 
 /**
@@ -130,6 +130,17 @@ export interface ExtendRefusal {
  * paths, and a capital letter on a slug is a different slug.
  */
 export function extendRefusal(status: number, refusal: Refusal, title: string): ExtendRefusal {
+  // Past the deadline the runner is still at it (the proxy does not pass the
+  // abort on), so starting it is the wrong advice. Try again joins the read
+  // under way: the press's key is the same, and the runner answers it with
+  // the draft the first post is making.
+  if (runnerSlow(status, refusal)) {
+    return {
+      headline: `The studio is still reading ${title}.`,
+      detail: "It did not answer in time, but it may still be opening the diagram. Try again to keep waiting for the same read.",
+      actions: ["retry", "close"],
+    };
+  }
   if (runnerDown(status, refusal)) {
     return {
       headline: "The studio runner is not answering.",
@@ -209,10 +220,12 @@ export function talkItThroughText(
 /* -------------------------------------------------------------------------- */
 
 /**
- * How long a pending press's idempotency key is reused. A reload while the
- * diagram is being read posts again, and the same key makes the runner answer
- * with the draft the first post made rather than a second one. Past this, a
- * key left behind by a panel closed mid-read is not reused for a new press.
+ * How long a pending press's idempotency key is reused, from its last use. A
+ * reload while the diagram is being read posts again, and the same key makes
+ * the runner answer with the draft the first post made rather than a second
+ * one. Past this, a key left behind by a panel closed mid-read is not reused
+ * for a new press. A press that ends without a draft stamps its key again
+ * (`extendKey` once more), so its Try again has the whole window.
  */
 export const EXTEND_KEY_TTL_MS = 5 * 60_000;
 
@@ -241,6 +254,11 @@ export function extendKey(storage: Storage | null, name: string, fresh: () => st
       now - parsed.at < EXTEND_KEY_TTL_MS &&
       (parsed.print ?? undefined) === print
     ) {
+      // Stamped again on every use, so the key lives five minutes past the
+      // last press or attempt, not the first: an Extend now waits up to four
+      // minutes (`SOURCE_CREATE_TIMEOUT_MS`), and a Try again after it must
+      // still join the same create.
+      safely(() => storage.setItem(KEY_PREFIX + name, JSON.stringify(print === undefined ? { key: parsed.key, at: now } : { key: parsed.key, at: now, print })), undefined);
       return parsed.key;
     }
   }

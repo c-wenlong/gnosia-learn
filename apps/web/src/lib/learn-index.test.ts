@@ -7,7 +7,7 @@ import {
   LEGEND_GROUPS,
   legendMembers,
   legendPress,
-  lastSeenLabel,
+  seenAgo,
   matchesFilter,
   matchesQuery,
   parseFilter,
@@ -54,14 +54,14 @@ describe("dueLabel", () => {
   });
 });
 
-describe("lastSeenLabel", () => {
+describe("seenAgo", () => {
   it("counts calendar days", () => {
-    expect(lastSeenLabel(null, now, TZ)).toBe("never");
-    expect(lastSeenLabel("2026-09-26T01:00:00Z", now, TZ)).toBe("today");
-    expect(lastSeenLabel("2026-09-25T01:00:00Z", now, TZ)).toBe("yesterday");
-    expect(lastSeenLabel("2026-09-23T01:00:00Z", now, TZ)).toBe("3 days");
-    expect(lastSeenLabel("2026-08-20T01:00:00Z", now, TZ)).toBe("5 weeks");
-    expect(lastSeenLabel("2026-03-01T01:00:00Z", now, TZ)).toBe("1 Mar");
+    expect(seenAgo(null, now, TZ)).toBe("never");
+    expect(seenAgo("2026-09-26T01:00:00Z", now, TZ)).toBe("today");
+    expect(seenAgo("2026-09-25T01:00:00Z", now, TZ)).toBe("yesterday");
+    expect(seenAgo("2026-09-23T01:00:00Z", now, TZ)).toBe("3 days");
+    expect(seenAgo("2026-08-20T01:00:00Z", now, TZ)).toBe("5 weeks");
+    expect(seenAgo("2026-03-01T01:00:00Z", now, TZ)).toBe("1 Mar");
   });
 });
 

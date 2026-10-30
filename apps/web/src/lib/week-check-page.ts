@@ -86,6 +86,16 @@ export async function loadWeekCheck(module: Pick<Module, "topics">): Promise<Wee
     concepts.map((c, i) => ({ slug: c.id, checks: checksOf(i) })),
   );
 
+  // Who needs each concept, built once rather than by a scan of the knowledge base per concept.
+  const dependants = new Map<string, { slug: string }[]>();
+  for (const d of kb.concepts) {
+    for (const needed of new Set([...d.requires, ...d.assumes])) {
+      const list = dependants.get(needed);
+      if (list === undefined) dependants.set(needed, [{ slug: d.id }]);
+      else list.push({ slug: d.id });
+    }
+  }
+
   const asked: WeekCheckConcept[] = concepts.map((c, i) => {
     const checks = checksOf(i);
     const pool = distractorPool(
@@ -94,7 +104,7 @@ export async function loadWeekCheck(module: Pick<Module, "topics">): Promise<Wee
         domain: c.domain,
         requires: c.requires.map((slug) => ({ slug })),
         assumes: c.assumes.map((slug) => ({ slug })),
-        dependants: kb.concepts.filter((d) => d.requires.includes(c.id) || d.assumes.includes(c.id)).map((d) => ({ slug: d.id })),
+        dependants: dependants.get(c.id) ?? [],
         backlinks: [],
       },
       summaries,

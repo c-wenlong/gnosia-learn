@@ -16,8 +16,8 @@
 
 import type { MasteryLabel } from "@gnosia/catalog/state";
 
-import { EMPTY_STANDING, itemDoneWith, type ItemStanding } from "@/lib/course-path";
-import { dayDiff, dayLabel } from "@/lib/day-groups";
+import { conceptHref, EMPTY_STANDING, itemDoneWith, percentOf, type ItemStanding } from "@/lib/course-path";
+import { dayDiff, dayLabel, weekdayName } from "@/lib/day-groups";
 import { dayKey } from "@gnosia/tutor/days";
 import { bucketOf, type MasteryBucket } from "@gnosia/tutor/mastery-bucket";
 import { recentItems, type RecentItem, type RecentSources } from "@/lib/recent-core";
@@ -109,23 +109,16 @@ export interface HomeModel {
 /* Days                                                                       */
 /* -------------------------------------------------------------------------- */
 
-const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-
-
-function weekdayOf(key: string): number {
-  return new Date(`${key}T12:00:00Z`).getUTCDay();
-}
-
 /** A past day, as a thread names it: "Today", "Yesterday", "Mon", "20 Aug". */
 export function pastDayLabel(key: string, today: string): string {
   const diff = dayDiff(key, today);
   if (diff <= 0) return "Today";
   if (diff === 1) return "Yesterday";
-  if (diff < 7) return WEEKDAYS[weekdayOf(key)].slice(0, 3);
+  if (diff < 7) return weekdayName(key);
   return dayLabel(key, today);
 }
 
-/** "today", "yesterday", "3 days ago", "on 20 Aug". */
+/** "today", "yesterday", "3 days ago", "on 20 Aug": Home's sentence for it, where the Learn table says `seenAgo`. */
 export function lastSeenLabel(at: string | null, now: Date, timeZone?: string): string | null {
   if (at === null) return null;
   const then = new Date(at);
@@ -226,7 +219,7 @@ export function nextFromHere(
     key: `concept:${c.id}`,
     title: c.title,
     detail: null,
-    href: `/learn/${encodeURIComponent(c.id)}`,
+    href: conceptHref(c.id),
     bucket: bucketOf(c),
     pL: c.pL,
   });
@@ -356,7 +349,7 @@ export function recallPicks(
  * docs/proposals/recall-in-chat.md, R3). With no pick, the whole queue.
  */
 export function recallHref(pick: Pick<RecallPick, "conceptId"> | undefined): string {
-  return pick === undefined ? "/review" : `/learn/${encodeURIComponent(pick.conceptId)}`;
+  return pick === undefined ? "/review" : conceptHref(pick.conceptId);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -438,7 +431,7 @@ export function coursesInProgress(
         title: c.title,
         completed: done,
         total,
-        percent: total === 0 ? 0 : Math.round((done / total) * 100),
+        percent: percentOf(done, total),
       };
       return { row, order: c.order };
     })

@@ -151,16 +151,20 @@ export async function sessionWillAsk(workspace: ConceptWorkspace): Promise<boole
 }
 
 export async function loadSessionPage(workspace: ConceptWorkspace, mode: ConceptSessionMode): Promise<SessionPageData> {
-  const [summaries, written] = await Promise.all([readSummaries(), readConceptOptions(workspace)]);
-
-  const [asset, { kb }] = await Promise.all([teachAsset(workspace.assets), readKb(await currentOwner())]);
+  // All five at once: none needs another's answer.
+  const [summaries, written, asset, { kb }, modelAvailable] = await Promise.all([
+    readSummaries(),
+    readConceptOptions(workspace),
+    teachAsset(workspace.assets),
+    currentOwner().then((owner) => readKb(owner)),
+    tutorModelConfigured(),
+  ]);
   const byId = new Map(kb.concepts.map((c) => [c.id, c]));
   const frontier = kb.frontier.flatMap((id) => {
     const c = byId.get(id);
     return c === undefined ? [] : [{ id: c.id, title: c.title, domain: c.domain }];
   });
 
-  const modelAvailable = await tutorModelConfigured();
   const plan = withoutEmptySteps(
     buildSessionPlan({
       slug: workspace.slug,
