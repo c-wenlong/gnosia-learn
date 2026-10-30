@@ -58,6 +58,7 @@ import { cx } from "@/components/ui/classes";
 export function AppShell({
   studio = false,
   runner = studio,
+  timeZone,
   collapsed = false,
   children,
 }: {
@@ -65,12 +66,14 @@ export function AppShell({
   studio?: boolean;
   /** Whether the studio's runner was listening as the page was drawn (`runnerListening`). */
   runner?: boolean;
+  /** The zone the server counts days in, so the sidebar's day headings are Home's. */
+  timeZone?: string;
   /** Whether the sidebar is folded to its rail on a desktop (`SIDEBAR_COOKIE`). */
   collapsed?: boolean;
   children: ReactNode;
 }) {
   return (
-    <ShellFrame studio={studio} runner={runner} initialCollapsed={collapsed}>
+    <ShellFrame studio={studio} runner={runner} timeZone={timeZone} initialCollapsed={collapsed}>
       <StoreBanner />
       <main
         className={cx(

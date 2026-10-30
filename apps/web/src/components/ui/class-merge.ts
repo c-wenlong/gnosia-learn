@@ -50,7 +50,6 @@ export const THEME_COLOURS = [
   "warn-tint",
   "danger",
   "streak",
-  "streak-text",
   "btn-face",
   "btn-lip",
   "btn-text",

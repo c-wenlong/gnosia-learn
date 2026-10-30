@@ -40,6 +40,12 @@ export interface ShellControls {
    * `draft` mirror holds. False without a studio.
    */
   runner: boolean;
+  /**
+   * The zone a day is counted in (`appTimeZone()`, else the server's own),
+   * so Recent's Today and Yesterday are Home's. Undefined outside the app's
+   * frame, where the browser's own zone is used.
+   */
+  timeZone?: string;
   /** The phone's drawer. */
   drawer: boolean;
   openDrawer: () => void;

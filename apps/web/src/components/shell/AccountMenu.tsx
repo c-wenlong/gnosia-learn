@@ -7,7 +7,7 @@ import { ThemeSwitch } from "@/components/ThemeSwitch";
 import { PixelAvatar } from "@/components/avatar/PixelAvatar";
 import { cx, MENU_HEADING, MENU_PANEL, menuRowClasses } from "@/components/ui/classes";
 import { Popover } from "@/components/ui/Popover";
-import { FADE, FADE_IN } from "./motion";
+import { LABEL_FADE, LABEL_SHOWN } from "./motion";
 import { useLearner } from "@/lib/learner-context";
 
 /**
@@ -72,7 +72,7 @@ export function AccountMenu({ collapsed, onPick }: { collapsed: boolean; onPick:
         ) : (
           <PixelAvatar avatar={avatar} className="size-8" />
         )}
-        <span aria-hidden={collapsed ? true : undefined} className={cx("flex min-w-0 flex-1 items-center gap-2.5 pr-2", FADE, collapsed ? "opacity-0" : FADE_IN)}>
+        <span aria-hidden={collapsed ? true : undefined} className={cx("flex min-w-0 flex-1 items-center gap-2.5 pr-2", LABEL_FADE, collapsed ? "opacity-0" : LABEL_SHOWN)}>
           <span className="min-w-0 flex-1 truncate text-[14px] font-medium text-text">{name}</span>
           <svg aria-hidden viewBox="0 0 20 20" className="size-4 shrink-0 text-text3" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
             <path d="M6.5 8 10 4.5 13.5 8M6.5 12l3.5 3.5 3.5-3.5" />

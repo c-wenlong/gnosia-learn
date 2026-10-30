@@ -2,20 +2,11 @@ import Link from "next/link";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { Glyph, type GlyphName } from "@/components/ui/Glyph";
+import { Glyph } from "@/components/ui/Glyph";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import { ProgressBar } from "@/components/ui/ProgressBar";
-import type { Thread, ThreadKind } from "@/lib/home-core";
-import { isCourseVisit } from "@/lib/recent-core";
-
-/** Each kind's glyph, and the word a screen reader hears before the title. */
-const KIND: Record<ThreadKind, { glyph: GlyphName; word: string }> = {
-  module: { glyph: "book", word: "Course module" },
-  video: { glyph: "video", word: "Video" },
-  draft: { glyph: "diagram", word: "Studio draft" },
-  concept: { glyph: "concepts", word: "Concept" },
-  session: { glyph: "chat", word: "Tutor session" },
-};
+import type { Thread } from "@/lib/home-core";
+import { recentGlyph } from "@/lib/recent-glyphs";
 
 /**
  * Pick up where you left off (docs/proposals/home-page.md, part 2): the last
@@ -42,38 +33,42 @@ export function ThreadsCard({ threads, reachable }: { threads: Thread[]; reachab
         </div>
       ) : (
         <ul className="-mx-2 flex flex-col">
-          {threads.map((t) => (
-            <li key={t.key}>
-              <Link
-                href={t.href}
-                className="flex min-w-0 items-center gap-3 rounded-lg px-2 py-2 transition-colors duration-100 hover:bg-surface2 motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent"
-              >
-                <Glyph name={KIND[t.kind].glyph} className="text-text2" />
-                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="truncate text-[14px] font-medium text-text">
-                    <span className="sr-only">{isCourseVisit(t) ? "Course" : KIND[t.kind].word}: </span>
-                    {t.title}
+          {threads.map((t) => {
+            // The sidebar's glyph and word for the same row (`recentGlyph`).
+            const kind = recentGlyph(t);
+            return (
+              <li key={t.key}>
+                <Link
+                  href={t.href}
+                  className="flex min-w-0 items-center gap-3 rounded-lg px-2 py-2 transition-colors duration-100 hover:bg-surface2 motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent"
+                >
+                  <Glyph name={kind.glyph} className="text-text2" />
+                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span className="truncate text-[14px] font-medium text-text">
+                      <span className="sr-only">{kind.word}: </span>
+                      {t.title}
+                    </span>
+                    <span className="flex min-w-0 items-center gap-2 text-[12px] text-text2">
+                      {t.kind === "concept" && t.bucket !== undefined ? (
+                        <MasteryDot bucket={t.bucket} pL={t.pL} size={10} showLabel />
+                      ) : (
+                        <span className="truncate">{t.detail}</span>
+                      )}
+                      {t.percent !== undefined && (
+                        // ProgressBar fills its container, so the wrapper sizes it.
+                        <span className="w-16 shrink-0 max-md:hidden">
+                          <ProgressBar percent={t.percent} size="sm" label={`${t.title}, ${t.percent}% watched`} />
+                        </span>
+                      )}
+                    </span>
                   </span>
-                  <span className="flex min-w-0 items-center gap-2 text-[12px] text-text2">
-                    {t.kind === "concept" && t.bucket !== undefined ? (
-                      <MasteryDot bucket={t.bucket} pL={t.pL} size={10} showLabel />
-                    ) : (
-                      <span className="truncate">{t.detail}</span>
-                    )}
-                    {t.percent !== undefined && (
-                      // ProgressBar fills its container, so the wrapper sizes it.
-                      <span className="w-16 shrink-0 max-md:hidden">
-                        <ProgressBar percent={t.percent} size="sm" label={`${t.title}, ${t.percent}% watched`} />
-                      </span>
-                    )}
-                  </span>
-                </span>
-                <time dateTime={t.at} className="shrink-0 text-[12px] text-text3">
-                  {t.day}
-                </time>
-              </Link>
-            </li>
-          ))}
+                  <time dateTime={t.at} className="shrink-0 text-[12px] text-text3">
+                    {t.day}
+                  </time>
+                </Link>
+              </li>
+            );
+          })}
         </ul>
       )}
     </Card>

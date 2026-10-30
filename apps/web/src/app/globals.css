@@ -122,15 +122,10 @@
   --warn-tint: #fff5d6;
   --danger: #c43939;
   --streak: #ff9600;
-  /* The streak as small text (today's letter in the streak strip, 11px):
-     the orange darkened within its hue until it clears 4.5:1 on the card
-     (4.80; 4.52 on the page). `--streak` stays the fill, at 3:1 for graphics. */
-  --streak-text: #b35a00;
-  /* The marks drawn on a bright fill: the check on a done streak day and the
-     dot on a mastered path node. White wherever those fills are mid-tone or
-     darker, which is both light palettes. The two dark palettes lighten both
-     fills, so `.dark` and `.gnosia.dark` turn the marks to their page colour. */
-  --streak-on: #ffffff;
+  /* The mark drawn on a bright fill: the dot on a mastered path node. White
+     wherever that fill is mid-tone or darker, which is both light palettes.
+     The two dark palettes lighten it, so `.dark` and `.gnosia.dark` turn the
+     mark to their page colour. */
   --m-hi-on: #ffffff;
   --btn-face: #111111;
   --btn-lip: #000000;
@@ -148,20 +143,17 @@
   --diagram-matte: #f7f6f3;
 
   /* Button faces and lips the kit hard-codes rather than naming: the accent
-     button's lip, the label on a green or yellow face, and the lips under a
-     mastered and a learning path node. Named here so no component carries a
-     literal. */
+     button's lip, and the label on a green or yellow face. Named here so no
+     component carries a literal. */
   --accent-lip: #2e4fd1;
   --ok-on: #ffffff;
   --warn-on: #5c4400;
-  --m-hi-lip: #2e4fd1;
   /* The close screen's review-cards tile; the kit's one literal colour. */
   --violet: #8b5cf6;
   /* Small text on a saturated fill (the stat tiles' strips). Black in every
      palette: at least 4.5:1 on the ok, accent, violet and streak tones (the
      accent is the lowest, 4.59 in Classic and 4.56 in Gnosia). */
   --on-tone: #000000;
-  --m-mid-lip: #7e93e6;
 
   /* Also a Tailwind font (`font-display`, below); declared here as well so
      inline styles and arbitrary values can name it. */
@@ -226,11 +218,6 @@
   --warn-tint: #33300f;
   --danger: #ff8585;
   --streak: #ffab33;
-  /* Already 8.83:1 on the dark card, so the text colour is the fill. */
-  --streak-text: #ffab33;
-  /* The check on the bright orange is the page colour: white was 1.89:1,
-     this is 9.76:1. */
-  --streak-on: #141414;
   --btn-face: #e5e5e5;
   --btn-lip: #b3b3b3;
   --btn-text: #000000;
@@ -241,10 +228,8 @@
   /* Learning: the kit's #3a4a8f lifted, same hue and chroma, until it clears
      3:1 on the card (3.07) and the page (3.39); the kit's value was 2.03.
      It sits 18.0 L* below mastered (a luminance ratio of 1.87), the widest
-     gap left once learning clears 3:1 and mastered stays #7491ff. The old
-     learning blue is now its lip, the darker shade under the path node. */
+     gap left once learning clears 3:1 and mastered stays #7491ff. */
   --m-mid: #5266ad;
-  --m-mid-lip: #3a4a8f;
   --m-lo: #4c4c4c;
   --lip-shade: #0f0f0f;
   --diagram-matte: #f7f6f3; /* stays light, see :root */
@@ -254,6 +239,14 @@
   /* Elevation by lightening rather than by shadow: a shadow does not carry on
      a dark ground. In light the two are equal, paper on paper needs a border. */
   --surface-raised: var(--surface2);
+
+  /* As :root has them, declared so this block names every palette token
+     (AGENTS.md: a token gets a value in every block); change them here
+     too when :root's change. */
+  --accent-lip: #2e4fd1;
+  --warn-on: #5c4400;
+  --violet: #8b5cf6;
+  --on-tone: #000000;
 }
 
 /*
@@ -299,18 +292,13 @@
   /* Mastery: deep teal, soft teal, warm grey, stepped by lightness (L* 36,
      58, 86) so the three stay apart without hue. */
   --m-hi: #0f5f61; /* --brand-teal */
-  --m-hi-lip: #0a4244;
   --m-mid: #529798;
-  --m-mid-lip: #3b7475;
   --m-lo: #ddd5c4;
   --lip-shade: #cbc1ad;
   --diagram-matte: #f7f6f3; /* stays light, see :root */
 
   /* The streak is the brand's gold: 3.1:1 on cream, the non-text minimum. */
   --streak: #b3842c; /* --brand-gold */
-  /* As small text the gold is too light (3.30:1 on the card): the brand
-     gold's hue darkened until it clears 4.5:1 (4.82 on the card). */
-  --streak-text: #916a23;
 
   /* Signal colours keep their :root hues. Only two labels move, each
      because it was under 4.5:1: the green text darkened just far enough to
@@ -319,6 +307,23 @@
      :root's is the one this palette chose, and it passes on cream (4.75). */
   --ok-text: #008024;
   --ok-on: #0b2e14;
+
+  /* As :root has them, declared so this block names every palette token
+     (AGENTS.md: a token gets a value in every block); change them here
+     too when :root's change. */
+  --ok: #29cc57;
+  --ok-lip: #15b441;
+  --ok-tint: #e6f8ec;
+  --warn: #f7c325;
+  --warn-lip: #b78900;
+  --warn-text: #8c6800;
+  --warn-tint: #fff5d6;
+  --danger: #c43939;
+  --m-hi-on: #ffffff;
+  --warn-on: #5c4400;
+  --violet: #8b5cf6;
+  --on-tone: #000000;
+  --surface-raised: var(--surface);
 }
 
 /*
@@ -368,18 +373,14 @@
 
   /* Mastery, stepped by lightness: bright teal, deep teal, navy-grey. */
   --m-hi: #5cbab3;
-  --m-hi-lip: #36908a;
   --m-hi-on: #0a1621;
   --m-mid: #187b78;
-  --m-mid-lip: #025f5d;
   --m-lo: #3d4c5b;
   --lip-shade: #05101c;
   --diagram-matte: #f7f6f3; /* stays light, see :root */
 
-  /* The brand's bright gold, which clears 4.5:1 as text on navy too. */
+  /* The brand's bright gold. */
   --streak: #e2b95e; /* --brand-gold in dark */
-  --streak-text: #e2b95e;
-  --streak-on: #0a1621;
 
   /* Signal colours as `.dark` has them; every pair passes on navy. */
   --ok: #29cc57;
@@ -494,7 +495,6 @@
   --color-warn-tint: var(--warn-tint);
   --color-danger: var(--danger);
   --color-streak: var(--streak);
-  --color-streak-text: var(--streak-text);
   --color-btn-face: var(--btn-face);
   --color-btn-lip: var(--btn-lip);
   --color-btn-text: var(--btn-text);

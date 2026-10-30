@@ -19,7 +19,7 @@ import { isPlainClick } from "@/lib/plain-click";
 import mark from "../../../public/brand/mark.png";
 import { AccountMenu } from "./AccountMenu";
 import { SearchField } from "./ChatSearch";
-import { FADE, FADE_IN } from "./motion";
+import { LABEL_FADE, LABEL_SHOWN } from "./motion";
 import { NavIcon } from "./NavIcon";
 import { ROW, rowFill } from "./rows";
 import { Sections } from "./Sections";
@@ -319,8 +319,8 @@ export function AppSidebar() {
               className={cx(
                 "absolute top-1/2 left-3.5 -translate-y-1/2 rounded-sm text-[15px] whitespace-nowrap text-text",
                 "focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent",
-                FADE,
-                rail ? "opacity-0" : FADE_IN,
+                LABEL_FADE,
+                rail ? "opacity-0" : LABEL_SHOWN,
               )}
             >
               <GnosiaWordmark />
@@ -419,7 +419,7 @@ function item(on: boolean): string {
 
 /** A destination's name: always there, faded out on the rail, where the link's own label names it. */
 function Label({ rail, children }: { rail: boolean; children: ReactNode }) {
-  return <span className={cx("min-w-0 flex-1 whitespace-nowrap", FADE, rail ? "opacity-0" : FADE_IN)}>{children}</span>;
+  return <span className={cx("min-w-0 flex-1 whitespace-nowrap", LABEL_FADE, rail ? "opacity-0" : LABEL_SHOWN)}>{children}</span>;
 }
 
 /**
@@ -493,14 +493,14 @@ function FoldButton({ rail, peeking, onPress }: { rail: boolean; peeking: boolea
         draggable={false}
         className={cx(
           "absolute size-7",
-          FADE,
+          LABEL_FADE,
           rail ? "opacity-100 group-hover/fold:opacity-0 group-focus-visible/fold:opacity-0" : "opacity-0",
         )}
       />
       <svg
         aria-hidden
         viewBox="0 0 20 20"
-        className={cx("size-[18px]", FADE, rail ? "opacity-0 group-hover/fold:opacity-100 group-focus-visible/fold:opacity-100" : "opacity-100")}
+        className={cx("size-[18px]", LABEL_FADE, rail ? "opacity-0 group-hover/fold:opacity-100 group-focus-visible/fold:opacity-100" : "opacity-100")}
         fill="none"
         stroke="currentColor"
         strokeWidth="1.7"

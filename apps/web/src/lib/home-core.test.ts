@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { dayLabel } from "@/lib/day-groups";
 import type { LogEvent } from "@/lib/days";
 import {
   clock,
@@ -40,7 +41,8 @@ describe("day words", () => {
     expect(pastDayLabel(TODAY, TODAY)).toBe("Today");
     expect(pastDayLabel("2026-09-25", TODAY)).toBe("Yesterday");
     expect(pastDayLabel("2026-09-21", TODAY)).toBe("Mon");
-    expect(pastDayLabel("2026-09-19", TODAY)).toBe("19 Sep");
+    // The Library's spelling of a date (`dayLabel`), whatever the ICU calls September.
+    expect(pastDayLabel("2026-09-19", TODAY)).toBe(dayLabel("2026-09-19", TODAY));
     expect(pastDayLabel("2025-12-30", TODAY)).toBe("30 Dec 2025");
   });
 
@@ -90,7 +92,7 @@ describe("pick up where you left off", () => {
       ["video", "Randomized algorithms", "2:17 of 11:36", "Today", "/library/manimkc%3Aout%2Fa.mp4"],
       ["module", "Randomized algorithms", "CS3230 · Module 6", "Yesterday", "/courses/cs3230/m6"],
       ["draft", "How dengue moves", "Video draft", "Mon", "/studio?draft=d1"],
-      ["concept", "Big-O", null, "10 Sep", "/learn/big-o"],
+      ["concept", "Big-O", null, dayLabel("2026-09-10", TODAY), "/learn/big-o"],
     ]);
     expect(threads[0].percent).toBe(20);
     expect(threads[3]).toMatchObject({ bucket: "learning", pL: 0.15 });
