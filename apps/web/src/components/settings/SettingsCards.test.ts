@@ -198,6 +198,38 @@ describe("the Providers card", () => {
     expect(document.activeElement).toBe(add);
   });
 
+  it.each([
+    ["Escape", (c: HTMLElement) => c.querySelector("dialog")!.dispatchEvent(new Event("cancel", { cancelable: true, bubbles: true }))],
+    ["the Close button", (c: HTMLElement) => button(c, "Close").click()],
+    ["the Cancel button", (c: HTMLElement) => button(c, "Cancel").click()],
+    [
+      "a press on the backdrop",
+      (c: HTMLElement) => {
+        const dialog = c.querySelector("dialog")!;
+        dialog.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+        dialog.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      },
+    ],
+  ])("drops a typed key when Add custom provider is closed with %s", (_name, close) => {
+    const container = mount(createElement(Providers, { studio: true, view: view() }));
+    const setValue = (input: HTMLInputElement, value: string) => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+    act(() => button(container, "Add custom provider").click());
+    act(() => setValue(container.querySelector<HTMLInputElement>('input[type="password"]')!, "gw-key-0123456789abcdef"));
+    expect(container.querySelector<HTMLInputElement>('input[type="password"]')!.value).toBe("gw-key-0123456789abcdef");
+
+    act(() => close(container));
+    act(() => {
+      vi.advanceTimersByTime(250);
+    });
+    expect(container.querySelector("dialog")).toBeNull();
+
+    act(() => button(container, "Add custom provider").click());
+    expect(container.querySelector<HTMLInputElement>('input[type="password"]')!.value).toBe("");
+  });
+
   it("adds a custom provider in one request with its name, base URL and key", async () => {
     const container = mount(createElement(Providers, { studio: true, view: view() }));
     act(() => button(container, "Add custom provider").click());

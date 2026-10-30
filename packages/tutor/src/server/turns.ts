@@ -72,6 +72,7 @@ import {
   type CustomProvider,
 } from "./custom-providers";
 import type { Env, TutorDeps } from "./deps";
+import { echoesKey } from "./key-echo";
 import { cachedModelList } from "./model-list";
 import {
   failureCode,
@@ -1282,8 +1283,8 @@ function chainEntryOf(body: unknown): { entry: { provider: ProviderName; model: 
 /**
  * The key gate an add and a replace share (docs/TUTOR-MODELS.md): the
  * provider must hold a key — a saved key that cannot be read because the
- * database is down is not "no key" — and the model id must not be, hold, or
- * be a long part of any key the tutor could call with (T11). Answers the
+ * database is down is not "no key" — and the model id must not hold a whole
+ * key the tutor could call with (T11, `echoesKey`). Answers the
  * refusal, or `serverKey` for the write's own under-lock check.
  */
 async function chainKeyGate(
@@ -1306,20 +1307,6 @@ async function chainKeyGate(
     return { refused: writeRefuse("That is one of your API keys, not a model id. Keys go in a provider's API key field.") };
   }
   return { serverKey: keyFor(provider, {}, deps.env) !== null };
-}
-
-/** Whether `model` is, holds, or is a long part of any key the tutor could call with. */
-function echoesKey(model: string, saved: SavedKeys, env: Env): boolean {
-  // The server's keys come through `keyFor`; every saved key is checked as
-  // well, a custom provider's included, which `PROVIDER_IDS` does not name.
-  const keys = [
-    ...PROVIDER_IDS.flatMap((id) => {
-      const key = keyFor(id, saved, env);
-      return key === null ? [] : [key.apiKey];
-    }),
-    ...Object.values(saved).filter((key): key is string => typeof key === "string" && key !== ""),
-  ];
-  return keys.some((key) => model.includes(key) || (model.length >= 12 && key.includes(model)));
 }
 
 const CHAIN_STATUS: Record<TutorModelError["code"], number> = {
