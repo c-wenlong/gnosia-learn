@@ -129,7 +129,8 @@ function TopicPanel({
   const noteId = useId();
 
   // Saved 400ms after the last keystroke, as the checklist did, and at once
-  // when the field loses focus or the panel goes away with an edit pending:
+  // when the field loses focus, the panel goes away or the page is left with
+  // an edit pending:
   // following a sidebar or next-module link unmounts the panel, and a timer
   // cancelled then would drop the last edit. Clicking any link or Reset blurs
   // the field first, so the flush lands before a reset clears the notes and
@@ -155,6 +156,12 @@ function TopicPanel({
     return () => window.clearTimeout(t);
   }, [draft, saved, flush]);
   useEffect(() => flush, [flush]);
+  // Closing the tab unmounts nothing, so the pending edit goes on `pagehide`,
+  // where the provider sends it with `keepalive` to outlive the page.
+  useEffect(() => {
+    window.addEventListener("pagehide", flush);
+    return () => window.removeEventListener("pagehide", flush);
+  }, [flush]);
 
   const hasRecap = Boolean(state.knowledge[topic.id]);
 

@@ -3,12 +3,24 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * The `(app)` layout fills in a missing motion cookie from the stored row,
- * and for "Always reduce motion" marks <html> with an inline script ahead of
- * the page, so the first page in a new browser does not paint moving.
+ * The `(app)` layout brings the motion cookie in line with the stored row,
+ * and for "Always reduce motion" the cookie does not know of yet marks
+ * <html> with an inline script ahead of the page, so the page does not paint
+ * moving. The stored theme wins over the cookie whenever the database
+ * answered. With a studio, it looks at the runner's port.
  */
 
-const env = vi.hoisted(() => ({ cookies: new Map<string, string>(), stored: null as string | null, asked: 0, nonce: null as string | null }));
+const env = vi.hoisted(() => ({
+  cookies: new Map<string, string>(),
+  stored: null as string | null,
+  asked: 0,
+  nonce: null as string | null,
+  theme: "light",
+  reachable: true,
+  studio: false,
+  runner: false,
+  looked: 0,
+}));
 
 vi.mock("next/headers", () => ({
   cookies: async () => ({ get: (name: string) => (env.cookies.has(name) ? { value: env.cookies.get(name) } : undefined) }),
@@ -16,7 +28,7 @@ vi.mock("next/headers", () => ({
 }));
 vi.mock("@/lib/auth/session", () => ({ requireSignedIn: async () => undefined }));
 vi.mock("@/lib/learner-store", () => ({
-  loadLearnerSnapshot: async () => ({ state: { theme: "light" }, reachable: true }),
+  loadLearnerSnapshot: async () => ({ state: { theme: env.theme }, reachable: env.reachable }),
 }));
 vi.mock("@/lib/motion-preference", () => ({
   readStoredMotion: async () => {
@@ -24,9 +36,21 @@ vi.mock("@/lib/motion-preference", () => ({
     return env.stored;
   },
 }));
-vi.mock("@/lib/studio", () => ({ studioEnabled: () => false }));
-vi.mock("@/lib/learner-context", () => ({ LearnerProvider: ({ children }: { children: ReactNode }) => children }));
-vi.mock("@/components/AppShell", () => ({ AppShell: ({ children }: { children: ReactNode }) => children }));
+vi.mock("@/lib/studio", () => ({ studioEnabled: () => env.studio }));
+vi.mock("@/lib/studio-runner", () => ({
+  runnerListening: async () => {
+    env.looked += 1;
+    return env.runner;
+  },
+}));
+vi.mock("@/lib/learner-context", () => ({
+  LearnerProvider: ({ initialState, children }: { initialState: { theme: string }; children: ReactNode }) =>
+    createElement("div", { "data-theme": initialState.theme }, children),
+}));
+vi.mock("@/components/AppShell", () => ({
+  AppShell: ({ studio, runner, children }: { studio: boolean; runner: boolean; children: ReactNode }) =>
+    createElement("section", { "data-studio": String(studio), "data-runner": String(runner) }, children),
+}));
 vi.mock("@/components/settings/MotionSeed", () => ({
   MotionSeed: ({ mode }: { mode: string }) => createElement("i", { "data-seed": mode }),
 }));
@@ -42,6 +66,11 @@ beforeEach(() => {
   env.stored = null;
   env.asked = 0;
   env.nonce = null;
+  env.theme = "light";
+  env.reachable = true;
+  env.studio = false;
+  env.runner = false;
+  env.looked = 0;
 });
 
 describe("the (app) layout's motion seed", () => {
@@ -59,17 +88,27 @@ describe("the (app) layout's motion seed", () => {
     expect(await render()).toMatch(/<script nonce="abc123">[^<]*dataset\.motion="reduce"/);
   });
 
-  it("seeds a stored system without a script, and asks nothing once the cookie is there", async () => {
+  it("seeds a stored system without a script", async () => {
     env.stored = "system";
+    const html = await render();
+    expect(html).not.toContain("<script");
+    expect(html).toContain('data-seed="system"');
+  });
+
+  it("brings a cookie that disagrees in line with the row, on every page", async () => {
+    env.stored = "system";
+    env.cookies.set("gnosia-motion", "always");
     let html = await render();
     expect(html).not.toContain("<script");
     expect(html).toContain('data-seed="system"');
 
+    env.stored = "always";
     env.cookies.set("gnosia-motion", "always");
     html = await render();
-    expect(env.asked).toBe(1);
+    // The root layout has already marked <html> from the cookie.
     expect(html).not.toContain("<script");
-    expect(html).not.toContain("data-seed");
+    expect(html).toContain('data-seed="always"');
+    expect(env.asked).toBe(2);
   });
 
   it("keeps the no-JavaScript notice beside the seed", async () => {
@@ -83,5 +122,34 @@ describe("the (app) layout's motion seed", () => {
     const html = await render();
     expect(html).not.toContain("data-seed");
     expect(html).not.toContain("<script");
+  });
+});
+
+describe("the (app) layout's theme", () => {
+  it("takes the stored theme over the cookie when the database answered", async () => {
+    env.theme = "gnosia-dark";
+    env.cookies.set("gnosia-theme", "light");
+    expect(await render()).toContain('data-theme="gnosia-dark"');
+  });
+
+  it("keeps the cookie's theme when the database did not answer", async () => {
+    env.reachable = false;
+    env.cookies.set("gnosia-theme", "dark");
+    expect(await render()).toContain('data-theme="dark"');
+  });
+});
+
+describe("the (app) layout's look at the runner", () => {
+  it("tells the shell whether the runner is listening, with a studio", async () => {
+    env.studio = true;
+    expect(await render()).toContain('data-runner="false"');
+    env.runner = true;
+    expect(await render()).toContain('data-runner="true"');
+  });
+
+  it("does not look without a studio", async () => {
+    env.runner = true;
+    expect(await render()).toContain('data-runner="false"');
+    expect(env.looked).toBe(0);
   });
 });

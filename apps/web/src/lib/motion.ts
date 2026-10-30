@@ -15,9 +15,9 @@ import { parseMotionMode } from "@/lib/preferences";
  * that decides in script whether to move (a smooth scroll, a timed exit)
  * asks `prefersReducedMotion()`, which also reads both.
  *
- * The cookie always holds a mode once one is known, `system` included, so a
- * missing cookie means a browser that has never been told, and the `(app)`
- * layout fills it in from the row (`MotionSeed`). Not `httpOnly`, for the
+ * The cookie always holds a mode once one is known, `system` included, and
+ * the `(app)` layout brings it in line with the row on every page
+ * (`MotionSeed`): the row wins whenever the database answers. Not `httpOnly`, for the
  * same reason as the theme's: the client writes it, and it is a display
  * preference, not anything that authenticates.
  */
@@ -43,8 +43,8 @@ export function motionAttribute(mode: MotionMode | null): "reduce" | undefined {
 }
 
 /**
- * For a browser with no cookie yet whose stored mode is `always`: the root
- * layout could not know, so the `(app)` layout puts this before the page in
+ * For a browser whose cookie does not say `always` while the stored mode
+ * does: the root layout could not know, so the `(app)` layout puts this before the page in
  * the HTML, and it marks <html> while the document is still being parsed,
  * before anything under it paints or starts an entrance animation.
  */

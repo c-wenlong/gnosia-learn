@@ -283,4 +283,42 @@ describe("the Model selection card", () => {
     expect(writes).toHaveLength(1);
     expect(JSON.parse(String((writes[0]?.[1] as RequestInit).body))).toEqual({ provider: "openrouter", model: "m-9" });
   });
+
+  it("asks before Remove model deletes anything", async () => {
+    const container = mount(selection());
+    await act(async () => {});
+    act(() => button(container, "Remove model").click());
+    expect(chainWrites("DELETE")).toHaveLength(0);
+    expect(button(container, "Remove model").getAttribute("aria-expanded")).toBe("true");
+    expect(container.textContent).toContain("Remove the tutor's model?");
+    await act(async () => button(container, "Remove").click());
+    expect(chainWrites("DELETE")).toHaveLength(1);
+    expect(container.textContent).toContain("Removed. The tutor has nothing to call");
+  });
+
+  it("says what is left when a removal is refused part way", async () => {
+    const chain: ChainEntry[] = [
+      { provider: "openrouter", model: "m-1" },
+      { provider: "openrouter", model: "m-2" },
+      { provider: "openrouter", model: "m-3" },
+    ];
+    const container = mount(selection({}, chain));
+    await act(async () => {});
+    let deletes = 0;
+    const answer = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (init?.method !== "DELETE") return answer(url, init);
+      deletes += 1;
+      return Promise.resolve(
+        deletes === 2
+          ? new Response(JSON.stringify({ ok: false, error: "Not removed: the database is unreachable." }), { status: 503 })
+          : new Response(JSON.stringify({ ok: true, chain: [] }), { status: 200 }),
+      );
+    });
+    act(() => button(container, "Remove model").click());
+    expect(container.textContent).toContain("Remove all 3 models the tutor tries?");
+    await act(async () => button(container, "Remove").click());
+    expect(chainWrites("DELETE")).toHaveLength(2);
+    expect(container.textContent).toContain("Not removed: the database is unreachable. 1 of 3 were removed before that; the tutor still tries the other 2.");
+  });
 });

@@ -93,7 +93,8 @@ export function AppSidebar() {
     [],
   );
   const peeking = collapsed && peek;
-  const search = useHistorySearch(studio);
+  // The runner's half of the search only while it is worth asking.
+  const search = useHistorySearch(shell?.runner ?? false);
   const searchField = useRef<HTMLInputElement | null>(null);
   const room = useRef<HTMLDivElement | null>(null);
   /** The rail's search button was pressed: the field takes focus once the sidebar is out. */

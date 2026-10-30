@@ -8,6 +8,7 @@ import { ByokConfig } from "@/components/studio/ByokConfig";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Combobox } from "@/components/ui/Combobox";
+import { ConfirmFold } from "@/components/ui/ConfirmFold";
 import { FormRow } from "@/components/ui/FormRow";
 import { LiveStatus } from "@/components/ui/LiveStatus";
 import { Select } from "@/components/ui/Select";
@@ -121,6 +122,8 @@ function TutorPick({ view, chain }: { view: ProvidersView; chain: ChainEntry[] }
   const [error, setError] = useState<string | null>(null);
   const busy = status.kind === "busy";
   const disabled = !view.chainReachable;
+  const [confirmingRemove, setConfirmingRemove] = useState(false);
+  const removeButton = useRef<HTMLButtonElement>(null);
   const focusNext = useRef<string | null>(null);
   useEffect(() => {
     if (focusNext.current === null || busy) return;
@@ -221,16 +224,24 @@ function TutorPick({ view, chain }: { view: ProvidersView; chain: ChainEntry[] }
     } else setStatus({ kind: "error", text: reply.data.error ?? `Not tested (HTTP ${reply.status}).` });
   };
 
+  // One DELETE per entry: the route removes one at a time. A refusal part
+  // way says what is left, so a chain cut short is never reported as whole
+  // or as gone.
   const remove = async () => {
     setStatus({ kind: "busy", text: "Removing…" });
+    let removed = 0;
     for (const entry of chain) {
       const reply = await sendJson<Reply>("DELETE", "/api/learner/tutor-model", { provider: entry.provider, model: entry.model });
       if (reply === null || reply.status !== 200 || reply.data.ok !== true) {
-        setStatus({ kind: "error", text: failure("removed", reply) });
+        const left = chain.length - removed;
+        const kept = removed === 0 ? "" : ` ${removed} of ${chain.length} were removed before that; the tutor still tries the other ${left}.`;
+        setStatus({ kind: "error", text: `${failure("removed", reply)}${kept}` });
         router.refresh();
         return;
       }
+      removed += 1;
     }
+    setConfirmingRemove(false);
     setProvider("");
     setModel("");
     setStatus({ kind: "done", text: "Removed. The tutor has nothing to call until you save a model." });
@@ -313,16 +324,35 @@ function TutorPick({ view, chain }: { view: ProvidersView; chain: ChainEntry[] }
           </Button>
         )}
         {chain.length > 0 && (
-          <button
-            type="button"
-            className="ml-auto text-[12px] leading-4 text-text3 underline-offset-2 hover:underline"
+          <Button
+            ref={removeButton}
+            variant="ghost"
+            size="sm"
+            className="ml-auto"
+            aria-expanded={confirmingRemove}
+            aria-controls={`${base}-remove-fold`}
             disabled={disabled || busy}
-            onClick={() => void remove()}
+            onClick={() => setConfirmingRemove((v) => !v)}
           >
             Remove model
-          </button>
+          </Button>
         )}
       </div>
+      <ConfirmFold
+        open={confirmingRemove && chain.length > 0}
+        id={`${base}-remove-fold`}
+        label="Confirm removing the tutor's model"
+        message={
+          chain.length > 1
+            ? `Remove all ${chain.length} models the tutor tries? It has nothing to call until you save one.`
+            : "Remove the tutor's model? It has nothing to call until you save one."
+        }
+        confirmLabel="Remove"
+        onConfirm={() => void remove()}
+        onCancel={() => setConfirmingRemove(false)}
+        busy={busy}
+        returnFocusTo={removeButton}
+      />
       <LiveStatus text={textOf(status)} tone={tone(status)} className="pt-0.5" />
     </div>
   );

@@ -32,6 +32,14 @@ export interface StudioChats {
 export interface ShellControls {
   /** Whether this deployment has a studio. Only the server can know (D11). */
   studio: boolean;
+  /**
+   * Whether the studio's runner is worth asking: it was listening when the
+   * server drew the page, or the studio page has read its list since. While
+   * it is not, nothing in the shell asks it (each request would fail, and say
+   * so in the console), and Recent shows the conversations the catalog's
+   * `draft` mirror holds. False without a studio.
+   */
+  runner: boolean;
   /** The phone's drawer. */
   drawer: boolean;
   openDrawer: () => void;

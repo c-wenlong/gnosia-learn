@@ -39,13 +39,15 @@ export function setTheme(state: LearnerState, theme: ThemeMode): LearnerState {
   return { ...state, theme };
 }
 
-export function toggleTopic(state: LearnerState, topicId: string): LearnerState {
+/**
+ * Tick an item, or untick it. A value rather than a toggle, so applying the
+ * same write twice (a write sent again after a refusal, over a snapshot that
+ * may already have it) gives the same state.
+ */
+export function setTopicCompleted(state: LearnerState, topicId: string, done: boolean): LearnerState {
   const completed = { ...state.completed };
-  if (completed[topicId]) {
-    delete completed[topicId];
-  } else {
-    completed[topicId] = true;
-  }
+  if (done) completed[topicId] = true;
+  else delete completed[topicId];
   return { ...state, completed };
 }
 
