@@ -123,6 +123,16 @@ export function LibraryResults({
 }) {
   const [pages, setPages] = useState<Page[]>([first]);
   const [status, setStatus] = useState<Status>("idle");
+  // A refresh (a star, an unstar or a rename from a row's menu) draws the
+  // page again under the same URL, so the list is not remounted: the server's
+  // new first page arrives here as a prop. Take it, and keep the later pages
+  // only while they still follow it (the cursor after the first page is the
+  // same); otherwise start again from the new first page.
+  const [seen, setSeen] = useState(first);
+  if (first !== seen) {
+    setSeen(first);
+    setPages((held) => (held.length > 1 && held[0].next === first.next ? [first, ...held.slice(1)] : [first]));
+  }
   const last = pages[pages.length - 1];
   const next = last.next;
   const listRef = useRef<HTMLElement | null>(null);

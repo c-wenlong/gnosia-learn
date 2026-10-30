@@ -227,9 +227,9 @@ const observed = () =>
 const stop = (host: HTMLElement, percent: number) =>
   host.querySelector(`button[role="radio"][data-option="${percent}"]`) as HTMLButtonElement | null;
 
-async function key(target: EventTarget, pressed: string) {
+async function key(target: EventTarget, pressed: string, repeat = false) {
   await act(async () => {
-    target.dispatchEvent(new KeyboardEvent("keydown", { key: pressed, bubbles: true }));
+    target.dispatchEvent(new KeyboardEvent("keydown", { key: pressed, repeat, bubbles: true }));
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
 }
@@ -307,6 +307,19 @@ describe("SessionFocus confidence (docs/proposals/structured-checks.md, phase 3)
 
     expect(observed()).toHaveLength(1);
     expect(observed()[0]).toMatchObject({ chosen: "ACK", confidence: 90, thinking: "3 packets" });
+  });
+
+  it("keeps the verdict on screen when Enter is held after checking", async () => {
+    const host = await mount();
+    await press(button(host, "Continue"));
+    await key(document.body, "1");
+    await key(document.body, "Enter");
+    expect(observed()).toHaveLength(1);
+    const verdict = host.textContent;
+    // The repeats a held Enter sends must not move past the verdict.
+    await key(document.body, "Enter", true);
+    await key(document.body, "Enter", true);
+    expect(host.textContent).toBe(verdict);
   });
 
   it("carries the confidence on a week check's answer too, with its module", async () => {

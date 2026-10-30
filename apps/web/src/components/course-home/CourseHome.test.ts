@@ -10,7 +10,7 @@ const learner = {
   state: {
     completed: {} as Record<string, true>,
     userResources: {} as Record<string, { id: string; title: string; url: string }[]>,
-    notes: {},
+    notes: {} as Record<string, string>,
     knowledge: {},
     epoch: 0,
   },
@@ -62,6 +62,7 @@ afterEach(() => {
   while (mounted.length) mounted.pop()?.();
   learner.state.completed = {};
   learner.state.userResources = {};
+  learner.state.notes = {};
   learner.updateNote.mockClear();
   router.replace.mockClear();
   window.location.hash = "";
@@ -230,6 +231,46 @@ describe("CourseHome", () => {
     expect(learner.updateNote).toHaveBeenCalledWith("m1-a", "closing the tab");
     act(() => mounted.pop()?.());
     expect(learner.updateNote).toHaveBeenCalledTimes(1);
+  });
+
+  it("takes a newer note from another tab into an open panel, and never writes the old draft back", () => {
+    vi.useFakeTimers();
+    try {
+      learner.state.notes = { "m1-a": "x" };
+      const { host, draw } = render("m1");
+      act(() => topicToggle(host, "m1-a").click());
+      const field = host.querySelector("textarea")!;
+      expect(field.value).toBe("x");
+      // The provider adopts a snapshot another tab wrote; nothing was typed here.
+      learner.state.notes = { "m1-a": "x and more" };
+      draw();
+      act(() => void vi.advanceTimersByTime(1_000));
+      expect(field.value).toBe("x and more");
+      act(() => void window.dispatchEvent(new Event("pagehide")));
+      act(() => mounted.pop()?.());
+      expect(learner.updateNote).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps an edit being typed when a newer note arrives, and saves it", () => {
+    vi.useFakeTimers();
+    try {
+      learner.state.notes = { "m1-a": "x" };
+      const { host, draw } = render("m1");
+      act(() => topicToggle(host, "m1-a").click());
+      const field = host.querySelector("textarea")!;
+      type(field, "x typed here");
+      learner.state.notes = { "m1-a": "x from elsewhere" };
+      draw();
+      expect(field.value).toBe("x typed here");
+      act(() => void vi.advanceTimersByTime(400));
+      expect(learner.updateNote).toHaveBeenCalledWith("m1-a", "x typed here");
+      expect(learner.updateNote).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("saves a note at once when the field loses focus, and only once", () => {

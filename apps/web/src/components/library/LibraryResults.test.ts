@@ -319,4 +319,26 @@ describe("LibraryResults", () => {
     expect([...container.querySelectorAll("h3")].map((h) => h.textContent)).toEqual(["Whole course(1)", "Week 2(2)"]);
     expect(container.querySelectorAll("h3 + ul")[1].querySelectorAll("a")).toHaveLength(2);
   });
+
+  it("takes the server's new first page after a refresh under the same URL", async () => {
+    await mount({ first: page([["4 Oct", 3, 3]], null, 0, "old") });
+    expect(links()).toEqual(["old 0", "old 1", "old 2"]);
+    // An unstar on a Favorites only view: the refresh sends a first page with one row fewer.
+    await mount({ first: page([["4 Oct", 2, 2]], null, 0, "new") });
+    expect(links()).toEqual(["new 0", "new 1"]);
+    expect(headings()).toEqual(["4 Oct(2)"]);
+  });
+
+  it("keeps the later pages after a refresh while they still follow the new first page", async () => {
+    libraryPage.mockResolvedValueOnce(page([["4 Oct", 4, 2]], null, 0, "r", 2));
+    await mount({ first: page([["4 Oct", 4, 2]], "c1", 2) });
+    await act(async () => button("Show older")?.click());
+    expect(links()).toEqual(["r 0", "r 1", "r 2", "r 3"]);
+    // A rename on the first page: the same cursor follows it, so page two stays.
+    await mount({ first: page([["4 Oct", 4, 2]], "c1", 2, "renamed") });
+    expect(links()).toEqual(["renamed 0", "renamed 1", "r 2", "r 3"]);
+    // The first page now ends somewhere else: the held pages no longer follow it.
+    await mount({ first: page([["4 Oct", 3, 2]], "c2", 1, "moved") });
+    expect(links()).toEqual(["moved 0", "moved 1"]);
+  });
 });
