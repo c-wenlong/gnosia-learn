@@ -220,6 +220,17 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
     expect(inline.headers.get("content-disposition")).toBe('inline; filename="demo.mp4"');
   });
 
+  it("names the download on a 304 too, so a renamed asset saves under its new name", async () => {
+    const response = await FILE(
+      new Request(`${ORIGIN}/api/assets/${encodeURIComponent(VIDEO_ID)}/file?download=1`, {
+        headers: { "if-none-match": `"${sha256(VIDEO)}"` },
+      }),
+      { params: Promise.resolve({ id: VIDEO_ID }) },
+    );
+    expect(response.status).toBe(304);
+    expect(response.headers.get("content-disposition")).toBe('attachment; filename="Demo.mp4"');
+  });
+
   it("keeps the attachment on a Range request for a download", async () => {
     const response = await FILE(
       new Request(`${ORIGIN}/api/assets/${encodeURIComponent(VIDEO_ID)}/file?download=1`, { headers: { range: "bytes=0-9" } }),

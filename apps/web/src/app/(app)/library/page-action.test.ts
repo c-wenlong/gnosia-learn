@@ -140,6 +140,22 @@ describe("libraryPage", () => {
     expect(await libraryPage("/library", one.next ?? "")).toEqual({ state: "stale" });
   });
 
+  it("never lets a slower read begun earlier replace the view a later read kept", async () => {
+    const { loadLibraryView } = await import("@/components/library/library-view");
+    // The first read is held until the second has finished.
+    let release = () => {};
+    loadLibrary.mockImplementationOnce(
+      () => new Promise((resolve) => (release = () => resolve(library(ROWS.slice(0, 5))))),
+    );
+    const slow = loadLibraryView({ view: "list" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const fresh = await loadLibraryView({ view: "list" });
+    release();
+    await slow;
+    // The scroll's next page takes the later read's view, not the slower one's.
+    expect(await loadLibraryView({ view: "list" }, { reuse: true })).toBe(fresh);
+  });
+
   it("reuses the view the page worked out for the pages after it, for a minute", async () => {
     const { libraryPage } = await import("./page-action");
     const one = await first("/library?view=list");

@@ -169,8 +169,14 @@ function conditional(request: Request, etag: string): { fresh: true } | { fresh:
 
 /** A 304: the validators and caching headers of a 200, and no body. */
 function notModified(headers: Record<string, string>): Response {
-  const { ETag, "Cache-Control": cache, "Content-Type": type } = headers;
-  return new Response(null, { status: 304, headers: { ETag, "Cache-Control": cache, "Content-Type": type } });
+  const { ETag, "Cache-Control": cache, "Content-Type": type, "Content-Disposition": disposition } = headers;
+  // The disposition too: a rename keeps the bytes and so the tag, and a
+  // cache updates its stored headers from a 304, so a download asked for
+  // again is saved under the new name.
+  return new Response(null, {
+    status: 304,
+    headers: { ETag, "Cache-Control": cache, "Content-Type": type, "Content-Disposition": disposition },
+  });
 }
 
 export async function GET(

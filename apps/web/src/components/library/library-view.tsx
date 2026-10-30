@@ -53,7 +53,10 @@ const VIEW_REUSE_MS = 60_000;
 const VIEWS_KEPT = 8;
 
 /** Views worked out lately, by owner and filters, oldest first. */
-const recentViews = new Map<string, { at: number; view: LibraryView }>();
+const recentViews = new Map<string, { at: number; read: number; view: LibraryView }>();
+
+/** Reads started, so a slower read begun earlier never replaces a newer one's view. */
+let readsStarted = 0;
 
 /**
  * What the Library shows for one URL, read and worked out once: the rows that
@@ -83,11 +86,15 @@ export async function loadLibraryView(params: LibraryParams, { reuse = false }: 
   if (reuse && kept !== undefined && Date.now() - kept.at < VIEW_REUSE_MS) return kept.view;
 
   const at = Date.now();
+  const read = ++readsStarted;
   const view = await workOutView(filters);
+  // A read begun after this one (a refresh after a rename, say) finished
+  // first: its view is the newer, and the pages after it go on from it.
+  if ((recentViews.get(key)?.read ?? 0) > read) return view;
   recentViews.delete(key);
   // An unreachable catalog is asked again next time rather than remembered.
   if (view.library.reachable) {
-    recentViews.set(key, { at, view });
+    recentViews.set(key, { at, read, view });
     for (const old of recentViews.keys()) {
       if (recentViews.size <= VIEWS_KEPT) break;
       recentViews.delete(old);
