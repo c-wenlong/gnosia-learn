@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { GraphEdge } from "@/lib/concept-graph";
-import { cachedDomainLayout, domainLayout, domainOfNode, domainTree, type DomainNode, type DomainTopic } from "@/lib/domain-map";
+import { axesLayout, cachedDomainLayouts, domainLayout, domainOfNode, domainTree, type DomainNode, type DomainTopic } from "@/lib/domain-map";
 import { wrapLabel } from "@/lib/concept-graph";
 import { domainShape, type ShapeName } from "@/test/domain-shapes";
 import {
@@ -252,13 +252,6 @@ describe("domainLayout (D3, D4)", () => {
     expect(keys).not.toContain("dot>memo");
   });
 
-  it("lists the edges that leave the domain, with the domain at the far end", () => {
-    expect(layout.outside).toEqual([
-      { from: "dot", to: "memo", kind: "assumes", domain: "foundations", inside: "memo" },
-      { from: "softmax", to: "knapsack", kind: "requires", domain: "machine-learning", inside: "knapsack" },
-    ]);
-  });
-
   it("is deterministic whatever order the rows arrive in", () => {
     expect(domainLayout([...nodes].reverse(), [...edges].reverse(), topics, "algorithms")).toEqual(layout);
   });
@@ -268,10 +261,39 @@ describe("domainLayout (D3, D4)", () => {
   });
 
   it("is remembered per graph, mastery aside", () => {
-    const first = cachedDomainLayout(nodes, edges, topics, "algorithms");
+    const first = cachedDomainLayouts(nodes, edges, topics, ["algorithms"]).algorithms;
+    expect(first).toEqual(layout);
     const relearned = nodes.map((n) => ({ ...n, bucket: "mastered" as const, pL: 0.99 }));
-    expect(cachedDomainLayout(relearned, edges, topics, "algorithms")).toBe(first);
-    expect(cachedDomainLayout(nodes, [...edges, req("dfs", "knapsack")], topics, "algorithms")).not.toBe(first);
+    expect(cachedDomainLayouts(relearned, edges, topics, ["algorithms"]).algorithms).toBe(first);
+    expect(cachedDomainLayouts(nodes, [...edges, req("dfs", "knapsack")], topics, ["algorithms"]).algorithms).not.toBe(first);
+  });
+
+  it("lays out every domain asked for, each as domainLayout would", () => {
+    const domains = ["algorithms", "foundations", "machine-learning", "nowhere"];
+    const all = cachedDomainLayouts(nodes, edges, topics, domains);
+    expect(Object.keys(all)).toEqual(domains);
+    for (const d of domains) expect(all[d]).toEqual(domainLayout(nodes, edges, topics, d));
+  });
+
+  it("gives a folder named like an object's own key a layout of its own", () => {
+    const vocab: DomainTopic[] = [];
+    const odd = [{ ...node("a", "t"), topic: null, domain: "__proto__" }, { ...node("b", "t"), topic: null, domain: "constructor" }];
+    const all = cachedDomainLayouts(odd, [], vocab, ["__proto__", "constructor"]);
+    expect(Object.keys(all)).toEqual(["__proto__", "constructor"]);
+    expect(Object.getPrototypeOf(all)).toBe(Object.prototype);
+    expect(Object.keys(all["__proto__"]!.positions)).toEqual(["a"]);
+  });
+
+  it("keeps a graph's layouts however many domains and graphs one request asks for", () => {
+    // Forty domains, past the old cache's 32 entries, and then other graphs: the first graph's
+    // layouts are still the ones remembered, where a cache of domains evicted its own entries.
+    const many: DomainTopic[] = Array.from({ length: 40 }, (_, i) => ({ slug: `t${i}`, title: `T${i}`, domain: `d${i}` }));
+    const ns = many.map((t) => node(`c-${t.slug}`, t.slug));
+    const domains = many.map((t) => t.domain);
+    const first = cachedDomainLayouts(ns, [], many, domains);
+    for (let g = 0; g < 4; g++) cachedDomainLayouts([...ns, node(`extra-${g}`, "t0")], [], many, ["d0"]);
+    const again = cachedDomainLayouts(ns, [], many, domains);
+    for (const d of domains) expect(again[d]).toBe(first[d]);
   });
 });
 
@@ -377,10 +399,23 @@ describe("topic titles on a laid out domain (D10)", () => {
  * domain, a cycle counting once) and y = how many concepts of the domain need
  * it, on a log scale, most at the top, with no two dots on one spot.
  */
+/** A domain's axes placement, with the layer and the count each concept was placed by. */
+function placement(ns: readonly DomainNode[], es: readonly GraphEdge[], ts: readonly DomainTopic[], domain: string) {
+  return axesLayout(Object.keys(domainLayout(ns, es, ts, domain).positions), es);
+}
+
 describe("the axes layout (D11)", () => {
   const layout = domainLayout(nodes, edges, topics, "algorithms");
-  const { axes } = layout;
+  const axes = placement(nodes, edges, topics, "algorithms");
   const ids = Object.keys(layout.positions).sort();
+
+  it("is what the domain's layout sends, without the numbers it was placed by", () => {
+    const { layer, needed, ...sent } = axes;
+    expect(layout.axes).toEqual(sent);
+    expect(Object.keys(layer).sort()).toEqual(ids);
+    expect(Object.keys(needed).sort()).toEqual(ids);
+    expect(layout.axes).not.toHaveProperty("layer");
+  });
 
   /** Every pair of dots at least the clearance apart, and every dot inside the picture. */
   function expectApart(a: typeof axes, name: string) {
@@ -465,7 +500,7 @@ describe("the axes layout (D11)", () => {
   for (const name of ["algorithms", "hci"] as ShapeName[]) {
     it(`lays out the owner's ${name} domain in order, with no two dots overlapping`, () => {
       const shape = domainShape(name);
-      const a = domainLayout(shape.nodes, shape.edges, shape.topics, shape.domain).axes;
+      const a = placement(shape.nodes, shape.edges, shape.topics, shape.domain);
       expect(Object.keys(a.positions)).toHaveLength(shape.nodes.length);
       expectApart(a, name);
       expectOrdered(a, name);
@@ -474,7 +509,7 @@ describe("the axes layout (D11)", () => {
 
   it("fits the owner's largest domain on a phone at the smallest scale", () => {
     const shape = domainShape("algorithms");
-    const a = domainLayout(shape.nodes, shape.edges, shape.topics, shape.domain).axes;
+    const a = placement(shape.nodes, shape.edges, shape.topics, shape.domain);
     expect(a.layers).toBe(10);
     // A 390px phone's card gives the picture 318px (measured in the built app), framed margin and all.
     expect(axesViewBox(a).width * MIN_DRAW_SCALE).toBeLessThanOrEqual(318);
@@ -496,7 +531,7 @@ describe("the axes layout (D11)", () => {
     const vocab: DomainTopic[] = [{ slug: "t", title: "T", domain: "d" }];
     const ns = ["a", "b", "c", "z"].map((id) => node(id, "t"));
     // a and b need each other; c needs both; z stands alone.
-    const l = domainLayout(ns, [req("a", "b"), req("b", "a"), req("b", "c")], vocab, "d").axes;
+    const l = placement(ns, [req("a", "b"), req("b", "a"), req("b", "c")], vocab, "d");
     expect(l.layer).toEqual({ a: 0, b: 0, c: 1, z: 0 });
     expect(l.needed).toEqual({ a: 2, b: 2, c: 0, z: 0 });
     expectApart(l, "cycle");
@@ -505,29 +540,29 @@ describe("the axes layout (D11)", () => {
 
   it("is the same whatever order the rows arrive in", () => {
     const shape = domainShape("algorithms");
-    const a = domainLayout(shape.nodes, shape.edges, shape.topics, shape.domain).axes;
+    const a = placement(shape.nodes, shape.edges, shape.topics, shape.domain);
     const shuffled = [...shape.nodes].sort((x, y) => (x.id.split("").reverse().join("") < y.id.split("").reverse().join("") ? -1 : 1));
-    expect(domainLayout(shuffled, [...shape.edges].reverse(), shape.topics, shape.domain).axes).toEqual(a);
+    expect(placement(shuffled, [...shape.edges].reverse(), shape.topics, shape.domain)).toEqual(a);
   });
 
   it("lays out a domain with no edges along the baseline, and an empty one as nothing", () => {
     const vocab: DomainTopic[] = [{ slug: "t", title: "T", domain: "d" }];
-    const flat = domainLayout(["a", "b", "c"].map((id) => node(id, "t")), [], vocab, "d").axes;
+    const flat = placement(["a", "b", "c"].map((id) => node(id, "t")), [], vocab, "d");
     expect(flat.layers).toBe(1);
     expect(flat.zone).toBeNull();
     expectApart(flat, "flat");
-    expect(domainLayout(nodes, edges, topics, "nowhere").axes).toMatchObject({ positions: {}, layers: 0, zone: null });
+    expect(placement(nodes, edges, topics, "nowhere")).toMatchObject({ positions: {}, layers: 0, zone: null });
   });
 
   it("is remembered with the groups layout", () => {
-    const first = cachedDomainLayout(nodes, edges, topics, "algorithms");
-    expect(cachedDomainLayout(nodes, edges, topics, "algorithms").axes).toBe(first.axes);
-    expect(first.axes).toEqual(axes);
+    const first = cachedDomainLayouts(nodes, edges, topics, ["algorithms"]).algorithms;
+    expect(cachedDomainLayouts(nodes, edges, topics, ["algorithms"]).algorithms.axes).toBe(first.axes);
+    expect(first.axes).toEqual(layout.axes);
   });
 
   it("draws most labels of the owner's largest domain at full size", () => {
     const shape = domainShape("algorithms");
-    const a = domainLayout(shape.nodes, shape.edges, shape.topics, shape.domain).axes;
+    const a = placement(shape.nodes, shape.edges, shape.topics, shape.domain);
     const items: LabelItem[] = shape.nodes.map((n) => {
       const lines = wrapLabel(n.title, 15);
       return { id: n.id, ...a.positions[n.id], lines: lines.length, em: Math.max(...lines.map((l) => textEm(l))), rank: 6, dependants: 0 };

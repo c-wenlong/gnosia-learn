@@ -20,6 +20,9 @@ final class TutorSettings {
     var rows: [SidecarClient.ProviderRow] = []
     var chain: [SidecarClient.ChainEntry] = []
     var keysReachable = true
+    /// False when the sidecar has no AUTH_SECRET to open saved keys with
+    /// (its health's `secret`): every saved key reads as needing re-entry.
+    var keysSealable = true
     var chainReachable = true
     var loaded = false
     /// The sidecar could not be reached or refused the reads.
@@ -81,9 +84,12 @@ final class TutorSettings {
             let client = try await sidecar.readyClient()
             async let keys = client.providerKeys()
             async let chainReply = client.tutorChain()
-            let (keyRows, modelChain) = try await (keys, chainReply)
+            async let state = client.health()
+            let (keyRows, modelChain, health) = try await (keys, chainReply, state)
             rows = keyRows.rows
             keysReachable = keyRows.reachable
+            // An older sidecar sends no `secret`; take it as present.
+            keysSealable = health.secret ?? true
             chain = modelChain.chain
             chainReachable = modelChain.reachable ?? true
             failure = nil
@@ -320,6 +326,11 @@ struct TutorSettingsSection: View {
             } else {
                 if !settings.keysReachable {
                     Text("The catalog could not be read — the server's keys alone show.")
+                        .font(.caption)
+                        .foregroundStyle(G.warnText)
+                }
+                if !settings.keysSealable {
+                    Text("The tutor service has no AUTH_SECRET, so saved keys cannot be read or saved here. Put the web app's AUTH_SECRET in ~/.gnosia/.env or apps/web/.env.local, then reopen the app.")
                         .font(.caption)
                         .foregroundStyle(G.warnText)
                 }

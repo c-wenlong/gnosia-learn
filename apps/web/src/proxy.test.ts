@@ -100,6 +100,39 @@ describe("proxy", () => {
     expect(broken.headers.get("location")).toBe(`${ORIGIN}/sign-in?next=%2Fhome`);
   });
 
+  it("gives every page a policy with a fresh nonce, on the response and on the request Next renders from", async () => {
+    const policies: string[] = [];
+    for (const [path, cookie] of [["/", undefined], ["/sign-in", undefined], ["/home", token], ["/home", token]] as const) {
+      const response = await proxy(get(path, cookie));
+      const policy = response.headers.get("content-security-policy");
+      expect(policy, path).not.toBeNull();
+      const nonce = /'nonce-([^']+)'/.exec(policy ?? "")?.[1];
+      expect(nonce, path).toMatch(/^[A-Za-z0-9+/]{22}==$/);
+      expect(policy, path).toContain("frame-ancestors 'none'");
+      expect(policy, path).not.toContain("'unsafe-inline' 'strict-dynamic'");
+      // NextResponse.next({ request }) hands the rewritten request headers to
+      // the renderer through these two response headers.
+      expect(response.headers.get("x-middleware-request-x-nonce"), path).toBe(nonce);
+      expect(response.headers.get("x-middleware-request-content-security-policy"), path).toBe(policy);
+      policies.push(policy ?? "");
+    }
+    expect(new Set(policies).size).toBe(policies.length);
+  });
+
+  it("lets a client-sent nonce choose nothing", async () => {
+    const headers = new Headers({ cookie: `${SESSION_COOKIE}=${token}`, "x-nonce": "attacker", "content-security-policy": "script-src *" });
+    const response = await proxy(new NextRequest(`${ORIGIN}/home`, { headers }));
+    expect(response.headers.get("x-middleware-request-x-nonce")).not.toBe("attacker");
+    expect(response.headers.get("x-middleware-request-content-security-policy")).toBe(response.headers.get("content-security-policy"));
+  });
+
+  it("leaves an API answer's policy to its route handler", async () => {
+    for (const path of ["/api/learner/home", "/api/assets/x/file", "/studio/api/jobs"]) {
+      const response = await proxy(get(path, token));
+      expect(response.headers.get("content-security-policy"), path).toBeNull();
+    }
+  });
+
   it("matcher skips static output and image files but covers the API", () => {
     const pattern = new RegExp(`^${config.matcher[0]}$`);
     for (const skipped of ["/_next/static/chunks/a.js", "/_next/image?url=x", "/icon.png", "/opengraph-image.png", "/banner.png", "/file.svg"]) {

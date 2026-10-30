@@ -51,7 +51,7 @@ export async function POST(req: Request) {
   if (!isCommitment(commitment)) return bad(COMMITMENT_RULE);
 
   // Before the read, so an unknown slug is not a free way to spin the limiter.
-  const limited = enforceRateLimit(req, "judge", CHAT_RATE_LIMIT);
+  const limited = enforceRateLimit(owner, "judge", CHAT_RATE_LIMIT);
   if (limited) return limited;
 
   return turnResponse(await judgeTurn(tutorDeps(owner), body));
