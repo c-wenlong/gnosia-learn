@@ -138,6 +138,24 @@ describe("RowMenu", () => {
     expect(status()).toBe("Not saved. Try again.");
   });
 
+  it("sends one star write at a time, and a retry after a refusal sends again", async () => {
+    let release: (response: Response) => void = () => {};
+    fetchMock.mockImplementationOnce(() => new Promise<Response>((resolve) => (release = resolve)));
+    const { choose, status } = mount(false);
+    const favoriteCalls = () => fetchMock.mock.calls.filter(([path]) => path === "/api/learner/favorite").length;
+    await choose("Favorite");
+    // The star shows at once, so the menu offers Unfavorite; pressing it while
+    // the first write is out sends nothing.
+    await choose("Unfavorite");
+    expect(favoriteCalls()).toBe(1);
+    await act(async () => release(new Response("{}", { status: 500 })));
+    expect(status()).toBe("Not saved. Try again.");
+    // Refused and put back: a press now is a new write.
+    await choose("Favorite");
+    expect(favoriteCalls()).toBe(2);
+    expect(status()).toBe("Starred");
+  });
+
   it("marks a note read through the watched event", async () => {
     const { choose, status } = mount();
     await choose("Mark read");

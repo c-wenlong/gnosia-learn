@@ -5,7 +5,7 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { cx, STATUS_TEXT } from "@/components/ui/classes";
-import { sendJson } from "@/lib/send-json";
+import { markWatched } from "@/lib/asset-actions";
 
 type State = { kind: "idle" } | { kind: "saving" } | { kind: "saved" } | { kind: "failed"; message: string };
 
@@ -29,13 +29,9 @@ export function MarkWatched({ assetId }: { assetId: string }) {
 
   async function mark() {
     setState({ kind: "saving" });
-    const reply = await sendJson<{ ok?: boolean; error?: string }>("POST", "/api/learner/watched", { assetId });
-    if (reply === null) {
-      setState({ kind: "failed", message: "Not saved: the server could not be reached." });
-      return;
-    }
-    if (!reply.ok || reply.data.ok === false) {
-      setState({ kind: "failed", message: reply.data.error ?? `Not saved (HTTP ${reply.status}).` });
+    const answer = await markWatched(assetId);
+    if (!answer.ok) {
+      setState({ kind: "failed", message: answer.message });
       return;
     }
     setState({ kind: "saved" });
