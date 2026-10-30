@@ -3,7 +3,7 @@ import { act, createElement, useEffect, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { emptyLearnerState } from "@gnosia/schema/shared";
+import { emptyLearnerState, type LearnerState } from "@gnosia/schema/shared";
 
 import {
   clearTables,
@@ -89,7 +89,7 @@ describe.skipIf(!reachable.ok)("a recap whose answer was lost after it was store
    * dropped after the route has run, as a connection that fails on the way
    * back would drop them.
    */
-  function mount(lose: number) {
+  function mount(lose: number, initialState: LearnerState = emptyLearnerState()) {
     let dropped = 0;
     const bodies: Record<string, unknown>[] = [];
     vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
@@ -119,7 +119,7 @@ describe.skipIf(!reachable.ok)("a recap whose answer was lost after it was store
       root!.render(
         createElement(
           provider.LearnerProvider,
-          { initialState: emptyLearnerState(), reachable: true } as ComponentProps<typeof provider.LearnerProvider>,
+          { initialState, reachable: true } as ComponentProps<typeof provider.LearnerProvider>,
           createElement(Probe),
         ),
       ),
@@ -144,6 +144,7 @@ describe.skipIf(!reachable.ok)("a recap whose answer was lost after it was store
     expect(bodies[1].requestId).toBe(bodies[0].requestId);
     expect(typeof bodies[0].requestId).toBe("string");
     expect(await sessions()).toBe(1);
+    expect(held.learner!.state.knowledge[ITEMS[0]]?.sessions).toBe(1);
 
     // A new save is a new session.
     act(() => held.learner!.saveKnowledge(ITEMS[0], { ...INPUT, summary: "Next time." }));
@@ -160,11 +161,13 @@ describe.skipIf(!reachable.ok)("a recap whose answer was lost after it was store
     act(() => root?.unmount());
     root = null;
 
-    // The next load sends the outbox.
-    const next = mount(0);
+    // The next load reads the recap the lost answer stored, and sends the outbox.
+    const next = mount(0, await state.readLearnerSnapshot(scratch.db));
     await vi.waitFor(() => expect(next).toHaveLength(1));
     await vi.waitFor(() => expect(held.learner!.saveError).toBeNull());
     expect(next[0].requestId).toBe(bodies[0].requestId);
     expect(await sessions()).toBe(1);
+    // The page counted one on the snapshot it read; the server's count is drawn over it.
+    await vi.waitFor(() => expect(held.learner!.state.knowledge[ITEMS[0]]?.sessions).toBe(1));
   });
 });

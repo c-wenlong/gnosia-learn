@@ -162,6 +162,13 @@ type Outbound =
 interface Keep {
   replay: Replay;
   outbound: Outbound;
+  /**
+   * From the stored write's `result`, the reducer that draws what the server
+   * stored over the optimistic value, or null to keep that value. A recap
+   * sent again may already have been stored once, so the session it counted
+   * on the page is the server's to say.
+   */
+  adopt?: (result: unknown) => ((previous: LearnerState) => LearnerState) | null;
 }
 
 /** A refused write kept to be drawn and sent again: see `unsaved`. */
@@ -519,6 +526,12 @@ export function LearnerProvider({
         stored.current.set(keys.join("\n"), confirm(next));
         // A new write gets its own re-reads, whatever earlier ones used.
         rereads.current = 0;
+        // Only the newest write on its key: an older one's value is not on screen.
+        const settle = newest ? keep?.adopt?.(response.result) : null;
+        if (settle) {
+          current.current = settle(current.current);
+          setState(current.current);
+        }
       };
       const start = () => {
         waiting.current.delete(start);
@@ -556,9 +569,9 @@ export function LearnerProvider({
    */
   const retryUnsaved = useCallback(
     (skip: readonly string[] = []) => {
-      for (const [key, { reduce, send, confirm, replay, outbound }] of [...unsaved.current]) {
+      for (const [key, { reduce, send, confirm, replay, outbound, adopt }] of [...unsaved.current]) {
         if (skip.includes(key)) continue;
-        void commit(key, reduce, send, confirm, { replay, outbound });
+        void commit(key, reduce, send, confirm, { replay, outbound, adopt });
       }
     },
     [commit],
@@ -741,9 +754,16 @@ export function LearnerProvider({
         // The recap as the write made it, not the reducer again: it counts a
         // session each time it runs, and a kept recap is drawn over every
         // snapshot until it is stored.
+        // The recap as stored, once it is: a copy of a save the server had
+        // already stored counts no session there, while the reducer above
+        // counted one on whatever the page last read.
         {
           replay: (next) => (previous) => withRecap(previous, topicId, next.knowledge[topicId]),
           outbound: { kind: "recap", topicId, input, countSession, requestId },
+          adopt: (result) => {
+            const recap = (result as { recap?: LearnerState["knowledge"][string] | null } | undefined)?.recap;
+            return recap ? (previous) => withRecap(previous, topicId, recap) : null;
+          },
         },
       );
     },
