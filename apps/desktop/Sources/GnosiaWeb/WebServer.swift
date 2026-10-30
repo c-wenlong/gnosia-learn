@@ -111,11 +111,9 @@ final class WebServer {
         }
 
         let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        proc.arguments = [
-            "-lc",
-            "exec node '\(next.path)' \(Self.mode(web: web)) '\(web.path)' -p \(port) -H 127.0.0.1"
-        ]
+        let shell = Checkout.shell("exec node '\(next.path)' \(Self.mode(web: web)) '\(web.path)' -p \(port) -H 127.0.0.1")
+        proc.executableURL = shell.executable
+        proc.arguments = shell.arguments
         proc.currentDirectoryURL = root
         // The shared child environment (Checkout.childEnv: the launchers'
         // one resolver, with the catalog's file pinned). GNOSIA_CATALOG is deliberately not

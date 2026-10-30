@@ -46,34 +46,63 @@ enum Checkout {
     /// snapshot. Until `prepare()` has run, or when the resolver cannot
     /// (no node, a stripped checkout), `fallbackEnv()` stands in.
     static func childEnv() -> [String: String] {
-        resolved.value ?? fallbackEnv()
+        state.resolved ?? fallbackEnv()
     }
 
-    private static let resolved = Resolved()
+    /// The command line a child runs under. With the resolved environment
+    /// it is a plain `/bin/sh -c`: that environment already carries the
+    /// login shell's PATH and exports, and a second login shell would read
+    /// the profile again and put back a value the resolver rewrote (a
+    /// relative `CATALOG_DB`, say). Without it, the login shell as before,
+    /// so the owner's nvm/volta PATH still reaches node.
+    static func shell(_ command: String) -> (executable: URL, arguments: [String]) {
+        state.resolved == nil
+            ? (URL(fileURLWithPath: "/bin/zsh"), ["-lc", command])
+            : (URL(fileURLWithPath: "/bin/sh"), ["-c", command])
+    }
 
-    /// The resolver's answer, read from any thread.
-    private final class Resolved: @unchecked Sendable {
+    private static let state = ResolverState()
+
+    /// The resolver's answer and the one run that produces it, from any
+    /// thread: every launcher awaits the same task, so a cold launch runs
+    /// the login shell and node once, not once per launcher.
+    private final class ResolverState: @unchecked Sendable {
         private let lock = NSLock()
-        private var env: [String: String]?
-        var value: [String: String]? {
-            get { lock.withLock { env } }
-            set { lock.withLock { env = newValue } }
+        private var answer: [String: String]?
+        private var running: Task<[String: String]?, Never>?
+        var resolved: [String: String]? { lock.withLock { answer } }
+
+        func task(root: URL) -> Task<[String: String]?, Never> {
+            lock.withLock {
+                if let running { return running }
+                let task = Task.detached { () -> [String: String]? in
+                    let env = Checkout.runResolver(root: root)
+                    if let env { self.lock.withLock { self.answer = env } }
+                    return env
+                }
+                running = task
+                return task
+            }
         }
     }
 
     /// Run the shared resolver, once, off the main thread. Every launcher
-    /// awaits it before its first spawn; a second call reuses the answer.
+    /// awaits it before its first spawn; a later call reuses the answer.
     static func prepare() async {
-        if resolved.value != nil { return }
         guard let root = repoRoot() else { return }
-        let env = await Task.detached { runResolver(root: root) }.value
-        if let env { resolved.value = env }
+        _ = await state.task(root: root).value
     }
+
+    /// How long the resolver may take before the launch goes on without it:
+    /// a login profile that stalls must not hold the window on its spinner.
+    static let resolverDeadline: TimeInterval = 20
 
     /// `node --import tsx services/sidecar/src/child-env.ts` through the
     /// login shell (so the owner's nvm/volta PATH and exports reach it),
-    /// read as one JSON object of strings. Nil on any failure.
-    private static func runResolver(root: URL) -> [String: String]? {
+    /// read as one JSON object of strings. `GNOSIA_WEB_MODE` reaches it from
+    /// this process, so a `next start` launch reads the production `.env`
+    /// files. Nil on any failure, or past `resolverDeadline`.
+    fileprivate static func runResolver(root: URL) -> [String: String]? {
         guard FileManager.default.fileExists(atPath: root.appending(path: "services/sidecar/src/child-env.ts").path) else { return nil }
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/bin/zsh")
@@ -83,9 +112,14 @@ enum Checkout {
         proc.standardOutput = out
         proc.standardError = FileHandle.nullDevice
         do { try proc.run() } catch { return nil }
+        // Past the deadline the child is stopped; its pipe then closes and
+        // the read below ends.
+        let deadline = DispatchWorkItem { if proc.isRunning { proc.terminate() } }
+        DispatchQueue.global().asyncAfter(deadline: .now() + resolverDeadline, execute: deadline)
         let data = out.fileHandleForReading.readDataToEndOfFile()
         proc.waitUntilExit()
-        guard proc.terminationStatus == 0 else { return nil }
+        deadline.cancel()
+        guard proc.terminationReason == .exit, proc.terminationStatus == 0 else { return nil }
         return parseResolved(data)
     }
 
@@ -121,7 +155,7 @@ enum Checkout {
     /// apps/web/src/lib/studio.ts, over the same environment the web gets.
     /// Anything non-empty but "0", "false", "off" or "no" enables it.
     static func studioEnabled(_ env: [String: String]) -> Bool {
-        let value = (env["STUDIO_ENABLED"] ?? "").trimmingCharacters(in: .whitespaces).lowercased()
+        let value = (env["STUDIO_ENABLED"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return !["", "0", "false", "off", "no"].contains(value)
     }
 

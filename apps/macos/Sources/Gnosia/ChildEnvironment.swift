@@ -19,26 +19,44 @@
 import Foundation
 
 enum ChildEnvironment {
-    private static let cache = Cache()
+    private static let state = State()
 
-    private final class Cache: @unchecked Sendable {
+    /// The answer and the one run that produces it: every caller awaits the
+    /// same task, so the login shell and node run once per app launch.
+    private final class State: @unchecked Sendable {
         private let lock = NSLock()
-        private var env: [String: String]?
-        var value: [String: String]? {
-            get { lock.withLock { env } }
-            set { lock.withLock { env = newValue } }
+        private var running: Task<[String: String]?, Never>?
+
+        func task(root: URL) -> Task<[String: String]?, Never> {
+            lock.withLock {
+                if let running { return running }
+                let task = Task.detached { ChildEnvironment.run(root: root) }
+                running = task
+                return task
+            }
         }
     }
 
     /// The resolved environment for a checkout, computed on first use.
     static func resolve(root: URL) async -> [String: String]? {
-        if let env = cache.value { return env }
-        let env = await Task.detached { run(root: root) }.value
-        if let env { cache.value = env }
-        return env
+        await state.task(root: root).value
     }
 
-    private static func run(root: URL) -> [String: String]? {
+    /// The command line a child runs under, given what `resolve` answered.
+    /// With an environment, a plain `/bin/sh -c`: it already carries the
+    /// login shell's PATH and exports, and a second login shell would read
+    /// the profile again and put back a value the resolver rewrote. Without
+    /// one, the login shell, so the owner's nvm/volta PATH reaches node.
+    static func shell(_ command: String, env: [String: String]?) -> (executable: URL, arguments: [String]) {
+        env == nil
+            ? (URL(fileURLWithPath: "/bin/zsh"), ["-lc", command])
+            : (URL(fileURLWithPath: "/bin/sh"), ["-c", command])
+    }
+
+    /// How long the resolver may take before the caller goes on without it.
+    static let deadline: TimeInterval = 20
+
+    fileprivate static func run(root: URL) -> [String: String]? {
         guard FileManager.default.fileExists(atPath: root.appending(path: "services/sidecar/src/child-env.ts").path) else { return nil }
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/bin/zsh")
@@ -48,9 +66,13 @@ enum ChildEnvironment {
         proc.standardOutput = out
         proc.standardError = FileHandle.nullDevice
         do { try proc.run() } catch { return nil }
+        // Past the deadline the child is stopped; its pipe closes and the read ends.
+        let stop = DispatchWorkItem { if proc.isRunning { proc.terminate() } }
+        DispatchQueue.global().asyncAfter(deadline: .now() + deadline, execute: stop)
         let data = out.fileHandleForReading.readDataToEndOfFile()
         proc.waitUntilExit()
-        guard proc.terminationStatus == 0 else { return nil }
+        stop.cancel()
+        guard proc.terminationReason == .exit, proc.terminationStatus == 0 else { return nil }
         return parse(data)
     }
 

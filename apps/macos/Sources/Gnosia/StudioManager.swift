@@ -385,11 +385,12 @@ final class StudioManager {
 
     /// The detached `npm run studio` itself, once the environment is known.
     private func spawnRunner(root: URL, env: [String: String]?) {
-        // A login shell so nvm/volta/homebrew PATH reaches npm, as with the
-        // sidecar; nohup + & detach the runner from this process entirely.
+        // The resolved environment under a plain shell, or a login shell when
+        // there is none (ChildEnvironment.shell); nohup + & detach the runner.
         let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        proc.arguments = ["-lc", "nohup npm run studio >> .studio/runner.log 2>&1 &"]
+        let shell = ChildEnvironment.shell("nohup npm run studio >> .studio/runner.log 2>&1 &", env: env)
+        proc.executableURL = shell.executable
+        proc.arguments = shell.arguments
         proc.currentDirectoryURL = root
         // The launchers' shared environment (S9-08): the data home's
         // STUDIO_DAILY_USD, STUDIO_OWNER and the pinned catalog, as the

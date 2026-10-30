@@ -53,11 +53,10 @@ enum CatalogSnapshot {
         return await withCheckedContinuation { done in
             let proc = Process()
             let stderr = Pipe()
-            proc.executableURL = URL(fileURLWithPath: "/bin/zsh")
-            proc.arguments = [
-                "-lc",
-                "node apps/macos/scripts/catalog-snapshot.mjs --if-stale --out '\(location.catalogPath)'"
-            ]
+            let shell = ChildEnvironment.shell(
+                "node apps/macos/scripts/catalog-snapshot.mjs --if-stale --out '\(location.catalogPath)'", env: env)
+            proc.executableURL = shell.executable
+            proc.arguments = shell.arguments
             proc.currentDirectoryURL = root
             if let env { proc.environment = env }
             let stdout = Pipe()

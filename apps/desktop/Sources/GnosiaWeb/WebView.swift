@@ -76,13 +76,22 @@ struct WebView: NSViewRepresentable {
             webView?.reload()
         }
 
+        /// Back and Forward move the front window only: every window's
+        /// coordinator hears the menu's notification.
         @objc func goBack() {
+            guard webView?.window?.isKeyWindow == true else { return }
             webView?.goBack()
         }
 
         @objc func goForward() {
+            guard webView?.window?.isKeyWindow == true else { return }
             webView?.goForward()
         }
+
+        /// Each download's chosen file, while its bytes land in a sibling
+        /// beside it: the chosen file is replaced only once the download
+        /// finishes, so a failed or cancelled one leaves an old file whole.
+        private var destinations: [ObjectIdentifier: (temporary: URL, chosen: URL)] = [:]
 
         func webView(
             _ webView: WKWebView,
@@ -135,12 +144,35 @@ struct WebView: NSViewRepresentable {
                 answer = panel.runModal()
             }
             guard answer == .OK, let url = panel.url else { return nil }
-            // WebKit refuses to write over a file; the panel already asked.
-            try? FileManager.default.removeItem(at: url)
-            return url
+            let temporary = url.deletingLastPathComponent()
+                .appending(path: ".\(url.lastPathComponent).\(UUID().uuidString).download")
+            destinations[ObjectIdentifier(download)] = (temporary, url)
+            return temporary
+        }
+
+        func downloadDidFinish(_ download: WKDownload) {
+            guard let target = destinations.removeValue(forKey: ObjectIdentifier(download)) else { return }
+            let files = FileManager.default
+            do {
+                if files.fileExists(atPath: target.chosen.path) {
+                    _ = try files.replaceItemAt(target.chosen, withItemAt: target.temporary)
+                } else {
+                    try files.moveItem(at: target.temporary, to: target.chosen)
+                }
+            } catch {
+                try? files.removeItem(at: target.temporary)
+                report(error)
+            }
         }
 
         func download(_ download: WKDownload, didFailWithError error: Error, resumeData: Data?) {
+            if let target = destinations.removeValue(forKey: ObjectIdentifier(download)) {
+                try? FileManager.default.removeItem(at: target.temporary)
+            }
+            report(error)
+        }
+
+        private func report(_ error: Error) {
             let alert = NSAlert()
             alert.messageText = "The download did not finish"
             alert.informativeText = error.localizedDescription

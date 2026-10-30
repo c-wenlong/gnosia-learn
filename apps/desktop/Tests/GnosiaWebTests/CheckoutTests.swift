@@ -43,7 +43,7 @@ final class CheckoutTests: XCTestCase {
     /// S9-15: the web's own `studioEnabled` rule.
     func testTheStudioStartsOnlyWhenTheWebServesIt() {
         XCTAssertFalse(Checkout.studioEnabled([:]))
-        for off in ["", " ", "0", "false", "OFF", "no"] {
+        for off in ["", " ", "0", "false", "OFF", "no", "false\n", " off\r\n"] {
             XCTAssertFalse(Checkout.studioEnabled(["STUDIO_ENABLED": off]), off)
         }
         for on in ["1", "true", "yes", "anything"] {

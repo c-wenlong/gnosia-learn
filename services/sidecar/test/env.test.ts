@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { catalogPathFrom, dataHomeEnvFile, readEnvFile } from "../src/env";
+import { catalogPathFrom, dataHomeEnvFile, readEnvFile, webMode } from "../src/env";
 
 /**
  * The sidecar's environment (S9-02): the web's, in the web's order, so the
@@ -81,6 +81,33 @@ describe("the launchers' shared environment (S9-08)", () => {
     expect(env).toMatchObject({ STUDIO_DAILY_USD: "5", STUDIO_ENABLED: "1", CATALOG_DB: join(app, "data/catalog.db") });
   });
 
+  it("keeps services/catalog/.env's settings in the sidecar itself, which reads that file once", async () => {
+    const home = temp();
+    const catalogEnv = join(temp(), "catalog.env");
+    writeFileSync(catalogEnv, `GNOSIA_HOME=${home}\n`);
+    const script = `
+      const { loadSidecarEnv, pinCatalogFile } = await import(${JSON.stringify(ENTRY)});
+      await loadSidecarEnv({ appDir: ${JSON.stringify(temp())} });
+      await pinCatalogFile();
+      process.stdout.write(JSON.stringify({ home: process.env.GNOSIA_HOME, db: process.env.CATALOG_DB }));
+    `;
+    const { stdout } = await run(process.execPath, ["--import", TSX, "--input-type=module", "-e", script], {
+      env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "", CATALOG_ENV_FILE: catalogEnv },
+    });
+    expect(JSON.parse(stdout)).toEqual({ home, db: join(home, "catalog.db") });
+  });
+
+  it("reads the production files when the shell runs next start, as Next would", async () => {
+    const app = temp();
+    writeFileSync(join(app, ".env.development"), "AUTH_SECRET=from-development\n");
+    writeFileSync(join(app, ".env.production"), "AUTH_SECRET=from-production\n");
+    const none = join(temp(), "none.env");
+    const start = await child({ GNOSIA_HOME: temp(), CATALOG_ENV_FILE: none, GNOSIA_WEB_MODE: "start" }, app);
+    expect(start.AUTH_SECRET).toBe("from-production");
+    const dev = await child({ GNOSIA_HOME: temp(), CATALOG_ENV_FILE: none }, app);
+    expect(dev.AUTH_SECRET).toBe("from-development");
+  });
+
   it("leaves a Postgres URL unpinned, for the catalog to refuse in its own words", async () => {
     const env = await child(
       { GNOSIA_HOME: temp(), CATALOG_ENV_FILE: join(temp(), "none.env"), DATABASE_URL: "postgres://x/y" },
@@ -116,6 +143,12 @@ describe("the sidecar's environment", () => {
     writeFileSync(join(app, ".env.local"), "CATALOG_DB=./data/catalog.db\n");
     const env = await loaded({ GNOSIA_HOME: home }, app, ["CATALOG_DB", "DATABASE_URL"]);
     expect(env).toEqual({ CATALOG_DB: join(app, "data/catalog.db"), DATABASE_URL: join(app, "data/from-home.db") });
+  });
+
+  it("takes the web's mode from GNOSIA_WEB_MODE, dev unless it says start", () => {
+    expect(webMode({})).toBe("dev");
+    expect(webMode({ GNOSIA_WEB_MODE: " start " })).toBe("start");
+    expect(webMode({ GNOSIA_WEB_MODE: "dev" })).toBe("dev");
   });
 
   it("leaves every other form of catalog path alone", () => {

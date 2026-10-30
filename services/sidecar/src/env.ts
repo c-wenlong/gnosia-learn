@@ -69,6 +69,17 @@ export function readEnvFile(file: string): Record<string, string> {
   }
 }
 
+/**
+ * How the desktop shell runs the web: `GNOSIA_WEB_MODE`, `dev` unless it
+ * says `start` (WebServer.mode in apps/desktop). Next reads
+ * `.env.production*` under `next start` and `.env.development*` under
+ * `next dev`, and a value this environment hands the server wins over its
+ * files, so the files read here must be the ones that mode reads.
+ */
+export function webMode(env: Record<string, string | undefined>): "dev" | "start" {
+  return env.GNOSIA_WEB_MODE?.trim() === "start" ? "start" : "dev";
+}
+
 interface NextEnv {
   loadEnvConfig?: (dir: string, dev: boolean, log: { info(): void; error(): void }, forceReload: boolean) => unknown;
 }
@@ -85,7 +96,10 @@ function repoRoot(): string {
  * A loader that cannot run (no `@next/env` in a stripped checkout) costs the
  * app's files, not the start: the data home's values are already in.
  */
-export async function loadSidecarEnv({ appDir = join(repoRoot(), "apps", "web") }: { appDir?: string } = {}): Promise<void> {
+export async function loadSidecarEnv({
+  appDir = join(repoRoot(), "apps", "web"),
+  dev = webMode(process.env) !== "start",
+}: { appDir?: string; dev?: boolean } = {}): Promise<void> {
   for (const [key, value] of Object.entries(readEnvFile(dataHomeEnvFile(process.env)))) {
     if (process.env[key] === undefined) process.env[key] = value;
   }
@@ -96,7 +110,7 @@ export async function loadSidecarEnv({ appDir = join(repoRoot(), "apps", "web") 
     const mod = (await import("@next/env")) as NextEnv & { default?: NextEnv };
     const load = mod.loadEnvConfig ?? mod.default?.loadEnvConfig;
     if (load === undefined) throw new Error("@next/env has no loadEnvConfig");
-    load(appDir, true, { info() {}, error() {} }, true);
+    load(appDir, dev, { info() {}, error() {} }, true);
   } catch (error) {
     process.stderr.write(
       `sidecar: could not read ${appDir}'s .env files: ${error instanceof Error ? error.message : String(error)}\n`,
@@ -120,7 +134,6 @@ export async function loadSidecarEnv({ appDir = join(repoRoot(), "apps", "web") 
  * home's `.env` or the web app's `.env.local` count.
  */
 export async function pinCatalogFile(): Promise<string | null> {
-  const before = { ...process.env };
   const { databasePath } = await import("@gnosia/catalog/state");
   let file: string | null = null;
   try {
@@ -128,8 +141,9 @@ export async function pinCatalogFile(): Promise<string | null> {
   } catch {
     file = null;
   }
-  // The catalog's dotenv read fills process.env; the pin is all that should stay of it.
-  for (const key of Object.keys(process.env)) if (!(key in before)) delete process.env[key];
+  // The catalog's own dotenv read has filled process.env by now, and it
+  // stays: the catalog reads that file once per process, so a later
+  // `blobRoot()` here needs its `GNOSIA_HOME` still in place.
   if (file !== null) process.env.CATALOG_DB = file;
   return file;
 }
@@ -142,8 +156,11 @@ export async function pinCatalogFile(): Promise<string | null> {
  * sidecar and the snapshot script cannot open two different databases or
  * run under two different spend caps.
  */
-export async function childEnvironment(options: { appDir?: string } = {}): Promise<Record<string, string>> {
+export async function childEnvironment(options: { appDir?: string; dev?: boolean } = {}): Promise<Record<string, string>> {
   await loadSidecarEnv(options);
-  await pinCatalogFile();
-  return Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined));
+  const web = Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined);
+  const file = await pinCatalogFile();
+  // Only the pin comes out of services/catalog/.env: every catalog process
+  // reads the rest of that file itself.
+  return { ...Object.fromEntries(web), ...(file === null ? {} : { CATALOG_DB: file }) };
 }
