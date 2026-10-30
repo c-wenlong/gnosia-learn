@@ -485,8 +485,10 @@ export function ConfirmCard({
             />
           ) : (
             <div className={cx("flex min-h-9 flex-wrap items-center gap-1.5", readBack)}>
-              {brief.elements.map((element) => (
-                <Chip key={element.label} size="sm" title={element.note}>
+              {/* Keyed by place as well as label: a diagram of replicas can
+                  name two elements alike. */}
+              {brief.elements.map((element, at) => (
+                <Chip key={`${at}:${element.label}`} size="sm" title={element.note}>
                   {element.label}
                 </Chip>
               ))}

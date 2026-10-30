@@ -342,12 +342,16 @@ export function effortOptions(defaults: AgentDefaults | null): FilterOption<stri
  * `studioAgentPreference` would not keep as sent is refused rather than
  * quietly stored as something else.
  */
-export function checkedAgent(value: unknown, stored: StudioAgentPreference | null = null): StudioAgentPreference | null {
+export function checkedAgent(
+  value: unknown,
+  stored: StudioAgentPreference | null = null,
+  offered: readonly ModelChoice[] | null = null,
+): StudioAgentPreference | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   const read = studioAgentPreference(value);
   const sent = value as { model?: unknown; effort?: unknown };
   if (read.model !== sent.model || read.effort !== sent.effort) return null;
-  return acceptableModel(read.model, stored?.model ?? null) ? read : null;
+  return acceptableModel(read.model, stored?.model ?? null, offered) ? read : null;
 }
 
 /**
@@ -355,13 +359,18 @@ export function checkedAgent(value: unknown, stored: StudioAgentPreference | nul
  * already stored (a full id set some other way, which the menu shows and a
  * change of the effort beside it sends back). Anything else is a typo that
  * would fail every job of that kind at spawn.
+ *
+ * "The menu" is the runner's own list when it answered (`offered`, from
+ * `GET /api/settings/agent`), as the panel draws it, so a model the runner
+ * adds can be saved the day it is offered; `MODEL_CHOICES` only when it
+ * did not.
  */
-export function acceptableModel(model: string, stored: string | null): boolean {
+export function acceptableModel(model: string, stored: string | null, offered: readonly ModelChoice[] | null = null): boolean {
   if (model === "default") return true;
   // The one name rule the runner and the catalog share (`isAgentModel`: lower
   // case, one bracketed suffix at most), so "Sonnet" is refused here as there.
   if (!isAgentModel(model)) return false;
-  return MODEL_CHOICES.some((choice) => choice.value === model) || model === stored;
+  return (offered ?? MODEL_CHOICES).some((choice) => choice.value === model) || model === stored;
 }
 
 /**

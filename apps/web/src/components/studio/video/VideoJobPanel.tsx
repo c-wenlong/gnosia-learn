@@ -24,6 +24,7 @@ import { VideoPlayer } from "@/components/VideoPlayer";
 import { modelName } from "@/lib/model-name";
 import { announceOpener, leaveOpener, sessionStore } from "@/lib/studio-extend";
 import { isActive, narration, type StudioEvent } from "@/lib/studio-jobs";
+import { checkWord, progressWord } from "@/lib/studio-job-state";
 import { useElapsed } from "@/lib/use-elapsed";
 import {
   changedLines,
@@ -344,7 +345,7 @@ function FailureCard({ job, path, inConversation }: { job: VideoJob; path: strin
  * A click opens the sheet at the panel's full width, above the strip, with
  * the previous and next scene a key away.
  */
-function SheetStrip({
+export function SheetStrip({
   job,
   sheets,
   loaded,
@@ -362,6 +363,13 @@ function SheetStrip({
   const [open, setOpen] = useState<string | null>(null);
   const shown = ordered.find((sheet) => sheet.scene === open) ?? null;
   const labelId = useId();
+  // Each scene's thumbnail, so closing the open sheet puts focus back on the
+  // thumbnail of the scene it was showing rather than on the page (S1-18).
+  const thumbs = useRef(new Map<string, HTMLButtonElement>());
+  const close = (): void => {
+    if (shown !== null) thumbs.current.get(shown.scene)?.focus();
+    setOpen(null);
+  };
   // The runner titles a sheet by the brief's scene name; once the video has
   // stored chapters, their titles are the scene's name here as everywhere.
   const titleOf = (scene: string): string => sceneTitle(job, scene, chapters);
@@ -409,7 +417,7 @@ function SheetStrip({
               // own cancel would take Escape too.
               event.preventDefault();
               event.stopPropagation();
-              setOpen(null);
+              close();
             } else if (event.key === "ArrowRight") step(1);
             else if (event.key === "ArrowLeft") step(-1);
           }}
@@ -432,7 +440,7 @@ function SheetStrip({
                 </Button>
               </>
             )}
-            <Button size="sm" variant="secondary" onClick={() => setOpen(null)} autoFocus>
+            <Button size="sm" variant="secondary" onClick={close} autoFocus>
               Close
             </Button>
           </figcaption>
@@ -452,6 +460,10 @@ function SheetStrip({
               ) : (
                 <button
                   type="button"
+                  ref={(element) => {
+                    if (element === null) thumbs.current.delete(scene);
+                    else thumbs.current.set(scene, element);
+                  }}
                   onClick={() => setOpen(open === scene ? null : scene)}
                   aria-pressed={open === scene}
                   aria-label={`Open the sheet for ${title}`}
@@ -512,6 +524,7 @@ function StepList({ rows, live }: { rows: StepRow[]; live: boolean }) {
                   row.key === "lines" && "text-warn-text",
                 )}
               >
+                <span className="sr-only">{progressWord(row.status)}</span>
                 {row.label}
                 {row.rounds !== null && <span className="font-normal text-text3"> · {row.rounds}</span>}
               </span>
@@ -819,7 +832,10 @@ function Checks({ job }: { job: VideoJob }) {
             <li key={step.name} className="flex min-w-0 items-start gap-2.5 py-1">
               <StepMark status={step.ok ? "done" : "failed"} live={false} />
               <span className="min-w-0 flex-1 text-[13px] leading-5">
-                <span className={step.ok ? "text-text2" : "font-medium text-danger"}>{gateStepLabel(step.name)}</span>
+                <span className={step.ok ? "text-text2" : "font-medium text-danger"}>
+                  <span className="sr-only">{checkWord(step.ok)}</span>
+                  {gateStepLabel(step.name)}
+                </span>
                 <span className="block text-[12px] leading-4 break-words text-text3">{step.detail}</span>
               </span>
             </li>
