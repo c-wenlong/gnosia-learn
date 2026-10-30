@@ -275,6 +275,15 @@ describe("domainLayout (D3, D4)", () => {
     for (const d of domains) expect(all[d]).toEqual(domainLayout(nodes, edges, topics, d));
   });
 
+  it("gives a folder named like an object's own key a layout of its own", () => {
+    const vocab: DomainTopic[] = [];
+    const odd = [{ ...node("a", "t"), topic: null, domain: "__proto__" }, { ...node("b", "t"), topic: null, domain: "constructor" }];
+    const all = cachedDomainLayouts(odd, [], vocab, ["__proto__", "constructor"]);
+    expect(Object.keys(all)).toEqual(["__proto__", "constructor"]);
+    expect(Object.getPrototypeOf(all)).toBe(Object.prototype);
+    expect(Object.keys(all["__proto__"]!.positions)).toEqual(["a"]);
+  });
+
   it("keeps a graph's layouts however many domains and graphs one request asks for", () => {
     // Forty domains, past the old cache's 32 entries, and then other graphs: the first graph's
     // layouts are still the ones remembered, where a cache of domains evicted its own entries.

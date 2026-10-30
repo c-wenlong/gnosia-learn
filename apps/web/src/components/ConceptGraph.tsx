@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { useMemo } from "react";
 
 import { cx } from "@/components/ui/classes";
 import { layoutGraph, wrapLabel, type GraphEdge, type GraphNode } from "@/lib/concept-graph";
@@ -53,13 +52,11 @@ export function ConceptGraph({
   label?: string;
   className?: string;
 }) {
-  // Laid out once per graph, not on every render of the page around it (a search keystroke).
-  const laid = useMemo(() => layoutGraph(nodes, edges, compact ? { columnWidth: 84, rowHeight: 96 } : {}), [nodes, edges, compact]);
   if (nodes.length === 0) {
     return <p className={cx("text-[13px] text-text3", className)}>Nothing to draw.</p>;
   }
 
-  const { width, height, positions } = laid;
+  const { width, height, positions } = layoutGraph(nodes, edges, compact ? { columnWidth: 84, rowHeight: 96 } : {});
   const labels = new Map(nodes.map((n) => [n.id, wrapLabel(n.title, compact ? 12 : 16)]));
   const fontSize = compact ? 12 : 11.5;
   const name = label ?? `Concept graph, ${nodes.length} concept${nodes.length === 1 ? "" : "s"}`;

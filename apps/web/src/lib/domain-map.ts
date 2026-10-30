@@ -547,17 +547,19 @@ export function cachedDomainLayouts(
   cache.set(key, layouts);
   if (cache.size > CACHE_GRAPHS) cache.delete(cache.keys().next().value as string);
   let graph: Prepared | null = null;
-  const out: Record<string, DomainLayout> = {};
-  for (const domain of domains) {
-    let layout = layouts.get(domain);
-    if (layout === undefined) {
-      graph ??= graphOf(nodes, edges, topics);
-      layout = layoutOf(graph, domain);
-      layouts.set(domain, layout);
-    }
-    out[domain] = layout;
-  }
-  return out;
+  // Built as entries: a folder can be named anything, `__proto__` included, and an
+  // assignment to that key would set the object's prototype instead of a layout.
+  return Object.fromEntries(
+    domains.map((domain) => {
+      let layout = layouts.get(domain);
+      if (layout === undefined) {
+        graph ??= graphOf(nodes, edges, topics);
+        layout = layoutOf(graph, domain);
+        layouts.set(domain, layout);
+      }
+      return [domain, layout] as const;
+    }),
+  );
 }
 
 /** What the Learn page sends the browser: every domain, and each one's picture. */
