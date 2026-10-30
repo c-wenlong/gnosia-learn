@@ -159,6 +159,45 @@ describe("Previewer's right arrow past the last row", () => {
     expect(previewAsset).not.toHaveBeenCalledWith("b");
   });
 
+  it("does not reopen a panel opened from a row while its close waits for the back to land", async () => {
+    window.history.replaceState(null, "", "/library");
+    let land: (added: boolean) => void = () => undefined;
+    const more: MoreRows = () =>
+      new Promise<boolean>((resolve) => {
+        land = resolve;
+      });
+    const element = (ids: string[]) =>
+      createElement(Previewer, { initialOpen: null, initial: null } as ComponentProps<typeof Previewer>, createElement(Rows, { ids, more }));
+    const { draw } = mount(element(["a"]));
+    // Opened from the row, so the panel pushed its own entry and Close goes back.
+    act(() => document.querySelector<HTMLAnchorElement>('a[href="/library/a"]')!.click());
+    await settle();
+    expect(window.location.search).toBe("?open=a");
+
+    act(() => {
+      document
+        .querySelector<HTMLElement>("[aria-busy]")!
+        .dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    });
+    // The back has not landed yet when the next page does.
+    const back = vi.spyOn(window.history, "back").mockImplementation(() => undefined);
+    try {
+      act(() => document.querySelector<HTMLButtonElement>("button[data-dialog-close]")!.click());
+      expect(back).toHaveBeenCalledTimes(1);
+      draw(element(["a", "b"]));
+      await act(async () => {
+        land(true);
+        await Promise.resolve();
+      });
+      await settle();
+    } finally {
+      back.mockRestore();
+    }
+
+    expect(window.location.search).toBe("?open=a");
+    expect(previewAsset).not.toHaveBeenCalledWith("b");
+  });
+
   it("goes on into the next page when the panel is still open", async () => {
     window.history.replaceState(null, "", "/library?open=a");
     let land: (added: boolean) => void = () => undefined;
