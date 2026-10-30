@@ -22,7 +22,10 @@
 //  by the script to a port nothing holds) and the sidecar's are answered by
 //  `FixtureRoutes` below, and the sidecar manager is one that never spawns.
 //  WKWebView bodies (note prose, chat bubbles) draw their plain-text stand-in
-//  or nothing, since their pages render out of process.
+//  or nothing when their pages have not painted yet, and a list's selected
+//  row (a backdrop material `cacheDisplay` draws as solid black) is redrawn
+//  as the plain unemphasized fill a window that is not key shows
+//  (`flattenSelections`).
 //
 
 import AppKit
@@ -194,6 +197,7 @@ private final class Shooter {
                 Self.turnRunLoop()
                 hosting.layoutSubtreeIfNeeded()
             }
+            Self.flattenSelections(in: hosting)
             hosting.display()
             guard let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else { continue }
             hosting.cacheDisplay(in: hosting.bounds, to: rep)
@@ -201,6 +205,30 @@ private final class Shooter {
             window.contentView = nil
             window.close()
         }
+    }
+
+    /// A list's selected row is an NSVisualEffectView with the `.selection`
+    /// material, a backdrop layer that `cacheDisplay` cannot draw: it comes
+    /// out as an opaque black block with the row's text lost on it (a sidebar
+    /// list in a window that is never key, so the real row is the light
+    /// unemphasized grey). Each one is swapped for a plain view filled with
+    /// the colour AppKit draws there, so the capture shows what the window
+    /// would.
+    private static func flattenSelections(in view: NSView) {
+        for sub in view.subviews { flattenSelections(in: sub) }
+        guard let effect = view as? NSVisualEffectView, effect.material == .selection,
+              !effect.isHidden, let parent = effect.superview
+        else { return }
+        let fill = NSView(frame: effect.frame)
+        fill.wantsLayer = true
+        fill.layer?.cornerRadius = effect.layer?.cornerRadius ?? 0
+        var color = NSColor.unemphasizedSelectedContentBackgroundColor.cgColor
+        effect.effectiveAppearance.performAsCurrentDrawingAppearance {
+            color = NSColor.unemphasizedSelectedContentBackgroundColor.cgColor
+        }
+        fill.layer?.backgroundColor = color
+        effect.isHidden = true
+        parent.addSubview(fill, positioned: .below, relativeTo: effect)
     }
 
     /// One short turn of the main run loop, outside the async context
