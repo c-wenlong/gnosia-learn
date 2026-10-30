@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CHAT_RATE_LIMIT, enforceRateLimit, enforceSameOrigin, SUMMARIZE_RATE_LIMIT } from "@/lib/agent/guard";
+import { CHAT_RATE_LIMIT, enforceRateLimit, enforceSameOrigin, readAgentBody, SUMMARIZE_RATE_LIMIT } from "@/lib/agent/guard";
 import {
   checkRateLimit,
   clientIp,
@@ -276,5 +276,56 @@ describe("enforceRateLimit", () => {
     }
     expect(enforceRateLimit("owner-c", "per-owner", SUMMARIZE_RATE_LIMIT, 0)?.status).toBe(429);
     expect(enforceRateLimit("owner-d", "per-owner", SUMMARIZE_RATE_LIMIT, 0)).toBeNull();
+  });
+});
+
+describe("readAgentBody", () => {
+  /** A body streamed in chunks with no Content-Length, as a chunked upload is. */
+  const streamed = (chunks: string[]) => {
+    let pulled = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        const next = chunks[pulled];
+        pulled += 1;
+        if (next === undefined) controller.close();
+        else controller.enqueue(new TextEncoder().encode(next));
+      },
+    });
+    const req = new Request("http://study.test/api/agent/judge", { method: "POST", body, duplex: "half" } as RequestInit);
+    return { req, pulled: () => pulled };
+  };
+
+  it("answers the parsed body", async () => {
+    const req = new Request("http://study.test/x", { method: "POST", body: JSON.stringify({ a: 1 }) });
+    expect(await readAgentBody(req, 100)).toEqual({ body: { a: 1 } });
+  });
+
+  it("refuses a declared length past the limit with a 413, before reading", async () => {
+    const req = new Request("http://study.test/x", {
+      method: "POST",
+      headers: { "content-length": "5000" },
+      body: "x".repeat(5000),
+    });
+    const answer = await readAgentBody(req, 4096);
+    expect(answer).toBeInstanceOf(Response);
+    const response = answer as Response;
+    expect(response.status).toBe(413);
+    expect((await response.json()).code).toBe("PAYLOAD_TOO_LARGE");
+  });
+
+  it("stops reading a stream with no length as soon as it passes the limit", async () => {
+    const { req, pulled } = streamed(Array.from({ length: 100 }, () => "x".repeat(1024)));
+    const answer = (await readAgentBody(req, 4096)) as Response;
+    expect(answer.status).toBe(413);
+    expect(pulled()).toBeLessThan(10);
+  });
+
+  it("refuses a body that is not JSON with a 400 that does not echo it", async () => {
+    const req = new Request("http://study.test/x", { method: "POST", body: "secret-not-json" });
+    const answer = (await readAgentBody(req, 100)) as Response;
+    expect(answer.status).toBe(400);
+    const text = await answer.text();
+    expect(text).toContain("BAD_REQUEST");
+    expect(text).not.toContain("secret-not-json");
   });
 });

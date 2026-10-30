@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { tutorDeps, turnResponse } from "@/lib/agent/env";
-import { CHAT_RATE_LIMIT, enforceRateLimit, enforceSameOrigin } from "@/lib/agent/guard";
+import { AGENT_BODY_LIMITS, CHAT_RATE_LIMIT, enforceRateLimit, enforceSameOrigin, readAgentBody } from "@/lib/agent/guard";
 import { requestOwner } from "@/lib/learner-api";
 import { judgeTurn, validateJudgeBody } from "@gnosia/tutor/server/turns";
 
@@ -30,12 +30,9 @@ export async function POST(req: Request) {
   const owner = await requestOwner();
   if (owner instanceof NextResponse) return owner;
 
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return bad("Invalid JSON body");
-  }
+  const read = await readAgentBody(req, AGENT_BODY_LIMITS.judge);
+  if (read instanceof NextResponse) return read;
+  const { body } = read;
   // The turn's own rules, before the limiter: a malformed body spends no token.
   const refused = validateJudgeBody(body);
   if (refused) return turnResponse(refused);
@@ -45,8 +42,4 @@ export async function POST(req: Request) {
   if (limited) return limited;
 
   return turnResponse(await judgeTurn(tutorDeps(owner), body));
-}
-
-function bad(error: string) {
-  return NextResponse.json({ error, code: "BAD_REQUEST" }, { status: 400 });
 }

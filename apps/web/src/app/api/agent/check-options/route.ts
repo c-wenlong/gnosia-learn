@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { tutorDeps, turnResponse } from "@/lib/agent/env";
-import { CHAT_RATE_LIMIT, enforceRateLimit, enforceSameOrigin } from "@/lib/agent/guard";
+import { AGENT_BODY_LIMITS, CHAT_RATE_LIMIT, enforceRateLimit, enforceSameOrigin, readAgentBody } from "@/lib/agent/guard";
 import { requestOwner } from "@/lib/learner-api";
 import { checkOptionsTurn, validateCheckOptionsBody } from "@gnosia/tutor/server/turns";
 
@@ -26,12 +26,9 @@ export async function POST(req: Request) {
   const owner = await requestOwner();
   if (owner instanceof NextResponse) return owner;
 
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body", code: "BAD_REQUEST" }, { status: 400 });
-  }
+  const read = await readAgentBody(req, AGENT_BODY_LIMITS.checkOptions);
+  if (read instanceof NextResponse) return read;
+  const { body } = read;
   const refused = validateCheckOptionsBody(body);
   if (refused) return turnResponse(refused);
 
