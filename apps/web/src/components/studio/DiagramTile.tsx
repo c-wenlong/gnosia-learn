@@ -4,7 +4,7 @@ import { ExtendLink } from "@/components/studio/ExtendLink";
 import { PanelLink, SelectableFrame } from "@/components/studio/PanelLink";
 import { RowJob, TileJob } from "@/components/studio/GridJob";
 import { KindBadge, KindWord } from "@/components/studio/KindBadge";
-import { TILE, TILE_ACTIONS, TILE_LIFT, TILE_WARNED } from "@/components/studio/surfaces";
+import { TILE, TILE_ACTIONS, TILE_LIFT, TILE_THUMB, TILE_WARNED } from "@/components/studio/surfaces";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { buttonClasses, cx } from "@/components/ui/classes";
@@ -142,7 +142,7 @@ function Thumbnail({ diagram }: { diagram: Diagram }) {
   ].filter((badge) => badge !== null);
 
   return (
-    <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden border-b border-border bg-diagram-matte">
+    <div className={cx("relative flex items-center justify-center overflow-hidden border-b border-border bg-diagram-matte", TILE_THUMB)}>
       {diagram.svg.exists ? (
         /* The runner streams a file from outside the app's tree, so there is
            nothing for the image optimiser to resolve, and an SVG is not a format
