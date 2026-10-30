@@ -89,7 +89,9 @@ function Strip({
       <PanelLink
         href={panelHref(path, { job: job.jobId })}
         scroll={false}
-        className="flex min-w-0 flex-1 items-center gap-3 hover:underline"
+        // Clipped, so a step count that cannot shrink stays inside the link
+        // when a refused Cancel's line takes the room on a phone.
+        className="flex min-w-0 flex-1 items-center gap-3 overflow-hidden hover:underline"
         title="Open this job in the panel"
       >
         <span className="max-w-[18rem] truncate font-medium">{job.title ?? job.jobId.slice(0, 8)}</span>
