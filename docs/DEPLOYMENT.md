@@ -129,10 +129,19 @@ until they are entered again ([docs/BYOK.md](BYOK.md), "Rotation"); changing
 `OWNER_PASSWORD` does neither, since the cookie is signed with the secret and
 not the password. Sessions last thirty days.
 
-The only brake on password guessing is a fixed 600ms delay per wrong attempt
-in `apps/web/src/app/api/auth/sign-in/route.ts`. That is proportionate for one
-owner with a long password; add a per-IP rule on `/api/auth/sign-in` with
-`vercel firewall` before opening the deployment to anyone else. When accounts
+Password guessing is bounded in `apps/web/src/lib/auth/sign-in-limit.ts`:
+ten attempts per client in fifteen minutes, and fifty wrong passwords from
+everyone together in fifteen minutes, after which the form refuses every
+attempt (the owner's too) until the window ends. Each wrong password also
+waits 600ms. "Per client" means the address in `X-Forwarded-For` only where a
+proxy sets that header: Vercel does (`VERCEL=1` is set for you), and anywhere
+else set `TRUST_PROXY=1` only when a reverse proxy in front of `next start`
+overwrites it. Without either, every client shares one bucket, since a client
+can send any value it likes. The counts live in one process's memory, so on
+Vercel each instance counts on its own: add a per-IP rule on
+`/api/auth/sign-in` with `vercel firewall` before opening the deployment to
+anyone else. Every other rate limit in the app is keyed by the signed-in
+owner, never by a header. When accounts
 arrive, `apps/web/src/lib/auth/` is the module to replace (Auth.js reads the
 same `AUTH_SECRET` name) and `isSignedIn` in `session.ts` is the seam every
 caller already goes through.

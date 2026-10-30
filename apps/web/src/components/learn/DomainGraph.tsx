@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 
 import { cx } from "@/components/ui/classes";
 import { wrapLabel, type GraphEdge } from "@/lib/concept-graph";
@@ -160,7 +160,11 @@ export function DomainGraph({
   const home = (id: string) => moved[id] ?? layout.positions[id];
   const at = (id: string) => (glide === 0 ? home(id) : mixPoint(home(id), layout.axes.positions[id] ?? home(id), glide));
   const topicOf = new Map(groups.flatMap((g) => g.concepts.map((id) => [id, g.topic] as const)));
-  const lines = (id: string) => wrapLabel(nodes.get(id)?.title ?? id, LABEL_CHARS).length;
+  // Each concept's label as wrapped lines, once per set of nodes: a hover or a drag frame
+  // reads them for every label, every edge end and every dot, and the titles do not change.
+  const wrapped = useMemo(() => new Map([...nodes].map(([id, n]) => [id, wrapLabel(n.title, LABEL_CHARS)])), [nodes]);
+  const wrappedOf = (id: string) => wrapped.get(id) ?? wrapLabel(id, LABEL_CHARS);
+  const lines = (id: string) => wrappedOf(id).length;
   // How wide the picture is drawn, for the labels' size on screen (D10); unknown until measured.
   const [drawn, setDrawn] = useState<number | null>(null);
   /** The topic whose cut title has a plate, kept mounted for the beat it takes to fade after the pointer leaves. */
@@ -190,7 +194,9 @@ export function DomainGraph({
   // A topic's title keeps 11px on screen too (D10), and its group's band grows upward to hold it.
   const heading = titleFont(scale);
   const band = titleBand(heading);
-  const boxOf = (g: { concepts: readonly string[]; title: string }) => groupBox(g.concepts.map(home), titleWidth(g.title), band);
+  // Each group's box once per render: the titles, the rects and the plates all read it.
+  const boxes = new Map(groups.map((g) => [g.topic, groupBox(g.concepts.map(home), titleWidth(g.title), band)]));
+  const boxOf = (g: { topic: string }) => boxes.get(g.topic) as Box;
   // The frame holds still while a concept is being dragged, and takes in where it was left afterwards.
   const fit = viewBoxFor(layout, topic, moved, band);
   // A label drawn larger than the layout's size reaches further below its dot, so the frame grows to hold the bottom row's.
@@ -216,13 +222,13 @@ export function DomainGraph({
       const n = nodes.get(id);
       const p = at(id);
       if (n === undefined || p === undefined) continue;
-      const wrapped = wrapLabel(n.title, LABEL_CHARS);
+      const label = wrappedOf(id);
       items.push({
         id,
         x: p.x,
         y: p.y,
-        lines: wrapped.length,
-        em: Math.max(0, ...wrapped.map((l) => textEm(l, id === selected))),
+        lines: label.length,
+        em: Math.max(0, ...label.map((l) => textEm(l, id === selected))),
         rank: labelRank({
           hover: id === hover,
           selected: id === selected,
@@ -394,6 +400,7 @@ export function DomainGraph({
             <Concept
               key={id}
               node={n}
+              lines={wrappedOf(id)}
               x={p.x}
               y={p.y}
               selected={id === selected}
@@ -644,6 +651,7 @@ function Edge({
 
 function Concept({
   node: n,
+  lines,
   x,
   y,
   selected,
@@ -659,6 +667,8 @@ function Concept({
   onPointerDown,
 }: {
   node: DomainGraphNode;
+  /** Its title wrapped to the label's lines. */
+  lines: readonly string[];
   x: number;
   y: number;
   selected: boolean;
@@ -678,7 +688,6 @@ function Concept({
   onHover: (id: string | null) => void;
   onPointerDown: (event: PointerEvent<SVGGElement>) => void;
 }) {
-  const lines = wrapLabel(n.title, LABEL_CHARS);
   const arc = arcLength(n, ARC_RADIUS);
   const label = labelBox({ x, y, lines: lines.length, em: Math.max(0, ...lines.map((l) => textEm(l, selected))) }, font, frame);
   const labelX = label.x + label.width / 2;

@@ -43,7 +43,7 @@ export async function POST(req: Request) {
   }
 
   // Before the read, so an unknown slug is not a free way to spin the limiter.
-  const limited = enforceRateLimit(req, "session", CHAT_RATE_LIMIT);
+  const limited = enforceRateLimit(owner, "session", CHAT_RATE_LIMIT);
   if (limited) return limited;
 
   return turnResponse(await sessionQuestionTurn(tutorDeps(owner), body));
