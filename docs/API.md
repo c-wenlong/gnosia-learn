@@ -96,7 +96,7 @@ sidecar adds the two read routes the native pane needs.
 | `POST /api/learner/provider-key` | `{ provider, key }` | Saves the owner's key for a provider (AES-256-GCM under a key from `AUTH_SECRET`; docs/BYOK.md) |
 | `DELETE /api/learner/provider-key` | `{ provider }` | Removes it |
 | `POST /api/learner/provider-key/test` | `{ provider }` | A probe call on the effective key, so a bad key fails in Settings, not mid-session |
-| `POST /api/learner/provider-key/sync` | `{ provider }` | Copies the saved tutor key into the studio runner's `byok.json` |
+| `POST /api/learner/provider-key/sync` | `{ provider }` | Adds a provider whose tutor key is saved to Studio's list; no key is sent, the runner opens the saved one (BYOK.md, D12) |
 | `POST /api/learner/tutor-model` | `{ provider, model }` | Appends the entry to the chain |
 | `PUT /api/learner/tutor-model` | `{ provider, model }` | Makes it the whole chain |
 | `PATCH /api/learner/tutor-model` | `{ provider, model, direction: "up" \| "down" }` | Moves the entry |
@@ -231,9 +231,9 @@ table's routes.
 | `GET /api/settings/agent` | The two agents' model and effort |
 | `PUT /api/settings/agent` | `{ kind: "video" \| "diagram", model, effort }` — `default` or a valid Claude CLI model, `default` or a configured effort |
 | `GET /api/settings/byok` | Which providers the runner can bill |
-| `PUT /api/settings/byok` | `{ provider, apiKey, model? }`: store it in `$STUDIO_HOME/byok.json`, mode 600 |
-| `DELETE /api/settings/byok` | `{ provider }`: remove it |
-| `POST /api/settings/byok/models` | `{ provider, apiKey? }`: the provider's model list, using the stored key when `apiKey` is blank |
+| `PUT /api/settings/byok` | `{ provider, model?, activate? }`: Studio uses a provider whose key is saved in Settings; a body with `apiKey` is refused, the runner keeps no key (BYOK.md, D12) |
+| `DELETE /api/settings/byok` | `{ provider }`: Studio stops using it; the key stays saved in Settings |
+| `POST /api/settings/byok/models` | `{ provider, apiKey? }`: the provider's model list, using the key saved in Settings when `apiKey` is blank |
 | `PUT /api/settings/byok/models` | `{ provider, models: { lite?, default?, max? } }`: tier picks, merged — omitted keeps, empty clears |
 | `PUT /api/settings/byok/active` | `{ provider }`: which connected provider a `byok` turn runs on |
 | `GET /api/health` | The blocked-or-ready answer in one read: dependencies, cached-probe freshness, jobs and queues, agent settings, catalog reachability, vocabulary, cost caps, diagram and video readiness, manual and tool health |

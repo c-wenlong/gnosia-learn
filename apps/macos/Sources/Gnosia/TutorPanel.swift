@@ -29,10 +29,13 @@
 //  fallback, or says there is no question and lets the learner carry on.
 //
 //  An answer is graded and persisted through recordSessionAnswer — the
-//  local `POST /api/learner/observe` — which moves p(L), spreads a correct
-//  answer to the prerequisites and schedules the review card, all inside
-//  learner.db, never the read-only catalog. A write that fails keeps the
-//  pick so "Try again" can replay it. The session row opens with the
+//  local `POST /api/learner/observe` — which writes the app's estimate of
+//  the p(L) move, the spread to the prerequisites and the review card into
+//  learner.db, never the read-only catalog, and queues the observe call.
+//  The feedback bar and the close screen draw that estimate until the
+//  catalog's reply lands, then what the catalog recorded
+//  (`LearnerStore.shown`). A write that fails keeps the pick so "Try
+//  again" can replay it. The session row opens with the
 //  first answer and closes on the close step — or on leaving mid-session,
 //  as the web's does.
 //
@@ -149,7 +152,6 @@ struct TutorSessionView: View {
     /// would be the tutor's, the web's "this note has no check" callout.
     @State private var noteAsksNothing = false
     @State private var next: (slug: String, title: String)? = nil
-    @State private var model = SessionLearnerModel(params: BKTParams(), mastery: [:], cards: [:])
     /// slug → title, for the close screen's What moved rows.
     @State private var titles: [String: String] = [:]
 
@@ -260,11 +262,6 @@ struct TutorSessionView: View {
         next = sessionNextConcept(
             frontier: store.learn.frontier.compactMap { store.learn.byId[$0] },
             current: (slug: slug, domain: w.domain, dependants: Set(w.dependants.map(\.slug)))
-        )
-        model = SessionLearnerModel(
-            params: bktParams(preferences: store.preferences),
-            mastery: store.mastery,
-            cards: store.learn.cards
         )
         titles = Dictionary(uniqueKeysWithValues: store.learn.concepts.map { ($0.slug, $0.title) })
         startedAt = Date()
@@ -400,9 +397,11 @@ struct TutorSessionView: View {
 
     // MARK: Grade, advance, close
 
-    /// Grade the pick — the observe call as a local write: BKT for the
-    /// concept, propagation to its prerequisites, the card rescheduled,
-    /// the observation event and the session row, one transaction. The
+    /// Grade the pick — the observe call as a local write: the app's
+    /// estimate of BKT for the concept, propagation to its prerequisites
+    /// and the card rescheduled, with the observation event and the
+    /// session row, one transaction; the catalog's reply replaces the
+    /// estimate when the queued observe lands. The
     /// pick is locked at the first attempt; a failed write keeps it so
     /// "Try again" replays the same answer rather than a new one.
     private func grade(_ choice: Int?) {
@@ -429,10 +428,10 @@ struct TutorSessionView: View {
         // check; a Quiz me check with no teaching only measures —
         // `source` in the web's grade, the same either way.
         let source = step.kind == .check && mode == .learn ? "teach" : "probe"
-        // The model advances with the answer; if the write does not land
-        // the model goes back too, so a retry replays the same answer from
-        // the same state rather than stacking a second update on the first.
-        let baseline = model
+        // The estimate starts from the store's rows as they stand, which
+        // a failed write leaves untouched, so a retry replays the same
+        // answer from the same state.
+        var model = SessionLearnerModel.current(store)
         var write = model.answer(
             slug, correct: correct, source: source, confidence: attempt.confidence,
             prereqsOf: { store.learn.byId[$0]?.requires ?? [] }
@@ -453,7 +452,6 @@ struct TutorSessionView: View {
             }
             store.refreshLearner()
         } else {
-            model = baseline
             error = learner.error ?? "Not saved. Press Try again; your pick is kept."
         }
         pending = false
@@ -783,7 +781,7 @@ struct TutorSessionView: View {
                         MathText(text: reason, font: .callout)
                             .foregroundStyle(ink)
                     }
-                    Text(sessionFeedbackNote(answered.outcome))
+                    Text(sessionFeedbackNote(learner.shown(answered.outcome)))
                         .font(.caption)
                         .foregroundStyle(G.text2)
                 }
@@ -867,9 +865,12 @@ struct TutorSessionView: View {
 
     private var closeStep: some View {
         let minutes = max(1, Int(((closedAt ?? Date()).timeIntervalSince(startedAt) / 60).rounded()))
-        let totals = sessionTotals(slug: slug, answers: answers)
-        let moved = sessionWhatMoved(slug: slug, title: title, answers: answers, titles: titles)
-        let scheduled = sessionScheduled(slug: slug, title: title, answers: answers, titles: titles)
+        // Each answer as the catalog recorded it, or the app's estimate
+        // while the reply is still on its way.
+        let shown = answers.map(learner.shown)
+        let totals = sessionTotals(slug: slug, answers: shown)
+        let moved = sessionWhatMoved(slug: slug, title: title, answers: shown, titles: titles)
+        let scheduled = sessionScheduled(slug: slug, title: title, answers: shown, titles: titles)
         let walked = stepsWalked(steps)
         return VStack(spacing: 24) {
             VStack(spacing: 8) {
@@ -886,6 +887,12 @@ struct TutorSessionView: View {
                 statTile("Right", "\(totals.right) / \(totals.answered)")
                 statTile("Mastery moved", formatTotalsMove(totals))
                 statTile("Review cards", "\(totals.cards)")
+            }
+            if let estimate = sessionEstimateNote(shown) {
+                Text(estimate)
+                    .font(.caption)
+                    .foregroundStyle(G.text2)
+                    .frame(maxWidth: .infinity, alignment: .center)
             }
 
             cardBlock("What moved") {

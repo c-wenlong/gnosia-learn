@@ -11,7 +11,8 @@ import { readAuthConfig, SESSION_COOKIE, verifySession } from "./core";
  * `isSignedIn` is the one question every server component and route asks;
  * the proxy asks the same thing from `NextRequest` directly, since it has no
  * `cookies()`. Keep the two in step: both go through `verifySession`, and the
- * answer depends on nothing but the cookie, the secret and the clock.
+ * answer depends on nothing but the cookie, the configuration (`AUTH_SECRET`,
+ * `OWNER_PASSWORD`, `SESSION_EPOCH`) and the clock.
  */
 
 export function authConfig() {
@@ -27,7 +28,7 @@ export async function isSignedIn(): Promise<boolean> {
   const config = authConfig();
   if (!config.ok) return false;
   const store = await cookies();
-  return verifySession(config.config.secret, store.get(SESSION_COOKIE)?.value, Math.floor(Date.now() / 1000));
+  return verifySession(config.config, store.get(SESSION_COOKIE)?.value, Math.floor(Date.now() / 1000));
 }
 
 /**

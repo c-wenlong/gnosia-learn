@@ -16,6 +16,7 @@ import { statusProps } from "@/components/ui/save-status";
 import type { ChainEntry } from "@gnosia/tutor/providers";
 import { TUTOR_STYLES, type TutorStyle } from "@gnosia/tutor/preferences";
 import type { ProvidersView } from "@/lib/providers/view";
+import type { ByokInitial } from "@/lib/studio-byok";
 import { sendJson } from "@/lib/send-json";
 
 import { usePreference } from "./SettingsForm";
@@ -30,7 +31,9 @@ import { failure, textOf, tone, type Reply, type Status } from "./status";
  * Lite/Default/Max models, its key coming from the Providers card above.
  * It is drawn only with `studio` (the server's `studioEnabled()`): without
  * the studio, its runner's `/studio/api/settings/byok` answers 404 and the
- * picker would say Loading for good.
+ * picker would say Loading for good. With it, the page reads the runner's
+ * answer first (`byok`), so a runner that is down shows as down without a
+ * request from the browser that could only fail.
  */
 
 type ListState =
@@ -44,6 +47,7 @@ export function ModelSelection({
   tutorStyle,
   savedForTutor,
   studio,
+  byok,
 }: {
   view: ProvidersView;
   /** The tutor's chain as the server read it; the first entry is the pick the tutor uses. */
@@ -53,6 +57,8 @@ export function ModelSelection({
   savedForTutor: string[];
   /** `studioEnabled()` on the server: whether to draw the Studio chats side at all. */
   studio: boolean;
+  /** The runner's BYOK settings as the server read them, or that it was down, so the card sends no request that can only fail. */
+  byok?: ByokInitial;
 }) {
   const style = usePreference<TutorStyle>(PREFERENCE_KEYS.tutorStyle, tutorStyle);
   return (
@@ -91,7 +97,7 @@ export function ModelSelection({
               uses the key saved above, no re-typing.
             </p>
           </div>
-          <ByokConfig manageKeys={false} savedForTutor={savedForTutor} />
+          <ByokConfig manageKeys={false} savedForTutor={savedForTutor} initial={byok} />
         </div>
       )}
     </Card>

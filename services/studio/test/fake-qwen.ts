@@ -42,6 +42,9 @@ fs.appendFileSync(dir + "/env.ndjson", JSON.stringify({
   anthropicKey: process.env.ANTHROPIC_API_KEY ?? null,
   systemMd: process.env.QWEN_SYSTEM_MD ?? null,
   home: process.env.HOME ?? null,
+  // The runner's own secrets, which no spawn may inherit.
+  authSecret: process.env.AUTH_SECRET ?? null,
+  ownerPassword: process.env.OWNER_PASSWORD ?? null,
 }) + "\n");
 const replies = JSON.parse(fs.readFileSync(dir + "/replies.json", "utf8"));
 const countFile = dir + "/count";

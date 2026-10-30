@@ -49,7 +49,7 @@ Three paths, each one way:
 | --- | --- | --- |
 | Read | Courses, topics, concepts, assets, sessions and the learner's catalog rows, mirrored by the snapshot script and opened read-only | `<data home>/app-catalog.db`, `CatalogStore.swift` |
 | Local write | Every learner write the app makes (answers, review grades, favourites, playback, progress, notes, names, visits), so it shows at once and survives an outage | `<data home>/learner.db`, `LearnerStore.swift` |
-| Mirror | Each local write sent to the catalog through the sidecar's web routes, queued and retried until it lands | `services/sidecar`, `SidecarManager.swift`, `SidecarClient.swift` |
+| Mirror | Each local write sent to the catalog through the sidecar's web routes, queued and retried until it lands. An answer's or review grade's reply carries what the catalog recorded and the mastery and review rows it moved, which replace the app's own estimate | `services/sidecar`, `SidecarManager.swift`, `SidecarClient.swift`, `LearnerStore.applyRecorded` |
 
 The sidecar is a loopback service the app spawns (`npx tsx
 services/sidecar/src/index.ts`): the tutor (chat, session questions) and
@@ -121,7 +121,9 @@ snapshot_meta    (key, value)     -- generator, schema_version, taken_at, ...
   progress ticks and notes, the week check), the Library (videos, PDFs,
   links, favourites, names), the Studio and Ask, in one sidebar.
 - The concept tutor's chat, with the tutor's choice and recall checks drawn
-  as cards, and the session page's steps with confidence.
+  as cards, and the session page's steps with confidence. An answer's p(L)
+  move and next review are the app's estimate, marked "not yet recorded",
+  until the catalog's reply lands; from then on they are the catalog's.
 - Video playback from the blob store, resuming where the web or the app
   last stopped; only the stretches actually played count as watched.
 - Settings: the catalog mirror's path and its last refresh, provider keys

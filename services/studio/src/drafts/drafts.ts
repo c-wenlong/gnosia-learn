@@ -13,7 +13,7 @@ import {
 } from "@gnosia/schema/shared";
 
 import { BriefError, loadVocabulary, SLUG_PATTERN, validateBrief, type ValidBrief, type Vocabulary } from "../diagram/brief";
-import { byokEnv, loadByok, resolveByok } from "../agent/byok";
+import { byokEnv, byokStatus, resolveByok } from "../agent/byok";
 import { codexEnv, codexSignedIn, sealCodexHome } from "../agent/codex";
 import { canvas, doctor, doctorChecks, type InspectReport } from "../canvas/canvas";
 import { conceptShow, draftUpsert, topicAdd, topicAddDryRun, videoList, videoShow, type CatalogResult } from "../data/catalog";
@@ -237,7 +237,7 @@ export interface DraftRecord {
   /**
    * The harness the conversation's turns spawn on: absent or null is `claude`,
    * the default; `"byok"` is the open harness (`qwen`, Qwen Code) on the key
-   * `byok.json` holds; `"codex"` is OpenAI's `codex exec` on the owner's codex
+   * saved in Settings; `"codex"` is OpenAI's `codex exec` on the owner's codex
    * login. Set at creation from the picker's pick and by `PUT .../harness`
    * while no turn has run; a harness carries its own session store, so once a
    * turn has run the pick is locked to it.
@@ -1408,12 +1408,7 @@ export class Drafts {
     const tutor = parseTutor(input.tutor);
     const harness = draftHarness(input.harness);
     const model = draftModel(input.model, harness);
-    if (harness === "byok" && resolveByok(await loadByok(), null) === null) {
-      throw new JobRefused(400, "BYOK is not set up: the picker's BYOK row takes a provider, an API key and a Default model first", {
-        field: "harness",
-        reason: "byok-unconfigured",
-      });
-    }
+    if (harness === "byok") await assertByokReady();
     if (harness === "codex" && !(await codexSignedIn(process.env))) {
       throw new JobRefused(400, "codex is not signed in: `codex login` once, or an OPENAI_API_KEY in the runner's env", {
         field: "harness",
@@ -2345,8 +2340,9 @@ export class Drafts {
     // cleared reports the way a missing binary does. Codex is `codex exec` on
     // the owner's codex login, checked the same way at pick time.
     const harness = record.harness ?? "claude";
-    const byok = harness === "byok" ? resolveByok(await loadByok(), record.model ?? null) : null;
-    if (harness === "byok" && byok === null) {
+    const resolved = harness === "byok" ? await resolveByok(record.model ?? null) : null;
+    const byok = resolved !== null && !("problem" in resolved) ? resolved : null;
+    if (resolved !== null && "problem" in resolved) {
       return {
         run: {
           exitCode: null,
@@ -2360,13 +2356,13 @@ export class Drafts {
           stopReason: null,
           sealBroken: null,
           spawnFailed: true,
-          stderr: "BYOK is not set up: the picker's BYOK row takes a provider and an API key first",
+          stderr: resolved.problem,
         },
         cost: { costUsd: null, costSource: null },
       };
     }
     // The conversation's own pick (D90), else the runner's `STUDIO_PLANNER_MODEL`.
-    // A BYOK turn runs the provider's model, which only `byok.json` names; a
+    // A BYOK turn runs the provider's model, which only its tier settings name; a
     // codex turn takes its login's model — the pick names claude's, so the
     // marker records what ran.
     const model = byok !== null ? byok.model : harness === "codex" ? (record.model ?? "codex") : (record.model ?? plannerModel());
@@ -3568,12 +3564,7 @@ export class Drafts {
     this.require(id);
     const harness = draftHarness(rawHarness);
     if (this.draining) throw new JobRefused(503, "the studio is shutting down", { reason: "shutdown" });
-    if (harness === "byok" && resolveByok(await loadByok(), null) === null) {
-      throw new JobRefused(400, "BYOK is not set up: the picker's BYOK row takes a provider, an API key and a Default model first", {
-        field: "harness",
-        reason: "byok-unconfigured",
-      });
-    }
+    if (harness === "byok") await assertByokReady();
     if (harness === "codex" && !(await codexSignedIn(process.env))) {
       throw new JobRefused(400, "codex is not signed in: `codex login` once, or an OPENAI_API_KEY in the runner's env", {
         field: "harness",
@@ -4389,7 +4380,7 @@ export function draftModel(raw: unknown, harness: "claude" | "byok" | "codex" | 
   // A name only means something on its own CLI (D92): a `gpt-` slug belongs
   // to codex, and one that is not is a claude name codex cannot take either.
   // BYOK's pick is a tier (D94): the provider's own model names live in
-  // `byok.json`, resolved at spawn, so a conversation holds the tier only.
+  // `byok-settings.json`, resolved at spawn, so a conversation holds the tier only.
   if (harness === "byok") {
     if (name === "lite" || name === "max") return name;
     throw new JobRefused(400, `"${name}" is not a tier byok takes (lite, default, max)`, { field: "model" });
@@ -4768,4 +4759,21 @@ export function noteForDraft(record: DraftRecord): string {
     case "abandoned":
       return "this conversation is closed";
   }
+}
+
+/**
+ * A BYOK pick is refused before it is kept when no turn could run on it: no
+ * provider with a Default model, no saved key for it, or keys the runner
+ * cannot open (docs/BYOK.md, D12). The status says which, never a key.
+ */
+async function assertByokReady(): Promise<void> {
+  const status = await byokStatus();
+  if (status.configured) return;
+  throw new JobRefused(
+    400,
+    status.error !== null
+      ? `BYOK is not set up: ${status.error}`
+      : "BYOK is not set up: the picker's BYOK row takes a provider with a key saved in Settings and a Default model first",
+    { field: "harness", reason: "byok-unconfigured" },
+  );
 }

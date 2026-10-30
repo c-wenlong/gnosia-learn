@@ -55,7 +55,7 @@ export async function GET(request: Request) {
   if (!config.ok) return redirectTo("/sign-in?error=unconfigured");
 
   claimLocalToken();
-  const session = await signSession(config.config.secret, Math.floor(Date.now() / 1000));
+  const session = await signSession(config.config, Math.floor(Date.now() / 1000));
   const response = redirectTo("/home");
   response.cookies.set({
     ...sessionCookie(request),

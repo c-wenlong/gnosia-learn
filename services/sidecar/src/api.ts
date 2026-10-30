@@ -41,6 +41,7 @@ import {
 } from "@gnosia/tutor/server/turns";
 
 import { guard } from "./guard";
+import { gradedExtras, observedExtras, withRecordedRows } from "./recorded";
 
 /**
  * The HTTP surface: JSON in, JSON out, on `127.0.0.1` and an ephemeral port.
@@ -62,8 +63,8 @@ import { guard } from "./guard";
  *   POST   /api/learner/preference             → preferenceTurn (lastVisited — the app's module visits)
  *   POST   /api/learner/asset-name             → assetNameTurn
  *   POST   /api/learner/note                   → noteTurn
- *   POST   /api/learner/observe                → observeTurn
- *   POST   /api/review/grade                   → reviewGradeTurn (the app's review cards)
+ *   POST   /api/learner/observe                → observeTurn, plus the rows it moved (recorded.ts)
+ *   POST   /api/review/grade                   → reviewGradeTurn (the app's review cards), plus the rows it moved
  *   POST   /api/learner/session/close          → sessionCloseTurn
  *   GET    /api/learner/provider-key           → providerKeyStatusTurn (the card's rows; the web reads them server-side)
  *   POST   /api/learner/provider-key           → providerKeySaveTurn
@@ -101,8 +102,8 @@ const TURNS: Record<string, Record<string, Turn>> = {
   "/api/learner/preference": { POST: preferenceTurn },
   "/api/learner/asset-name": { POST: assetNameTurn },
   "/api/learner/note": { POST: noteTurn },
-  "/api/learner/observe": { POST: observeTurn },
-  "/api/review/grade": { POST: reviewGradeTurn },
+  "/api/learner/observe": { POST: withRecordedRows(observeTurn, observedExtras) },
+  "/api/review/grade": { POST: withRecordedRows(reviewGradeTurn, gradedExtras) },
   "/api/learner/session/close": { POST: sessionCloseTurn },
   "/api/learner/provider-key": {
     GET: providerKeyStatusTurn as Turn,

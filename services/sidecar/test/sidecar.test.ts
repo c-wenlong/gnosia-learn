@@ -710,6 +710,10 @@ describe.skipIf(!reachable.ok)("the learner write routes, against a scratch data
       // A correct answer spread to the prerequisites: beta at one hop, alpha at two.
       expect(result.propagated.map((p) => p.concept).sort()).toEqual(["alpha", "beta"]);
       expect(result.card?.created).toBe(true);
+      // The grade the answer was recorded with, which observeTurn's own reply leaves out.
+      expect((result as unknown as { grade: number }).grade).toBe(
+        (await readEvents(scratch.db, "local")).find((e) => e.requestId === "req-gamma-1")?.grade,
+      );
 
       // The session row and its session-start event opened with the answer.
       const events = await readEvents(scratch.db, "local");
@@ -724,6 +728,16 @@ describe.skipIf(!reachable.ok)("the learner write routes, against a scratch data
       expect(model.concepts.beta?.pL).toBeGreaterThan(model.params.pL0);
       const reviews = await readReviews(scratch.db, "local");
       expect(reviews.cards.gamma).toBeDefined();
+
+      // The reply carries the rows the answer moved, as the catalog holds
+      // them, so the native app can replace its own estimate (S9-06).
+      const rows = (result as unknown as { rows: { mastery: { conceptSlug: string; pL: number; observations: number }[]; review: { conceptSlug: string; due: string; intervalDays: number }[] } }).rows;
+      expect(rows.mastery.map((m) => m.conceptSlug).sort()).toEqual(["alpha", "beta", "gamma"]);
+      expect(rows.mastery.find((m) => m.conceptSlug === "gamma")).toMatchObject({ pL: model.concepts.gamma?.pL, observations: 1 });
+      expect(rows.mastery.find((m) => m.conceptSlug === "beta")?.pL).toBeCloseTo(model.concepts.beta?.pL ?? -1);
+      expect(rows.review).toEqual([
+        expect.objectContaining({ conceptSlug: "gamma", due: reviews.cards.gamma?.due, intervalDays: reviews.cards.gamma?.intervalDays }),
+      ]);
 
       // A replayed request id records nothing and answers replayed.
       const replay = await call2("/api/learner/observe", "POST", answer);
@@ -789,6 +803,20 @@ describe.skipIf(!reachable.ok)("the learner write routes, against a scratch data
         result: { concept: "alpha", rating: 2, replayed: false },
       });
       expect(body.result.grade).toBe(4); // Good maps onto SM-2's 4.
+
+      const card = (await readReviews(scratch.db, "local")).cards.alpha;
+      expect(body.result.rows.review).toEqual([expect.objectContaining({ conceptSlug: "alpha", due: card?.due, ease: card?.ease })]);
+      const entry = (await readModel(scratch.db, "local")).concepts.alpha;
+      expect(body.result.rows.mastery).toEqual([
+        {
+          conceptSlug: "alpha",
+          pL: body.result.pL,
+          observations: entry?.observations,
+          correct: entry?.correct,
+          lastSeen: entry?.lastSeen,
+          updatedAt: expect.stringMatching(/^\d{4}-\d\d-\d\dT/),
+        },
+      ]);
 
       const reviews = (await readEvents(scratch.db, "local")).filter((e) => e.type === "review");
       expect(reviews).toHaveLength(1);

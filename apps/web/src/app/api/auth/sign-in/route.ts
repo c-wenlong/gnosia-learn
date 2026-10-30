@@ -60,7 +60,7 @@ export async function POST(request: Request) {
     return back("password");
   }
   releaseSignIn();
-  const token = await signSession(config.config.secret, Math.floor(Date.now() / 1000));
+  const token = await signSession(config.config, Math.floor(Date.now() / 1000));
   const response = redirectTo(next);
   response.cookies.set({
     ...sessionCookie(request),

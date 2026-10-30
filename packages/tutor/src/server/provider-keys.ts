@@ -12,14 +12,21 @@ import {
   type ProviderName,
 } from "@gnosia/schema/shared";
 
-import type { Env } from "./deps";
 import { openKey, sealKey } from "./seal";
+
+/**
+ * The environment a read is given, the same shape as `Env` in `./deps`,
+ * declared here so this module imports nothing beyond the catalog's door and
+ * the seal: the studio runner opens the BYOK keys through it (docs/BYOK.md,
+ * D12) without type-checking the tutor's request seams.
+ */
+type Env = Record<string, string | undefined>;
 
 /**
  * The owner's saved provider keys (docs/BYOK.md), the request-independent
  * half of `apps/web/src/lib/provider-keys/store.ts`: the database handle and
- * the environment are parameters, so the Next app and the sidecar resolve
- * the same sealed rows the same way.
+ * the environment are parameters, so the Next app, the sidecar and the studio
+ * runner resolve the same sealed rows the same way.
  */
 
 /** The secret keys are sealed under, or null when the deployment has none worth the name. */
