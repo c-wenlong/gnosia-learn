@@ -27,6 +27,13 @@ import { readChain } from "./tutor-models";
  * reached rejects it inside whichever read asks first, and that read's own
  * catch decides the cost — saved keys fall back to the server's env keys, a
  * missing chain is an empty chain. None of these functions throws for it.
+ *
+ * Every read here takes the custom providers' base URLs before the saved
+ * keys. A URL moves only with a new key in the same write
+ * (`updateCustomProvider`), so a key read after the URL is that URL's key,
+ * or a newer one someone supplied with a later move. Read the other way
+ * round, a move landing between the two reads would pair the key saved for
+ * the old URL with the new URL, and the call would send it there.
  */
 
 /**
@@ -41,7 +48,9 @@ async function ownerInputs(
   db: Promise<CatalogDatabase>,
   owner: string,
 ): Promise<{ saved: SavedKeys; chain: ChainEntry[]; custom: ProviderConfig[] }> {
-  const [saved, chain, custom] = await Promise.all([
+  // The base URLs first, then the keys (see the header).
+  const custom = await customConfigs(db, owner);
+  const [saved, chain] = await Promise.all([
     db
       .then((handle) => openSavedKeys(handle, owner, process.env))
       .catch((error: unknown) => {
@@ -54,7 +63,6 @@ async function ownerInputs(
         console.warn(`tutor: model chain unavailable (${failureCode(error)}), the tutor has no chain`);
         return [];
       }),
-    customConfigs(db, owner),
   ]);
   return { saved, chain, custom };
 }
@@ -136,6 +144,8 @@ export async function entryCredential(
   model?: string,
   env: Env = process.env,
 ): Promise<ProviderCredential | null> {
+  // The base URL first, then the key (see the header).
+  const custom = provider.startsWith("custom-") ? await customConfigs(db, owner) : [];
   // process.env here for the same reason as in `ownerInputs` above.
   const saved = await db
     .then((handle) => openSavedKeys(handle, owner, process.env))
@@ -143,7 +153,6 @@ export async function entryCredential(
       console.warn(`tutor: saved provider keys unavailable (${failureCode(error)}), using the server's`);
       return {};
     });
-  const custom = provider.startsWith("custom-") ? await customConfigs(db, owner) : [];
   const config = [...providerConfigs(env), ...custom].find((c) => c.id === provider);
   const key = keyFor(provider, saved, env);
   if (config === undefined || key === null) return null;
