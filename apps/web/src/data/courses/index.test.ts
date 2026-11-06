@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  findTopic,
   getAllTopicIds,
   getCourse,
   getCourses,
@@ -74,15 +73,6 @@ describe("course lookups", () => {
     expect(courseTopicIds(course)).toEqual(getAllTopicIds([course]));
     expect(courseTopicIds(course)).toEqual(course.modules.flatMap((m) => m.topics.map((t) => t.id)));
     expect(courseTopicIds(course).length).toBeLessThan(getAllTopicIds(both).length);
-  });
-
-  it("finds a topic and the module it belongs to", async () => {
-    const course = (await getCourse("cp4284"))!;
-    const wanted = course.modules[1].topics[0];
-    const found = findTopic(course, wanted.id);
-    expect(found?.module.id).toBe(course.modules[1].id);
-    expect(found?.topic.title).toBe(wanted.title);
-    expect(findTopic(course, otherCourse([]).modules[0].topics[0].id)).toBeUndefined();
   });
 
   it("links related courses via shared tags", async () => {

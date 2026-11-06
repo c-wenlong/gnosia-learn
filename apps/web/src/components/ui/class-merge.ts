@@ -85,7 +85,7 @@ const PALETTE =
 const APP_COLOURS = new Set<string>(THEME_COLOURS);
 
 /** A colour name after `bg-`, `text-`, `border-` and the rest, its `/90` opacity already cut off. */
-export function isThemeColour(value: string): boolean {
+function isThemeColour(value: string): boolean {
   return APP_COLOURS.has(value) || KEYWORD_COLOURS.has(value) || PALETTE.test(value);
 }
 

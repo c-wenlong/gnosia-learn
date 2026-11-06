@@ -15,8 +15,6 @@ import type { MasteryLabel } from "@gnosia/catalog/state";
  */
 export type MasteryBucket = "mastered" | "learning" | "untouched";
 
-export const MASTERY_BUCKETS: readonly MasteryBucket[] = ["mastered", "learning", "untouched"];
-
 /**
  * Which bucket a concept is in.
  *

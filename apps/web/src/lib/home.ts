@@ -206,7 +206,7 @@ async function draftsOrNone(db: CatalogDatabase, owner: string): Promise<RecentD
   }
 }
 
-export function emptyHome(now: Date, timeZone?: string): HomeModel {
+function emptyHome(now: Date, timeZone?: string): HomeModel {
   return {
     reachable: false,
     asOf: now.toISOString(),
