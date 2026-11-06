@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 
@@ -159,6 +159,42 @@ describe("the turn routes", () => {
     const down = await post("/api/agent/check-options", { conceptSlug: "alpha", checkId: "c1" });
     expect(down.status).toBe(503);
     expect(((await down.json()) as { code?: string }).code).toBe("CONCEPT_UNAVAILABLE");
+  }, 30_000);
+
+  it("aborts the turn's model call when the caller hangs up", async () => {
+    let seen: AbortSignal | undefined;
+    let called!: () => void;
+    const reached = new Promise<void>((resolve) => (called = resolve));
+    const hangs = createApi({
+      ...stubDeps({}),
+      seams: {
+        credentials: async () => [],
+        complete: (_messages, _steps, signal) => {
+          seen = signal;
+          called();
+          return new Promise(() => {});
+        },
+      },
+    });
+    await new Promise<void>((resolve) => hangs.listen(0, "127.0.0.1", resolve));
+    try {
+      const { port } = hangs.address() as AddressInfo;
+      const caller = new AbortController();
+      const answer = fetch(`http://127.0.0.1:${port}/api/agent/chat`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ subject: "linear algebra", messages: [{ role: "user", content: "teach me" }] }),
+        signal: caller.signal,
+      }).catch(() => null);
+      await reached;
+      expect(seen?.aborted).toBe(false);
+      caller.abort();
+      await answer;
+      await vi.waitFor(() => expect(seen?.aborted).toBe(true));
+    } finally {
+      hangs.closeAllConnections();
+      await new Promise((resolve) => hangs.close(resolve));
+    }
   }, 30_000);
 
   it("answers MISSING_API_KEY with no keys configured, not a crash", async () => {

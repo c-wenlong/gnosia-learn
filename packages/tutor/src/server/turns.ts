@@ -145,7 +145,9 @@ function credentialsOf(deps: TutorDeps) {
 }
 
 function completeWith(deps: TutorDeps, messages: ChatMessage[], steps: readonly import("../providers").ChainStep[]) {
-  return deps.seams?.complete ? deps.seams.complete(messages, steps) : completeWithFallback(messages, steps);
+  return deps.seams?.complete
+    ? deps.seams.complete(messages, steps, deps.signal)
+    : completeWithFallback(messages, steps, undefined, deps.signal);
 }
 
 function assetDetailOf(deps: TutorDeps, id: string) {
@@ -847,8 +849,11 @@ export async function checkOptionsTurn(deps: TutorDeps, body: unknown): Promise<
   if (remembered !== undefined) return remembered;
   return oncePerCheck(key, async (): Promise<TurnReply> => {
     const credentials = await credentialsOf(deps);
+    // Not the request's signal: every caller asking for this check at once
+    // shares the one call, and its options are stored for the next visit, so
+    // one tab closing must not end it for the others.
     const outcome = await completeWith(
-      deps,
+      { ...deps, signal: undefined },
       [
         { role: "system", content: buildCheckOptionsPrompt(toConceptPromptInput(read.workspace), check) },
         { role: "user", content: CHECK_OPTIONS_REQUEST },
@@ -863,7 +868,9 @@ export async function checkOptionsTurn(deps: TutorDeps, body: unknown): Promise<
             attempts: outcome.attempts,
             providers: availableProviderSummary(credentials),
           })
-        : refuseFor(key, reply(502, { error: "All free providers failed", code: "ALL_PROVIDERS_FAILED", attempts: outcome.attempts }));
+        : outcome.code === "CANCELLED"
+          ? reply(502, { error: "The request was closed", code: "CANCELLED", attempts: outcome.attempts })
+          : refuseFor(key, reply(502, { error: "All free providers failed", code: "ALL_PROVIDERS_FAILED", attempts: outcome.attempts }));
     }
     const parsed = parseCheckOptions(outcome.result.content, answer);
     if (!parsed.ok) {
