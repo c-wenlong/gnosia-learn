@@ -329,4 +329,16 @@ describe("readAgentBody", () => {
     expect(text).toContain("BAD_REQUEST");
     expect(text).not.toContain("secret-not-json");
   });
+
+  it("says a body whose stream failed could not be read, rather than calling it invalid JSON (R3-2-14)", async () => {
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.error(new Error("aborted"));
+      },
+    });
+    const req = new Request("http://study.test/x", { method: "POST", body, duplex: "half" } as RequestInit);
+    const answer = (await readAgentBody(req, 100)) as Response;
+    expect(answer.status).toBe(400);
+    expect(await answer.json()).toEqual({ error: "The request body could not be read.", code: "BAD_REQUEST" });
+  });
 });

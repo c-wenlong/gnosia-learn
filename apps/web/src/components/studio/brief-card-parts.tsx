@@ -32,7 +32,8 @@ export const FOOTER = "mt-3.5 flex flex-col gap-2 border-t border-hair pt-3.5";
 /**
  * Use this brief, on a card the planner put on hold or one the conversation
  * moved past: the press's own busy state and the sentence it was refused with.
- * `use` runs the card's action, which resolves with an error sentence or null.
+ * `use` runs the card's action, which resolves with an error sentence or null;
+ * one that rejects is said as a refusal too.
  */
 export function useHoldAction() {
   const [using, setUsing] = useState(false);
@@ -41,9 +42,15 @@ export function useHoldAction() {
     if (action === undefined || using) return;
     setUsing(true);
     setUseError(null);
-    const error = await action();
-    setUsing(false);
-    setUseError(error);
+    // An action that throws (a load that failed past the client's own
+    // handling) must not leave the press on "Saving…" until a remount.
+    try {
+      setUseError(await action());
+    } catch {
+      setUseError("It could not be put back. Try again.");
+    } finally {
+      setUsing(false);
+    }
   }
   return { using, useError, use };
 }

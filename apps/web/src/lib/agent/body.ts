@@ -30,7 +30,9 @@ export const AGENT_BODY_LIMITS = {
  * The request body parsed as JSON, read no further than `maxBytes`, or the
  * response to answer with: 413 `PAYLOAD_TOO_LARGE` past the limit (before
  * anything is buffered when `Content-Length` says so), 400 `BAD_REQUEST` for
- * a body that is not JSON. Nothing is echoed back.
+ * a body that is not JSON, and 400 `BAD_REQUEST` saying the body could not be
+ * read for a stream that failed (a client that aborted mid-upload), which is
+ * not a malformed request and is not called one. Nothing is echoed back.
  */
 export async function readAgentBody(req: Request, maxBytes: number): Promise<{ body: unknown } | NextResponse> {
   let text: string;
@@ -43,7 +45,7 @@ export async function readAgentBody(req: Request, maxBytes: number): Promise<{ b
         { status: 413 },
       );
     }
-    return NextResponse.json({ error: "Invalid JSON body", code: "BAD_REQUEST" }, { status: 400 });
+    return NextResponse.json({ error: "The request body could not be read.", code: "BAD_REQUEST" }, { status: 400 });
   }
   try {
     return { body: JSON.parse(text) as unknown };
