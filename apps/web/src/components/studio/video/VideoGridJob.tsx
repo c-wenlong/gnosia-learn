@@ -48,6 +48,7 @@ import { newVideoJobs, videoJobForSlug, videoRowJobLabel, videoRowWords, tileSta
 import { shortLength } from "@/lib/studio-brief-video";
 import { type StudioVideo } from "@/lib/studio-video-grid";
 import { conversationHref, gridHref, panelHref } from "@/lib/studio-url";
+import { clock } from "@/lib/recent-core";
 
 /**
  * Studio videos in the grid, and a video job where its video is (docs/
@@ -91,7 +92,7 @@ export function VideoTile({ video, path }: { video: StudioVideo; path: string })
           <PlayMark />
           {video.durationSeconds !== null && (
             <span className="absolute right-2 bottom-2 rounded bg-black/75 px-1.5 py-0.5 text-xs font-medium tabular-nums text-white">
-              {clockLength(video.durationSeconds)}
+              {clock(Math.round(video.durationSeconds))}
             </span>
           )}
         </div>
@@ -155,11 +156,6 @@ function PlayMark() {
       <Glyph name="play" className="size-5 translate-x-px fill-current" />
     </span>
   );
-}
-
-function clockLength(seconds: number): string {
-  const whole = Math.max(0, Math.round(seconds));
-  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
 }
 
 /**
