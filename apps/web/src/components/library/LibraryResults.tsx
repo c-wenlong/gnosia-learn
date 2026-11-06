@@ -18,7 +18,7 @@ import { MasteryDot } from "@/components/ui/MasteryDot";
 import { SkeletonCard, SkeletonRow } from "@/components/ui/Skeleton";
 import { TextLink } from "@/components/ui/TextLink";
 import { cx } from "@/components/ui/classes";
-import { ARRIVE } from "@/components/library/arrive";
+import { FADE_IN } from "@/components/ui/motion";
 import type { LibraryLayout } from "@/lib/library";
 import { cameBack, heldPagesKey, parseHeldPages } from "@/lib/library-history";
 import { foldPieces, type FoldedGroup, type LibraryPage } from "@/lib/library-pages";
@@ -484,7 +484,7 @@ function GroupSection({
   const pad = inset && "px-[var(--shell-row-pad)]";
   const modules = sections.length > 0 && sections[0].section !== null;
   return (
-    <section aria-labelledby={id} className={cx("flex flex-col", inset ? "gap-1" : "gap-3", ARRIVE)}>
+    <section aria-labelledby={id} className={cx("flex flex-col", inset ? "gap-1" : "gap-3", FADE_IN)}>
       <h2
         id={id}
         className={cx("flex h-[var(--shell-row)] min-w-0 items-center gap-1.5 text-[14px] leading-5 font-medium text-text", pad)}

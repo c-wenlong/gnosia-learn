@@ -3,7 +3,7 @@ import "server-only";
 import type { ReactNode } from "react";
 
 import { AssetCard, type CardConcept } from "@/components/AssetCard";
-import { ARRIVE } from "@/components/library/arrive";
+import { FADE_IN } from "@/components/ui/motion";
 import { AssetRow } from "@/components/library/AssetRow";
 import { cx } from "@/components/ui/classes";
 import { getCourses } from "@/data/courses";
@@ -248,7 +248,7 @@ async function workOutView(filters: ReturnType<typeof libraryFilters>) {
   const renderRow = (row: Row): ReactNode => {
     if (view === "list") {
       return (
-        <li key={row.id} className={cx("group/item", ARRIVE)}>
+        <li key={row.id} className={cx("group/item", FADE_IN)}>
           <AssetRow
             asset={row}
             source={sourceOf(row)}
@@ -264,7 +264,7 @@ async function workOutView(filters: ReturnType<typeof libraryFilters>) {
     }
     const { concept, topic: topicLabel } = describe(row);
     return (
-      <li key={row.id} className={cx("flex", ARRIVE)}>
+      <li key={row.id} className={cx("flex", FADE_IN)}>
         <AssetCard
           asset={row}
           concept={concept}

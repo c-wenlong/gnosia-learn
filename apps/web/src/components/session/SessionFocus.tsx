@@ -48,6 +48,7 @@ import { tutorProblem } from "@/lib/tutor-errors";
 import { closeChatSession, closeSessionNow, releaseScope, saveObservation } from "@/lib/chat-recall";
 
 import { SessionClose } from "./SessionClose";
+import { ENTER } from "@/components/ui/motion";
 
 /**
  * The session (hi-fi 05 to 07, and 15 on a phone): a short scripted loop over
@@ -591,7 +592,7 @@ export function SessionFocus({
               tone="neutral"
               role="status"
               title="No question for this step"
-              className="animate-enter motion-reduce:animate-none"
+              className={ENTER}
               actions={
                 canAskAgain({
                   modelAvailable,
@@ -620,7 +621,7 @@ export function SessionFocus({
               // least as tall as the placeholder was, so nothing under it jumps up.
               className={
                 (step.question === null || step.question.rewrite !== undefined) && modelAvailable
-                  ? "min-h-[180px] animate-enter motion-reduce:animate-none"
+                  ? cx("min-h-[180px]", ENTER)
                   : undefined
               }
             />

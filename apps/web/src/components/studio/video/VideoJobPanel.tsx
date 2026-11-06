@@ -10,7 +10,7 @@ import { JobCost } from "@/components/studio/JobCost";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
 import { PanelLink } from "@/components/studio/PanelLink";
 import { useJobVerb } from "@/components/studio/use-job-verb";
-import { FADE_IN } from "@/components/studio/motion";
+import { FADE_IN } from "@/components/ui/motion";
 import { FadeImg } from "@/components/studio/motion-parts";
 import { useJobEvents, useSheets, useTranscript, useVideoJob } from "@/components/studio/video/use-video-job";
 import { Button } from "@/components/ui/Button";

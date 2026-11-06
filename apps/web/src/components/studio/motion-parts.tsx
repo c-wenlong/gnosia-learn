@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type ImgHTMLAttributes, type ReactNode, type RefObject } from "react";
 
-import { ENTER, FOLD_MS } from "@/components/studio/motion";
+import { ENTER, FOLD_MS } from "@/components/ui/motion";
 import { Collapse } from "@/components/ui/Collapse";
 import { revealClass, useImageReveal } from "@/components/ui/use-image-reveal";
 import { usePresence } from "@/components/ui/use-presence";

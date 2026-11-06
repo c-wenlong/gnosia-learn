@@ -42,7 +42,7 @@ import {
   type VideoProgress,
 } from "@/lib/recent-core";
 import { studioEnabled } from "@/lib/studio";
-import type { Course } from "@gnosia/tutor/types";
+import type { Course } from "@gnosia/content";
 
 /**
  * Recent, read from the catalog (L7 of
@@ -142,7 +142,7 @@ export async function videoProgress(
  * log it writes. Repeated here because the web app reaches the catalog
  * through `@gnosia/catalog/state` alone.
  */
-export function sessionLogId(sessionId: string): string {
+function sessionLogId(sessionId: string): string {
   return `session:learn/sessions/${sessionId}.md`;
 }
 
@@ -255,7 +255,7 @@ export function sidebarCourses(
   });
 }
 
-export function emptyRecent(): RecentModel {
+function emptyRecent(): RecentModel {
   return { reachable: false, items: [], more: false, pinned: [], courses: [] };
 }
 

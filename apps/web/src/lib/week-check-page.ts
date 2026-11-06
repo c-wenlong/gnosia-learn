@@ -17,7 +17,7 @@ import {
   type SessionQuestion,
 } from "@gnosia/tutor/session-core";
 import { readSummaries, tutorModelConfigured } from "@/lib/session-page";
-import type { Module } from "@gnosia/tutor/types";
+import type { Module } from "@gnosia/content";
 import { checksByLastAsked, weekCheckOrder, type WeekCheckConcept, type WeekCheckPlan } from "@/lib/week-check";
 
 /**

@@ -39,6 +39,7 @@ import {
   type IndexView,
   type MapLayout,
 } from "@/lib/learn-index";
+import { FADE_IN } from "@/components/ui/motion";
 
 
 const VIEW_ITEMS: SegmentItem<IndexView>[] = [
@@ -268,7 +269,7 @@ export function LearnIndex({
         // sidebar takes 60 or 260px of it, so a viewport breakpoint docked the
         // graph beside a table with no room left for the concept titles. It
         // fades in over the map it replaces.
-        <div className="@container animate-fade-in motion-reduce:animate-none">
+        <div className={cx("@container", FADE_IN)}>
           <div className="grid grid-cols-1 items-start gap-5 @4xl:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]">
             <ConceptTable rows={visible} selected={selected} onSelect={setSelected} total={rows.length} />
             <GraphCard
@@ -283,7 +284,7 @@ export function LearnIndex({
         </div>
       ) : domain === null || domainLayout === null ? (
         // Keyed by level, so each one fades in over the one it replaces.
-        <div key="domains" className="animate-fade-in motion-reduce:animate-none">
+        <div key="domains" className={FADE_IN}>
           <DomainCards
             tree={map.tree}
             rows={byId}
@@ -293,7 +294,7 @@ export function LearnIndex({
           />
         </div>
       ) : (
-        <div key={`${domain.slug}:${place.topic ?? ""}`} className="animate-fade-in motion-reduce:animate-none">
+        <div key={`${domain.slug}:${place.topic ?? ""}`} className={FADE_IN}>
           <DomainView
             domain={domain}
             layout={domainLayout}
@@ -501,7 +502,7 @@ function GraphCard({
             {/* Keyed on what it draws, so a new concept's graph fades in rather than snapping into the old one's place. */}
             <ConceptGraph
               key={drawn}
-              className="animate-fade-in motion-reduce:animate-none"
+              className={FADE_IN}
               nodes={shown.nodes}
               edges={shown.edges}
               focus={focus.id}

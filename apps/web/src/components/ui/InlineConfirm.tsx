@@ -5,9 +5,7 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode 
 import { Button } from "./Button";
 import { cx } from "./classes";
 import { TextLink } from "./TextLink";
-
-/** The swap's fade: opacity only, for something replacing something in place. */
-const SWAP = "animate-fade-in motion-reduce:animate-none";
+import { FADE_IN } from "./motion";
 
 /**
  * Kit `InlineConfirm`: a press that asks before it acts by swapping itself
@@ -140,11 +138,11 @@ export function InlineConfirm({
 
   if (!open) {
     return size === "text" ? (
-      <TextLink ref={trigger} onClick={() => setOpen(true)} tone="muted" weight="normal" disabled={disabled || busy} className={cx(SWAP, className)}>
+      <TextLink ref={trigger} onClick={() => setOpen(true)} tone="muted" weight="normal" disabled={disabled || busy} className={cx(FADE_IN, className)}>
         {label}
       </TextLink>
     ) : (
-      <Button ref={trigger} variant="ghost" size={buttonSize} disabled={disabled || busy} onClick={() => setOpen(true)} className={cx(SWAP, className)}>
+      <Button ref={trigger} variant="ghost" size={buttonSize} disabled={disabled || busy} onClick={() => setOpen(true)} className={cx(FADE_IN, className)}>
         {label}
       </Button>
     );
@@ -155,7 +153,7 @@ export function InlineConfirm({
       role="group"
       aria-labelledby={questionId}
       onKeyDown={onKeyDown}
-      className={cx("flex flex-wrap items-center", size === "text" ? "gap-x-2 gap-y-1" : "gap-2", SWAP, className)}
+      className={cx("flex flex-wrap items-center", size === "text" ? "gap-x-2 gap-y-1" : "gap-2", FADE_IN, className)}
     >
       <span id={questionId} className={cx("text-text2", size === "button" && "text-[13px]")}>
         {question}
