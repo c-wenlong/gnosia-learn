@@ -11,8 +11,7 @@ import {
   missingKeyMessage,
   listProviderModels,
   MODEL_LIST_MAX_BYTES,
-  orderCredentials,
-  resetGoneModelReports,
+  providerConfigs,
   turnTimeouts,
   tutorSteps,
   type ChainEntry,
@@ -28,7 +27,6 @@ import {
  */
 
 afterEach(() => {
-  resetGoneModelReports();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -192,8 +190,9 @@ describe("completeWithFallback over a chain", () => {
 describe("listProviderModels", () => {
   const key = "sk-or-v1-ListKeyExample0123456789abcdef0123456789";
   const credential = (id: "nvidia" | "gemini" | "openrouter", env: Record<string, string> = {}): ProviderCredential => {
-    const [c] = orderCredentials({ [id]: key }, env);
-    return c!;
+    // The shape `entryCredential` builds for a model list.
+    const config = providerConfigs(env).find((c) => c.id === id)!;
+    return { config, ...keyFor(id, { [id]: key }, env)!, modelFrom: "chain" };
   };
 
   function listing(data: unknown, init: { status?: number } = {}) {

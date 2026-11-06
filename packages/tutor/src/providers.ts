@@ -292,40 +292,6 @@ export function providerConfigs(
   ];
 }
 
-/** The providers the server's environment holds a key for, in the cascade's order. */
-export function resolveProviders(
-  env: EnvMap = process.env,
-): ProviderConfig[] {
-  return providerConfigs(env).filter((c) => Boolean(env[c.apiKeyEnv]?.trim()));
-}
-
-/**
- * The keys the tutor calls with, in the order it tries them (docs/BYOK.md,
- * decision 4): the owner's saved keys first, in the cascade's order, then the
- * server's for the providers the owner saved none for.
- *
- * A provider appears once. The owner's key stands in for the server's rather
- * than going ahead of it, so a saved key that stops working shows up as a
- * failed attempt (and as a failed Test in Settings) instead of being hidden by
- * the server quietly answering for it. `saved` holds only keys that
- * decrypted; one that did not is missing, and the server's key applies.
- */
-export function orderCredentials(
-  saved: SavedKeys,
-  env: EnvMap = process.env,
-): ProviderCredential[] {
-  const configs = providerConfigs(env);
-  const own: ProviderCredential[] = configs.flatMap((config) => {
-    const apiKey = saved[config.id];
-    return apiKey ? [{ config, apiKey, source: "saved" as const }] : [];
-  });
-  const server: ProviderCredential[] = configs.flatMap((config) => {
-    const apiKey = env[config.apiKeyEnv]?.trim();
-    return !saved[config.id] && apiKey ? [{ config, apiKey, source: "server" as const }] : [];
-  });
-  return [...own, ...server];
-}
-
 /**
  * The key the tutor calls one provider with (docs/BYOK.md, decision 9): the
  * owner's saved key if it decrypted, else the server's, else none.
@@ -632,11 +598,6 @@ function reportIfModelGone(attempt: ProviderAttemptError, baseUrl: string, model
       ? `agent: ${attempt.provider} answered 410 Gone for model ${attempt.model}; it is retired, ${fix}`
       : `agent: ${attempt.provider} answered 404 for model ${attempt.model} at ${originOf(baseUrl)}; the model may be retired (${fix}) or the base URL may not serve /chat/completions`,
   );
-}
-
-/** Test hook: forget which gone models were already reported. */
-export function resetGoneModelReports(): void {
-  reportedGone.clear();
 }
 
 /**

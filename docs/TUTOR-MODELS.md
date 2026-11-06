@@ -233,7 +233,7 @@ Providers card (`Providers.tsx`) in place of Provider keys and Models.
   the row stays listed.
 - **Order with no models.** While the chain is empty the rows follow the
   order the built-in defaults are tried in, saved keys before the server's
-  (`orderCredentials`), so the card never lists a provider ahead of one the
+  (`providerKeyViews` in `apps/web/src/lib/provider-keys/settings.ts`), so the card never lists a provider ahead of one the
   tutor calls first.
 
 ## T13. The common providers
@@ -337,9 +337,9 @@ added no models, `availableProviderSummary` says "add a provider and a
 model", and the card lists only providers the owner connected — a saved key
 or chain entries — with the rest offered under Add provider. A provider's
 built-in default still feeds one place: the key Test, which needs a model
-to call (`keyTestModel`, `used` false). `orderCredentials` remains for
-callers with no owner — scripts and tests — and is not the tutor's
-fallback anymore.
+to call (`keyTestModel`, `used` false). `orderCredentials`, which built
+the old defaults' order, was removed on 2026-11-07: nothing shipped called
+it any more.
 
 ## T16. Two cards: every provider listed, and the picks as dropdowns
 

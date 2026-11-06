@@ -3,75 +3,63 @@ import {
   availableProviderSummary,
   completeWithFallback,
   DEFAULT_NVIDIA_MODEL,
+  isCallable,
+  keyFor,
   openRouterReferer,
-  orderCredentials,
-  resetGoneModelReports,
-  resolveProviders,
+  providerConfigs,
   providerMessage,
   testProviderKey,
+  tutorSteps,
+  type ChainEntry,
+  type ProviderName,
+  type SavedKeys,
 } from "../src/providers";
 import { resolveSiteUrl } from "../src/site-url";
 
+type EnvMap = Record<string, string | undefined>;
+
 afterEach(() => {
-  resetGoneModelReports();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
-describe("resolveProviders", () => {
-  it("returns providers in NVIDIA → Gemini → OpenRouter order when keys exist", () => {
-    const providers = resolveProviders({
-      NVIDIA_API_KEY: "nv",
-      GEMINI_API_KEY: "gm",
-      OPENROUTER_API_KEY: "or",
-    });
-    expect(providers.map((p) => p.id)).toEqual([
-      "nvidia",
-      "gemini",
-      "openrouter",
+/** One built-in provider's config under `env`. */
+function config(env: EnvMap, id: ProviderName) {
+  const found = providerConfigs(env).find((c) => c.id === id);
+  if (found === undefined) throw new Error(`no provider ${id}`);
+  return found;
+}
+
+/** The calls the tutor makes for a chain, the way the routes build them. */
+function callable(chain: ChainEntry[], saved: SavedKeys, env: EnvMap) {
+  return tutorSteps(chain, saved, env).filter(isCallable);
+}
+
+describe("providerConfigs", () => {
+  it("lists NVIDIA, Gemini and OpenRouter first, each with its default model", () => {
+    const configs = providerConfigs({});
+    expect(configs.slice(0, 3).map((p) => [p.id, p.model])).toEqual([
+      ["nvidia", "google/gemma-4-31b-it"],
+      ["gemini", "gemini-2.5-flash"],
+      ["openrouter", "openrouter/free"],
     ]);
-    expect(providers[0].model).toBe("google/gemma-4-31b-it");
-    expect(providers[1].model).toBe("gemini-2.5-flash");
-    expect(providers[2].model).toBe("openrouter/free");
   });
 
   it("never defaults to the retired Llama 3.1 8B", () => {
     expect(DEFAULT_NVIDIA_MODEL).not.toBe("meta/llama-3.1-8b-instruct");
-    expect(resolveProviders({ NVIDIA_API_KEY: "nv" })[0].model).toBe(
-      DEFAULT_NVIDIA_MODEL,
-    );
+    expect(config({}, "nvidia").model).toBe(DEFAULT_NVIDIA_MODEL);
   });
 
   it("falls back to the default when NVIDIA_MODEL is blank", () => {
-    const providers = resolveProviders({
-      NVIDIA_API_KEY: "nv",
-      NVIDIA_MODEL: "   ",
-    });
-    expect(providers[0].model).toBe(DEFAULT_NVIDIA_MODEL);
-  });
-
-  it("skips providers without keys", () => {
-    const providers = resolveProviders({
-      GEMINI_API_KEY: "gm",
-    });
-    expect(providers.map((p) => p.id)).toEqual(["gemini"]);
+    expect(config({ NVIDIA_MODEL: "   " }, "nvidia").model).toBe(DEFAULT_NVIDIA_MODEL);
   });
 
   it("honors model overrides", () => {
-    const providers = resolveProviders({
-      NVIDIA_API_KEY: "nv",
-      NVIDIA_MODEL: "meta/llama-3.1-70b-instruct",
-    });
-    expect(providers[0].model).toBe("meta/llama-3.1-70b-instruct");
+    expect(config({ NVIDIA_MODEL: "meta/llama-3.1-70b-instruct" }, "nvidia").model).toBe("meta/llama-3.1-70b-instruct");
   });
 
   it("uses the published endpoints when no base URL is set", () => {
-    const providers = resolveProviders({
-      NVIDIA_API_KEY: "nv",
-      GEMINI_API_KEY: "gm",
-      OPENROUTER_API_KEY: "or",
-    });
-    expect(providers.map((p) => p.baseUrl)).toEqual([
+    expect(providerConfigs({}).slice(0, 3).map((p) => p.baseUrl)).toEqual([
       "https://integrate.api.nvidia.com/v1",
       "https://generativelanguage.googleapis.com/v1beta/openai",
       "https://openrouter.ai/api/v1",
@@ -79,29 +67,26 @@ describe("resolveProviders", () => {
   });
 
   it("honors base URL overrides, one provider at a time", () => {
-    const providers = resolveProviders({
-      NVIDIA_API_KEY: "nv",
-      GEMINI_API_KEY: "gm",
-      NVIDIA_BASE_URL: "http://localhost:8080/v1",
-    });
-    expect(providers[0].baseUrl).toBe("http://localhost:8080/v1");
+    const env = { NVIDIA_BASE_URL: "http://localhost:8080/v1" };
+    expect(config(env, "nvidia").baseUrl).toBe("http://localhost:8080/v1");
     // The one that was not overridden is untouched.
-    expect(providers[1].baseUrl).toBe(
-      "https://generativelanguage.googleapis.com/v1beta/openai",
-    );
+    expect(config(env, "gemini").baseUrl).toBe("https://generativelanguage.googleapis.com/v1beta/openai");
   });
 
   it("trims a trailing slash, since the caller appends /chat/completions", () => {
-    const providers = resolveProviders({
-      GEMINI_API_KEY: "gm",
-      GEMINI_BASE_URL: "http://127.0.0.1:1234/v1/",
-    });
-    expect(providers[0].baseUrl).toBe("http://127.0.0.1:1234/v1");
+    expect(config({ GEMINI_BASE_URL: "http://127.0.0.1:1234/v1/" }, "gemini").baseUrl).toBe("http://127.0.0.1:1234/v1");
   });
 
   it("falls back to the default for a blank base URL", () => {
-    const providers = resolveProviders({ NVIDIA_API_KEY: "nv", NVIDIA_BASE_URL: "  " });
-    expect(providers[0].baseUrl).toBe("https://integrate.api.nvidia.com/v1");
+    expect(config({ NVIDIA_BASE_URL: "  " }, "nvidia").baseUrl).toBe("https://integrate.api.nvidia.com/v1");
+  });
+
+  it("calls a provider through the configured endpoint, with the chain's model", () => {
+    const [step] = callable([{ provider: "gemini", model: "gemini-2.5-pro" }], {}, {
+      GEMINI_API_KEY: "gm",
+      GEMINI_BASE_URL: "http://127.0.0.1:1234/v1/",
+    });
+    expect(step?.config).toMatchObject({ id: "gemini", model: "gemini-2.5-pro", baseUrl: "http://127.0.0.1:1234/v1" });
   });
 });
 
@@ -153,11 +138,9 @@ describe("openRouterReferer", () => {
   });
 
   it("rides along on the provider's headers", () => {
-    const providers = resolveProviders({
-      OPENROUTER_API_KEY: "or",
-      NEXT_PUBLIC_SITE_URL: "https://forked.test",
-    });
-    expect(providers[0].extraHeaders?.["HTTP-Referer"]).toBe("https://forked.test/");
+    expect(config({ NEXT_PUBLIC_SITE_URL: "https://forked.test" }, "openrouter").extraHeaders?.["HTTP-Referer"]).toBe(
+      "https://forked.test/",
+    );
   });
 });
 
@@ -171,7 +154,7 @@ describe("completeWithFallback", () => {
   it("returns MISSING_API_KEY when no keys are configured", async () => {
     const outcome = await completeWithFallback(
       [{ role: "user", content: "hi" }],
-      orderCredentials({}, {}),
+      tutorSteps([], {}, {}),
     );
     expect(outcome.ok).toBe(false);
     if (!outcome.ok) expect(outcome.code).toBe("MISSING_API_KEY");
@@ -189,10 +172,14 @@ describe("completeWithFallback", () => {
 
     const outcome = await completeWithFallback(
       [{ role: "user", content: "hi" }],
-      orderCredentials({}, {
-        NVIDIA_API_KEY: "nv",
-        GEMINI_API_KEY: "gm",
-      }),
+      tutorSteps(
+        [
+          { provider: "nvidia", model: DEFAULT_NVIDIA_MODEL },
+          { provider: "gemini", model: "gemini-2.5-flash" },
+        ],
+        {},
+        { NVIDIA_API_KEY: "nv", GEMINI_API_KEY: "gm" },
+      ),
     );
 
     expect(outcome.ok).toBe(true);
@@ -223,11 +210,15 @@ describe("completeWithFallback", () => {
 
     const outcome = await completeWithFallback(
       [{ role: "user", content: "hi" }],
-      orderCredentials({}, {
-        NVIDIA_API_KEY: "nv",
-        GEMINI_API_KEY: "gm",
-        OPENROUTER_API_KEY: "or",
-      }),
+      tutorSteps(
+        [
+          { provider: "nvidia", model: DEFAULT_NVIDIA_MODEL },
+          { provider: "gemini", model: "gemini-2.5-flash" },
+          { provider: "openrouter", model: "openrouter/free" },
+        ],
+        {},
+        { NVIDIA_API_KEY: "nv", GEMINI_API_KEY: "gm", OPENROUTER_API_KEY: "or" },
+      ),
     );
 
     expect(outcome.ok).toBe(true);
@@ -238,6 +229,8 @@ describe("completeWithFallback", () => {
     }
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+  // A gone model is logged once per process, so each test below retires a
+  // model of its own rather than resetting what the module remembers.
   it("logs a 410 once with the model name, and keeps falling back", async () => {
     const gone = {
       ok: false,
@@ -258,10 +251,14 @@ describe("completeWithFallback", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    const credentials = orderCredentials({}, {
-      NVIDIA_API_KEY: "nv",
-      GEMINI_API_KEY: "gm",
-    });
+    const credentials = tutorSteps(
+      [
+        { provider: "nvidia", model: "retired/model-410" },
+        { provider: "gemini", model: "gemini-2.5-flash" },
+      ],
+      {},
+      { NVIDIA_API_KEY: "nv", GEMINI_API_KEY: "gm" },
+    );
 
     for (let i = 0; i < 3; i++) {
       const outcome = await completeWithFallback(
@@ -272,14 +269,14 @@ describe("completeWithFallback", () => {
       if (outcome.ok) {
         expect(outcome.attempts[0]).toMatchObject({
           provider: "nvidia",
-          model: DEFAULT_NVIDIA_MODEL,
+          model: "retired/model-410",
           status: 410,
         });
       }
     }
 
     expect(errorSpy).toHaveBeenCalledTimes(1);
-    expect(errorSpy.mock.calls[0][0]).toContain(DEFAULT_NVIDIA_MODEL);
+    expect(errorSpy.mock.calls[0][0]).toContain("retired/model-410");
     expect(errorSpy.mock.calls[0][0]).toContain("410");
   });
 
@@ -296,14 +293,14 @@ describe("completeWithFallback", () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     await completeWithFallback(
       [{ role: "user", content: "hi" }],
-      orderCredentials({}, {
+      tutorSteps([{ provider: "nvidia", model: "missing/model-404" }], {}, {
         NVIDIA_API_KEY: "nv",
         NVIDIA_BASE_URL: "https://user:pw@gateway.example/t0k3n-path/v1?key=q5",
       }),
     );
     expect(errorSpy).toHaveBeenCalledTimes(1);
     const line = String(errorSpy.mock.calls[0][0]);
-    expect(line).toContain(DEFAULT_NVIDIA_MODEL);
+    expect(line).toContain("missing/model-404");
     expect(line).toContain("https://gateway.example");
     // Only the origin: a gateway token in the path, query or userinfo stays out.
     expect(line).not.toContain("t0k3n-path");
@@ -326,50 +323,49 @@ describe("completeWithFallback", () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     await completeWithFallback(
       [{ role: "user", content: "hi" }],
-      orderCredentials({}, { NVIDIA_API_KEY: "nv" }),
+      tutorSteps([{ provider: "nvidia", model: "busy/model-429" }], {}, { NVIDIA_API_KEY: "nv" }),
     );
     expect(errorSpy).not.toHaveBeenCalled();
   });
 });
 
 /**
- * Bring your own key (docs/BYOK.md, decision 4): the owner's saved keys go
- * first, in the cascade's order, then the server's for the rest, and each
- * provider appears once.
+ * Bring your own key (docs/BYOK.md, decisions 4 and 9): each provider is
+ * called with the owner's saved key if it decrypted, else the server's, and
+ * appears once either way.
  */
-describe("orderCredentials", () => {
+describe("keyFor", () => {
   const env = { NVIDIA_API_KEY: "server-nvidia-key", OPENROUTER_API_KEY: "server-openrouter-key" };
 
-  it("is the server's keys alone when the owner saved none", () => {
-    expect(orderCredentials({}, env).map((c) => [c.config.id, c.source])).toEqual([
-      ["nvidia", "server"],
-      ["openrouter", "server"],
-    ]);
-  });
-
-  it("puts the owner's keys first, in the cascade's order, then the server's", () => {
-    const order = orderCredentials({ openrouter: "own-openrouter-key", gemini: "own-gemini-key" }, env);
-    expect(order.map((c) => [c.config.id, c.source, c.apiKey])).toEqual([
-      ["gemini", "saved", "own-gemini-key"],
-      ["openrouter", "saved", "own-openrouter-key"],
-      ["nvidia", "server", "server-nvidia-key"],
-    ]);
+  it("is the server's key when the owner saved none, and none for a provider the server has no key for", () => {
+    expect(keyFor("nvidia", {}, env)).toEqual({ apiKey: "server-nvidia-key", source: "server" });
+    expect(keyFor("gemini", {}, env)).toBeNull();
   });
 
   it("uses the owner's key in place of the server's for the same provider, not beside it", () => {
-    const order = orderCredentials({ nvidia: "own-nvidia-key" }, env);
-    expect(order.filter((c) => c.config.id === "nvidia")).toHaveLength(1);
-    expect(order[0]).toMatchObject({ source: "saved", apiKey: "own-nvidia-key" });
+    expect(keyFor("nvidia", { nvidia: "own-nvidia-key" }, env)).toEqual({ apiKey: "own-nvidia-key", source: "saved" });
+    const steps = callable([{ provider: "nvidia", model: "n" }], { nvidia: "own-nvidia-key" }, env);
+    expect(steps.map((c) => [c.config.id, c.source, c.apiKey])).toEqual([["nvidia", "saved", "own-nvidia-key"]]);
   });
 
   it("works with no server keys at all, which is a local machine's case", () => {
-    expect(orderCredentials({ gemini: "own-gemini-key" }, {}).map((c) => c.config.id)).toEqual(["gemini"]);
-    expect(orderCredentials({}, {})).toEqual([]);
+    expect(keyFor("gemini", { gemini: "own-gemini-key" }, {})).toEqual({ apiKey: "own-gemini-key", source: "saved" });
+    expect(keyFor("nvidia", {}, {})).toBeNull();
   });
 
   it("says where each key came from, and never any of the key", () => {
-    const summary = availableProviderSummary(orderCredentials({ gemini: "own-gemini-key" }, env));
-    expect(summary).toBe("gemini (your key) → nvidia (server key) → openrouter (server key)");
+    const summary = availableProviderSummary(
+      tutorSteps(
+        [
+          { provider: "gemini", model: "g" },
+          { provider: "nvidia", model: "n" },
+          { provider: "openrouter", model: "o" },
+        ],
+        { gemini: "own-gemini-key" },
+        env,
+      ),
+    );
+    expect(summary).toBe("gemini g (your key) → nvidia n (server key) → openrouter o (server key)");
     expect(summary).not.toMatch(/own-gemini|server-nvidia|server-openrouter/);
   });
 });
@@ -387,7 +383,7 @@ describe("provider errors never carry a key", () => {
         text: async () => `{"error":"Invalid key ${key}, also known as nvapi-Zk3x****gJ0sA"}`,
       }),
     );
-    const outcome = await completeWithFallback([{ role: "user", content: "hi" }], orderCredentials({ nvidia: key }, {}));
+    const outcome = await completeWithFallback([{ role: "user", content: "hi" }], callable([{ provider: "nvidia", model: "n" }], { nvidia: key }, {}));
     expect(outcome.ok).toBe(false);
     if (outcome.ok) return;
     const text = JSON.stringify(outcome.attempts);
@@ -411,7 +407,14 @@ describe("provider errors never carry a key", () => {
     );
     const outcome = await completeWithFallback(
       [{ role: "user", content: "hi" }],
-      orderCredentials({ nvidia: key, gemini: "AIzaSyExampleExampleExample0123456789" }, {}),
+      callable(
+        [
+          { provider: "nvidia", model: "n" },
+          { provider: "gemini", model: "g" },
+        ],
+        { nvidia: key, gemini: "AIzaSyExampleExampleExample0123456789" },
+        {},
+      ),
     );
     expect(outcome.ok).toBe(true);
     const text = JSON.stringify(outcome);
@@ -431,7 +434,7 @@ describe("provider errors never carry a key", () => {
       text: async () => `Authentication failed for key ${key}`,
     });
     vi.stubGlobal("fetch", fetchMock);
-    const [credential] = orderCredentials({ nvidia: key }, {});
+    const [credential] = callable([{ provider: "nvidia", model: DEFAULT_NVIDIA_MODEL }], { nvidia: key }, {});
     const result = await testProviderKey(credential!);
     expect(result).toEqual({ ok: false, status: 401, message: "Authentication failed for key [redacted]" });
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -442,7 +445,7 @@ describe("provider errors never carry a key", () => {
   });
 
   it("redacts a key echoed in a success's model name or an error's status text", async () => {
-    const [credential] = orderCredentials({ nvidia: key }, {});
+    const [credential] = callable([{ provider: "nvidia", model: DEFAULT_NVIDIA_MODEL }], { nvidia: key }, {});
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ model: `model-for-${key}` }) }));
     expect(await testProviderKey(credential!)).toEqual({ ok: true, model: "model-for-[redacted]" });
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 401, statusText: `Bad key ${key}`, text: async () => "" }));
@@ -450,7 +453,7 @@ describe("provider errors never carry a key", () => {
   });
 
   it("calls any 2xx a working key, and a network failure a failed test rather than a throw", async () => {
-    const [credential] = orderCredentials({ gemini: "AIzaSyExampleExampleExample0123456789" }, {});
+    const [credential] = callable([{ provider: "gemini", model: "gemini-2.5-flash" }], { gemini: "AIzaSyExampleExampleExample0123456789" }, {});
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ model: "gemini-2.5-flash" }) }));
     expect(await testProviderKey(credential!)).toEqual({ ok: true, model: "gemini-2.5-flash" });
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fetch failed")));
