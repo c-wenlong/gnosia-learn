@@ -15,7 +15,7 @@ import {
 } from "../providers";
 import { readOwnerCustomProviders } from "./custom-providers";
 import type { Env } from "./deps";
-import { failureCode, openSavedKeys } from "./provider-keys";
+import { failureCode, openSavedKeysPinned } from "./provider-keys";
 import { pointsAtThisApp } from "./self-address";
 import { readChain } from "./tutor-models";
 
@@ -28,17 +28,47 @@ import { readChain } from "./tutor-models";
  * catch decides the cost — saved keys fall back to the server's env keys, a
  * missing chain is an empty chain. None of these functions throws for it.
  *
- * Every read here takes the custom providers' base URLs before the saved
- * keys. A URL moves only with a new key in the same write
- * (`updateCustomProvider`), so a key read after the URL is that URL's key,
- * or a newer one someone supplied with a later move. Read the other way
- * round, a move landing between the two reads would pair the key saved for
- * the old URL with the new URL, and the call would send it there.
+ * A custom provider's key goes only to the base URL it was saved beside
+ * (`pinToUrls`). The URL and the key are separate reads, and a move (which
+ * replaces both in one write, `updateCustomProvider`) can land between them:
+ * either order of reads could then pair a key with a URL it was never saved
+ * for, an old key with a new host or a fresh key with the host being left.
  */
 
 /**
+ * The saved keys, less any custom provider's key that was not saved beside
+ * the base URL its config names. `savedFor` comes from the same statement as
+ * the key, so a key read across a move is dropped, and that provider counts
+ * as having no key for this request.
+ */
+function pinToUrls(
+  pinned: { keys: SavedKeys; savedFor: Partial<Record<ProviderName, string>> },
+  custom: readonly ProviderConfig[],
+): SavedKeys {
+  const keys: SavedKeys = { ...pinned.keys };
+  for (const id of Object.keys(keys) as ProviderName[]) {
+    if (!id.startsWith("custom-")) continue;
+    const config = custom.find((c) => c.id === id);
+    if (config === undefined || pinned.savedFor[id] !== config.baseUrl) delete keys[id];
+  }
+  return keys;
+}
+
+/** The saved keys pinned to `custom`'s URLs; empty when they cannot be read. */
+async function savedKeysFor(db: Promise<CatalogDatabase>, owner: string, custom: readonly ProviderConfig[]): Promise<SavedKeys> {
+  // process.env, not the caller's env: see `ownerInputs`.
+  return db
+    .then((handle) => openSavedKeysPinned(handle, owner, process.env))
+    .then((pinned) => pinToUrls(pinned, custom))
+    .catch((error: unknown) => {
+      console.warn(`tutor: saved provider keys unavailable (${failureCode(error)}), using the server's`);
+      return {};
+    });
+}
+
+/**
  * The owner's saved keys and model chain, each empty when it cannot be read.
- * `openSavedKeys` takes `process.env` rather than the caller's `env` on
+ * `savedKeysFor` takes `process.env` rather than the caller's `env` on
  * purpose: `env` is the *provider* map the request resolves keys and models
  * against (a test hands in `{}` for "the server holds no key"), while the
  * `AUTH_SECRET` the saved keys are sealed under is the process's own and is
@@ -48,15 +78,9 @@ async function ownerInputs(
   db: Promise<CatalogDatabase>,
   owner: string,
 ): Promise<{ saved: SavedKeys; chain: ChainEntry[]; custom: ProviderConfig[] }> {
-  // The base URLs first, then the keys (see the header).
   const custom = await customConfigs(db, owner);
   const [saved, chain] = await Promise.all([
-    db
-      .then((handle) => openSavedKeys(handle, owner, process.env))
-      .catch((error: unknown) => {
-        console.warn(`tutor: saved provider keys unavailable (${failureCode(error)}), using the server's`);
-        return {};
-      }),
+    savedKeysFor(db, owner, custom),
     db
       .then((handle) => readChain(handle, owner))
       .catch((error: unknown) => {
@@ -144,15 +168,8 @@ export async function entryCredential(
   model?: string,
   env: Env = process.env,
 ): Promise<ProviderCredential | null> {
-  // The base URL first, then the key (see the header).
   const custom = provider.startsWith("custom-") ? await customConfigs(db, owner) : [];
-  // process.env here for the same reason as in `ownerInputs` above.
-  const saved = await db
-    .then((handle) => openSavedKeys(handle, owner, process.env))
-    .catch((error: unknown) => {
-      console.warn(`tutor: saved provider keys unavailable (${failureCode(error)}), using the server's`);
-      return {};
-    });
+  const saved = await savedKeysFor(db, owner, custom);
   const config = [...providerConfigs(env), ...custom].find((c) => c.id === provider);
   const key = keyFor(provider, saved, env);
   if (config === undefined || key === null) return null;

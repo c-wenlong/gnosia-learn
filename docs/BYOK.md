@@ -69,7 +69,11 @@ A saved key goes only to the address it was saved for: a custom provider's
 base URL cannot move without a new key in the same write
 ([TUTOR-MODELS.md](TUTOR-MODELS.md), T14), or one request moving the URL
 to a host of the caller's choosing and a second listing its models would
-have sent the key there. Until 2026-11-07 it could.
+have sent the key there. Until 2026-11-07 it could. And a call sends a
+custom key only when the URL it calls is the one the key was read beside,
+in the same statement (`pinToUrls` in `packages/tutor/src/server/credentials.ts`),
+so a move landing between a request's two reads cannot pair a key with the
+other URL.
 
 **D4. Resolved per request, for the signed-in owner.** (Since the model
 chain, this is the order for an owner with no chain; an owner with one gets

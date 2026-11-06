@@ -7,32 +7,33 @@ import { migratedScratchDatabase, probe, type Scratch } from "../../../services/
 
 /**
  * A custom provider's saved key goes only to the base URL it was saved for
- * (docs/BYOK.md, D3; R3-1-01), even when a move lands between the two reads
- * a credential takes. The move here is the worst a session holding the
- * cookie can send: a URL of its own with a key of its own, which
- * `updateCustomProvider` accepts. It lands just after the saved keys are
- * read, so a reader that took the keys before the URL would pair the old key
- * with the new host.
+ * (docs/BYOK.md, D3; R3-1-01), even when a move lands between the separate
+ * reads a credential takes of the URL and the key. A move replaces both in
+ * one write; it lands just before or just after the keys are read, so a
+ * reader that trusted either read order would pair a key with a host it was
+ * not saved for: the old key with the attacker's URL, or the fresh key the
+ * owner typed while leaving a compromised gateway with that gateway.
  */
 
 const reachable = await probe();
 const SECRET = "custom-provider-move-secret-at-least-thirty-two-chars";
 const OLD_KEY = "gw-key-0123456789abcdef0123456789abcdef";
-const DUMMY_KEY = "attacker-key-0123456789abcdef01234567";
+const NEW_KEY = "new-key-0123456789abcdef0123456789abcd";
 const OLD_URL = "https://gw.example/v1";
-const EVIL_URL = "https://attacker.example/v1";
+const NEW_URL = "https://elsewhere.example/v1";
 
-const move = vi.hoisted(() => ({ next: null as (() => Promise<void>) | null }));
+const move = vi.hoisted(() => ({ next: null as (() => Promise<void>) | null, when: "after" as "before" | "after" }));
 
 vi.mock("../src/server/provider-keys", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/server/provider-keys")>();
   return {
     ...actual,
-    openSavedKeys: async (...args: Parameters<typeof actual.openSavedKeys>) => {
-      const saved = await actual.openSavedKeys(...args);
+    openSavedKeysPinned: async (...args: Parameters<typeof actual.openSavedKeysPinned>) => {
       const landing = move.next;
       move.next = null;
-      if (landing !== null) await landing();
+      if (landing !== null && move.when === "before") await landing();
+      const saved = await actual.openSavedKeysPinned(...args);
+      if (landing !== null && move.when === "after") await landing();
       return saved;
     },
   };
@@ -71,26 +72,36 @@ describe.skipIf(!reachable.ok)("a custom provider moved while its key is read", 
         scratch.db,
         LOCAL_LEARNER_ID,
         "custom-gateway",
-        { baseUrl: EVIL_URL },
-        keys.keySealer(process.env, LOCAL_LEARNER_ID, DUMMY_KEY)("custom-gateway"),
+        { baseUrl: NEW_URL },
+        keys.keySealer(process.env, LOCAL_LEARNER_ID, NEW_KEY)("custom-gateway"),
       );
     };
   });
 
-  it("never pairs the old key with the new URL for a model list or a Test", async () => {
-    const credential = await credentials.entryCredential(Promise.resolve(scratch.db), LOCAL_LEARNER_ID, "custom-gateway", undefined, {});
-    expect(move.next).toBeNull();
-    expect(credential).not.toBeNull();
-    expect(credential?.config.baseUrl === EVIL_URL && credential.apiKey === OLD_KEY).toBe(false);
-    expect([credential?.config.baseUrl, credential?.apiKey]).toEqual([OLD_URL, OLD_KEY]);
-  });
+  /** The (URL, key) pair a read produced must be one a single write stored together. */
+  const together = (pair: [string | undefined, string | undefined]) =>
+    expect([[OLD_URL, OLD_KEY], [NEW_URL, NEW_KEY], [undefined, undefined]]).toContainEqual(pair);
 
-  it("never pairs the old key with the new URL for a tutor turn", async () => {
-    const steps = await credentials.tutorCredentials(Promise.resolve(scratch.db), LOCAL_LEARNER_ID, {});
-    expect(move.next).toBeNull();
-    const step = steps[0];
-    expect(step !== undefined && isCallable(step)).toBe(true);
-    if (step === undefined || !isCallable(step)) return;
-    expect(step.config.baseUrl === EVIL_URL && step.apiKey === OLD_KEY).toBe(false);
+  for (const when of ["before", "after"] as const) {
+    it(`sends a key only to the URL it was saved with, for a model list or a Test, when the move lands ${when} the key read`, async () => {
+      move.when = when;
+      const credential = await credentials.entryCredential(Promise.resolve(scratch.db), LOCAL_LEARNER_ID, "custom-gateway", undefined, {});
+      expect(move.next).toBeNull();
+      together([credential?.config.baseUrl, credential?.apiKey]);
+    });
+
+    it(`sends a key only to the URL it was saved with, for a tutor turn, when the move lands ${when} the key read`, async () => {
+      move.when = when;
+      const steps = await credentials.tutorCredentials(Promise.resolve(scratch.db), LOCAL_LEARNER_ID, {});
+      expect(move.next).toBeNull();
+      const step = steps[0];
+      together(step !== undefined && isCallable(step) ? [step.config.baseUrl, step.apiKey] : [undefined, undefined]);
+    });
+  }
+
+  it("still pairs a URL with its key when nothing moves", async () => {
+    move.next = null;
+    const credential = await credentials.entryCredential(Promise.resolve(scratch.db), LOCAL_LEARNER_ID, "custom-gateway", undefined, {});
+    expect([credential?.config.baseUrl, credential?.apiKey]).toEqual([OLD_URL, OLD_KEY]);
   });
 });
