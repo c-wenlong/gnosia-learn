@@ -23,7 +23,7 @@ import { useStudioJobs } from "@/components/studio/JobsProvider";
 import { HostContext, type HostControls, NEW_CHAT_EVENT } from "@/components/studio/panel-host";
 import { Sentence } from "@/components/studio/Sentence";
 import { VerbNotice } from "@/components/studio/StudioChrome";
-import { FADE_IN } from "@/components/studio/motion";
+import { FADE_IN } from "@/components/ui/motion";
 import { DialogHeader, StudioDialog, StudioPane } from "@/components/studio/StudioDialog";
 import { StudioSettings } from "@/components/studio/StudioSettings";
 import { VideoPreview } from "@/components/studio/video/VideoPreview";

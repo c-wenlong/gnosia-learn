@@ -3,7 +3,7 @@
 import type { ReactNode, Ref } from "react";
 
 import { CancelJobButton, Duration, JobDot } from "@/components/studio/job-bits";
-import { FADE_IN, POP_IN } from "@/components/studio/motion";
+import { FADE_IN, POP_IN } from "@/components/ui/motion";
 import { KindBadge } from "@/components/studio/KindBadge";
 import { PanelLink } from "@/components/studio/PanelLink";
 import { useStudioJobs } from "@/components/studio/JobsProvider";

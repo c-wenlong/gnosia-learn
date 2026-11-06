@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { FADE_IN, POP_IN } from "@/components/studio/motion";
+import { FADE_IN, POP_IN } from "@/components/ui/motion";
 import { chipClasses, cx } from "@/components/ui/classes";
 import { composerKey } from "@/components/ui/composer-keys";
 import { Glyph } from "@/components/ui/Glyph";

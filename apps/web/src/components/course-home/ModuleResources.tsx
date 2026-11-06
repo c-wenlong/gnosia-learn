@@ -18,6 +18,7 @@ import { RESOURCE_GLYPH } from "./icons";
 import { resourceLink } from "./resource-link";
 import { ROW, ROW_HOVER, ROW_LIST, ROW_META, ROW_TITLE, STRETCHED } from "./rows";
 import { ownValue } from "@gnosia/tutor/own-key";
+import { ENTER } from "@/components/ui/motion";
 
 const TYPE_LABEL: Record<Resource["type"], string> = {
   paper: "Paper",
@@ -155,7 +156,7 @@ export function ModuleResources({ moduleId, curated }: { moduleId: string; curat
       {rows.map(({ resource: r, leaving }, at) => {
         const link = resourceLink(r.url);
         return (
-          <li key={r.id} className="animate-enter motion-reduce:animate-none">
+          <li key={r.id} className={ENTER}>
             <Collapse open={!leaving}>
               <div className={cx(ROW, ROW_HOVER)}>
                 <ResourceAnchor
