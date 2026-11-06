@@ -43,6 +43,7 @@ import {
 } from "@/lib/recent-core";
 import { studioEnabled } from "@/lib/studio";
 import type { Course } from "@gnosia/content";
+import { moduleNumber } from "@gnosia/content/module-number";
 
 /**
  * Recent, read from the catalog (L7 of
@@ -99,7 +100,7 @@ export function modulePlace(courses: readonly Course[], visit: ModuleVisit): Mod
     courseCode: course.code,
     courseTitle: course.title,
     moduleTitle: found?.title ?? null,
-    moduleOrder: found?.order ?? null,
+    moduleNumber: found === undefined ? null : moduleNumber(course, found),
   };
 }
 
@@ -250,7 +251,7 @@ export function sidebarCourses(
       title: c.title,
       href: base,
       open: last === undefined ? base : `${base}/${encodeURIComponent(last.slug)}`,
-      resume: last === undefined ? null : { title: last.title, order: last.order },
+      resume: last === undefined ? null : { title: last.title, number: moduleNumber(c, last) },
     };
   });
 }

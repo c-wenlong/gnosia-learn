@@ -81,7 +81,7 @@ export interface ModulePlace {
   courseCode: string;
   courseTitle: string;
   moduleTitle: string | null;
-  moduleOrder: number | null;
+  moduleNumber: number | null;
 }
 
 /** A library video with a saved position: a `playback:<asset>` preference and the asset's title. */
@@ -241,7 +241,7 @@ export function recentItems(sources: RecentSources): RecentItem[] {
       kind: "module",
       title: inModule ? (place.moduleTitle as string) : place.courseTitle,
       detail:
-        inModule && place.moduleOrder !== null ? `${place.courseCode} · Module ${place.moduleOrder}` : place.courseCode,
+        inModule && place.moduleNumber !== null ? `${place.courseCode} · Module ${place.moduleNumber}` : place.courseCode,
       href: inModule
         ? `/courses/${encodeURIComponent(visit.courseSlug)}/${encodeURIComponent(visit.moduleSlug as string)}`
         : `/courses/${encodeURIComponent(visit.courseSlug)}`,
@@ -341,7 +341,7 @@ export interface SidebarCourse {
   /** Where the row opens: the module visited last, else the course page, which shows the module the owner is on. */
   open: string;
   /** The module visited last, named under the course; null when none is recorded. */
-  resume: { title: string; order: number } | null;
+  resume: { title: string; number: number } | null;
 }
 
 /** What `GET /api/learner/recent` answers with: Recent's rows, the pins, and the courses. */

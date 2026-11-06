@@ -98,7 +98,7 @@ struct CourseDetailView: View {
                                   : done > 0 ? "circle.lefthalf.filled" : "circle")
                                 .foregroundStyle(done > 0 ? G.accent : G.text3)
                                 .font(.callout)
-                            Text(m.numberedTitle)
+                            Text(course.numberedTitle(of: m))
                                 .lineLimit(2)
                             Spacer()
                             Text(m.items.isEmpty ? "0" : "\(done)/\(m.items.count)")

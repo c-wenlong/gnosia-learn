@@ -8,6 +8,7 @@ import { CollapseChevron } from "@/components/ui/Collapse";
 import { Panel } from "@/components/ui/Panel";
 import { moduleHref, moduleMark, type PathStatus } from "@/lib/course-path";
 import type { Course } from "@gnosia/content";
+import { modulePlace, numberedTitle } from "@gnosia/content/module-number";
 
 import { Glyph } from "@/components/ui/Glyph";
 
@@ -103,7 +104,7 @@ export function CourseSidebar({
           >
             <span className="min-w-0">
               <span className="block text-[12px] leading-4 text-text2">
-                Module {current.order} of {course.modules.length}
+                {modulePlace(course, current)}
               </span>
               <span className="block truncate text-[15px] font-semibold leading-6 text-text">{current.title}</span>
             </span>
@@ -145,7 +146,7 @@ export function CourseSidebar({
                     >
                       <ModuleMarkIcon mark={moduleMark(s)} fraction={s.total === 0 ? 0 : s.done / s.total} />
                       <span className="min-w-0 flex-1">
-                        {m.order}. {m.title}
+                        {numberedTitle(course, m)}
                       </span>
                       <span className="shrink-0 text-[12px] font-normal tabular-nums text-text2">
                         {s.done}/{s.total}

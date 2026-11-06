@@ -1,4 +1,5 @@
 import type { Course, Module, Topic } from "@gnosia/content";
+import { moduleNumber } from "@gnosia/content/module-number";
 
 /**
  * Derive concrete end-of-session learning objectives for a topic.
@@ -41,7 +42,7 @@ export function buildSessionAngle(
   return [
     `Socratic micro-learning (not a lecture dump).`,
     `Course lens: ${course.code} ${course.title} (${tags}).`,
-    `Module context: M${module.order} ${module.title}.`,
+    `Module context: M${moduleNumber(course, module)} ${module.title}.`,
     `Focus: ${topic.title}.`,
     `Style: short turns, one probing question at a time, demand the learner think before revealing answers.`,
     `Depth: undergraduate / upper-year SoC self-study; prefer worked micro-examples over abstract monologue.`,

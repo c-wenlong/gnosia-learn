@@ -230,13 +230,15 @@ export function nextFromHere(
     const start = fromModule === undefined ? 0 : course.modules.findIndex((m) => m.slug === fromModule);
     if (start === -1) return [];
     const steps: NextStep[] = [];
-    for (const mod of course.modules.slice(start)) {
+    for (const [i, mod] of course.modules.entries()) {
+      if (i < start) continue;
       const topic = mod.topics.find((t) => !graph.done(t.id));
       if (topic === undefined) continue;
       steps.push({
         key: `topic:${topic.id}`,
         title: topic.title,
-        detail: `${course.code} · Module ${mod.order}`,
+        // The module's place in the list (`moduleNumber`), never its authored `order`.
+        detail: `${course.code} · Module ${i + 1}`,
         href: graph.topicHref(course, mod.slug, topic.id),
       });
     }
@@ -362,12 +364,12 @@ export function recallHref(pick: Pick<RecallPick, "conceptId"> | undefined): str
  */
 export function nextUpEyebrows(place: {
   courseCode?: string | null;
-  moduleOrder?: number | null;
+  moduleNumber?: number | null;
   domain?: string | null;
 }): { eyebrow: string; eyebrowShort: string } {
-  const { courseCode, moduleOrder, domain } = place;
+  const { courseCode, moduleNumber, domain } = place;
   if (courseCode) {
-    const unit = typeof moduleOrder === "number" ? moduleOrder : null;
+    const unit = typeof moduleNumber === "number" ? moduleNumber : null;
     return {
       eyebrow: ["Next on your path", courseCode, unit !== null ? `Module ${unit}` : null].filter(Boolean).join(" · "),
       eyebrowShort: `Next up · ${courseCode}${unit !== null ? ` M${unit}` : ""}`,
