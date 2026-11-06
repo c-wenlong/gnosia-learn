@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  atxHeading,
   headingIds,
   inlineText,
   isExternalHref,
@@ -48,6 +49,29 @@ describe("headings and paragraphs", () => {
       { kind: "heading", level: 3, text: "Three" },
       { kind: "heading", level: 6, text: "Six" },
     ]);
+  });
+
+  it("takes closing hashes off only after a space, or when they are all there is", () => {
+    expect(blocks("## Title ##\n\n# C#\n\n### ###\n\n#  Spaced   #  ")).toEqual([
+      { kind: "heading", level: 2, text: "Title" },
+      { kind: "heading", level: 1, text: "C#" },
+      { kind: "heading", level: 3, text: "" },
+      { kind: "heading", level: 1, text: "Spaced" },
+    ]);
+    expect(atxHeading("#hashtag")).toBeNull();
+    expect(atxHeading("####### seven")).toBeNull();
+    expect(atxHeading("   # three spaces")).toEqual({ level: 1, text: "three spaces" });
+    expect(atxHeading("    # four spaces")).toBeNull();
+    expect(atxHeading(" # indented", false)).toBeNull();
+  });
+
+  it("reads a heading line in linear time, however many spaces it holds (R3-1-02)", () => {
+    // The old expression took 10 s at 4,000 spaces and grew with the cube.
+    const line = `# a${" ".repeat(50_000)}x`;
+    const started = performance.now();
+    const note = parseNote(`${line}\n\nprose`);
+    expect(performance.now() - started).toBeLessThan(250);
+    expect(note.blocks[0]).toEqual({ kind: "heading", level: 1, text: `a${" ".repeat(50_000)}x` });
   });
 
   it("joins the soft wrapping notes are written with", () => {

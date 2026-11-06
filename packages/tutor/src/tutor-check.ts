@@ -30,9 +30,19 @@ export const VERDICT_FEEDBACK_LIMIT = 300;
 /**
  * The marker, on its own line: `CHECK: ...`, or `CHECK(<concept id>): ...`
  * from the course topic tutor, which names which of its topic's concepts the
- * check tests (phase 3). Tolerates the bold or code a model adds around it.
+ * check tests (phase 3). Tolerates the bold or code a model adds around it;
+ * the closing marks are taken off by `trimMarks`, not by the expression,
+ * since a lazy `(.+?)[\s*_`]*$` backtracked quadratically on a long run of
+ * them.
  */
-const MARKER = /^[\s>*_`]*CHECK[*_`]*\s*(?:\(\s*([a-z0-9]+(?:-[a-z0-9]+)*)\s*\))?[*_`]*\s*:[*_`]*\s*(.+?)[\s*_`]*$/i;
+const MARKER = /^[\s>*_`]*CHECK[*_`]*\s*(?:\(\s*([a-z0-9]+(?:-[a-z0-9]+)*)\s*\))?[*_`]*\s*:[*_`]*\s*(.+)$/i;
+
+/** `text` without the whitespace, `*`, `_` and backticks at its end. */
+function trimMarks(text: string): string {
+  let end = text.length;
+  while (end > 0 && /[\s*_`]/.test(text[end - 1] as string)) end -= 1;
+  return text.slice(0, end);
+}
 
 /** A concept id as the catalog writes them. */
 const CONCEPT_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -52,11 +62,11 @@ export interface TurnCheck {
  * still sees what was asked.
  */
 export function splitCheck(reply: string): { content: string; check: TurnCheck | null } {
-  const lines = reply.replace(/\s+$/, "").split("\n");
+  const lines = reply.trimEnd().split("\n");
   const last = lines.at(-1) ?? "";
   const match = MARKER.exec(last);
   if (match === null) return { content: reply.trim(), check: null };
-  const question = match[2].trim().replace(/\s+/g, " ").slice(0, CHECK_QUESTION_LIMIT);
+  const question = trimMarks(match[2]).trim().replace(/\s+/g, " ").slice(0, CHECK_QUESTION_LIMIT);
   if (question === "") return { content: reply.trim(), check: null };
   const content = lines.slice(0, -1).join("\n").trim();
   const check: TurnCheck = { question };

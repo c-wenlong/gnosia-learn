@@ -194,7 +194,7 @@ export interface SplitReply {
  * so its question is still asked and judged.
  */
 export function splitTurnCheck(reply: string, { cards = true }: { cards?: boolean } = {}): SplitReply {
-  const trimmed = reply.replace(/\s+$/, "");
+  const trimmed = reply.trimEnd();
   const block = lastBlock(trimmed);
   if (block === null) return { ...splitCheck(reply), refused: null };
 

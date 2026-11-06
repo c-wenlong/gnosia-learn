@@ -46,6 +46,14 @@ describe("splitCheck", () => {
     });
   });
 
+  it("reads a marker with a long run of spaces or marks, and a reply ending in one, in linear time", () => {
+    const started = performance.now();
+    expect(splitCheck(`x\nCHECK: a${" ".repeat(50_000)}b`).check?.question).toBe("a b");
+    expect(splitCheck(`x\nCHECK: a${"*_` ".repeat(12_500)}`).check?.question).toBe("a");
+    expect(splitCheck(`${" ".repeat(50_000)}x`).check).toBeNull();
+    expect(performance.now() - started).toBeLessThan(250);
+  });
+
   it("clips a long question", () => {
     expect(splitCheck(`x\nCHECK: ${"a".repeat(900)}`).check?.question).toHaveLength(400);
   });
