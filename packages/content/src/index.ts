@@ -1,15 +1,17 @@
 /**
- * One reader for the authored content under `content/`, and the seam that lets
- * that content move into Postgres.
+ * The parsers for the export format (the layout `catalog export` writes and
+ * `catalog import` reads, seed/README.md), and the seam every reader of
+ * authored content goes through.
  *
  * Two layers. The synchronous parsers (`loadCourses`, `loadTopics`,
- * `loadTags`) are what `catalog index` turns into rows, and they are the only
+ * `loadTags`) are what `catalog import` turns into rows, and they are the only
  * place a course file's meaning is decided. `ContentSource` is what a reader
- * holds: `fileSource(root)` answers it from those parsers, `dbSource` in
- * `@gnosia/catalog` will answer it from rows, and `selectSource` picks one
- * per content type (docs/CONTENT-MIGRATION.md, 0.6 and D9). The web app and
- * the studio read through the seam; only the indexers call the parsers
- * directly, until phase 2 retires them to import validators.
+ * holds: `dbSource` in `@gnosia/catalog` answers it from rows, which is the
+ * default and, since the phase 3 cut-over, the only copy of the content;
+ * `fileSource(root)` answers it from the parsers, for an import and for a
+ * test that hands the seam a tree of its own. `selectSource` picks one per
+ * content type (docs/CONTENT-MIGRATION.md, 0.6 and D9). The web app and the
+ * studio read through the seam; only the importers call the parsers directly.
  *
  * **This reads the filesystem.** Anything importing it runs on the server. The
  * web app puts `server-only` in front of it (`apps/web/src/data/source.ts`) so
