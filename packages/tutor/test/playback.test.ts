@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { dayKey } from "../src/days";
 import {
   applySave,
   coverage,
@@ -134,5 +135,14 @@ describe("parsePlayback", () => {
     }) as Playback;
     expect(parsed.ranges).toEqual([[0, 3]]);
     expect(parsed.watchedAt).toBeNull();
+  });
+
+  it("reads a watchedAt that is not a date as never watched, so the save after it can name its day (R3-1-04)", () => {
+    const parsed = parsePlayback({ position: 3, duration: 10, watchedAt: "garbage" }) as Playback;
+    expect(parsed.watchedAt).toBeNull();
+    const next = applySave(parsed, { position: 9.5, duration: 10, ranges: [[0, 9.5]] }, NOW);
+    expect(next.playback.watchedAt).toBe(NOW);
+    expect(dayKey(next.playback.watchedAt as string, "UTC")).toBe(NOW.slice(0, 10));
+    expect(parsePlayback({ position: 3, duration: 10, watchedAt: NOW })?.watchedAt).toBe(NOW);
   });
 });

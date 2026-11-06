@@ -317,6 +317,14 @@ export async function chatTurn(deps: TutorDeps, body: ChatBody): Promise<TurnRep
   if (!courseSlug || !moduleSlug || !topicId || !Array.isArray(messages)) {
     return reply(400, { error: "courseSlug, moduleSlug, topicId, and messages are required" });
   }
+  // The body is a client's JSON, typed only by hope: a number here used to
+  // throw in the prompt builder and answer 500.
+  if (typeof courseSlug !== "string" || typeof moduleSlug !== "string" || typeof topicId !== "string") {
+    return reply(400, { error: "courseSlug, moduleSlug and topicId must be strings", code: "BAD_REQUEST" });
+  }
+  if (learnerNote !== undefined && typeof learnerNote !== "string") {
+    return reply(400, { error: "learnerNote must be a string", code: "BAD_REQUEST" });
+  }
   // As on the other paths: a turn with another role or non-text content
   // would otherwise reach every provider in the chain and fail at each.
   if (!wellFormedTurns(messages)) {

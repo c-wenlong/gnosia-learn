@@ -20,6 +20,7 @@ import type { ContentType } from "@gnosia/content";
 import { isRenderSource, uploadCommand, type RouteProblemCode } from "../asset-problems";
 import { ContentUnavailableError } from "./content-source";
 import type { AssetSeams } from "./deps";
+import { failureCode } from "./provider-keys";
 
 /**
  * Turning an `asset` row into bytes a browser can play.
@@ -176,8 +177,7 @@ export function blobStoreProblem(error: unknown): AssetFileProblem {
   if (error instanceof BlobNotFoundError) {
     return notUploaded("The blob store no longer holds this object. Run `npm run catalog -- blob audit`.");
   }
-  const message = error instanceof Error ? error.message : String(error);
-  console.warn(`asset file: blob store unavailable: ${message}`);
+  console.warn(`asset file: blob store unavailable (${failureCode(error)})`);
   return {
     ok: false,
     status: 503,
