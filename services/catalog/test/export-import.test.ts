@@ -2,8 +2,12 @@ import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { TOPIC_RELATION_KINDS as READER_KINDS } from "@gnosia/content";
-import { contentRevision, tag, TOPIC_RELATION_KINDS } from "@gnosia/schema";
+import {
+  COURSE_COVER_EXTENSIONS,
+  RESOURCE_TYPES as READER_RESOURCE_TYPES,
+  TOPIC_RELATION_KINDS as READER_KINDS,
+} from "@gnosia/content";
+import { contentRevision, COURSE_COVER_TYPES, RESOURCE_TYPES, tag, TOPIC_RELATION_KINDS } from "@gnosia/schema";
 import { parse, stringify } from "yaml";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -144,6 +148,13 @@ describe("the export's YAML, without a database", () => {
 
   it("knows the relation kinds the database checks", () => {
     expect([...READER_KINDS]).toEqual([...TOPIC_RELATION_KINDS]);
+  });
+
+  // A list the reader gains and the schema lacks passes the read and then
+  // fails the CHECK at import, and the other way round (R3-2-09).
+  it("knows the resource types and cover extensions the database checks", () => {
+    expect([...READER_RESOURCE_TYPES]).toEqual([...RESOURCE_TYPES]);
+    expect([...COURSE_COVER_EXTENSIONS]).toEqual(Object.keys(COURSE_COVER_TYPES));
   });
 });
 
