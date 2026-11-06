@@ -58,7 +58,7 @@ import type { AssetSeams } from "./deps";
  * still the right type, since the point is to put it in an `<img>`; the
  * sandbox is what makes it safe.
  */
-export const CONTENT_TYPES: Readonly<Record<string, string>> = {
+const CONTENT_TYPES: Readonly<Record<string, string>> = {
   ".mp4": "video/mp4",
   ".svg": "image/svg+xml",
   ".vtt": "text/vtt",
@@ -199,7 +199,7 @@ export async function resolveBlob(seams: AssetSeams, blob: AssetBlob, name: stri
     );
   }
   const ext = path.extname(blob.key).toLowerCase();
-  const contentType = CONTENT_TYPES[ext] ?? null;
+  const contentType = contentTypeFor(blob.key);
   if (contentType === null) {
     console.warn(`asset file: refusing ${blob.assetId}, unrecognised blob extension`);
     return missing("unsupported-type", `Asset ${blob.assetId} is stored with an extension this route will not serve.`);

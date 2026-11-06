@@ -19,11 +19,6 @@ export function authConfig() {
   return readAuthConfig(process.env);
 }
 
-/** Whether a deployment can sign anyone in at all. */
-export function authConfigured(): boolean {
-  return authConfig().ok;
-}
-
 export async function isSignedIn(): Promise<boolean> {
   const config = authConfig();
   if (!config.ok) return false;

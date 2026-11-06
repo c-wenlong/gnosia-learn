@@ -5,6 +5,7 @@ import { Glyph } from "@/components/ui/Glyph";
 import { IconButton } from "@/components/ui/IconButton";
 import { assetHref } from "@/lib/library";
 import type { PreviewHeader } from "@/lib/library-preview";
+import { FADE_IN } from "@/components/ui/motion";
 
 /**
  * Manus's `previewer-header`, drawn by the kit's `DialogHeader`: 48px, the
@@ -56,7 +57,7 @@ export function PreviewerHeader({
         ) : (
           <span
             className={cx(
-              "animate-fade-in motion-reduce:animate-none",
+              FADE_IN,
               header.plainName && "font-mono font-medium text-text2",
             )}
           >

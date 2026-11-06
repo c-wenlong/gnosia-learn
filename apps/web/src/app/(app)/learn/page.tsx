@@ -30,7 +30,7 @@ import {
   type IndexRow,
 } from "@/lib/learn-index";
 import { bucketOf } from "@gnosia/tutor/mastery-bucket";
-import type { Course } from "@gnosia/tutor/types";
+import type { Course } from "@gnosia/content";
 
 export const metadata: Metadata = { title: "Learn" };
 

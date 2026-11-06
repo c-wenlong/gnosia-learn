@@ -11,7 +11,7 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { TextLink } from "@/components/ui/TextLink";
 import { Callout } from "@/components/ui/Callout";
 import { courseTopicIds, doneWord, moduleHref, topicMeta, type PathStatus, type TopicMastery } from "@/lib/course-path";
-import type { Course, Module, Topic } from "@gnosia/tutor/types";
+import type { Course, Module, Topic } from "@gnosia/content";
 import { ownValue } from "@gnosia/tutor/own-key";
 
 import type { RelatedCourse } from "./types";

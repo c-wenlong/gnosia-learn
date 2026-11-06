@@ -14,7 +14,7 @@ import {
   type PathAsset,
   type PathKbConcept,
 } from "./module-path";
-import type { Module, Resource, Topic } from "@gnosia/tutor/types";
+import type { Module, Resource, Topic } from "@gnosia/content";
 
 /**
  * Phase 3 of docs/proposals/module-learning-path.md: the module page as one

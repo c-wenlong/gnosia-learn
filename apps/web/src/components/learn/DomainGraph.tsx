@@ -47,6 +47,7 @@ import { arcLength } from "@/lib/map-reading";
 import { MASTERY_BUCKET_LABEL, type MasteryBucket } from "@gnosia/tutor/mastery-bucket";
 import { ownValue } from "@gnosia/tutor/own-key";
 import { prefersReducedMotion } from "@/lib/motion";
+import { FADE_IN } from "@/components/ui/motion";
 
 /**
  * One domain, or one of its topics, as a bounded picture (D3 of
@@ -547,7 +548,7 @@ function Plate({ node, at, lines, font, frame }: { node: DomainGraphNode; at: Po
   // Tall enough to cover the label it replaces, one line or two.
   const height = labelFoot(lines, font) - 15;
   return (
-    <g data-plate pointerEvents="none" className="animate-fade-in motion-reduce:animate-none">
+    <g data-plate pointerEvents="none" className={FADE_IN}>
       <rect x={left} y={top} width={width} height={height} rx={6} className="fill-surface stroke-hair" strokeWidth={1} />
       <text x={left + width / 2} y={top + height / 2 + font * 0.36} textAnchor="middle" fontSize={font} fontWeight={700} className="fill-text">
         {node.title}
