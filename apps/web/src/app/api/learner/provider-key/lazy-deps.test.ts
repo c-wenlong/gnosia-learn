@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { migratedScratchDatabase } from "../../../../../../../services/catalog/test/scratch-database";
+
 /**
  * The Settings writes run on the learner writes' lazy deps: a body refused
  * before the write opens no database (so no rejected promise is left with
@@ -40,11 +42,23 @@ describe("the Settings write routes' deps", () => {
   });
 
   it("answer a chain write with the blob store unable to open", async () => {
-    vi.spyOn(console, "warn").mockImplementation(() => {});
-    const { POST } = await import("../tutor-model/route");
-    const response = await POST(post("/api/learner/tutor-model", { provider: "gemini", model: "gemini-2.5-flash" }));
-    expect(response.status).toBe(503);
-    expect(((await response.json()) as { code: string }).code).toBe("STORE_UNAVAILABLE");
-    expect(assetBlobStore).not.toHaveBeenCalled();
+    // A database that answers, so the reply comes from the write itself: with
+    // the database refused too, a 503 would say nothing about the blob store.
+    const scratch = await migratedScratchDatabase();
+    try {
+      catalogDatabase.mockResolvedValue(scratch.db as never);
+      // The server's key, so the write has a key to file the model under.
+      vi.stubEnv("GEMINI_API_KEY", "AIza-lazy-deps-test-key-0123456789");
+      const { POST } = await import("../tutor-model/route");
+      const response = await POST(post("/api/learner/tutor-model", { provider: "gemini", model: "gemini-2.5-flash" }));
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ ok: true });
+      expect(catalogDatabase).toHaveBeenCalled();
+      expect(assetBlobStore).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+      catalogDatabase.mockReset();
+      await scratch.drop();
+    }
   });
 });
