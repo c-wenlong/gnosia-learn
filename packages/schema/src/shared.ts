@@ -4,16 +4,16 @@
  *
  * This file deliberately pulls in nothing — not drizzle, not node. That is
  * what makes it importable from a `"use client"` component in `src/` through
- * the `@gnosia/schema/shared` subpath without dragging a Postgres driver
- * into the browser bundle (layering rule 8 in ARCHITECTURE.md), while
+ * the `@gnosia/schema/shared` subpath without dragging drizzle and a
+ * database driver into the browser bundle (layering rule 8 in ARCHITECTURE.md), while
  * `state.ts` re-exports the same values for the service and the migrations.
  *
  * Before bundle 5 these lived twice: `KNOWLEDGE_LIMITS` in the web app's
  * `storage.ts` and a copy in `state.ts`, with a comment asking the two to stay
  * in step. They are now one definition, because the web app clamps a recap on
  * the way in and the database refuses one that was not clamped, and those two
- * numbers being different is a 23514 the learner sees as "save failed" for no
- * visible reason.
+ * numbers being different is a CHECK failure the learner sees as "save
+ * failed" for no visible reason.
  */
 
 /** Bounds on a recap, so one runaway session cannot fill a column or a quota. */
@@ -185,7 +185,7 @@ export type ProviderId = (typeof PROVIDER_IDS)[number];
 export const CUSTOM_PROVIDER_PREFIX = "custom-";
 /** `custom-`, then 1 to 40 lowercase letters, digits and hyphens, not starting or ending with a hyphen. */
 export const CUSTOM_PROVIDER_ID_PATTERN = /^custom-[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/;
-/** The same rule, written for a Postgres CHECK. */
+/** The same rule, written for the table's CHECK (a JavaScript pattern, read by the `regexp` function `connect` registers). */
 export const CUSTOM_PROVIDER_ID_SQL = "^custom-[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$";
 export type CustomProviderId = `custom-${string}`;
 /** A built-in provider or one the owner added: what a `provider` column holds. */
@@ -429,7 +429,8 @@ export const PREFERENCE_KEYS = {
   /**
    * `"system"` (follow the operating system's reduced-motion setting, the
    * default) or `"always"` (reduce motion whatever the system says). Written
-   * from Settings; nothing reads it yet.
+   * from Settings; read by the signed-in layout through
+   * `apps/web/src/lib/motion-preference.ts`, which `lib/motion.ts` builds on.
    */
   reducedMotion: "reducedMotion",
   /**
@@ -530,7 +531,7 @@ export function clampSummary(value: unknown): string {
  * The keys deliberately match the old localStorage document, minus `version`.
  * They are the argument to `/api/learner/import`, and a component reading
  * `state.completed[id]` should not have to care that the bytes now come from
- * Postgres.
+ * the catalog.
  */
 
 /**
@@ -857,8 +858,9 @@ export type CostSource = (typeof COST_SOURCES)[number];
  * A job in any of these owns `target_path` and no second job may take it: an
  * unaccepted candidate still holds it, because the next brief would be written
  * against a file the first job has not landed yet. Enforced by the partial
- * unique index `job_active_target_key`, so the refusal is a `23505` naming the
- * holder rather than a race nobody sees.
+ * unique index `job_active_target_key`, so the refusal is a unique-constraint
+ * failure (the catalog's `sqlstate` reads it as `23505`) naming the holder
+ * rather than a race nobody sees.
  */
 export const JOB_ACTIVE_STATES = ["queued", "running", "awaiting_review"] as const;
 export type JobActiveState = (typeof JOB_ACTIVE_STATES)[number];

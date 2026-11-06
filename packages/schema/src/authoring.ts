@@ -90,22 +90,25 @@ export const INSTANCE_ROLES = ["primary", "copy"] as const;
 export type InstanceRole = (typeof INSTANCE_ROLES)[number];
 
 /**
- * The history of record: one row per content write, append-only by a per-row
- * trigger created in the migration, the same guard `event` has and for the
- * same reason (a revoked privilege does not bind the owner who runs psql).
+ * The history of record: one row per content write, append-only by the row
+ * triggers `content_revision_no_update` and `_no_delete` created in the
+ * migration, the same guard `event` has and for the same reason (anyone who
+ * can open the file can write to it, so the database itself refuses).
  *
  * Written only by the write seam in `services/catalog/src/content/`, which
- * also sets the `gnosia.revision_id` setting the per-table guard triggers
- * check once a type flips (D4).
+ * also sets the revision this connection is writing (`setRevisionId`, read by
+ * the per-connection function `catalog_revision_id()`) that the per-table
+ * guard triggers check once a type flips (D4).
  *
  * `snapshot` is the whole entity after the write, with its owned links under
  * it in a canonical order, so a diff is a comparison of two rows and a restore
  * is one write. `snapshot_hash` is how an import that changes nothing writes
  * nothing.
  *
- * The id is supplied by the seam from the identity's own sequence, so the
- * setting can name the revision before the entity write it authorises; that
- * is why the identity is BY DEFAULT rather than ALWAYS.
+ * The id is reserved by the seam before the entity write it authorises
+ * (`reserveRevisionIds`: the next rowids, under the transaction's write
+ * lock), so the guard can name the revision before the row exists; that is
+ * why the seam supplies the id rather than leaving it to the insert.
  */
 export const contentRevision = sqliteTable(
   "content_revision",
@@ -199,13 +202,14 @@ export const contentSource = sqliteTable(
 /**
  * One row naming this database `primary` or `copy` (D2, edge case 14). The
  * migration seeds `primary`, since the local database is the primary until the
- * deferred cloud move, and a database copied with `createdb -T` inherits the
- * row of the one it was copied from.
+ * deferred cloud move, and a file copied from another (with SQLite's backup
+ * API, or by hand) inherits the row of the one it was copied from.
  *
- * On a copy every write to every other table is refused by a statement trigger
- * the migration attaches, naming `primary_host`; a connection opened with
- * `gnosia.copy_ok = on` (tests and `scripts/e2e.mjs`, through
- * `CATALOG_COPY_OK=1`) is let through. The boolean key with a CHECK is what
+ * On a copy every write to every other table is refused by three row triggers
+ * per table the migration attaches (`<table>_copy_guard_ins`, `_upd`, `_del`),
+ * naming `primary_host`. They ask the per-connection function
+ * `catalog_copy_ok()`, and a connection opened with `copyOk` (tests and
+ * `scripts/e2e.mjs`, through `CATALOG_COPY_OK=1`) is let through. The boolean key with a CHECK is what
  * makes it a single row.
  */
 export const catalogInstance = sqliteTable(
