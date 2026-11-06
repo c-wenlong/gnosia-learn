@@ -9,6 +9,7 @@ import { ConfirmFold } from "@/components/ui/ConfirmFold";
 import { FormRow } from "@/components/ui/FormRow";
 import { Input } from "@/components/ui/Input";
 import { LiveStatus } from "@/components/ui/LiveStatus";
+import { statusProps, type SaveStatus } from "@/components/ui/save-status";
 import { TextLink } from "@/components/ui/TextLink";
 import { cx } from "@/components/ui/classes";
 import { usePresence } from "@/components/ui/use-presence";
@@ -16,7 +17,7 @@ import type { ProviderRowView } from "@/lib/providers/view";
 import { sendJson } from "@/lib/send-json";
 import { BYOK_SETTINGS_CHANGED } from "@/lib/studio-byok";
 
-import { tone, textOf, failure, type Status, type Reply } from "./status";
+import { failure, type Reply } from "./status";
 
 type Mode = "idle" | "edit" | "delete";
 
@@ -37,8 +38,8 @@ export function ProviderRow({
   // A custom provider's Edit also takes its name and base URL (T14).
   const [name, setName] = useState(row.label);
   const [url, setUrl] = useState(row.custom?.baseUrl ?? "");
-  const [status, setStatus] = useState<Status>({ kind: "idle" });
-  const busy = status.kind === "busy";
+  const [status, setStatus] = useState<SaveStatus>({ kind: "idle" });
+  const busy = status.kind === "saving";
   const keyForm = usePresence(mode === "edit", 300);
   const hasModels = row.models.length > 0;
 
@@ -66,7 +67,7 @@ export function ProviderRow({
     event.preventDefault();
     const key = draft;
     setDraft("");
-    setStatus({ kind: "busy", text: "Saving…" });
+    setStatus({ kind: "saving", text: "Saving…" });
     // A custom provider's name, base URL and key go in one write, so a key
     // that is refused leaves the name and the URL as they were.
     const custom = row.custom;
@@ -77,36 +78,36 @@ export function ProviderRow({
       const changed = await sendJson<Reply>("PATCH", "/api/learner/custom-provider", body);
       if (changed === null || changed.status !== 200 || changed.data.ok !== true) {
         focusNext.current = `${base}-key`;
-        return setStatus({ kind: "error", text: failure("saved", changed) });
+        return setStatus({ kind: "error", message: failure("saved", changed) });
       }
     } else if (typed) {
       const reply = await sendJson<Reply>("POST", "/api/learner/provider-key", { provider: row.id, key });
       if (reply === null || reply.status !== 200 || reply.data.ok !== true) {
         focusNext.current = `${base}-key`;
-        return setStatus({ kind: "error", text: failure("saved", reply) });
+        return setStatus({ kind: "error", message: failure("saved", reply) });
       }
     }
     focusNext.current = `${base}-edit`;
     setMode("idle");
-    setStatus({ kind: "done", text: row.custom !== undefined ? "Saved." : "Key saved." });
+    setStatus({ kind: "saved", text: row.custom !== undefined ? "Saved." : "Key saved." });
     window.dispatchEvent(new Event(BYOK_SETTINGS_CHANGED));
     router.refresh();
   };
 
   const remove = async () => {
-    setStatus({ kind: "busy", text: "Deleting…" });
+    setStatus({ kind: "saving", text: "Deleting…" });
     const reply = await sendJson<Reply>("DELETE", "/api/learner/tutor-model/provider", { provider: row.id });
     // Focus after either answer is the fold's (`ConfirmFold`): back to its
     // Delete when the delete failed, to the row's own Add key once the row
     // stays (a built-in is always listed), and to Add custom provider when a
     // custom row leaves with the refresh (`onGone`).
     if (reply === null || reply.status !== 200 || reply.data.ok !== true) {
-      return setStatus({ kind: "error", text: failure("deleted", reply) });
+      return setStatus({ kind: "error", message: failure("deleted", reply) });
     }
     setMode("idle");
     const kept = reply.data.byok === false ? " The studio runner did not answer, so studio chats may still offer this provider. Remove it in a chat's BYOK settings." : "";
     const text = `Deleted ${row.label}.${kept}`;
-    setStatus({ kind: "done", text });
+    setStatus({ kind: "saved", text });
     window.dispatchEvent(new Event(BYOK_SETTINGS_CHANGED));
     if (row.custom === undefined) focusNext.current = `${base}-edit`;
     else onGone(text);
@@ -115,16 +116,16 @@ export function ProviderRow({
 
   const testKey = async () => {
     focusNext.current = `${base}-test-key`;
-    setStatus({ kind: "busy", text: "Testing…" });
+    setStatus({ kind: "saving", text: "Testing…" });
     const reply = await sendJson<Reply>("POST", "/api/learner/provider-key/test", { provider: row.id });
-    if (reply === null) return setStatus({ kind: "error", text: "Not tested: the server did not answer." });
+    if (reply === null) return setStatus({ kind: "error", message: "Not tested: the server did not answer." });
     const tested = reply.data.tested ? ` Tested with ${reply.data.tested}.` : "";
-    if (reply.status === 200 && reply.data.ok === true) return setStatus({ kind: "done", text: `The key works.${tested}` });
+    if (reply.status === 200 && reply.data.ok === true) return setStatus({ kind: "saved", text: `The key works.${tested}` });
     if (reply.status === 200) {
       const outcome = typeof reply.data.status === "number" ? `was refused (HTTP ${reply.data.status})` : "could not be tested";
-      return setStatus({ kind: "error", text: `The key ${outcome}: ${(reply.data.message ?? "no reason given").replace(/\.$/, "")}.${tested}` });
+      return setStatus({ kind: "error", message: `The key ${outcome}: ${(reply.data.message ?? "no reason given").replace(/\.$/, "")}.${tested}` });
     }
-    setStatus({ kind: "error", text: reply.data.error ?? `Not tested (HTTP ${reply.status}).` });
+    setStatus({ kind: "error", message: reply.data.error ?? `Not tested (HTTP ${reply.status}).` });
   };
 
   const open = (next: Mode) => {
@@ -279,7 +280,7 @@ export function ProviderRow({
         returnFocusTo={deleteButton}
       />
 
-      <LiveStatus text={textOf(status)} tone={tone(status)} className="pt-2.5" />
+      <LiveStatus {...statusProps(status)} className="pt-2.5" />
     </li>
   );
 }
