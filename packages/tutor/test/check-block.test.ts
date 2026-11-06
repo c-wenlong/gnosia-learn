@@ -86,6 +86,12 @@ describe("readCheckBlock", () => {
 });
 
 describe("splitTurnCheck", () => {
+  it("reads a reply holding a long run of spaces in linear time", () => {
+    const started = performance.now();
+    expect(splitTurnCheck(`${" ".repeat(50_000)}x`)).toEqual({ content: "x", check: null, refused: null });
+    expect(performance.now() - started).toBeLessThan(250);
+  });
+
   it("takes a block off the end of a reply and returns the check beside the prose", () => {
     expect(splitTurnCheck(block(choice))).toEqual({ content: "Good. One check.", check: choice, refused: null });
   });

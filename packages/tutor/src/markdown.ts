@@ -124,7 +124,28 @@ function splitFrontmatter(source: string): { frontmatter: string | null; body: s
 }
 
 const FENCE = /^ {0,3}(`{3,}|~{3,})\s*(\S*).*$/;
-const HEADING = /^ {0,3}(#{1,6})\s+(.*?)\s*#*\s*$/;
+const HEADING_OPEN = /^ {0,3}(#{1,6})\s/;
+const HEADING_OPEN_UNINDENTED = /^(#{1,6})\s/;
+
+/**
+ * A line's ATX heading, its level and its text with any closing hashes taken
+ * off, or null when the line is not one. Linear in the line's length: the one
+ * regular expression this used to be, `(.*?)\s*#*\s*$`, backtracked cubically
+ * on a long run of spaces, so a single crafted line in a note stalled the
+ * server's render for seconds to minutes. A closing run of `#` counts only
+ * after whitespace, or as the whole text, so `# C#` keeps its `#`.
+ * `indented: false` refuses the up-to-three leading spaces Markdown allows.
+ */
+export function atxHeading(line: string, indented = true): { level: number; text: string } | null {
+  const open = (indented ? HEADING_OPEN : HEADING_OPEN_UNINDENTED).exec(line);
+  if (open === null) return null;
+  const text = line.slice(open[0].length).trim();
+  let cut = text.length;
+  while (cut > 0 && text[cut - 1] === "#") cut -= 1;
+  const closes = cut < text.length && (cut === 0 || /\s/.test(text[cut - 1] as string));
+  return { level: open[1].length, text: closes ? text.slice(0, cut).trimEnd() : text };
+}
+
 const RULE = /^ {0,3}(?:(?:\*\s*){3,}|(?:-\s*){3,}|(?:_\s*){3,})$/;
 const QUOTE = /^ {0,3}>/;
 const LIST_ITEM = /^(\s*)([-*+]|(\d{1,9})[.)])(\s+)(.*)$/;
@@ -134,7 +155,7 @@ function interrupts(line: string): boolean {
   return (
     line.trim() === "" ||
     FENCE.test(line) ||
-    HEADING.test(line) ||
+    atxHeading(line) !== null ||
     RULE.test(line) ||
     QUOTE.test(line) ||
     LIST_ITEM.test(line)
@@ -169,9 +190,9 @@ function parseBlocks(lines: string[]): Block[] {
       continue;
     }
 
-    const heading = HEADING.exec(line);
+    const heading = atxHeading(line);
     if (heading) {
-      blocks.push({ kind: "heading", level: heading[1].length, text: heading[2] });
+      blocks.push({ kind: "heading", level: heading.level, text: heading.text });
       i += 1;
       continue;
     }
@@ -246,7 +267,7 @@ function displayMathAt(lines: string[], from: number): [string, number] | null {
   for (let i = from; i < lines.length; i += 1) {
     const line = lines[i].trim();
     if (line === "") return null;
-    if (i > from && (HEADING.test(lines[i]) || FENCE.test(lines[i]) || RULE.test(lines[i]))) return null;
+    if (i > from && (atxHeading(lines[i]) !== null || FENCE.test(lines[i]) || RULE.test(lines[i]))) return null;
     body.push(line);
     const joined = body.join("\n");
     // The opening line on its own is `$$`, which also ends with `$$`.
