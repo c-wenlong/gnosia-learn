@@ -1325,7 +1325,7 @@ async function chainKeyGate(
 ): Promise<{ serverKey: boolean } | { refused: TurnReply }> {
   let saved: SavedKeys;
   try {
-    saved = await openSavedKeys(await deps.db, deps.owner, deps.env);
+    saved = await openSavedKeys(await deps.db, deps.owner, process.env);
   } catch (error) {
     console.warn(`tutor model ${what === "added" ? "add" : "set"}: saved provider keys unavailable (${failureCode(error)})`);
     return { refused: writeRefuse(`Not ${what}: your saved keys could not be read just now. Try again in a moment.`, "STORE_UNAVAILABLE", 503) };
