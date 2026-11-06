@@ -17,8 +17,10 @@ import { LOCAL_LEARNER_ID } from "./shared";
  *
  * Where `now()` was the default, `cast(unixepoch('subsec') * 1000 as integer)`
  * is: evaluated once per row, which is what the avatar draw relies on too.
+ * Exported for an instant column that defaults to now under another name
+ * (`event.at`, `job.requested_at`), so the expression is written once.
  */
-const NOW_MS = sql`(cast(unixepoch('subsec') * 1000 as integer))`;
+export const NOW_MS = sql`(cast(unixepoch('subsec') * 1000 as integer))`;
 
 export const createdAt = () =>
   integer("created_at", { mode: "timestamp_ms" }).notNull().default(NOW_MS);

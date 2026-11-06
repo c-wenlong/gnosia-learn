@@ -138,7 +138,7 @@ describe("loadAssetBody for anything else", () => {
   });
 
   it("leaves the text null for a servable file that did not read, and checks no embeds", async () => {
-    const log = row({ id: "session:2026-10-01-vectors", kind: "session_log", path: "learn/sessions/2026-10-01-vectors.md" });
+    const log = row({ id: "session:2026-10-01-vectors", kind: "session", path: "learn/sessions/2026-10-01-vectors.md" });
     const body = await loadAssetBody(log, []);
     expect(body).toMatchObject({ servable: true, fileProblem: null, text: null });
     expect(readAssetText).toHaveBeenCalledWith({}, log.id);
