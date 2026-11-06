@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import type { CourseInProgress } from "@/lib/home-core";
+import { cx, FOCUS } from "@/components/ui/classes";
 
 /**
  * Courses in progress (hi-fi 01, bottom right): the courses opened or with at
@@ -23,7 +24,7 @@ export function CoursesCard({ courses: { rows: courses, total } }: { courses: { 
               <div className="flex min-w-0 items-baseline gap-3">
                 <Link
                   href={`/courses/${c.slug}`}
-                  className="min-w-0 flex-1 truncate rounded-sm text-[14px] font-medium text-text underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                  className={cx("min-w-0 flex-1 truncate rounded-sm text-[14px] font-medium text-text underline-offset-4 hover:underline", FOCUS)}
                 >
                   {c.code} {c.title}
                 </Link>

@@ -6,7 +6,7 @@ import { DomainGraph, type DomainGraphNode, type MapMark } from "@/components/le
 import { LegendChips, useLegendPreview } from "@/components/learn/LegendChips";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { CARD_TITLE, cx, LABEL } from "@/components/ui/classes";
+import { CARD_TITLE, cx, FOCUS, LABEL } from "@/components/ui/classes";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SegmentedControl, type SegmentItem } from "@/components/ui/SegmentedControl";
@@ -76,7 +76,7 @@ export function DomainCards({
             data-dim={dim}
             onClick={() => onOpen(d.slug)}
             className={cx(
-              "flex min-w-0 flex-col gap-2 rounded-[20px] border-2 border-border bg-surface p-4 text-left transition-[opacity,border-color] duration-150 hover:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent motion-reduce:transition-none",
+              "flex min-w-0 flex-col gap-2 rounded-[20px] border-2 border-border bg-surface p-4 text-left transition-[opacity,border-color] duration-150 hover:border-accent", FOCUS, "motion-reduce:transition-none",
               dim && "opacity-40",
             )}
           >

@@ -6,7 +6,7 @@ import { useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, ty
 
 import type { HistorySearch } from "@/components/studio/history-search";
 import { TextLink } from "@/components/ui/TextLink";
-import { cx, FIELD_TEXT, STATUS_TEXT } from "@/components/ui/classes";
+import { cx, FIELD_TEXT, iconButtonClasses, STATUS_TEXT } from "@/components/ui/classes";
 import { isImeKey } from "@/components/ui/composer-keys";
 import { Collapse } from "@/components/ui/Collapse";
 import { Glyph } from "@/components/ui/Glyph";
@@ -355,11 +355,16 @@ function CoursesSection({
             inert={rail}
             aria-label="Browse courses"
             title="Browse courses"
-            className={cx(
-              "inline-flex size-7 items-center justify-center rounded-md text-text3 transition-[opacity,background-color,color] duration-150 hover:bg-surface2/60 hover:text-text motion-reduce:transition-none",
-              "focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent",
-              rail ? "opacity-0" : "opacity-0 group-hover/label:opacity-100 [@media(hover:none)]:opacity-100",
-            )}
+            className={iconButtonClasses({
+              size: "sm",
+              shape: "square",
+              tone: "muted",
+              inset: true,
+              className: cx(
+                "focus-visible:opacity-100",
+                rail ? "opacity-0" : "opacity-0 group-hover/label:opacity-100 [@media(hover:none)]:opacity-100",
+              ),
+            })}
           >
             <Glyph name="add" size={16} />
           </Link>
@@ -493,17 +498,17 @@ function RecentRow({
           disabled={rail}
           onOpenChange={setMenu}
           trigger={
-            <svg aria-hidden viewBox="0 0 20 20" className="size-[18px]" fill="currentColor">
-              <circle cx="5" cy="10" r="1.4" />
-              <circle cx="10" cy="10" r="1.4" />
-              <circle cx="15" cy="10" r="1.4" />
-            </svg>
+            <Glyph name="more" size={18} />
           }
-          triggerClassName={cx(
-            "inline-flex size-7 items-center justify-center rounded-md text-text2 transition-[opacity,background-color] duration-150 hover:bg-surface2 hover:text-text motion-reduce:transition-none",
-            "focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent",
-            rail ? "opacity-0" : open ? "opacity-100" : "opacity-0 group-hover/row:opacity-100 [@media(hover:none)]:opacity-100",
-          )}
+          triggerClassName={iconButtonClasses({
+            size: "sm",
+            shape: "square",
+            inset: true,
+            className: cx(
+              "focus-visible:opacity-100",
+              rail ? "opacity-0" : open ? "opacity-100" : "opacity-0 group-hover/row:opacity-100 [@media(hover:none)]:opacity-100",
+            ),
+          })}
         >
           <MenuItem
             icon="pin"
