@@ -105,20 +105,16 @@ export function seedOf(text: string): number {
   return h >>> 0;
 }
 
-/** A small deterministic PRNG (mulberry32), so a shuffle is repeatable. */
-function random(seed: number): () => number {
+/** A seeded Fisher-Yates, mulberry32 seeded, so the same seed always gives the same order. */
+export function shuffleWithSeed<T>(list: readonly T[], seed: number): T[] {
+  const out = [...list];
   let a = seed;
-  return () => {
+  const next = () => {
     a = (a + 0x6d2b79f5) | 0;
     let t = Math.imul(a ^ (a >>> 15), 1 | a);
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
-}
-
-function shuffled<T>(list: readonly T[], seed: number): T[] {
-  const out = [...list];
-  const next = random(seed);
   for (let i = out.length - 1; i > 0; i -= 1) {
     const j = Math.floor(next() * (i + 1));
     [out[i], out[j]] = [out[j] as T, out[i] as T];
@@ -160,8 +156,8 @@ export function buildChoices(
   const seed = seedOf(conceptId);
   // Draw from the front of the preference order, shuffled within it, so the
   // best distractors are used first but not always in the same slots.
-  const wrong = shuffled(candidates.slice(0, (MAX_CHOICES - 1) * 2), seed).slice(0, MAX_CHOICES - 1);
-  const choices = shuffled([answer.trim(), ...wrong], seed ^ 0x9e3779b9);
+  const wrong = shuffleWithSeed(candidates.slice(0, (MAX_CHOICES - 1) * 2), seed).slice(0, MAX_CHOICES - 1);
+  const choices = shuffleWithSeed([answer.trim(), ...wrong], seed ^ 0x9e3779b9);
   return { choices, correct: choices.indexOf(answer.trim()) };
 }
 

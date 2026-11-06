@@ -1,12 +1,12 @@
 /**
  * Abuse prevention for the `/api/agent/*` routes.
  *
- * These routes spend the owner's provider quota (NVIDIA, Gemini, OpenRouter)
- * on behalf of whoever calls them, and the app has no user accounts: learner
- * state is localStorage only and the caller is a `"use client"` component
- * doing a same-origin `fetch`. Anything the browser would have to send is
- * visible in the JS bundle, so there is no token to check. What is left is
- * three cheap bounds that make casual abuse unrewarding:
+ * These routes spend the owner's provider quota (the keys in their model
+ * chain, saved or the server's) on behalf of whoever holds the session. They
+ * sit behind the owner's sign-in (`apps/web/src/proxy.ts`), and the caller is
+ * a `"use client"` component doing a same-origin `fetch` with the session
+ * cookie. On top of the session, three cheap bounds make abuse from a page
+ * that holds it unrewarding:
  *
  *   1. the request has to look like it came from a page on this same host,
  *   2. the payload has to be small enough that one call cannot amplify cost,
