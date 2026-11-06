@@ -11,7 +11,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 
-import { createdAt, instant, updatedAt } from "./columns";
+import { createdAt, instant, NOW_MS, updatedAt } from "./columns";
 import { inList, quoted } from "./sql-in-list";
 import { concept, curriculumItem } from "./content";
 // `state` and `studio` reference each other: `event.session_id` points at
@@ -120,7 +120,7 @@ export const event = sqliteTable(
     // Was `GENERATED ALWAYS AS IDENTITY`; a rowid alias fills the same role.
     id: integer("id").primaryKey({ autoIncrement: true }),
     /** When it happened, from the emitter. Not the same as `created_at`, which is when it landed. */
-    at: instant("at").notNull().default(sql`(cast(unixepoch('subsec') * 1000 as integer))`),
+    at: instant("at").notNull().default(NOW_MS),
     learnerId: text("learner_id")
       .notNull()
       .references(() => learner.id, { onDelete: "restrict", onUpdate: "cascade" }),

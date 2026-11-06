@@ -5,7 +5,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { BriefEdit } from "@/lib/studio-brief-edit";
 
-import { ElementsEditor } from "./brief-editor";
+import { ElementsEditor, RelationsEditor } from "./brief-editor";
 
 /**
  * The diagram card's element editor on its own, now that it can render
@@ -15,6 +15,8 @@ import { ElementsEditor } from "./brief-editor";
 
 beforeAll(() => {
   (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  // jsdom draws no layout: the arrow ends' lists scroll their row into view.
+  Element.prototype.scrollIntoView ??= () => undefined;
 });
 
 const cleanups: Array<() => void> = [];
@@ -83,5 +85,71 @@ describe("ElementsEditor", () => {
     expect(onRemove).not.toHaveBeenCalled();
     const remove = host.querySelector<HTMLButtonElement>('button[aria-label="Remove element 1"]')!;
     expect(remove.disabled).toBe(true);
+  });
+});
+
+describe("ElementsEditor's remove", () => {
+  it("is in the tab order, so an element with a label can be removed from the keyboard (R3-2-10)", async () => {
+    const { host } = await mount(["Client", "Server"]);
+    const remove = host.querySelector<HTMLButtonElement>('button[aria-label="Remove Client"]')!;
+    expect(remove.disabled).toBe(false);
+    expect(remove.tabIndex).toBe(0);
+  });
+});
+
+describe("RelationsEditor", () => {
+  async function relations(locked: boolean) {
+    const onChange = vi.fn();
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    const brief = {
+      ...edit(["Client", "Server"]),
+      relations: [{ id: "r0", from: "e0", to: "e1", label: "asks" }],
+    } as unknown as BriefEdit;
+    const draw = (isLocked: boolean) =>
+      act(async () =>
+        root.render(
+          createElement(RelationsEditor, {
+            edit: brief,
+            locked: isLocked,
+            problemFor: () => null,
+            messageId: (field: string) => `m-${field}`,
+            onChange,
+            onAdd: vi.fn(),
+            onRemove: vi.fn(),
+          }),
+        ),
+      );
+    await draw(locked);
+    cleanups.push(() => {
+      act(() => root.unmount());
+      host.remove();
+    });
+    const end = (which: "from" | "to") => host.querySelector<HTMLButtonElement>(`button[data-field="relation:r0:${which}"]`)!;
+    return { end, onChange, rerender: draw };
+  }
+
+  it("disables both arrow ends while the editor is locked, as it does the fields beside them (R3-2-10)", async () => {
+    const { end } = await relations(true);
+    expect(end("from").disabled).toBe(true);
+    expect(end("to").disabled).toBe(true);
+  });
+
+  it("closes an open arrow end when the editor locks, and does not reopen it when it unlocks", async () => {
+    const { end, rerender } = await relations(false);
+    await act(async () => end("from").click());
+    expect(end("from").getAttribute("aria-expanded")).toBe("true");
+    await rerender(true);
+    expect(end("from").getAttribute("aria-expanded")).toBe("false");
+    expect(end("from").getAttribute("aria-controls")).toBeNull();
+    await rerender(false);
+    expect(end("from").getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("leaves the ends open while the editor is not locked", async () => {
+    const { end } = await relations(false);
+    expect(end("from").disabled).toBe(false);
+    expect(end("from").getAttribute("aria-label")).toBe("Arrow 1 from: Client");
   });
 });

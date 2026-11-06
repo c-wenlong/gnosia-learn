@@ -68,15 +68,33 @@ export async function openSavedKeys(
   owner: string,
   env: Env = process.env,
 ): Promise<Partial<Record<ProviderName, string>>> {
+  return (await openSavedKeysPinned(db, owner, env)).keys;
+}
+
+/**
+ * The owner's saved keys, and for each custom provider's key the base URL it
+ * was read beside, in one statement (`savedFor`). A caller that sends a
+ * custom key drops it unless the URL it is about to call is that one
+ * (`pinToUrls` in `credentials.ts`): a URL read in a separate query can
+ * belong to a move that landed between the two reads.
+ */
+export async function openSavedKeysPinned(
+  db: CatalogDatabase,
+  owner: string,
+  env: Env = process.env,
+): Promise<{ keys: Partial<Record<ProviderName, string>>; savedFor: Partial<Record<ProviderName, string>> }> {
   const secret = keySecret(env);
-  if (secret === null) return {};
+  if (secret === null) return { keys: {}, savedFor: {} };
   const rows = await readProviderKeys(db, owner);
-  const out: Partial<Record<ProviderName, string>> = {};
+  const keys: Partial<Record<ProviderName, string>> = {};
+  const savedFor: Partial<Record<ProviderName, string>> = {};
   for (const row of rows) {
     const key = openKey(row, { secret, owner, provider: row.provider });
-    if (key !== null) out[row.provider] = key;
+    if (key === null) continue;
+    keys[row.provider] = key;
+    if (row.savedFor !== null) savedFor[row.provider] = row.savedFor;
   }
-  return out;
+  return { keys, savedFor };
 }
 
 /** The deployment has no `AUTH_SECRET` to seal with. */

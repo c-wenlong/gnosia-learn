@@ -3,14 +3,15 @@ import type { Course, TagMeta, TopicEntry } from "./types";
 /**
  * Where a reader gets authored content from, without knowing where it lives.
  *
- * Today every type is a file under `content/` or `learn/`. The migration in
- * docs/CONTENT-MIGRATION.md moves them into Postgres one type at a time, and
- * this interface is the seam that lets it: `fileSource` reads the files,
- * `dbSource` in `@gnosia/catalog` reads the rows, and `selectSource` picks
- * one per type. A caller holds a `ContentSource` and never learns which.
+ * Every type is rows in the catalog since the phase 3 cut-over
+ * (docs/CONTENT-MIGRATION.md), and `dbSource` in `@gnosia/catalog` reads
+ * them; it is the default. `fileSource` reads a tree in the export format,
+ * which is what an import and a test that brings its own tree use, and
+ * `selectSource` picks one per type. A caller holds a `ContentSource` and
+ * never learns which.
  *
- * Every method is async because a database read is, and a synchronous
- * interface cannot be served from `pg` (D9). The file implementation is async
+ * Every method is async because a database read was, on the Postgres driver
+ * this seam was built for (D9). The file implementation is async
  * only in signature; it still parses with the synchronous functions the
  * catalog indexers call, so both sides refuse exactly the same files.
  *

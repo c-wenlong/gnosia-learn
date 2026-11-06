@@ -70,7 +70,7 @@ describe("AssetBody", () => {
     const note = draw(data({ id: "note:a", kind: "note", path: "learn/concepts/a.md" }, { text: source }));
     expect(note).toMatch(/<img [^>]*src="\/a.png"/);
 
-    const log = draw(data({ id: "session:a", kind: "session_log", path: "learn/sessions/a.md" }, { text: source }));
+    const log = draw(data({ id: "session:a", kind: "session", path: "learn/sessions/a.md" }, { text: source }));
     expect(log).not.toContain("<img");
     expect(log).toMatch(/<a [^>]*href="\/a.png"/);
   });

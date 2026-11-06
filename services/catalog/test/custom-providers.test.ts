@@ -56,7 +56,20 @@ describe.skipIf(!reachable.ok)("custom_provider", () => {
     expect(first).toMatchObject({ id: "custom-my-gateway", label: "My gateway", baseUrl: "https://gw.example/v1" });
     const second = await add(scratch.db, LOCAL_LEARNER_ID, { label: "My  gateway", baseUrl: "http://localhost:11434/v1" });
     expect(second.id).toBe("custom-my-gateway-2");
-    const moved = (await updateCustomProvider(scratch.db, LOCAL_LEARNER_ID, first.id, { label: "Work gateway", baseUrl: "https://gw2.example/v1" })).provider;
+    // A new base URL without a new key is refused whole, so the saved key never goes to the new host.
+    await expect(
+      updateCustomProvider(scratch.db, LOCAL_LEARNER_ID, first.id, { label: "Work gateway", baseUrl: "https://gw2.example/v1" }),
+    ).rejects.toMatchObject({ code: "KEY_REQUIRED" });
+    expect((await readCustomProviders(scratch.db, LOCAL_LEARNER_ID)).find((p) => p.id === first.id)).toMatchObject({
+      label: "My gateway",
+      baseUrl: "https://gw.example/v1",
+    });
+    // The same URL sent again with a rename (Settings sends both) needs no key.
+    const renamed = (await updateCustomProvider(scratch.db, LOCAL_LEARNER_ID, first.id, { label: "Renamed", baseUrl: "https://gw.example/v1/" })).provider;
+    expect(renamed).toMatchObject({ label: "Renamed", baseUrl: "https://gw.example/v1" });
+    const moved = (
+      await updateCustomProvider(scratch.db, LOCAL_LEARNER_ID, first.id, { label: "Work gateway", baseUrl: "https://gw2.example/v1" }, sealed("wxyz"))
+    ).provider;
     expect(moved).toMatchObject({ id: "custom-my-gateway", label: "Work gateway", baseUrl: "https://gw2.example/v1" });
     expect((await readCustomProviders(scratch.db, LOCAL_LEARNER_ID)).map((p) => p.label)).toEqual(["My gateway", "Work gateway"]);
   });

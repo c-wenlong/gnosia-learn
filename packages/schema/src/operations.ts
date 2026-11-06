@@ -93,9 +93,9 @@ export const indexRun = sqliteTable(
      * count.
      *
      * Every content type records `root`, the absolute directory it was read
-     * from, and `database`, which database read it (`current_database()` and
-     * its oid): a seam write rewrites that tree's files (D17), and only on the
-     * database that recorded it, since a `createdb -T` copy inherits the row
+     * from, and `database`, which database read it (its file's path): a seam
+     * write rewrites that tree's files (D17), and only on the database that
+     * recorded it, since a copy of the file inherits the row
      * (`services/catalog/src/content/import-root.ts`).
      *
      * `mirrors` records which destinations it could reach: a destination it

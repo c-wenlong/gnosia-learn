@@ -4,8 +4,10 @@
  *
  * `order` is the sort key and nothing else. It may have gaps (archiving a
  * module leaves 1 and 3), so printing it gave "Module 3 of 2". The list is
- * already in `order` (both readers sort by it), so a module's place in it
- * runs 1..N with no gaps and never passes the count. Every header, sidebar
+ * already in `order`: the database reader sorts by `position`, which an
+ * import writes from `order`, and the file reader (`readCourse`) sorts by
+ * `order` and refuses two modules of a course sharing one. So a module's
+ * place in it runs 1..N with no gaps and never passes the count. Every header, sidebar
  * row, neighbour link, label and prompt that names a module by number goes
  * through here, and the macOS app's `CatalogCourse.number(of:)` ports the
  * same rule against `apps/macos/Tests/GnosiaTests/Fixtures/module-numbers.json`.

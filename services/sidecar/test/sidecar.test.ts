@@ -611,11 +611,20 @@ describe.skipIf(!reachable.ok)("the learner write routes, against a scratch data
     const chained = await call2("/api/learner/tutor-model", "POST", { provider: "custom-my-gateway", model: "my-model-1" });
     expect(await chained.json()).toMatchObject({ ok: true });
 
-    // The PATCH renames it and moves it; the id and the models stay.
+    // A move without the key is refused: the saved key goes only to the URL it was saved for.
+    const keyless = await call2("/api/learner/custom-provider", "PATCH", {
+      provider: "custom-my-gateway",
+      baseUrl: "https://gateway2.example.com/v1",
+    });
+    expect(keyless.status).toBe(400);
+    expect(await keyless.json()).toMatchObject({ ok: false, code: "KEY_REQUIRED" });
+
+    // The PATCH renames it and moves it with its key; the id and the models stay.
     const renamed = await call2("/api/learner/custom-provider", "PATCH", {
       provider: "custom-my-gateway",
       label: "Renamed gateway",
       baseUrl: "https://gateway2.example.com/v1",
+      key: CUSTOM_KEY,
     });
     expect(await renamed.json()).toMatchObject({
       ok: true,

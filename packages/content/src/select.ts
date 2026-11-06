@@ -136,9 +136,11 @@ export interface SelectSourceOptions {
   /** `CONTENT_SOURCE`'s value. Defaults to `process.env.CONTENT_SOURCE`. */
   variable?: string | undefined;
   /**
-   * Told why the rows could not be read. Defaults to one `console.warn`. A
-   * reporter that throws fails the read with what it threw instead of falling
-   * back to files, which is how a framework's own control flow thrown through
+   * Told why the rows could not be read. Defaults to one `console.warn`. With
+   * no rows every type `CONTENT_SOURCE` does not name reads the database (the
+   * default since the cut-over), so a database that is down then fails that
+   * read too, and says why. A reporter that throws fails the read with what it
+   * threw instead, which is how a framework's own control flow thrown through
    * the callback (Next's "dynamic server usage" during a prerender) gets back
    * to the framework.
    */
@@ -168,7 +170,9 @@ export function selectSource(options: SelectSourceOptions): SelectedSource {
     options.onOwnershipError ??
     ((error: unknown) => {
       const message = error instanceof Error ? error.message : String(error);
-      console.warn(`content source: the content_source rows could not be read, reading files. ${message}`);
+      console.warn(
+        `content source: the content_source rows could not be read, so every type CONTENT_SOURCE does not name reads the database. ${message}`,
+      );
     });
 
   let resolved: Promise<Resolutions> | null = null;
