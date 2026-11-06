@@ -110,7 +110,7 @@ export default async function StudioPage({
   // under load.
   //
   // The topics come from the runner, not from the app's own content read: that
-  // read is database-only and throws with Postgres down, and U3 says this
+  // read is database-only and throws with the catalog unreadable, and U3 says this
   // screen still browses and draws then. The runner answers from its D13 copy,
   // and with no copy at all the chips fall back to slugs and the banner below
   // says why.

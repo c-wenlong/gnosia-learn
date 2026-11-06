@@ -1383,12 +1383,12 @@ not have to be worked out again.
   "Lint, test, and build" runs on Ubuntu; the local gate (`npm run lint &&
   npm run typecheck && npm test && npm run build`) runs on the Mac, and
   neither needs a database server: every catalog suite makes its own scratch
-  file. CI sets `DATABASE_URL` to a `postgres://` value nothing listens on,
-  on purpose: the catalog refuses it (`databasePath()` in
-  `services/catalog/src/env.ts`), so a test that opens the default catalog
-  instead of a scratch file fails on CI, where on a laptop it would read the
-  owner's real `~/.gnosia/catalog.db`. Run the suite with that same value
-  to see it locally. CI does not build on a pull request: `npm run
+  file. `vitest.setup.ts` blanks `CATALOG_DB`, sets `DATABASE_URL` to a
+  `postgres://` value the catalog refuses (`databasePath()` in
+  `services/catalog/src/env.ts`) and refuses to open the owner's real
+  catalog file, on every run, local and CI alike (#578), so a test that opens
+  the default catalog instead of a scratch file fails everywhere. CI sets the
+  same `DATABASE_URL` too. CI does not build on a pull request: `npm run
   build` runs in `deploy.yml` when a release is published, so the local
   build is the one a PR gets. `node_modules` and the ESLint cache are
   restored from `main`'s caches, which `.github/workflows/cache.yml` refills
