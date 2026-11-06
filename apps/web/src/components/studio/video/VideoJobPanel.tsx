@@ -15,7 +15,7 @@ import { FadeImg } from "@/components/studio/motion-parts";
 import { useJobEvents, useSheets, useTranscript, useVideoJob } from "@/components/studio/video/use-video-job";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
-import { buttonClasses, cx, LABEL } from "@/components/ui/classes";
+import { buttonClasses, cx, FOCUS, LABEL } from "@/components/ui/classes";
 import { composerKey } from "@/components/ui/composer-keys";
 import { Collapse } from "@/components/ui/Collapse";
 import { Disclosure } from "@/components/ui/Disclosure";
@@ -439,7 +439,7 @@ export function SheetStrip({
                   aria-label={`Open the sheet for ${title}`}
                   className={cx(
                     "relative block aspect-video w-full overflow-hidden rounded-lg border bg-black transition-shadow",
-                    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+                    FOCUS,
                     open === scene ? "border-accent ring-2 ring-accent" : "border-hair hover:border-border",
                   )}
                 >
@@ -591,7 +591,7 @@ function HowItWasMade({
   return (
     <section className="min-w-0 border-t border-hair pt-4">
       <Disclosure
-        className="flex w-full items-center justify-between rounded-md text-left text-[13px] font-semibold text-text2 hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        className={cx("flex w-full items-center justify-between rounded-md text-left text-[13px] font-semibold text-text2 hover:text-text", FOCUS)}
         summary={(open) => (
           <>
             <span>How it was made</span>
@@ -701,7 +701,7 @@ function Chapters({
                 <button
                   type="button"
                   onClick={() => onJump(scene.start ?? 0)}
-                  className="min-w-0 flex-1 rounded-sm text-left text-[14px] font-semibold text-text hover:text-accent-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                  className={cx("min-w-0 flex-1 rounded-sm text-left text-[14px] font-semibold text-text hover:text-accent-text", FOCUS)}
                   aria-label={`Play from ${scene.title}, at ${formatTimecode(scene.start)}`}
                 >
                   {scene.title}

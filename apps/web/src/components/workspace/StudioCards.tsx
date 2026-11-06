@@ -6,7 +6,7 @@ import { ConceptGraph } from "@/components/ConceptGraph";
 import { MathText } from "@/components/Math";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { cx } from "@/components/ui/classes";
+import { cx, FOCUS } from "@/components/ui/classes";
 import { AssetThumb } from "@/components/workspace/AssetThumb";
 import type { CheckStatus, ConceptWorkspace } from "@gnosia/tutor/concept-workspace-core";
 import { historyBars } from "@gnosia/tutor/concept-workspace-core";
@@ -133,7 +133,7 @@ export function StudioCards({
               <li key={a.id}>
                 <Link
                   href={assetHref(a.id)}
-                  className="flex h-11 min-w-0 items-center gap-2.5 rounded-xl bg-surface2 px-2 text-[12px] text-text2 transition-colors duration-100 hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                  className={cx("flex h-11 min-w-0 items-center gap-2.5 rounded-xl bg-surface2 px-2 text-[12px] text-text2 transition-colors duration-100 hover:text-text", FOCUS)}
                 >
                   <AssetThumb src={a.thumbnail} />
                   <span className="min-w-0 flex-1 truncate px-1">

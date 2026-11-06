@@ -9,7 +9,7 @@ import { Chip } from "@/components/ui/Chip";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import { Placeholder } from "@/components/ui/Placeholder";
 import { Tabs, type TabItem } from "@/components/ui/Tabs";
-import { cx, LABEL } from "@/components/ui/classes";
+import { cx, FOCUS, LABEL } from "@/components/ui/classes";
 import { assetHref, conceptHref, libraryHref, type ExplainedConcept } from "@/lib/library";
 import { ownValue } from "@gnosia/tutor/own-key";
 
@@ -115,7 +115,7 @@ function ExplainsList({ concepts }: { concepts: ExplainedConcept[] }) {
               <MasteryDot bucket={c.bucket} />
               <Link
                 href={conceptHref(c.slug)}
-                className="min-w-0 flex-1 truncate rounded-sm text-[14px] text-text underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                className={cx("min-w-0 flex-1 truncate rounded-sm text-[14px] text-text underline-offset-4 hover:underline", FOCUS)}
               >
                 {c.title}
               </Link>
@@ -163,7 +163,7 @@ function RelatedRow({ asset }: { asset: AssetWithTopics }) {
     <li>
       <Link
         href={assetHref(asset.id)}
-        className="group flex items-center gap-3 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        className={cx("group flex items-center gap-3 rounded-lg", FOCUS)}
       >
         <span className="w-16 shrink-0">
           <Placeholder label={assetKindLabel(asset.kind)} height={44} className="px-1" />
@@ -226,7 +226,7 @@ function FamilyRow({ asset }: { asset: AssetRef }) {
     <li>
       <Link
         href={assetHref(asset.id)}
-        className="group flex min-w-0 items-baseline justify-between gap-3 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        className={cx("group flex min-w-0 items-baseline justify-between gap-3 rounded-sm", FOCUS)}
       >
         <span className="shrink-0 text-[13px] text-text underline-offset-4 group-hover:underline">
           {assetKindLabel(asset.kind)}

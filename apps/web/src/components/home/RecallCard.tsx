@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardAction } from "@/components/ui/Card";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import { recallHref, type RecallPick } from "@/lib/home-core";
+import { cx, FOCUS } from "@/components/ui/classes";
 
 /**
  * Worth a quick recall (docs/proposals/home-page.md, part 4): at most three
@@ -27,7 +28,7 @@ export function RecallCard({ picks }: { picks: RecallPick[] }) {
             <MasteryDot bucket={pick.bucket} />
             <Link
               href={recallHref(pick)}
-              className="min-w-0 flex-1 truncate rounded-sm text-[14px] text-text underline-offset-4 transition-colors duration-100 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              className={cx("min-w-0 flex-1 truncate rounded-sm text-[14px] text-text underline-offset-4 transition-colors duration-100 hover:underline", FOCUS)}
             >
               {pick.title}
             </Link>

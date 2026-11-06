@@ -14,7 +14,7 @@ import {
 import { EmbedImage } from "@/components/EmbedImage";
 import { SvgBlock } from "@/components/SvgBlock";
 import { compileSvg } from "@/lib/svg-block";
-import { cx } from "@/components/ui/classes";
+import { cx, FOCUS } from "@/components/ui/classes";
 import { DisplayMath, InlineMath } from "@/components/Math";
 import { WidgetFailure } from "@/components/WidgetFailure";
 import type { AssetProblemCode } from "@gnosia/tutor/asset-problems";
@@ -410,7 +410,7 @@ function HeadingAnchor({ id, text }: { id: string; text: string }) {
       // written, whatever it contains; a Unicode id survives it the same way.
       href={`#${encodeURIComponent(id)}`}
       aria-label={`Link to "${text}"`}
-      className="-m-2 ml-0.5 inline-block rounded-sm p-2 align-middle text-[0.8em] font-normal text-text2 no-underline opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent [@media(hover:none)]:opacity-100"
+      className={cx("-m-2 ml-0.5 inline-block rounded-sm p-2 align-middle text-[0.8em] font-normal text-text2 no-underline opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-visible:opacity-100", FOCUS, "[@media(hover:none)]:opacity-100")}
     >
       #
     </a>
@@ -666,7 +666,7 @@ function Figure({
 }
 
 const LINK_CLASS =
-  "rounded-sm text-accent-text underline decoration-1 underline-offset-2 transition-colors duration-150 hover:decoration-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+  cx("rounded-sm text-accent-text underline decoration-1 underline-offset-2 transition-colors duration-150 hover:decoration-2", FOCUS);
 
 function Inlines({ nodes, links }: { nodes: Inline[]; links: Resolvers }) {
   return (

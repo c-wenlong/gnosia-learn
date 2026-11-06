@@ -6,7 +6,7 @@ import { FADE_IN } from "@/components/studio/motion";
 import { PanelLink } from "@/components/studio/PanelLink";
 import { DialogHeader } from "@/components/studio/StudioDialog";
 import { Button } from "@/components/ui/Button";
-import { buttonClasses, cx } from "@/components/ui/classes";
+import { buttonClasses, cx, FOCUS } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
 import { jobKind } from "@/lib/studio-cards";
 import { isTerminal, type Job } from "@/lib/studio-jobs";
@@ -90,7 +90,7 @@ function BackBar({ href }: { href: string }) {
       <PanelLink
         href={href}
         scroll={false}
-        className="inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[13px] font-medium text-text2 transition-colors hover:bg-surface hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        className={cx("inline-flex h-8 items-center gap-1.5 rounded-full px-2.5 text-[13px] font-medium text-text2 transition-colors hover:bg-surface hover:text-text", FOCUS)}
       >
         <Glyph name="previous" size={16} />
         From your conversation

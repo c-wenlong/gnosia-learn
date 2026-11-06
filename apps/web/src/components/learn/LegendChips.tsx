@@ -2,7 +2,7 @@
 
 import { memo, useMemo, useState } from "react";
 
-import { cx } from "@/components/ui/classes";
+import { cx, FOCUS } from "@/components/ui/classes";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import { LEGEND_GROUPS, type IndexFilter, type LegendGroup } from "@/lib/learn-index";
 
@@ -93,7 +93,7 @@ export const LegendChips = memo(function LegendChips({
             className={cx(
               "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-[12px] font-medium whitespace-nowrap",
               "transition-[color,background-color,border-color] duration-150 motion-reduce:transition-none",
-              "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+              FOCUS,
               on ? "border-accent bg-tint text-accent-text" : "border-border bg-surface text-text hover:bg-surface2",
             )}
           >

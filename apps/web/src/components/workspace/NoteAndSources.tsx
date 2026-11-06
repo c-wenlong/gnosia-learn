@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 
 import { MathText } from "@/components/Math";
 import { NoteProse, type EmbedResolution } from "@/components/NoteProse";
-import { cx } from "@/components/ui/classes";
+import { cx, FOCUS } from "@/components/ui/classes";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import { TextLink } from "@/components/ui/TextLink";
 import type { CitationSource } from "@gnosia/tutor/prompt";
@@ -35,7 +35,7 @@ function NeighbourList({ refs, empty, note }: { refs: NeighbourRef[]; empty: str
         <li key={r.slug}>
           <Link
             href={`/learn/${r.slug}`}
-            className="group inline-flex max-w-full items-center gap-2 rounded-sm text-[13px] text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            className={cx("group inline-flex max-w-full items-center gap-2 rounded-sm text-[13px] text-text", FOCUS)}
           >
             <MasteryDot bucket={r.bucket} size={12} />
             <span className="min-w-0 truncate group-hover:underline group-hover:underline-offset-4">{r.title}</span>

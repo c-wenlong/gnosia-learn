@@ -10,7 +10,7 @@ import { FOLD_MS } from "@/components/studio/motion";
 import { FadeImg } from "@/components/studio/motion-parts";
 import { VideoChangeButton } from "@/components/studio/video/VideoGridJob";
 import { Button } from "@/components/ui/Button";
-import { buttonClasses, cx } from "@/components/ui/classes";
+import { buttonClasses, cx, FOCUS } from "@/components/ui/classes";
 import { CollapseChevron } from "@/components/ui/Collapse";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Glyph } from "@/components/ui/Glyph";
@@ -146,7 +146,7 @@ export function MadeList({ made }: { made: readonly MadeItem[] }) {
       <Disclosure
         open={open}
         onOpenChange={setOpen}
-        className="inline-flex items-center gap-1 self-start rounded-sm text-[13px] font-medium text-text2 hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        className={cx("inline-flex items-center gap-1 self-start rounded-sm text-[13px] font-medium text-text2 hover:text-text", FOCUS)}
         regionClassName="w-full"
         summary={(shown) => (
           <>
