@@ -1,7 +1,7 @@
 import type { Family } from "@gnosia/tutor/asset-meta";
 import type { ModuleMark, ModuleMetaPart, TopicMark } from "@/lib/course-path";
 import { MASTERY_BUCKET_LABEL } from "@gnosia/tutor/mastery-bucket";
-import type { ResourceType } from "@gnosia/tutor/types";
+import type { ResourceType } from "@gnosia/content";
 
 import { Glyph, type GlyphName } from "@/components/ui/Glyph";
 import { MasteryDot } from "@/components/ui/MasteryDot";

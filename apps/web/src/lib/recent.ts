@@ -42,7 +42,7 @@ import {
   type VideoProgress,
 } from "@/lib/recent-core";
 import { studioEnabled } from "@/lib/studio";
-import type { Course } from "@gnosia/tutor/types";
+import type { Course } from "@gnosia/content";
 
 /**
  * Recent, read from the catalog (L7 of

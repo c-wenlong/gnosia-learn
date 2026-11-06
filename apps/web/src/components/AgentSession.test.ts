@@ -4,7 +4,7 @@ import { createRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Course, Module, Topic } from "@gnosia/tutor/types";
+import type { Course, Module, Topic } from "@gnosia/content";
 
 /**
  * The course topic tutor's check cards (docs/proposals/structured-checks.md,

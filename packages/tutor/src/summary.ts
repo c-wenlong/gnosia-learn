@@ -1,10 +1,9 @@
 import type {
   Course,
-  KnowledgeInput,
   Module,
   Topic,
-  TopicKnowledge,
-} from "./types";
+} from "@gnosia/content";
+import type { KnowledgeInput, TopicKnowledge } from "@gnosia/schema/shared";
 import { buildLearningObjectives } from "./objectives";
 
 export interface TranscriptTurn {

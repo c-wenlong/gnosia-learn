@@ -3,7 +3,7 @@ import "server-only";
 import { cache } from "react";
 
 import { contentSource } from "@/data/source";
-import type { TagMeta } from "@gnosia/tutor/types";
+import type { TagMeta } from "@gnosia/content";
 
 /**
  * The app's view of the cross-course themes.
