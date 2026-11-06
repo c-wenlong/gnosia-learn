@@ -8,6 +8,7 @@ import {
   readCards,
 } from "@gnosia/catalog/state";
 import type { ContentSource, Course } from "@gnosia/content";
+import { moduleNumber } from "@gnosia/content/module-number";
 import type { OwnerScope } from "@gnosia/schema/shared";
 
 import { findTopicAcrossCourses } from "../lookup";
@@ -48,7 +49,7 @@ export function placeOf(courses: readonly Course[], topicIds: readonly string[])
       courseCode: found.course.code,
       courseTitle: found.course.title,
       moduleSlug: found.module.slug,
-      moduleOrder: found.module.order,
+      moduleNumber: moduleNumber(found.course, found.module),
       moduleTitle: found.module.title,
       topicId: found.topic.id,
       topicTitle: found.topic.title,

@@ -229,15 +229,16 @@ struct ConceptPlace: Hashable {
     let courseCode: String
     let courseTitle: String
     let moduleSlug: String
-    let moduleOrder: Int
+    /// The module's number in the course, 1-based — CatalogCourse.number(of:).
+    let moduleNumber: Int
     let moduleTitle: String
     let topicId: String
     let topicTitle: String
 
     /// "CP4281 · Module 2 · Transformations" — placeLabel.
-    var label: String { "\(courseCode) · Module \(moduleOrder) · \(topicTitle)" }
+    var label: String { "\(courseCode) · Module \(moduleNumber) · \(topicTitle)" }
     /// "CP4281 M2" — the index row's courseLabel.
-    var shortLabel: String { "\(courseCode) M\(moduleOrder)" }
+    var shortLabel: String { "\(courseCode) M\(moduleNumber)" }
 }
 
 /// A course as "Next from here" walks it — PathCourse in home-core.ts:
@@ -525,14 +526,14 @@ struct LearnGraph {
         var allCourses: [PathCourse] = []
         for course in courses {
             var modules: [PathCourse.Module] = []
-            for m in course.modules {
+            for (index, m) in course.modules.enumerated() {
                 var topics: [PathCourse.Item] = []
                 for item in m.items {
                     topics.append(PathCourse.Item(id: item.id, title: item.title))
                     itemPlace[item.id] = ConceptPlace(
                         courseSlug: course.slug, courseCode: course.code,
                         courseTitle: course.title, moduleSlug: m.slug,
-                        moduleOrder: m.order, moduleTitle: m.title,
+                        moduleNumber: index + 1, moduleTitle: m.title,
                         topicId: item.id, topicTitle: item.title
                     )
                 }
@@ -1360,7 +1361,8 @@ struct ModulePlace {
     let courseCode: String
     let courseTitle: String
     let moduleTitle: String?
-    let moduleOrder: Int?
+    /// The module's number in the course — CatalogCourse.number(of:).
+    let moduleNumber: Int?
 }
 
 /// A library video with a saved position — VideoProgress.
@@ -1442,7 +1444,7 @@ func modulePlace(_ visit: ModuleVisit, store: CatalogStore) -> ModulePlace? {
     if visit.moduleSlug != nil && found == nil { return nil }
     return ModulePlace(
         courseCode: course.code, courseTitle: course.title,
-        moduleTitle: found?.title, moduleOrder: found?.order
+        moduleTitle: found?.title, moduleNumber: found.map { course.number(of: $0) }
     )
 }
 
@@ -1493,8 +1495,8 @@ func recentItems(
             key: "module:\(visit.courseSlug)/\(visit.moduleSlug ?? "")",
             kind: .module,
             title: inModule ? place.moduleTitle! : place.courseTitle,
-            detail: inModule && place.moduleOrder != nil
-                ? "\(place.courseCode) · Module \(place.moduleOrder!)"
+            detail: inModule && place.moduleNumber != nil
+                ? "\(place.courseCode) · Module \(place.moduleNumber!)"
                 : place.courseCode,
             destination: inModule
                 ? .module(course: visit.courseSlug, module: visit.moduleSlug!)
@@ -1572,7 +1574,7 @@ struct SidebarCourse: Identifiable {
     let destination: RecentDestination
     /// The module visited last, when one is recorded — the web's `resume`,
     /// drawn as "<order>. <title>" under the course's name.
-    let resume: (order: Int, title: String)?
+    let resume: (number: Int, title: String)?
 }
 
 /// A stored pin — PinnedRow, with the web href already read into the
@@ -1710,7 +1712,7 @@ extension LearnGraph {
             return SidebarCourse(
                 slug: c.slug, code: c.code, title: c.title,
                 destination: last.map { .module(course: c.slug, module: $0.slug) } ?? .course(c.slug),
-                resume: last.map { (order: $0.order, title: $0.title) }
+                resume: last.map { (number: c.number(of: $0), title: $0.title) }
             )
         }
     }
@@ -1957,14 +1959,14 @@ extension LearnGraph {
             let start = fromModule == nil ? 0 : (course.modules.firstIndex { $0.slug == fromModule! } ?? -1)
             if start < 0 { return [] }
             var steps: [NextStep] = []
-            for mod in course.modules.dropFirst(start) {
+            for (index, mod) in course.modules.enumerated().dropFirst(start) {
                 guard let topic = mod.topics.first(where: { !isDone($0.id) }) else { continue }
                 let destination: RecentDestination =
                     if let mastery = topicMastery(topic.id) { .concept(mastery.next) }
                     else { .module(course: course.slug, module: mod.slug) }
                 steps.append(NextStep(
                     key: "topic:\(topic.id)", title: topic.title,
-                    detail: "\(course.code) · Module \(mod.order)",
+                    detail: "\(course.code) · Module \(index + 1)",
                     destination: destination
                 ))
             }
@@ -2084,7 +2086,7 @@ extension LearnGraph {
         let eyebrow: String
         let short: String
         if let code = place?.courseCode {
-            let unit = place?.moduleOrder
+            let unit = place?.moduleNumber
             eyebrow = ["Next on your path", code, unit.map { "Module \($0)" }]
                 .compactMap { $0 }.joined(separator: " · ")
             short = "Next up · \(code)\(unit.map { " M\($0)" } ?? "")"

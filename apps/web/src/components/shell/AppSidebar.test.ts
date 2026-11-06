@@ -340,7 +340,7 @@ describe("the sections", () => {
     title: "Algorithms",
     href: "/courses/cs3230",
     open: "/courses/cs3230/m2",
-    resume: { title: "Divide and conquer", order: 2 },
+    resume: { title: "Divide and conquer", number: 2 },
   };
   const withRows = (patch: Partial<RecentModel> = {}) => mocks.fetchRecent.mockResolvedValue({ ...EMPTY, items: [VIDEO, MODULE, CONCEPT], courses: [COURSE], ...patch });
   const section = (container: HTMLElement, id: string) => nav(container).querySelector(`#${id}`)!.closest("section")!;
@@ -498,7 +498,7 @@ describe("the sections", () => {
   });
 
   it("names the module visited last by its whole title, never cut at the colon, truncating with the tooltip holding it", async () => {
-    withRows({ courses: [{ ...COURSE, resume: { title: "Week 2: MapReduce", order: 2 } }] });
+    withRows({ courses: [{ ...COURSE, resume: { title: "Week 2: MapReduce", number: 2 } }] });
     const container = await mount(false);
     const row = section(container, "sidebar-courses").querySelector<HTMLAnchorElement>("li a")!;
     const line = [...row.querySelectorAll("span")].find((s) => s.textContent === "2. Week 2: MapReduce")!;
