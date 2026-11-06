@@ -10,6 +10,7 @@ import {
 } from "drizzle-orm/sqlite-core";
 
 import { createdAt, instant, ownerId, updatedAt } from "./columns";
+import { inList } from "./sql-in-list";
 import { learner } from "./state";
 import { job, session } from "./studio";
 
@@ -22,10 +23,6 @@ import { job, session } from "./studio";
  * records which content types the database owns, and `catalog_instance` says
  * whether this database is the one writes belong in.
  */
-
-const quoted = (values: readonly string[]) => values.map((v) => `'${v}'`).join(", ");
-const inList = (column: string, values: readonly string[]) =>
-  sql.raw(`${column} in (${quoted(values)})`);
 
 /**
  * The entities a revision can be about. Link rows have no type of their own:

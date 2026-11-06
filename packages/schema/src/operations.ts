@@ -9,6 +9,7 @@ import {
 } from "drizzle-orm/sqlite-core";
 
 import { createdAt, instant, updatedAt } from "./columns";
+import { inList } from "./sql-in-list";
 import { asset } from "./content";
 
 /**
@@ -115,7 +116,7 @@ export const indexRun = sqliteTable(
   () => [
     check(
       "index_run_source_check",
-      sql.raw(`source in (${INDEX_SOURCES.map((s) => `'${s}'`).join(", ")})`),
+      inList("source", INDEX_SOURCES),
     ),
     check("index_run_written_check", sql`written >= 0 and deleted >= 0`),
     check("index_run_order_check", sql`finished_at >= started_at`),
@@ -179,11 +180,11 @@ export const mirror = sqliteTable(
     primaryKey({ columns: [t.assetId, t.destination] }),
     check(
       "mirror_status_check",
-      sql.raw(`status in (${MIRROR_STATUSES.map((s) => `'${s}'`).join(", ")})`),
+      inList("status", MIRROR_STATUSES),
     ),
     check(
       "mirror_compared_check",
-      sql.raw(`compared in (${MIRROR_COMPARISONS.map((c) => `'${c}'`).join(", ")})`),
+      inList("compared", MIRROR_COMPARISONS),
     ),
     check("mirror_bytes_check", sql`bytes is null or bytes >= 0`),
     // `catalog status` counts by status across every destination, and that is
