@@ -80,17 +80,6 @@ export async function requestOwner(): Promise<string | NextResponse> {
   }
 }
 
-/**
- * The 401 for a request with no session, or null when it has one. For a route
- * whose reader resolves the owner itself: deciding it here first means a
- * request that got past the proxy is a 401, not the reader's `NoOwnerError`
- * surfacing as a 500 or as "the catalog is unreachable".
- */
-export async function refuseWithoutOwner(): Promise<NextResponse | null> {
-  const owner = await requestOwner();
-  return owner instanceof NextResponse ? owner : null;
-}
-
 export function badRequest(message: string): NextResponse {
   return NextResponse.json({ ok: false, error: message, code: "BAD_REQUEST" }, { status: 400 });
 }

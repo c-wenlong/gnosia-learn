@@ -18,7 +18,7 @@ import {
   type PathAsset,
   type PathPrerequisite,
 } from "@/lib/module-path";
-import type { Course, Module } from "@gnosia/tutor/types";
+import type { Course, Module } from "@gnosia/content";
 
 import { Glyph, type GlyphName } from "@/components/ui/Glyph";
 

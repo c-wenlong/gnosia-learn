@@ -1,13 +1,14 @@
 /**
- * The studio's motion vocabulary, on top of the tokens in `globals.css` and
+ * The kit's motion vocabulary, on top of the tokens in `globals.css` and
  * the rules in docs/design/IMPLEMENTATION.md, "Motion": something that
  * mounts animates in, something with height folds, and nothing moves for a
  * reader who asked for less.
  *
  * Plain strings, in a module with no `"use client"`, so a
- * server component (the studio page, the canvas page) can use the classes
- * too: imported from a client module they would be client references, not
- * strings. The pieces that hold state are in `motion-parts.tsx`.
+ * server component (a page, the server-drawn library rows) can use the
+ * classes too: imported from a client module they would be client
+ * references, not strings. The studio's pieces that hold state are in
+ * `components/studio/motion-parts.tsx`.
  */
 
 /** How long `Collapse` takes to fold (its `duration-300`). */

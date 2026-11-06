@@ -47,5 +47,5 @@ export async function POST(req: Request) {
   const rateLimited = enforceRateLimit(owner, "summarize", SUMMARIZE_RATE_LIMIT);
   if (rateLimited) return rateLimited;
 
-  return turnResponse(await summarizeTurn(tutorDeps(owner), body));
+  return turnResponse(await summarizeTurn(tutorDeps(owner, req.signal), body));
 }

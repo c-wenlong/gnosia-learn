@@ -6,7 +6,7 @@ import { HarnessPicker } from "@/components/studio/HarnessPicker";
 import { HomeComposer } from "@/components/studio/HomeComposer";
 import { ExtendStart } from "@/components/studio/ExtendStart";
 import { JobStrip } from "@/components/studio/JobStrip";
-import { FADE_IN } from "@/components/studio/motion";
+import { FADE_IN } from "@/components/ui/motion";
 import { RenewLists } from "@/components/studio/RenewLists";
 import { StudioDialog } from "@/components/studio/StudioDialog";
 import { ShotView } from "@/components/studio/ShotView";
@@ -110,7 +110,7 @@ export default async function StudioPage({
   // under load.
   //
   // The topics come from the runner, not from the app's own content read: that
-  // read is database-only and throws with Postgres down, and U3 says this
+  // read is database-only and throws with the catalog unreadable, and U3 says this
   // screen still browses and draws then. The runner answers from its D13 copy,
   // and with no copy at all the chips fall back to slugs and the banner below
   // says why.

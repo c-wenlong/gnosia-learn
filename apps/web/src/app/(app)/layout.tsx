@@ -32,7 +32,7 @@ import { asThemeMode, LEGACY_THEME_COOKIE, THEME_COOKIE } from "@/lib/theme-cook
  * `requireSignedIn` runs first and before any query. The proxy has already
  * turned an anonymous visitor away; this is the second lock, the one that
  * still holds if a matcher edit ever lets a page through, and it also means a
- * stranger's request never reaches Postgres.
+ * stranger's request never reaches the catalog.
  *
  * **The stored row wins over the browser's cookie**, for the theme and for
  * motion alike, whenever the database answered: a choice made in another

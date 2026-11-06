@@ -11,14 +11,14 @@ import { TextLink } from "@/components/ui/TextLink";
 import { useCopied } from "@/components/ui/use-copied";
 import type {
   Course,
-  KnowledgeInput,
   Module,
   Topic,
-  TopicKnowledge,
-} from "@gnosia/tutor/types";
+} from "@gnosia/content";
+import type { KnowledgeInput, TopicKnowledge } from "@gnosia/schema/shared";
 import { useLearner } from "@/lib/learner-context";
 import { formatKnowledgeMarkdown } from "@gnosia/tutor/summary";
 import { ownValue } from "@gnosia/tutor/own-key";
+import { FADE_IN } from "@/components/ui/motion";
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
@@ -284,7 +284,7 @@ export function TopicRecap({
   // swapping in a frame.
   if (editing) {
     return (
-      <div className="w-full animate-fade-in motion-reduce:animate-none">
+      <div className={cx("w-full", FADE_IN)}>
         <RecapEditor
           focusOnOpen
           initial={knowledge}
@@ -307,7 +307,7 @@ export function TopicRecap({
   }
 
   return (
-    <div className="w-full animate-fade-in motion-reduce:animate-none">
+    <div className={cx("w-full", FADE_IN)}>
       <RecapCard
         knowledge={knowledge}
         course={course}

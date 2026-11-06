@@ -493,7 +493,7 @@ file cannot disagree about what a course means.
 
 `apps/web/src/data/courses/index.ts` is the app's view of that: `import "server-only"`,
 `getCourses()` (async, wrapped in React's `cache()` so a render reads once),
-and the lookups pages call: `getCourse`, `getModule`, `findTopic`,
+and the lookups pages call: `getCourse`, `getModule`,
 `getAllTopicIds`, `getRelatedCourses`. The ones that need
 every course take the list as an argument, so a page reads it once and the
 helpers under `lib/` stay synchronous. `apps/web/src/data/content.ts`
