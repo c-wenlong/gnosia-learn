@@ -30,9 +30,11 @@ import { session } from "./studio";
  * else. Never drop them expecting an import to rebuild them: nothing in the
  * repository can, and only an export taken first (`catalog export`, or the
  * nightly one) brings them back. `content_revision` is their history, one row
- * per write. Only the video tools' rows are still derived, from each tool's
- * `topics --json` report on `catalog import`. The state half (state.ts) is the
- * learner's evidence about all of this, and is the only copy too.
+ * per write, except a session log's text, whose history is its append-only
+ * `session_log_entry` rows (D20), not a revision's snapshot. Only the video
+ * tools' rows are still derived, from each tool's `topics --json` report on
+ * `catalog import`. The state half (state.ts) is the learner's evidence about
+ * all of this, and is the only copy too.
  *
  * Kind columns are `text` plus a CHECK rather than a SQLite ENUM — SQLite has
  * no ENUM type at all, and a `text` CHECK is a one-line change in a migration,
