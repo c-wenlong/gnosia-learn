@@ -45,6 +45,7 @@ describe.skipIf(!reachable.ok)("custom provider routes", () => {
   let chain: typeof import("../tutor-model/route");
   let providerRoute: typeof import("../tutor-model/provider/route");
   let models: typeof import("../tutor-model/models/route");
+  let tester: typeof import("../provider-key/test/route");
   let credentials: typeof import("@/lib/agent/credentials");
   const saved = { url: process.env.DATABASE_URL, secret: process.env.AUTH_SECRET };
 
@@ -58,12 +59,13 @@ describe.skipIf(!reachable.ok)("custom provider routes", () => {
     scratch = await migratedScratchDatabase();
     process.env.DATABASE_URL = scratch.url;
     process.env.AUTH_SECRET = SECRET;
-    [route, keys, chain, providerRoute, models, credentials] = await Promise.all([
+    [route, keys, chain, providerRoute, models, tester, credentials] = await Promise.all([
       import("./route"),
       import("../provider-key/route"),
       import("../tutor-model/route"),
       import("../tutor-model/provider/route"),
       import("../tutor-model/models/route"),
+      import("../provider-key/test/route"),
       import("@/lib/agent/credentials"),
     ]);
   }, 60_000);
@@ -156,11 +158,46 @@ describe.skipIf(!reachable.ok)("custom provider routes", () => {
     expect(steps.some((s) => isCallable(s))).toBe(false);
   });
 
+  it("never sends a saved key to a base URL it was not saved with", async () => {
+    await route.POST(request("/api/learner/custom-provider", "POST", { label: "Gateway", baseUrl: "https://gw.example/v1", key: KEY }));
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ data: [{ id: "gw/fast" }] }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    // Moving the URL without the key is refused whole: the row keeps its address.
+    const moved = await route.PATCH(request("/api/learner/custom-provider", "PATCH", { provider: "custom-gateway", baseUrl: "https://attacker.example/v1" }));
+    expect(moved.status).toBe(400);
+    expect(await json(moved)).toMatchObject({ ok: false, code: "KEY_REQUIRED" });
+    expect((await scratch.pool.query("select base_url from custom_provider")).rows).toEqual([{ base_url: "https://gw.example/v1" }]);
+    await models.POST(request("/api/learner/tutor-model/models", "POST", { provider: "custom-gateway" }));
+    await tester.POST(request("/api/learner/provider-key/test", "POST", { provider: "custom-gateway" }));
+    for (const [url] of fetchMock.mock.calls as unknown as [string][]) expect(url.startsWith("https://gw.example/v1/")).toBe(true);
+
+    // Moved with a new key, the new host gets the new key and never the old one.
+    const NEW_KEY = `${KEY.slice(0, -4)}yyyy`;
+    fetchMock.mockClear();
+    const withKey = await route.PATCH(
+      request("/api/learner/custom-provider", "PATCH", { provider: "custom-gateway", baseUrl: "https://gw2.example/v1", key: NEW_KEY }),
+    );
+    expect(await json(withKey)).toMatchObject({ ok: true, provider: { baseUrl: "https://gw2.example/v1" }, key: { last4: "yyyy" } });
+    await models.POST(request("/api/learner/tutor-model/models", "POST", { provider: "custom-gateway" }));
+    expect(fetchMock).toHaveBeenCalled();
+    for (const [url, init] of fetchMock.mock.calls as unknown as [string, RequestInit][]) {
+      expect(url.startsWith("https://gw2.example/v1/")).toBe(true);
+      expect((init.headers as Record<string, string>).Authorization).toBe(`Bearer ${NEW_KEY}`);
+    }
+  });
+
   it("renames and moves a provider, keeping its key and models, and Delete removes it whole", async () => {
     await route.POST(request("/api/learner/custom-provider", "POST", { label: "Gateway", baseUrl: "https://gw.example/v1", key: KEY }));
     await chain.POST(request("/api/learner/tutor-model", "POST", { provider: "custom-gateway", model: "gw/fast" }));
+    // A rename sends the URL it already has, as Settings does, and keeps the key.
+    const renamed = await json(
+      await route.PATCH(request("/api/learner/custom-provider", "PATCH", { provider: "custom-gateway", label: "Work", baseUrl: "https://gw.example/v1" })),
+    );
+    expect(renamed).toMatchObject({ ok: true, provider: { id: "custom-gateway", label: "Work", baseUrl: "https://gw.example/v1" }, key: null });
+    expect((await scratch.pool.query("select last4 from provider_key")).rows).toEqual([{ last4: KEY.slice(-4) }]);
     const changed = await json(
-      await route.PATCH(request("/api/learner/custom-provider", "PATCH", { provider: "custom-gateway", label: "Work", baseUrl: "https://gw2.example/v1" })),
+      await route.PATCH(request("/api/learner/custom-provider", "PATCH", { provider: "custom-gateway", baseUrl: "https://gw2.example/v1", key: KEY })),
     );
     expect(changed).toMatchObject({ ok: true, provider: { id: "custom-gateway", label: "Work", baseUrl: "https://gw2.example/v1" } });
     expect((await route.PATCH(request("/api/learner/custom-provider", "PATCH", { provider: "custom-nobody", label: "x" }))).status).toBe(404);

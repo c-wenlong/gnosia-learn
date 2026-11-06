@@ -18,7 +18,9 @@ export const runtime = "nodejs";
  *
  * `PATCH { provider, label?, baseUrl?, key? }` renames it, moves it, and
  * replaces its key, all in one transaction: a key that cannot be stored
- * leaves the name and the URL as they were. Its models stay. Its Delete is
+ * leaves the name and the URL as they were. A move to a new base URL is
+ * refused (`KEY_REQUIRED`) unless the key comes with it, so a saved key never
+ * goes to a host it was not saved for. Its models stay. Its Delete is
  * the provider route's, which removes it whole. Both are the sidecar's
  * turns (`customProviderAddTurn`, `customProviderChangeTurn`).
  */

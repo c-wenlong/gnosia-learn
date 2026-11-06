@@ -65,6 +65,11 @@ that compared what it was sent with a fragment of a key, and refused or
 accepted on the result, would let a caller guess the key one character at a
 time. The model chain's key check compares whole keys only
 ([TUTOR-MODELS.md](TUTOR-MODELS.md), T11), and until 2026-10-30 it did not.
+A saved key goes only to the address it was saved for: a custom provider's
+base URL cannot move without a new key in the same write
+([TUTOR-MODELS.md](TUTOR-MODELS.md), T14), or one request moving the URL
+to a host of the caller's choosing and a second listing its models would
+have sent the key there. Until 2026-11-07 it could.
 
 **D4. Resolved per request, for the signed-in owner.** (Since the model
 chain, this is the order for an owner with no chain; an owner with one gets
