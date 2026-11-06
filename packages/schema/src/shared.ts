@@ -209,10 +209,10 @@ const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 /**
  * A custom provider's base URL, checked (T14): `https:`, or `http:` to this
  * machine only (a local Ollama or LM Studio), with no user name, password,
- * query or fragment, at most `maxBaseUrlChars`, and a trailing slash
- * dropped, since the tutor appends `/chat/completions` and `/models`. The
- * owner's key for the provider is sent to exactly this URL and no built-in
- * key ever is. The reason never repeats the value.
+ * query, fragment or `@` in the path, at most `maxBaseUrlChars` as typed and
+ * as stored, and a trailing slash dropped, since the tutor appends
+ * `/chat/completions` and `/models`. The owner's key for the provider is sent
+ * to exactly this URL and no built-in key ever is. The reason never repeats the value.
  */
 export function checkBaseUrl(value: unknown): { ok: true; url: string } | { ok: false; reason: string } {
   if (typeof value !== "string") return { ok: false, reason: "The base URL must be text." };
@@ -233,7 +233,16 @@ export function checkBaseUrl(value: unknown): { ok: true; url: string } | { ok: 
   }
   if (url.username !== "" || url.password !== "") return { ok: false, reason: "Put the key in the API key field, not in the URL." };
   if (url.search !== "" || url.hash !== "") return { ok: false, reason: "The base URL takes no query or fragment." };
-  return { ok: true, url: `${url.origin}${url.pathname}`.replace(/\/+$/, "") };
+  // The table's CHECK refuses an `@` anywhere in the path, so this says why
+  // here rather than letting the write fail (R3-2-08).
+  if (url.pathname.includes("@")) return { ok: false, reason: "The base URL's path cannot contain @." };
+  const normal = `${url.origin}${url.pathname}`.replace(/\/+$/, "");
+  // Parsing percent-encodes what it must (a space is three characters), so
+  // the stored value is measured again against the CHECK's limit.
+  if (normal.length > CUSTOM_PROVIDER_LIMITS.maxBaseUrlChars) {
+    return { ok: false, reason: `The base URL is longer than ${CUSTOM_PROVIDER_LIMITS.maxBaseUrlChars} characters.` };
+  }
+  return { ok: true, url: normal };
 }
 
 /** A custom provider's name, checked: 1 to `maxLabelChars` characters with no control characters. */

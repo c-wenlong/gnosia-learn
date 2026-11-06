@@ -482,6 +482,8 @@ function readCourse(
   const moduleSlugs = new Map<string, string>();
   /** Where each module was read, for the lessons check after the loop. */
   const moduleAt = new Map<string, string>();
+  /** Each module `order` in this course and where it was read. */
+  const moduleOrders = new Map<number, string>();
   for (const [i, rawModule] of rawModules.entries()) {
     const mod = rawModule as RawModule;
     const at = `${where} module[${i}]`;
@@ -539,11 +541,25 @@ function readCourse(
     const moduleSlug = urlSlug(requireText(mod.slug, at, "slug"), at, "slug");
     claim(moduleSlugs, "module slug", moduleSlug, at);
 
+    // The database keeps a module's `order` as its position and lists a
+    // course's modules by it, and a module is numbered by its place in that
+    // list (`moduleNumber`), so two modules of one course sharing an order
+    // would have no knowable number.
+    const moduleOrder = requireInteger(mod.order, at, "order");
+    const orderTakenBy = moduleOrders.get(moduleOrder);
+    if (orderTakenBy !== undefined) {
+      throw new ContentError(
+        `${at}: module order ${moduleOrder} is already used by ${orderTakenBy}. ` +
+          `Module order is the course's module order, so it has to be unambiguous.`,
+      );
+    }
+    moduleOrders.set(moduleOrder, at);
+
     const read: Module = {
       id: moduleId,
       slug: moduleSlug,
       title: requireText(mod.title, at, "title"),
-      order: requireInteger(mod.order, at, "order"),
+      order: moduleOrder,
       topic: topicSlug ?? "",
       topics,
       resources,
@@ -580,7 +596,9 @@ function readCourse(
     order,
     inferred: requireBoolean(parsed.inferred, where, "inferred"),
     tags: stringList(parsed.tags, where, "tags"),
-    modules,
+    // In `order`, as the database reader lists them, whatever order the file
+    // wrote them in: the two readers must number a module the same (R3-2-06).
+    modules: modules.sort((a, b) => a.order - b.order),
     capstone: requireText(parsed.capstone, where, "capstone"),
   };
   // Optional keys are omitted rather than set to undefined: the shape has to
