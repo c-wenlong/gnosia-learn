@@ -1,5 +1,6 @@
 import { DEFAULT_TUTOR_STYLE, TUTOR_STYLES, type TutorStyle } from "./preferences";
 import type { Course, Module, Topic } from "@gnosia/content";
+import { moduleNumber } from "@gnosia/content/module-number";
 import type { TopicKnowledge } from "@gnosia/schema/shared";
 import { buildLearningObjectives, buildSessionAngle } from "./objectives";
 import { formatPriorKnowledgeBlock } from "./summary";
@@ -99,7 +100,7 @@ ${angle}
 - Capstone goal: ${course.capstone}
 
 ### Module
-- M${module.order}: ${module.title}
+- M${moduleNumber(course, module)}: ${module.title}
 - Other topics in this module:
 ${siblingTopics || "- (this is the only topic)"}
 

@@ -32,7 +32,7 @@ import {
 const AT = (day: number, hour = 12) => new Date(Date.UTC(2026, 9, day, hour)).toISOString();
 
 const none: RecentSources = { modules: [], place: () => null, videos: [], drafts: [], concepts: [], sessions: [] };
-const place = () => ({ courseCode: "CS3230", courseTitle: "Algorithms", moduleTitle: "Divide and conquer", moduleOrder: 3 });
+const place = () => ({ courseCode: "CS3230", courseTitle: "Algorithms", moduleTitle: "Divide and conquer", moduleNumber: 3 });
 
 describe("the five sources", () => {
   it("makes a row of a module visit, naming the course and module, and leaves out a visit whose module is gone", () => {
@@ -334,11 +334,11 @@ const COURSES = [
     title: "Algorithms",
     order: 1,
     modules: [
-      { slug: "m1", title: "Asymptotics", order: 1, topics: [{ id: "cs3230-m1-t1" }] },
-      { slug: "m3", title: "Divide and conquer", order: 3, topics: [] },
+      { id: "cs3230-m1", slug: "m1", title: "Asymptotics", order: 1, topics: [{ id: "cs3230-m1-t1" }] },
+      { id: "cs3230-m3", slug: "m3", title: "Divide and conquer", order: 3, topics: [] },
     ],
   },
-  { slug: "cs4225", code: "CS4225", title: "Big data", order: 2, modules: [{ slug: "m1", title: "Map", order: 1, topics: [{ id: "cs4225-m1-t1" }] }] },
+  { slug: "cs4225", code: "CS4225", title: "Big data", order: 2, modules: [{ id: "cs4225-m1", slug: "m1", title: "Map", order: 1, topics: [{ id: "cs4225-m1-t1" }] }] },
 ];
 
 describe("readRecent", () => {
@@ -395,7 +395,8 @@ describe("readRecent", () => {
       "/library/session%3Alearn%2Fsessions%2F2026-08-19-react-agents.md",
     );
     expect(recent.pinned.map((p) => p.key)).toEqual(["concept:recurrences"]);
-    // One row per course, opening the module visited last in it.
+    // One row per course, opening the module visited last in it, numbered by
+    // its place in the course (2), not its authored order (3).
     expect(recent.courses).toEqual([
       {
         slug: "cs3230",
@@ -403,7 +404,7 @@ describe("readRecent", () => {
         title: "Algorithms",
         href: "/courses/cs3230",
         open: "/courses/cs3230/m3",
-        resume: { title: "Divide and conquer", order: 3 },
+        resume: { title: "Divide and conquer", number: 2 },
       },
     ]);
     // Every read is the owner's, and bounded by the page: the newest 51
@@ -463,7 +464,7 @@ describe("readRecent", () => {
     ]);
     state.readPreferences.mockResolvedValue({});
     const { readRecent } = await import("./recent");
-    expect((await readRecent()).courses[0]).toMatchObject({ open: "/courses/cs3230/m1", resume: { title: "Asymptotics", order: 1 } });
+    expect((await readRecent()).courses[0]).toMatchObject({ open: "/courses/cs3230/m1", resume: { title: "Asymptotics", number: 1 } });
   });
 
   it("loses only the rows a failed read held, and is the empty answer when the database cannot be reached", async () => {

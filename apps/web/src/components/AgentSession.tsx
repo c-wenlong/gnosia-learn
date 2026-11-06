@@ -20,6 +20,7 @@ import type {
   Module,
   Topic,
 } from "@gnosia/content";
+import { moduleNumber } from "@gnosia/content/module-number";
 import { useLearner } from "@/lib/learner-context";
 import { buildAgentSessionContext } from "@gnosia/tutor/prompt";
 import { RecapCard, RecapEditor } from "@/components/TopicRecap";
@@ -361,7 +362,7 @@ export function AgentSession({
         <p className="text-[13px] font-medium text-accent-text">Micro-learning</p>
         <h1 className={PAGE_TITLE}>{topic.title}</h1>
         <p className="text-[14px] text-text2">
-          {course.code} · M{module.order} {module.title}
+          {course.code} · M{moduleNumber(course, module)} {module.title}
         </p>
         <p className="text-[14px] text-text2">{session.angle}</p>
       </header>

@@ -58,8 +58,8 @@ describe("day words", () => {
 
 describe("pick up where you left off", () => {
   const PLACES: Record<string, ModulePlace> = {
-    "cs3230/m6": { courseCode: "CS3230", courseTitle: "Algorithms", moduleTitle: "Randomized algorithms", moduleOrder: 6 },
-    "cs3230/": { courseCode: "CS3230", courseTitle: "Algorithms", moduleTitle: null, moduleOrder: null },
+    "cs3230/m6": { courseCode: "CS3230", courseTitle: "Algorithms", moduleTitle: "Randomized algorithms", moduleNumber: 6 },
+    "cs3230/": { courseCode: "CS3230", courseTitle: "Algorithms", moduleTitle: null, moduleNumber: null },
   };
   const place = (v: ModuleVisit) => PLACES[`${v.courseSlug}/${v.moduleSlug ?? ""}`] ?? null;
   const none = { modules: [], place, videos: [], drafts: [], concepts: [] };
@@ -251,6 +251,16 @@ describe("next from here", () => {
     ]);
   });
 
+  it("numbers a step by its module's place in the course, not its authored order", () => {
+    // Authored orders 1 and 3, as archiving the middle module leaves them.
+    const gapped: PathCourse = { ...COURSE, modules: [COURSE.modules[0]!, { ...COURSE.modules[1]!, slug: "m3", order: 3 }] };
+    const groups = nextFromHere(
+      [thread({ kind: "module", title: "Module three", courseSlug: "cs3230", moduleSlug: "m3" })],
+      { ...graph(), courses: [gapped] },
+    );
+    expect(groups[0]!.steps.map((s) => s.detail)).toEqual(["CS3230 · Module 2"]);
+  });
+
   it("starts a page with no threads at the first course's first open topic", () => {
     expect(nextFromHere([], graph(["t1"]))).toEqual([
       { key: "start", heading: "Start here", steps: [expect.objectContaining({ title: "Recurrences" })] },
@@ -295,7 +305,7 @@ describe("next from here", () => {
 
 describe("next up", () => {
   it("names the course and module when a curriculum item links the concept", () => {
-    expect(nextUpEyebrows({ courseCode: "CP4281", moduleOrder: 2 })).toEqual({
+    expect(nextUpEyebrows({ courseCode: "CP4281", moduleNumber: 2 })).toEqual({
       eyebrow: "Next on your path · CP4281 · Module 2",
       eyebrowShort: "Next up · CP4281 M2",
     });

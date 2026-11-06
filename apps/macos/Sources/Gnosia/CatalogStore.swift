@@ -1517,18 +1517,26 @@ struct CatalogCourse: Identifiable, Hashable {
         return "\(m) \(m == 1 ? "module" : "modules") · \(t) \(t == 1 ? "topic" : "topics")"
     }
 
-    /// "Module 3 of 4" over a module's header: its authored `order` and the
-    /// module count, as the web's ModuleMain and CourseSidebar print it, so
-    /// the header and the sidebar row ("3. …") name the same number.
-    func place(of module: CourseModule) -> String {
-        "Module \(module.order) of \(modules.count)"
+    /// The number a module is shown under: its 1-based place in `modules`,
+    /// never its authored `order`, which is the sort key and may have gaps
+    /// (1 and 3 once the middle module is archived). `moduleNumber` in
+    /// packages/content/src/module-number.ts, held to the same fixture
+    /// (Tests/GnosiaTests/Fixtures/module-numbers.json). Matched by id, and
+    /// 0 for a module this course does not list.
+    func number(of module: CourseModule) -> Int {
+        (modules.firstIndex { $0.id == module.id } ?? -1) + 1
     }
-}
 
-extension CourseModule {
-    /// "3. Agentic frameworks": the sidebar row and the neighbour links, the
-    /// web's `{m.order}. {m.title}`.
-    var numberedTitle: String { "\(order). \(title)" }
+    /// "Module 2 of 2" over a module's header — modulePlace.
+    func place(of module: CourseModule) -> String {
+        "Module \(number(of: module)) of \(modules.count)"
+    }
+
+    /// "2. Agentic frameworks": the sidebar row and the neighbour links —
+    /// numberedTitle.
+    func numberedTitle(of module: CourseModule) -> String {
+        "\(number(of: module)). \(module.title)"
+    }
 }
 
 // MARK: - Kind vocabulary
