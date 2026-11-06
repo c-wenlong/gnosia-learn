@@ -148,8 +148,7 @@ export const EVENT_TYPES = [
 export type EventType = (typeof EVENT_TYPES)[number];
 
 /**
- * Where a recap came from. Mirrors `KnowledgeSource` in
- * `packages/tutor/src/types.ts`.
+ * Where a recap came from: `KnowledgeSource`, below, is this same list.
  */
 export const RECAP_SOURCES = ["agent", "manual"] as const;
 export type RecapSource = (typeof RECAP_SOURCES)[number];
