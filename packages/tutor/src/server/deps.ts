@@ -34,6 +34,12 @@ export interface TutorDeps extends AssetSeams {
   owner: string;
   env: Env;
   /**
+   * The request's abort signal, when the host has one. A model call made for
+   * the turn is aborted when it fires, so a closed tab stops paying for an
+   * answer nobody will read.
+   */
+  signal?: AbortSignal;
+  /**
    * The functions a turn delegates to, overridable so a host binds them to
    * the seams its own tests mock. The web app binds each to the shim that
    * re-exports this package (`@/lib/concept-workspace` and friends), which is
@@ -56,6 +62,7 @@ export interface TurnSeams {
   complete?: (
     messages: import("../providers").ChatMessage[],
     steps: readonly import("../providers").ChainStep[],
+    signal?: AbortSignal,
   ) => Promise<import("../providers").CompleteOutcome>;
   assetDetail?: (deps: TutorDeps, id: string) => Promise<import("./asset-detail").AssetDetail>;
   assetText?: (deps: TutorDeps, db: CatalogDatabase, id: string, limit?: number) => Promise<string | null>;

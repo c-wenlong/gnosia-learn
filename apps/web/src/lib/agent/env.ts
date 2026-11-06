@@ -23,9 +23,10 @@ import { readChain } from "@/lib/tutor-models/store";
  * leaves `seams` unset, so the package's own readers answer; here each is
  * bound to this app's own reader (`@/lib/*`, `@/data/*`) or the package's
  * function, imported here by name, which is what this app's route tests
- * stub.
+ * stub. `signal` is the request's, so a provider call stops when the
+ * browser goes away.
  */
-export function tutorDeps(owner: string): TutorDeps {
+export function tutorDeps(owner: string, signal?: AbortSignal): TutorDeps {
   return {
     // The promise, not the handle: a database that is down rejects inside
     // whichever read asks for it, and that read's own degradation answers.
@@ -35,12 +36,13 @@ export function tutorDeps(owner: string): TutorDeps {
     source: contentSource(),
     blobStore: assetBlobStore(),
     env: process.env,
+    signal,
     seams: {
       courses: () => getCourses(),
       readWorkspace: (deps, slug) => readConceptWorkspace(slug, deps.owner),
       tutorStyle: () => readTutorStyle(),
       credentials: (deps) => tutorCredentials(deps.owner),
-      complete: (messages, steps) => completeWithFallback(messages, steps),
+      complete: (messages, steps, cancel) => completeWithFallback(messages, steps, undefined, cancel),
       assetDetail: (_deps, id) => readAssetDetail(id),
       assetText: (_deps, db, id, limit) => readAssetText(db, id, limit),
       keyCredential: (deps, provider) => keyTestCredential(deps.owner, provider),
