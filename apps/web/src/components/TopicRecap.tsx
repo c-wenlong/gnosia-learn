@@ -11,11 +11,10 @@ import { TextLink } from "@/components/ui/TextLink";
 import { useCopied } from "@/components/ui/use-copied";
 import type {
   Course,
-  KnowledgeInput,
   Module,
   Topic,
-  TopicKnowledge,
-} from "@gnosia/tutor/types";
+} from "@gnosia/content";
+import type { KnowledgeInput, TopicKnowledge } from "@gnosia/schema/shared";
 import { useLearner } from "@/lib/learner-context";
 import { formatKnowledgeMarkdown } from "@gnosia/tutor/summary";
 import { ownValue } from "@gnosia/tutor/own-key";

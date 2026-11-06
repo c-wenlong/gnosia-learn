@@ -60,7 +60,6 @@ import {
   parseKnowledgeResponse,
   type TranscriptTurn,
 } from "../summary";
-import type { TopicKnowledge } from "../types";
 import { splitTurnCheck } from "../check-block";
 import {
   CHAT_ANSWER_LIMIT,
@@ -107,7 +106,7 @@ import { svgText } from "../svg-text";
 import { parseTranscript } from "../transcript";
 import { measurePayload, PAYLOAD_LIMITS } from "../guards";
 import { pointsAtThisApp, SELF_ADDRESS_REASON } from "./self-address";
-import { checkModelId, KNOWLEDGE_LIMITS, providerLabel } from "@gnosia/schema/shared";
+import { checkModelId, KNOWLEDGE_LIMITS, providerLabel, type TopicKnowledge } from "@gnosia/schema/shared";
 
 /**
  * The request-independent core of the `/api/agent/*` and the `/api/learner/*`

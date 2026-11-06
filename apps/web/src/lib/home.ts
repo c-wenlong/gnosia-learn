@@ -19,7 +19,7 @@ import { getCourses } from "@/data/courses";
 import { getTopics } from "@/data/topics";
 import { ContentUnavailableError } from "@/data/source";
 import { findTopicAcrossCourses } from "@gnosia/tutor/lookup";
-import type { Course } from "@gnosia/tutor/types";
+import type { Course } from "@gnosia/content";
 import { conceptsByItem, continueHref, conceptsForTopic, itemDoneWith, itemStanding, resolveTopicMastery } from "@/lib/course-path";
 import { activeOnly } from "@/lib/course-summary";
 import { dayKey } from "@gnosia/tutor/days";

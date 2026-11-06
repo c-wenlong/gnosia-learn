@@ -2,7 +2,7 @@ import type { MasteryLabel } from "@gnosia/catalog/state";
 
 import { bucketOf, MASTERY_BUCKET_LABEL, type MasteryBucket } from "@gnosia/tutor/mastery-bucket";
 import { ownValue } from "@gnosia/tutor/own-key";
-import type { Course } from "@gnosia/tutor/types";
+import type { Course } from "@gnosia/content";
 
 /**
  * The course page's arithmetic: which mark each topic and module carries,

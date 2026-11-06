@@ -10,7 +10,7 @@ import { FormRow } from "@/components/ui/FormRow";
 import { Input } from "@/components/ui/Input";
 import { useLearner } from "@/lib/learner-context";
 import { prefersReducedMotion } from "@/lib/motion";
-import type { Resource } from "@gnosia/tutor/types";
+import type { Resource } from "@gnosia/content";
 
 import { Glyph } from "@/components/ui/Glyph";
 

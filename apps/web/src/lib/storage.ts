@@ -1,10 +1,11 @@
-import { clampKnowledgeList, clampSummary } from "@gnosia/schema/shared";
 import {
+  clampKnowledgeList,
+  clampSummary,
   type KnowledgeInput,
   type LearnerState,
   type ThemeMode,
   type UserResource,
-} from "@gnosia/tutor/types";
+} from "@gnosia/schema/shared";
 
 /**
  * Pure state transitions for the learner state.

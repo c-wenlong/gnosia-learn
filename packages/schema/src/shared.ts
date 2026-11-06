@@ -524,10 +524,9 @@ export function clampSummary(value: unknown): string {
 /**
  * What a learner snapshot looks like once it leaves the database.
  *
- * These are declared here rather than in `packages/tutor/src/types.ts` because
- * both sides now need them: `services/catalog/src/state/` builds the snapshot
- * and the web app's provider consumes it. `apps/web/src/lib/types.ts`
- * re-exports them, so components keep importing from where they always did.
+ * These are declared here because both sides need them:
+ * `services/catalog/src/state/` builds the snapshot and the web app's
+ * provider consumes it, importing them from `@gnosia/schema/shared`.
  *
  * The keys deliberately match the old localStorage document, minus `version`.
  * They are the argument to `/api/learner/import`, and a component reading

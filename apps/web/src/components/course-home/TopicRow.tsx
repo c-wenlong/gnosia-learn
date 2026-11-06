@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/Textarea";
 import { TextLink } from "@/components/ui/TextLink";
 import { topicMark, topicMeta, topicSessionHref, type TopicMastery } from "@/lib/course-path";
 import { useLearner } from "@/lib/learner-context";
-import type { Course, Module, Topic } from "@gnosia/tutor/types";
+import type { Course, Module, Topic } from "@gnosia/content";
 import { ownValue } from "@gnosia/tutor/own-key";
 
 import { TopicMarkIcon } from "./icons";

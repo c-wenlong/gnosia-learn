@@ -49,7 +49,7 @@ export interface TutorDeps extends AssetSeams {
  * identity and scope off the same object.
  */
 export interface TurnSeams {
-  courses?: () => Promise<import("../types").Course[]>;
+  courses?: () => Promise<import("@gnosia/content").Course[]>;
   readWorkspace?: (deps: TutorDeps, slug: string) => Promise<import("./concept-workspace").ConceptWorkspaceRead>;
   tutorStyle?: (deps: TutorDeps) => Promise<import("../preferences").TutorStyle>;
   credentials?: (deps: TutorDeps) => Promise<import("../providers").ChainStep[]>;

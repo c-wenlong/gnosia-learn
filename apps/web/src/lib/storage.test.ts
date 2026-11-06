@@ -11,8 +11,7 @@ import {
   setTheme,
   setTopicCompleted,
 } from "@/lib/storage";
-import { KNOWLEDGE_LIMITS } from "@gnosia/schema/shared";
-import { emptyLearnerState as defaultState, type KnowledgeInput } from "@gnosia/tutor/types";
+import { emptyLearnerState as defaultState, KNOWLEDGE_LIMITS, type KnowledgeInput } from "@gnosia/schema/shared";
 
 const sampleKnowledge = (
   overrides: Partial<KnowledgeInput> = {},
