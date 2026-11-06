@@ -132,7 +132,7 @@ export interface RecentSources {
   sessions?: readonly SessionTouch[];
 }
 
-/** "2:17", "1:02:03". */
+/** "2:17", "1:02:03", rounded down; the studio's video length badge rounds before it calls this. */
 export function clock(seconds: number): string {
   const s = Math.max(0, Math.floor(seconds));
   const h = Math.floor(s / 3600);

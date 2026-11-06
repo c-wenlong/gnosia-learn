@@ -12,6 +12,7 @@ import {
 } from "drizzle-orm/sqlite-core";
 
 import { archivedAt, createdAt, instant, ownerId, updatedAt } from "./columns";
+import { inList, quoted } from "./sql-in-list";
 // `content` and `state` reference each other: every content entity carries
 // `owner_id` pointing at `learner`, and `mastery`, `progress` and the rest
 // point back at `concept` and `curriculum_item`. Both directions are declared
@@ -144,11 +145,6 @@ export type BlobProvider = (typeof BLOB_PROVIDERS)[number];
 /** `pending` from the row write until the store confirms the upload, then `present`. */
 export const BLOB_STATES = ["pending", "present"] as const;
 export type BlobState = (typeof BLOB_STATES)[number];
-
-const quoted = (values: readonly string[]) => values.map((v) => `'${v}'`).join(", ");
-
-const inList = (column: string, values: readonly string[]) =>
-  sql.raw(`${column} in (${quoted(values)})`);
 
 /**
  * The id rule the content readers enforce at parse time
