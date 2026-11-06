@@ -8,7 +8,7 @@ import { DomainCards, DomainView, type Place } from "@/components/learn/DomainBr
 import type { MapMark } from "@/components/learn/DomainGraph";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { cardClasses, cx, LABEL, NOTE, PAGE_TITLE } from "@/components/ui/classes";
+import { cardClasses, cx, FOCUS, LABEL, NOTE, PAGE_TITLE } from "@/components/ui/classes";
 import { isImeKey } from "@/components/ui/composer-keys";
 import { FilterMenu } from "@/components/ui/FilterMenu";
 import { MasteryDot } from "@/components/ui/MasteryDot";
@@ -395,7 +395,7 @@ function ConceptTable({
                       onClick={(e) => e.stopPropagation()}
                       // Tabbing through the titles moves the graph along with the focus.
                       onFocus={() => onSelect(r.id)}
-                      className="min-w-0 truncate rounded-sm text-[14px] text-text underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                      className={cx("min-w-0 truncate rounded-sm text-[14px] text-text underline-offset-4 hover:underline", FOCUS)}
                     >
                       {r.title}
                     </Link>

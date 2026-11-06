@@ -6,6 +6,7 @@ import { useId, useRef, useState } from "react";
 import { ThemeSwitch } from "@/components/ThemeSwitch";
 import { PixelAvatar } from "@/components/avatar/PixelAvatar";
 import { cx, MENU_HEADING, MENU_PANEL, menuRowClasses } from "@/components/ui/classes";
+import { Glyph } from "@/components/ui/Glyph";
 import { Popover } from "@/components/ui/Popover";
 import { LABEL_FADE, LABEL_SHOWN } from "./motion";
 import { useLearner } from "@/lib/learner-context";
@@ -99,14 +100,14 @@ export function AccountMenu({ collapsed, onPick }: { collapsed: boolean; onPick:
           </li>
           <li>
             <Link href="/settings" className={item} onClick={pick}>
-              <Glyph d="M10 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM10 2.5v2M10 15.5v2M17.5 10h-2M4.5 10h-2M15.3 4.7l-1.4 1.4M6.1 13.9l-1.4 1.4M15.3 15.3l-1.4-1.4M6.1 6.1 4.7 4.7" />
+              <Glyph name="settings" size={16} stroke={1.7} className="text-text2" />
               Settings
             </Link>
           </li>
           <li>
             <form method="post" action="/api/auth/sign-out">
               <button type="submit" className={item}>
-                <Glyph d="M8 3.5H4.5a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1H8M13 13.5 16.5 10 13 6.5M16.5 10H7.5" />
+                <Glyph name="signOut" size={16} stroke={1.7} className="text-text2" />
                 Sign out
               </button>
             </form>
@@ -114,13 +115,5 @@ export function AccountMenu({ collapsed, onPick }: { collapsed: boolean; onPick:
         </ul>
       </Popover>
     </div>
-  );
-}
-
-function Glyph({ d }: { d: string }) {
-  return (
-    <svg aria-hidden viewBox="0 0 20 20" className="size-4 shrink-0 text-text2" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-      <path d={d} />
-    </svg>
   );
 }

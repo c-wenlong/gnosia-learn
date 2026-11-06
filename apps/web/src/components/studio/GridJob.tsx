@@ -17,7 +17,7 @@ import { FADE_IN } from "@/components/ui/motion";
 import { PanelLink } from "@/components/studio/PanelLink";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
 import { TILE_THUMB } from "@/components/studio/surfaces";
-import { cx } from "@/components/ui/classes";
+import { cx, FOCUS } from "@/components/ui/classes";
 import { useImageReveal } from "@/components/ui/use-image-reveal";
 import { finishedHeadline, jobShotHref, type Job } from "@/lib/studio-jobs";
 import {
@@ -129,7 +129,7 @@ export function JobRowLink({ jobId, label, path, children }: { jobId: string; la
       aria-label={label}
       // Shrinks before the title does, and never past about half the row:
       // the row's name is what identifies it, the status is extra.
-      className="relative z-10 flex min-w-0 max-w-[45%] items-center rounded px-1 hover:bg-surface2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      className={cx("relative z-10 flex min-w-0 max-w-[45%] items-center rounded px-1 hover:bg-surface2", FOCUS)}
     >
       {children}
     </PanelLink>

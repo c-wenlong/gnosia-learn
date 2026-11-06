@@ -96,6 +96,10 @@ const PATHS = {
   open: "M11 4h5v5M16 4l-7 7M14 11.5V15a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h3.5",
   // An arrow down onto a line: save the file.
   download: "M10 3.5v9M6 8.5l4 4 4-4M4 16h12",
+  // A gear: the account menu's Settings.
+  settings: "M10 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM10 2.5v2M10 15.5v2M17.5 10h-2M4.5 10h-2M15.3 4.7l-1.4 1.4M6.1 13.9l-1.4 1.4M15.3 15.3l-1.4-1.4M6.1 6.1 4.7 4.7",
+  // An arrow leaving a door: the account menu's Sign out.
+  signOut: "M8 3.5H4.5a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1H8M13 13.5 16.5 10 13 6.5M16.5 10H7.5",
   // Three dots in a row: more actions, the row and card menu's button.
   more: "M4.1 10a.9.9 0 1 0 1.8 0 .9.9 0 1 0-1.8 0zM9.1 10a.9.9 0 1 0 1.8 0 .9.9 0 1 0-1.8 0zM14.1 10a.9.9 0 1 0 1.8 0 .9.9 0 1 0-1.8 0z",
   // Arrows up and down: move a row earlier or later.

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Collapse } from "@/components/ui/Collapse";
 import { Glyph } from "@/components/ui/Glyph";
 import { LiveStatus, type StatusTone } from "@/components/ui/LiveStatus";
-import { cx, inputClasses } from "@/components/ui/classes";
+import { cx, FOCUS, inputClasses } from "@/components/ui/classes";
 import { TextLink } from "@/components/ui/TextLink";
 import { checkAssetName, renameAsset } from "@/lib/asset-actions";
 
@@ -125,7 +125,7 @@ export function AssetTitle({
           aria-controls={fieldId}
           title="Rename"
           onClick={() => (editing ? close() : (setStatus(QUIET), setEditing(true)))}
-          className="mt-0.5 shrink-0 rounded-md p-1.5 text-text3 transition-colors duration-150 hover:bg-surface2 hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent motion-reduce:transition-none"
+          className={cx("mt-0.5 shrink-0 rounded-md p-1.5 text-text3 transition-colors duration-150 hover:bg-surface2 hover:text-text", FOCUS, "motion-reduce:transition-none")}
         >
           <Glyph name="practice" size={18} />
           <span className="sr-only">Rename</span>
