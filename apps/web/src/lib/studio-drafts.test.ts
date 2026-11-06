@@ -15,6 +15,8 @@ import {
 } from "./studio-drafts";
 import { videoAvailability, diagramAvailability, readStudioHealth } from "@/lib/studio-health";
 import {
+  call,
+  CALL_TIMEOUT_MS,
   idempotencyKey,
   RUNNER_DOWN,
   RUNNER_SLOW,
@@ -191,10 +193,38 @@ describe("the calls", () => {
   });
 
   it("gives every call a deadline, so a runner that hangs does not leave a press spinning", async () => {
-    const fetchMock = answer(200, {});
-    await getDraft("d1");
-    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(init.signal).toBeInstanceOf(AbortSignal);
+    // A runner that never answers: the fetch settles only when its signal fires.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_path: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => init.signal?.addEventListener("abort", () => reject(init.signal?.reason)))),
+    );
+    // The deadline asked for is `CALL_TIMEOUT_MS`; the test spends 5 ms of it.
+    const real = AbortSignal.timeout.bind(AbortSignal);
+    const timeout = vi.spyOn(AbortSignal, "timeout").mockImplementation(() => real(5));
+    try {
+      const result = await getDraft("d1");
+      expect(timeout).toHaveBeenCalledWith(CALL_TIMEOUT_MS);
+      expect(result).toMatchObject({ ok: false, status: 0, refusal: { error: RUNNER_SLOW } });
+    } finally {
+      timeout.mockRestore();
+    }
+  });
+
+  it("takes the caller's own signal in place of the deadline, and a cancel reads as not reached", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_path: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => init.signal?.addEventListener("abort", () => reject(init.signal?.reason)))),
+    );
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    try {
+      const own = new AbortController();
+      const pending = call("/studio/api/drafts/d1", { signal: own.signal });
+      own.abort();
+      expect(await pending).toMatchObject({ ok: false, status: 0, refusal: { error: RUNNER_DOWN } });
+      expect(timeout).not.toHaveBeenCalled();
+    } finally {
+      timeout.mockRestore();
+    }
   });
 });
 

@@ -12,6 +12,13 @@ import { buttonClasses, cx } from "@/components/ui/classes";
  * ones (the tiles) take the same strings.
  */
 
+/**
+ * A tile's picture frame, 4:3 (D22): every diagram and video tile, a job's
+ * card, and the loading frame's placeholders, which must match them or the
+ * grid grows as it lands.
+ */
+export const TILE_THUMB = "aspect-[4/3]";
+
 /** A tile's frame: radius 12, a 1px edge, the surface. The caller lays out what is inside. */
 const TILE_SHAPE = "relative flex min-w-0 flex-col overflow-hidden rounded-xl border bg-surface";
 

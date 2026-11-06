@@ -101,7 +101,7 @@ describe("useJobVerb", () => {
     expect(mocks.push).toHaveBeenCalledWith("/studio?view=grid&job=j2", { scroll: false });
   });
 
-  it("stays put on a refusal, and on an answer naming the same job", async () => {
+  it("stays put on a refusal", async () => {
     runner({ status: 409, body: { jobId: "j1", error: "not resumable" } });
     const navigate = vi.fn(() => true);
     await mount(navigate);
@@ -111,6 +111,42 @@ describe("useJobVerb", () => {
     });
     expect(text).toBe("not resumable");
     expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("stays put on a good answer naming the job it was pressed on", async () => {
+    runner({ status: 202, body: { jobId: "j1", note: "Already running" } });
+    const navigate = vi.fn(() => true);
+    await mount(navigate);
+    await act(async () => {
+      await handle.verbs!.run("j1", "resume", { follow: true });
+    });
+    expect(navigate).not.toHaveBeenCalled();
+    expect(mocks.push).not.toHaveBeenCalled();
+  });
+
+  it("follows any job a Retry-shaped send queues, from no job at all", async () => {
+    runner({ status: 202, body: { jobId: "j9" } });
+    const navigate = vi.fn(() => true);
+    await mount(navigate);
+    await act(async () => {
+      await handle.verbs!.send("/studio/api/jobs", { label: "retry", body: { kind: "diagram" }, follow: { from: null } });
+    });
+    expect(navigate).toHaveBeenCalledWith("/studio?view=list&job=j9");
+  });
+
+  it("reads the job list after a post, and not after a quiet one", async () => {
+    const fetch = runner({ status: 202, body: { jobId: "j2" } });
+    await mount(null);
+    const reads = () => fetch.mock.calls.filter(([, init]) => init?.method !== "POST").length;
+    const before = reads();
+    await act(async () => {
+      await handle.verbs!.run("j1", "revise", { quiet: true });
+    });
+    expect(reads()).toBe(before);
+    await act(async () => {
+      await handle.verbs!.run("j1", "cancel");
+    });
+    expect(reads()).toBe(before + 1);
   });
 
   it("is busy with the verb while it is in flight, and idle after", async () => {
