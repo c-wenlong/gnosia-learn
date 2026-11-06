@@ -33,48 +33,60 @@ export function JobLog({
    */
   const [choice, setChoice] = useState<{ job: string; open: boolean } | null>(null);
   const open = choice !== null && choice.job === jobId ? choice.open : openByDefault;
-  const [lines, setLines] = useState<string[]>([]);
-  const [total, setTotal] = useState(0);
+  /**
+   * What was read, with the job it was read about. A panel that switches job
+   * keeps this component mounted, so lines held on their own showed the last
+   * job's tail under the new one, and for good when the new one's log did not
+   * answer (R3-2-02). A read of another job is drawn as nothing read yet.
+   */
+  const [read, setRead] = useState<LogRead | null>(null);
+  const shown = read !== null && read.job === jobId ? read : null;
+  const lines = shown?.lines ?? NO_LINES;
   const box = useRef<HTMLPreElement | null>(null);
 
   useEffect(() => {
     if (!open) return;
-    let alive = true;
+    const stop = new AbortController();
+    const { signal } = stop;
+    const failed = (): void => {
+      if (signal.aborted) return;
+      // What this job's log said before stays; another job's never does.
+      setRead((held) =>
+        held !== null && held.job === jobId ? { ...held, failed: true } : { job: jobId, lines: [], total: 0, failed: true },
+      );
+    };
     const load = async (): Promise<void> => {
       try {
         const head = await fetch(`/studio/api/jobs/${encodeURIComponent(jobId)}/log?from=0&limit=1`, {
           cache: "no-store",
+          signal,
         });
-        if (!head.ok) return;
+        if (!head.ok) return failed();
         const counted = (await head.json()) as { total?: number };
         const size = counted.total ?? 0;
         const from = Math.max(0, size - WINDOW);
         const window = await fetch(
           `/studio/api/jobs/${encodeURIComponent(jobId)}/log?from=${from}&limit=${WINDOW}`,
-          { cache: "no-store" },
+          { cache: "no-store", signal },
         );
-        if (!window.ok) return;
+        if (!window.ok) return failed();
         const body = (await window.json()) as { lines?: string[] };
-        if (!alive) return;
-        setTotal(size);
-        setLines(body.lines ?? []);
+        if (signal.aborted) return;
+        setRead({ job: jobId, lines: body.lines ?? [], total: size, failed: false });
       } catch {
-        // Same reasoning as the poll: a log window that could not be fetched is
-        // not news, and the screen already says whether the runner is there.
+        // An aborted read is this effect being torn down; anything else is a
+        // log that could not be read, which the panel says under it.
+        failed();
       }
     };
     void load();
     // A job that has stopped has a log that has stopped, so it is read once.
     // Polling one for as long as a panel is open was two requests every four
     // seconds about a file nothing is writing to.
-    if (!live) {
-      return () => {
-        alive = false;
-      };
-    }
+    if (!live) return () => stop.abort();
     const timer = setInterval(() => void load(), 4000);
     return () => {
-      alive = false;
+      stop.abort();
       clearInterval(timer);
     };
   }, [jobId, open, live]);
@@ -101,15 +113,35 @@ export function JobLog({
           ref={box}
           className="mt-2 h-60 overflow-auto rounded-md border border-border bg-surface p-2 font-mono text-xs whitespace-pre-wrap break-all text-text2"
         >
-          {lines.length === 0 ? "nothing on disk yet" : lines.join("\n")}
+          {lines.length > 0
+            ? lines.join("\n")
+            : shown === null
+              ? "Reading the log."
+              : shown.failed
+                ? "The log could not be read."
+                : "Nothing on disk yet."}
         </pre>
-        <p className="mt-1 text-xs text-text2">
-          the last {lines.length} of {total} lines
-        </p>
+        {shown !== null && lines.length > 0 && (
+          <p className="mt-1 text-xs text-text2">
+            {shown.failed
+              ? `The log could not be read just now. These are the last ${lines.length} of ${shown.total} lines read before.`
+              : `The last ${lines.length} of ${shown.total} lines.`}
+          </p>
+        )}
       </Disclosure>
     </div>
   );
 }
+
+/** One read of a job's log: its tail, its length, and whether the latest read failed. */
+interface LogRead {
+  job: string;
+  lines: string[];
+  total: number;
+  failed: boolean;
+}
+
+const NO_LINES: string[] = [];
 
 /** How many lines of the tail the panel holds. A window, never the whole file. */
 const WINDOW = 200;

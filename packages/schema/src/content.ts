@@ -24,10 +24,15 @@ import { session } from "./studio";
 
 /**
  * The content half of the catalog: what exists, and how the pieces refer to
- * one another. Everything here is *derived* from files in git (concept notes,
- * course data, manimkc topics, .tldr sources). It is rebuildable by re-running
- * the indexers, so nothing in this file is a source of truth. The state half
- * (state.ts) is the opposite: those rows are the only copy.
+ * one another. These rows are the authored content of record: since the phase
+ * 3 cut-over the repository holds no `content/` or `learn/`, so every topic,
+ * tag, concept note, session log, course and diagram exists here and nowhere
+ * else. Never drop them expecting an import to rebuild them: nothing in the
+ * repository can, and only an export taken first (`catalog export`, or the
+ * nightly one) brings them back. `content_revision` is their history, one row
+ * per write. Only the video tools' rows are still derived, from each tool's
+ * `topics --json` report on `catalog import`. The state half (state.ts) is the
+ * learner's evidence about all of this, and is the only copy too.
  *
  * Kind columns are `text` plus a CHECK rather than a SQLite ENUM — SQLite has
  * no ENUM type at all, and a `text` CHECK is a one-line change in a migration,
