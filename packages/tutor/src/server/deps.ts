@@ -34,6 +34,12 @@ export interface TutorDeps extends AssetSeams {
   owner: string;
   env: Env;
   /**
+   * The URL the request came in on, when the host has one. A custom
+   * provider's base URL on this port is this app, not a model server
+   * (`pointsAtThisApp`), so a save names it too.
+   */
+  requestUrl?: string;
+  /**
    * The functions a turn delegates to, overridable so a host binds them to
    * the seams its own tests mock. The web app binds each to the shim that
    * re-exports this package (`@/lib/concept-workspace` and friends), which is

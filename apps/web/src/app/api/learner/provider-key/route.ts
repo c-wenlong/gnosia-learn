@@ -1,10 +1,8 @@
-import { CustomProviderError } from "@gnosia/catalog/state";
-import { NextResponse } from "next/server";
+import type { ProviderName } from "@gnosia/schema/shared";
+import { providerKeyRemoveTurn, providerKeySaveTurn } from "@gnosia/tutor/server/turns";
 
 import { connectByokProvider, dropByokProvider } from "@/lib/byok-sync";
-import { KEY_WRITE_RATE_LIMIT, answer, guard, readBody, readProvider, refuse } from "@/lib/provider-keys/requests";
-import { checkKeyShape } from "@gnosia/tutor/server/seal";
-import { failureCode, NoKeySecretError, removeProviderKey, saveProviderKey } from "@/lib/provider-keys/store";
+import { byokField, KEY_WRITE_RATE_LIMIT, settingsRoute } from "@/lib/provider-keys/requests";
 
 export const runtime = "nodejs";
 
@@ -22,62 +20,23 @@ export const runtime = "nodejs";
  * Write-only. No answer carries the key or its ciphertext, and nothing is
  * logged but a code: a refused key is refused without repeating it, and a
  * failed write is reported without the driver's message, which would quote
- * the sealed bytes.
+ * the sealed bytes. The save and the removal are the sidecar's turns
+ * (`providerKeySaveTurn`, `providerKeyRemoveTurn`); telling Studio's list
+ * is this app's own step after them.
  */
 
-export async function POST(req: Request): Promise<NextResponse> {
-  const owner = await guard(req, "write", KEY_WRITE_RATE_LIMIT);
-  if (owner instanceof NextResponse) return owner;
-  const body = await readBody(req);
-  if (body instanceof NextResponse) return body;
-  const provider = readProvider(body);
-  if (provider instanceof NextResponse) return provider;
-  const shape = checkKeyShape(body.key);
-  if (!shape.ok) return refuse(shape.reason);
+// One key (D95): a provider the studio harness can name joins Studio's list,
+// and the runner opens this same sealed row when a turn spawns (docs/BYOK.md,
+// D12); the key itself is never sent to it. `byok` in the reply says whether
+// the runner took the provider: `false` means it did not answer, and the
+// tutor's save still stands.
+export const POST = settingsRoute("provider-key", KEY_WRITE_RATE_LIMIT, providerKeySaveTurn, async (body) =>
+  byokField(await connectByokProvider(body.provider as ProviderName)),
+);
 
-  try {
-    // A key under a custom id is stored only while the owner has that
-    // provider, checked under the lock its Delete holds (T14).
-    const key = await saveProviderKey(owner, provider, shape.key);
-    // One key (D95): a provider the studio harness can name joins Studio's
-    // list, and the runner opens this same sealed row when a turn spawns
-    // (docs/BYOK.md, D12); the key itself is never sent to it. `byok` in the
-    // reply says whether the runner took the provider — `false` means it did
-    // not answer, and the tutor's save still stands.
-    const byok = await connectByokProvider(provider);
-    return answer({ ok: true, key, ...(byok === undefined ? {} : { byok }) });
-  } catch (error) {
-    return failed("save", error);
-  }
-}
-
-export async function DELETE(req: Request): Promise<NextResponse> {
-  const owner = await guard(req, "write", KEY_WRITE_RATE_LIMIT);
-  if (owner instanceof NextResponse) return owner;
-  const body = await readBody(req);
-  if (body instanceof NextResponse) return body;
-  const provider = readProvider(body);
-  if (provider instanceof NextResponse) return provider;
-
-  try {
-    const removed = await removeProviderKey(owner, provider);
-    // Studio's list is told whenever a preset's key went away, and the answer
-    // says whether it landed: `byok: false` tells the card the runner still
-    // lists the provider (with no key to run on), so the row can say so.
-    const byok = removed ? await dropByokProvider(provider) : undefined;
-    return answer({ ok: true, removed, ...(byok === undefined ? {} : { byok }) });
-  } catch (error) {
-    return failed("remove", error);
-  }
-}
-
-function failed(what: string, error: unknown): NextResponse {
-  if (error instanceof CustomProviderError && error.code === "NOT_FOUND") {
-    return refuse("That is not one of your providers.", "NOT_FOUND", 404);
-  }
-  if (error instanceof NoKeySecretError) {
-    return refuse("This server has no AUTH_SECRET, so it cannot store a key.", "NO_SECRET", 503);
-  }
-  console.warn(`provider key ${what} failed (${failureCode(error)})`);
-  return refuse("Not saved: the database is unreachable.", "STORE_UNAVAILABLE", 503);
-}
+// Studio's list is told whenever a preset's key went away, and the answer
+// says whether it landed: `byok: false` tells the card the runner still lists
+// the provider (with no key to run on), so the row can say so.
+export const DELETE = settingsRoute("provider-key", KEY_WRITE_RATE_LIMIT, providerKeyRemoveTurn, async (body, answered) =>
+  byokField(answered.removed === true ? await dropByokProvider(body.provider as ProviderName) : undefined),
+);

@@ -1319,7 +1319,7 @@ async function chainKeyGate(
 ): Promise<{ serverKey: boolean } | { refused: TurnReply }> {
   let saved: SavedKeys;
   try {
-    saved = await openSavedKeys(await deps.db, deps.owner, process.env);
+    saved = await openSavedKeys(await deps.db, deps.owner, deps.env);
   } catch (error) {
     console.warn(`tutor model ${what === "added" ? "add" : "set"}: saved provider keys unavailable (${failureCode(error)})`);
     return { refused: writeRefuse(`Not ${what}: your saved keys could not be read just now. Try again in a moment.`, "STORE_UNAVAILABLE", 503) };
@@ -1494,7 +1494,7 @@ function customProviderFailed(what: string, error: unknown): TurnReply {
 export async function customProviderAddTurn(deps: TutorDeps, body: unknown): Promise<TurnReply> {
   const read = writeRecord(body);
   if ("refused" in read) return read.refused;
-  if (pointsAtThisApp(read.record.baseUrl, deps.env)) return writeRefuse(SELF_ADDRESS_REASON);
+  if (pointsAtThisApp(read.record.baseUrl, deps.env, deps.requestUrl)) return writeRefuse(SELF_ADDRESS_REASON);
   const shape = checkKeyShape(read.record.key);
   if (!shape.ok) return writeRefuse(shape.reason);
   // As `providerKeySaveTurn`: on the web's path the sealer runs before the
@@ -1535,7 +1535,7 @@ export async function customProviderChangeTurn(deps: TutorDeps, body: unknown): 
   if (label === undefined && baseUrl === undefined && key === undefined) {
     return writeRefuse("Send a new name, a new base URL, a new key, or any of them.");
   }
-  if (pointsAtThisApp(baseUrl, deps.env)) return writeRefuse(SELF_ADDRESS_REASON);
+  if (pointsAtThisApp(baseUrl, deps.env, deps.requestUrl)) return writeRefuse(SELF_ADDRESS_REASON);
   let checked: string | undefined;
   if (key !== undefined) {
     const shape = checkKeyShape(key);
