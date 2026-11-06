@@ -65,6 +65,9 @@ describe("custom providers (docs/TUTOR-MODELS.md, T14)", () => {
       "not a url",
       "",
       `https://a.example/${"x".repeat(300)}`,
+      // Under the limit as typed, over it once the spaces are percent-encoded.
+      `https://a.example/${" ".repeat(120)}x`,
+      "https://gw.example/v1@team",
       42,
     ]) {
       const result = checkBaseUrl(bad);

@@ -453,6 +453,16 @@ describe("teachProse", () => {
     expect(prose).not.toContain("id: dot-product");
   });
 
+  it("matches a hidden section with closing hashes, and reads a long heading line in linear time (R3-1-02)", () => {
+    expect(teachProse("Intro.\n\n## Checks ##\n\nhidden\n\n## After\n\nshown")).toBe("Intro.\n\n## After\n\nshown");
+    // The old match and strip took 19.5 s at 5,000 spaces.
+    const line = `## a${" ".repeat(50_000)}x`;
+    const started = performance.now();
+    const prose = teachProse(`Intro.\n\n${line}\n\nbody`);
+    expect(performance.now() - started).toBeLessThan(250);
+    expect(prose).toContain(line);
+  });
+
   it("drops a hidden section's subsections with it, and keeps a note with no frontmatter", () => {
     expect(teachProse("Intro.\n\n## Checks\n\n### One\n\nhidden\n\n## After\n\nshown")).toBe("Intro.\n\n## After\n\nshown");
   });

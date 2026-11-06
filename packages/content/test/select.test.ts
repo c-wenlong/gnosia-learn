@@ -178,6 +178,28 @@ describe("selectSource", () => {
     expect(String(onOwnershipError.mock.calls[0]?.[0])).toContain("ECONNREFUSED");
   });
 
+  it("warns that it reads the database, by default, when the rows cannot be read (R3-2-05)", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const source = selectSource({
+        files,
+        db: () => db,
+        ownership: async () => {
+          throw new Error("ECONNREFUSED");
+        },
+        variable: undefined,
+      });
+      await source.topics();
+      expect(warn).toHaveBeenCalledTimes(1);
+      const said = String(warn.mock.calls[0]?.[0]);
+      expect(said).toContain("reads the database");
+      expect(said).not.toContain("files");
+      expect(said).toContain("ECONNREFUSED");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it("fails the read with what the reporter throws, rather than falling back", async () => {
     const signal = new Error("the framework's own control flow");
     const source = selectSource({

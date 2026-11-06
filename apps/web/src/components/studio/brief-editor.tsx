@@ -103,7 +103,6 @@ export function ElementsEditor({
                 inset
                 onClick={() => onRemove(element.id)}
                 disabled={locked || only}
-                tabIndex={-1}
                 className="absolute right-0.5"
               >
                 <Glyph name="close" size={14} />
@@ -280,6 +279,9 @@ function EndSelect({
       value={value}
       invalid={problem !== null}
       describedBy={problem === null ? undefined : describedBy}
+      // Locked like the inputs beside it: an enabled list whose pick snapped
+      // back said nothing about why (R3-2-10).
+      disabled={locked}
       onChange={(next) => {
         if (locked) return;
         onChange(relation.id, { [end]: next }, end);

@@ -90,4 +90,27 @@ describe("VerbSubmit", () => {
     expect(other).not.toHaveBeenCalled();
     await act(async () => slow.finish());
   });
+
+  it("keeps the hold through an address change that is not its own outcome (R3-2-01)", async () => {
+    const { host, root } = mountRoot();
+    const slow = slowAction();
+    const other = vi.fn(async () => {});
+    nav.query = "v=export&ok=1";
+    await act(async () => root.render(createElement("div", null, form(slow.action, false, "strip"))));
+    await act(async () => host.querySelector("button")!.click());
+    // The pressed form goes, and Details opens the inspector, whose Export mounts.
+    nav.query = "inspect=1";
+    await act(async () => root.render(createElement("div", null, form(other, false, "inspector"))));
+    expect(host.querySelector("button")!.disabled).toBe(true);
+    // Another verb's outcome does not end this one either.
+    nav.query = "v=verify&ok=1";
+    await act(async () => root.render(createElement("div", null, form(other, false, "inspector"))));
+    expect(host.querySelector("button")!.disabled).toBe(true);
+    // Its own outcome does.
+    nav.query = "v=export&ok=0&m=stopped";
+    await act(async () => root.render(createElement("div", null, form(other, false, "inspector"))));
+    expect(host.querySelector("button")!.disabled).toBe(false);
+    expect(other).not.toHaveBeenCalled();
+    await act(async () => slow.finish());
+  });
 });

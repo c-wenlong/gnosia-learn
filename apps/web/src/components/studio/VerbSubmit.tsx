@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 
 import { Button } from "@/components/ui/Button";
 import { menuRowClasses, type ButtonVariant } from "@/components/ui/classes";
+import { OUTCOME_PARAMS } from "@/lib/studio-url";
 
 /**
  * The submit button of a diagram verb's form (Export SVG, Verify, Inspect,
@@ -23,9 +24,13 @@ import { menuRowClasses, type ButtonVariant } from "@/components/ui/classes";
  * form that was pressed: the More menu unmounts its forms when it closes, and
  * the freshness pill and Export SVG are two forms for one action, so a hold
  * kept by one form let the other, or the menu reopened, press again (the
- * Greptile review of #595). It ends when the action's redirect lands (the
- * address changes), and after `HOLD_MS` whatever happens, so an action that
- * threw cannot leave a verb held for good.
+ * Greptile review of #595). It ends when the action's own redirect lands,
+ * which is the address gaining an outcome naming that verb (`withOutcome`'s
+ * `v`), and after `HOLD_MS` whatever happens, so an action that threw cannot
+ * leave a verb held for good. Any other change of address (Details opening
+ * the inspector, a job panel) leaves every hold alone: freeing on it let the
+ * inspector's Export mount enabled mid-export and queue a second one
+ * (R3-2-01).
  */
 
 /** Longer than the runner's 200 s verb deadline. */
@@ -45,16 +50,21 @@ function hold(verb: string): void {
   changed();
 }
 
-function release(verb?: string): void {
-  if (verb === undefined ? held.size === 0 : !held.has(verb)) return;
-  if (verb === undefined) held.clear();
-  else held.delete(verb);
+function release(verb: string): void {
+  if (!held.delete(verb)) return;
   changed();
 }
 
 function subscribe(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
+}
+
+/** The verb outcome the address carries, if any, and the whole of it as one key. */
+function outcomeOf(search: URLSearchParams | null): { verb: string | null; key: string } {
+  const verb = search?.get("v") ?? null;
+  const key = OUTCOME_PARAMS.map((name) => `${name}=${search?.get(name) ?? ""}`).join("&");
+  return { verb, key };
 }
 
 function isHeld(verb: string): boolean {
@@ -95,15 +105,15 @@ export function VerbSubmit({
       release(verb);
     }
   }, [status.pending, verb]);
-  // The redirect that ends an action changes the address; a form that was
-  // unmounted mid-action (the closed menu) never sees its own end.
-  const query = useSearchParams()?.toString() ?? "";
-  const seen = useRef(query);
+  // The redirect that ends an action puts its outcome in the address; a form
+  // that was unmounted mid-action (the closed menu) never sees its own end.
+  const outcome = outcomeOf(useSearchParams());
+  const seen = useRef(outcome.key);
   useEffect(() => {
-    if (seen.current === query) return;
-    seen.current = query;
-    release();
-  }, [query]);
+    if (seen.current === outcome.key) return;
+    seen.current = outcome.key;
+    if (outcome.verb !== null) release(outcome.verb);
+  }, [outcome.key, outcome.verb]);
   useEffect(() => {
     if (!isHeld(verb) || status.pending) return;
     const timer = setTimeout(() => release(verb), HOLD_MS);

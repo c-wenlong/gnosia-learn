@@ -1535,7 +1535,9 @@ export async function customProviderAddTurn(deps: TutorDeps, body: unknown): Pro
  * `PATCH /api/learner/custom-provider` with `{ provider, label?, baseUrl?,
  * key? }`: rename the provider, move it, and replace its key, all in one
  * transaction — a key that cannot be stored leaves the name and the URL as
- * they were. Its id and its models stay. Delete is the provider route's
+ * they were. Its id and its models stay. A new base URL needs `key` with it,
+ * or 400 `KEY_REQUIRED` (`updateCustomProvider`): the saved key goes only to
+ * the URL it was saved for. Delete is the provider route's
  * (`tutorProviderRemoveTurn`), which removes it whole. 200 `{ ok, provider,
  * key }`, `key` null when none was sent.
  */

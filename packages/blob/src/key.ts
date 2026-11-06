@@ -19,11 +19,12 @@ import { BlobIntegrityError, BlobKeyError, BlobRangeError, type BlobMeta, type B
  */
 
 /*
- * The same rule as the database's `blob_object_key_check` since migration
- * 0013, which builds that check from `BLOB_KEY_PATTERN` in
- * packages/schema/src/content.ts. 0010's check was looser (any owner without
- * a slash, an optional extension of any length); 0013 tightened it to this
- * rather than relaxing this to match, since that would admit `..` as an owner
+ * The same rule as the database's `blob_object_key_check`, which the
+ * catalog's first migration (`0000_majestic_ronan`) builds from
+ * `BLOB_KEY_PATTERN` in packages/schema/src/content.ts. The old Postgres
+ * journal had a looser check before its 0013 (any owner without a slash, an
+ * optional extension of any length); the database was tightened to this
+ * rather than this relaxed to match, since that would admit `..` as an owner
  * and mixed case, the two things the rules above exist to refuse.
  * `test/key.test.ts` holds `key()` and `isKey()` against the pattern, so the
  * two cannot drift apart.

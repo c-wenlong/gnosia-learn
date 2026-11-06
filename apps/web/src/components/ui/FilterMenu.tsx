@@ -65,6 +65,7 @@ export function FilterMenu<V extends string>({
   id: triggerId,
   placeholder,
   dataField,
+  disabled = false,
 }: {
   /** The group's name: "Type", "Course", "Status". The trigger prints it before the value. */
   label: string;
@@ -95,9 +96,15 @@ export function FilterMenu<V extends string>({
   placeholder?: string;
   /** Put on the trigger as `data-field`, for a form that finds its fields by it. */
   dataField?: string;
+  /** The trigger takes no press and the list never opens: a field of a locked form. */
+  disabled?: boolean;
 }) {
   const field = face === "field";
   const [open, setOpen] = useState(false);
+  // A menu disabled while open (a locked form) closes for good, adjusted
+  // during render so the trigger's `aria-expanded` and the panel agree at
+  // once, and enabling it again does not reopen it unasked.
+  if (disabled && open) setOpen(false);
   const [active, setActive] = useState(-1);
   // True while the highlight was last moved by a key: the row then carries a
   // focus outline, since the list itself draws none.
@@ -192,6 +199,7 @@ export function FilterMenu<V extends string>({
         aria-controls={open ? listId : undefined}
         aria-busy={busy || undefined}
         id={triggerId}
+        disabled={disabled}
         data-field={dataField}
         data-value={value}
         aria-label={bare || field ? `${label}: ${shown}` : undefined}
@@ -210,7 +218,7 @@ export function FilterMenu<V extends string>({
               )
             : chipClasses({
                 active: defaultValue !== undefined && value !== defaultValue,
-                className: cx("max-w-full pr-2.5", busy && "opacity-70", invalid && "border-danger"),
+                className: cx("max-w-full pr-2.5 disabled:cursor-not-allowed disabled:opacity-50", busy && "opacity-70", invalid && "border-danger"),
               })
         }
       >
