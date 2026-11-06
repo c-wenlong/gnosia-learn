@@ -311,7 +311,12 @@ Ollama or LM Studio), by a name, a base URL and a key, from Add provider's
   under the learner lock (`addCustomProvider`), so a provider never exists
   without its key. `PATCH` changes the name, the base URL and, when one is
   sent, the key, in one transaction too, so a refused key leaves the name
-  and the URL as they were; the models stay. Delete is the provider route's,
+  and the URL as they were; the models stay. A new base URL needs the key
+  sent with it, or the write is refused with `KEY_REQUIRED` and nothing
+  changes: the saved key goes only to the URL it was saved for, so a
+  session cannot move the URL to its own host and have the next model list
+  or Test carry the key there (BYOK.md, D3). A rename, or the same URL sent
+  again, keeps the key. Delete is the provider route's,
   which removes the row, the key and the models in one transaction.
 - **A key is filed under a custom id only while the owner has it**: every
   write of one (`saveCustomProviderKey`, which the key route reaches through

@@ -1,4 +1,4 @@
-import { isProviderName, type ProviderName, providerKey } from "@gnosia/schema";
+import { customProvider, isProviderName, type ProviderName, providerKey } from "@gnosia/schema";
 import { and, asc, eq, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
@@ -39,6 +39,13 @@ export interface StoredProviderKey extends SealedProviderKey {
   provider: ProviderName;
   createdAt: Date;
   updatedAt: Date;
+  /**
+   * For a custom provider's key, that provider's base URL as the same
+   * statement read it, so a caller can send the key only to the URL it was
+   * saved beside (`updateCustomProvider` moves the URL only with a new key).
+   * Null for a built-in provider, or a custom one whose row is gone.
+   */
+  savedFor: string | null;
 }
 
 function provider(value: string): ProviderName {
@@ -48,12 +55,14 @@ function provider(value: string): ProviderName {
 
 /** Every key this owner saved, in no particular order the caller should rely on. */
 export async function readProviderKeys(db: CatalogDatabase, owner: string): Promise<StoredProviderKey[]> {
+  // One statement, so a key and its provider's URL come from one snapshot.
   const rows = await db
-    .select()
+    .select({ key: providerKey, baseUrl: customProvider.baseUrl })
     .from(providerKey)
+    .leftJoin(customProvider, and(eq(customProvider.ownerId, providerKey.ownerId), eq(customProvider.id, providerKey.provider)))
     .where(eq(providerKey.ownerId, owner))
     .orderBy(asc(bytewise(providerKey.provider)));
-  return rows.flatMap((row) =>
+  return rows.flatMap(({ key: row, baseUrl }) =>
     isProviderName(row.provider)
       ? [
           {
@@ -65,6 +74,7 @@ export async function readProviderKeys(db: CatalogDatabase, owner: string): Prom
             last4: row.last4,
             createdAt: row.createdAt,
             updatedAt: row.updatedAt,
+            savedFor: baseUrl ?? null,
           },
         ]
       : [],

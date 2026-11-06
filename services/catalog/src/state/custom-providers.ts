@@ -38,7 +38,7 @@ export interface StoredCustomProvider {
   updatedAt: Date;
 }
 
-export type CustomProviderErrorCode = "INVALID" | "FULL" | "NOT_FOUND";
+export type CustomProviderErrorCode = "INVALID" | "FULL" | "NOT_FOUND" | "KEY_REQUIRED";
 
 export class CustomProviderError extends StateError {
   constructor(
@@ -143,6 +143,12 @@ export async function saveCustomProviderKey(
  * Change a custom provider's name or base URL, and its key when `sealed` is
  * given, in one transaction: a key that cannot be stored leaves the name and
  * the URL as they were. Its id and models stay.
+ *
+ * A new base URL needs a new key in the same write (`KEY_REQUIRED`
+ * otherwise): the saved key goes only to the address it was saved with, so a
+ * session that moves the URL cannot have the server send that key to a host
+ * of its choosing (docs/BYOK.md, D3). A rename, or the same URL sent again,
+ * keeps the key.
  */
 export async function updateCustomProvider(
   db: CatalogDatabase,
@@ -156,6 +162,16 @@ export async function updateCustomProvider(
   if (input.label !== undefined) set.label = label(input.label);
   if (input.baseUrl !== undefined) set.baseUrl = baseUrl(input.baseUrl);
   return withLearnerLock(db, owner, async (tx) => {
+    if (set.baseUrl !== undefined && sealed === undefined) {
+      const [current] = await tx
+        .select({ baseUrl: customProvider.baseUrl })
+        .from(customProvider)
+        .where(and(eq(customProvider.ownerId, owner), eq(customProvider.id, id)));
+      if (current === undefined) throw new CustomProviderError("NOT_FOUND", "That is not one of your providers.");
+      if (current.baseUrl !== set.baseUrl) {
+        throw new CustomProviderError("KEY_REQUIRED", "A new base URL needs the key again: type it with the new address.");
+      }
+    }
     const updated = await tx
       .update(customProvider)
       .set(set)
