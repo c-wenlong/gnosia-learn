@@ -674,7 +674,10 @@ export async function completeWithFallback(
     skipped: true,
   });
   const credentials = steps.filter(isCallable);
-  const seconds = (ms: number) => `${Math.round(ms / 1000)} seconds`;
+  const seconds = (ms: number) => {
+    const whole = Math.round(ms / 1000);
+    return `${whole} ${whole === 1 ? "second" : "seconds"}`;
+  };
   if (credentials.length === 0) {
     return { ok: false, attempts: steps.flatMap((s) => (isCallable(s) ? [] : [skipped(s)])), code: "MISSING_API_KEY" };
   }
