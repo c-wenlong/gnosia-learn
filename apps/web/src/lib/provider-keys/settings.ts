@@ -68,7 +68,7 @@ export function providerKeyViews(
       inUse: own ? "saved" : server ? "server" : null,
     };
   });
-  // The same rule as `orderCredentials`: the owner's usable keys in the
+  // The order of docs/BYOK.md, decision 4: the owner's usable keys in the
   // cascade's order, then the server's for the rest. A custom provider has
   // no built-in default, so it is never in this order (T14).
   const builtIn = rows.filter((r) => r.custom === undefined);

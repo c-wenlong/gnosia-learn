@@ -18,7 +18,7 @@ are written down here before anything else.
 | Sealing and opening | `packages/tutor/src/server/seal.ts` (tests in `packages/tutor/test/seal.test.ts`) |
 | The web app's store, per owner | `apps/web/src/lib/provider-keys/store.ts` |
 | The studio runner's read of them (D12) | `services/studio/src/agent/byok-keys.ts`, the settings beside them in `services/studio/src/agent/byok.ts` |
-| The order the tutor tries keys in | `orderCredentials` in `packages/tutor/src/providers.ts`, `tutorCredentials` in `apps/web/src/lib/agent/credentials.ts` |
+| The order the tutor tries keys in | `tutorSteps` and `keyFor` in `packages/tutor/src/providers.ts`, the card's `order` in `apps/web/src/lib/provider-keys/settings.ts`, `tutorCredentials` in `apps/web/src/lib/agent/credentials.ts` |
 | Save and remove | `POST` and `DELETE /api/learner/provider-key` |
 | Test | `POST /api/learner/provider-key/test` |
 | The Settings card | `apps/web/src/components/settings/ProviderKeys.tsx`, fed by `apps/web/src/lib/provider-keys/settings.ts` |

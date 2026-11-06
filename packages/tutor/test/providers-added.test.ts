@@ -5,7 +5,7 @@ import {
   customProviderConfig,
   dashScopeListUrl,
   listProviderModels,
-  orderCredentials,
+  keyFor,
   providerConfigs,
   type ProviderCredential,
   redirectPolicy,
@@ -42,9 +42,10 @@ describe("the added providers", () => {
 
   it("never take a server key from the bare <ID>_API_KEY a shell may export for other tools", () => {
     const shell = { ANTHROPIC_API_KEY: "sk-ant-api-from-the-shell-000000", OPENAI_API_KEY: "sk-from-the-shell-0000000000" };
-    expect(orderCredentials({}, shell).map((c) => c.config.id)).toEqual([]);
-    const opted = orderCredentials({}, { TUTOR_ANTHROPIC_API_KEY: "sk-ant-api-opted-in-0000000000", TUTOR_ANTHROPIC_MODEL: "claude-x" });
-    expect(opted.map((c) => [c.config.id, c.config.model, c.source])).toEqual([["anthropic", "claude-x", "server"]]);
+    expect(providerConfigs(shell).filter((c) => keyFor(c.id, {}, shell) !== null)).toEqual([]);
+    const opted = { TUTOR_ANTHROPIC_API_KEY: "sk-ant-api-opted-in-0000000000", TUTOR_ANTHROPIC_MODEL: "claude-x" };
+    expect(keyFor("anthropic", {}, opted)).toEqual({ apiKey: "sk-ant-api-opted-in-0000000000", source: "server" });
+    expect(providerConfigs(opted).find((c) => c.id === "anthropic")?.model).toBe("claude-x");
   });
 
   it("asks Anthropic for one page of up to 1000 models, with its version header", async () => {
