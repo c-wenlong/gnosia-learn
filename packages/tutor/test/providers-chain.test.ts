@@ -483,10 +483,37 @@ describe("reading a model's reply", () => {
   }
 
   it("refuses a reply past its 2 MB cap without reading the rest, and moves on", async () => {
-    const outcome = await attemptWith(`{"choices":[{"message":{"content":"${"x".repeat(2 * 1024 * 1024)}"}}]}`);
-    expect(outcome).toMatchObject({ ok: false, code: "ALL_PROVIDERS_FAILED" });
-    if (outcome.ok) return;
-    expect(outcome.attempts).toEqual([{ provider: "nvidia", model: "m", message: "The reply was too large to read." }]);
+    // An endless body of 512 KiB chunks: only a reader that stops can finish.
+    const chunk = new Uint8Array(512 * 1024).fill(0x78);
+    let pulled = 0;
+    let cancelled = false;
+    const endless = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled += 1;
+        controller.enqueue(chunk);
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) =>
+        JSON.parse(String(init?.body)).model === "huge"
+          ? new Response(endless, { status: 200 })
+          : new Response(JSON.stringify({ choices: [{ message: { content: "From the second." } }] }), { status: 200 }),
+      ),
+    );
+    const outcome = await completeWithFallback(
+      [{ role: "user", content: "hi" }],
+      tutorSteps([{ provider: "nvidia", model: "huge" }, { provider: "openrouter", model: "small" }], {}, ENV),
+    );
+    expect(cancelled).toBe(true);
+    // Five chunks pass 2 MB; the stream may have queued one more ahead.
+    expect(pulled).toBeLessThanOrEqual(6);
+    expect(outcome).toMatchObject({ ok: true, result: { content: "From the second." } });
+    if (!outcome.ok) return;
+    expect(outcome.attempts).toEqual([{ provider: "nvidia", model: "huge", message: "The reply was too large to read." }]);
   });
 
   it("says a reply that is not JSON was not JSON", async () => {

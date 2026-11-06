@@ -1,4 +1,4 @@
-import { learner, LOCAL_LEARNER_ID, ownerScope } from "@gnosia/schema";
+import { COMMONS_OWNER, learner, LOCAL_LEARNER_ID, ownerScope } from "@gnosia/schema";
 import { readPreference } from "@gnosia/catalog/state";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
@@ -28,11 +28,13 @@ describe.skipIf(!reachable.ok)("learner write turns", () => {
 
   beforeAll(async () => {
     scratch = await migratedScratchDatabase();
-    await scratch.db.insert(learner).values([{ id: LOCAL_LEARNER_ID }, { id: OTHER }]).onConflictDoNothing();
+    await scratch.db.insert(learner).values([{ id: LOCAL_LEARNER_ID }, { id: OTHER }, { id: COMMONS_OWNER }]).onConflictDoNothing();
     await seedContent(scratch.db);
     await seedAssets(scratch.db);
     // The video is another owner's: the local owner cannot read it.
     await scratch.pool.query(`update asset set owner_id = '${OTHER}' where id = '${ASSETS.video}'`);
+    // The link is the commons': every owner may read it.
+    await scratch.pool.query(`update asset set owner_id = '${COMMONS_OWNER}' where id = '${ASSETS.link}'`);
   }, 60_000);
 
   afterAll(async () => {
@@ -67,8 +69,10 @@ describe.skipIf(!reachable.ok)("learner write turns", () => {
     expect((await favoriteTurn(deps(OTHER), { assetId: ASSETS.video, favorite: true })).status).toBe(200);
     expect((await watchedTurn(deps(OTHER), { assetId: ASSETS.video })).status).toBe(200);
     expect((await playbackTurn(deps(OTHER), save)).status).toBe(200);
-    // A commons asset is the local owner's to star.
-    expect((await favoriteTurn(deps(LOCAL_LEARNER_ID), { assetId: ASSETS.diagram, favorite: true })).status).toBe(200);
+    // A commons asset is every owner's to star.
+    for (const owner of [LOCAL_LEARNER_ID, OTHER]) {
+      expect((await favoriteTurn(deps(owner), { assetId: ASSETS.link, favorite: true })).status, owner).toBe(200);
+    }
   });
 
   it("saves over a stored watchedAt that is not a date, answering 200 with the day it crosses (R3-1-04)", async () => {
