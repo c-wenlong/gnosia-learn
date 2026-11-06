@@ -31,7 +31,8 @@ export interface ConceptPlace {
   courseCode: string;
   courseTitle: string;
   moduleSlug: string;
-  moduleOrder: number;
+  /** The module's number in the course, 1-based (`moduleNumber`), never its authored `order`. */
+  moduleNumber: number;
   moduleTitle: string;
   topicId: string;
   topicTitle: string;
@@ -245,7 +246,7 @@ function promptNeighbour(ref: NeighbourRef): ConceptPromptNeighbour {
 /** "CP4281 · Module 2 · Transformations". */
 export function placeLabel(place: ConceptPlace | null): string | null {
   if (place === null) return null;
-  return `${place.courseCode} · Module ${place.moduleOrder} · ${place.topicTitle}`;
+  return `${place.courseCode} · Module ${place.moduleNumber} · ${place.topicTitle}`;
 }
 
 /** Strip the frontmatter off a note file, leaving the body the tutor reads. */

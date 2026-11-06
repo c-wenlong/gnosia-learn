@@ -18,6 +18,7 @@
  */
 
 export { ContentError } from "./errors";
+export { moduleNumber, modulePlace, numberedTitle } from "./module-number";
 export {
   COURSE_COVER_EXTENSIONS,
   COURSES_DIR,

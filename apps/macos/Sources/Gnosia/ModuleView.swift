@@ -258,7 +258,7 @@ struct ModuleView: View {
                 let previous = course.modules[index - 1]
                 Button { onNavigate(index - 1) } label: {
                     Label("Previous module", systemImage: "chevron.left")
-                    Text(previous.numberedTitle).lineLimit(1)
+                    Text(course.numberedTitle(of: previous)).lineLimit(1)
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
@@ -267,7 +267,7 @@ struct ModuleView: View {
             if index + 1 < course.modules.count {
                 let next = course.modules[index + 1]
                 Button { onNavigate(index + 1) } label: {
-                    Text(next.numberedTitle).lineLimit(1)
+                    Text(course.numberedTitle(of: next)).lineLimit(1)
                     Label("Next module", systemImage: "chevron.right")
                         .labelStyle(.titleAndIcon)
                 }

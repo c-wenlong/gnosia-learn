@@ -77,14 +77,14 @@ function type(field: HTMLTextAreaElement, text: string) {
   });
 }
 
-function render(moduleSlug?: string) {
+function render(moduleSlug?: string, shown: Course = course) {
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
   const draw = () =>
     act(() =>
       root.render(
-        createElement(CourseHome, { course, moduleSlug, mastery: {}, modules: {}, assetsReachable: true, related: [] }),
+        createElement(CourseHome, { course: shown, moduleSlug, mastery: {}, modules: {}, assetsReachable: true, related: [] }),
       ),
     );
   draw();
@@ -179,6 +179,30 @@ describe("CourseHome", () => {
     const panel = host.querySelector(`#${CSS.escape(toggle.getAttribute("aria-controls")!)}`)!;
     expect(panel.textContent).toContain("Mark done");
     expect(panel.textContent).toContain("m1-a covers this");
+  });
+
+  it("numbers modules by their place in the course, not their authored order", () => {
+    // Authored orders 1 and 3, as archiving the middle module leaves them.
+    const gapped = { ...course, modules: [mod(1), mod(3)] } as Course;
+    const header = (host: HTMLElement) => host.querySelector("h1")?.previousElementSibling?.textContent;
+    const rowTitles = (host: HTMLElement) =>
+      sidebarRows(host).map((a) => a.querySelector("span.flex-1")?.textContent);
+    const neighbour = (host: HTMLElement) =>
+      [...host.querySelectorAll("nav[aria-label='Other modules'] a span.block.truncate")].map((s) => s.textContent);
+
+    const first = render("m1", gapped).host;
+    expect(header(first)).toBe("Module 1 of 2");
+    expect(rowTitles(first)).toEqual(["1. Module 1 title", "2. Module 3 title"]);
+    expect(neighbour(first)).toEqual(["2. Module 3 title"]);
+    mounted.pop()?.();
+
+    const last = render("m3", gapped).host;
+    expect(header(last)).toBe("Module 2 of 2");
+    expect(neighbour(last)).toEqual(["1. Module 1 title"]);
+    const narrow = [...last.querySelectorAll("button[aria-expanded] span.block")].map((s) => s.textContent);
+    expect(narrow).toContain("Module 2 of 2");
+    const locked = [...last.querySelectorAll("p")].find((p) => p.textContent?.startsWith("Opens once you start"));
+    expect(locked?.querySelector("a")?.textContent).toBe("Module 1: Module 1 title");
   });
 
   it("links the modules either side of the one on screen", () => {

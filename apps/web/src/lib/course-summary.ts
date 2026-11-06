@@ -23,8 +23,8 @@ import type { Course, TagMeta } from "@gnosia/content";
 export interface CourseSummaryTopic {
   id: string;
   title: string;
-  /** The module the topic sits in: its place in the course, its title and its URL slug. */
-  moduleOrder: number;
+  /** The module the topic sits in: its number (`moduleNumber`, 1-based), its title and its URL slug. */
+  moduleNumber: number;
   moduleTitle: string;
   moduleSlug: string;
 }
@@ -79,8 +79,8 @@ export function toCourseSummary(course: Course, tags: readonly TagMeta[], coverS
     cover: coverSha256 === null ? null : coverUrl(course.slug, coverSha256),
     tags: tags.map(({ id, label }) => ({ id, label })),
     moduleCount: course.modules.length,
-    topics: course.modules.flatMap((m) =>
-      m.topics.map((t) => ({ id: t.id, title: t.title, moduleOrder: m.order, moduleTitle: m.title, moduleSlug: m.slug })),
+    topics: course.modules.flatMap((m, i) =>
+      m.topics.map((t) => ({ id: t.id, title: t.title, moduleNumber: i + 1, moduleTitle: m.title, moduleSlug: m.slug })),
     ),
   };
 }

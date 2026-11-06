@@ -58,8 +58,8 @@ describe("day words", () => {
 
 describe("pick up where you left off", () => {
   const PLACES: Record<string, ModulePlace> = {
-    "cs3230/m6": { courseCode: "CS3230", courseTitle: "Algorithms", moduleTitle: "Randomized algorithms", moduleOrder: 6 },
-    "cs3230/": { courseCode: "CS3230", courseTitle: "Algorithms", moduleTitle: null, moduleOrder: null },
+    "cs3230/m6": { courseCode: "CS3230", courseTitle: "Algorithms", moduleTitle: "Randomized algorithms", moduleNumber: 6 },
+    "cs3230/": { courseCode: "CS3230", courseTitle: "Algorithms", moduleTitle: null, moduleNumber: null },
   };
   const place = (v: ModuleVisit) => PLACES[`${v.courseSlug}/${v.moduleSlug ?? ""}`] ?? null;
   const none = { modules: [], place, videos: [], drafts: [], concepts: [] };
@@ -295,7 +295,7 @@ describe("next from here", () => {
 
 describe("next up", () => {
   it("names the course and module when a curriculum item links the concept", () => {
-    expect(nextUpEyebrows({ courseCode: "CP4281", moduleOrder: 2 })).toEqual({
+    expect(nextUpEyebrows({ courseCode: "CP4281", moduleNumber: 2 })).toEqual({
       eyebrow: "Next on your path · CP4281 · Module 2",
       eyebrowShort: "Next up · CP4281 M2",
     });

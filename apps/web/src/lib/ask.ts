@@ -42,11 +42,11 @@ export async function readAskEntries(): Promise<AskEntry[]> {
           aliases: [course.code],
         },
         ...course.modules.map(
-          (m): AskEntry => ({
+          (m, i): AskEntry => ({
             kind: "module",
             key: `module:${course.slug}/${m.slug}`,
             title: m.title,
-            detail: `${course.code} · Module ${m.order}`,
+            detail: `${course.code} · Module ${i + 1}`,
             href: `/courses/${encodeURIComponent(course.slug)}/${encodeURIComponent(m.slug)}`,
           }),
         ),

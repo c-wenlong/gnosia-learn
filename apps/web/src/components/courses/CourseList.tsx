@@ -282,7 +282,7 @@ function ContinueCard({ entry: { summary, status } }: { entry: CourseEntry }) {
               {next.title}
             </p>
             <p className="mt-1 truncate text-[13px] text-text2" title={next.moduleTitle}>
-              Module {next.moduleOrder} · {next.moduleTitle}
+              Module {next.moduleNumber} · {next.moduleTitle}
             </p>
           </div>
           <Button

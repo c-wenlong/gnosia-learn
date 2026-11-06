@@ -1,13 +1,34 @@
+import Foundation
 import Testing
 @testable import Gnosia
 
-/// The module page's header and the sidebar row name the same number: the
-/// module's authored `order`, as the web's ModuleMain ("Module {order} of
-/// {count}") and CourseSidebar ("{order}. {title}") print it.
+/// A module is numbered by its 1-based place in the course's module list,
+/// never its authored `order`: a course whose modules carry order 1 and 3
+/// reads "Module 1 of 2" and "Module 2 of 2", rows "1." and "2.". The cases
+/// are Fixtures/module-numbers.json, which
+/// packages/content/test/module-number.test.ts holds the web's rule to.
 @Suite struct CourseNumbering {
-    private func module(_ order: Int, _ title: String) -> CourseModule {
+    private struct Fixture: Decodable {
+        struct Case: Decodable {
+            struct Module: Decodable { let id: String; let order: Int; let title: String }
+            struct Expected: Decodable { let number: Int; let place: String; let numberedTitle: String }
+            let name: String
+            let modules: [Module]
+            let expected: [Expected]
+        }
+        let cases: [Case]
+    }
+
+    private func fixture() throws -> Fixture {
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appending(path: "Fixtures/module-numbers.json")
+        return try JSONDecoder().decode(Fixture.self, from: Data(contentsOf: url))
+    }
+
+    private func module(_ id: String, _ order: Int, _ title: String) -> CourseModule {
         CourseModule(
-            id: "m\(order)", slug: "m\(order)", title: title, order: order,
+            id: id, slug: id, title: title, order: order,
             topic: "", videos: [], items: [], resources: []
         )
     }
@@ -20,11 +41,21 @@ import Testing
         )
     }
 
-    @Test func aGapInTheOrderShowsTheSameNumberInHeaderAndRow() {
-        let last = module(3, "Agentic frameworks")
-        let c = course([module(1, "Foundations"), last])
-        #expect(c.place(of: last) == "Module 3 of 2")
-        #expect(last.numberedTitle == "3. Agentic frameworks")
+    @Test func theFixtureCoversAGap() throws {
+        #expect(try fixture().cases.contains { $0.modules.map(\.order) == [1, 3] })
+    }
+
+    @Test func everyModuleIsNumberedByItsPlace() throws {
+        for c in try fixture().cases {
+            let modules = c.modules.map { module($0.id, $0.order, $0.title) }
+            let shown = course(modules)
+            let got = modules.map { m in
+                (shown.number(of: m), shown.place(of: m), shown.numberedTitle(of: m))
+            }
+            #expect(got.map(\.0) == c.expected.map(\.number), "\(c.name)")
+            #expect(got.map(\.1) == c.expected.map(\.place), "\(c.name)")
+            #expect(got.map(\.2) == c.expected.map(\.numberedTitle), "\(c.name)")
+        }
     }
 
     @Test func paletteStepHoldsAtTheEnds() {

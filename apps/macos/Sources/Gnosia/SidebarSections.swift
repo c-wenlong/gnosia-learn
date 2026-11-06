@@ -84,7 +84,7 @@ struct SidebarSections: View {
                         .font(.callout)
                         .lineLimit(1)
                     if let resume = course.resume {
-                        Text("\(resume.order). \(resume.title)")
+                        Text("\(resume.number). \(resume.title)")
                             .font(.caption)
                             .foregroundStyle(G.text3)
                             .lineLimit(1)
@@ -100,7 +100,7 @@ struct SidebarSections: View {
         // Any page of the course: the row is where the owner is.
         .help(course.resume == nil
               ? "\(course.code) \(course.title)"
-              : "\(course.code) \(course.title), \(course.resume!.order). \(course.resume!.title)")
+              : "\(course.code) \(course.title), \(course.resume!.number). \(course.resume!.title)")
     }
 
     /// The web highlights the course row on any page of the course.

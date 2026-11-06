@@ -377,7 +377,7 @@ function CoursesSection({
           // Any page of the course: the row is where the owner is.
           const here = isCurrentRow(course.href, pathname, true);
           const name = `${course.code} ${course.title}`;
-          const resume = course.resume === null ? null : `${course.resume.order}. ${course.resume.title}`;
+          const resume = course.resume === null ? null : `${course.resume.number}. ${course.resume.title}`;
           return (
             <li key={course.slug}>
               <Link
