@@ -133,9 +133,9 @@ export const session = sqliteTable(
  * drawing and a second Draw, or a second diagram in the same conversation, is
  * the normal case, and a `draft.job_id` would overwrite the first job's link.
  *
- * `kind` is what the draft's briefs produce (D42): `diagram` or `video`
- * (`DRAFT_KINDS`, D51 of docs/STUDIO-VIDEOS.md), fixed after the draft's
- * first paid turn.
+ * `kind` mirrors the newest brief's kind, for display: `diagram` or `video`
+ * (`DRAFT_KINDS`, D62 of docs/STUDIO-MENTIONS.md), `diagram` before any
+ * brief. It changes when a newer brief of another kind arrives.
  *
  * `name` is the owner's, `title` the planner's: a conversation shows its
  * name, else its title, else the person's first message (the runner has

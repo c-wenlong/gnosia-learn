@@ -902,8 +902,9 @@ export const JOB_TRANSITIONS: Readonly<Record<JobState, readonly JobState[]>> = 
 
 /**
  * What a studio draft's briefs produce (D42 of docs/STUDIO-CHAT-FIRST.md):
- * a diagram, or a manimkc video (docs/STUDIO-VIDEOS.md, D51), chosen before
- * the draft's first paid turn and fixed after it.
+ * a diagram or a video. A draft's `kind` is its newest brief's, for display
+ * (D62 of docs/STUDIO-MENTIONS.md, which superseded D51's kind fixed after
+ * the first paid turn).
  */
 export const DRAFT_KINDS = ["diagram", "video"] as const;
 export type DraftKind = (typeof DRAFT_KINDS)[number];
