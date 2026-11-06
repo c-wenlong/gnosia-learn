@@ -103,7 +103,6 @@ final class WebServer {
             status = .failed("No checkout found — set GNOSIA_REPO to the repository root.")
             return false
         }
-        let web = root.appending(path: "apps/web")
         let next = root.appending(path: "node_modules/next/dist/bin/next")
         guard FileManager.default.fileExists(atPath: next.path) else {
             status = .failed("next is not installed — run `npm install` in \(root.path).")
@@ -111,10 +110,11 @@ final class WebServer {
         }
 
         let proc = Process()
-        let shell = Checkout.shell("exec node '\(next.path)' \(Self.mode(web: web)) '\(web.path)' -p \(port) -H 127.0.0.1")
+        let launch = Self.launch(root: root, next: next, mode: Self.mode(), port: port)
+        let shell = Checkout.shell(launch.command)
         proc.executableURL = shell.executable
         proc.arguments = shell.arguments
-        proc.currentDirectoryURL = root
+        proc.currentDirectoryURL = launch.directory
         // The shared child environment (Checkout.childEnv: the launchers'
         // one resolver, with the catalog's file pinned). GNOSIA_CATALOG is deliberately not
         // consulted — it names the native app's read snapshot, not the live
@@ -144,12 +144,25 @@ final class WebServer {
         }
     }
 
+    /// The command and the directory it runs in. The directory is the web
+    /// app's own, as under `npm run dev`. Next 16 compiles `next.config.ts`
+    /// into a module with no filename, so Node resolves its relative
+    /// imports (`./src/lib/auth/csp`) against the process's directory: a
+    /// server started from the repository root, with the app's directory
+    /// as an argument, bound its port and then failed every request with
+    /// "Cannot find module". A relative CATALOG_DB resolves from there too
+    /// (scripts/lib/dev-env.mjs).
+    nonisolated static func launch(root: URL, next: URL, mode: String, port: Int) -> (command: String, directory: URL) {
+        let web = root.appending(path: "apps/web")
+        return ("exec node '\(next.path)' \(mode) -p \(port) -H 127.0.0.1", web)
+    }
+
     /// `dev` by default: it is slower on the first hit of each route but it
     /// always serves the checkout's current code — `start` would silently
     /// run whatever `.next` build happens to be lying around, which is how
     /// a day-old build ships to the window with no hint anything is off.
     /// GNOSIA_WEB_MODE=start opts into the fast path deliberately.
-    private static func mode(web: URL) -> String {
+    private static func mode() -> String {
         let env = ProcessInfo.processInfo.environment["GNOSIA_WEB_MODE"]?
             .trimmingCharacters(in: .whitespaces)
         if env == "dev" || env == "start" { return env! }
