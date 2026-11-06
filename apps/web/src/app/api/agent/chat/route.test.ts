@@ -185,6 +185,24 @@ describe("POST /api/agent/chat with conceptSlug", () => {
     expect(sent[1]).toEqual({ role: "user", content: "What is it?" });
   });
 
+  it("hands the request's signal to the model call, so a closed tab stops it", async () => {
+    readConceptWorkspace.mockResolvedValue({ state: "ok", workspace });
+    completeWithFallback.mockResolvedValue({
+      ok: true,
+      attempts: [],
+      result: { content: "It measures alignment.", model: "m", provider: "gemini", providerLabel: "Gemini" },
+    });
+    const browser = new AbortController();
+    const base = post({ conceptSlug: "dot-product", messages: [{ role: "user", content: "What is it?" }] });
+    const { POST } = await import("./route");
+    await POST(new Request(base, { signal: browser.signal }));
+    const signal = completeWithFallback.mock.calls[0]?.[3] as AbortSignal | undefined;
+    expect(signal).toBeInstanceOf(AbortSignal);
+    expect(signal?.aborted).toBe(false);
+    browser.abort();
+    expect(signal?.aborted).toBe(true);
+  });
+
   it("takes a CHECK marker off the reply and returns it beside the prose", async () => {
     readConceptWorkspace.mockResolvedValue({ state: "ok", workspace });
     completeWithFallback.mockResolvedValue({

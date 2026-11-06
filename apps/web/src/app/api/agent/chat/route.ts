@@ -34,5 +34,5 @@ export async function POST(req: Request): Promise<NextResponse> {
   const tooLarge = payloadTooLarge(body.messages, typeof body.learnerNote === "string" ? body.learnerNote : undefined);
   if (tooLarge) return turnResponse(tooLarge);
 
-  return turnResponse(await chatTurn(tutorDeps(owner), body));
+  return turnResponse(await chatTurn(tutorDeps(owner, req.signal), body));
 }
