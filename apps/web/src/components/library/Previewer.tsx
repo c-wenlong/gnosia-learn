@@ -30,6 +30,7 @@ import {
   previewTarget,
   withOpen,
 } from "@/lib/library-preview";
+import { FADE_IN } from "@/components/ui/motion";
 
 /** Marks a history entry the panel pushed, so Close knows it can go back to the list. */
 const PUSHED = "libraryPreview";
@@ -350,7 +351,7 @@ export function Previewer({
                   <BodySkeleton />
                 ) : (
                   // Keyed, so each asset's body fades in as it arrives.
-                  <div key={shownId} className="animate-fade-in motion-reduce:animate-none">
+                  <div key={shownId} className={FADE_IN}>
                     {answer.state === "ok" ? (
                       <Suspense fallback={<BodySkeleton />}>{answer.body}</Suspense>
                     ) : (

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { Skeleton } from "@/components/ui/Skeleton";
 import { cardClasses, cx } from "@/components/ui/classes";
+import { FADE_IN } from "@/components/ui/motion";
 
 /**
  * What a page under the app shell shows while the server reads it.
@@ -38,7 +39,7 @@ import { cardClasses, cx } from "@/components/ui/classes";
  */
 
 /** A page's own way in once it replaces the loading frame: opacity only, so no transform is left on the page's root. */
-export const PAGE_ENTER = "animate-fade-in motion-reduce:animate-none";
+export const PAGE_ENTER = FADE_IN;
 
 /** The frame's wait-then-fade, on the element carrying `data-layout`. */
 const FRAME_ENTER = "animate-fade-in-late motion-reduce:animate-none";

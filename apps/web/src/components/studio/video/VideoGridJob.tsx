@@ -16,7 +16,7 @@ import {
   NewJobRow,
 } from "@/components/studio/job-tile";
 import { JobRowLink } from "@/components/studio/GridJob";
-import { FADE_IN } from "@/components/studio/motion";
+import { FADE_IN } from "@/components/ui/motion";
 import { FadeImg } from "@/components/studio/motion-parts";
 import { PanelLink } from "@/components/studio/PanelLink";
 import { useStudioJobs } from "@/components/studio/JobsProvider";

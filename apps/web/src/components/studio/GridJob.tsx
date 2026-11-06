@@ -13,7 +13,7 @@ import {
   NewJobCard,
   NewJobRow,
 } from "@/components/studio/job-tile";
-import { FADE_IN } from "@/components/studio/motion";
+import { FADE_IN } from "@/components/ui/motion";
 import { PanelLink } from "@/components/studio/PanelLink";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
 import { TILE_THUMB } from "@/components/studio/surfaces";
