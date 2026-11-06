@@ -17,6 +17,7 @@ import { Placeholder } from "@/components/ui/Placeholder";
 import { RatingButton } from "@/components/ui/RatingButton";
 import { StatTile } from "@/components/ui/StatTile";
 import { CLOSE_TITLE, cx } from "@/components/ui/classes";
+import { conceptHref } from "@/lib/course-path";
 import { scrollBehavior } from "@/lib/motion";
 import { quizKey } from "@/lib/quiz-keys";
 import { randomToken } from "@/lib/random-token";
@@ -164,7 +165,7 @@ export function ReviewSession({
   const done = initial.reachable && index >= total;
 
   const exit = focus
-    ? { href: `/learn/${encodeURIComponent(focus)}`, label: "Exit to workspace" }
+    ? { href: conceptHref(focus), label: "Exit to workspace" }
     : { href: "/home", label: "Exit to Home" };
 
   const suggested: Rating | null =
@@ -574,7 +575,7 @@ function Links({
         </Button>
       )}
       <span className="hidden md:contents">
-        <Button variant="ghost" size="sm" href={`/learn/${encodeURIComponent(item.conceptId)}`}>
+        <Button variant="ghost" size="sm" href={conceptHref(item.conceptId)}>
           Open concept
         </Button>
       </span>
