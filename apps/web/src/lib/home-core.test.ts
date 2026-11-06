@@ -251,6 +251,16 @@ describe("next from here", () => {
     ]);
   });
 
+  it("numbers a step by its module's place in the course, not its authored order", () => {
+    // Authored orders 1 and 3, as archiving the middle module leaves them.
+    const gapped: PathCourse = { ...COURSE, modules: [COURSE.modules[0]!, { ...COURSE.modules[1]!, slug: "m3", order: 3 }] };
+    const groups = nextFromHere(
+      [thread({ kind: "module", title: "Module three", courseSlug: "cs3230", moduleSlug: "m3" })],
+      { ...graph(), courses: [gapped] },
+    );
+    expect(groups[0]!.steps.map((s) => s.detail)).toEqual(["CS3230 · Module 2"]);
+  });
+
   it("starts a page with no threads at the first course's first open topic", () => {
     expect(nextFromHere([], graph(["t1"]))).toEqual([
       { key: "start", heading: "Start here", steps: [expect.objectContaining({ title: "Recurrences" })] },
