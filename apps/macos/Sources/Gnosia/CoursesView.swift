@@ -10,8 +10,13 @@
 //  sidecar. Selecting a card pushes the course home
 //  (CourseDetailView); a video anywhere under it pushes VideoDetailView.
 //
-//  Stands alone: CoursesView().environment(store) is a complete surface, so
-//  the root composition can mount it without further wiring.
+//  It brings no NavigationStack of its own: it mounts as the root of the
+//  shell's detail stack (RootView), which resolves the card's CatalogCourse
+//  and a module video's CatalogAsset. A stack of its own there would be
+//  nested in the shell's, and a nested stack at the root takes over every
+//  push onto the outer one: the sidebar's course and Recent module rows
+//  (AppDestination values, which this view never registered) drew
+//  SwiftUI's lone warning triangle instead of the course.
 //
 
 import ImageIO
@@ -44,46 +49,38 @@ struct CoursesView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            Group {
-                if let error = store.error {
-                    ContentUnavailableView {
-                        Label("No catalog", systemImage: "cylinder.split.1x2")
-                    } description: {
-                        Text(error).font(.caption)
-                    }
-                } else if store.courses.isEmpty {
-                    ContentUnavailableView(
-                        "No courses",
-                        systemImage: "books.vertical",
-                        description: Text("The catalog snapshot lists no courses yet.")
-                    )
-                } else if filtered.isEmpty {
-                    ContentUnavailableView(
-                        "No match",
-                        systemImage: "magnifyingglass",
-                        description: Text("No course matches\(search.isEmpty ? "" : " \"\(search)\"").")
-                    )
-                } else {
-                    grid
+        Group {
+            if let error = store.error {
+                ContentUnavailableView {
+                    Label("No catalog", systemImage: "cylinder.split.1x2")
+                } description: {
+                    Text(error).font(.caption)
                 }
+            } else if store.courses.isEmpty {
+                ContentUnavailableView(
+                    "No courses",
+                    systemImage: "books.vertical",
+                    description: Text("The catalog snapshot lists no courses yet.")
+                )
+            } else if filtered.isEmpty {
+                ContentUnavailableView(
+                    "No match",
+                    systemImage: "magnifyingglass",
+                    description: Text("No course matches\(search.isEmpty ? "" : " \"\(search)\"").")
+                )
+            } else {
+                grid
             }
-            .navigationTitle("Courses")
-            .searchable(text: $search, prompt: "Search courses")
-            .toolbar {
-                if !usedTags.isEmpty {
-                    Picker("Tag", selection: $tag) {
-                        Text("All tags").tag(String?.none)
-                        ForEach(usedTags) { Text($0.label).tag(String?.some($0.id)) }
-                    }
-                    .pickerStyle(.menu)
+        }
+        .navigationTitle("Courses")
+        .searchable(text: $search, prompt: "Search courses")
+        .toolbar {
+            if !usedTags.isEmpty {
+                Picker("Tag", selection: $tag) {
+                    Text("All tags").tag(String?.none)
+                    ForEach(usedTags) { Text($0.label).tag(String?.some($0.id)) }
                 }
-            }
-            .navigationDestination(for: CatalogCourse.self) { course in
-                CourseDetailView(course: course)
-            }
-            .navigationDestination(for: CatalogAsset.self) { asset in
-                VideoDetailView(asset: asset)
+                .pickerStyle(.menu)
             }
         }
         .task { store.loadIfNeeded() }

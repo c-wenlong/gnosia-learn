@@ -51,20 +51,44 @@ extension View {
     /// rather than crashing.
     func appDestinations() -> some View {
         navigationDestination(for: AppDestination.self) { destination in
-            switch destination {
-            case .concept(let slug):
-                ConceptDestination(slug: slug)
-            case .course(let slug):
-                CourseDestination(slug: slug)
-            case .module(let course, let module):
-                CourseDestination(slug: course, moduleID: module)
-            case .asset(let id):
-                AssetDestination(id: id)
-            case .session(let slug, let mode):
-                SessionDestination(slug: slug, mode: mode)
-            case .check(let course, let module):
-                CheckDestination(courseSlug: course, moduleSlug: module)
-            }
+            ResolvedDestination(destination: destination)
+        }
+    }
+}
+
+extension EnvironmentValues {
+    /// Called with each AppDestination a stack resolves, as its page
+    /// appears: how a test tells a push that drew its page from one that
+    /// drew SwiftUI's warning triangle (no destination ran). Nil in the app.
+    @Entry var destinationShown: (@MainActor (AppDestination) -> Void)? = nil
+}
+
+/// One AppDestination's page.
+private struct ResolvedDestination: View {
+    @Environment(\.destinationShown) private var shown
+    let destination: AppDestination
+
+    var body: some View {
+        // Keyed by the destination: a second push can land in the same
+        // slot as the first, where `onAppear` would not run again.
+        page.task(id: destination) { shown?(destination) }
+    }
+
+    @ViewBuilder
+    private var page: some View {
+        switch destination {
+        case .concept(let slug):
+            ConceptDestination(slug: slug)
+        case .course(let slug):
+            CourseDestination(slug: slug)
+        case .module(let course, let module):
+            CourseDestination(slug: course, moduleID: module)
+        case .asset(let id):
+            AssetDestination(id: id)
+        case .session(let slug, let mode):
+            SessionDestination(slug: slug, mode: mode)
+        case .check(let course, let module):
+            CheckDestination(courseSlug: course, moduleSlug: module)
         }
     }
 }
@@ -192,8 +216,16 @@ private enum Section: String, CaseIterable, Identifiable {
     }
 }
 
+extension EnvironmentValues {
+    /// Sidebar rows pressed in order once the shell is up, each as a press
+    /// on that row would: how the UI snapshot harness and the
+    /// SidebarNavigation tests press a row. Empty in the app.
+    @Entry var sidebarSeedOpens: [AppDestination] = []
+}
+
 struct RootView: View {
     @Environment(CatalogStore.self) private var store
+    @Environment(\.sidebarSeedOpens) private var seedOpens
     @Environment(\.colorScheme) private var colorScheme
     @State private var section: Section = .home
     /// The detail column's own stack: the sidebar's Courses, Pinned and
@@ -215,9 +247,10 @@ struct RootView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(G.page)
                     .appDestinations()
-                    // A pushed course or module page can link onward by
-                    // the values its own views push: another course, and
-                    // a module's videos by asset id.
+                    // The Courses grid's cards push a course by value, and
+                    // a pushed course or module page links onward the same
+                    // way: another course, and a module's videos. Courses
+                    // brings no stack of its own for these (CoursesView).
                     .navigationDestination(for: CatalogCourse.self) { course in
                         CourseDestination(slug: course.slug)
                     }
@@ -227,6 +260,14 @@ struct RootView: View {
             }
         }
         .onAppear { store.refreshLearner() }
+        .task {
+            // Each after a beat, so a push lands on a shell that has drawn
+            // the page before it (Home first), as a press on a row does.
+            for destination in seedOpens {
+                try? await Task.sleep(for: .milliseconds(300))
+                open(destination)
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             store.refreshLearner()
         }
