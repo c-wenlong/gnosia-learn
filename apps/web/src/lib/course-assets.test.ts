@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AssetRef } from "@gnosia/catalog/state";
-import type { Course, Module, Topic } from "@gnosia/tutor/types";
+import type { Course, Module, Topic } from "@gnosia/content";
 
 /**
  * What a course page reads from the catalog per module (`loadCourseAssets`),

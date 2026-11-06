@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { providerLabel } from "@gnosia/schema/shared";
+import { providerLabel, type KnowledgeInput, type TopicKnowledge } from "@gnosia/schema/shared";
 import { MathText } from "@/components/Math";
 import { NoteProse } from "@/components/NoteProse";
 import { Button } from "@/components/ui/Button";
@@ -17,11 +17,9 @@ import { TypingDots } from "@/components/ui/TypingDots";
 import { useCopied } from "@/components/ui/use-copied";
 import type {
   Course,
-  KnowledgeInput,
   Module,
   Topic,
-  TopicKnowledge,
-} from "@gnosia/tutor/types";
+} from "@gnosia/content";
 import { useLearner } from "@/lib/learner-context";
 import { buildAgentSessionContext } from "@gnosia/tutor/prompt";
 import { RecapCard, RecapEditor } from "@/components/TopicRecap";

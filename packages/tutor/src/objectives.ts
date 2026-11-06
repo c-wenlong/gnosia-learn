@@ -1,4 +1,4 @@
-import type { Course, Module, Topic } from "./types";
+import type { Course, Module, Topic } from "@gnosia/content";
 
 /**
  * Derive concrete end-of-session learning objectives for a topic.
