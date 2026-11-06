@@ -2,12 +2,10 @@ import type { ChainEntry } from "@gnosia/tutor/providers";
 
 /**
  * What the Providers and Model selection cards say about a request: the
- * status line's state, the reply shape their routes answer with, and the
- * sentence for a refusal. Shared so the two cards say the same thing the
- * same way.
+ * reply shape their routes answer with, and the sentence for a refusal.
+ * Shared so the two cards say the same thing the same way. Their status
+ * line is the kit's `SaveStatus`, read with `statusProps`.
  */
-
-export type Status = { kind: "idle" } | { kind: "busy"; text: string } | { kind: "done"; text: string } | { kind: "error"; text: string };
 
 export interface Reply {
   ok?: boolean;
@@ -24,7 +22,5 @@ export interface Reply {
   tested?: string;
 }
 
-export const tone = (s: Status) => (s.kind === "done" ? "ok" : s.kind === "error" ? "danger" : "muted");
-export const textOf = (s: Status) => (s.kind === "idle" ? null : s.text);
 export const failure = (what: string, reply: { status: number; data: Reply } | null) =>
   reply === null ? `Not ${what}: the server did not answer.` : (reply.data.error ?? `Not ${what} (HTTP ${reply.status}).`);
