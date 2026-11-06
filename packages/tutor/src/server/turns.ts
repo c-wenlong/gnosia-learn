@@ -143,6 +143,28 @@ function credentialsOf(deps: TutorDeps) {
   return deps.seams?.credentials ? deps.seams.credentials(deps) : tutorCredentials(deps.db, deps.owner, deps.env);
 }
 
+/**
+ * The reply for a model call that found no provider to answer: 503
+ * `MISSING_API_KEY` when nothing held a key, 502 `CANCELLED` when the request
+ * was closed, else 502 `ALL_PROVIDERS_FAILED`. Every one carries the attempts
+ * and where each key came from (`providers`, never a key). `missingKey` adds
+ * a sentence to the missing-key message.
+ */
+function providerFailure(
+  outcome: Extract<import("../providers").CompleteOutcome, { ok: false }>,
+  credentials: readonly import("../providers").ChainStep[],
+  missingKey = "",
+): TurnReply {
+  const providers = availableProviderSummary(credentials);
+  if (outcome.code === "MISSING_API_KEY") {
+    return reply(503, { error: `${missingKeyMessage(credentials)}${missingKey}`, code: "MISSING_API_KEY", attempts: outcome.attempts, providers });
+  }
+  if (outcome.code === "CANCELLED") {
+    return reply(502, { error: "The request was closed", code: "CANCELLED", attempts: outcome.attempts, providers });
+  }
+  return reply(502, { error: "All free providers failed", code: "ALL_PROVIDERS_FAILED", attempts: outcome.attempts, providers });
+}
+
 function completeWith(deps: TutorDeps, messages: ChatMessage[], steps: readonly import("../providers").ChainStep[]) {
   return deps.seams?.complete
     ? deps.seams.complete(messages, steps, deps.signal)
@@ -521,23 +543,7 @@ async function completeTurn(
   const credentials = await credentialsOf(deps);
   const outcome = await completeWith(deps, payloadMessages, credentials);
 
-  if (!outcome.ok) {
-    if (outcome.code === "MISSING_API_KEY") {
-      return reply(503, {
-        error: missingKeyMessage(credentials),
-        code: "MISSING_API_KEY",
-        attempts: outcome.attempts,
-        providers: availableProviderSummary(credentials),
-      });
-    }
-
-    return reply(502, {
-      error: "All free providers failed",
-      code: "ALL_PROVIDERS_FAILED",
-      attempts: outcome.attempts,
-      providers: availableProviderSummary(credentials),
-    });
-  }
+  if (!outcome.ok) return providerFailure(outcome, credentials);
 
   // The concept tutor's and the topic tutor's prompts ask for a check block
   // or the marker; the open tutor's reply is returned exactly as the model
@@ -640,20 +646,7 @@ export async function judgeTurn(deps: TutorDeps, body: unknown): Promise<TurnRep
     credentials,
   );
 
-  if (!outcome.ok) {
-    return outcome.code === "MISSING_API_KEY"
-      ? reply(503, {
-          error: missingKeyMessage(credentials),
-          code: "MISSING_API_KEY",
-          attempts: outcome.attempts,
-          providers: availableProviderSummary(credentials),
-        })
-      : reply(502, {
-          error: "All free providers failed",
-          code: "ALL_PROVIDERS_FAILED",
-          attempts: outcome.attempts,
-        });
-  }
+  if (!outcome.ok) return providerFailure(outcome, credentials);
 
   const parsed = parseVerdict(outcome.result.content);
   if (!parsed.ok) {
@@ -730,20 +723,7 @@ export async function sessionQuestionTurn(deps: TutorDeps, body: unknown): Promi
     credentials,
   );
 
-  if (!outcome.ok) {
-    return outcome.code === "MISSING_API_KEY"
-      ? reply(503, {
-          error: missingKeyMessage(credentials),
-          code: "MISSING_API_KEY",
-          attempts: outcome.attempts,
-          providers: availableProviderSummary(credentials),
-        })
-      : reply(502, {
-          error: "All free providers failed",
-          code: "ALL_PROVIDERS_FAILED",
-          attempts: outcome.attempts,
-        });
-  }
+  if (!outcome.ok) return providerFailure(outcome, credentials);
 
   const parsed = parseSessionQuestion(outcome.result.content);
   if (!parsed.ok) {
@@ -860,16 +840,8 @@ export async function checkOptionsTurn(deps: TutorDeps, body: unknown): Promise<
       credentials,
     );
     if (!outcome.ok) {
-      return outcome.code === "MISSING_API_KEY"
-        ? reply(503, {
-            error: missingKeyMessage(credentials),
-            code: "MISSING_API_KEY",
-            attempts: outcome.attempts,
-            providers: availableProviderSummary(credentials),
-          })
-        : outcome.code === "CANCELLED"
-          ? reply(502, { error: "The request was closed", code: "CANCELLED", attempts: outcome.attempts })
-          : refuseFor(key, reply(502, { error: "All free providers failed", code: "ALL_PROVIDERS_FAILED", attempts: outcome.attempts }));
+      const failed = providerFailure(outcome, credentials);
+      return outcome.code === "ALL_PROVIDERS_FAILED" ? refuseFor(key, failed) : failed;
     }
     const parsed = parseCheckOptions(outcome.result.content, answer);
     if (!parsed.ok) {
@@ -958,22 +930,7 @@ export async function summarizeTurn(deps: TutorDeps, body: SummarizeBody): Promi
   const credentials = await credentialsOf(deps);
   const outcome = await completeWith(deps, payload, credentials);
 
-  if (!outcome.ok) {
-    if (outcome.code === "MISSING_API_KEY") {
-      return reply(503, {
-        error: `${missingKeyMessage(credentials)} Or write the recap by hand instead: it saves to the same place.`,
-        code: "MISSING_API_KEY",
-        attempts: outcome.attempts,
-        providers: availableProviderSummary(credentials),
-      });
-    }
-    return reply(502, {
-      error: "All free providers failed",
-      code: "ALL_PROVIDERS_FAILED",
-      attempts: outcome.attempts,
-      providers: availableProviderSummary(credentials),
-    });
-  }
+  if (!outcome.ok) return providerFailure(outcome, credentials, " Or write the recap by hand instead: it saves to the same place.");
 
   const knowledge = parseKnowledgeResponse(outcome.result.content);
   if (!knowledge) {

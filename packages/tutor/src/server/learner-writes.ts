@@ -596,7 +596,7 @@ export async function reviewGradeTurn(deps: TutorDeps, body: unknown): Promise<T
       const requestId = b.requestId;
       if (
         requestId !== undefined &&
-        (typeof requestId !== "string" || !/^[A-Za-z0-9_-]+$/.test(requestId) || requestId.length > MAX_ID_CHARS)
+        !isSessionToken(requestId)
       ) {
         throw new BadRequest(`"requestId" must be a short token of letters, digits, "-" and "_".`);
       }

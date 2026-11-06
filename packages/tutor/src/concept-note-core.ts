@@ -138,23 +138,23 @@ function readCheck(text: string): Omit<ConceptCheck, "id"> | null {
   };
 }
 
-/** The check blocks of a note, frontmatter and all, in order. */
-export function parseChecks(source: string): ConceptCheck[] {
+/** The checks the note's check blocks hold, numbered in order. */
+function checksOf(blocks: ReturnType<typeof parseNote>["blocks"]): ConceptCheck[] {
   const checks: ConceptCheck[] = [];
-  for (const text of checkBlocks(parseNote(source).blocks)) {
+  for (const text of checkBlocks(blocks)) {
     const check = readCheck(text);
     if (check) checks.push({ id: `c${checks.length + 1}`, ...check });
   }
   return checks;
 }
 
+/** The check blocks of a note, frontmatter and all, in order. */
+export function parseChecks(source: string): ConceptCheck[] {
+  return checksOf(parseNote(source).blocks);
+}
+
 /** A whole note file to its frontmatter fields and its checks. */
 export function parseConceptNote(source: string): ParsedConceptNote {
   const { frontmatter, blocks } = parseNote(source);
-  const checks: ConceptCheck[] = [];
-  for (const text of checkBlocks(blocks)) {
-    const check = readCheck(text);
-    if (check) checks.push({ id: `c${checks.length + 1}`, ...check });
-  }
-  return { frontmatter: parseFrontmatterFields(frontmatter), checks };
+  return { frontmatter: parseFrontmatterFields(frontmatter), checks: checksOf(blocks) };
 }
