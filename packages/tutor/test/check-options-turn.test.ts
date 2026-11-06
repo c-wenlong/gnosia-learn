@@ -75,7 +75,7 @@ describe.skipIf(!reachable.ok)("checkOptionsTurn", () => {
     seams: {
       readWorkspace: async () => ({ state: "ok", workspace: workspaceWith(checks) }),
       credentials: async () => [],
-      complete: (messages, steps) => complete(messages, steps),
+      complete: (messages, steps, signal) => complete(messages, steps, signal),
     },
   });
 
@@ -119,6 +119,14 @@ describe.skipIf(!reachable.ok)("checkOptionsTurn", () => {
     const hit = await checkOptionsTurn(deps(LOCAL_LEARNER_ID), { conceptSlug: "alpha", checkId: "c1" });
     expect(hit).toMatchObject({ status: 200, body: { options: GOOD, cached: true } });
     expect(complete).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the shared call going when the request that started it is closed", async () => {
+    const closed = new AbortController();
+    closed.abort();
+    const reply = await checkOptionsTurn({ ...deps(LOCAL_LEARNER_ID), signal: closed.signal }, { conceptSlug: "alpha", checkId: "c1" });
+    expect(reply).toMatchObject({ status: 200, body: { options: GOOD } });
+    expect(complete.mock.calls[0]?.[2]).toBeUndefined();
   });
 
   it("writes an edited check again, and the page's read skips the stale row meanwhile", async () => {

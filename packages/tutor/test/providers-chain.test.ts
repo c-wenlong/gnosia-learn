@@ -401,7 +401,7 @@ describe("a turn's time limits", () => {
     await vi.advanceTimersByTimeAsync(10);
     cancel.abort();
     const outcome = await walk;
-    expect(outcome).toMatchObject({ ok: false, code: "ALL_PROVIDERS_FAILED" });
+    expect(outcome).toMatchObject({ ok: false, code: "CANCELLED" });
     if (outcome.ok) return;
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect((fetchMock.mock.calls[0]?.[1] as RequestInit).signal?.aborted).toBe(true);
@@ -417,7 +417,7 @@ describe("a turn's time limits", () => {
       undefined,
       AbortSignal.abort(),
     );
-    expect(outcome).toMatchObject({ ok: false, code: "ALL_PROVIDERS_FAILED" });
+    expect(outcome).toMatchObject({ ok: false, code: "CANCELLED" });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

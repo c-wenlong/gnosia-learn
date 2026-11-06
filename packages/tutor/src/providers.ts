@@ -651,7 +651,9 @@ export function resetGoneModelReports(): void {
  *
  * `cancel` is the caller's own signal, the request's when a route passes
  * one: once it fires the call in flight is aborted and no further provider
- * is tried, since nobody is waiting for the answer.
+ * is tried, since nobody is waiting for the answer. That answers `CANCELLED`,
+ * never `ALL_PROVIDERS_FAILED`, so a caller that remembers failures does not
+ * remember a hang-up as one.
  */
 /** What one turn through the chain answers: a completion, or the failure code with every attempt recorded. */
 export type CompleteOutcome =
@@ -659,7 +661,7 @@ export type CompleteOutcome =
   | {
       ok: false;
       attempts: ProviderAttemptError[];
-      code: "MISSING_API_KEY" | "ALL_PROVIDERS_FAILED";
+      code: "MISSING_API_KEY" | "ALL_PROVIDERS_FAILED" | "CANCELLED";
     };
 
 export async function completeWithFallback(
@@ -744,7 +746,7 @@ export async function completeWithFallback(
     }
   }
 
-  return { ok: false, attempts, code: "ALL_PROVIDERS_FAILED" };
+  return { ok: false, attempts, code: cancel?.aborted ? "CANCELLED" : "ALL_PROVIDERS_FAILED" };
 }
 
 /**
