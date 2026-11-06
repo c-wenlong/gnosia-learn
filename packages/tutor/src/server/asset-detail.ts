@@ -17,6 +17,7 @@ import type { OwnerScope } from "@gnosia/schema/shared";
 import { compareByKindThenId } from "../kind-order";
 import { openBlob, resolveAsset } from "./asset-files";
 import type { AssetSeams } from "./deps";
+import { failureCode } from "./provider-keys";
 import type { RouteProblemCode } from "../asset-problems";
 
 /**
@@ -344,6 +345,5 @@ export async function readAssetTextFor(
 }
 
 export function warn(what: string, error: unknown): void {
-  const message = error instanceof Error ? error.message : String(error);
-  console.warn(`asset library: ${what} unavailable — ${message}`);
+  console.warn(`asset library: ${what} unavailable (${failureCode(error)})`);
 }

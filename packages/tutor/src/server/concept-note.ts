@@ -2,6 +2,7 @@ import type { ContentSource } from "@gnosia/content";
 
 import { parseConceptNote, type ConceptCheck, type ConceptFrontmatter } from "../concept-note-core";
 import { ContentUnavailableError } from "./content-source";
+import { failureCode } from "./provider-keys";
 
 /**
  * One concept's note through the reader seam, the request-independent half
@@ -42,12 +43,11 @@ export async function readConceptNote(source: ContentSource, slug: string): Prom
     }
     return { ok: true, path: note.path, source: note.markdown, ...parseConceptNote(note.markdown) };
   } catch (error) {
-    console.warn(`concept note: ${slug} unavailable, ${messageOf(error)}`);
+    console.warn(`concept note: ${slug} unavailable (${failureCode(error)})`);
     const code = error instanceof ContentUnavailableError && error.reason === "not-flipped" ? "not-flipped" : "unreachable";
-    return { ok: false, code, message: messageOf(error) };
+    // A ContentUnavailableError says what to run; any other message is the
+    // driver's, which carries the SQL and its parameters, and stays off the page.
+    const message = error instanceof ContentUnavailableError ? error.message : "The catalog database could not be reached.";
+    return { ok: false, code, message };
   }
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

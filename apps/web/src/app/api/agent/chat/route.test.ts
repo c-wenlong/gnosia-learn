@@ -411,6 +411,18 @@ describe("POST /api/agent/chat with conceptSlug", () => {
       expect(status).toBe(400);
       expect(json.code).toBe("BAD_REQUEST");
     }
+    // A field of the wrong type is a 400 too, not a TypeError in the prompt builder (R3-1-03).
+    const messages = [{ role: "user", content: "hi" }];
+    for (const body of [
+      { ...topic, messages, learnerNote: 5 },
+      { ...topic, messages, learnerNote: {} },
+      { ...topic, courseSlug: 4284, messages },
+      { ...topic, topicId: ["t1"], messages },
+    ]) {
+      const { status, json } = await call(body);
+      expect(status, JSON.stringify(body)).toBe(400);
+      expect(json.code).toBe("BAD_REQUEST");
+    }
     expect(getCourses).not.toHaveBeenCalled();
     expect(completeWithFallback).not.toHaveBeenCalled();
   });

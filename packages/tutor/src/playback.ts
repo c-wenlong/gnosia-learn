@@ -113,7 +113,8 @@ export function parsePlayback(value: unknown): Playback | null {
     position,
     duration,
     ranges: clampRanges(ranges, duration),
-    watchedAt: typeof raw.watchedAt === "string" ? raw.watchedAt : null,
+    // Not a date reads as never watched: `dayKey` throws on one, after the save has landed.
+    watchedAt: typeof raw.watchedAt === "string" && !Number.isNaN(Date.parse(raw.watchedAt)) ? raw.watchedAt : null,
     updatedAt: typeof raw.updatedAt === "string" ? raw.updatedAt : new Date(0).toISOString(),
   };
 }
