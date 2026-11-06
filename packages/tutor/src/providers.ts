@@ -582,17 +582,13 @@ function originOf(baseUrl: string): string {
   }
 }
 
-function reportIfModelGone(attempt: ProviderAttemptError, baseUrl: string, modelFrom: "chain" | "default"): void {
+function reportIfModelGone(attempt: ProviderAttemptError, baseUrl: string): void {
   if (attempt.status !== 404 && attempt.status !== 410) return;
   const key = `${attempt.provider}/${attempt.model}`;
   if (reportedGone.has(key)) return;
   reportedGone.add(key);
-  // A chain entry is the owner's to change in Settings; a default is the operator's, in the environment.
-  // The first three read `<ID>_MODEL`; the providers of T13 read `TUTOR_<ID>_MODEL`.
-  const variable = (["nvidia", "gemini", "openrouter"] as string[]).includes(attempt.provider)
-    ? `${attempt.provider.toUpperCase()}_MODEL`
-    : `TUTOR_${attempt.provider.toUpperCase()}_MODEL`;
-  const fix = modelFrom === "chain" ? "replace it under Model selection in Settings" : `set ${variable}`;
+  // Every step the tutor calls is a chain entry (`tutorSteps`), so the fix is always the owner's, in Settings.
+  const fix = "replace it under Model selection in Settings";
   console.error(
     attempt.status === 410
       ? `agent: ${attempt.provider} answered 410 Gone for model ${attempt.model}; it is retired, ${fix}`
@@ -696,7 +692,7 @@ export async function completeWithFallback(
       ) {
         const attempt = err as ProviderAttemptError;
         attempts.push(attempt);
-        reportIfModelGone(attempt, provider.baseUrl, step.modelFrom ?? "default");
+        reportIfModelGone(attempt, provider.baseUrl);
       } else {
         attempts.push({
           provider: provider.id,
