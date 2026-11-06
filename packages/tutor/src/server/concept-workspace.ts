@@ -18,6 +18,7 @@ import {
   type ConceptWorkspace,
 } from "../concept-workspace-core";
 import { readConceptNote } from "./concept-note";
+import { failureCode } from "./provider-keys";
 
 /**
  * The concept workspace's read, the request-independent half of
@@ -81,8 +82,7 @@ export async function readConceptWorkspace(deps: WorkspaceDeps, slug: string): P
   try {
     kb = { kb: await readKnowledgeBase(await deps.db, deps.owner), reachable: true };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.warn(`concept workspace: knowledge base unavailable — ${message}`);
+    console.warn(`concept workspace: knowledge base unavailable (${failureCode(error)})`);
     kb = { kb: EMPTY_KNOWLEDGE_BASE, reachable: false };
   }
   if (!kb.reachable) return { state: "unreachable", message: "The catalog database could not be reached." };
@@ -114,8 +114,8 @@ export async function readConceptWorkspace(deps: WorkspaceDeps, slug: string): P
     });
     return workspace === null ? { state: "not-found" } : { state: "ok", workspace };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.warn(`concept workspace: ${slug} unavailable, ${message}`);
-    return { state: "unreachable", message };
+    // The code only: a drizzle error's message is its SQL and bind parameters.
+    console.warn(`concept workspace: ${slug} unavailable (${failureCode(error)})`);
+    return { state: "unreachable", message: "The catalog database could not be reached." };
   }
 }
