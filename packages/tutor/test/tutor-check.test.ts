@@ -51,6 +51,11 @@ describe("splitCheck", () => {
     expect(splitCheck(`x\nCHECK: a${" ".repeat(50_000)}b`).check?.question).toBe("a b");
     expect(splitCheck(`x\nCHECK: a${"*_` ".repeat(12_500)}`).check?.question).toBe("a");
     expect(splitCheck(`${" ".repeat(50_000)}x`).check).toBeNull();
+    // A marker with no colon, or no question, or a line break mid-answer.
+    expect(splitCheck(`x\nCHECK${" ".repeat(50_000)}x`).check).toBeNull();
+    expect(splitCheck(`x\nCHECK(alpha)${" ".repeat(50_000)}x`).check).toBeNull();
+    expect(splitCheck(`x\nCHECK:${" ".repeat(50_000)}\r`).check).toBeNull();
+    expect(splitCheck(`x\nCHECK: a${" ".repeat(50_000)}\rb`).check?.question).toBe("a b");
     expect(performance.now() - started).toBeLessThan(250);
   });
 

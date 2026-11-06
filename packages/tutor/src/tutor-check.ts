@@ -31,11 +31,13 @@ export const VERDICT_FEEDBACK_LIMIT = 300;
  * The marker, on its own line: `CHECK: ...`, or `CHECK(<concept id>): ...`
  * from the course topic tutor, which names which of its topic's concepts the
  * check tests (phase 3). Tolerates the bold or code a model adds around it;
- * the closing marks are taken off by `trimMarks`, not by the expression,
- * since a lazy `(.+?)[\s*_`]*$` backtracked quadratically on a long run of
- * them.
+ * the closing marks are taken off by `trimMarks`, not by the expression.
+ * No two repeated groups in it can match the same characters, so it fails
+ * or succeeds in linear time: a lazy `(.+?)[\s*_`]*$`, and two `\s*` either
+ * side of an optional group, each backtracked quadratically on a long run of
+ * spaces.
  */
-const MARKER = /^[\s>*_`]*CHECK[*_`]*\s*(?:\(\s*([a-z0-9]+(?:-[a-z0-9]+)*)\s*\))?[*_`]*\s*:[*_`]*\s*(.+)$/i;
+const MARKER = /^[\s>*_`]*CHECK[\s*_`]*(?:\(\s*([a-z0-9]+(?:-[a-z0-9]+)*)\s*\)[\s*_`]*)?:[*_`]*\s*([^]+)$/i;
 
 /** `text` without the whitespace, `*`, `_` and backticks at its end. */
 function trimMarks(text: string): string {
