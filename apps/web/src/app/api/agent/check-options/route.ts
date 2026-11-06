@@ -37,5 +37,5 @@ export async function POST(req: Request) {
   const limited = enforceRateLimit(owner, "check-options", CHAT_RATE_LIMIT);
   if (limited) return limited;
 
-  return turnResponse(await checkOptionsTurn(tutorDeps(owner), body));
+  return turnResponse(await checkOptionsTurn(tutorDeps(owner, req.signal), body));
 }

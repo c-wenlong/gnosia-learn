@@ -145,7 +145,9 @@ function credentialsOf(deps: TutorDeps) {
 }
 
 function completeWith(deps: TutorDeps, messages: ChatMessage[], steps: readonly import("../providers").ChainStep[]) {
-  return deps.seams?.complete ? deps.seams.complete(messages, steps) : completeWithFallback(messages, steps);
+  return deps.seams?.complete
+    ? deps.seams.complete(messages, steps, deps.signal)
+    : completeWithFallback(messages, steps, undefined, deps.signal);
 }
 
 function assetDetailOf(deps: TutorDeps, id: string) {

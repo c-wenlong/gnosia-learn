@@ -648,6 +648,10 @@ export function resetGoneModelReports(): void {
  * a chain entry with no key is recorded as a skipped attempt and the walk
  * goes on. Nothing to call at all is `MISSING_API_KEY`, with the skips as its
  * attempts.
+ *
+ * `cancel` is the caller's own signal, the request's when a route passes
+ * one: once it fires the call in flight is aborted and no further provider
+ * is tried, since nobody is waiting for the answer.
  */
 /** What one turn through the chain answers: a completion, or the failure code with every attempt recorded. */
 export type CompleteOutcome =
@@ -662,6 +666,7 @@ export async function completeWithFallback(
   messages: ChatMessage[],
   steps: readonly ChainStep[],
   timeouts: TurnTimeouts = turnTimeouts(),
+  cancel?: AbortSignal,
 ): Promise<CompleteOutcome> {
   const skipped = (step: SkippedEntry): ProviderAttemptError => ({
     provider: step.provider,
@@ -687,13 +692,21 @@ export async function completeWithFallback(
       continue;
     }
     const { config: provider, apiKey } = step;
-    const signal = AbortSignal.any([AbortSignal.timeout(timeouts.attemptMs), deadline]);
+    if (cancel?.aborted) {
+      attempts.push({ provider: provider.id, model: provider.model, message: "Cancelled: the request was closed." });
+      break;
+    }
+    const signal = AbortSignal.any([AbortSignal.timeout(timeouts.attemptMs), deadline, ...(cancel ? [cancel] : [])]);
     try {
       const result = await callOpenAiCompatible(provider, apiKey, messages, secrets, signal);
       return { ok: true, result, attempts };
     } catch (err) {
       if (signal.aborted) {
         // Cut off, whatever the fetch threw on the way out.
+        if (cancel?.aborted) {
+          attempts.push({ provider: provider.id, model: provider.model, message: "Cancelled: the request was closed." });
+          break;
+        }
         if (deadline.aborted) {
           const untried = steps.slice(index + 1).filter(isCallable).length;
           attempts.push({

@@ -388,6 +388,39 @@ describe("a turn's time limits", () => {
     expect(outcome.attempts[2]?.message).toMatch(/^Cut off: the turn ran out of its 0 seconds, so 1 more model was not tried\.$/);
   });
 
+  it("aborts the call in flight and tries nothing more when the caller's signal fires", async () => {
+    const fetchMock = hanging();
+    vi.stubGlobal("fetch", fetchMock);
+    const cancel = new AbortController();
+    const walk = completeWithFallback(
+      [{ role: "user", content: "hi" }],
+      tutorSteps([{ provider: "nvidia", model: "first" }, { provider: "openrouter", model: "second" }], {}, ENV),
+      { attemptMs: 5_000, deadlineMs: 10_000 },
+      cancel.signal,
+    );
+    await vi.advanceTimersByTimeAsync(10);
+    cancel.abort();
+    const outcome = await walk;
+    expect(outcome).toMatchObject({ ok: false, code: "ALL_PROVIDERS_FAILED" });
+    if (outcome.ok) return;
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect((fetchMock.mock.calls[0]?.[1] as RequestInit).signal?.aborted).toBe(true);
+    expect(outcome.attempts).toEqual([{ provider: "nvidia", model: "first", message: "Cancelled: the request was closed." }]);
+  });
+
+  it("calls nothing when the caller's signal has already fired", async () => {
+    const fetchMock = hanging();
+    vi.stubGlobal("fetch", fetchMock);
+    const outcome = await completeWithFallback(
+      [{ role: "user", content: "hi" }],
+      tutorSteps([{ provider: "nvidia", model: "first" }], {}, ENV),
+      undefined,
+      AbortSignal.abort(),
+    );
+    expect(outcome).toMatchObject({ ok: false, code: "ALL_PROVIDERS_FAILED" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("reads its limits from the environment, within bounds, and defaults otherwise", () => {
     expect(turnTimeouts({})).toEqual({ attemptMs: DEFAULT_ATTEMPT_TIMEOUT_MS, deadlineMs: DEFAULT_TURN_DEADLINE_MS });
     expect(turnTimeouts({ TUTOR_ATTEMPT_TIMEOUT_MS: "15000", TUTOR_TURN_DEADLINE_MS: " 45000 " })).toEqual({
