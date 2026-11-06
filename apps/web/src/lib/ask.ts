@@ -4,6 +4,7 @@ import { conceptSummaries, listAssets } from "@gnosia/catalog/state";
 
 import { getCourses } from "@/data/courses";
 import type { AskEntry } from "@/lib/ask-core";
+import { conceptHref } from "@/lib/course-path";
 import { catalogDatabase } from "@/lib/learner-store";
 import { currentScope } from "@/lib/owner";
 
@@ -26,7 +27,7 @@ export async function readAskEntries(): Promise<AskEntry[]> {
           key: `concept:${c.conceptId}`,
           title: c.title,
           detail: c.domain,
-          href: `/learn/${encodeURIComponent(c.conceptId)}`,
+          href: conceptHref(c.conceptId),
           aliases: [c.conceptId.replace(/-/g, " ")],
         }),
       );
