@@ -225,6 +225,12 @@ export function createApi(deps: TutorDeps): Server {
       }
     }
 
-    write(response, await turn(deps, body));
+    // A caller that hangs up before the answer aborts the turn's model call,
+    // as the web routes do with `req.signal`.
+    const closed = new AbortController();
+    response.on("close", () => {
+      if (!response.writableFinished) closed.abort();
+    });
+    write(response, await turn({ ...deps, signal: closed.signal }, body));
   }
 }

@@ -36,5 +36,5 @@ export async function POST(req: Request) {
   const limited = enforceRateLimit(owner, "session", CHAT_RATE_LIMIT);
   if (limited) return limited;
 
-  return turnResponse(await sessionQuestionTurn(tutorDeps(owner), body));
+  return turnResponse(await sessionQuestionTurn(tutorDeps(owner, req.signal), body));
 }
