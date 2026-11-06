@@ -61,6 +61,7 @@ export {
   type SessionLogSource,
   type SourceKind,
 } from "./source";
+export { RESOURCE_TYPES } from "./types";
 export type {
   Course,
   CourseCover,

@@ -26,6 +26,7 @@ import type {
   Topic,
   TopicEntry,
 } from "./types";
+import { RESOURCE_TYPES } from "./types";
 
 /**
  * `content/courses/*.yaml`: one file per course, and the only parser of them.
@@ -47,8 +48,6 @@ export const COURSES_DIR = "content/courses";
 
 /** What a course code may be: it names the file, `<code>.yaml` in lowercase. */
 const COURSE_CODE = /^[A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)*$/;
-
-const RESOURCE_TYPES: readonly ResourceType[] = ["paper", "docs", "video", "book", "other", "practice"];
 
 /**
  * The asset id prefixes a listed video may carry: the four video tools'
@@ -130,7 +129,7 @@ export interface LoadCoursesOptions extends LoadOptions {
 /**
  * The image types a cover file may be, by extension: the same closed list as
  * `COURSE_COVER_TYPES` in `@gnosia/schema`, which this package does not
- * import. `catalog course cover` decides the type from the bytes; the export
+ * import; the catalog's export-import suite holds the two equal. `catalog course cover` decides the type from the bytes; the export
  * names the file by it.
  */
 export const COURSE_COVER_EXTENSIONS = ["webp", "jpg", "png"] as const;

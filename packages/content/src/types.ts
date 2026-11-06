@@ -8,7 +8,15 @@
  * nothing would say so. One declaration, one parser, one meaning.
  */
 
-export type ResourceType = "paper" | "docs" | "video" | "book" | "other" | "practice";
+/**
+ * What a module resource may be, the one list the reader checks against and
+ * the type is drawn from. The same list as `RESOURCE_TYPES` in
+ * `@gnosia/schema`, which this package does not import, and which the
+ * database's `asset_resource_type_check` is built from; the catalog's
+ * export-import suite holds the two equal.
+ */
+export const RESOURCE_TYPES = ["paper", "docs", "video", "book", "other", "practice"] as const;
+export type ResourceType = (typeof RESOURCE_TYPES)[number];
 
 /**
  * A cross-course theme id, e.g. `hci`. Deliberately a plain string: the set is
