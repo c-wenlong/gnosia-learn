@@ -96,11 +96,33 @@ struct UISnapshots {
         await shooter.shoot("review-tutor", ReviewView().environment(\.reviewSeedIndex, 1))
         await shooter.shoot("course", CourseDetailView(course: course))
         await shooter.shoot("module", CourseDetailView(course: course, moduleID: module.id))
+        // The sidebar's own rows, pressed in the shell: the first course
+        // row (where it resumes) and a Recent module it does not resume, read
+        // after the course and module shots, whose visits (written to
+        // learner.db) are what the sidebar lists. Each draws its course
+        // page, not SwiftUI's lone warning triangle.
+        store.refreshLearner()
+        let sidebar = store.sidebarRecent()
+        let courseRow = try #require(sidebar.courses.first, "the fixture's sidebar lists a course").destination
+        let moduleRow = try #require(
+            sidebar.groups.flatMap(\.rows).first {
+                $0.kind == .module && $0.moduleSlug != nil && $0.destination != courseRow
+            },
+            "the fixture's Recent lists a second module"
+        ).destination
+        var pages: [AppDestination] = []
+        for (name, row) in [("shell-course-row", courseRow), ("shell-module-row", moduleRow)] {
+            await shooter.shoot(name, RootView()
+                .environment(\.sidebarSeedOpens, [row])
+                .environment(\.destinationShown) { pages.append($0) }, stack: false)
+        }
+        #expect(pages.filter { $0 == courseRow }.count == 2, "the course row's page, light and dark: \(pages)")
+        #expect(pages.filter { $0 == moduleRow }.count == 2, "the module row's page, light and dark: \(pages)")
         await shooter.shoot("studio-home", StudioView(), stack: false)
         await shooter.shoot("studio-draft", StudioDraftView(draftId: FixtureRoutes.draftId))
         await shooter.shoot("settings", SettingsView().frame(width: 1280, height: 800))
 
-        #expect(shooter.written.count == 2 * 15 + 1, "\(shooter.written)")
+        #expect(shooter.written.count == 2 * 17 + 1, "\(shooter.written)")
     }
 
     /// A thread whose one tutor turn asks a recall check, live.
