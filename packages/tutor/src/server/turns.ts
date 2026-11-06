@@ -1138,8 +1138,8 @@ export async function modelListTurn(deps: TutorDeps, body: unknown): Promise<Tur
  * answers and statuses the Next routes give. What is not ported is what a
  * loopback single-owner service does not have — the session, origin and
  * rate-limit guards (the sidecar's own `guard.ts` answers origin) — and the
- * `byok` mirror, which is the web deployment pushing a saved key into the
- * studio runner's `byok.json`; a deployment without the runner omits the
+ * `byok` mirror, which is the web deployment telling the studio runner which
+ * saved key to use; a deployment without the runner omits the
  * field there too, so its absence here is the same contract.
  *
  * `AUTH_SECRET` reads `process.env`, never `deps.env`: `env` is the provider

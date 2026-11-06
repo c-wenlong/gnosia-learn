@@ -120,7 +120,7 @@ export function runnerSettings(raw: unknown): {
     models: models.length > 0 ? models : null,
     defaults,
     resolved: resolved.turns === null && resolved.video === null && resolved.diagram === null ? null : resolved,
-    // The model `byok.json` names, for a BYOK conversation's meta row — its
+    // The model the runner's BYOK settings name, for a BYOK conversation's meta row — its
     // turns run on it, not on the claude pick this menu otherwise offers.
     byokModel,
     byokTiers,

@@ -49,8 +49,8 @@ export async function DELETE(req: Request): Promise<NextResponse> {
   if (got instanceof NextResponse) return got;
   try {
     const removed = await deleteChainProvider(got.owner, got.provider);
-    // The key went with the provider; it leaves `byok.json` too (D95), and
-    // the answer says whether the runner's copy is gone.
+    // The key went with the provider; it leaves the runner's BYOK list too
+    // (D95), and the answer says whether the runner dropped it.
     const byok = removed.keyRemoved ? await dropByokProvider(got.provider) : undefined;
     return answer({ ok: true, ...removed, ...(byok === undefined ? {} : { byok }) });
   } catch (error) {

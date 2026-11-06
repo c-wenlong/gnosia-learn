@@ -11,7 +11,7 @@ import { Notice } from "@/components/ui/Notice";
  * listening to, takes the whole region — no cards, no strip controls that
  * cannot do anything, no thumbnails that will 404 one at a time.
  *
- * What is *not* here: a stale page bundle and an unreachable Postgres. Both
+ * What is *not* here: a stale page bundle and an unreachable catalog. Both
  * mean everything still works (U5 and U3), so both are banners, the kit's
  * `Banner`. Both cards here are the kit's `Notice` in its dense form.
  */
