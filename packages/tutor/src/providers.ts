@@ -64,9 +64,6 @@ export interface ProviderAttemptError {
   timedOut?: true;
 }
 
-/** Preferred free production cascade: NVIDIA → Gemini Flash → OpenRouter free. */
-export const DEFAULT_PROVIDER_ORDER: readonly ProviderId[] = PROVIDER_IDS;
-
 /**
  * Where a key came from: the owner saved it in Settings (`provider_key`,
  * docs/BYOK.md), or the server's environment set it.
@@ -1000,12 +997,4 @@ async function fetchModelList(
         : providerText(err instanceof Error ? err.message : "The provider could not be reached.", secrets, 300),
     };
   }
-}
-
-export function preferredModelLabel(
-  env: EnvMap = process.env,
-): string {
-  const first = resolveProviders(env)[0];
-  if (!first) return "free cascade (unconfigured)";
-  return `${first.label} · ${first.model}`;
 }

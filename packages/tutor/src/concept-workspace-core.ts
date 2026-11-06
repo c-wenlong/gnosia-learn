@@ -112,7 +112,7 @@ export interface WorkspaceEvent {
   [key: string]: unknown;
 }
 
-export function graphNodeOf(concept: KbConcept, courses: readonly string[] = []): GraphNode {
+function graphNodeOf(concept: KbConcept, courses: readonly string[] = []): GraphNode {
   return {
     id: concept.id,
     title: concept.title,

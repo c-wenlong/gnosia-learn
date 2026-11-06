@@ -40,7 +40,7 @@ import { AUTH_SECRET_VAR, MIN_SECRET_LENGTH, OWNER_PASSWORD_VAR } from "@gnosia/
  * Optional. Any value; change it (`1`, `2`, ...) to end every session without
  * changing the password or `AUTH_SECRET` (docs/DEPLOYMENT.md, "Signing in").
  */
-export const SESSION_EPOCH_VAR = "SESSION_EPOCH";
+const SESSION_EPOCH_VAR = "SESSION_EPOCH";
 
 export interface AuthConfig {
   password: string;

@@ -35,9 +35,6 @@ export interface ParsedTranscript {
   dropped: number;
 }
 
-/** An empty parse: a file that held nothing usable, as opposed to no file at all. */
-export const EMPTY_TRANSCRIPT: ParsedTranscript = { chapters: [], cues: [], dropped: 0 };
-
 /**
  * A finite, non-negative number, or null.
  *
