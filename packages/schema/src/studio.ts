@@ -12,6 +12,7 @@ import {
 } from "drizzle-orm/sqlite-core";
 
 import { createdAt, instant, ownerId, updatedAt } from "./columns";
+import { inList, quoted } from "./sql-in-list";
 import { asset, topic } from "./content";
 import { learner } from "./state";
 import {
@@ -45,9 +46,6 @@ import {
  * about a learner and nothing projects it into `mastery`), and no column on
  * `asset` pointing back at a job (see `asset_job`).
  */
-
-const inList = (column: string, values: readonly string[]) =>
-  sql.raw(`${column} in (${values.map((v) => `'${v}'`).join(", ")})`);
 
 const jsonObject = (column: string, nullable = false) =>
   sql.raw(
@@ -202,14 +200,14 @@ export const draft = sqliteTable(
     check(
       "draft_cost_source_check",
       sql.raw(
-        `cost_source is null or cost_source in (${COST_SOURCES.map((v) => `'${v}'`).join(", ")})`,
+        `cost_source is null or cost_source in (${quoted(COST_SOURCES)})`,
       ),
     ),
     check("draft_cost_source_paired_check", sql`cost_source is null or cost_usd is not null`),
     check(
       "draft_error_kind_check",
       sql.raw(
-        `error_kind is null or error_kind in (${DRAFT_ERROR_KINDS.map((v) => `'${v}'`).join(", ")})`,
+        `error_kind is null or error_kind in (${quoted(DRAFT_ERROR_KINDS)})`,
       ),
     ),
     index("draft_owner_id_idx").on(t.ownerId),
@@ -355,7 +353,7 @@ export const job = sqliteTable(
     check(
       "job_cost_source_check",
       sql.raw(
-        `cost_source is null or cost_source in (${COST_SOURCES.map((v) => `'${v}'`).join(", ")})`,
+        `cost_source is null or cost_source in (${quoted(COST_SOURCES)})`,
       ),
     ),
     // A source with no figure beside it says where a number came from and then

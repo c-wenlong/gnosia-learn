@@ -12,6 +12,7 @@ import {
 } from "drizzle-orm/sqlite-core";
 
 import { createdAt, instant, updatedAt } from "./columns";
+import { inList, quoted } from "./sql-in-list";
 import { concept, curriculumItem } from "./content";
 // `state` and `studio` reference each other: `event.session_id` points at
 // `session`, and `session.learner_id` points back at `learner`. Both are
@@ -56,12 +57,9 @@ import {
  * therefore safe in a client component.
  */
 
-const inList = (column: string, values: readonly string[]) =>
-  sql.raw(`${column} in (${values.map((v) => `'${v}'`).join(", ")})`);
-
 /** A `provider` column: a built-in provider, or a custom one's id (docs/TUTOR-MODELS.md, T14). */
 const providerName = (column: string) =>
-  sql.raw(`(${column} in (${PROVIDER_IDS.map((v) => `'${v}'`).join(", ")}) or ${column} regexp '${CUSTOM_PROVIDER_ID_SQL}')`);
+  sql.raw(`(${column} in (${quoted(PROVIDER_IDS)}) or ${column} regexp '${CUSTOM_PROVIDER_ID_SQL}')`);
 
 /**
  * One of `values` at random, each as likely as the next. Postgres drew with
