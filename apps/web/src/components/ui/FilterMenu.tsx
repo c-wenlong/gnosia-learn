@@ -101,6 +101,10 @@ export function FilterMenu<V extends string>({
 }) {
   const field = face === "field";
   const [open, setOpen] = useState(false);
+  // A menu disabled while open (a locked form) closes for good, adjusted
+  // during render so the trigger's `aria-expanded` and the panel agree at
+  // once, and enabling it again does not reopen it unasked.
+  if (disabled && open) setOpen(false);
   const [active, setActive] = useState(-1);
   // True while the highlight was last moved by a key: the row then carries a
   // focus outline, since the list itself draws none.
@@ -233,7 +237,7 @@ export function FilterMenu<V extends string>({
       <Popover
         ref={list}
         anchorRef={trigger}
-        open={open && !disabled}
+        open={open}
         onOpenChange={() => setOpen(false)}
         minWidthFromAnchor={field}
         id={listId}
