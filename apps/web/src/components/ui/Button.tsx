@@ -2,6 +2,7 @@ import Link from "next/link";
 import { useId, type AnchorHTMLAttributes, type ButtonHTMLAttributes, type ReactNode, type Ref } from "react";
 
 import { buttonClasses, cx, NOTE, type ButtonSize, type ButtonVariant } from "./classes";
+import { FADE_IN } from "./motion";
 
 /**
  * Kit `Btn`. One primary per region (DESIGN.md, "Components").
@@ -91,7 +92,7 @@ function ReasonedButton({ reason, "aria-describedby": describedBy, ...rest }: Pl
   return (
     <span className={cx(rest.block ? "flex w-full" : "inline-flex max-w-full", "flex-wrap items-center gap-x-2 gap-y-1")}>
       <PlainButton {...rest} aria-describedby={cx(describedBy, id)} />
-      <span id={id} className={cx(NOTE, "min-w-0 animate-fade-in motion-reduce:animate-none")}>
+      <span id={id} className={cx(NOTE, "min-w-0", FADE_IN)}>
         {reason}
       </span>
     </span>

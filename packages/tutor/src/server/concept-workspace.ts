@@ -7,11 +7,10 @@ import {
   readKnowledgeBase,
   readCards,
 } from "@gnosia/catalog/state";
-import type { ContentSource } from "@gnosia/content";
+import type { ContentSource, Course } from "@gnosia/content";
 import type { OwnerScope } from "@gnosia/schema/shared";
 
 import { findTopicAcrossCourses } from "../lookup";
-import type { Course } from "../types";
 import {
   buildConceptWorkspace,
   type ConceptPlace,

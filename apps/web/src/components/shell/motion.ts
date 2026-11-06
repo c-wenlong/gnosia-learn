@@ -6,7 +6,7 @@
  *
  * `LABEL_FADE` is the transition and `LABEL_SHOWN` the visible half of the
  * toggle (the hidden half is `opacity-0`). Not a mount animation: that is
- * the studio's `FADE_IN` and `PAGE_ENTER`, which these names no longer
+ * the kit's `FADE_IN` (`components/ui/motion.ts`) and `PAGE_ENTER`, which these names no longer
  * share, so an import from the wrong module cannot compile.
  */
 export const LABEL_FADE = "transition-opacity duration-150 ease-out motion-reduce:transition-none";

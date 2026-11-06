@@ -60,7 +60,6 @@ import {
   parseKnowledgeResponse,
   type TranscriptTurn,
 } from "../summary";
-import type { TopicKnowledge } from "../types";
 import { splitTurnCheck } from "../check-block";
 import {
   CHAT_ANSWER_LIMIT,
@@ -107,7 +106,7 @@ import { svgText } from "../svg-text";
 import { parseTranscript } from "../transcript";
 import { measurePayload, PAYLOAD_LIMITS } from "../guards";
 import { pointsAtThisApp, SELF_ADDRESS_REASON } from "./self-address";
-import { checkModelId, KNOWLEDGE_LIMITS, providerLabel } from "@gnosia/schema/shared";
+import { checkModelId, KNOWLEDGE_LIMITS, providerLabel, type TopicKnowledge } from "@gnosia/schema/shared";
 
 /**
  * The request-independent core of the `/api/agent/*` and the `/api/learner/*`
@@ -145,7 +144,9 @@ function credentialsOf(deps: TutorDeps) {
 }
 
 function completeWith(deps: TutorDeps, messages: ChatMessage[], steps: readonly import("../providers").ChainStep[]) {
-  return deps.seams?.complete ? deps.seams.complete(messages, steps) : completeWithFallback(messages, steps);
+  return deps.seams?.complete
+    ? deps.seams.complete(messages, steps, deps.signal)
+    : completeWithFallback(messages, steps, undefined, deps.signal);
 }
 
 function assetDetailOf(deps: TutorDeps, id: string) {
@@ -847,8 +848,11 @@ export async function checkOptionsTurn(deps: TutorDeps, body: unknown): Promise<
   if (remembered !== undefined) return remembered;
   return oncePerCheck(key, async (): Promise<TurnReply> => {
     const credentials = await credentialsOf(deps);
+    // Not the request's signal: every caller asking for this check at once
+    // shares the one call, and its options are stored for the next visit, so
+    // one tab closing must not end it for the others.
     const outcome = await completeWith(
-      deps,
+      { ...deps, signal: undefined },
       [
         { role: "system", content: buildCheckOptionsPrompt(toConceptPromptInput(read.workspace), check) },
         { role: "user", content: CHECK_OPTIONS_REQUEST },
@@ -863,7 +867,9 @@ export async function checkOptionsTurn(deps: TutorDeps, body: unknown): Promise<
             attempts: outcome.attempts,
             providers: availableProviderSummary(credentials),
           })
-        : refuseFor(key, reply(502, { error: "All free providers failed", code: "ALL_PROVIDERS_FAILED", attempts: outcome.attempts }));
+        : outcome.code === "CANCELLED"
+          ? reply(502, { error: "The request was closed", code: "CANCELLED", attempts: outcome.attempts })
+          : refuseFor(key, reply(502, { error: "All free providers failed", code: "ALL_PROVIDERS_FAILED", attempts: outcome.attempts }));
     }
     const parsed = parseCheckOptions(outcome.result.content, answer);
     if (!parsed.ok) {
@@ -1132,8 +1138,8 @@ export async function modelListTurn(deps: TutorDeps, body: unknown): Promise<Tur
  * answers and statuses the Next routes give. What is not ported is what a
  * loopback single-owner service does not have — the session, origin and
  * rate-limit guards (the sidecar's own `guard.ts` answers origin) — and the
- * `byok` mirror, which is the web deployment pushing a saved key into the
- * studio runner's `byok.json`; a deployment without the runner omits the
+ * `byok` mirror, which is the web deployment telling the studio runner which
+ * saved key to use; a deployment without the runner omits the
  * field there too, so its absence here is the same contract.
  *
  * `AUTH_SECRET` reads `process.env`, never `deps.env`: `env` is the provider

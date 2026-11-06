@@ -40,6 +40,7 @@ import { CHAT_ANSWER_LIMIT, pendingCheck, recallOpening, type TurnCheck } from "
 import { CheckCard, CheckRow, slotPlan, useCheckThread, type SlotOptions } from "./use-check-thread";
 import { takeUnanswered } from "./unanswered";
 import { NOTE_HASH } from "./WorkspacePanels";
+import { ENTER, FADE_IN } from "@/components/ui/motion";
 
 /**
  * The workspace's centre panel: a chat with the concept tutor
@@ -533,7 +534,7 @@ export function TutorChat({
           <TutorMessage
             cites={note && <Cite n={note.n} label={note.label} href={note.href} />}
             // Unseen until hydration has said there is no stored thread to show instead.
-            className={hydrated ? "animate-fade-in motion-reduce:animate-none" : "opacity-0"}
+            className={hydrated ? FADE_IN : "opacity-0"}
           >
             <p className="max-w-[60ch]">
               Ask me anything about {title}. I answer from your note and cite it as [1], and I will check you as we
@@ -543,7 +544,7 @@ export function TutorChat({
         )}
 
         {turns.flatMap((turn, i) => {
-          const enter = i < restored ? "animate-fade-in motion-reduce:animate-none" : "animate-enter motion-reduce:animate-none";
+          const enter = i < restored ? FADE_IN : ENTER;
           // A card's answer is the card's to show; the turn holds what the tutor was sent.
           if (turn.role === "user" && (turn.choice || turn.recall)) return [<CheckRow key={`v${i}`} at={i} {...slotProps} />];
           const item = turn.role === "studio" ? (

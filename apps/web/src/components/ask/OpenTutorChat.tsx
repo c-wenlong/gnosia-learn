@@ -12,6 +12,7 @@ import { ASK_START_KEY } from "@/lib/ask-core";
 import { tutorProblem } from "@/lib/tutor-errors";
 import { trimForRequest, type TutorTurn } from "@/lib/tutor-thread";
 import { takeUnanswered } from "@/components/workspace/unanswered";
+import { ENTER, FADE_IN } from "@/components/ui/motion";
 
 interface ChatReply {
   message?: { role: "assistant"; content: string };
@@ -140,11 +141,11 @@ export function OpenTutorChat({ subject }: { subject: string }) {
       <div className="flex flex-col gap-4" aria-live="polite">
         {turns.map((turn, i) =>
           turn.role === "user" ? (
-            <UserMessage key={i} className="animate-enter motion-reduce:animate-none">
+            <UserMessage key={i} className={ENTER}>
               <MathText text={turn.content} />
             </UserMessage>
           ) : (
-            <TutorMessage key={i} className="animate-enter motion-reduce:animate-none">
+            <TutorMessage key={i} className={ENTER}>
               <NoteProse source={turn.content} idPrefix={`t${i}-`} images="link" />
             </TutorMessage>
           ),
@@ -153,7 +154,7 @@ export function OpenTutorChat({ subject }: { subject: string }) {
         {error !== null && (
           <Callout
             role="alert"
-            className="animate-fade-in motion-reduce:animate-none"
+            className={FADE_IN}
             actions={
               <Button variant="secondary" size="sm" onClick={() => void send(turns)}>
                 Try again

@@ -15,7 +15,7 @@ import { withCatalog } from "@/lib/asset-library";
 import { assetHref, isCompanionKind, libraryHref } from "@/lib/library";
 import type { ModulePathAssets, PathAsset } from "@/lib/module-path";
 import { currentScope } from "@/lib/owner";
-import type { Course } from "@gnosia/tutor/types";
+import type { Course } from "@gnosia/content";
 
 /**
  * What a course page reads from the catalog per module, for its meta row and

@@ -24,8 +24,8 @@ export const runtime = "nodejs";
 
 export const PATCH = settingsRoute("tutor-model", CHAIN_WRITE_RATE_LIMIT, tutorProviderMoveTurn);
 
-// The key went with the provider; Studio's list is told too (D95), and the
-// answer says whether the runner's copy is gone.
+// The key went with the provider; it leaves the runner's BYOK list too
+// (D95), and the answer says whether the runner dropped it.
 export const DELETE = settingsRoute("tutor-model", CHAIN_WRITE_RATE_LIMIT, tutorProviderRemoveTurn, async (body, answered) =>
   byokField(answered.keyRemoved === true ? await dropByokProvider(body.provider as ProviderName) : undefined),
 );

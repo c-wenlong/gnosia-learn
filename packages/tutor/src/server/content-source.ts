@@ -40,7 +40,7 @@ export class ContentUnavailableError extends Error {
 }
 
 /** The sentence for a type that resolved to files, by where that came from. */
-export function notFlippedMessage(type: ContentType, from: Resolutions[ContentType]["from"]): string {
+function notFlippedMessage(type: ContentType, from: Resolutions[ContentType]["from"]): string {
   const flip = `npm run catalog -- flip ${type}`;
   if (from === "variable") {
     return (

@@ -2,7 +2,7 @@
 
 import { Failure } from "@/components/studio/draft/ThreadFoot";
 import { JobPanel } from "@/components/studio/JobPanel";
-import { FADE_IN } from "@/components/studio/motion";
+import { FADE_IN } from "@/components/ui/motion";
 import { PanelLink } from "@/components/studio/PanelLink";
 import { DialogHeader } from "@/components/studio/StudioDialog";
 import { Button } from "@/components/ui/Button";

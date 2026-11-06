@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { providerLabel } from "@gnosia/schema/shared";
+import { providerLabel, type KnowledgeInput, type TopicKnowledge } from "@gnosia/schema/shared";
 import { MathText } from "@/components/Math";
 import { NoteProse } from "@/components/NoteProse";
 import { Button } from "@/components/ui/Button";
@@ -17,11 +17,9 @@ import { TypingDots } from "@/components/ui/TypingDots";
 import { useCopied } from "@/components/ui/use-copied";
 import type {
   Course,
-  KnowledgeInput,
   Module,
   Topic,
-  TopicKnowledge,
-} from "@gnosia/tutor/types";
+} from "@gnosia/content";
 import { useLearner } from "@/lib/learner-context";
 import { buildAgentSessionContext } from "@gnosia/tutor/prompt";
 import { RecapCard, RecapEditor } from "@/components/TopicRecap";
@@ -45,6 +43,7 @@ import { tutorProblem } from "@/lib/tutor-errors";
 import { recapTurns, topicRequestTurns } from "@/lib/tutor-thread";
 import { ownValue } from "@gnosia/tutor/own-key";
 import { randomToken } from "@/lib/random-token";
+import { ENTER, FADE_IN } from "@/components/ui/motion";
 
 type Role = "user" | "assistant";
 
@@ -451,13 +450,13 @@ export function AgentSession({
               // tinted bubble, told apart by shape, so no turn carries a
               // speaker label; only the provider, when there is one, is shown.
               m.role === "assistant" ? (
-                <TutorMessage key={m.id} className="animate-enter motion-reduce:animate-none">
+                <TutorMessage key={m.id} className={ENTER}>
                   {m.meta && <p className={cx(NOTE, "mb-1")}>{m.meta}</p>}
                   {/* The tutor writes markdown, as the concept tutor's does; an image in it is a link. */}
                   <NoteProse source={m.content} idPrefix={`t${i}-`} images="link" />
                 </TutorMessage>
               ) : (
-                <UserMessage key={m.id} className="animate-enter motion-reduce:animate-none">
+                <UserMessage key={m.id} className={ENTER}>
                   <MathText text={m.content} />
                 </UserMessage>
               ),
@@ -475,7 +474,7 @@ export function AgentSession({
             <Callout
               tone="danger"
               role="alert"
-              className="animate-fade-in motion-reduce:animate-none"
+              className={FADE_IN}
               actions={
                 // The learner's turn went unanswered: send it again, rather than typing it twice.
                 takeUnanswered(messages) !== null ? (
@@ -546,13 +545,13 @@ export function AgentSession({
         )}
 
         {recapError && (
-          <Callout role="status" className="animate-fade-in motion-reduce:animate-none">
+          <Callout role="status" className={FADE_IN}>
             {recapError}
           </Callout>
         )}
 
         {saveError && (
-          <Callout tone="danger" role="alert" className="animate-fade-in motion-reduce:animate-none">
+          <Callout tone="danger" role="alert" className={FADE_IN}>
             {saveError}
           </Callout>
         )}
@@ -561,7 +560,7 @@ export function AgentSession({
           <RecapEditor
             initial={recapDraft}
             submitLabel="Save recap"
-            className="animate-fade-in motion-reduce:animate-none"
+            className={FADE_IN}
             onSave={(input) => {
               saveKnowledge(topic.id, input);
               setRecapDraft(null);
@@ -573,7 +572,7 @@ export function AgentSession({
         )}
 
         {storedKnowledge && !recapDraft && (
-          <div className="flex flex-col gap-2 animate-fade-in motion-reduce:animate-none">
+          <div className={cx("flex flex-col gap-2", FADE_IN)}>
             <LiveStatus
               text={
                 justSaved === null

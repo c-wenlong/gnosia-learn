@@ -17,7 +17,7 @@ import {
   type ModuleStatus,
   type TopicMastery,
 } from "@/lib/course-path";
-import type { Course, Module } from "@gnosia/tutor/types";
+import type { Course, Module } from "@gnosia/content";
 
 import { Glyph } from "@/components/ui/Glyph";
 

@@ -30,7 +30,7 @@ export const MAX_ASSET_ID_CHARS = 512;
 
 export const TEXT_PREVIEW_BYTES = 256 * 1024;
 
-export function distinctTopics(rows: AssetWithTopics[]): string[] {
+function distinctTopics(rows: AssetWithTopics[]): string[] {
   return [...new Set(rows.flatMap((row) => row.topics))];
 }
 
@@ -218,7 +218,7 @@ export async function optionalParents(
 }
 
 /** Concept links for these assets, or none. See `optionalTitles` for why this cannot throw. */
-export async function optionalConcepts(
+async function optionalConcepts(
   deps: DetailDeps,
   ids: readonly string[],
 ): Promise<Record<string, string[]>> {
@@ -231,7 +231,7 @@ export async function optionalConcepts(
 }
 
 /** The rename field's data, or none. A failure costs the field, never the page. */
-export async function optionalNaming(deps: DetailDeps, id: string): Promise<AssetNaming | null> {
+async function optionalNaming(deps: DetailDeps, id: string): Promise<AssetNaming | null> {
   try {
     return await readAssetNaming(await deps.db, id, deps.owner);
   } catch (error) {
@@ -241,7 +241,7 @@ export async function optionalNaming(deps: DetailDeps, id: string): Promise<Asse
 }
 
 /** The note index, or none. See `optionalTitles` for why this cannot throw. */
-export async function optionalNotes(deps: DetailDeps): Promise<Record<string, string>> {
+async function optionalNotes(deps: DetailDeps): Promise<Record<string, string>> {
   try {
     return noteIndex(await listAssets(await deps.db, { kind: "note" }, deps.scope));
   } catch (error) {
@@ -259,7 +259,7 @@ export async function optionalNotes(deps: DetailDeps): Promise<Record<string, st
  * that happens in Obsidian and is better than a link pointing at the wrong
  * note. Nothing in the corpus collides today.
  */
-export function noteIndex(rows: AssetWithTopics[]): Record<string, string> {
+function noteIndex(rows: AssetWithTopics[]): Record<string, string> {
   // A Map, then `fromEntries`: assigning `out["__proto__"]` on a plain object
   // sets its prototype instead of a key, so a note by that name would be
   // unlinkable, and `fromEntries` defines every key as the object's own.
