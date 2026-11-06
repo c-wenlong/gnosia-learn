@@ -11,14 +11,16 @@ import {
   type ReactNode,
 } from "react";
 import { useRouter } from "next/navigation";
-import { cleanDisplayName, LEGACY_STORAGE_KEY, type AvatarId } from "@gnosia/schema/shared";
+import {
+  cleanDisplayName,
+  LEGACY_STORAGE_KEY,
+  type AvatarId,
+  type KnowledgeInput,
+  type LearnerState,
+  type ThemeMode,
+  type UserResource,
+} from "@gnosia/schema/shared";
 
-import type {
-  KnowledgeInput,
-  LearnerState,
-  ThemeMode,
-  UserResource,
-} from "@gnosia/tutor/types";
 import {
   addUserResource,
   clearKnowledge,

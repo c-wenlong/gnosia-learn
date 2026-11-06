@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ExtendLink } from "@/components/studio/ExtendLink";
 import { KindBadge, KindWord } from "@/components/studio/KindBadge";
-import { FOLD_MS } from "@/components/studio/motion";
+import { FOLD_MS } from "@/components/ui/motion";
 import { FadeImg } from "@/components/studio/motion-parts";
 import { VideoChangeButton } from "@/components/studio/video/VideoGridJob";
 import { Button } from "@/components/ui/Button";

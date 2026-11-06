@@ -6,7 +6,7 @@ import type { FormatTime } from "@/lib/studio-chat";
  * The topic vocabulary as the studio screens get it: from the runner, never
  * from the app's own content read.
  *
- * The app reads content from the database only, so with Postgres down its
+ * The app reads content from the database only, so with the catalog unreadable its
  * topic read throws, and U3 says the studio still browses and draws. The
  * runner keeps the last topic list it read under `$STUDIO_HOME/cache/`
  * (D13 of docs/CONTENT-MIGRATION.md) and serves it at `/api/vocabulary`, with

@@ -26,6 +26,7 @@ import {
   type CourseSummary,
 } from "@/lib/course-summary";
 import { useLearner } from "@/lib/learner-context";
+import { FADE_IN } from "@/components/ui/motion";
 
 /**
  * The Courses page's interactive half, in two sections after Coursera.
@@ -148,7 +149,7 @@ export function CourseList({
           </h2>
           <ul className="flex flex-col gap-4">
             {continuingShown.map((entry) => (
-              <li key={entry.summary.slug} className="animate-fade-in motion-reduce:animate-none">
+              <li key={entry.summary.slug} className={FADE_IN}>
                 <ContinueCard entry={entry} />
               </li>
             ))}
@@ -306,7 +307,7 @@ function CourseGrid({ courses, render }: { courses: CourseSummary[]; render: (s:
   return (
     <ul className="grid grid-cols-2 gap-3 sm:gap-4 sm:[grid-template-columns:repeat(auto-fill,minmax(280px,1fr))]">
       {courses.map((s) => (
-        <li key={s.slug} className="group relative flex animate-fade-in motion-reduce:animate-none">
+        <li key={s.slug} className={cx("group relative flex", FADE_IN)}>
           {render(s)}
         </li>
       ))}

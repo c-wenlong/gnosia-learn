@@ -1,5 +1,6 @@
 import { DEFAULT_TUTOR_STYLE, TUTOR_STYLES, type TutorStyle } from "./preferences";
-import type { Course, Module, Topic, TopicKnowledge } from "./types";
+import type { Course, Module, Topic } from "@gnosia/content";
+import type { TopicKnowledge } from "@gnosia/schema/shared";
 import { buildLearningObjectives, buildSessionAngle } from "./objectives";
 import { formatPriorKnowledgeBlock } from "./summary";
 

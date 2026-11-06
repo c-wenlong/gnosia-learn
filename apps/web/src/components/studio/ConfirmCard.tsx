@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
-import { FADE_IN } from "@/components/studio/motion";
+import { FADE_IN } from "@/components/ui/motion";
 import { Reveal } from "@/components/studio/motion-parts";
 import { FOOTER, LiveFooter, MadeFooter, OnHoldFooter, ProposedTopic, useHoldAction } from "@/components/studio/brief-card-parts";
 import { Arrow, ElementsEditor, Problem, RelationsEditor } from "@/components/studio/brief-editor";

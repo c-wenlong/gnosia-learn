@@ -17,7 +17,7 @@ import { HarnessPicker } from "@/components/studio/HarnessPicker";
 import { JobCost } from "@/components/studio/JobCost";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
 import { MadeList, useConversationMade } from "@/components/studio/MadeCard";
-import { ENTER, FADE_IN } from "@/components/studio/motion";
+import { ENTER, FADE_IN } from "@/components/ui/motion";
 import { Arrive } from "@/components/studio/motion-parts";
 import { PANE_GUTTER, usePaneLayout } from "@/components/studio/pane-context";
 import { PinnedConcept, PinnedDiagram, PinnedVideo } from "@/components/studio/PinnedDiagram";

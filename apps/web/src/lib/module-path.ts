@@ -8,7 +8,7 @@ import {
 } from "@/lib/course-path";
 import { bucketOf, masteryCaption, type MasteryBucket } from "@gnosia/tutor/mastery-bucket";
 import { ownValue } from "@gnosia/tutor/own-key";
-import type { Module, Resource, Topic } from "@gnosia/tutor/types";
+import type { Module, Resource, Topic } from "@gnosia/content";
 import { weekCheckBound } from "@/lib/week-check";
 
 /**

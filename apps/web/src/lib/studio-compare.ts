@@ -160,7 +160,7 @@ export function emptyLintLine(which: "fixed" | "added", comparison: Comparison):
  *
  * The runner records the whole of what the CLI printed, which is right — it is
  * the record, and a truncated one helps nobody at three in the morning. What a
- * banner needs is the first line of it. The real thing a Postgres that is down
+ * banner needs is the first line of it. The real thing an unreadable catalog
  * produces here is a command echo followed by four lines of pretty-printed JSON
  * whose `error` is the empty string, and six lines of that drowns the sentence
  * above it that says what actually happened.
