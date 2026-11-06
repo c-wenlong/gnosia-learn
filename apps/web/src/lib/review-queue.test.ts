@@ -2,6 +2,8 @@ import type { ReviewQueueItem } from "@gnosia/catalog/state";
 import { describe, expect, it } from "vitest";
 
 import type { ConceptCheck } from "@gnosia/tutor/concept-note-core";
+import { withTutorOptions } from "@gnosia/tutor/review-core";
+import { CHECK_DISTRACTOR_LIMITS } from "@gnosia/schema/shared";
 import { toReviewItem } from "./review-queue";
 
 /**
@@ -58,6 +60,30 @@ describe("toReviewItem with the tutor's options", () => {
 
   it("marks nothing on a recall card", () => {
     expect(toReviewItem(item, [], POOL, written).wrong).toBeUndefined();
+  });
+});
+
+describe("toReviewItem asking the tutor for options", () => {
+  const written = { c1: ["They point the same way.", "Their lengths cancel.", "One of them is zero."] };
+
+  it("names the check to ask for when its options came from the notes and a model can be asked", () => {
+    expect(toReviewItem(item, [check()], POOL, {}, true).rewrite).toEqual({ check: "c1" });
+    expect(toReviewItem(item, [check()], POOL, {}, false).rewrite).toBeUndefined();
+  });
+
+  it("asks nothing for a card the tutor's options already lay out, a recall card, or an answer too long for an option", () => {
+    expect(toReviewItem(item, [check()], POOL, written, true).rewrite).toBeUndefined();
+    expect(toReviewItem(item, [], POOL, {}, true).rewrite).toBeUndefined();
+    const long = check({ answer: "x".repeat(CHECK_DISTRACTOR_LIMITS.maxOptionChars + 1) });
+    expect(toReviewItem(item, [long], POOL, {}, true).rewrite).toBeUndefined();
+  });
+
+  it("lays the card out in the browser exactly as the queue will once the options are stored", () => {
+    const asked = toReviewItem(item, [check()], POOL, {}, true);
+    const laid = withTutorOptions(asked, written.c1);
+    const stored = toReviewItem(item, [check()], POOL, written, true);
+    expect(laid).toEqual(stored);
+    expect(laid?.rewrite).toBeUndefined();
   });
 });
 

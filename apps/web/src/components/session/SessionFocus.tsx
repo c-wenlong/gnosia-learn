@@ -15,6 +15,7 @@ import { cx } from "@/components/ui/classes";
 import { DEFAULT_CONFIDENCE } from "@gnosia/tutor/check-block";
 import { ConfidenceField, ReasoningField } from "@/components/workspace/SurenessFields";
 import { FocusFrame } from "./FocusFrame";
+import { useWrittenOptions } from "./use-written-options";
 import {
   feedbackNote,
   newSessionId,
@@ -30,7 +31,6 @@ import {
   withConsequence,
   withWrittenOptions,
   canAskAgain,
-  OPTIONS_WAIT_MS,
   sameCheck,
 } from "@gnosia/tutor/session-core";
 import {
@@ -166,8 +166,6 @@ export function SessionFocus({
   const [thinking, setThinking] = useState("");
   const [graded, setGraded] = useState<Record<number, Graded>>({});
   const [resolved, setResolved] = useState<Record<number, Resolved>>({});
-  /** A note question's options from the tutor, by step: the question laid out with them, or null when it could not. */
-  const [rewritten, setRewritten] = useState<Record<number, SessionQuestion | null>>({});
   const [whyOpen, setWhyOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -187,7 +185,6 @@ export function SessionFocus({
   // Refs, not state, for what a handler must see before React re-renders.
   const inFlight = useRef(false);
   const requested = useRef(new Set<number>());
-  const rewriting = useRef(new Set<number>());
   const attempts = useRef<Record<number, Attempt>>({});
   /**
    * This visit's session scope in `chat-recall`, which owns the write and the
@@ -220,6 +217,23 @@ export function SessionFocus({
   const exitHref = weekCheck?.moduleHref ?? `/learn/${slug}`;
   /** The concept a step asks about: its own in a week check, else the session's. */
   const conceptOf = useCallback((s: SessionStep | undefined) => s?.place?.slug ?? slug, [slug]);
+
+  // A note question whose wrong options the tutor has not written asks for them
+  // (`useWrittenOptions`), for this step and the two after it. Any refusal keeps
+  // the options from the notes.
+  const optionsAt = useCallback((at: number) => steps[at]?.question?.rewrite ?? null, [steps]);
+  const written = useWrittenOptions(index, optionsAt, modelAvailable);
+  /** A note question's options from the tutor, by step: the question laid out with them, or null when it could not. */
+  const rewritten = useMemo(() => {
+    const out: Record<number, SessionQuestion | null> = {};
+    for (const [at, answer] of Object.entries(written)) {
+      const q = steps[Number(at)]?.question ?? null;
+      // Options for the check as the server read it now: a note edited since
+      // the page drew asks a different question, so they are not used.
+      out[Number(at)] = answer !== null && q !== null && sameCheck(q, answer) ? withWrittenOptions(q, answer.options) : null;
+    }
+    return out;
+  }, [written, steps]);
 
   /** The question on screen for a step, or why there is none, or that it is coming. */
   const questionFor = useCallback(
@@ -303,70 +317,6 @@ export function SessionFocus({
       })
       .finally(() => asking.current.delete(controller));
   }, [index, steps, modelAvailable, graded, questionFor, conceptOf]);
-
-  /** Option requests in flight, aborted (and forgotten) if the page goes away, as the question requests are. */
-  const optioning = useRef(new Map<AbortController, number>());
-  useEffect(() => {
-    const held = optioning.current;
-    const asked = rewriting.current;
-    return () => {
-      for (const [controller, at] of held) {
-        controller.abort();
-        asked.delete(at);
-      }
-      held.clear();
-    };
-  }, []);
-
-  // A note question whose wrong options the tutor has not written asks for them,
-  // once, for this step and the two after it, so the next question is usually
-  // ready by the time it comes up. Any refusal keeps the options from the notes.
-  useEffect(() => {
-    if (!modelAvailable) return;
-    for (const at of [index, index + 1, index + 2]) {
-      const q = steps[at]?.question ?? null;
-      const ask = q?.rewrite;
-      if (q === null || ask === undefined || rewriting.current.has(at)) continue;
-      rewriting.current.add(at);
-      const controller = new AbortController();
-      optioning.current.set(controller, at);
-      // A request that stalls does not hold the question back for good: past
-      // the tutor's own deadline the page asks with the notes' options.
-      let timedOut = false;
-      const timer = setTimeout(() => {
-        timedOut = true;
-        controller.abort();
-      }, OPTIONS_WAIT_MS);
-      /** Gone because the page went away: nobody is left to show anything to. */
-      const gone = () => controller.signal.aborted && !timedOut;
-      fetch("/api/agent/check-options", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ conceptSlug: ask.concept, checkId: ask.check }),
-        signal: controller.signal,
-      })
-        .then(async (res) => {
-          const body = (await res.json().catch(() => ({}))) as { options?: unknown; question?: unknown; answer?: unknown };
-          if (gone()) return;
-          // Options for the check as the server read it now: a note edited since
-          // the page drew asks a different question, so they are not used.
-          const fits =
-            res.ok &&
-            Array.isArray(body.options) &&
-            body.options.every((o) => typeof o === "string") &&
-            sameCheck(q, { question: body.question, answer: body.answer });
-          const question = fits ? withWrittenOptions(q, body.options as string[]) : null;
-          setRewritten((prev) => ({ ...prev, [at]: question }));
-        })
-        .catch(() => {
-          if (!gone()) setRewritten((prev) => ({ ...prev, [at]: null }));
-        })
-        .finally(() => {
-          clearTimeout(timer);
-          optioning.current.delete(controller);
-        });
-    }
-  }, [index, steps, modelAvailable]);
 
   // A failed request is forgotten, and the effect above asks again.
   const askAgain = useCallback(() => {

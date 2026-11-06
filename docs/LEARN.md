@@ -420,8 +420,12 @@ the three wrong options come from one of two places, best first
 
 Pages only read the store. A model call happens when the session page asks
 for a step's options (the step on screen and the two after it) and waits for
-them, never while a page renders; a review card reads the store and never
-asks. The options are laid out by a seed of the concept, the check and where
+them, never while a page renders. Review does the same for a check card whose
+options came from the notes, when a model can be asked: it asks for the card
+on screen and the two after it, the card on screen waits, and a refusal or no
+answer within 70 seconds asks it with the notes' options and their line
+(`useWrittenOptions` in `apps/web/src/components/session/`, shared by both
+pages). The options are laid out by a seed of the concept, the check and where
 it is asked, so a check reads the same whether its options arrived on the
 page or came from the store. One generation sends the note (clipped to 8,000
 characters) and the check, roughly 1,000 to 3,000 input tokens and 100
