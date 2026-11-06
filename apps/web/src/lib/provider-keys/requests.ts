@@ -5,9 +5,8 @@ import { isProviderName, PROVIDER_IDS, type ProviderName } from "@gnosia/schema/
 import type { TutorDeps } from "@gnosia/tutor/server/deps";
 import type { TurnReply } from "@gnosia/tutor/server/turns";
 
-import { tutorDeps } from "@/lib/agent/env";
 import { enforceRateLimit, enforceSameOrigin, type RateLimitRule } from "@/lib/agent/guard";
-import { BodyTooLarge, readBodyText, requestOwner } from "@/lib/learner-api";
+import { BodyTooLarge, learnerDeps, readBodyText, requestOwner } from "@/lib/learner-api";
 
 /**
  * The guards in front of `/api/learner/provider-key` and its `test`, the same
@@ -89,6 +88,9 @@ export function readProvider(body: Record<string, unknown>): ProviderName | Next
  * turn took and its answer; what it returns joins the answer (the studio's
  * provider list, D95, as `byok`). The turn sees the request's URL, so a
  * custom provider pointed at this app's own port is refused by that port.
+ * The deps are the learner writes' lazy ones: the database and the blob
+ * store open only when the turn reads them, so a refused body touches
+ * neither, and these writes never need the blob store at all.
  */
 export function settingsRoute(
   scope: "provider-key" | "tutor-model",
@@ -101,7 +103,7 @@ export function settingsRoute(
     if (owner instanceof NextResponse) return owner;
     const body = await readBody(req);
     if (body instanceof NextResponse) return body;
-    const { status, body: answered } = await turn({ ...tutorDeps(owner), requestUrl: req.url }, body);
+    const { status, body: answered } = await turn(learnerDeps(owner, req.url), body);
     const record = answered as Record<string, unknown>;
     const extra = status === 200 && after !== undefined ? await after(body, record) : {};
     return answer({ ...record, ...extra }, status);

@@ -210,13 +210,16 @@ export function handler<T>(
  * The seams a learner write reads, for one owner. Lazy on purpose: a write
  * uses the database, the scope and the time zone, and a body refused before
  * the write must not open the database (a rejected promise nobody awaits) or
- * build a content source and a blob store it never reads.
+ * build a content source and a blob store it never reads. `requestUrl` is
+ * for the Settings writes (`settingsRoute`), whose custom-provider turns
+ * refuse a base URL on this app's own port.
  */
-function learnerDeps(owner: string): TutorDeps {
+export function learnerDeps(owner: string, requestUrl?: string): TutorDeps {
   return {
     owner,
     scope: ownerScope(owner),
     env: process.env,
+    requestUrl,
     get db() {
       return catalogDatabase();
     },
