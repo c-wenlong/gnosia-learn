@@ -34,6 +34,12 @@ export interface TutorDeps extends AssetSeams {
   owner: string;
   env: Env;
   /**
+   * The URL the request came in on, when the host has one. A custom
+   * provider's base URL on this port is this app, not a model server
+   * (`pointsAtThisApp`), so a save names it too.
+   */
+  requestUrl?: string;
+  /**
    * The request's abort signal, when the host has one. A model call made for
    * the turn is aborted when it fires, so a closed tab stops paying for an
    * answer nobody will read.

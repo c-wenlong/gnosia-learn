@@ -9,11 +9,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const openSavedKeys = vi.hoisted(() => vi.fn());
 const addChainEntry = vi.hoisted(() => vi.fn());
-vi.mock("@/lib/provider-keys/store", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/provider-keys/store")>()),
+// The route is the tutor's `tutorModelAddTurn`, which reads the keys and
+// writes the chain through these two modules.
+vi.mock("@gnosia/tutor/server/provider-keys", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@gnosia/tutor/server/provider-keys")>()),
   openSavedKeys,
 }));
-vi.mock("@/lib/tutor-models/store", () => ({ addChainEntry, removeChainEntry: vi.fn(), moveChainEntry: vi.fn() }));
+vi.mock("@gnosia/tutor/server/tutor-models", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@gnosia/tutor/server/tutor-models")>()),
+  addChainEntry,
+}));
+vi.mock("@/lib/learner-store", () => ({ catalogDatabase: async () => ({}) }));
 vi.mock("@/lib/auth/session", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth/session")>()),
   isSignedIn: async () => true,

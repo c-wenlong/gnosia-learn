@@ -1,9 +1,9 @@
-import { NextResponse } from "next/server";
+import type { ProviderName } from "@gnosia/schema/shared";
+import { tutorProviderMoveTurn, tutorProviderRemoveTurn } from "@gnosia/tutor/server/turns";
 
 import { dropByokProvider } from "@/lib/byok-sync";
-import { answer, guard, readBody, readProvider, refuse } from "@/lib/provider-keys/requests";
-import { CHAIN_WRITE_RATE_LIMIT, chainFailed } from "@/lib/tutor-models/requests";
-import { deleteChainProvider, moveChainProvider } from "@/lib/tutor-models/store";
+import { byokField, settingsRoute } from "@/lib/provider-keys/requests";
+import { CHAIN_WRITE_RATE_LIMIT } from "@/lib/tutor-models/requests";
 
 export const runtime = "nodejs";
 
@@ -22,38 +22,10 @@ export const runtime = "nodejs";
  * is the environment's and stays.
  */
 
-async function read(req: Request) {
-  const owner = await guard(req, "write", CHAIN_WRITE_RATE_LIMIT, "tutor-model");
-  if (owner instanceof NextResponse) return owner;
-  const body = await readBody(req);
-  if (body instanceof NextResponse) return body;
-  const provider = readProvider(body);
-  if (provider instanceof NextResponse) return provider;
-  return { owner, body, provider };
-}
+export const PATCH = settingsRoute("tutor-model", CHAIN_WRITE_RATE_LIMIT, tutorProviderMoveTurn);
 
-export async function PATCH(req: Request): Promise<NextResponse> {
-  const got = await read(req);
-  if (got instanceof NextResponse) return got;
-  const direction = got.body.direction;
-  if (direction !== "up" && direction !== "down") return refuse(`"direction" must be "up" or "down".`);
-  try {
-    return answer({ ok: true, chain: await moveChainProvider(got.owner, got.provider, direction) });
-  } catch (error) {
-    return chainFailed("move", error);
-  }
-}
-
-export async function DELETE(req: Request): Promise<NextResponse> {
-  const got = await read(req);
-  if (got instanceof NextResponse) return got;
-  try {
-    const removed = await deleteChainProvider(got.owner, got.provider);
-    // The key went with the provider; it leaves the runner's BYOK list too
-    // (D95), and the answer says whether the runner dropped it.
-    const byok = removed.keyRemoved ? await dropByokProvider(got.provider) : undefined;
-    return answer({ ok: true, ...removed, ...(byok === undefined ? {} : { byok }) });
-  } catch (error) {
-    return chainFailed("remove", error);
-  }
-}
+// The key went with the provider; it leaves the runner's BYOK list too
+// (D95), and the answer says whether the runner dropped it.
+export const DELETE = settingsRoute("tutor-model", CHAIN_WRITE_RATE_LIMIT, tutorProviderRemoveTurn, async (body, answered) =>
+  byokField(answered.keyRemoved === true ? await dropByokProvider(body.provider as ProviderName) : undefined),
+);
