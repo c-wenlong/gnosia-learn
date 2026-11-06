@@ -203,6 +203,14 @@ describe("POST /api/agent/chat with conceptSlug", () => {
     expect(signal?.aborted).toBe(true);
   });
 
+  it("says a closed request was closed, not that every provider failed", async () => {
+    readConceptWorkspace.mockResolvedValue({ state: "ok", workspace });
+    completeWithFallback.mockResolvedValue({ ok: false, attempts: [], code: "CANCELLED" });
+    const { status, json } = await call({ conceptSlug: "dot-product", messages: [{ role: "user", content: "What is it?" }] });
+    expect(status).toBe(502);
+    expect(json).toMatchObject({ code: "CANCELLED", error: "The request was closed" });
+  });
+
   it("takes a CHECK marker off the reply and returns it beside the prose", async () => {
     readConceptWorkspace.mockResolvedValue({ state: "ok", workspace });
     completeWithFallback.mockResolvedValue({

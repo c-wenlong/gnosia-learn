@@ -1,3 +1,5 @@
+import { isSessionToken } from "./session-core";
+
 /**
  * Recall in the chat, phase 1 (docs/proposals/recall-in-chat.md): the pure
  * rules for a check the concept tutor asks inside its thread.
@@ -194,7 +196,6 @@ export function newVerdict(question: string, requestId: string, source: "probe" 
   };
 }
 
-const TOKEN = /^[A-Za-z0-9_-]{1,128}$/;
 const unit = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n) && n >= 0 && n <= 1;
 
 /**
@@ -206,7 +207,7 @@ const unit = (n: unknown): n is number => typeof n === "number" && Number.isFini
 export function restoreVerdict(value: unknown): Verdict | null {
   if (value === null || typeof value !== "object") return null;
   const v = value as Record<string, unknown>;
-  if (typeof v.question !== "string" || v.question.trim() === "" || !TOKEN.test(String(v.requestId))) return null;
+  if (typeof v.question !== "string" || v.question.trim() === "" || !isSessionToken(v.requestId)) return null;
   if (v.source !== "probe" && v.source !== "teach") return null;
   const r = v.recorded as Record<string, unknown> | null | undefined;
   const recorded: RecordedResult | null =

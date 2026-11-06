@@ -16,10 +16,9 @@ import {
 /**
  * The parts of the asset file route that need no database and no filesystem.
  *
- * They are here rather than folded into the route suite because the route
- * suite skips itself without Postgres, and range arithmetic and header
- * hygiene are exactly the things that should still be a gate on a laptop with
- * the database down.
+ * They are here rather than folded into the route suite because range
+ * arithmetic and header hygiene need no catalog at all, and a test of them
+ * should not have to build one.
  */
 
 describe("parseRange", () => {
