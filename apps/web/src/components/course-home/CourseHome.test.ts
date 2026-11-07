@@ -64,6 +64,10 @@ afterEach(() => {
   learner.state.userResources = {};
   learner.state.notes = {};
   learner.updateNote.mockClear();
+  learner.toggleTopicCompletion.mockClear();
+  learner.addResource.mockClear();
+  learner.removeResource.mockClear();
+  learner.resetCourse.mockClear();
   router.replace.mockClear();
   window.location.hash = "";
 });
@@ -236,6 +240,21 @@ describe("CourseHome", () => {
     window.location.hash = "#resources";
     render();
     expect(router.replace).not.toHaveBeenCalled();
+  });
+
+  it("ticks a topic done through the provider when its Mark done box is pressed", () => {
+    const { host } = render("m1");
+    act(() => topicToggle(host, "m1-a").click());
+    const box = host.querySelector("input[type=checkbox]") as HTMLInputElement;
+    expect(box.checked).toBe(false);
+    act(() => box.click());
+    expect(learner.toggleTopicCompletion).toHaveBeenCalledTimes(1);
+    expect(learner.toggleTopicCompletion).toHaveBeenCalledWith("m1-a");
+  });
+
+  it("opens the landing module when the URL names no module of the course", () => {
+    const { host } = render("nope");
+    expect(heading(host)).toBe("Module 1 title");
   });
 
   it("saves a note edit still pending when the panel goes away", () => {

@@ -118,22 +118,38 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
+  // Reset rather than clear: a once-answer queued by one test would
+  // otherwise answer a call made by the next.
+  for (const mock of [
+    mocks.getDraft,
+    mocks.sendMessage,
+    mocks.abandonDraft,
+    mocks.createDraft,
+    mocks.drawDraft,
+    mocks.drawBoth,
+    mocks.setDraftTrust,
+    mocks.declineSuggestion,
+    mocks.push,
+    mocks.focus,
+    mocks.insertMention,
+    mocks.readStudioHealth,
+    mocks.getByokSettings,
+  ]) {
+    mock.mockReset();
+  }
   mocks.composer = null;
   mocks.events = null;
-  mocks.focus.mockClear();
-  mocks.insertMention.mockClear();
-  mocks.setDraftTrust.mockClear();
-  mocks.declineSuggestion.mockClear();
-  mocks.sendMessage.mockClear();
-  mocks.readStudioHealth.mockClear();
   mocks.lateHandle = false;
   sessionStorage.clear();
   mocks.sendMessage.mockResolvedValue({ ok: true, status: 202, data: { draftId: "d1", seq: 1, note: "" } });
   mocks.abandonDraft.mockResolvedValue({ ok: true, status: 200, data: { draftId: "d1", state: "abandoned", note: "" } });
   mocks.createDraft.mockResolvedValue({ ok: true, status: 201, data: { draftId: "d2", state: "open", note: "" } });
   mocks.drawDraft.mockResolvedValue({ ok: true, status: 200, data: { draftId: "d1", jobId: "j1", state: "drawing", note: "" } });
+  mocks.drawBoth.mockResolvedValue({ ok: true, status: 200, data: { draftId: "d1", results: [], note: "" } });
   mocks.setDraftTrust.mockResolvedValue({ ok: true, status: 200, data: { draftId: "d1", trust: ["video"], note: "" } });
   mocks.declineSuggestion.mockResolvedValue({ ok: true, status: 200, data: { draftId: "d1", declined: ["video"], note: "" } });
+  mocks.readStudioHealth.mockResolvedValue(null);
+  mocks.getByokSettings.mockResolvedValue({ ok: false, status: 502, refusal: { error: "the studio runner is not answering", detail: null } });
 });
 
 const mounted: Array<() => void> = [];

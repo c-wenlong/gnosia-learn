@@ -24,6 +24,23 @@ describe("PageLoading, full", () => {
   });
 });
 
+describe("PageLoading, app", () => {
+  it("is the default frame every page's loading.tsx draws", () => {
+    const html = renderToStaticMarkup(PageLoading());
+    expect(html).toMatch(/<p role="status" class="sr-only">Loading<\/p><div data-layout="app" aria-busy="true"/);
+    expect(html).toContain("animate-fade-in-late");
+  });
+});
+
+describe("PageLoading, focus", () => {
+  it("is the frame Review and the session page draw, one centred card", () => {
+    const html = renderToStaticMarkup(PageLoading({ layout: "focus" }));
+    expect(html).toMatch(/data-layout="focus" aria-busy="true"/);
+    expect(html).toContain("mx-auto");
+    expect(html).toContain("animate-fade-in-late");
+  });
+});
+
 describe("PageLoading, workspace", () => {
   it("carries the concept page's own root, so the shell is the same height while it loads", () => {
     const html = renderToStaticMarkup(PageLoading({ layout: "workspace", label: "Opening the concept" }));

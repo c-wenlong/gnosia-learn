@@ -119,6 +119,7 @@ beforeEach(() => {
 
 const mounted: Array<() => void> = [];
 afterEach(() => {
+  vi.useRealTimers();
   while (mounted.length) mounted.pop()?.();
   document.querySelectorAll("[data-test-focus]").forEach((element) => element.remove());
 });
@@ -203,13 +204,35 @@ describe("focus, with a composer that loads late", () => {
   it("is taken when the chunk lands, from the dialog's Close, however long that takes", async () => {
     mocks.hold = true;
     focused("close");
-    await mount();
-    // Nothing of the composer exists yet, so nothing can have been focused.
-    expect(mocks.composer).toBeNull();
-    expect(mocks.focus).not.toHaveBeenCalled();
-    // A long wait: no poll gives up on it, which is why there is none.
-    await act(async () => new Promise((resolve) => setTimeout(resolve, 300)));
-    expect(mocks.focus).not.toHaveBeenCalled();
+    // Mounted under fake timers so "however long" is a number the test
+    // picks, and any poll for the composer would have had to fire by the
+    // last advance rather than merely not having fired in 300 real ms.
+    vi.useFakeTimers();
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    try {
+      await act(async () => {
+        root.render(createElement(ExtendStart, { name: "tcp-handshake", title: "TCP handshake", path: "/studio?extend=tcp-handshake", listed: true }));
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      mounted.push(() => {
+        act(() => root.unmount());
+        host.remove();
+      });
+      // Nothing of the composer exists yet, so nothing can have been focused.
+      expect(mocks.composer).toBeNull();
+      expect(mocks.focus).not.toHaveBeenCalled();
+      // A long wait: no poll gives up on it, which is why there is none.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30_000);
+      });
+      expect(mocks.focus).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
     await act(async () => mocks.release());
     await settle();
     expect(mocks.composer).not.toBeNull();

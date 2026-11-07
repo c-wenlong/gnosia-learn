@@ -1,10 +1,31 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { AssetRef } from "@gnosia/catalog/state";
 
 import type { AssetBodyData } from "./asset-body-data";
-import { AssetBody } from "./AssetBody";
+import { AssetBody, type AssetBodyVideo } from "./AssetBody";
+
+/**
+ * The player stands in for `LibraryVideo`: what this file checks is what the
+ * body hands it (its source, its sidecars, the asides under it), not the
+ * player, which is a client component with tests of its own.
+ */
+vi.mock("@/components/library/LibraryVideo", async () => {
+  const { createElement: h } = await import("react");
+  return {
+    LibraryVideo: (props: { src: string; chapters?: unknown[]; transcript?: unknown[]; notes?: unknown }) =>
+      h(
+        "div",
+        {
+          "data-player": props.src,
+          "data-chapters": props.chapters === undefined ? "none" : props.chapters.length,
+          "data-cues": props.transcript === undefined ? "none" : props.transcript.length,
+        },
+        props.notes as never,
+      ),
+  };
+});
 
 /**
  * `AssetBody` drawn from data the server already read: which shape each kind
@@ -31,8 +52,11 @@ function data(asset: Partial<AssetRef> & Pick<AssetRef, "id" | "kind">, over: Pa
   };
 }
 
-const draw = (body: AssetBodyData) =>
-  renderToStaticMarkup(createElement(AssetBody, { data: body, title: "Demo", notes: {}, variant: "page" }));
+const draw = (body: AssetBodyData, video?: AssetBodyVideo) =>
+  renderToStaticMarkup(createElement(AssetBody, { data: body, title: "Demo", notes: {}, variant: "page", video }));
+
+const player: AssetBodyVideo = { heading: null, playback: null, watchedDay: null, favorite: false };
+const videoRow = { id: "video:manimkc:out/demo.mp4", kind: "video", path: "out/demo.mp4" } as const;
 
 describe("AssetBody", () => {
   it("draws a poster as the picture it is, never as its bytes in text", () => {
@@ -119,5 +143,86 @@ describe("AssetBody", () => {
     const html = draw(data({ id: "note:a", kind: "note", path: "learn/concepts/a.md" }, { text: null }));
     expect(html).toContain("This file could not be read.");
     expect(html).toContain(`href="/api/assets/note%3Aa/file"`);
+  });
+
+  it("says a video that cannot be served cannot be shown, and draws no player", () => {
+    const html = draw(data(videoRow, { servable: false, fileProblem: "not-uploaded" }), player);
+    expect(html).toContain("This video cannot be shown here.");
+    expect(html).not.toContain("data-player");
+  });
+
+  it("draws nothing for a servable video it was given no player for", () => {
+    expect(draw(data(videoRow))).toBe("");
+  });
+
+  it("hands a servable video its file and its read sidecars", () => {
+    const html = draw(
+      data(videoRow, {
+        sidecars: {
+          state: "read",
+          chapters: [{ start: 0, end: 60, title: "Opening" }],
+          cues: [
+            { start: 0, end: 5, text: "One." },
+            { start: 5, end: 10, text: "Two." },
+          ],
+          dropped: 0,
+        },
+      }),
+      player,
+    );
+    expect(html).toContain(`data-player="/api/assets/${encodeURIComponent(videoRow.id)}/file"`);
+    expect(html).toContain('data-chapters="1"');
+    expect(html).toContain('data-cues="2"');
+    expect(html).not.toContain("left out");
+  });
+
+  it("says under the video what became of its sidecars", () => {
+    const none = draw(data(videoRow, { sidecars: { state: "none" } }), player);
+    expect(none).toContain("No transcript or chapter sidecar is indexed");
+    expect(none).toContain('data-chapters="none"');
+
+    const unreadable = draw(data(videoRow, { sidecars: { state: "unreadable" } }), player);
+    expect(unreadable).toContain("could not be read back as a transcript");
+    expect(unreadable).toContain('data-cues="none"');
+
+    const cue = { start: 0, end: 5, text: "One." };
+    const one = draw(data(videoRow, { sidecars: { state: "read", chapters: [], cues: [cue], dropped: 1 } }), player);
+    expect(one).toContain("1 entry in the transcript had no usable timecode or text and were left out.");
+    const three = draw(data(videoRow, { sidecars: { state: "read", chapters: [], cues: [cue], dropped: 3 } }), player);
+    expect(three).toContain("3 entries in the transcript");
+  });
+
+  it("draws a servable diagram on its mat, and one that is not as the failure", () => {
+    const row = { id: "diagram:learn/assets/a.svg", kind: "diagram_svg", path: "learn/assets/a.svg" } as const;
+    const shown = draw(data(row));
+    expect(shown).toMatch(/<img [^>]*src="\/api\/assets\/diagram%3Alearn%2Fassets%2Fa\.svg\/file"/);
+
+    const failed = draw(data(row, { servable: false, fileProblem: "not-uploaded" }));
+    expect(failed).toContain("This diagram cannot be shown here.");
+    expect(failed).not.toContain("<img");
+  });
+
+  it("falls back to the raw words for a transcript or chapter list that does not parse", () => {
+    const transcript = draw(data({ id: "t", kind: "transcript", path: "out/a.transcript.json" }, { text: "not json {" }));
+    expect(transcript).toContain("<pre");
+    expect(transcript).toContain("not json {");
+    expect(transcript).not.toContain("<ol");
+
+    const chapters = draw(data({ id: "c", kind: "chapters", path: "out/a.chapters.json" }, { text: "[oops" }));
+    expect(chapters).toContain("<pre");
+    expect(chapters).toContain("[oops");
+    expect(chapters).not.toContain("<ol");
+  });
+
+  it("says a link row with no URL has none, and links nothing", () => {
+    const html = draw(data({ id: "link:a", kind: "link", url: null }));
+    expect(html).toContain("This link has no URL");
+    expect(html).not.toMatch(/<a [^>]*href=/);
+  });
+
+  it("says a row with neither words nor a path names no file", () => {
+    const html = draw(data({ id: "note:a", kind: "note", path: null }, { text: null }));
+    expect(html).toContain("This row names no file.");
+    expect(html).not.toContain("This file could not be read.");
   });
 });
