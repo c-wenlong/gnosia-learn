@@ -103,27 +103,54 @@ final class WebServer {
             // be reported as having said nothing.
             await capture.settle()
             let tail = capture.tail
-            // The dev-singleton case: Next refused the port because the app
-            // dir already has a server, and named where it lives. That
-            // server has no GNOSIA_LOCAL_TOKEN of ours, so the window opens
-            // on the bare URL and the owner signs in once as usual.
-            if let existing = Self.existingServer(in: tail) {
+            switch Self.judge(
+                attempt: attempt, outcome: outcome, tail: tail, root: root,
+                resolverFailure: Checkout.resolverFailure
+            ) {
+            case .adopt(let existing):
                 status = .running(existing)
                 return
-            }
-            // Alive and silent for the whole wait: another port changes
-            // nothing, and the likeliest cause is macOS refusing the child
-            // the checkout's folder.
-            if outcome == .timedOut, tail.isEmpty {
-                status = .failed(Self.withResolverNote(Self.silentMessage(root: root, seconds: Self.readyTimeout)))
+            case .fail(let message):
+                status = .failed(message)
                 return
-            }
-            if attempt == 3 {
-                status = .failed(Self.withResolverNote(tail.isEmpty
-                    ? "The web server did not come up after three ports."
-                    : tail))
+            case .retry:
+                continue
             }
         }
+    }
+
+    /// What one failed attempt leads to.
+    enum AttemptVerdict: Equatable {
+        /// Adopt the dev server already running.
+        case adopt(URL)
+        /// Stop with this message.
+        case fail(String)
+        /// Try another port.
+        case retry
+    }
+
+    /// Decides from what a failed attempt left behind, as a pure rule.
+    nonisolated static func judge(
+        attempt: Int, outcome: ReadyOutcome, tail: String, root: URL, resolverFailure: String?
+    ) -> AttemptVerdict {
+        // The dev-singleton case: Next refused the port because the app
+        // dir already has a server, and named where it lives. That
+        // server has no GNOSIA_LOCAL_TOKEN of ours, so the window opens
+        // on the bare URL and the owner signs in once as usual.
+        if let existing = existingServer(in: tail) { return .adopt(existing) }
+        // Alive and silent for the whole wait: another port changes
+        // nothing, and the likeliest cause is macOS refusing the child
+        // the checkout's folder.
+        if outcome == .timedOut, tail.isEmpty {
+            return .fail(withResolverNote(silentMessage(root: root, seconds: readyTimeout), failure: resolverFailure))
+        }
+        if attempt == 3 {
+            return .fail(withResolverNote(
+                tail.isEmpty ? "The web server did not come up after three ports." : tail,
+                failure: resolverFailure
+            ))
+        }
+        return .retry
     }
 
     /// The failure text for a child that ran the whole wait and printed nothing.
@@ -135,8 +162,8 @@ final class WebServer {
 
     /// The resolver's failure, when it failed, under a launch failure: the
     /// children then ran on the fallback environment, which may be why.
-    private static func withResolverNote(_ message: String) -> String {
-        guard let why = Checkout.resolverFailure else { return message }
+    nonisolated static func withResolverNote(_ message: String, failure: String?) -> String {
+        guard let why = failure else { return message }
         return message + "\n\nThe environment resolver also failed: " + why
     }
 
@@ -246,7 +273,7 @@ final class WebServer {
     }
 
     /// Ninety seconds covers a dev-mode cold compile on a slow machine.
-    static let readyTimeout = 90
+    nonisolated static let readyTimeout = 90
 
     /// Polls the socket until any response arrives — a redirect to
     /// /sign-in still proves the server bound. The process dying first
