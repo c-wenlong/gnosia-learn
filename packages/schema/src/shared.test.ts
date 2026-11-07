@@ -96,3 +96,16 @@ describe("custom providers (docs/TUTOR-MODELS.md, T14)", () => {
     expect(checkProviderLabel("bad\u0007name").ok).toBe(false);
   });
 });
+
+describe("narrationSeconds", () => {
+  it("predicts the video from the characters, the rate and the over-speech factor", async () => {
+    const { narrationSeconds, VIDEO_OVER_SPEECH } = await import("./shared");
+    expect(narrationSeconds(["abcd", "ef"], 2)).toBeCloseTo(3 * VIDEO_OVER_SPEECH);
+    expect(narrationSeconds([], 15)).toBe(0);
+  });
+
+  it("is NaN without a usable rate, so a caller shows unknown", async () => {
+    const { narrationSeconds } = await import("./shared");
+    for (const rate of [undefined, 0, -1, Number.NaN]) expect(narrationSeconds(["hello"], rate)).toBeNaN();
+  });
+});

@@ -993,3 +993,28 @@ export function canonical(value: unknown): JsonValue {
 export function canonicalJson(value: unknown): string {
   return JSON.stringify(canonical(value));
 }
+
+/**
+ * A studio video's narration timing, shared by the web app's brief card and
+ * the studio runner's validator and gate so the two cannot predict different
+ * lengths for the same script. The speech rate itself is gnosia-audio's,
+ * which each side reads at run time (the runner from `home --json`, the card
+ * from the runner's `/api/health`), so it is a parameter here.
+ */
+
+/** The voice value for a video with no narration. */
+export const SILENT_VOICE = "none";
+
+/** The finished video over the speech: 1.03 to 1.15 measured, 1.08 taken. */
+export const VIDEO_OVER_SPEECH = 1.08;
+
+/**
+ * Seconds of video the given narration lines predict at `charsPerSecond`.
+ * NaN when there is no usable rate, which a caller shows as unknown rather
+ * than guess.
+ */
+export function narrationSeconds(lines: readonly string[], charsPerSecond: number | undefined): number {
+  if (charsPerSecond === undefined || !(charsPerSecond > 0)) return Number.NaN;
+  const characters = lines.reduce((sum, line) => sum + line.length, 0);
+  return (characters / charsPerSecond) * VIDEO_OVER_SPEECH;
+}
