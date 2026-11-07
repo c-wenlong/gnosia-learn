@@ -162,7 +162,7 @@ export function chapterSegments(
 }
 
 /** The longest caption shown at once, in characters: about two lines. */
-export const CAPTION_CHARS = 84;
+const CAPTION_CHARS = 84;
 
 /**
  * A spoken line cut into captions of at most `maxChars`, each with its share

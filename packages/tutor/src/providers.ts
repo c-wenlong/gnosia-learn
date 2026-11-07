@@ -741,7 +741,7 @@ export type KeyTestResult =
 const KEY_TEST_REPLY_MAX_BYTES = 256 * 1024;
 
 /** How long a Test waits for the provider before calling it a failure. */
-export const KEY_TEST_TIMEOUT_MS = 15_000;
+const KEY_TEST_TIMEOUT_MS = 15_000;
 
 /**
  * One minimal call with one key and one model (`config.model`): the key Test
@@ -818,7 +818,7 @@ export type ModelListResult =
   | { ok: false; status: number | null; message: string };
 
 /** How long a model list waits for the provider. */
-export const MODEL_LIST_TIMEOUT_MS = 10_000;
+const MODEL_LIST_TIMEOUT_MS = 10_000;
 
 /** The most a list may be: OpenRouter's, the longest, is about 2 MB and 350 models. */
 export const MODEL_LIST_MAX_BYTES = 8 * 1024 * 1024;

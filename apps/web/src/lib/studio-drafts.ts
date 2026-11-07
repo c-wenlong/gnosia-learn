@@ -340,7 +340,7 @@ export interface DraftSummary {
  * Past this the answer is `RUNNER_SLOW`, and a retry with the same key joins
  * the create still running.
  */
-export const SOURCE_CREATE_TIMEOUT_MS = 240_000;
+const SOURCE_CREATE_TIMEOUT_MS = 240_000;
 
 /**
  * `POST /api/drafts`: a new conversation, or one opened on a diagram to

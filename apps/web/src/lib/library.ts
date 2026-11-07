@@ -414,10 +414,10 @@ export function courseFacets(
 /* -------------------------------------------------------------------------- */
 
 /** The longest query the page reads; the rest is ignored rather than refused. */
-export const MAX_QUERY_CHARS = 200;
+const MAX_QUERY_CHARS = 200;
 
 /** The most words a query is split into. */
-export const MAX_QUERY_TERMS = 8;
+const MAX_QUERY_TERMS = 8;
 
 /**
  * A query as the words every match must contain: lowercased, split on
@@ -446,7 +446,7 @@ export function matchesAll(haystack: string, terms: readonly string[]): boolean 
  * What a row is called, for search: its title, its filename and its URL. The
  * filename matters for the rows with no title, which the card names by it.
  */
-export function searchableName(row: {
+function searchableName(row: {
   title: string | null;
   path: string | null;
   url: string | null;

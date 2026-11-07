@@ -82,11 +82,11 @@ export const CONTENT_TYPES = [
 export type ContentType = (typeof CONTENT_TYPES)[number];
 
 /** Where a content type is read from: the files, or the database after its flip. */
-export const CONTENT_SOURCES = ["files", "db"] as const;
+const CONTENT_SOURCES = ["files", "db"] as const;
 export type ContentSourceName = (typeof CONTENT_SOURCES)[number];
 
 /** Whether this database takes writes. Exactly one database is `primary` at any time (D2). */
-export const INSTANCE_ROLES = ["primary", "copy"] as const;
+const INSTANCE_ROLES = ["primary", "copy"] as const;
 export type InstanceRole = (typeof INSTANCE_ROLES)[number];
 
 /**

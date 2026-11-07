@@ -31,7 +31,7 @@ export type ConceptNoteRead =
     };
 
 /** The largest note this will read. The longest in the corpus is under 20kB. */
-export const NOTE_READ_LIMIT = 256 * 1024;
+const NOTE_READ_LIMIT = 256 * 1024;
 
 /** Read and parse one concept's note. Degrades to a reason, never throws. */
 export async function readConceptNote(source: ContentSource, slug: string): Promise<ConceptNoteRead> {

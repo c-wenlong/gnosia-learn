@@ -24,7 +24,7 @@ export const THINKING = "The planner is thinking";
 export const CHECKING_BRIEF = "Checking the brief";
 export const STILL_ANSWERING = "The planner is still answering.";
 export const EDITING_BRIEF = "Save or cancel your edits to the brief first.";
-export const CUT_OFF = "The reply was cut off.";
+const CUT_OFF = "The reply was cut off.";
 export const GONE = "This conversation is gone. Drafts are kept seven days.";
 
 /* -------------------------------------------------------------------------- */

@@ -404,7 +404,7 @@ export function mergeStreams(streams: readonly { items: readonly RecentItem[]; m
 /* Day headings                                                               */
 /* -------------------------------------------------------------------------- */
 
-export const DAY_GROUPS = ["Today", "Yesterday", "Previous 7 days", "Previous 30 days", "Older"] as const;
+const DAY_GROUPS = ["Today", "Yesterday", "Previous 7 days", "Previous 30 days", "Older"] as const;
 
 export interface RecentGroup<T> {
   label: (typeof DAY_GROUPS)[number];
@@ -452,9 +452,9 @@ export interface PinnedRow {
 }
 
 /** The most pins kept. */
-export const MAX_PINS = 50;
+const MAX_PINS = 50;
 /** The longest title kept. */
-export const MAX_RECENT_TITLE = 200;
+const MAX_RECENT_TITLE = 200;
 const MAX_HREF = 1_000;
 const MAX_KEY = 600;
 
@@ -492,7 +492,7 @@ export function cleanTitle(value: unknown): string | null {
 }
 
 /** One stored pin read back, or null when it is not one. */
-export function asPinnedRow(value: unknown): PinnedRow | null {
+function asPinnedRow(value: unknown): PinnedRow | null {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
   const raw = value as Record<string, unknown>;
   const kind = raw.kind;

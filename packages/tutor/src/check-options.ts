@@ -25,7 +25,7 @@ import { firstObject } from "./session-question";
 export const CHECK_OPTIONS_VERSION = 1;
 
 /** The longest question and answer the prompt quotes. */
-export const CHECK_TEXT_LIMIT = 1_200;
+const CHECK_TEXT_LIMIT = 1_200;
 
 /**
  * The system prompt. The question and answer are quoted as data, as the note
@@ -75,7 +75,7 @@ export const CHECK_OPTIONS_REQUEST = "Write the three wrong options now, as JSON
 export type ParsedOptions = { ok: true; options: string[] } | { ok: false; reason: string };
 
 /** How two options are compared: lowercase, runs of space collapsed, no closing full stop. */
-export function optionKey(text: string): string {
+function optionKey(text: string): string {
   return text.toLowerCase().replace(/\s+/g, " ").trim().replace(/[.!?;:,]+$/, "").trim();
 }
 

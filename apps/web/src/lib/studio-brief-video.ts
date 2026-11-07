@@ -108,10 +108,10 @@ export function switchedTool<T extends Pick<VideoBrief, "tool" | "toolReason">>(
 }
 
 /** The voice value for a video with no narration. */
-export const SILENT = "none";
+const SILENT = "none";
 
 /** The finished video over the speech: 1.03 to 1.15 measured, 1.08 taken. */
-export const VIDEO_OVER_SPEECH = 1.08;
+const VIDEO_OVER_SPEECH = 1.08;
 
 export function isNarrated(brief: Pick<VideoBrief, "voice">): boolean {
   return brief.voice !== SILENT;
@@ -123,7 +123,7 @@ export function isNarrated(brief: Pick<VideoBrief, "voice">): boolean {
  * one) the answer is NaN, which the length lines show as unknown rather than
  * guess.
  */
-export function secondsForLines(lines: readonly string[], charsPerSecond: number | undefined): number {
+function secondsForLines(lines: readonly string[], charsPerSecond: number | undefined): number {
   if (charsPerSecond === undefined || !(charsPerSecond > 0)) return Number.NaN;
   const characters = lines.reduce((sum, line) => sum + line.length, 0);
   return (characters / charsPerSecond) * VIDEO_OVER_SPEECH;

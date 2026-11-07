@@ -28,10 +28,10 @@ export const WEEK_CHECK_LIMIT = 24;
  * concept from the 0.25 prior to 0.97 with the default parameters
  * (`scripts/learn/lib/bkt.mjs`), so three is the number that can finish one.
  */
-export const WEEK_CHECK_PER_CONCEPT = 3;
+const WEEK_CHECK_PER_CONCEPT = 3;
 
 /** p(L) at which a concept counts as mastered: `MASTERY_THRESHOLD` in `bkt.mjs`, which the web app does not import. */
-export const MASTERED_AT = 0.95;
+const MASTERED_AT = 0.95;
 
 /** "Up to N questions": three a concept, never past the limit. */
 export function weekCheckBound(concepts: number): number {

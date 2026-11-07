@@ -128,7 +128,7 @@ export const MAX_TRACKED_CLIENTS = 10_000;
  * How often a store is swept for expired windows. Sweeping on every call made
  * each request with a new key a walk over up to `MAX_TRACKED_CLIENTS` entries.
  */
-export const SWEEP_INTERVAL_MS = 1_000;
+const SWEEP_INTERVAL_MS = 1_000;
 
 interface RateLimitEntry {
   count: number;
@@ -222,7 +222,7 @@ export function checkRateLimit(
  * so with `TRUST_PROXY=1`. Without either, those headers are whatever the
  * client typed.
  */
-export function trustsProxy(env: Record<string, string | undefined> = process.env): boolean {
+function trustsProxy(env: Record<string, string | undefined> = process.env): boolean {
   return env.VERCEL === "1" || env.TRUST_PROXY === "1" || env.TRUST_PROXY === "true";
 }
 

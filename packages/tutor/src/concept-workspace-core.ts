@@ -258,7 +258,7 @@ export function noteBody(source: string): string {
 }
 
 /** How many recent answers the tutor is shown. */
-export const PROMPT_RECENT_ANSWERS = 5;
+const PROMPT_RECENT_ANSWERS = 5;
 
 /** The tutor's view of a workspace: what `buildConceptSessionContext` takes. */
 export function toConceptPromptInput(workspace: ConceptWorkspace): ConceptPromptInput {

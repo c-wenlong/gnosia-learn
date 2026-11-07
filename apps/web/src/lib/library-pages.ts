@@ -36,10 +36,10 @@ import { compareSortKeys, type LibrarySort, type SortKey } from "@/lib/library";
  */
 
 /** Rows a page aims for. */
-export const PAGE_SIZE = 50;
+const PAGE_SIZE = 50;
 
 /** The most rows a page may hold when it is rounded up to finish its last group. */
-export const PAGE_MAX = 100;
+const PAGE_MAX = 100;
 
 /** Where the last row drawn sits: its group, its course module when the grouping has them, and its sort key. */
 export interface PageCursor {

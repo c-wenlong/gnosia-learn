@@ -182,9 +182,9 @@ export type ProviderId = (typeof PROVIDER_IDS)[number];
  * `provider` columns as a built-in's, so its key is a `provider_key` row and
  * its models are chain entries like any other.
  */
-export const CUSTOM_PROVIDER_PREFIX = "custom-";
+const CUSTOM_PROVIDER_PREFIX = "custom-";
 /** `custom-`, then 1 to 40 lowercase letters, digits and hyphens, not starting or ending with a hyphen. */
-export const CUSTOM_PROVIDER_ID_PATTERN = /^custom-[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/;
+const CUSTOM_PROVIDER_ID_PATTERN = /^custom-[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/;
 /** The same rule, written for the table's CHECK (a JavaScript pattern, read by the `regexp` function `connect` registers). */
 export const CUSTOM_PROVIDER_ID_SQL = "^custom-[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$";
 export type CustomProviderId = `custom-${string}`;
@@ -306,7 +306,7 @@ export function providerLabel(value: string): string {
 }
 
 /** Whether `value` names a provider the tutor knows. */
-export function isProviderId(value: unknown): value is ProviderId {
+function isProviderId(value: unknown): value is ProviderId {
   return typeof value === "string" && (PROVIDER_IDS as readonly string[]).includes(value);
 }
 

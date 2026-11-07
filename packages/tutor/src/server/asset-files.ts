@@ -192,7 +192,7 @@ export function blobStoreProblem(error: unknown): AssetFileProblem {
  * store. `name` is what the saved file is called: the asset's logical path,
  * whose extension is replaced by the object's (a poster is `<video>.jpg`).
  */
-export async function resolveBlob(seams: AssetSeams, blob: AssetBlob, name: string): Promise<AssetStored | AssetFileProblem> {
+async function resolveBlob(seams: AssetSeams, blob: AssetBlob, name: string): Promise<AssetStored | AssetFileProblem> {
   if (blob.state !== "present") {
     return notUploaded(
       `Asset ${blob.assetId} is kept in the blob store and its upload has not been confirmed. Rerun the upload.`,
@@ -257,7 +257,7 @@ const ROW_CONTENT_TYPES: Readonly<Record<ContentType, string | undefined>> = {
 };
 
 /** The kinds `ROW_KINDS` covers, for a caller deciding servability without the text. */
-export function rowTypeFor(kind: string): ContentType | null {
+function rowTypeFor(kind: string): ContentType | null {
   return ROW_KINDS[kind] ?? null;
 }
 
@@ -283,7 +283,7 @@ const notFlipped = (error: ContentUnavailableError): AssetFileProblem => ({
  * the route answers `catalog-unreachable`; only a type that is not flipped is
  * an answer of its own.
  */
-export async function resolveRowText(
+async function resolveRowText(
   seams: AssetSeams,
   db: CatalogDatabase,
   row: AssetRef,

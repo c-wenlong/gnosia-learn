@@ -130,7 +130,7 @@ function withoutRewrite(item: ReviewItem): ReviewItem {
  * The most cards one session asks. A long backlog renders, and reads a note
  * for, only this many; the close screen says more are due.
  */
-export const REVIEW_SESSION_LIMIT = 50;
+const REVIEW_SESSION_LIMIT = 50;
 
 /** The session, without the request marker. For route handlers and tests. */
 export async function readReviewSession(

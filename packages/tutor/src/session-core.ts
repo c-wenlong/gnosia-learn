@@ -338,7 +338,7 @@ export function parseMode(value: unknown): ConceptSessionMode {
 }
 
 /** The most checks Quiz me asks in one session. */
-export const MAX_QUIZ_CHECKS = 5;
+const MAX_QUIZ_CHECKS = 5;
 
 /**
  * The steps a session walks through.
@@ -795,7 +795,7 @@ export function scheduledCards(
 }
 
 /** The longest prefill "Ask the tutor" puts in the workspace input. */
-export const PREFILL_LIMIT = 1_200;
+const PREFILL_LIMIT = 1_200;
 
 /**
  * What "Ask the tutor" prefills in the workspace chat: the question, what the

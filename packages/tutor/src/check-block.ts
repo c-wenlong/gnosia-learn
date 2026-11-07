@@ -36,7 +36,7 @@ import { CHAT_ANSWER_LIMIT, CHECK_QUESTION_LIMIT, splitCheck, type RecordedResul
  */
 
 /** How many options a choice check may have. */
-export const CHOICE_OPTIONS = { min: 3, max: 5 } as const;
+const CHOICE_OPTIONS = { min: 3, max: 5 } as const;
 
 /** The confidence stops the card offers, in percent. 50 is where it rests. */
 export const CONFIDENCE_STOPS = [0, 30, 50, 70, 90, 100] as const;

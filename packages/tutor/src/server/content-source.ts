@@ -143,7 +143,7 @@ export function selectContentSource(hooks: ContentSourceHooks): SelectedSource {
  * arrives as an error with an empty message and a `code` (`ECONNREFUSED`),
  * so the innermost code is added when no message says it.
  */
-export function cause(error: unknown): string {
+function cause(error: unknown): string {
   let message = error instanceof Error ? error.message : String(error);
   let code: string | null = null;
   let current: unknown = error;

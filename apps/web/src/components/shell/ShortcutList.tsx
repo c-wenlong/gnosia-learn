@@ -18,7 +18,7 @@ export function useIsMac(serverGuess = false): boolean {
 }
 
 /** One key, as Manus draws it: a 26px cap, radius 6, a hairline, the key in 13px secondary text. */
-export const KEYCAP = cx(
+const KEYCAP = cx(
   "inline-flex h-[26px] min-w-[26px] items-center justify-center rounded-md border border-hair bg-page px-1.5",
   "font-sans text-[13px] leading-none text-text2",
 );

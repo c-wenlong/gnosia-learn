@@ -34,7 +34,7 @@ import { jobStateLabel } from "@/lib/studio-job-state";
 /* -------------------------------------------------------------------------- */
 
 /** The runner's names for the manimkc-video skill's steps (`VideoStep` in `video/types.ts`). */
-export const VIDEO_STEP_NAMES = [
+const VIDEO_STEP_NAMES = [
   "storyboard",
   "narration",
   "setup",
@@ -467,7 +467,7 @@ function furthestRunning(steps: readonly VideoStep[]): VideoStepName | null {
 const REPEATS = new Set<VideoStepName>(["narration", "scene-code", "lint", "preview", "look", "build"]);
 
 /** The step happening now, or null when none is. */
-export function currentStep(job: VideoJob): VideoStepName | null {
+function currentStep(job: VideoJob): VideoStepName | null {
   if (job.state !== "running") return null;
   const running = furthestRunning(job.steps);
   if (running !== null) return running;

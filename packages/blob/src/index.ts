@@ -13,5 +13,5 @@ export {
   type BlobStat,
   type BlobStore,
 } from "./store";
-export { isKey, isOwnerId, key, parseKey, type ParsedKey } from "./key";
+export { isKey, key, parseKey, type ParsedKey } from "./key";
 export { defaultBlobRoot, fsStore } from "./fs";

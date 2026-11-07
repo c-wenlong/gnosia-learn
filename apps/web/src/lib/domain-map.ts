@@ -3,7 +3,6 @@ import { Graph, layout as dagreLayout } from "@dagrejs/dagre";
 import { reduceEdges, type GraphEdge, type GraphNode } from "@gnosia/tutor/concept-graph";
 import {
   AXES_TOP,
-  AXIS_BAND,
   axesGeometry,
   DOT_TOP,
   domainTitle,
@@ -358,12 +357,12 @@ export function axesLayout(ids: readonly string[], edges: readonly GraphEdge[]):
   }
 
   const layers = sorted.length === 0 ? 0 : Math.max(...sorted.map((id) => layer[id])) + 1;
-  const column = Math.max(COLUMN_MIN, Math.min(COLUMN_MAX, Math.floor((AXES_MAX_WIDTH - AXIS_BAND - 8) / Math.max(1, layers))));
+  const column = Math.max(COLUMN_MIN, Math.min(COLUMN_MAX, Math.floor((AXES_MAX_WIDTH - TITLE_RESERVE - 8) / Math.max(1, layers))));
   const counts = [...new Set(sorted.map((id) => needed[id]))].sort((a, b) => b - a);
   const most = counts[0] ?? 0;
   const span = Math.max(LOG_SPAN_MIN, Math.min(LOG_SPAN_MAX, (counts.length - 1) * LOG_STEP));
   const onScale = (n: number) => (most === 0 ? AXES_TOP : AXES_TOP + (1 - Math.log1p(n) / Math.log1p(most)) * span);
-  const centre = (l: number) => AXIS_BAND + (l + 0.5) * column;
+  const centre = (l: number) => TITLE_RESERVE + (l + 0.5) * column;
 
   const positions: Record<string, { x: number; y: number }> = {};
   /** The lowest dot placed so far in each layer's column, and in the whole picture. */
@@ -388,8 +387,8 @@ export function axesLayout(ids: readonly string[], edges: readonly GraphEdge[]):
   }
 
   const bottom = sorted.length === 0 ? AXES_TOP : floor;
-  const width = AXIS_BAND + layers * column + 8;
-  const plot = { x: AXIS_BAND, y: AXES_TOP, width: layers * column, height: bottom - AXES_TOP };
+  const width = TITLE_RESERVE + layers * column + 8;
+  const plot = { x: TITLE_RESERVE, y: AXES_TOP, width: layers * column, height: bottom - AXES_TOP };
   // Foundational: the earliest third of the columns, down to the lowest of them in the top half of the scale.
   let zone: AxesLayout["zone"] = null;
   if (most > 0) {

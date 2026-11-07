@@ -19,7 +19,7 @@ import { currentOwner } from "@/lib/owner";
 
 export type { SettingsSnapshot };
 
-export async function readSettings(): Promise<SettingsSnapshot> {
+async function readSettings(): Promise<SettingsSnapshot> {
   return readSettingsCore(catalogDatabase(), await currentOwner());
 }
 

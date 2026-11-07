@@ -7,7 +7,7 @@ import { listDrafts, type DraftSummary } from "@/lib/studio-drafts";
 import { useDraftsWake } from "@/lib/use-drafts-wake";
 
 /** How long typing rests before the runner is asked, so each letter is not a read. */
-export const SEARCH_DEBOUNCE_MS = 200;
+const SEARCH_DEBOUNCE_MS = 200;
 
 /** The most the field takes; the runner refuses a longer `q`. */
 export const SEARCH_MAX = 200;

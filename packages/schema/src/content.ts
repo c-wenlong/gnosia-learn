@@ -91,7 +91,7 @@ export const BLOB_STORED_KINDS = [
  * by the Postgres-to-SQLite port (services/catalog/scripts/pg-to-sqlite.mjs);
  * null only where a port or a test made a row without one.
  */
-export const GENERATED_BY = [
+const GENERATED_BY = [
   "manimkc",
   "remotionkc",
   "revideokc",
@@ -119,11 +119,11 @@ export const SOURCE_REPOS = ["gnosia", "manimkc", "tldrawkc", "remotionkc", "rev
 export type SourceRepo = (typeof SOURCE_REPOS)[number];
 
 /** A `collection` is any ordered container. Courses and modules today, decks next. */
-export const COLLECTION_KINDS = ["course", "module", "deck"] as const;
+const COLLECTION_KINDS = ["course", "module", "deck"] as const;
 export type CollectionKind = (typeof COLLECTION_KINDS)[number];
 
 /** How one concept depends on another. `requires` is hard, `assumes` is soft. */
-export const PREREQUISITE_KINDS = ["requires", "assumes"] as const;
+const PREREQUISITE_KINDS = ["requires", "assumes"] as const;
 export type PrerequisiteKind = (typeof PREREQUISITE_KINDS)[number];
 
 /**
@@ -146,11 +146,11 @@ export const TOPIC_RELATION_KINDS = ["broader", "related", "precedes"] as const;
 export type TopicRelationKind = (typeof TOPIC_RELATION_KINDS)[number];
 
 /** Where a blob's bytes live. `fs` is the laptop's store under `~/.gnosia/blobs`. */
-export const BLOB_PROVIDERS = ["fs", "vercel-blob", "r2"] as const;
+const BLOB_PROVIDERS = ["fs", "vercel-blob", "r2"] as const;
 export type BlobProvider = (typeof BLOB_PROVIDERS)[number];
 
 /** `pending` from the row write until the store confirms the upload, then `present`. */
-export const BLOB_STATES = ["pending", "present"] as const;
+const BLOB_STATES = ["pending", "present"] as const;
 export type BlobState = (typeof BLOB_STATES)[number];
 
 /**

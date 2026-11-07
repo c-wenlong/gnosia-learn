@@ -188,7 +188,7 @@ export const PHASES = [
   { key: "ready", label: "Ready to accept" },
 ] as const;
 
-export function phaseIndex(phase: string | null | undefined): number {
+function phaseIndex(phase: string | null | undefined): number {
   if (phase === null || phase === undefined) return -1;
   return PHASES.findIndex((entry) => entry.key === phase);
 }
