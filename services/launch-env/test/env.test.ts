@@ -84,17 +84,20 @@ describe("the launchers' shared environment (S9-08)", () => {
   it("keeps services/catalog/.env's settings in the process itself, which reads that file once", async () => {
     const home = temp();
     const catalogEnv = join(temp(), "catalog.env");
-    writeFileSync(catalogEnv, `GNOSIA_HOME=${home}\n`);
+    writeFileSync(catalogEnv, `GNOSIA_HOME=${home}\nCATALOG_DOTENV_SETTING=from-the-file\n`);
     const script = `
       const { loadWebEnv, pinCatalogFile } = await import(${JSON.stringify(ENTRY)});
       await loadWebEnv({ appDir: ${JSON.stringify(temp())} });
       await pinCatalogFile();
-      process.stdout.write(JSON.stringify({ home: process.env.GNOSIA_HOME, db: process.env.CATALOG_DB }));
+      process.stdout.write(JSON.stringify({ home: process.env.GNOSIA_HOME, db: process.env.CATALOG_DB, mark: process.env.CATALOG_DOTENV_SETTING }));
     `;
     const { stdout } = await run(process.execPath, ["--import", TSX, "--input-type=module", "-e", script], {
-      env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "", CATALOG_ENV_FILE: catalogEnv },
+      // A temp HOME and GNOSIA_HOME, not the developer's: with the real HOME
+      // and no GNOSIA_HOME, loadWebEnv reads the machine's ~/.gnosia/.env, and
+      // a CATALOG_DB or GNOSIA_HOME line in it changes what this asserts.
+      env: { PATH: process.env.PATH ?? "", HOME: temp(), GNOSIA_HOME: home, CATALOG_ENV_FILE: catalogEnv },
     });
-    expect(JSON.parse(stdout)).toEqual({ home, db: join(home, "catalog.db") });
+    expect(JSON.parse(stdout)).toEqual({ home, db: join(home, "catalog.db"), mark: "from-the-file" });
   });
 
   it("reads the production files when the shell runs next start, as Next would", async () => {
