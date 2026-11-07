@@ -1,3 +1,5 @@
+import { narrationSeconds, SILENT_VOICE, VIDEO_OVER_SPEECH } from "@gnosia/schema/shared";
+
 import { agentModelName, BriefError, SLUG_PATTERN, type Vocabulary } from "../diagram/brief";
 import { charsPerSecond } from "./narration";
 import { isVideoToolName, notInStudio, VIDEO_TOOL_NAMES, type VideoToolName } from "./tools";
@@ -24,8 +26,8 @@ export type VideoMode = (typeof VIDEO_MODES)[number];
 export const AUDIENCES = ["new", "familiar", "expert"] as const;
 export type Audience = (typeof AUDIENCES)[number];
 
-/** The voice value for a video with no narration. */
-export const SILENT = "none";
+/** The voice value for a video with no narration (shared with the web app's card). */
+export const SILENT = SILENT_VOICE;
 
 export interface VideoBeat {
   say: string;
@@ -71,8 +73,6 @@ export interface ValidVideoBrief extends VideoBrief {
   idempotencyKey: string;
 }
 
-/** The finished video over the speech: 1.03 to 1.15 measured, 1.08 taken. */
-export const VIDEO_OVER_SPEECH = 1.08;
 /** How far the script's prediction may sit from the target. */
 export const LENGTH_TOLERANCE = 0.2;
 
@@ -90,10 +90,9 @@ export function predictedSeconds(brief: Pick<VideoBrief, "voice" | "scenes">): n
 
 /** Seconds of video the given narration lines predict. */
 export function secondsForLines(lines: readonly string[]): number {
-  const characters = lines.reduce((sum, line) => sum + line.length, 0);
   // The speech rate is gnosia-audio's (its data/timing.json, read through
   // `home --json` in narration.ts): the median of manimkc's kokoro builds.
-  return (characters / charsPerSecond()) * VIDEO_OVER_SPEECH;
+  return narrationSeconds(lines, charsPerSecond());
 }
 
 /** Lower-case words joined by underscores: a scene's name, which becomes one class and one chapter. */
