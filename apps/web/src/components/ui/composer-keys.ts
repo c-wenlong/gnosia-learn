@@ -36,7 +36,7 @@ export const COMPOSER_REASON = cx("px-1", NOTE);
 /** 15px text on a 24px line, as the tutor's input always had. */
 export const COMPOSER_LINE_PX = 24;
 /** Two 2px borders and two 12px paddings: one line is 52px, the kit height. */
-export const COMPOSER_CHROME_PX = 28;
+const COMPOSER_CHROME_PX = 28;
 /** Past this the textarea scrolls rather than growing. */
 export const COMPOSER_MAX_ROWS = 6;
 
@@ -57,7 +57,7 @@ export function composerHeight(scrollHeight: number, maxRows: number = COMPOSER_
  */
 export const COMPOSER_BOX = "rounded-[20px] border-2 border-border bg-surface transition-colors duration-100";
 /** The field's padding inside the box: 12px over the text and 4px under it, before the row of controls. */
-export const COMPOSER_BOX_PAD_PX = 16;
+const COMPOSER_BOX_PAD_PX = 16;
 /** Lines the box's field shows when empty, so it reads as a place to write a paragraph. */
 export const COMPOSER_BOX_MIN_ROWS = 3;
 /** The box's field height for `rows` lines: what both fields and the loading frame take. */

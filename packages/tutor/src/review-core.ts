@@ -88,8 +88,8 @@ export interface CheckLike {
 }
 
 /** The fewest wrong options a multiple-choice card is worth showing. */
-export const MIN_DISTRACTORS = 2;
-export const MAX_CHOICES = 4;
+const MIN_DISTRACTORS = 2;
+const MAX_CHOICES = 4;
 
 /**
  * FNV-1a over a string. A seed, not a hash anyone relies on: it makes the
@@ -224,7 +224,7 @@ export function formatDue(iso: string | null, now: Date): string | null {
  * Minutes left, at thirty seconds a card. A round number for a header, not a
  * measurement: nothing records how long a review takes.
  */
-export const SECONDS_PER_CARD = 30;
+const SECONDS_PER_CARD = 30;
 export function minutesLeft(cards: number): number {
   return Math.max(0, Math.ceil((cards * SECONDS_PER_CARD) / 60));
 }

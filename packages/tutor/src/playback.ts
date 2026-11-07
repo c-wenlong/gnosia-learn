@@ -35,10 +35,10 @@ export type Playback = {
 export const WATCHED_FRACTION = 0.9;
 
 /** Within this many seconds of the end, the next visit starts from the top. */
-export const RESUME_TAIL_SECONDS = 10;
+const RESUME_TAIL_SECONDS = 10;
 
 /** Before this many seconds, there is nothing worth resuming. */
-export const RESUME_HEAD_SECONDS = 5;
+const RESUME_HEAD_SECONDS = 5;
 
 /** Longest video accepted, in seconds. A bound on a number a browser sends. */
 export const MAX_DURATION_SECONDS = 24 * 60 * 60;
@@ -71,7 +71,7 @@ export function mergeRanges(ranges: readonly Range[]): Range[] {
 }
 
 /** Clip every range into `[0, duration]`. */
-export function clampRanges(ranges: readonly Range[], duration: number): Range[] {
+function clampRanges(ranges: readonly Range[], duration: number): Range[] {
   return mergeRanges(
     ranges.map(([start, end]): Range => [Math.max(0, start), Math.min(duration, end)]),
   );

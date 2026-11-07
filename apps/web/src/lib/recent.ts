@@ -81,7 +81,7 @@ export interface RecentRows {
  * with the `visit` events (`moduleVisits`) until the preference is left
  * unread, one release after the events began.
  */
-export function storedVisits(preferences: Record<string, unknown>): ModuleVisit[] {
+function storedVisits(preferences: Record<string, unknown>): ModuleVisit[] {
   const list = asRecentModules(preferences[PREFERENCE_KEYS.recentModules]);
   if (list !== undefined) return list;
   const last = asLastVisited(preferences[PREFERENCE_KEYS.lastVisited]);
@@ -89,7 +89,7 @@ export function storedVisits(preferences: Record<string, unknown>): ModuleVisit[
 }
 
 /** Where a visit points, read from the courses; null when the course or module is gone. */
-export function modulePlace(courses: readonly Course[], visit: ModuleVisit): ModulePlace | null {
+function modulePlace(courses: readonly Course[], visit: ModuleVisit): ModulePlace | null {
   const course = courses.find((c) => c.slug === visit.courseSlug);
   if (course === undefined) return null;
   const found = visit.moduleSlug === undefined ? undefined : course.modules.find((m) => m.slug === visit.moduleSlug);
@@ -109,7 +109,7 @@ export function modulePlace(courses: readonly Course[], visit: ModuleVisit): Mod
  * costs the video rows (an untitled row would have nothing to say), not the
  * list.
  */
-export async function videoProgress(
+async function videoProgress(
   db: CatalogDatabase,
   preferences: Record<string, unknown>,
   scope: OwnerScope,
@@ -154,7 +154,7 @@ function sessionLogId(sessionId: string): string {
  * test, a goal that names no concept) has nowhere to go back to and is left
  * out, as a video whose asset is gone is.
  */
-export async function sessionTouches(
+async function sessionTouches(
   db: CatalogDatabase,
   sessions: readonly RecentSession[],
   scope: OwnerScope,
@@ -213,7 +213,7 @@ export async function recentSources(db: CatalogDatabase, rows: RecentRows, scope
 /* -------------------------------------------------------------------------- */
 
 /** The most courses the section lists. */
-export const SIDEBAR_COURSES = 12;
+const SIDEBAR_COURSES = 12;
 
 /**
  * The courses the owner has opened, newest visit first: the courses of the
@@ -223,7 +223,7 @@ export const SIDEBAR_COURSES = 12;
  * set aside on the Courses page is left out, as Home leaves it out. Each
  * opens at the module visited last in it.
  */
-export function sidebarCourses(
+function sidebarCourses(
   courses: readonly Course[],
   visits: readonly ModuleVisit[],
   snapshot: { completed: Readonly<Record<string, true>>; inactiveCourses: readonly string[] },

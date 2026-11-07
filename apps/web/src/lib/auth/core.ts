@@ -158,7 +158,7 @@ let heldKey: { inputs: SessionKeyInputs; key: Promise<CryptoKey> } | null = null
  * elsewhere. The derived key is kept for the process, so the rounds are paid
  * once per configuration, not per request.
  */
-export function sessionKey(inputs: SessionKeyInputs): Promise<CryptoKey> {
+function sessionKey(inputs: SessionKeyInputs): Promise<CryptoKey> {
   const held = heldKey;
   if (held !== null && held.inputs.secret === inputs.secret && held.inputs.password === inputs.password && held.inputs.epoch === inputs.epoch) {
     return held.key;

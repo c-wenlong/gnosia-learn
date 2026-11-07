@@ -14,7 +14,7 @@
  */
 
 /** The shortest run of a key's characters treated as an echo of it. */
-export const ECHO_CHARS = 6;
+const ECHO_CHARS = 6;
 
 export const REDACTED = "[redacted]";
 

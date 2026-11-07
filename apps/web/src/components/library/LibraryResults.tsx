@@ -27,7 +27,7 @@ type Page = LibraryPage<ReactNode>;
 type Status = "idle" | "loading" | "failed" | "stale";
 
 /** Placeholders a loading page shows: a screen's worth in each layout, or fewer when fewer rows are left. */
-export const SKELETON_ROWS = { list: 12, grid: 6 } as const;
+const SKELETON_ROWS = { list: 12, grid: 6 } as const;
 
 /** Loads a screen ahead of the reader: the sentinel counts as seen a viewport before it is. */
 const AHEAD = "0px 0px 100% 0px";

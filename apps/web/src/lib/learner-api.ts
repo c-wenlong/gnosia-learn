@@ -79,7 +79,7 @@ export async function requestOwner(): Promise<string | NextResponse> {
   }
 }
 
-export function badRequest(message: string): NextResponse {
+function badRequest(message: string): NextResponse {
   return NextResponse.json({ ok: false, error: message, code: "BAD_REQUEST" }, { status: 400 });
 }
 
@@ -89,7 +89,7 @@ export function badRequest(message: string): NextResponse {
  * drizzle message is the failed SQL with its bind parameters, which here are
  * the learner's notes, recaps and answers.
  */
-export function unavailable(error: unknown): NextResponse {
+function unavailable(error: unknown): NextResponse {
   console.warn(`learner write failed (${failureCode(error)})`);
   return NextResponse.json(
     { ok: false, error: "Not saved: the database is unreachable.", code: "STORE_UNAVAILABLE" },

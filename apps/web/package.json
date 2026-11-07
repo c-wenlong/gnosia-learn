@@ -13,9 +13,6 @@
   "//dependencies": "@gnosia/catalog and @gnosia/schema were resolved through workspace hoisting before this file existed. They are declared now, because a workspace that imports a package without depending on it breaks the moment the hoist changes.",
   "dependencies": {
     "@dagrejs/dagre": "^3.1.1",
-    "@lexical/clipboard": "0.52.0",
-    "@lexical/history": "0.52.0",
-    "@lexical/plain-text": "0.52.0",
     "@lexical/react": "0.52.0",
     "@lexical/utils": "0.52.0",
     "@gnosia/blob": "*",

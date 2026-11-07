@@ -12,7 +12,7 @@
  * companion — that is the safe default, since a new kind must be opted out of
  * being silently filtered out by a list nobody remembered to update.
  */
-export const COMPANION_KINDS: ReadonlySet<string> = new Set([
+const COMPANION_KINDS: ReadonlySet<string> = new Set([
   "transcript",
   "captions",
   "chapters",

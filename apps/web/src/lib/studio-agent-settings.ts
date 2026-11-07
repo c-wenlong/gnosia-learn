@@ -200,7 +200,7 @@ export function agentDefaults(raw: unknown): AgentDefaults | null {
 }
 
 /** "Claude Code default (Fable 5.1)", or without the name when it is not known. */
-export function defaultLabel(resolved: string | null | undefined, known: boolean, words: (value: string) => string = (value) => value): string {
+function defaultLabel(resolved: string | null | undefined, known: boolean, words: (value: string) => string = (value) => value): string {
   if (!known) return "Claude Code default";
   return resolved === null || resolved === undefined ? "Claude Code default (the CLI's own)" : `Claude Code default (${words(resolved)})`;
 }

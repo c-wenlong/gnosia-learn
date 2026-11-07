@@ -344,6 +344,6 @@ export async function readAssetTextFor(
   }
 }
 
-export function warn(what: string, error: unknown): void {
+function warn(what: string, error: unknown): void {
   console.warn(`asset library: ${what} unavailable (${failureCode(error)})`);
 }

@@ -20,7 +20,6 @@
  */
 
 export { ContentError } from "./errors";
-export { moduleNumber, modulePlace, numberedTitle } from "./module-number";
 export {
   COURSE_COVER_EXTENSIONS,
   COURSES_DIR,
@@ -53,7 +52,6 @@ export {
 export {
   CONTENT_TYPES,
   METHOD_TYPES,
-  SOURCE_KINDS,
   type ConceptNoteSource,
   type ContentSource,
   type ContentType,

@@ -3,7 +3,6 @@ import "server-only";
 import type { ProviderName } from "@gnosia/schema/shared";
 import {
   failureCode,
-  NoKeySecretError,
   openSavedKeys as openSavedKeysCore,
   savedKeyStatuses as savedKeyStatusesCore,
   saveProviderKey as saveProviderKeyCore,
@@ -18,7 +17,7 @@ import { catalogDatabase } from "@/lib/learner-store";
  * pool and its `process.env`.
  */
 
-export { failureCode, NoKeySecretError };
+export { failureCode };
 export type { SavedKeyStatus };
 
 export async function savedKeyStatuses(owner: string): Promise<SavedKeyStatus[]> {

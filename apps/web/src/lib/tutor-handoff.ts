@@ -84,9 +84,9 @@ export function tagSendBlock(value: Value, options: readonly MentionOption<TagKi
 }
 
 /** How many tutor turns a hand-off carries (D69): three exchanges. */
-export const HANDOFF_TURNS = 6;
+const HANDOFF_TURNS = 6;
 /** The most characters of them it carries, the newest kept first. */
-export const HANDOFF_CHARS = 6_000;
+const HANDOFF_CHARS = 6_000;
 
 /**
  * The tutor turns a tagged message takes to the studio (D69): the last six,
@@ -124,7 +124,7 @@ export function handoffTurns(
  * same field, and the plain one stops typing there (`maxLength`). The studio
  * dropped its own cap (#231), so this is the tutor's, not the planner's.
  */
-export const TUTOR_INPUT_LIMIT = 4_000;
+const TUTOR_INPUT_LIMIT = 4_000;
 
 /**
  * Why Send waits on the length of what is in the @ field, or null. Only Send:

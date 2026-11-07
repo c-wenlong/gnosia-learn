@@ -30,7 +30,7 @@ export function answer(body: unknown, status = 200): NextResponse {
   return NextResponse.json(body, { status, headers: { "Cache-Control": "no-store" } });
 }
 
-export function refuse(error: string, code = "BAD_REQUEST", status = 400): NextResponse {
+function refuse(error: string, code = "BAD_REQUEST", status = 400): NextResponse {
   return answer({ ok: false, error, code }, status);
 }
 
