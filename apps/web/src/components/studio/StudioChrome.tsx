@@ -30,6 +30,9 @@ import { Glyph } from "@/components/ui/Glyph";
  * drew a 6px box with no focus ring; the lint rule `gnosia/studio-kit` fails if a studio
  * file exports one of those names again or hand-builds such a control. The
  * tile and the home view's sheet are studio-local surfaces, in `surfaces.ts`.
+ * The inspector's `label · value` rows are the kit's `FactList` at
+ * `density="dense"` (it was a `MetaRow` of plain `div`s here, with no list
+ * semantics).
  */
 
 /**
@@ -85,16 +88,6 @@ export function PanelHeading({ children }: { children: ReactNode }) {
     <h2 className={cx(LABEL, "mb-2")}>
       {children}
     </h2>
-  );
-}
-
-/** One `label · value` row in the inspector. 32px, the dense rhythm. */
-export function MetaRow({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex min-h-8 items-start gap-3 border-b border-border py-1.5 last:border-b-0">
-      <span className="w-24 shrink-0 text-xs text-text2">{label}</span>
-      <span className="min-w-0 flex-1 break-words text-xs text-text">{children}</span>
-    </div>
   );
 }
 

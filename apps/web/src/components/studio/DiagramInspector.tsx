@@ -3,13 +3,14 @@ import { FadeImg } from "@/components/studio/motion-parts";
 import { PanelLink } from "@/components/studio/PanelLink";
 import { exportSvg, inspectDiagram, verifySvg } from "@/app/(app)/studio/actions";
 import { ExtendLink } from "@/components/studio/ExtendLink";
-import { MetaRow, Mono, PanelHeading } from "@/components/studio/StudioChrome";
+import { Mono, PanelHeading } from "@/components/studio/StudioChrome";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { VerbSubmit } from "@/components/studio/VerbSubmit";
 import { Glyph } from "@/components/ui/Glyph";
 import { buttonClasses, cx } from "@/components/ui/classes";
 import { Callout } from "@/components/ui/Callout";
+import { FactList } from "@/components/ui/FactList";
 import { jobStateLabel } from "@/lib/studio-job-state";
 import { canvasHref, panelHref, thumbnailHref } from "@/lib/studio-url";
 import { formatBytes } from "@gnosia/tutor/asset-meta";
@@ -189,50 +190,56 @@ function SelectedDiagram({
 
       <div className="mt-4">
         <PanelHeading>Details</PanelHeading>
-        <MetaRow label="Concepts">
-          {diagram.concepts.length === 0 ? (
-            <span className="text-text2">none recorded</span>
-          ) : (
-            <span className="flex flex-wrap gap-1">
-              {diagram.concepts.map((slug) => (
-                <Badge key={slug}>{slug}</Badge>
-              ))}
-            </span>
-          )}
-        </MetaRow>
-        <MetaRow label="Document">
-          <Mono>{diagram.tldr.path}</Mono>
-        </MetaRow>
-        <MetaRow label="Shapes">{diagram.shapes}</MetaRow>
-        <MetaRow label="Created">
-          <StudioTime at={diagram.created} as="day" />
-        </MetaRow>
-        <MetaRow label="Modified">
-          <StudioTime at={diagram.tldr.modified} />
-          {diagram.tldr.modified !== null && (
-            <span className="block text-text2"><StudioTime at={diagram.tldr.modified} as="dayTime" /></span>
-          )}
-        </MetaRow>
-        <MetaRow label="Source note">
-          {diagram.source === null ? (
-            <span className="text-text2">none</span>
-          ) : (
-            <Mono>{diagram.source}</Mono>
-          )}
-        </MetaRow>
-        <MetaRow label="SVG">
-          {diagram.svg.exists ? (
-            <>
-              <Mono>{diagram.svg.path}</Mono>
-              <span className="block text-text2">
-                {formatBytes(diagram.svg.bytes)} · <StudioTime at={diagram.svg.modified} />
-                {diagram.svgState === "stale" ? " · exported from an earlier version" : ""}
-              </span>
-            </>
-          ) : (
-            <span className="text-warn-text">never exported</span>
-          )}
-        </MetaRow>
+        <FactList
+          density="dense"
+          facts={[
+            {
+              label: "Concepts",
+              value:
+                diagram.concepts.length === 0 ? (
+                  <span className="text-text2">none recorded</span>
+                ) : (
+                  <span className="flex flex-wrap gap-1">
+                    {diagram.concepts.map((slug) => (
+                      <Badge key={slug}>{slug}</Badge>
+                    ))}
+                  </span>
+                ),
+            },
+            { label: "Document", value: <Mono>{diagram.tldr.path}</Mono> },
+            { label: "Shapes", value: diagram.shapes },
+            { label: "Created", value: <StudioTime at={diagram.created} as="day" /> },
+            {
+              label: "Modified",
+              value: (
+                <>
+                  <StudioTime at={diagram.tldr.modified} />
+                  {diagram.tldr.modified !== null && (
+                    <span className="block text-text2"><StudioTime at={diagram.tldr.modified} as="dayTime" /></span>
+                  )}
+                </>
+              ),
+            },
+            {
+              label: "Source note",
+              value: diagram.source === null ? <span className="text-text2">none</span> : <Mono>{diagram.source}</Mono>,
+            },
+            {
+              label: "SVG",
+              value: diagram.svg.exists ? (
+                <>
+                  <Mono>{diagram.svg.path}</Mono>
+                  <span className="block text-text2">
+                    {formatBytes(diagram.svg.bytes)} · <StudioTime at={diagram.svg.modified} />
+                    {diagram.svgState === "stale" ? " · exported from an earlier version" : ""}
+                  </span>
+                </>
+              ) : (
+                <span className="text-warn-text">never exported</span>
+              ),
+            },
+          ]}
+        />
       </div>
 
       <div className="mt-4">

@@ -13,6 +13,7 @@ import {
   type ChoicePick,
 } from "@gnosia/tutor/check-block";
 
+import { AnswerRecap } from "./AnswerRecap";
 import { ConfidenceField, ReasoningField } from "./SurenessFields";
 import { RecordedCard } from "./VerdictRow";
 
@@ -146,27 +147,12 @@ export function ChoiceCheckCard({
         </>
       ) : (
         <>
-          <dl className="flex flex-col gap-1 rounded-lg bg-surface2 px-3 py-2 text-[13px]">
-            <div className="flex flex-wrap gap-x-1.5">
-              <dt className="text-text3">Your answer</dt>
-              <dd className="min-w-0 text-text">
-                {answer.picked === null ? (
-                  "I don't know"
-                ) : (
-                  <>
-                    <MathText text={check.options[answer.picked] ?? ""} />
-                    {answer.confidence !== null && <span className="text-text2"> · {answer.confidence}% sure</span>}
-                  </>
-                )}
-              </dd>
-            </div>
-            {answer.thinking !== null && (
-              <div className="flex flex-wrap gap-x-1.5">
-                <dt className="text-text3">Your reasoning</dt>
-                <dd className="min-w-0 whitespace-pre-wrap text-text">{answer.thinking}</dd>
-              </div>
-            )}
-          </dl>
+          <AnswerRecap
+            layout="inline"
+            answer={answer.picked === null ? "I don't know" : <MathText text={check.options[answer.picked] ?? ""} />}
+            confidence={answer.picked === null ? null : answer.confidence}
+            thinking={answer.thinking}
+          />
           <p className="text-[14px] leading-6 text-text2">
             <MathText text={check.why} />
           </p>
