@@ -4,8 +4,9 @@ import { useId, useState } from "react";
 
 import { MathText } from "@/components/Math";
 import { Button } from "@/components/ui/Button";
-import { cx, LABEL, STATUS_TEXT } from "@/components/ui/classes";
+import { LABEL } from "@/components/ui/classes";
 import { Textarea } from "@/components/ui/Textarea";
+import { ErrorText } from "@/components/ui/ErrorText";
 import { DEFAULT_CONFIDENCE, type RecallCheck, type RecallPick } from "@gnosia/tutor/check-block";
 import { SESSION_TEXT_LIMIT } from "@gnosia/tutor/session-core";
 import type { Verdict } from "@gnosia/tutor/tutor-check";
@@ -118,11 +119,7 @@ export function RecallCheckCard({
             <Button variant="primary" size="sm" onClick={submit} disabled={disabled}>
               Submit
             </Button>
-            {missing && (
-              <p role="alert" className={cx(STATUS_TEXT, "text-warn-text")}>
-                Write your answer first.
-              </p>
-            )}
+            {missing && <ErrorText tone="warn">Write your answer first.</ErrorText>}
           </div>
         </>
       ) : (

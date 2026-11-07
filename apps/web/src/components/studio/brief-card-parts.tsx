@@ -7,6 +7,7 @@ import { PanelLink } from "@/components/studio/PanelLink";
 import { Button } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
 import { cx, linkClasses } from "@/components/ui/classes";
+import { ErrorText } from "@/components/ui/ErrorText";
 import type { TopicOption } from "@/data/topics";
 import { madeLine } from "@/lib/studio-cards";
 import type { DrawBlock } from "@/lib/studio-chat";
@@ -55,16 +56,6 @@ export function useHoldAction() {
   return { using, useError, use };
 }
 
-/** A refusal, said where it happened. Nothing when there is none. */
-export function FooterError({ text }: { text: string | null }) {
-  if (text === null) return null;
-  return (
-    <p role="alert" className="text-[13px] leading-5 text-danger">
-      {text}
-    </p>
-  );
-}
-
 /** On hold (D60): the planner's few words for why, and Use this brief. */
 export function OnHoldFooter({
   open,
@@ -91,7 +82,7 @@ export function OnHoldFooter({
             {using ? "Saving…" : "Use this brief"}
           </Button>
         </div>
-        <FooterError text={error} />
+        <ErrorText>{error}</ErrorText>
       </div>
     </Reveal>
   );

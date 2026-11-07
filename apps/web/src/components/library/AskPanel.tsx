@@ -3,12 +3,11 @@
 import { useEffect, useRef, type KeyboardEvent } from "react";
 
 import { Button } from "@/components/ui/Button";
-import { Callout } from "@/components/ui/Callout";
 import { Composer } from "@/components/ui/Composer";
 import { isImeKey } from "@/components/ui/composer-keys";
 import { ChatTurn, TutorThinking } from "@/components/workspace/ChatTurn";
 import { useUnsavedChat } from "@/components/workspace/use-unsaved-chat";
-import { FADE_IN } from "@/components/ui/motion";
+import { TurnError } from "@/components/workspace/TurnError";
 
 /**
  * Ask on a library asset: quick questions about the video, note or diagram
@@ -84,19 +83,7 @@ export function AskPanel({
         </div>
       )}
       {busy && <TutorThinking />}
-      {error !== null && (
-        <Callout
-          role="alert"
-          className={FADE_IN}
-          actions={
-            <Button variant="secondary" size="sm" onClick={retry}>
-              Try again
-            </Button>
-          }
-        >
-          {error}
-        </Callout>
-      )}
+      {error !== null && <TurnError error={error} onRetry={retry} />}
       <Composer
         value={draft}
         onChange={setDraft}

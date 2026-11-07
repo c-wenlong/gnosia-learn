@@ -46,10 +46,9 @@ const houseRules = [
       ...WEB_IGNORES,
       // The kit's own Callout, Notice and Banner are the warn box.
       ui("**"),
-      // Not yet on Callout: the tutor chat's notices and its recorded verdict,
-      // ok or warn, which Callout has no ok tone for. Move one onto the kit and
-      // take it off this list; never add to it.
-      src("components/workspace/TutorChat.tsx"),
+      // Not yet on Callout: the tutor's recorded verdict, ok or warn, which
+      // Callout has no ok tone for. Move it onto the kit and take it off this
+      // list; never add to it.
       src("components/workspace/VerdictRow.tsx"),
     ],
     rules: { "gnosia/kit-warn-box": "error" },

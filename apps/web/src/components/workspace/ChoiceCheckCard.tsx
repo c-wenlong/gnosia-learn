@@ -5,7 +5,7 @@ import { useId, useState } from "react";
 import { MathText } from "@/components/Math";
 import { Button } from "@/components/ui/Button";
 import { ChoiceRow, type ChoiceState } from "@/components/ui/ChoiceRow";
-import { cx, STATUS_TEXT } from "@/components/ui/classes";
+import { ErrorText } from "@/components/ui/ErrorText";
 import {
   DEFAULT_CONFIDENCE,
   type ChoiceAnswer,
@@ -141,11 +141,7 @@ export function ChoiceCheckCard({
             <Button variant="primary" size="sm" onClick={submit} disabled={disabled}>
               Submit
             </Button>
-            {missing && (
-              <p role="alert" className={cx(STATUS_TEXT, "text-warn-text")}>
-                Pick an option, or I don&apos;t know, first.
-              </p>
-            )}
+            {missing && <ErrorText tone="warn">Pick an option, or I don&apos;t know, first.</ErrorText>}
           </div>
         </>
       ) : (
@@ -182,9 +178,7 @@ export function ChoiceCheckCard({
             </p>
           ) : (
             <div className="flex flex-wrap items-center gap-3">
-              <p role="alert" className={cx(STATUS_TEXT, "text-warn-text")}>
-                {answer.error ?? "The answer was not recorded."} A retry is never recorded twice.
-              </p>
+              <ErrorText tone="warn">{answer.error ?? "The answer was not recorded."} A retry is never recorded twice.</ErrorText>
               <Button variant="secondary" size="sm" onClick={onRetry}>
                 Try again
               </Button>

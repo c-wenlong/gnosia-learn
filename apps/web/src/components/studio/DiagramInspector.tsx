@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { VerbSubmit } from "@/components/studio/VerbSubmit";
 import { Glyph } from "@/components/ui/Glyph";
 import { buttonClasses, cx } from "@/components/ui/classes";
+import { Callout } from "@/components/ui/Callout";
 import { jobStateLabel } from "@/lib/studio-job-state";
 import { canvasHref, panelHref, thumbnailHref } from "@/lib/studio-url";
 import { formatBytes } from "@gnosia/tutor/asset-meta";
@@ -66,12 +67,11 @@ function DirectoryFacts({ listing }: { listing: DiagramListing }) {
           </p>
           <ul className="space-y-2">
             {listing.errors.map((problem) => (
-              <li
-                key={problem.path}
-                className="rounded-md border border-danger/45 bg-danger/8 p-2"
-              >
-                <p className="font-mono text-xs break-all text-danger">{problem.path}</p>
-                <p className="mt-1 text-xs text-danger">{problem.message}</p>
+              <li key={problem.path}>
+                <Callout tone="danger" dense bordered>
+                  <p className="font-mono break-all">{problem.path}</p>
+                  <p className="mt-1">{problem.message}</p>
+                </Callout>
               </li>
             ))}
           </ul>
