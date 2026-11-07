@@ -132,6 +132,12 @@ describe("readLibrary when the catalog fails", () => {
 
 describe("loadFavorites", () => {
   it("answers the starred ids, and an empty set for none", async () => {
+    readPreferencesWithPrefix.mockResolvedValueOnce({
+      "favorite:fx:video": { at: "2026-10-02T00:00:00Z" },
+      // A row under the prefix this code did not write is no star either.
+      "favorite:fx:diagram": "yes",
+    });
+    expect(await loadFavorites()).toEqual(new Set(["fx:video"]));
     readPreferencesWithPrefix.mockResolvedValueOnce({});
     expect(await loadFavorites()).toEqual(new Set());
   });
