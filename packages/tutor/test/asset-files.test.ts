@@ -52,6 +52,8 @@ describe("parseRange", () => {
     // Past the end and reversed is still reversed: invalid, so not a 416.
     expect(parseRange("bytes=500-200", 100)).toEqual({ kind: "whole" });
     expect(parseRange("bytes=5-2", 0)).toEqual({ kind: "whole" });
+    // Past 2^53, where Number rounds both bounds to 9007199254740992.
+    expect(parseRange("bytes=9007199254740993-9007199254740992", 100)).toEqual({ kind: "whole" });
   });
 
   it("calls a range the file cannot satisfy unsatisfiable, not empty", () => {

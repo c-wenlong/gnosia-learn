@@ -570,7 +570,9 @@ export function parseRange(header: string | null, size: number): RangeRequest {
   const [, rawStart = "", rawEnd = ""] = match;
   if (rawStart === "" && rawEnd === "") return { kind: "whole" };
   // Judged before the size: a reversed range is invalid on any file, an empty one included.
-  if (rawStart !== "" && rawEnd !== "" && Number(rawEnd) < Number(rawStart)) return { kind: "whole" };
+  // As BigInts, since both are digit strings and `Number` rounds two bounds past
+  // 2^53 to one value, which would hide the reversal and answer 416.
+  if (rawStart !== "" && rawEnd !== "" && BigInt(rawEnd) < BigInt(rawStart)) return { kind: "whole" };
 
   // An empty file can satisfy nothing, and `bytes=0-` against it would
   // otherwise compute the range 0..-1.
