@@ -23,11 +23,16 @@ beforeAll(() => {
 });
 
 const shown: Element[] = [];
+// The setup file's stand-in (apps/web/src/test/popover-shim.ts), called
+// through so a recorded popover still shows: jsdom does not focus into a
+// panel that is not rendered.
+const showPopover = HTMLElement.prototype.showPopover;
 beforeEach(() => {
   vi.useFakeTimers();
   shown.length = 0;
   HTMLElement.prototype.showPopover = function (this: HTMLElement) {
     shown.push(this);
+    showPopover.call(this);
   };
 });
 
