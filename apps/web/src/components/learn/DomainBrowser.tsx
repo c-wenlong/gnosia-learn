@@ -6,6 +6,7 @@ import { DomainGraph, type DomainGraphNode, type MapMark } from "@/components/le
 import { LegendChips, useLegendPreview } from "@/components/learn/LegendChips";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { DockedAside } from "@/components/ui/DockedAside";
 import { CARD_TITLE, cx, FOCUS, LABEL } from "@/components/ui/classes";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import { ProgressBar } from "@/components/ui/ProgressBar";
@@ -262,9 +263,8 @@ export function DomainView({
         )}
         </div>
       </div>
-      {/* Sized by the room the page has: the list docks beside the picture when it fits, under it otherwise. */}
-      <div className="@container">
-        <div className="grid grid-cols-1 items-start gap-4 @4xl:grid-cols-[minmax(0,1fr)_300px]">
+      {/* The list docks beside the picture when it fits, under it otherwise. */}
+      <DockedAside aside="narrow">
           <Card>
             <LegendChips counts={counts} filter={filter} preview={legend} onPress={onLegendPress} />
             <DomainGraph
@@ -340,8 +340,7 @@ export function DomainView({
               onHoverTopic={setHoverTopic}
             />
           </div>
-        </div>
-      </div>
+      </DockedAside>
     </div>
   );
 }
