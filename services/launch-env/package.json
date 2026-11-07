@@ -10,7 +10,8 @@
     "test": "vitest run test"
   },
   "dependencies": {
-    "@gnosia/catalog": "*"
+    "@gnosia/catalog": "*",
+    "@next/env": "16.4.3"
   },
   "devDependencies": {
     "@types/node": "^22.20.4",

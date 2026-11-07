@@ -209,6 +209,14 @@ This project is continuously deployed and not versioned; entries are grouped by 
   runs at all) and its stderr is kept, the checkout path is quoted for the
   shell, and `bundle-app.sh` fails when signing fails.
 
+- **The environment a launcher hands its children no longer carries
+  `__NEXT_PROCESSED_ENV` or the launcher's `PWD`.** `@next/env` sets the first
+  once it has loaded the files, and a `next dev` that finds it skips its own
+  `.env` load; the second named the repository root while the web runs in
+  `apps/web`. `@next/env` is now declared by `services/launch-env` rather than
+  reached through hoisting, and `MAX_NOTE_CHARS` is no longer exported from
+  the tutor's learner writes (nothing imported it).
+
 - **The three asset-presentation components now reset their own state when the
   file they are showing changes.** `VideoPlayer` kept the playback position,
   `DiagramView` kept a failed load and `AssetCard` kept a failed thumbnail, so
