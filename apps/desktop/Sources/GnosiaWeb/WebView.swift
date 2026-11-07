@@ -106,6 +106,17 @@ func opensInBrowser(_ url: URL?) -> Bool {
     return scheme == "http" || scheme == "https"
 }
 
+/// The web view's configuration. Tab reaches links as well as form controls,
+/// as it does in Chrome and Firefox: WebKit's default (Safari's "Press Tab to
+/// highlight each item" off) skips every link, so a keyboard user of the
+/// window could not reach the sidebar, a card's "All reviews" or a row link
+/// with Tab at all, only with Option-Tab.
+func webViewConfiguration() -> WKWebViewConfiguration {
+    let configuration = WKWebViewConfiguration()
+    configuration.preferences.tabFocusesLinks = true
+    return configuration
+}
+
 struct WebView: NSViewRepresentable {
     let url: URL
     /// The launch token for the first request's header, or nil.
@@ -114,7 +125,7 @@ struct WebView: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(origin: url) }
 
     func makeNSView(context: Context) -> WKWebView {
-        let view = WKWebView()
+        let view = WKWebView(frame: .zero, configuration: webViewConfiguration())
         view.allowsBackForwardNavigationGestures = true
         view.navigationDelegate = context.coordinator
         view.uiDelegate = context.coordinator
