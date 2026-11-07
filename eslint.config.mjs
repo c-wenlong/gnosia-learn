@@ -46,10 +46,9 @@ const houseRules = [
       ...WEB_IGNORES,
       // The kit's own Callout, Notice and Banner are the warn box.
       ui("**"),
-      // Not yet on Callout: the tutor chat's notices and its recorded verdict,
-      // ok or warn, which Callout has no ok tone for. Move one onto the kit and
-      // take it off this list; never add to it.
-      src("components/workspace/TutorChat.tsx"),
+      // Not yet on Callout: the tutor's recorded verdict, ok or warn, which
+      // Callout has no ok tone for. Move it onto the kit and take it off this
+      // list; never add to it.
       src("components/workspace/VerdictRow.tsx"),
     ],
     rules: { "gnosia/kit-warn-box": "error" },
@@ -127,10 +126,12 @@ const houseRules = [
   { files: [src("app/(app)/studio/page.tsx")], rules: { "gnosia/h1-role": ["error", { allow: 1 }] } },
   // A session step's title, 20 and 28 from 768px, a focus title that changes every step.
   { files: [src("components/session/SessionFocus.tsx")], rules: { "gnosia/h1-role": ["error", { allow: 1 }] } },
-  // Review's question, 20 and 24 from 768px; its close screen takes CLOSE_TITLE.
+  // Review's question, 20 and 24 from 768px; its close screen takes CLOSE_TITLE through FocusHeading.
   { files: [src("components/review/ReviewSession.tsx")], rules: { "gnosia/h1-role": ["error", { allow: 1 }] } },
   // The watch page's title in the sans at 22 and 24 (#168), or a file name in mono.
   { files: [src("components/library/AssetTitle.tsx")], rules: { "gnosia/h1-role": ["error", { allow: 2 }] } },
+  // The kit PageHeader draws the role its caller names: `titleClass` is typed to the title roles, so the compiler holds it.
+  { files: [src("components/ui/PageHeader.tsx")], rules: { "gnosia/h1-role": ["error", { allow: 1 }] } },
   // A heading inside a note's own Markdown, sized with the prose.
   { files: [src("components/NoteProse.tsx")], rules: { "gnosia/h1-role": ["error", { allow: 1 }] } },
   {

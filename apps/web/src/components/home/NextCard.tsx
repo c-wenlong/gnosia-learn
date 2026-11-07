@@ -1,7 +1,6 @@
-import Link from "next/link";
-
 import { Card } from "@/components/ui/Card";
 import { Glyph } from "@/components/ui/Glyph";
+import { LinkRow } from "@/components/ui/LinkRow";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import type { NextGroup } from "@/lib/home-core";
 
@@ -21,18 +20,20 @@ export function NextCard({ groups }: { groups: NextGroup[] }) {
             <ul className="-mx-2 flex flex-col">
               {group.steps.map((step) => (
                 <li key={step.key}>
-                  <Link
+                  <LinkRow
                     href={step.href}
-                    className="flex min-w-0 items-center gap-3 rounded-lg px-2 py-1.5 transition-colors duration-100 hover:bg-surface2 motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent"
-                  >
-                    {step.bucket !== undefined ? (
-                      <MasteryDot bucket={step.bucket} />
-                    ) : (
-                      <Glyph name="topics" size={16} className="text-text2" />
-                    )}
-                    <span className="min-w-0 flex-1 truncate text-[14px] text-text">{step.title}</span>
-                    {step.detail !== null && <span className="shrink-0 text-[12px] text-text3 max-md:hidden">{step.detail}</span>}
-                  </Link>
+                    lead={
+                      step.bucket !== undefined ? (
+                        <MasteryDot bucket={step.bucket} />
+                      ) : (
+                        <Glyph name="topics" size={16} className="text-text2" />
+                      )
+                    }
+                    title={step.title}
+                    trailing={
+                      step.detail !== null && <span className="shrink-0 text-[12px] text-text3 max-md:hidden">{step.detail}</span>
+                    }
+                  />
                 </li>
               ))}
             </ul>

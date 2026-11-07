@@ -116,4 +116,62 @@ final class WebServerTests: XCTestCase {
         XCTAssertTrue(message.contains("still running but silent after 90 s"))
         XCTAssertTrue(message.contains("/Users/o/Desktop/repo"))
     }
+
+    private let root = URL(fileURLWithPath: "/Users/o/repo")
+
+    func testTheResolverNoteIsAppendedOnlyWhenTheResolverFailed() {
+        XCTAssertEqual(WebServer.withResolverNote("boom", failure: nil), "boom")
+        XCTAssertEqual(
+            WebServer.withResolverNote("boom", failure: "no shell"),
+            "boom\n\nThe environment resolver also failed: no shell"
+        )
+    }
+
+    /// Alive and silent for the whole wait stops at once with the
+    /// blocked-checkout message, on the first attempt, without trying
+    /// another port.
+    func testASilentTimeoutStopsOnTheFirstAttemptWithTheBlockedMessage() {
+        let verdict = WebServer.judge(attempt: 1, outcome: .timedOut, tail: "", root: root, resolverFailure: nil)
+        XCTAssertEqual(verdict, .fail(WebServer.silentMessage(root: root, seconds: WebServer.readyTimeout)))
+        guard case .fail(let message) = verdict else { return XCTFail("expected a failure") }
+        XCTAssertTrue(message.contains("still running but silent after 90 s"))
+        XCTAssertTrue(message.contains("/Users/o/repo"))
+        // And the resolver's failure rides along.
+        XCTAssertEqual(
+            WebServer.judge(attempt: 1, outcome: .timedOut, tail: "", root: root, resolverFailure: "no shell"),
+            .fail(WebServer.silentMessage(root: root, seconds: 90) + "\n\nThe environment resolver also failed: no shell")
+        )
+    }
+
+    func testOtherFailuresRetryUntilTheThirdPort() {
+        // Timed out but with output: another port may help.
+        XCTAssertEqual(WebServer.judge(attempt: 1, outcome: .timedOut, tail: "compiling", root: root, resolverFailure: nil), .retry)
+        // Exited silently: retried.
+        XCTAssertEqual(WebServer.judge(attempt: 2, outcome: .exited, tail: "", root: root, resolverFailure: nil), .retry)
+        // Exited silently with the resolver down: no note until the end.
+        XCTAssertEqual(WebServer.judge(attempt: 1, outcome: .exited, tail: "EADDRINUSE", root: root, resolverFailure: "x"), .retry)
+        XCTAssertEqual(
+            WebServer.judge(attempt: 3, outcome: .exited, tail: "", root: root, resolverFailure: nil),
+            .fail("The web server did not come up after three ports.")
+        )
+        XCTAssertEqual(
+            WebServer.judge(attempt: 3, outcome: .exited, tail: "EADDRINUSE", root: root, resolverFailure: "x"),
+            .fail("EADDRINUSE\n\nThe environment resolver also failed: x")
+        )
+        // A silent timeout on the last attempt is still the blocked message.
+        XCTAssertEqual(
+            WebServer.judge(attempt: 3, outcome: .timedOut, tail: "", root: root, resolverFailure: nil),
+            .fail(WebServer.silentMessage(root: root, seconds: 90))
+        )
+    }
+
+    func testAnExistingDevServerIsAdoptedOnAnyAttempt() {
+        let tail = "You can access the existing server at http://localhost:3000, or stop it."
+        for outcome in [WebServer.ReadyOutcome.exited, .timedOut] {
+            XCTAssertEqual(
+                WebServer.judge(attempt: 3, outcome: outcome, tail: tail, root: root, resolverFailure: "x"),
+                .adopt(URL(string: "http://localhost:3000")!)
+            )
+        }
+    }
 }

@@ -3,7 +3,6 @@
 import { NoteProse } from "@/components/NoteProse";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
-import { cx } from "@/components/ui/classes";
 import { TutorMessage } from "@/components/ui/Message";
 import { TypingDots } from "@/components/ui/TypingDots";
 import { CHECKING_BRIEF, splitReply, THINKING, type ThreadProblem } from "@/lib/studio-chat";
@@ -11,8 +10,8 @@ import type { DraftKind } from "@/lib/studio-drafts";
 
 /**
  * What sits at the thread's foot besides the entries: the reply being
- * written, and a problem in its place when a turn fails without adding an
- * entry. `Failure` is the line a press that did nothing leaves where it was.
+ * written (`Streaming`), and a problem in its place when a turn fails without
+ * adding an entry (`Problem`).
  */
 
 /**
@@ -132,15 +131,5 @@ export function Problem({
       {problem.case === "E2" && <p>{problem.text}</p>}
       {problem.case === "E6" && <p className="font-mono text-[12px]">{problem.text}</p>}
     </Callout>
-  );
-}
-
-/** Why New conversation or Start over did nothing, where the press was. */
-export function Failure({ text, className }: { text: string | null; className?: string }) {
-  if (text === null) return null;
-  return (
-    <p role="alert" className={cx("text-[13px] text-danger", className)}>
-      {text}
-    </p>
   );
 }

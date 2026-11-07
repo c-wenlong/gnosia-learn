@@ -1401,6 +1401,26 @@ async function run() {
     }
   });
 
+  // The action row under an item's title wraps on a phone. It once sat in a
+  // `shrink-0` box, which a session's four buttons pushed to about 490px wide,
+  // so the whole page scrolled sideways (a note's row has Ask as well).
+  await step('library: an item page fits a phone', page, async () => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    try {
+      for (const kind of ['session', 'note']) {
+        await go(`/library?kind=${kind}`);
+        const href = await main.locator('a[href^="/library/"]').first().getAttribute('href');
+        assert(href, `the library lists no ${kind} to open`);
+        await go(href);
+        await main.getByRole('heading', { level: 1 }).first().waitFor();
+        const overflow = await page.evaluate(() => document.scrollingElement.scrollWidth - window.innerWidth);
+        assert(overflow <= 0, `a ${kind} page scrolls sideways by ${overflow}px on a phone`);
+      }
+    } finally {
+      await page.setViewportSize({ width: 1280, height: 860 });
+    }
+  });
+
   await step('ask: the box finds a concept, and a miss opens the tutor', page, async () => {
     assert(state.concept !== null, 'no concept: the /learn step found none');
     await go('/home');

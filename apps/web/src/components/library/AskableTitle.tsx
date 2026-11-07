@@ -36,7 +36,7 @@ export function AskableTitle({
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         {heading}
-        <div className="flex shrink-0 flex-wrap items-start gap-2.5">
+        <div className="flex min-w-0 max-w-full flex-wrap items-start gap-2.5">
           {before}
           <AskButton
             open={open}

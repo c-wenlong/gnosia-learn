@@ -12,6 +12,7 @@ import { useStoredHarness } from "@/components/studio/HarnessPicker";
 import type { HarnessValue } from "@/lib/studio-harness";
 import { Glyph, type GlyphName } from "@/components/ui/Glyph";
 import type { MentionComposerHandle } from "@/components/ui/MentionComposer";
+import { ErrorText } from "@/components/ui/ErrorText";
 import {
   EMPTY_MENTION_VALUE,
   hasMention,
@@ -147,11 +148,7 @@ export function HomeComposer({
       <p role="status" aria-live="polite" className="sr-only">
         {announcement}
       </p>
-      {error !== null && (
-        <p role="alert" className="px-1 text-[13px] text-danger">
-          The conversation could not start: {error}
-        </p>
-      )}
+      {error !== null && <ErrorText className="px-1">The conversation could not start: {error}</ErrorText>}
     </div>
   );
 }

@@ -6,11 +6,11 @@ import { ResetCourseButton } from "@/components/ResetCourseButton";
 import { Button } from "@/components/ui/Button";
 import { cx, LABEL } from "@/components/ui/classes";
 import { Collapse } from "@/components/ui/Collapse";
+import { CourseProgress } from "@/components/ui/CourseProgress";
 import { Panel } from "@/components/ui/Panel";
-import { ProgressBar } from "@/components/ui/ProgressBar";
 import { TextLink } from "@/components/ui/TextLink";
 import { Callout } from "@/components/ui/Callout";
-import { courseTopicIds, doneWord, moduleHref, topicMeta, type PathStatus, type TopicMastery } from "@/lib/course-path";
+import { courseTopicIds, moduleHref, topicMeta, type PathStatus, type TopicMastery } from "@/lib/course-path";
 import type { Course, Module, Topic } from "@gnosia/content";
 import { moduleNumber } from "@gnosia/content/module-number";
 import { ownValue } from "@gnosia/tutor/own-key";
@@ -60,14 +60,7 @@ export function CourseRail({
   return (
     <div className={cx("flex min-w-0 flex-col gap-4", className)}>
       <RailCard title="Course progress">
-        <div className="flex items-baseline gap-2">
-          <span className="text-[28px] font-semibold leading-8 tabular-nums text-text">{status.percent}%</span>
-          <span className="text-[14px] text-text2">{doneWord(status.conceptBacked)}</span>
-        </div>
-        <ProgressBar percent={status.percent} label={`${course.code} progress`} />
-        <p className="text-[14px] leading-5 text-text2">
-          {status.doneCount} of {status.total} topics {doneWord(status.conceptBacked)}
-        </p>
+        <CourseProgress variant="headline" code={course.code} done={status.doneCount} total={status.total} percent={status.percent} conceptBacked={status.conceptBacked} />
         <div className="flex flex-wrap items-center gap-2.5">
           {continueHref ? (
             <Button href={continueHref} size="sm">

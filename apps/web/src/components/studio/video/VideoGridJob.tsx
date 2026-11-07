@@ -17,6 +17,7 @@ import {
 } from "@/components/studio/job-tile";
 import { JobRowLink } from "@/components/studio/GridJob";
 import { FADE_IN } from "@/components/ui/motion";
+import { ErrorTip } from "@/components/ui/ErrorTip";
 import { FadeImg } from "@/components/studio/motion-parts";
 import { PanelLink } from "@/components/studio/PanelLink";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
@@ -223,14 +224,7 @@ export function VideoChangeButton({
       {/* Seen as well as heard: a tooltip is out of reach on a phone. At
           most 176px wide: the button sits 8px in from a tile's right edge,
           and a 200px tile hides what overflows it. */}
-      {problem !== null && (
-        <span
-          role="alert"
-          className="absolute top-full right-0 z-20 mt-1 w-max max-w-44 rounded-md border border-border bg-surface px-2 py-1.5 text-left text-xs leading-4 font-normal text-danger shadow-sm"
-        >
-          {problem}
-        </span>
-      )}
+      {problem !== null && <ErrorTip>{problem}</ErrorTip>}
     </span>
   );
 }

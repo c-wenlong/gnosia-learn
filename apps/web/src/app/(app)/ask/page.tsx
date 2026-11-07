@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 
 import { OpenTutorChat } from "@/components/ask/OpenTutorChat";
 import { AskBox } from "@/components/home/AskBox";
-import { NOTE, PAGE_TITLE } from "@/components/ui/classes";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { OPEN_SUBJECT_LIMIT } from "@gnosia/tutor/prompt";
 
 export const metadata: Metadata = { title: "Ask the tutor" };
@@ -30,12 +30,10 @@ export default async function AskPage({
   return (
     <div data-layout="app" className="mx-auto flex w-full max-w-[760px] flex-col gap-5">
       <AskBox />
-      <div className="flex flex-col gap-1">
-        <h1 className={PAGE_TITLE}>{subject}</h1>
-        <p className={NOTE}>
-          Nothing in your notebook covers this yet. This chat is not saved, and your answers here move no mastery.
-        </p>
-      </div>
+      <PageHeader
+        title={subject}
+        note="Nothing in your notebook covers this yet. This chat is not saved, and your answers here move no mastery."
+      />
       <OpenTutorChat key={subject} subject={subject} />
     </div>
   );

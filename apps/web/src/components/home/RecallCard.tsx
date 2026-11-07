@@ -1,10 +1,8 @@
-import Link from "next/link";
-
 import { Button } from "@/components/ui/Button";
 import { Card, CardAction } from "@/components/ui/Card";
+import { LinkRow } from "@/components/ui/LinkRow";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import { recallHref, type RecallPick } from "@/lib/home-core";
-import { cx, FOCUS } from "@/components/ui/classes";
 
 /**
  * Worth a quick recall (docs/proposals/home-page.md, part 4): at most three
@@ -22,22 +20,24 @@ export function RecallCard({ picks }: { picks: RecallPick[] }) {
       action={<CardAction href="/review">All reviews</CardAction>}
       className="max-md:gap-2 max-md:p-3.5"
     >
-      <ul className="flex flex-col gap-2">
+      {/* The whole row opens the concept, as the proposal's part 4 says ("each
+          row links to its concept"); #381 first wrapped only the title. */}
+      <ul className="-mx-2 flex flex-col">
         {picks.map((pick) => (
-          <li key={pick.conceptId} className="flex min-w-0 items-center gap-3">
-            <MasteryDot bucket={pick.bucket} />
-            <Link
+          <li key={pick.conceptId}>
+            <LinkRow
               href={recallHref(pick)}
-              className={cx("min-w-0 flex-1 truncate rounded-sm text-[14px] text-text underline-offset-4 transition-colors duration-100 hover:underline", FOCUS)}
-            >
-              {pick.title}
-            </Link>
-            {pick.lastSeen !== null && (
-              <span className="shrink-0 text-[12px] text-text2">
-                <span className="md:hidden">{pick.lastSeen}</span>
-                <span className="max-md:hidden">last seen {pick.lastSeen}</span>
-              </span>
-            )}
+              lead={<MasteryDot bucket={pick.bucket} />}
+              title={pick.title}
+              trailing={
+                pick.lastSeen !== null && (
+                  <span className="shrink-0 text-[12px] text-text2">
+                    <span className="md:hidden">{pick.lastSeen}</span>
+                    <span className="max-md:hidden">last seen {pick.lastSeen}</span>
+                  </span>
+                )
+              }
+            />
           </li>
         ))}
       </ul>

@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
 import { DraftJobView } from "@/components/studio/draft/DraftJobView";
 import { DraftStatus } from "@/components/studio/draft/DraftStatus";
 import { Entry, MadeArrival, type EntryActions, type EntryThread } from "@/components/studio/draft/Entry";
-import { Failure, Problem, Streaming } from "@/components/studio/draft/ThreadFoot";
+import { Problem, Streaming } from "@/components/studio/draft/ThreadFoot";
 import { problemKindOf, topSeq, type Value } from "@/components/studio/draft/thread";
 import { useDraftRecord } from "@/components/studio/draft/use-draft-record";
 import { useDraftVerbs } from "@/components/studio/draft/use-draft-verbs";
@@ -37,6 +37,7 @@ import { EMPTY_MENTION_VALUE, isEmptyValue } from "@/lib/mentions";
 import { TutorMessage, UserMessage } from "@/components/ui/Message";
 import { TextLink } from "@/components/ui/TextLink";
 import { useFollowFoot } from "@/components/ui/use-follow-foot";
+import { ErrorText } from "@/components/ui/ErrorText";
 import type { TopicOption } from "@/data/topics";
 import { conversationTitle } from "@/lib/conversation-title";
 import { placeMade } from "@/lib/conversation-made";
@@ -539,9 +540,7 @@ export function DraftPanel({
               </p>
             ))}
             {verbs.waitError !== null && (
-              <p role="alert" className="text-[12px] text-danger">
-                {verbs.waitError}
-              </p>
+              <ErrorText>{verbs.waitError}</ErrorText>
             )}
           </div>
         )}
@@ -602,12 +601,9 @@ export function DraftPanel({
             />
           )}
           {downReason !== null && <span className="text-danger">The runner stopped answering: {downReason}</span>}
-          <Failure
-            text={
-              model.error ?? harness.error ?? verbs.startOverError ?? (startError === null ? null : `A new conversation could not start: ${startError}`)
-            }
-            className="basis-full"
-          />
+          <ErrorText className="basis-full">
+            {model.error ?? harness.error ?? verbs.startOverError ?? (startError === null ? null : `A new conversation could not start: ${startError}`)}
+          </ErrorText>
         </div>
         <p role="status" aria-live="polite" className="sr-only">
           {announce}

@@ -82,7 +82,11 @@ func navigationVerdict(for url: URL?, appOrigin: URL, mainFrame: Bool) -> Naviga
         return rest == "blank" || rest == "srcdoc" ? .allow : .cancel
     case "blob":
         // blob:http://127.0.0.1:port/<uuid>: the origin that made it.
-        guard let inner = URL(string: String(url.absoluteString.dropFirst("blob:".count))) else { return .cancel }
+        // Foundation percent-encodes the opaque part when it holds an IPv6
+        // literal (`blob:http%3A//%5B::1%5D:port/…`), so decode it first or
+        // an app served from [::1] could never load its own blobs.
+        let opaque = String(url.absoluteString.dropFirst("blob:".count))
+        guard let inner = URL(string: opaque.removingPercentEncoding ?? opaque) else { return .cancel }
         return sameOrigin(inner, appOrigin) ? .allow : .cancel
     case "http", "https":
         if sameOrigin(url, appOrigin) { return .allow }

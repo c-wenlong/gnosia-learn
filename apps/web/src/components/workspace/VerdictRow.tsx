@@ -1,8 +1,9 @@
 "use client";
 
 import { Button } from "@/components/ui/Button";
-import { cx, linkClasses, STATUS_TEXT } from "@/components/ui/classes";
+import { cx, linkClasses } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
+import { ErrorText } from "@/components/ui/ErrorText";
 import { formatInterval } from "@gnosia/tutor/review-core";
 import { recordedCard, recordedLine, type RecordedResult, type Verdict } from "@gnosia/tutor/tutor-check";
 
@@ -131,9 +132,7 @@ export function VerdictRow({
         </span>
       </div>
       {verdict.state === "failed" && verdict.error && (
-        <p role="alert" className={cx(STATUS_TEXT, "text-warn-text")}>
-          {verdict.error} A retry is never recorded twice.
-        </p>
+        <ErrorText tone="warn">{verdict.error} A retry is never recorded twice.</ErrorText>
       )}
     </div>
   );

@@ -46,6 +46,16 @@ describe("parseRange", () => {
     expect(parseRange("bytes=-500", 100)).toEqual({ kind: "partial", start: 0, end: 99 });
   });
 
+  it("ignores a reversed range and sends the whole file, as RFC 9110 asks of an invalid one", () => {
+    expect(parseRange("bytes=5-2", 100)).toEqual({ kind: "whole" });
+    expect(parseRange("bytes=99-0", 100)).toEqual({ kind: "whole" });
+    // Past the end and reversed is still reversed: invalid, so not a 416.
+    expect(parseRange("bytes=500-200", 100)).toEqual({ kind: "whole" });
+    expect(parseRange("bytes=5-2", 0)).toEqual({ kind: "whole" });
+    // Past 2^53, where Number rounds both bounds to 9007199254740992.
+    expect(parseRange("bytes=9007199254740993-9007199254740992", 100)).toEqual({ kind: "whole" });
+  });
+
   it("calls a range the file cannot satisfy unsatisfiable, not empty", () => {
     expect(parseRange("bytes=100-", 100)).toEqual({ kind: "unsatisfiable" });
     expect(parseRange("bytes=200-300", 100)).toEqual({ kind: "unsatisfiable" });

@@ -5,7 +5,7 @@ import { useId, useState } from "react";
 import { MathText } from "@/components/Math";
 import { Button } from "@/components/ui/Button";
 import { ChoiceRow, type ChoiceState } from "@/components/ui/ChoiceRow";
-import { cx, STATUS_TEXT } from "@/components/ui/classes";
+import { ErrorText } from "@/components/ui/ErrorText";
 import {
   DEFAULT_CONFIDENCE,
   type ChoiceAnswer,
@@ -13,6 +13,7 @@ import {
   type ChoicePick,
 } from "@gnosia/tutor/check-block";
 
+import { AnswerRecap } from "./AnswerRecap";
 import { ConfidenceField, ReasoningField } from "./SurenessFields";
 import { RecordedCard } from "./VerdictRow";
 
@@ -141,36 +142,17 @@ export function ChoiceCheckCard({
             <Button variant="primary" size="sm" onClick={submit} disabled={disabled}>
               Submit
             </Button>
-            {missing && (
-              <p role="alert" className={cx(STATUS_TEXT, "text-warn-text")}>
-                Pick an option, or I don&apos;t know, first.
-              </p>
-            )}
+            {missing && <ErrorText tone="warn">Pick an option, or I don&apos;t know, first.</ErrorText>}
           </div>
         </>
       ) : (
         <>
-          <dl className="flex flex-col gap-1 rounded-lg bg-surface2 px-3 py-2 text-[13px]">
-            <div className="flex flex-wrap gap-x-1.5">
-              <dt className="text-text3">Your answer</dt>
-              <dd className="min-w-0 text-text">
-                {answer.picked === null ? (
-                  "I don't know"
-                ) : (
-                  <>
-                    <MathText text={check.options[answer.picked] ?? ""} />
-                    {answer.confidence !== null && <span className="text-text2"> · {answer.confidence}% sure</span>}
-                  </>
-                )}
-              </dd>
-            </div>
-            {answer.thinking !== null && (
-              <div className="flex flex-wrap gap-x-1.5">
-                <dt className="text-text3">Your reasoning</dt>
-                <dd className="min-w-0 whitespace-pre-wrap text-text">{answer.thinking}</dd>
-              </div>
-            )}
-          </dl>
+          <AnswerRecap
+            layout="inline"
+            answer={answer.picked === null ? "I don't know" : <MathText text={check.options[answer.picked] ?? ""} />}
+            confidence={answer.picked === null ? null : answer.confidence}
+            thinking={answer.thinking}
+          />
           <p className="text-[14px] leading-6 text-text2">
             <MathText text={check.why} />
           </p>
@@ -182,9 +164,7 @@ export function ChoiceCheckCard({
             </p>
           ) : (
             <div className="flex flex-wrap items-center gap-3">
-              <p role="alert" className={cx(STATUS_TEXT, "text-warn-text")}>
-                {answer.error ?? "The answer was not recorded."} A retry is never recorded twice.
-              </p>
+              <ErrorText tone="warn">{answer.error ?? "The answer was not recorded."} A retry is never recorded twice.</ErrorText>
               <Button variant="secondary" size="sm" onClick={onRetry}>
                 Try again
               </Button>

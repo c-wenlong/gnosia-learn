@@ -49,6 +49,7 @@ import { closeChatSession, closeSessionNow, releaseScope, saveObservation } from
 
 import { SessionClose } from "./SessionClose";
 import { ENTER } from "@/components/ui/motion";
+import { ErrorText } from "@/components/ui/ErrorText";
 
 /**
  * The session (hi-fi 05 to 07, and 15 on a phone): a short scripted loop over
@@ -705,11 +706,7 @@ export function SessionFocus({
                 <Button onClick={advance}>Continue</Button>
               </div>
             ) : null}
-            {error !== null && (
-              <p role="alert" className="text-[13px] font-medium text-danger">
-                {error}
-              </p>
-            )}
+            <ErrorText>{error}</ErrorText>
           </div>
         </>
       )}

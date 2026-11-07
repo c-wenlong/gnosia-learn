@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { StatTile } from "@/components/ui/StatTile";
-import { CLOSE_TITLE, cx } from "@/components/ui/classes";
+import { FocusHeading } from "@/components/ui/FocusHeading";
 import { formatDue } from "@gnosia/tutor/review-core";
 import {
   formatPL,
@@ -71,14 +71,11 @@ export function SessionClose({
 
   return (
     <div className="flex flex-col gap-4 md:gap-[22px]">
-      <div className="flex flex-col items-center gap-1.5 pt-2 text-center md:pt-0">
-        <h1 tabIndex={-1} className={cx(CLOSE_TITLE, "outline-none")}>
-          {walked === "" ? "Nothing to ask" : weekCheck === null ? "Session closed" : "Module check done"}
-        </h1>
-        <p className="text-[13px] text-text2">
-          {walked === "" ? title : `${title} · ${minutes} min · ${weekCheck === null ? walked : asked}`}
-        </p>
-      </div>
+      <FocusHeading
+        className="pt-2 md:pt-0"
+        title={walked === "" ? "Nothing to ask" : weekCheck === null ? "Session closed" : "Module check done"}
+        lead={walked === "" ? title : `${title} · ${minutes} min · ${weekCheck === null ? walked : asked}`}
+      />
 
       <div className="grid grid-cols-3 gap-2.5 md:flex md:gap-3.5">
         <StatTile value={`${totals.right} / ${totals.answered}`} label="Right" tone="ok" />
