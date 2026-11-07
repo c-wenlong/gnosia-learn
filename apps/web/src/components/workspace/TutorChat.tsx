@@ -41,6 +41,7 @@ import { CheckCard, CheckRow, slotPlan, useCheckThread, type SlotOptions } from 
 import { takeUnanswered } from "./unanswered";
 import { NOTE_HASH } from "./WorkspacePanels";
 import { ENTER, FADE_IN } from "@/components/ui/motion";
+import { Callout } from "@/components/ui/Callout";
 
 /**
  * The workspace's centre panel: a chat with the concept tutor
@@ -585,38 +586,53 @@ export function TutorChat({
 
         {!busy && recall !== null && turns.length > 0 && pendingCheck(turns) === null && (
           // R3 on a thread the learner already had: the card is due, so recall is one press away.
-          <div className="flex animate-fade-in flex-wrap items-center gap-3 rounded-xl bg-surface2 px-4 py-3 text-[13px] text-text motion-reduce:animate-none">
-            <span className="min-w-0 flex-1">This concept&apos;s review is due.</span>
-            <Button variant="secondary" size="sm" onClick={recallNow}>
-              Recall now
-            </Button>
-          </div>
+          <Callout
+            tone="neutral"
+            actionsAt="end"
+            className={FADE_IN}
+            actions={
+              <Button variant="secondary" size="sm" onClick={recallNow}>
+                Recall now
+              </Button>
+            }
+          >
+            This concept&apos;s review is due.
+          </Callout>
         )}
 
         {!busy && openingFailed && turns.length === 0 && (
           // R3: the model could not open on a recall question; the learner can ask again.
-          <div role="status" className="flex animate-fade-in flex-wrap items-center gap-3 rounded-xl bg-warn-tint px-4 py-3 text-[13px] text-text motion-reduce:animate-none">
-            <span className="min-w-0 flex-1">This review is due, but the tutor could not open on a recall question.</span>
-            <Button variant="secondary" size="sm" onClick={() => void askOpening()}>
-              Try again
-            </Button>
-          </div>
+          <Callout
+            role="status"
+            actionsAt="end"
+            className={FADE_IN}
+            actions={
+              <Button variant="secondary" size="sm" onClick={() => void askOpening()}>
+                Try again
+              </Button>
+            }
+          >
+            This review is due, but the tutor could not open on a recall question.
+          </Callout>
         )}
 
         {!busy && (error || last?.role === "user") && (
           // An error, or a thread restored after a reload that cut a request
           // off: either way the last question has no answer, so offer it again.
-          <div
+          <Callout
             role={error ? "alert" : "status"}
-            className="flex animate-fade-in flex-wrap items-center gap-3 rounded-xl bg-warn-tint px-4 py-3 text-[13px] text-text motion-reduce:animate-none"
+            actionsAt="end"
+            className={FADE_IN}
+            actions={
+              last?.role === "user" ? (
+                <Button variant="secondary" size="sm" onClick={retry}>
+                  Try again
+                </Button>
+              ) : undefined
+            }
           >
-            <span className="min-w-0 flex-1">{error ?? "Your last question has no answer yet."}</span>
-            {last?.role === "user" && (
-              <Button variant="secondary" size="sm" onClick={retry}>
-                Try again
-              </Button>
-            )}
-          </div>
+            {error ?? "Your last question has no answer yet."}
+          </Callout>
         )}
 
         {turns.length > 0 &&
@@ -694,9 +710,9 @@ export function TutorChat({
           />
         )}
         {refusal !== null && (
-          <p role="alert" className="animate-fade-in rounded-xl bg-warn-tint px-4 py-3 text-[13px] text-text motion-reduce:animate-none">
+          <Callout role="alert" className={FADE_IN}>
             {refusal}
-          </p>
+          </Callout>
         )}
       </div>
     </div>

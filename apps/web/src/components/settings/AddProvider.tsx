@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/Input";
 import { Dialog, DIALOG_CLOSE_MS } from "@/components/ui/Dialog";
 import { DialogHeader } from "@/components/ui/DialogHeader";
 import { usePresence } from "@/components/ui/use-presence";
+import { ErrorText } from "@/components/ui/ErrorText";
 import { sendJson } from "@/lib/send-json";
 
 import { failure, type Reply } from "./status";
@@ -157,9 +158,9 @@ function AddProviderForm({
         </FormRow>
         {/* The refusal can be about any field (the name, the URL, the key), so it sits above the buttons, not under one of them. */}
         {error !== null && (
-          <p role="alert" className="animate-fade-in text-[12px] text-danger motion-reduce:animate-none">
+          <ErrorText>
             {error} {draft === "" && "Enter the key again: it is never kept after a send."}
-          </p>
+          </ErrorText>
         )}
         <div className="flex flex-wrap gap-2.5">
           <Button type="submit" size="sm" disabled={saving || !ready}>

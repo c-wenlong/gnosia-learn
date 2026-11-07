@@ -17,6 +17,7 @@ import { Placeholder } from "@/components/ui/Placeholder";
 import { RatingButton } from "@/components/ui/RatingButton";
 import { StatTile } from "@/components/ui/StatTile";
 import { CLOSE_TITLE, cx } from "@/components/ui/classes";
+import { ErrorText } from "@/components/ui/ErrorText";
 import { conceptHref } from "@/lib/course-path";
 import { scrollBehavior } from "@/lib/motion";
 import { quizKey } from "@/lib/quiz-keys";
@@ -473,11 +474,7 @@ export function ReviewSession({
             </Button>
           </div>
         )}
-        {error !== null && (
-          <p role="alert" className="text-[13px] font-medium text-danger">
-            {error}
-          </p>
-        )}
+        <ErrorText>{error}</ErrorText>
       </div>
 
       <div className="hidden items-center justify-between gap-4 text-[12px] text-text3 md:flex">

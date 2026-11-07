@@ -9,6 +9,7 @@ import { TextLink } from "@/components/ui/TextLink";
 import { cx, STATUS_TEXT } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
 import { SearchField as KitSearchField } from "@/components/ui/SearchField";
+import { ErrorText } from "@/components/ui/ErrorText";
 import { isCurrentRow } from "@/lib/nav";
 import { recentGlyph } from "@/lib/recent-glyphs";
 import { matchedTitle, time, type RecentItem } from "@/lib/recent-core";
@@ -130,10 +131,11 @@ export function SearchResults({
   // words that follow redraw it in place.
   return (
     <div data-peek-hold="" className="animate-fade-in pt-1 motion-reduce:animate-none">
+      {/* Keyed by the words, so a new refusal is a new alert and is announced. */}
       {errors.map((error) => (
-        <p key={error} role="alert" className={cx(STATUS_TEXT, "px-2 pt-1 text-danger")}>
+        <ErrorText key={error} className="px-2 pt-1">
           {error}
-        </p>
+        </ErrorText>
       ))}
       {searching && hits.length === 0 && (
         <p role="status" className={cx(STATUS_TEXT, "px-2 pt-1 text-text3")}>
@@ -177,11 +179,7 @@ export function SearchResults({
           <TextLink onClick={search.showMore} pending={search.loadingMore} size="sm" className="px-1.5 py-1">
             {search.loadingMore ? "Reading more matches…" : "Show more matches"}
           </TextLink>
-          {search.moreError !== null && (
-            <p role="alert" className={cx(STATUS_TEXT, "px-1.5 text-danger")}>
-              {search.moreError}
-            </p>
-          )}
+          <ErrorText className="px-1.5">{search.moreError}</ErrorText>
         </div>
       )}
     </div>
