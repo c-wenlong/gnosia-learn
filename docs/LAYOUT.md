@@ -148,7 +148,7 @@ apps/desktop/
 | File | Owns |
 | --- | --- |
 | `GnosiaWebApp.swift` | The entry point and the window |
-| `WebView.swift` | The WKWebView: navigation off 127.0.0.1 goes to the real browser, cookies persist across launches |
+| `WebView.swift` | The WKWebView: it shows only the app server's origin, other web pages go to the real browser and other schemes are dropped; cookies persist across launches |
 | `WebServer.swift` | The lifecycle of the Next server the window loads |
 | `StudioRunner.swift` | The lifecycle of the studio runner, adopted when one already answers on its port |
 | `Checkout.swift` | Where the repository and the data home are, and the environment each child starts with, read once per launch from `services/launch-env` |

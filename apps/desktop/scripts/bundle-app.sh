@@ -2,7 +2,9 @@
 # Bundle .build/release/GnosiaWeb into .build/"Gnosia Web.app" — Info.plist
 # plus the brand .icns made from Resources/AppIcon.png. The shell has no
 # SwiftPM resources of its own; everything it renders comes from the server
-# it spawns. Adhoc-signed.
+# it spawns. Ad hoc signed, and the Info.plist carries the folder usage
+# strings macOS shows when the checkout is under Desktop, Documents or
+# Downloads.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -50,6 +52,11 @@ cat > "$CONTENTS/Info.plist" <<PLIST
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>NSHighResolutionCapable</key><true/>
     <key>NSPrincipalClass</key><string>NSApplication</string>
+    <!-- What macOS shows when it asks to let the app, and the servers it
+         spawns, read a checkout under one of these folders. -->
+    <key>NSDesktopFolderUsageDescription</key><string>Gnosia serves the web app from its checkout, and the checkout is in your Desktop folder.</string>
+    <key>NSDocumentsFolderUsageDescription</key><string>Gnosia serves the web app from its checkout, and the checkout is in your Documents folder.</string>
+    <key>NSDownloadsFolderUsageDescription</key><string>Gnosia serves the web app from its checkout, and the checkout is in your Downloads folder.</string>
     <key>LSEnvironment</key>
     <dict>
         <key>GNOSIA_REPO</key><string>$REPO_ROOT_XML</string>
@@ -58,6 +65,8 @@ cat > "$CONTENTS/Info.plist" <<PLIST
 </plist>
 PLIST
 
-codesign --sign - --force --deep "$APP" 2>/dev/null || true
+# A signing failure stops the build: an unsigned bundle is what macOS then
+# refuses or keeps asking about.
+codesign --sign - --force --deep "$APP"
 
 echo "Built $APP — open it or copy it to /Applications."

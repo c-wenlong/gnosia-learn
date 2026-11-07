@@ -5,7 +5,8 @@
 //  The desktop shell for the web app: one window hosting a WKWebView on a
 //  locally spawned Next server, so the app people use is the app itself —
 //  no second UI to keep in parity. Runs unbundled from `swift run` too, so
-//  init() asks for a regular activation policy the way GnosiaApp does.
+//  init() asks for a regular activation policy: an unbundled executable
+//  otherwise gets no Dock icon and no menu bar.
 //
 
 import AppKit
@@ -32,14 +33,25 @@ struct GnosiaWebApp: App {
                 .task { await server.start() }
                 // Only when the web serves the studio (S9-15): without
                 // STUDIO_ENABLED /studio 404s, and a runner booted anyway
-                // would hold port 7250 for nothing.
+                // would hold port 7250 for nothing. And only on the
+                // environment the web gets: at once when the resolver
+                // answered, else once the web is up on the fallback. A
+                // runner started on the fallback while the web's "Try
+                // again" went on to resolve would open another catalog.
                 .task {
-                    await Checkout.prepare()
-                    if Checkout.studioEnabled(Checkout.childEnv()) { await studio.start() }
+                    if await Checkout.prepare() == nil, Checkout.isResolved { await startStudio() }
+                }
+                .onChange(of: server.status) { _, status in
+                    if case .running = status { Task { await startStudio() } }
                 }
         }
         .windowToolbarStyle(.unified)
         .commands { AppCommands() }
+    }
+
+    /// `StudioRunner.start()` is idempotent, so both callers may ask.
+    private func startStudio() async {
+        if Checkout.studioEnabled(Checkout.childEnv()) { await studio.start() }
     }
 }
 
