@@ -26,7 +26,22 @@
 const OPEN = "data-popover-open";
 const RULE_ID = "jsdom-popover-shim";
 
-function showRule(doc: Document) {
+// The few DOM members the shim touches, spelled out: the root tsconfig, which
+// checks vitest.setup.ts and so this file, has no DOM lib.
+interface Box {
+  ownerDocument: Page;
+  hasAttribute(name: string): boolean;
+  setAttribute(name: string, value: string): void;
+  removeAttribute(name: string): void;
+}
+interface Page {
+  head: { append(node: unknown): void } | null;
+  documentElement: { append(node: unknown): void };
+  getElementById(id: string): unknown;
+  createElement(tag: "style"): { id: string; textContent: string | null };
+}
+
+function showRule(doc: Page) {
   if (doc.getElementById(RULE_ID) !== null) return;
   const style = doc.createElement("style");
   style.id = RULE_ID;
@@ -34,13 +49,13 @@ function showRule(doc: Document) {
   (doc.head ?? doc.documentElement).append(style);
 }
 
-function popoverOf(el: HTMLElement, method: string) {
+function popoverOf(el: Box, method: string) {
   if (!el.hasAttribute("popover")) {
     throw new DOMException(`${method}: the element has no popover attribute`, "NotSupportedError");
   }
 }
 
-function setOpen(el: HTMLElement, open: boolean) {
+function setOpen(el: Box, open: boolean) {
   if (open) {
     showRule(el.ownerDocument);
     el.setAttribute(OPEN, "");
@@ -50,17 +65,18 @@ function setOpen(el: HTMLElement, open: boolean) {
 }
 
 export function installPopoverShim() {
-  if (typeof HTMLElement === "undefined" || typeof HTMLElement.prototype.showPopover === "function") return;
-  const proto = HTMLElement.prototype;
-  proto.showPopover = function showPopover(this: HTMLElement) {
+  const element = (globalThis as unknown as { HTMLElement?: { prototype: Record<string, unknown> } }).HTMLElement;
+  if (element === undefined || typeof element.prototype.showPopover === "function") return;
+  const proto = element.prototype;
+  proto.showPopover = function showPopover(this: Box) {
     popoverOf(this, "showPopover");
     setOpen(this, true);
   };
-  proto.hidePopover = function hidePopover(this: HTMLElement) {
+  proto.hidePopover = function hidePopover(this: Box) {
     popoverOf(this, "hidePopover");
     setOpen(this, false);
   };
-  proto.togglePopover = function togglePopover(this: HTMLElement, options?: boolean | { force?: boolean }) {
+  proto.togglePopover = function togglePopover(this: Box, options?: boolean | { force?: boolean }) {
     popoverOf(this, "togglePopover");
     const force = typeof options === "boolean" ? options : options?.force;
     const open = force ?? !this.hasAttribute(OPEN);
