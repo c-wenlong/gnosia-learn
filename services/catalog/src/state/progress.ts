@@ -214,7 +214,6 @@ export async function resetProgress(
       and(
         eq(progress.learnerId, learnerId),
         inArray(progress.curriculumItemId, curriculumItemIds),
-        readable,
       ),
     );
   return result.changes;

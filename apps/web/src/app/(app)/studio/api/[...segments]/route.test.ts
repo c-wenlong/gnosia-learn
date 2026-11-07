@@ -2,9 +2,10 @@ import { STUDIO_OWNER_HEADER } from "@gnosia/schema/shared";
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const signedIn = vi.hoisted(() => ({ value: true }));
 vi.mock("@/lib/auth/session", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth/session")>()),
-  isSignedIn: async () => true,
+  isSignedIn: async () => signedIn.value,
 }));
 
 import { GET, POST } from "./route";
@@ -28,6 +29,7 @@ describe("/studio/api/*", () => {
 
   beforeEach(() => {
     vi.stubEnv("STUDIO_ENABLED", "1");
+    signedIn.value = true;
     seen.length = 0;
     reply = () => new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
     vi.stubGlobal(
@@ -46,8 +48,8 @@ describe("/studio/api/*", () => {
 
   const context = { params: Promise.resolve({ segments: ["jobs"] }) };
 
-  function request(method: string, headers: Record<string, string>, body?: BodyInit): NextRequest {
-    return new NextRequest(`${ORIGIN}/studio/api/jobs`, {
+  function request(method: string, headers: Record<string, string>, body?: BodyInit, path = "jobs"): NextRequest {
+    return new NextRequest(`${ORIGIN}/studio/api/${path}`, {
       method,
       headers: { host: "localhost:3000", ...headers },
       ...(body === undefined ? {} : { body, duplex: "half" }),
@@ -95,6 +97,37 @@ describe("/studio/api/*", () => {
     const names = [...seen[0].headers.keys()].sort();
     expect(names).toEqual(["accept", "if-none-match", "last-event-id", STUDIO_OWNER_HEADER].sort());
     expect(seen[0].headers.get(STUDIO_OWNER_HEADER)).toBe("local");
+  });
+
+  it("sends the session's owner, never the one a page names", async () => {
+    await GET(request("GET", { "sec-fetch-site": "same-origin", [STUDIO_OWNER_HEADER]: "someone-else" }), context);
+    expect(seen).toHaveLength(1);
+    expect(seen[0].headers.get(STUDIO_OWNER_HEADER)).toBe("local");
+  });
+
+  it("is a 401 with no session, and forwards nothing", async () => {
+    signedIn.value = false;
+    const get = await GET(request("GET", { "sec-fetch-site": "same-origin" }), context);
+    expect(get.status).toBe(401);
+    const post = await POST(request("POST", { "sec-fetch-site": "same-origin", "content-type": "application/json" }, "{}"), context);
+    expect(post.status).toBe(401);
+    expect(seen).toHaveLength(0);
+  });
+
+  it("encodes each segment, so one cannot add a path step of its own", async () => {
+    // Route handler params arrive decoded: "..%2F" in the address is "../" here.
+    const segments = { params: Promise.resolve({ segments: ["diagrams", "../", "a/b", "svg"] }) };
+    await GET(request("GET", { "sec-fetch-site": "same-origin" }), segments);
+    expect(seen).toHaveLength(1);
+    expect(seen[0].url).toMatch(/\/api\/diagrams\/\.\.%2F\/a%2Fb\/svg$/);
+    expect(new URL(seen[0].url).pathname).toBe("/api/diagrams/..%2F/a%2Fb/svg");
+  });
+
+  it("forwards the query string as it came", async () => {
+    await GET(request("GET", { "sec-fetch-site": "same-origin" }, undefined, "jobs?state=queued&limit=5"), context);
+    expect(seen).toHaveLength(1);
+    expect(new URL(seen[0].url).search).toBe("?state=queued&limit=5");
+    expect(new URL(seen[0].url).pathname).toBe("/api/jobs");
   });
 
   it("forwards a JSON body and refuses one over the runner's limit, declared or streamed", async () => {
@@ -147,5 +180,7 @@ describe("/studio/api/*", () => {
     );
     const response = await GET(request("GET", { "sec-fetch-site": "same-origin" }), context);
     expect(response.status).toBe(502);
+    const body = (await response.json()) as { error: string; detail: string };
+    expect(body.detail).toContain("npm run studio");
   });
 });
