@@ -10,17 +10,17 @@ beforeAll(() => {
   (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 });
 
-let unmount: (() => void) | null = null;
+// Every root a test mounts, so afterEach unmounts all of them, not just the last.
+const mounted: Array<() => void> = [];
 afterEach(() => {
-  unmount?.();
-  unmount = null;
+  for (const unmount of mounted.splice(0)) unmount();
 });
 
 function draw(props: Parameters<typeof LinkRow>[0]): HTMLElement {
   const host = document.createElement("div");
   const root = createRoot(host);
   act(() => root.render(createElement(LinkRow, props)));
-  unmount = () => act(() => root.unmount());
+  mounted.push(() => act(() => root.unmount()));
   return host;
 }
 
@@ -60,7 +60,6 @@ describe("LinkRow", () => {
     expect(lines[0].className).toContain("font-medium");
     expect(lines[0].textContent).toBe("Divide and conquer");
     expect(lines[1].textContent).toBe("CS3230 · Module 2");
-    unmount?.();
 
     const plain = draw({ href: "/x", title: "Divide and conquer" }).querySelector("a")!;
     expect(plain.querySelector(".font-medium")).toBeNull();

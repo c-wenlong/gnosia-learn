@@ -9,17 +9,17 @@ beforeAll(() => {
   (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 });
 
-let unmount: (() => void) | null = null;
+// Every root a test mounts, so afterEach unmounts all of them, not just the last.
+const mounted: Array<() => void> = [];
 afterEach(() => {
-  unmount?.();
-  unmount = null;
+  for (const unmount of mounted.splice(0)) unmount();
 });
 
 function draw(props: ComponentProps<typeof CourseProgress>): HTMLElement {
   const host = document.createElement("div");
   const root = createRoot(host);
   act(() => root.render(createElement(CourseProgress, props)));
-  unmount = () => act(() => root.unmount());
+  mounted.push(() => act(() => root.unmount()));
   return host;
 }
 
@@ -73,7 +73,6 @@ describe("CourseProgress", () => {
     const ticked = draw({ variant: "headline", code: "CP4284", done: 1, total: 4, conceptBacked: false });
     expect(text(ticked)).toBe("25%done1 of 4 topics done");
     expect(bar(ticked).getAttribute("aria-label")).toBe("CP4284 progress");
-    unmount?.();
 
     const backed = draw({ variant: "headline", code: "CP4284", done: 4, total: 4, conceptBacked: true });
     expect(text(backed)).toBe("100%mastered4 of 4 topics mastered");
