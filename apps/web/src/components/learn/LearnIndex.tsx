@@ -8,6 +8,7 @@ import { DomainCards, DomainView, type Place } from "@/components/learn/DomainBr
 import type { MapMark } from "@/components/learn/DomainGraph";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { DockedAside } from "@/components/ui/DockedAside";
 import { cardClasses, cx, FOCUS, LABEL } from "@/components/ui/classes";
 import { isImeKey } from "@/components/ui/composer-keys";
 import { FilterMenu } from "@/components/ui/FilterMenu";
@@ -269,23 +270,19 @@ export function LearnIndex({
       )}
 
       {view === "table" ? (
-        // Sized by the width the page actually has, not the viewport's: the
-        // sidebar takes 60 or 260px of it, so a viewport breakpoint docked the
-        // graph beside a table with no room left for the concept titles. It
-        // fades in over the map it replaces.
-        <div className={cx("@container", FADE_IN)}>
-          <div className="grid grid-cols-1 items-start gap-5 @4xl:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]">
-            <ConceptTable rows={visible} selected={selected} onSelect={setSelected} total={rows.length} />
-            <GraphCard
-              nodes={nodes}
-              edges={edges}
-              focus={focus}
-              scope={scope}
-              onScope={setScope}
-              onSelect={setSelected}
-            />
-          </div>
-        </div>
+        // The graph docks beside the table when the page has the room
+        // (DockedAside). It fades in over the map it replaces.
+        <DockedAside aside="wide" className={FADE_IN}>
+          <ConceptTable rows={visible} selected={selected} onSelect={setSelected} total={rows.length} />
+          <GraphCard
+            nodes={nodes}
+            edges={edges}
+            focus={focus}
+            scope={scope}
+            onScope={setScope}
+            onSelect={setSelected}
+          />
+        </DockedAside>
       ) : domain === null || domainLayout === null ? (
         // Keyed by level, so each one fades in over the one it replaces.
         <div key="domains" className={FADE_IN}>
