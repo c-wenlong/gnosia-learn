@@ -146,6 +146,23 @@ describe("the value's shape", () => {
     expect(isBareTag({ text: "words", mentions: [] })).toBe(false);
   });
 
+  it("reads words, not a bare tag, when a range does not hold a real chip", () => {
+    // Every value the composer builds passes the runner's checks, but
+    // isBareTag is library code: a range past the text's end must not slice
+    // the words away, and a kind twice is one chip and text.
+    expect(isBareTag({ text: "hello", mentions: [{ kind: "video", start: 0, end: 6 }] })).toBe(false);
+    expect(isBareTag({ text: "a @video", mentions: [{ kind: "video", start: 2, end: 7 }] })).toBe(false);
+    expect(
+      isBareTag({
+        text: "@video@video",
+        mentions: [
+          { kind: "video", start: 0, end: 6 },
+          { kind: "video", start: 6, end: 12 },
+        ],
+      }),
+    ).toBe(false);
+  });
+
   it("trims for sending and moves every position with the text", () => {
     const trimmed = trimValue(valueOf([{ type: "text", text: "  \n make a " }, { type: "mention", kind: "video" }, { type: "text", text: "  " }]));
     expect(trimmed).toEqual({ text: "make a @video", mentions: [{ kind: "video", start: 7, end: 13 }] });
