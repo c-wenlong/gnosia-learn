@@ -22,7 +22,7 @@ import type {
 /* -------------------------------------------------------------------------- */
 
 /** The event names `GET /api/drafts/{id}/events` sends, in the doc's API table. */
-export const DRAFT_EVENT_TYPES = [
+const DRAFT_EVENT_TYPES = [
   "delta",
   "message",
   "reply",

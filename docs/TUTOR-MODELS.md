@@ -168,7 +168,7 @@ not reach it. `checkModelId` refuses an id with a known key prefix (`nvapi-`,
 `sk-`, `AIza`) or a run of 20 or more letters and digits holding both, which
 random key material has and model ids, whose words are split by `-`, `.`, `/`
 and `:`, do not; the catalog function and every route share it. The add and
-replace writes (the web route and the sidecar's turns, through `echoesKey` in
+replace writes (the web route's turns, through `echoesKey` in
 `packages/tutor/src/server/key-echo.ts`) also refuse an id that is or contains
 a whole key the owner's tutor could call with, saved or server, for any
 provider, skipping a server key shorter than 16 characters. They never refuse
@@ -233,7 +233,7 @@ Providers card (`Providers.tsx`) in place of Provider keys and Models.
   the row stays listed.
 - **Order with no models.** While the chain is empty the rows follow the
   order the built-in defaults are tried in, saved keys before the server's
-  (`orderCredentials`), so the card never lists a provider ahead of one the
+  (`providerKeyViews` in `apps/web/src/lib/provider-keys/settings.ts`), so the card never lists a provider ahead of one the
   tutor calls first.
 
 ## T13. The common providers
@@ -311,7 +311,12 @@ Ollama or LM Studio), by a name, a base URL and a key, from Add provider's
   under the learner lock (`addCustomProvider`), so a provider never exists
   without its key. `PATCH` changes the name, the base URL and, when one is
   sent, the key, in one transaction too, so a refused key leaves the name
-  and the URL as they were; the models stay. Delete is the provider route's,
+  and the URL as they were; the models stay. A new base URL needs the key
+  sent with it, or the write is refused with `KEY_REQUIRED` and nothing
+  changes: the saved key goes only to the URL it was saved for, so a
+  session cannot move the URL to its own host and have the next model list
+  or Test carry the key there (BYOK.md, D3). A rename, or the same URL sent
+  again, keeps the key. Delete is the provider route's,
   which removes the row, the key and the models in one transaction.
 - **A key is filed under a custom id only while the owner has it**: every
   write of one (`saveCustomProviderKey`, which the key route reaches through
@@ -332,9 +337,9 @@ added no models, `availableProviderSummary` says "add a provider and a
 model", and the card lists only providers the owner connected — a saved key
 or chain entries — with the rest offered under Add provider. A provider's
 built-in default still feeds one place: the key Test, which needs a model
-to call (`keyTestModel`, `used` false). `orderCredentials` remains for
-callers with no owner — scripts and tests — and is not the tutor's
-fallback anymore.
+to call (`keyTestModel`, `used` false). `orderCredentials`, which built
+the old defaults' order, was removed on 2026-11-07: nothing shipped called
+it any more.
 
 ## T16. Two cards: every provider listed, and the picks as dropdowns
 

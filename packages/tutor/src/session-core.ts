@@ -3,6 +3,7 @@ import { CHECK_DISTRACTOR_LIMITS } from "@gnosia/schema/shared";
 
 import type { ConceptCheck } from "./concept-note-core";
 import type { ConceptWorkspace } from "./concept-workspace-core";
+import { atxHeading } from "./markdown";
 import { buildChoices, formatDue } from "./review-core";
 
 /**
@@ -208,8 +209,11 @@ export function withWrittenOptions(question: SessionQuestion, options: readonly 
  * question, or another check moved into this id) asks something else, and
  * options written for that are not used here.
  */
-export function sameCheck(question: SessionQuestion, server: { question: unknown; answer: unknown }): boolean {
-  const answer = question.choices[question.correct];
+export function sameCheck(
+  question: Pick<SessionQuestion, "prompt"> & { choices: readonly string[] | null; correct: number | null },
+  server: { question: unknown; answer: unknown },
+): boolean {
+  const answer = question.correct === null ? undefined : question.choices?.[question.correct];
   return (
     typeof server.question === "string" &&
     typeof server.answer === "string" &&
@@ -334,7 +338,7 @@ export function parseMode(value: unknown): ConceptSessionMode {
 }
 
 /** The most checks Quiz me asks in one session. */
-export const MAX_QUIZ_CHECKS = 5;
+const MAX_QUIZ_CHECKS = 5;
 
 /**
  * The steps a session walks through.
@@ -545,10 +549,12 @@ export function teachProse(source: string): string {
 
   interface Section {
     heading: string | null;
+    /** The heading's text, closing hashes off: what `HIDDEN_SECTIONS` is matched against. */
+    title: string;
     level: number;
     body: string[];
   }
-  const sections: Section[] = [{ heading: null, level: 0, body: [] }];
+  const sections: Section[] = [{ heading: null, title: "", level: 0, body: [] }];
   let fence: string | null = null;
   let inCheck = false;
 
@@ -573,9 +579,9 @@ export function teachProse(source: string): string {
       if (!inCheck) current.body.push(line);
       continue;
     }
-    const heading = /^(#{1,6})\s+(.*?)\s*#*\s*$/.exec(line);
+    const heading = atxHeading(line, false);
     if (heading !== null) {
-      sections.push({ heading: line, level: heading[1]?.length ?? 1, body: [] });
+      sections.push({ heading: line, title: heading.text, level: heading.level, body: [] });
       continue;
     }
     current.body.push(line);
@@ -585,7 +591,7 @@ export function teachProse(source: string): string {
   let skipBelow: number | null = null;
   for (const section of sections) {
     if (section.heading !== null) {
-      const text = section.heading.replace(/^#+\s*/, "").replace(/\s*#*\s*$/, "").trim().toLowerCase();
+      const text = section.title.toLowerCase();
       if (skipBelow !== null && section.level > skipBelow) continue;
       skipBelow = null;
       if (section.level === 1) {
@@ -789,7 +795,7 @@ export function scheduledCards(
 }
 
 /** The longest prefill "Ask the tutor" puts in the workspace input. */
-export const PREFILL_LIMIT = 1_200;
+const PREFILL_LIMIT = 1_200;
 
 /**
  * What "Ask the tutor" prefills in the workspace chat: the question, what the

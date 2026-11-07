@@ -185,6 +185,32 @@ describe("POST /api/agent/chat with conceptSlug", () => {
     expect(sent[1]).toEqual({ role: "user", content: "What is it?" });
   });
 
+  it("hands the request's signal to the model call, so a closed tab stops it", async () => {
+    readConceptWorkspace.mockResolvedValue({ state: "ok", workspace });
+    completeWithFallback.mockResolvedValue({
+      ok: true,
+      attempts: [],
+      result: { content: "It measures alignment.", model: "m", provider: "gemini", providerLabel: "Gemini" },
+    });
+    const browser = new AbortController();
+    const base = post({ conceptSlug: "dot-product", messages: [{ role: "user", content: "What is it?" }] });
+    const { POST } = await import("./route");
+    await POST(new Request(base, { signal: browser.signal }));
+    const signal = completeWithFallback.mock.calls[0]?.[3] as AbortSignal | undefined;
+    expect(signal).toBeInstanceOf(AbortSignal);
+    expect(signal?.aborted).toBe(false);
+    browser.abort();
+    expect(signal?.aborted).toBe(true);
+  });
+
+  it("says a closed request was closed, not that every provider failed", async () => {
+    readConceptWorkspace.mockResolvedValue({ state: "ok", workspace });
+    completeWithFallback.mockResolvedValue({ ok: false, attempts: [], code: "CANCELLED" });
+    const { status, json } = await call({ conceptSlug: "dot-product", messages: [{ role: "user", content: "What is it?" }] });
+    expect(status).toBe(502);
+    expect(json).toMatchObject({ code: "CANCELLED", error: "The request was closed" });
+  });
+
   it("takes a CHECK marker off the reply and returns it beside the prose", async () => {
     readConceptWorkspace.mockResolvedValue({ state: "ok", workspace });
     completeWithFallback.mockResolvedValue({
@@ -383,6 +409,18 @@ describe("POST /api/agent/chat with conceptSlug", () => {
     for (const messages of [[{ role: "tool", content: "x" }], [{ role: "user", content: { parts: ["x"] } }], [null]]) {
       const { status, json } = await call({ ...topic, messages });
       expect(status).toBe(400);
+      expect(json.code).toBe("BAD_REQUEST");
+    }
+    // A field of the wrong type is a 400 too, not a TypeError in the prompt builder (R3-1-03).
+    const messages = [{ role: "user", content: "hi" }];
+    for (const body of [
+      { ...topic, messages, learnerNote: 5 },
+      { ...topic, messages, learnerNote: {} },
+      { ...topic, courseSlug: 4284, messages },
+      { ...topic, topicId: ["t1"], messages },
+    ]) {
+      const { status, json } = await call(body);
+      expect(status, JSON.stringify(body)).toBe(400);
       expect(json.code).toBe("BAD_REQUEST");
     }
     expect(getCourses).not.toHaveBeenCalled();

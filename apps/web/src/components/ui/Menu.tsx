@@ -256,7 +256,7 @@ export function Menu({
  * the arrows, Home and End move, and, while the list is open, a letter finds
  * an item. Any other key, or one held with Ctrl, Cmd or Alt, goes on.
  */
-export function menuOwnsKey(event: { key: string; ctrlKey: boolean; metaKey: boolean; altKey: boolean }, open: boolean): boolean {
+function menuOwnsKey(event: { key: string; ctrlKey: boolean; metaKey: boolean; altKey: boolean }, open: boolean): boolean {
   if (event.ctrlKey || event.metaKey || event.altKey) return false;
   if (MENU_KEYS.has(event.key)) return true;
   return open && event.key.length === 1;

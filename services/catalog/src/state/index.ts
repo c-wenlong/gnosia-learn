@@ -67,7 +67,8 @@ export { blobRoot } from "../env";
 /**
  * The catalog's file as every catalog command resolves it (`CATALOG_DB`,
  * `services/catalog/.env`, `DATABASE_URL`, the data home), for the launchers
- * that hand one resolved path to the web, the studio and the macOS sidecar.
+ * that hand one resolved path to the web and the studio
+ * (`services/launch-env`).
  */
 export { databasePath } from "../env";
 /**

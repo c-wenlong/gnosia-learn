@@ -2,7 +2,7 @@ import type { Env } from "./deps";
 
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
-/** The message a refused base URL gets, on the web and in the sidecar alike. */
+/** The message a refused base URL gets. */
 export const SELF_ADDRESS_REASON = "That address is this app or its studio runner, not a model provider.";
 
 function portOf(url: URL): string {

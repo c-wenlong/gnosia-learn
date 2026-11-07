@@ -91,7 +91,7 @@ const input = (over: Partial<WorkspaceInput> = {}): WorkspaceInput => ({
     courseCode: "CP4281",
     courseTitle: "Graphics",
     moduleSlug: "m2",
-    moduleOrder: 2,
+    moduleNumber: 2,
     moduleTitle: "Transformations",
     topicId: "cp4281-m2-t1",
     topicTitle: "Transformations",

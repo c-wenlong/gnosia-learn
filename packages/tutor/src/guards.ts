@@ -1,12 +1,12 @@
 /**
  * Abuse prevention for the `/api/agent/*` routes.
  *
- * These routes spend the owner's provider quota (NVIDIA, Gemini, OpenRouter)
- * on behalf of whoever calls them, and the app has no user accounts: learner
- * state is localStorage only and the caller is a `"use client"` component
- * doing a same-origin `fetch`. Anything the browser would have to send is
- * visible in the JS bundle, so there is no token to check. What is left is
- * three cheap bounds that make casual abuse unrewarding:
+ * These routes spend the owner's provider quota (the keys in their model
+ * chain, saved or the server's) on behalf of whoever holds the session. They
+ * sit behind the owner's sign-in (`apps/web/src/proxy.ts`), and the caller is
+ * a `"use client"` component doing a same-origin `fetch` with the session
+ * cookie. On top of the session, three cheap bounds make abuse from a page
+ * that holds it unrewarding:
  *
  *   1. the request has to look like it came from a page on this same host,
  *   2. the payload has to be small enough that one call cannot amplify cost,
@@ -22,7 +22,7 @@
 /*
  * The same-origin rule is not here. It is `requestIsSameOrigin` in the web
  * app's `apps/web/src/lib/auth/core.ts`, the one rule every guarded route
- * uses; the native sidecar has no browser in front of it to ask.
+ * uses.
  */
 
 
@@ -128,7 +128,7 @@ export const MAX_TRACKED_CLIENTS = 10_000;
  * How often a store is swept for expired windows. Sweeping on every call made
  * each request with a new key a walk over up to `MAX_TRACKED_CLIENTS` entries.
  */
-export const SWEEP_INTERVAL_MS = 1_000;
+const SWEEP_INTERVAL_MS = 1_000;
 
 interface RateLimitEntry {
   count: number;
@@ -222,7 +222,7 @@ export function checkRateLimit(
  * so with `TRUST_PROXY=1`. Without either, those headers are whatever the
  * client typed.
  */
-export function trustsProxy(env: Record<string, string | undefined> = process.env): boolean {
+function trustsProxy(env: Record<string, string | undefined> = process.env): boolean {
   return env.VERCEL === "1" || env.TRUST_PROXY === "1" || env.TRUST_PROXY === "true";
 }
 

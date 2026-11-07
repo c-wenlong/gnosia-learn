@@ -8,12 +8,12 @@ import { Callout } from "@/components/ui/Callout";
 import { Card } from "@/components/ui/Card";
 import { Glyph } from "@/components/ui/Glyph";
 import { LiveStatus } from "@/components/ui/LiveStatus";
+import { statusProps, type SaveStatus } from "@/components/ui/save-status";
 import type { ProvidersView } from "@/lib/providers/view";
 import { BYOK_SETTINGS_CHANGED } from "@/lib/studio-byok";
 
 import { AddProvider } from "./AddProvider";
 import { ProviderRow } from "./ProviderRow";
-import { tone, textOf, type Status } from "./status";
 
 /**
  * The Providers card: every model provider in one list — each built-in,
@@ -45,7 +45,7 @@ export function Providers({
 }) {
   const router = useRouter();
   const base = useId();
-  const [status, setStatus] = useState<Status>({ kind: "idle" });
+  const [status, setStatus] = useState<SaveStatus>({ kind: "idle" });
   const [adding, setAdding] = useState(false);
   // While a new key is on its way the form must stay open: the toggle would
   // shut it under a save that is still going to land.
@@ -100,7 +100,7 @@ export function Providers({
         opener={() => document.getElementById(`${base}-add`)}
         onAdded={(label) => {
           setAdding(false);
-          setStatus({ kind: "done", text: `Added ${label}. Pick a model for it below.` });
+          setStatus({ kind: "saved", text: `Added ${label}. Pick a model for it below.` });
           // Studio's provider list changed too; its block reads it again.
           window.dispatchEvent(new Event(BYOK_SETTINGS_CHANGED));
           router.refresh();
@@ -119,14 +119,14 @@ export function Providers({
               // it: the card says what happened, and Add provider takes focus.
               onGone={(text) => {
                 focusAdd.current = true;
-                setStatus({ kind: "done", text });
+                setStatus({ kind: "saved", text });
               }}
             />
           ))}
         </ul>
       )}
       <div className="-mt-3">
-        <LiveStatus text={textOf(status)} tone={tone(status)} className="pt-3" />
+        <LiveStatus {...statusProps(status)} className="pt-3" />
       </div>
     </Card>
   );

@@ -16,13 +16,14 @@ import {
   NewJobRow,
 } from "@/components/studio/job-tile";
 import { JobRowLink } from "@/components/studio/GridJob";
-import { FADE_IN } from "@/components/studio/motion";
+import { FADE_IN } from "@/components/ui/motion";
+import { ErrorTip } from "@/components/ui/ErrorTip";
 import { FadeImg } from "@/components/studio/motion-parts";
 import { PanelLink } from "@/components/studio/PanelLink";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
 import { KindBadge, KindWord } from "@/components/studio/KindBadge";
 import { usePanelHost } from "@/components/studio/panel-host";
-import { TILE, TILE_ACTIONS, TILE_LIFT } from "@/components/studio/surfaces";
+import { TILE, TILE_ACTIONS, TILE_LIFT, TILE_THUMB } from "@/components/studio/surfaces";
 import { Badge } from "@/components/ui/Badge";
 import { buttonClasses, cx, linkClasses } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
@@ -48,6 +49,7 @@ import { newVideoJobs, videoJobForSlug, videoRowJobLabel, videoRowWords, tileSta
 import { shortLength } from "@/lib/studio-brief-video";
 import { type StudioVideo } from "@/lib/studio-video-grid";
 import { conversationHref, gridHref, panelHref } from "@/lib/studio-url";
+import { clock } from "@/lib/recent-core";
 
 /**
  * Studio videos in the grid, and a video job where its video is (docs/
@@ -81,7 +83,7 @@ export function VideoTile({ video, path }: { video: StudioVideo; path: string })
         aria-label={`Play video: ${title}`}
         className="flex min-w-0 flex-col"
       >
-        <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden border-b border-border bg-black">
+        <div className={cx("relative flex items-center justify-center overflow-hidden border-b border-border bg-black", TILE_THUMB)}>
           {video.posterAssetId !== null ? (
             // A blob behind the asset route, which the optimiser cannot resize; it fades in once loaded.
             <FadeImg src={posterHref(video.posterAssetId)} alt="" loading="lazy" decoding="async" className="h-full w-full object-contain" />
@@ -91,7 +93,7 @@ export function VideoTile({ video, path }: { video: StudioVideo; path: string })
           <PlayMark />
           {video.durationSeconds !== null && (
             <span className="absolute right-2 bottom-2 rounded bg-black/75 px-1.5 py-0.5 text-xs font-medium tabular-nums text-white">
-              {clockLength(video.durationSeconds)}
+              {clock(Math.round(video.durationSeconds))}
             </span>
           )}
         </div>
@@ -155,11 +157,6 @@ function PlayMark() {
       <Glyph name="play" className="size-5 translate-x-px fill-current" />
     </span>
   );
-}
-
-function clockLength(seconds: number): string {
-  const whole = Math.max(0, Math.round(seconds));
-  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
 }
 
 /**
@@ -227,14 +224,7 @@ export function VideoChangeButton({
       {/* Seen as well as heard: a tooltip is out of reach on a phone. At
           most 176px wide: the button sits 8px in from a tile's right edge,
           and a 200px tile hides what overflows it. */}
-      {problem !== null && (
-        <span
-          role="alert"
-          className="absolute top-full right-0 z-20 mt-1 w-max max-w-44 rounded-md border border-border bg-surface px-2 py-1.5 text-left text-xs leading-4 font-normal text-danger shadow-sm"
-        >
-          {problem}
-        </span>
-      )}
+      {problem !== null && <ErrorTip>{problem}</ErrorTip>}
     </span>
   );
 }
@@ -250,7 +240,7 @@ function TileVideoJob({ slug, title, poster, path }: { slug: string; title: stri
   if (job === null) return null;
   return (
     // Fades in over the poster as the job starts, as a diagram's does (`TileJob`).
-    <div className={cx("absolute inset-x-0 top-0 aspect-[4/3] overflow-hidden border-b border-border", FADE_IN)}>
+    <div className={cx("absolute inset-x-0 top-0 overflow-hidden border-b border-border", TILE_THUMB, FADE_IN)}>
       <VideoStage key={job.jobId} job={job} title={title} backdrop={poster} path={path} isNew={false} />
     </div>
   );

@@ -8,11 +8,11 @@ import { LibraryVideo } from "@/components/library/LibraryVideo";
 import { Notice } from "@/components/ui/Notice";
 import { NoteProse } from "@/components/NoteProse";
 import { safeHref } from "@gnosia/tutor/markdown";
-import { formatTimecode } from "@gnosia/tutor/media";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import type { TabItem } from "@/components/ui/Tabs";
 import { TextLink } from "@/components/ui/TextLink";
+import { TranscriptLine } from "@/components/TranscriptLine";
 import { WidgetFailure } from "@/components/WidgetFailure";
 import { assetKindLabel } from "@gnosia/tutor/asset-meta";
 import type { RouteProblemCode } from "@gnosia/tutor/asset-problems";
@@ -287,14 +287,8 @@ function CueList({
       {/* On the page the list scrolls in its card; in the previewer the panel scrolls. */}
       <ol className={variant === "page" ? "-mx-2 max-h-[36rem] overflow-y-auto" : "-mx-2"}>
         {entries.map((entry, i) => (
-          <li
-            key={`${entry.start}-${i}`}
-            className="grid grid-cols-[3rem_minmax(0,1fr)] gap-2 rounded-lg px-2 py-1 text-[14px] leading-[22px] text-text2"
-          >
-            <span className="pt-px text-[12px] tabular-nums text-text3">{formatTimecode(entry.start)}</span>
-            {/* Capped for the same reason as the raw file above: a spoken line
-                set across the whole of a wide column is a line nobody reads. */}
-            <span className="max-w-[70ch]">{entry.text}</span>
+          <li key={`${entry.start}-${i}`}>
+            <TranscriptLine start={entry.start} text={entry.text} className="text-text2" />
           </li>
         ))}
       </ol>

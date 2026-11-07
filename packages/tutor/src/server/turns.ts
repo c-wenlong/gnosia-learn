@@ -20,10 +20,8 @@ import {
   availableProviderSummary,
   type ChatMessage,
   completeWithFallback,
-  customProviderConfig,
   keyFor,
   missingKeyMessage,
-  providerConfigs,
   type SavedKeys,
   skippedEntries,
   testProviderKey,
@@ -60,7 +58,6 @@ import {
   parseKnowledgeResponse,
   type TranscriptTurn,
 } from "../summary";
-import type { TopicKnowledge } from "../types";
 import { splitTurnCheck } from "../check-block";
 import {
   CHAT_ANSWER_LIMIT,
@@ -76,8 +73,6 @@ import { entryCredential, keyTestCredential, tutorCredentials } from "./credenti
 import {
   changeCustomProvider,
   createCustomProvider,
-  readOwnerCustomProviders,
-  type CustomProvider,
 } from "./custom-providers";
 import type { Env, TutorDeps } from "./deps";
 import { echoesKey } from "./key-echo";
@@ -88,9 +83,7 @@ import {
   NoKeySecretError,
   openSavedKeys,
   removeProviderKey,
-  savedKeyStatuses,
   saveProviderKey,
-  type SavedKeyStatus,
 } from "./provider-keys";
 import { checkKeyShape } from "./seal";
 import { readTutorStyle } from "./settings";
@@ -107,15 +100,15 @@ import { svgText } from "../svg-text";
 import { parseTranscript } from "../transcript";
 import { measurePayload, PAYLOAD_LIMITS } from "../guards";
 import { pointsAtThisApp, SELF_ADDRESS_REASON } from "./self-address";
-import { checkModelId, KNOWLEDGE_LIMITS, providerLabel } from "@gnosia/schema/shared";
+import { checkModelId, KNOWLEDGE_LIMITS, providerLabel, type TopicKnowledge } from "@gnosia/schema/shared";
 
 /**
  * The request-independent core of the `/api/agent/*` and the `/api/learner/*`
  * route handlers — the provider-call reads and the Settings writes alike.
  * Each function takes the request's resolved seams (`TutorDeps`) and a parsed
  * body, and answers a plain `{ status, body, headers }` the transport writes
- * out — the Next routes map it onto `NextResponse.json`, the sidecar writes
- * it directly. Nothing here knows `Request`/`NextResponse`/cookies.
+ * out: the Next routes map it onto `NextResponse.json`. Nothing here knows
+ * `Request`/`NextResponse`/cookies.
  */
 
 export interface TurnReply {
@@ -144,8 +137,32 @@ function credentialsOf(deps: TutorDeps) {
   return deps.seams?.credentials ? deps.seams.credentials(deps) : tutorCredentials(deps.db, deps.owner, deps.env);
 }
 
+/**
+ * The reply for a model call that found no provider to answer: 503
+ * `MISSING_API_KEY` when nothing held a key, 502 `CANCELLED` when the request
+ * was closed, else 502 `ALL_PROVIDERS_FAILED`. Every one carries the attempts
+ * and where each key came from (`providers`, never a key). `missingKey` adds
+ * a sentence to the missing-key message.
+ */
+function providerFailure(
+  outcome: Extract<import("../providers").CompleteOutcome, { ok: false }>,
+  credentials: readonly import("../providers").ChainStep[],
+  missingKey = "",
+): TurnReply {
+  const providers = availableProviderSummary(credentials);
+  if (outcome.code === "MISSING_API_KEY") {
+    return reply(503, { error: `${missingKeyMessage(credentials)}${missingKey}`, code: "MISSING_API_KEY", attempts: outcome.attempts, providers });
+  }
+  if (outcome.code === "CANCELLED") {
+    return reply(502, { error: "The request was closed", code: "CANCELLED", attempts: outcome.attempts, providers });
+  }
+  return reply(502, { error: "All free providers failed", code: "ALL_PROVIDERS_FAILED", attempts: outcome.attempts, providers });
+}
+
 function completeWith(deps: TutorDeps, messages: ChatMessage[], steps: readonly import("../providers").ChainStep[]) {
-  return deps.seams?.complete ? deps.seams.complete(messages, steps) : completeWithFallback(messages, steps);
+  return deps.seams?.complete
+    ? deps.seams.complete(messages, steps, deps.signal)
+    : completeWithFallback(messages, steps, undefined, deps.signal);
 }
 
 function assetDetailOf(deps: TutorDeps, id: string) {
@@ -315,6 +332,14 @@ export async function chatTurn(deps: TutorDeps, body: ChatBody): Promise<TurnRep
   const { courseSlug, moduleSlug, topicId, messages, learnerNote, priorKnowledge } = body;
   if (!courseSlug || !moduleSlug || !topicId || !Array.isArray(messages)) {
     return reply(400, { error: "courseSlug, moduleSlug, topicId, and messages are required" });
+  }
+  // The body is a client's JSON, typed only by hope: a number here used to
+  // throw in the prompt builder and answer 500.
+  if (typeof courseSlug !== "string" || typeof moduleSlug !== "string" || typeof topicId !== "string") {
+    return reply(400, { error: "courseSlug, moduleSlug and topicId must be strings", code: "BAD_REQUEST" });
+  }
+  if (learnerNote !== undefined && typeof learnerNote !== "string") {
+    return reply(400, { error: "learnerNote must be a string", code: "BAD_REQUEST" });
   }
   // As on the other paths: a turn with another role or non-text content
   // would otherwise reach every provider in the chain and fail at each.
@@ -520,23 +545,7 @@ async function completeTurn(
   const credentials = await credentialsOf(deps);
   const outcome = await completeWith(deps, payloadMessages, credentials);
 
-  if (!outcome.ok) {
-    if (outcome.code === "MISSING_API_KEY") {
-      return reply(503, {
-        error: missingKeyMessage(credentials),
-        code: "MISSING_API_KEY",
-        attempts: outcome.attempts,
-        providers: availableProviderSummary(credentials),
-      });
-    }
-
-    return reply(502, {
-      error: "All free providers failed",
-      code: "ALL_PROVIDERS_FAILED",
-      attempts: outcome.attempts,
-      providers: availableProviderSummary(credentials),
-    });
-  }
+  if (!outcome.ok) return providerFailure(outcome, credentials);
 
   // The concept tutor's and the topic tutor's prompts ask for a check block
   // or the marker; the open tutor's reply is returned exactly as the model
@@ -639,20 +648,7 @@ export async function judgeTurn(deps: TutorDeps, body: unknown): Promise<TurnRep
     credentials,
   );
 
-  if (!outcome.ok) {
-    return outcome.code === "MISSING_API_KEY"
-      ? reply(503, {
-          error: missingKeyMessage(credentials),
-          code: "MISSING_API_KEY",
-          attempts: outcome.attempts,
-          providers: availableProviderSummary(credentials),
-        })
-      : reply(502, {
-          error: "All free providers failed",
-          code: "ALL_PROVIDERS_FAILED",
-          attempts: outcome.attempts,
-        });
-  }
+  if (!outcome.ok) return providerFailure(outcome, credentials);
 
   const parsed = parseVerdict(outcome.result.content);
   if (!parsed.ok) {
@@ -729,20 +725,7 @@ export async function sessionQuestionTurn(deps: TutorDeps, body: unknown): Promi
     credentials,
   );
 
-  if (!outcome.ok) {
-    return outcome.code === "MISSING_API_KEY"
-      ? reply(503, {
-          error: missingKeyMessage(credentials),
-          code: "MISSING_API_KEY",
-          attempts: outcome.attempts,
-          providers: availableProviderSummary(credentials),
-        })
-      : reply(502, {
-          error: "All free providers failed",
-          code: "ALL_PROVIDERS_FAILED",
-          attempts: outcome.attempts,
-        });
-  }
+  if (!outcome.ok) return providerFailure(outcome, credentials);
 
   const parsed = parseSessionQuestion(outcome.result.content);
   if (!parsed.ok) {
@@ -847,8 +830,11 @@ export async function checkOptionsTurn(deps: TutorDeps, body: unknown): Promise<
   if (remembered !== undefined) return remembered;
   return oncePerCheck(key, async (): Promise<TurnReply> => {
     const credentials = await credentialsOf(deps);
+    // Not the request's signal: every caller asking for this check at once
+    // shares the one call, and its options are stored for the next visit, so
+    // one tab closing must not end it for the others.
     const outcome = await completeWith(
-      deps,
+      { ...deps, signal: undefined },
       [
         { role: "system", content: buildCheckOptionsPrompt(toConceptPromptInput(read.workspace), check) },
         { role: "user", content: CHECK_OPTIONS_REQUEST },
@@ -856,14 +842,8 @@ export async function checkOptionsTurn(deps: TutorDeps, body: unknown): Promise<
       credentials,
     );
     if (!outcome.ok) {
-      return outcome.code === "MISSING_API_KEY"
-        ? reply(503, {
-            error: missingKeyMessage(credentials),
-            code: "MISSING_API_KEY",
-            attempts: outcome.attempts,
-            providers: availableProviderSummary(credentials),
-          })
-        : refuseFor(key, reply(502, { error: "All free providers failed", code: "ALL_PROVIDERS_FAILED", attempts: outcome.attempts }));
+      const failed = providerFailure(outcome, credentials);
+      return outcome.code === "ALL_PROVIDERS_FAILED" ? refuseFor(key, failed) : failed;
     }
     const parsed = parseCheckOptions(outcome.result.content, answer);
     if (!parsed.ok) {
@@ -952,22 +932,7 @@ export async function summarizeTurn(deps: TutorDeps, body: SummarizeBody): Promi
   const credentials = await credentialsOf(deps);
   const outcome = await completeWith(deps, payload, credentials);
 
-  if (!outcome.ok) {
-    if (outcome.code === "MISSING_API_KEY") {
-      return reply(503, {
-        error: `${missingKeyMessage(credentials)} Or write the recap by hand instead: it saves to the same place.`,
-        code: "MISSING_API_KEY",
-        attempts: outcome.attempts,
-        providers: availableProviderSummary(credentials),
-      });
-    }
-    return reply(502, {
-      error: "All free providers failed",
-      code: "ALL_PROVIDERS_FAILED",
-      attempts: outcome.attempts,
-      providers: availableProviderSummary(credentials),
-    });
-  }
+  if (!outcome.ok) return providerFailure(outcome, credentials, " Or write the recap by hand instead: it saves to the same place.");
 
   const knowledge = parseKnowledgeResponse(outcome.result.content);
   if (!knowledge) {
@@ -1129,12 +1094,11 @@ export async function modelListTurn(deps: TutorDeps, body: unknown): Promise<Tur
  * `/api/learner/custom-provider` and `/api/learner/tutor-model` write
  * routes (docs/BYOK.md,
  * docs/TUTOR-MODELS.md): the same bodies, the same `{ ok, error, code }`
- * answers and statuses the Next routes give. What is not ported is what a
- * loopback single-owner service does not have — the session, origin and
- * rate-limit guards (the sidecar's own `guard.ts` answers origin) — and the
- * `byok` mirror, which is the web deployment pushing a saved key into the
- * studio runner's `byok.json`; a deployment without the runner omits the
- * field there too, so its absence here is the same contract.
+ * answers and statuses the Next routes give. What stays in the routes is the
+ * session, origin and rate-limit guards, and the `byok` mirror, which is the
+ * web deployment telling the studio runner which saved key to use; a
+ * deployment without the runner omits the field there too, so its absence
+ * here is the same contract.
  *
  * `AUTH_SECRET` reads `process.env`, never `deps.env`: `env` is the provider
  * map a request resolves keys and models against (a test hands in `{}` for
@@ -1221,76 +1185,6 @@ function keyWriteFailed(what: string, error: unknown): TurnReply {
   }
   console.warn(`provider key ${what} failed (${failureCode(error)})`);
   return writeRefuse("Not saved: the database is unreachable.", "STORE_UNAVAILABLE", 503);
-}
-
-/** One provider's row in the status answer: what Settings may know — never the key, never its ciphertext. */
-export interface ProviderKeyRow {
-  id: ProviderName;
-  label: string;
-  /** The model the provider's key Test would call: its default, or "" for an owner's own provider. */
-  model: string;
-  keyUrl?: string;
-  /** A provider the owner added (T14): its base URL. Absent for a built-in. */
-  custom?: { baseUrl: string };
-  saved: { last4: string; /** ISO instant of the last save. */ updatedAt: string; readable: boolean } | null;
-  /** The server's environment holds a key for this provider. */
-  server: boolean;
-  /** Whose key the tutor calls this provider with now, or null when it has none. */
-  inUse: "saved" | "server" | null;
-}
-
-/**
- * `GET /api/learner/provider-key`: the Provider keys card's rows — every
- * provider, built-in and the owner's own, with its key state. The web page
- * builds the same rows server-side (`providerKeyViews`); a native client has
- * no server component, so the sidecar answers them. Never throws: a database
- * that cannot be read answers `reachable: false` and rows holding the
- * server's keys only, as the web's `loadProviderKeys` does.
- */
-export async function providerKeyStatusTurn(deps: TutorDeps): Promise<TurnReply> {
-  let statuses: SavedKeyStatus[] = [];
-  let custom: CustomProvider[] = [];
-  let reachable = true;
-  try {
-    const db = await deps.db;
-    [statuses, custom] = await Promise.all([
-      savedKeyStatuses(db, deps.owner, process.env),
-      readOwnerCustomProviders(db, deps.owner),
-    ]);
-  } catch (error) {
-    console.warn(`settings: saved provider keys unavailable (${failureCode(error)})`);
-    reachable = false;
-  }
-
-  const byProvider = new Map<string, SavedKeyStatus>(statuses.map((s) => [s.provider, s]));
-  const configs = [...providerConfigs(deps.env), ...custom.map(customProviderConfig)];
-  const rows = configs.map((config): ProviderKeyRow => {
-    const status = byProvider.get(config.id);
-    const server = config.apiKeyEnv !== "" && Boolean(deps.env[config.apiKeyEnv]?.trim());
-    const own = status?.readable === true;
-    return {
-      id: config.id,
-      label: config.label,
-      model: config.model,
-      ...(config.keyUrl === undefined ? {} : { keyUrl: config.keyUrl }),
-      ...(config.custom ? { custom: { baseUrl: config.baseUrl } } : {}),
-      saved:
-        status === undefined
-          ? null
-          : { last4: status.last4, updatedAt: status.updatedAt, readable: status.readable },
-      server,
-      inUse: own ? "saved" : server ? "server" : null,
-    };
-  });
-  // `providerKeyViews`' order: the owner's usable keys in the cascade's
-  // order, then the server's. A custom provider has no built-in default and
-  // is never in it (T14).
-  const builtIn = rows.filter((row) => row.custom === undefined);
-  const order = [
-    ...builtIn.filter((row) => row.inUse === "saved"),
-    ...builtIn.filter((row) => row.inUse === "server"),
-  ].map((row) => ({ id: row.id, label: `${row.label} (${row.model})`, source: row.inUse }));
-  return writeAnswer({ ok: true, reachable, rows, order });
 }
 
 /** `{ provider, model }` read from a body, or the refusal the web's `entry` gives. */
@@ -1455,21 +1349,6 @@ export async function tutorProviderRemoveTurn(deps: TutorDeps, body: unknown): P
   }
 }
 
-/**
- * `GET /api/learner/tutor-model`: the owner's chain, top first. The web page
- * reads it server-side (`loadTutorModels`); a native client has no server
- * component, so the sidecar answers it. Never throws: a database that cannot
- * be read answers `reachable: false` and an empty chain.
- */
-export async function tutorModelChainTurn(deps: TutorDeps): Promise<TurnReply> {
-  try {
-    return writeAnswer({ ok: true, reachable: true, chain: await readChain(await deps.db, deps.owner) });
-  } catch (error) {
-    console.warn(`settings: model chain unavailable (${failureCode(error)})`);
-    return writeAnswer({ ok: true, reachable: false, chain: [] });
-  }
-}
-
 /** `failed` in the web's `/api/learner/custom-provider` route: its own refusal, or a dead store. */
 function customProviderFailed(what: string, error: unknown): TurnReply {
   if (error instanceof CustomProviderError) {
@@ -1494,7 +1373,7 @@ function customProviderFailed(what: string, error: unknown): TurnReply {
 export async function customProviderAddTurn(deps: TutorDeps, body: unknown): Promise<TurnReply> {
   const read = writeRecord(body);
   if ("refused" in read) return read.refused;
-  if (pointsAtThisApp(read.record.baseUrl, deps.env)) return writeRefuse(SELF_ADDRESS_REASON);
+  if (pointsAtThisApp(read.record.baseUrl, deps.env, deps.requestUrl)) return writeRefuse(SELF_ADDRESS_REASON);
   const shape = checkKeyShape(read.record.key);
   if (!shape.ok) return writeRefuse(shape.reason);
   // As `providerKeySaveTurn`: on the web's path the sealer runs before the
@@ -1521,7 +1400,9 @@ export async function customProviderAddTurn(deps: TutorDeps, body: unknown): Pro
  * `PATCH /api/learner/custom-provider` with `{ provider, label?, baseUrl?,
  * key? }`: rename the provider, move it, and replace its key, all in one
  * transaction — a key that cannot be stored leaves the name and the URL as
- * they were. Its id and its models stay. Delete is the provider route's
+ * they were. Its id and its models stay. A new base URL needs `key` with it,
+ * or 400 `KEY_REQUIRED` (`updateCustomProvider`): the saved key goes only to
+ * the URL it was saved for. Delete is the provider route's
  * (`tutorProviderRemoveTurn`), which removes it whole. 200 `{ ok, provider,
  * key }`, `key` null when none was sent.
  */
@@ -1535,7 +1416,7 @@ export async function customProviderChangeTurn(deps: TutorDeps, body: unknown): 
   if (label === undefined && baseUrl === undefined && key === undefined) {
     return writeRefuse("Send a new name, a new base URL, a new key, or any of them.");
   }
-  if (pointsAtThisApp(baseUrl, deps.env)) return writeRefuse(SELF_ADDRESS_REASON);
+  if (pointsAtThisApp(baseUrl, deps.env, deps.requestUrl)) return writeRefuse(SELF_ADDRESS_REASON);
   let checked: string | undefined;
   if (key !== undefined) {
     const shape = checkKeyShape(key);

@@ -1,6 +1,6 @@
-import { seedOf } from "./review-core";
-import { SESSION_TEXT_LIMIT } from "./session-core";
-import { firstObject, QUESTION_LIMITS, shuffleWithSeed } from "./session-question";
+import { seedOf, shuffleWithSeed } from "./review-core";
+import { isSessionToken, SESSION_TEXT_LIMIT } from "./session-core";
+import { firstObject, QUESTION_LIMITS } from "./session-question";
 import { CHAT_ANSWER_LIMIT, CHECK_QUESTION_LIMIT, splitCheck, type RecordedResult, type TurnCheck } from "./tutor-check";
 
 /**
@@ -36,7 +36,7 @@ import { CHAT_ANSWER_LIMIT, CHECK_QUESTION_LIMIT, splitCheck, type RecordedResul
  */
 
 /** How many options a choice check may have. */
-export const CHOICE_OPTIONS = { min: 3, max: 5 } as const;
+const CHOICE_OPTIONS = { min: 3, max: 5 } as const;
 
 /** The confidence stops the card offers, in percent. 50 is where it rests. */
 export const CONFIDENCE_STOPS = [0, 30, 50, 70, 90, 100] as const;
@@ -194,7 +194,7 @@ export interface SplitReply {
  * so its question is still asked and judged.
  */
 export function splitTurnCheck(reply: string, { cards = true }: { cards?: boolean } = {}): SplitReply {
-  const trimmed = reply.replace(/\s+$/, "");
+  const trimmed = reply.trimEnd();
   const block = lastBlock(trimmed);
   if (block === null) return { ...splitCheck(reply), refused: null };
 
@@ -408,13 +408,11 @@ export interface ChoiceAnswer extends ChoicePick {
   recorded: RecordedResult | null;
 }
 
-const REQUEST_ID = /^[A-Za-z0-9_-]{1,128}$/;
-
 /** A stored answer back, or null when it is not one. */
 export function restoreChoiceAnswer(value: unknown): ChoiceAnswer | null {
   if (value === null || typeof value !== "object") return null;
   const v = value as Record<string, unknown>;
-  if (typeof v.requestId !== "string" || !REQUEST_ID.test(v.requestId)) return null;
+  if (!isSessionToken(v.requestId)) return null;
   if (typeof v.correct !== "boolean") return null;
   if (v.source !== "probe" && v.source !== "teach") return null;
   const picked = v.picked === null ? null : Number.isInteger(v.picked) && (v.picked as number) >= 0 ? (v.picked as number) : undefined;

@@ -4,6 +4,7 @@ import { cx } from "./classes";
 import { COMPOSER_BOX, COMPOSER_REASON } from "./composer-keys";
 import { Glyph } from "./Glyph";
 import { IconButton } from "./IconButton";
+import { FADE_IN } from "./motion";
 
 /**
  * The kit composers' box layout (`layout="box"` on `Composer` and
@@ -87,7 +88,7 @@ export function ComposerRow({ field, send }: { field: ReactNode; send: ReactNode
 export function ComposerReason({ id, reason, quiet = false }: { id: string; reason: string | null; quiet?: boolean }) {
   if (reason === null) return null;
   return (
-    <p id={id} className={quiet ? "sr-only" : cx(COMPOSER_REASON, "animate-fade-in motion-reduce:animate-none")}>
+    <p id={id} className={quiet ? "sr-only" : cx(COMPOSER_REASON, FADE_IN)}>
       {reason}
     </p>
   );

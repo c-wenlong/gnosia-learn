@@ -1,0 +1,22 @@
+/**
+ * The kit's motion vocabulary, on top of the tokens in `globals.css` and
+ * the rules in docs/design/IMPLEMENTATION.md, "Motion": something that
+ * mounts animates in, something with height folds, and nothing moves for a
+ * reader who asked for less.
+ *
+ * Plain strings, in a module with no `"use client"`, so a
+ * server component (a page, the server-drawn library rows) can use the
+ * classes too: imported from a client module they would be client
+ * references, not strings. The studio's pieces that hold state are in
+ * `components/studio/motion-parts.tsx`.
+ */
+
+/** How long `Collapse` takes to fold (its `duration-300`). */
+export const FOLD_MS = 300;
+
+/** A fade and a 6px rise, for something new in a list: a message, a banner. */
+export const ENTER = "animate-enter motion-reduce:animate-none";
+/** Opacity only, for a swap in place. */
+export const FADE_IN = "animate-fade-in motion-reduce:animate-none";
+/** A fade and a slight scale, for a menu, a popover or a card that appears. */
+export const POP_IN = "animate-pop-in motion-reduce:animate-none";

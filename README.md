@@ -46,6 +46,12 @@ A third part, the `tools/manimkc/` submodule, renders narrated animations for co
   <em>Today, the home page, live at <a href="https://gnosia-one.vercel.app">gnosia-one.vercel.app</a>.</em>
 </p>
 
+## Hosting, now and next
+
+Today Gnosia is self-hosted. You host the service, it serves a web page, you prompt it, and it uses the local Claude CLI to run the video process.
+
+In future, the same flow can run completely in the cloud, in sandboxes, so prompting does not depend on your local machine.
+
 ## Why this exists
 
 Knowing what is worth learning and actually learning it are two different problems, and most tools solve only one. The roadmap answers the first: a shortlist of courses broken into topics you can tick off. The pipeline answers the second, by keeping a real model of what you hold rather than a list of what you have read. Asset generation is the third piece, for the ideas that only make sense in motion, so the loop can end in a video rather than a paragraph.

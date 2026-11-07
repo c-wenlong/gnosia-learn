@@ -196,7 +196,7 @@ export async function loadLibrary(): Promise<LibrarySnapshot> {
 }
 
 
-/** This app's seams for the detail read, the same ones the sidecar builds around its own pool. */
+/** This app's seams for the detail read. */
 async function detailSeams(): Promise<{ db: Promise<CatalogDatabase>; owner: string; scope: OwnerScope }> {
   const owner = await currentOwner();
   return { db: catalogDatabase(), owner, scope: await currentScope() };

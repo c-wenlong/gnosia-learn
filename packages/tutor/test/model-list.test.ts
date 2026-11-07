@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { orderCredentials, type ProviderCredential } from "../src/providers";
+import { keyFor, providerConfigs, type ProviderCredential } from "../src/providers";
 import { cachedModelList, clearModelListCache, MODEL_LIST_TTL_MS } from "../src/server/model-list";
 
 /**
@@ -18,7 +18,9 @@ const KEY_A = "nvapi-FirstKeyExample0123456789abcdef";
 const KEY_B = "nvapi-SecondKeyExample0123456789abcdef";
 
 function nvidia(key: string, env: Record<string, string> = {}): ProviderCredential {
-  return orderCredentials({ nvidia: key }, env)[0]!;
+  // The shape `entryCredential` builds for a model list.
+  const config = providerConfigs(env).find((c) => c.id === "nvidia")!;
+  return { config, ...keyFor("nvidia", { nvidia: key }, env)!, modelFrom: "chain" };
 }
 
 function listing(ids: string[]) {

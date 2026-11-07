@@ -1,6 +1,7 @@
 import { useId, type ReactNode } from "react";
 
-import { cx, LABEL, STATUS_TEXT } from "./classes";
+import { cx, LABEL } from "./classes";
+import { ErrorText } from "./ErrorText";
 import { LiveStatus, type StatusTone } from "./LiveStatus";
 
 /** What a row's control is handed: the ids that tie it to the row's words. */
@@ -22,7 +23,7 @@ export interface FormRowField {
  *
  * The control is a function of the row (`children(field)`): it takes `id` for
  * the label, `describedBy` for the hint and the error, and `invalid`. The
- * error is a `role="alert"` line under the control; the status is a
+ * error is an `ErrorText` (a `role="alert"` line) under the control; the status is a
  * `LiveStatus` ("Saving…", "Saved", why a save failed), which glides in and
  * out.
  *
@@ -48,7 +49,7 @@ export function FormRow({
   label: ReactNode;
   /** A line about the field: what it is for, what happens on a change. */
   hint?: ReactNode;
-  /** Why the value was refused; null or absent when it was not. */
+  /** Why the value was refused; null, absent or empty when it was not. */
   error?: string | null;
   /** The status line, as `LiveStatus` takes it. An inline row keeps its column whether or not one is given. */
   status?: { text: string | null; tone?: StatusTone };
@@ -62,8 +63,11 @@ export function FormRow({
   const id = given ?? made;
   const hintId = `${id}-hint`;
   const errorId = `${id}-error`;
-  const describedBy = [hint !== undefined ? hintId : null, error !== null ? errorId : null].filter((part) => part !== null).join(" ") || undefined;
-  const field: FormRowField = { id, labelId: `${id}-label`, describedBy, invalid: error !== null };
+  // An empty error is no error: `ErrorText` draws nothing for it, so the
+  // control must not point at a line that is not there or say it is invalid.
+  const failed = error !== null && error !== "";
+  const describedBy = [hint !== undefined ? hintId : null, failed ? errorId : null].filter((part) => part !== null).join(" ") || undefined;
+  const field: FormRowField = { id, labelId: `${id}-label`, describedBy, invalid: failed };
   const inline = layout === "inline";
 
   const labelLine = (
@@ -76,11 +80,7 @@ export function FormRow({
       {hint}
     </p>
   );
-  const errorLine = error !== null && (
-    <p id={errorId} role="alert" className={cx(STATUS_TEXT, "animate-fade-in text-danger motion-reduce:animate-none")}>
-      {error}
-    </p>
-  );
+  const errorLine = failed && <ErrorText id={errorId}>{error}</ErrorText>;
   const statusLine = status !== undefined && <LiveStatus text={status.text} tone={status.tone} />;
 
   if (inline) {

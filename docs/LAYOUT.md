@@ -15,9 +15,9 @@ fresh clone starts from, and `.studio/` is generated state, never source.
 gnosia/                           the checkout
 ├── apps/
 │   ├── web/                      the Next.js app, @gnosia/web
-│   └── macos/                    the SwiftUI app, a SwiftPM package + an npm shell
+│   └── desktop/                  Gnosia Web, the desktop shell, a SwiftPM package
 ├── packages/                     schema · content · blob · tutor
-├── services/                     catalog · studio · sidecar
+├── services/                     catalog · studio · launch-env
 ├── tools/                        five git submodules (another repo each)
 ├── scripts/                      learn's maths and shim, one-off jobs
 ├── seed/                         a content slice in the export format
@@ -29,8 +29,8 @@ gnosia/                           the checkout
 
 The product is Gnosia, renamed from self-learn: the workspace names are
 `@gnosia/web`, `@gnosia/catalog`, `@gnosia/schema`, `@gnosia/content`,
-`@gnosia/blob`, `@gnosia/tutor`, `@gnosia/studio`, `@gnosia/sidecar` and
-`@gnosia/macos`. `GNOSIA_HOME` is the data-root variable everywhere, and
+`@gnosia/blob`, `@gnosia/tutor`, `@gnosia/studio` and
+`@gnosia/launch-env`. `GNOSIA_HOME` is the data-root variable everywhere, and
 the web keeps the legacy storage key and cookies readable
 (`self-learn:v1`, `self-learn-theme`, `self-learn-motion`).
 
@@ -126,62 +126,32 @@ content source (the database, or a refusal naming `catalog flip <type>`),
 `courses/` the course lookups every page calls, `content.ts` the tags,
 `topics.ts` the vocabulary. All `import "server-only"`.
 
-## apps/macos — the native app
+## apps/desktop: the desktop shell
 
-A SwiftPM executable package, `Package.swift` at its root and
-`swift run Gnosia` or `scripts/bundle-app.sh` (which codesigns a `Gnosia.app`
-bundle with an `Info.plist` and icon) to run it. The `package.json` beside it
-exists only so the snapshot script's npm dependency (`better-sqlite3`)
-resolves inside the workspaces: `npm run snapshot -w @gnosia/macos`
-refreshes `app-catalog.db`.
+A SwiftPM executable package, `Package.swift` at its root: Gnosia Web, one
+window with a WKWebView on the web app. It adds no second interface. It spawns
+`next dev` and the studio runner from the checkout, so the window always
+serves the checkout's current code. `scripts/bundle-app.sh` builds
+`Gnosia Web.app` and `scripts/install-app.sh` installs it.
 
 ```
-apps/macos/
-├── Package.swift                 the executable target and its C shim
-├── Sources/
-│   ├── CSQLite3/                 sqlite3's module map; no code of ours
-│   └── Gnosia/                   the app, one file per surface or model
-├── Resources/                    in Sources/Gnosia: the mark and wordmarks
-├── scripts/
-│   ├── catalog-snapshot.mjs      catalog.db → app-catalog.db
-│   └── bundle-app.sh             .app bundle, adhoc-signed
-└── package.json                  the snapshot script's npm shell
+apps/desktop/
+├── Package.swift                 the executable target and its tests
+├── Sources/GnosiaWeb/            the app, one file per job
+├── Resources/AppIcon.png         the icon `bundle-app.sh` turns into the bundle's
+├── Tests/GnosiaWebTests/         the launchers' pure rules
+└── scripts/
+    ├── bundle-app.sh             the .app bundle
+    └── install-app.sh            quit, rebuild and replace the installed copy
 ```
-
-`Sources/Gnosia/` keeps one ownership per file, and the file's header comment
-says which web surface it ports. The read model first:
 
 | File | Owns |
 | --- | --- |
-| `CatalogStore.swift` | The whole read model: `app-catalog.db` opened read-only, `learner.db` merged over it, the catalog's paths resolved (see the data root below). `SQLiteDatabase` in the same file is the raw SQLite shell |
-| `LearnModel.swift` | The learning arithmetic ported to the mirror: BKT buckets, the learn index, the review queue, home's threads — kept in step with the named `apps/web/src/lib/` modules |
-| `LearnerStore.swift` | The writable half: `learner.db`'s `watch`, `favorite`, `asset_name`, `progress` marks and the `session`/`event`/`mastery`/`review` tables a check session writes, column for column the catalog's |
-| `LearnerControls.swift` | The write affordances (star, mark watched, rename, topic tick); every write is `LearnerStore` then `refreshLearner()` |
-
-The process clients and their lifecycles:
-
-| File | Owns |
-| --- | --- |
-| `SidecarManager.swift` | Spawning `npx tsx services/sidecar/src/index.ts`, parsing the one `listening <port>` stdout line, handing the port to the client |
-| `SidecarClient.swift` | Every call to the sidecar: `/api/health`, the four `/api/agent/*` turns, and the `/api/learner/provider-key*` and `/api/learner/tutor-model*` settings routes |
-| `StudioManager.swift` | Connect-only: the port probe on 7250 and the five polled reads. It never launches the runner — the reasons are in its header |
-| `StudioClient.swift` | The studio routes the surface uses: health, diagrams (+svg, verbs, commit), jobs (+log, shot, sheets, media, actions), videos, drafts (+messages, draw, abandon), mirrors POST, vocabulary |
-
-The shell and destinations (`GnosiaApp.swift` is the entry point,
-`RootView.swift` the `NavigationSplitView` sidebar):
-
-| File | The destination it owns |
-| --- | --- |
-| `HomeView.swift` | The dashboard, in the web `/home`'s shape |
-| `CoursesView.swift`, `CourseDetailView.swift`, `ModuleView.swift` | The cover grid, the course home, the module's learning path |
-| `LearnView.swift`, `ConceptDetailView.swift` | The concept index, one concept's workspace |
-| `SessionModel.swift`, `SessionView.swift` | The concept session in both modes (Teach me, Quiz me): plan, questions, the observe-equivalent write into `learner.db` |
-| `ReviewView.swift` | The due queue, read-only — grading stays in the web app and CLI |
-| `LibraryView.swift`, `AssetDetailView.swift`, `VideoDetailView.swift`, `MediaViews.swift` | The grid, the per-kind detail dispatch, the video page, and the AVKit/PDFKit/QuickLook surfaces |
-| `AskView.swift`, `AssetAskPanel.swift` | The open tutor, and the asset chat as an inspector panel |
-| `SettingsView.swift`, `TutorSettingsView.swift` | The ⌘, pane: where `app-catalog.db` is, and the tutor's keys and chain through the sidecar |
-| `StudioView.swift`, `StudioDetails.swift`, `SvgRasterizer.swift` | The studio surface, its job/diagram/draft detail screens, and the one-WKWebView SVG rasterizer they share |
-| `Theme.swift` | The brand palette, token for token from the web's `.gnosia` blocks |
+| `GnosiaWebApp.swift` | The entry point and the window |
+| `WebView.swift` | The WKWebView: it shows only the app server's origin, other web pages go to the real browser and other schemes are dropped; cookies persist across launches |
+| `WebServer.swift` | The lifecycle of the Next server the window loads |
+| `StudioRunner.swift` | The lifecycle of the studio runner, adopted when one already answers on its port |
+| `Checkout.swift` | Where the repository and the data home are, and the environment each child starts with, read once per launch from `services/launch-env` |
 
 ## services/catalog — the catalog database and the CLIs
 
@@ -199,18 +169,18 @@ set the port came from). `src/` divides by who a file serves:
 | `src/pdf/`, `src/poster/` | The upload-time recipes: a video's pages-as-PDF and its poster frame |
 | `src/canvas.ts`, `src/env.ts`, `src/db.ts`, `src/migrations.ts` | The `npm run canvas` launcher, the env resolution every tool root goes through, the pool, and `catalog migrate` |
 
-## services/sidecar — the tutor's loopback API
+## services/launch-env: the launchers' environment
 
-Five files, no framework, `node:http` on `127.0.0.1` only: `index.ts` binds
-an ephemeral port (or `GNOSIA_SIDECAR_PORT`) and prints exactly one line,
-`listening <port>`, on stdout — that is the contract `SidecarManager` parses.
-`api.ts` is the route table (`TURNS`, method-aware), mapping the web app's
-own `/api/agent/*` and `/api/learner/*` tutor paths to the same
-`packages/tutor` `*Turn` functions; `guard.ts` the host/origin checks a
-browser can't fake; `deps.ts` builds `TutorDeps` over the catalog's pool and
-the blob store; `config.ts` the host, port and owner
-(`GNOSIA_SIDECAR_OWNER`, default `local`). The macOS app launches it; its
-routes are enumerated in [API.md](API.md#the-sidecar).
+Two files. `src/env.ts` gives a spawned service the environment the web app
+sees: the process's own exports, then `$GNOSIA_HOME/.env`, then `apps/web`'s
+`.env` files through `@next/env`, with a relative `CATALOG_DB` or
+`DATABASE_URL` made absolute and `CATALOG_DB` pinned at the file the catalog's
+own resolver names (`loadWebEnv`, `pinCatalogFile`, `childEnvironment`).
+`src/child-env.ts` prints that environment as one JSON object on stdout;
+`apps/desktop`'s `Checkout.swift` runs it once per launch, so the web server
+and the studio runner open the same catalog file and the same `AUTH_SECRET`.
+The tests are in `test/env.test.ts`, and `test/fixtures/dotenv.json` pins the
+shell's Swift dotenv parser against Node's `util.parseEnv`.
 
 ## services/studio — the runner
 
@@ -239,7 +209,7 @@ The bottom of the stack, npm workspaces, Node-only.
 | `packages/schema` | The Drizzle table definitions — the source of every migration — plus `shared.ts`, the subpath that imports nothing and so is safe inside `"use client"` |
 | `packages/content` | The export-format reader: `loadCourses`, `loadTopics`, `loadTags`, the types and the `ContentSource`/`selectSource` seam. Reads files, connects to nothing |
 | `packages/blob` | `BlobStore`, the `<owner>/<sha256>.<ext>` key scheme and the `fs` adapter under the data root's `blobs/` ([README](../packages/blob/README.md)) |
-| `packages/tutor` | The tutor, split `src/` (the pure half: prompts, providers, session core, judges — most of it ported from `apps/web/src/lib`) and `src/server/` (`deps.ts`, `turns.ts` with the `*Turn` functions, credentials, model list). Both the web routes and the sidecar call the same functions |
+| `packages/tutor` | The tutor, split `src/` (the pure half: prompts, providers, session core, judges, most of it ported from `apps/web/src/lib`) and `src/server/` (`deps.ts`, `turns.ts` with the `*Turn` functions, credentials, model list). The web routes call these functions |
 
 ## tools/
 
@@ -285,15 +255,12 @@ deleted at will: nothing in it is the only copy of anything.
 
 Not in the repository at all, and deliberately so: the data a generator
 produces should not be pinned inside a checkout it can be moved out of.
-Resolved as `GNOSIA_HOME`, then `~/.gnosia`. `GNOSIA_CATALOG` and
-`GNOSIA_BLOBS` override the two files directly.
+Resolved as `GNOSIA_HOME`, then `~/.gnosia`.
 
 | Path | What it is |
 | --- | --- |
 | `blobs/` | The `fs` blob store: every asset's bytes keyed `<owner>/<sha256>.<ext>` |
 | `catalog.db` | The live catalog database — the SQLite file `CATALOG_DB`/`DATABASE_URL` names, which `services/catalog` and the web app read and write |
-| `app-catalog.db` | The snapshot `apps/macos/scripts/catalog-snapshot.mjs` mirrors out of `catalog.db`; the native app's read model, replaced wholesale each run |
-| `learner.db` | The native app's writable store: its marks and the learning state its sessions write |
 | `topics/` | A checkout per video tool of its topic sources (`topics/manimkc/` is itself a git repo holding `agentic-ai/`, `algorithms/`, …): authored material kept outside the submodules, so a tool's move or a fresh clone loses no source |
 | `manimkc/`, `remotionkc/`, `revideokc/`, `blenderkc/` | The tools' `*_HOME` data roots when the owner keeps them here: renders, narration caches, state |
 | `tool-checkouts/` | Second checkouts of the tools (`manimkc/`, `remotionkc/`, `revideokc/`), for runs that must not touch the repo's |
@@ -304,5 +271,4 @@ Resolved as `GNOSIA_HOME`, then `~/.gnosia`. `GNOSIA_CATALOG` and
 Which of these a given machine has is convention, not code: the catalog reads
 each tool's checkout from its `*_ROOT` variable and its output location from
 the report's `outRoot`, so nothing in `services/` goes looking under
-`~/.gnosia`. The two databases are not peers: `catalog.db` is the authority
-and `app-catalog.db` a mirror of it, never the other way.
+`~/.gnosia`.

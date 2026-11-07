@@ -64,9 +64,6 @@ export interface ProviderAttemptError {
   timedOut?: true;
 }
 
-/** Preferred free production cascade: NVIDIA → Gemini Flash → OpenRouter free. */
-export const DEFAULT_PROVIDER_ORDER: readonly ProviderId[] = PROVIDER_IDS;
-
 /**
  * Where a key came from: the owner saved it in Settings (`provider_key`,
  * docs/BYOK.md), or the server's environment set it.
@@ -293,40 +290,6 @@ export function providerConfigs(
     },
     ...added,
   ];
-}
-
-/** The providers the server's environment holds a key for, in the cascade's order. */
-export function resolveProviders(
-  env: EnvMap = process.env,
-): ProviderConfig[] {
-  return providerConfigs(env).filter((c) => Boolean(env[c.apiKeyEnv]?.trim()));
-}
-
-/**
- * The keys the tutor calls with, in the order it tries them (docs/BYOK.md,
- * decision 4): the owner's saved keys first, in the cascade's order, then the
- * server's for the providers the owner saved none for.
- *
- * A provider appears once. The owner's key stands in for the server's rather
- * than going ahead of it, so a saved key that stops working shows up as a
- * failed attempt (and as a failed Test in Settings) instead of being hidden by
- * the server quietly answering for it. `saved` holds only keys that
- * decrypted; one that did not is missing, and the server's key applies.
- */
-export function orderCredentials(
-  saved: SavedKeys,
-  env: EnvMap = process.env,
-): ProviderCredential[] {
-  const configs = providerConfigs(env);
-  const own: ProviderCredential[] = configs.flatMap((config) => {
-    const apiKey = saved[config.id];
-    return apiKey ? [{ config, apiKey, source: "saved" as const }] : [];
-  });
-  const server: ProviderCredential[] = configs.flatMap((config) => {
-    const apiKey = env[config.apiKeyEnv]?.trim();
-    return !saved[config.id] && apiKey ? [{ config, apiKey, source: "server" as const }] : [];
-  });
-  return [...own, ...server];
 }
 
 /**
@@ -619,27 +582,18 @@ function originOf(baseUrl: string): string {
   }
 }
 
-function reportIfModelGone(attempt: ProviderAttemptError, baseUrl: string, modelFrom: "chain" | "default"): void {
+function reportIfModelGone(attempt: ProviderAttemptError, baseUrl: string): void {
   if (attempt.status !== 404 && attempt.status !== 410) return;
   const key = `${attempt.provider}/${attempt.model}`;
   if (reportedGone.has(key)) return;
   reportedGone.add(key);
-  // A chain entry is the owner's to change in Settings; a default is the operator's, in the environment.
-  // The first three read `<ID>_MODEL`; the providers of T13 read `TUTOR_<ID>_MODEL`.
-  const variable = (["nvidia", "gemini", "openrouter"] as string[]).includes(attempt.provider)
-    ? `${attempt.provider.toUpperCase()}_MODEL`
-    : `TUTOR_${attempt.provider.toUpperCase()}_MODEL`;
-  const fix = modelFrom === "chain" ? "replace it under Model selection in Settings" : `set ${variable}`;
+  // Every step the tutor calls is a chain entry (`tutorSteps`), so the fix is always the owner's, in Settings.
+  const fix = "replace it under Model selection in Settings";
   console.error(
     attempt.status === 410
       ? `agent: ${attempt.provider} answered 410 Gone for model ${attempt.model}; it is retired, ${fix}`
       : `agent: ${attempt.provider} answered 404 for model ${attempt.model} at ${originOf(baseUrl)}; the model may be retired (${fix}) or the base URL may not serve /chat/completions`,
   );
-}
-
-/** Test hook: forget which gone models were already reported. */
-export function resetGoneModelReports(): void {
-  reportedGone.clear();
 }
 
 /**
@@ -648,6 +602,12 @@ export function resetGoneModelReports(): void {
  * a chain entry with no key is recorded as a skipped attempt and the walk
  * goes on. Nothing to call at all is `MISSING_API_KEY`, with the skips as its
  * attempts.
+ *
+ * `cancel` is the caller's own signal, the request's when a route passes
+ * one: once it fires the call in flight is aborted and no further provider
+ * is tried, since nobody is waiting for the answer. That answers `CANCELLED`,
+ * never `ALL_PROVIDERS_FAILED`, so a caller that remembers failures does not
+ * remember a hang-up as one.
  */
 /** What one turn through the chain answers: a completion, or the failure code with every attempt recorded. */
 export type CompleteOutcome =
@@ -655,13 +615,14 @@ export type CompleteOutcome =
   | {
       ok: false;
       attempts: ProviderAttemptError[];
-      code: "MISSING_API_KEY" | "ALL_PROVIDERS_FAILED";
+      code: "MISSING_API_KEY" | "ALL_PROVIDERS_FAILED" | "CANCELLED";
     };
 
 export async function completeWithFallback(
   messages: ChatMessage[],
   steps: readonly ChainStep[],
   timeouts: TurnTimeouts = turnTimeouts(),
+  cancel?: AbortSignal,
 ): Promise<CompleteOutcome> {
   const skipped = (step: SkippedEntry): ProviderAttemptError => ({
     provider: step.provider,
@@ -670,7 +631,10 @@ export async function completeWithFallback(
     skipped: true,
   });
   const credentials = steps.filter(isCallable);
-  const seconds = (ms: number) => `${Math.round(ms / 1000)} seconds`;
+  const seconds = (ms: number) => {
+    const whole = Math.round(ms / 1000);
+    return `${whole} ${whole === 1 ? "second" : "seconds"}`;
+  };
   if (credentials.length === 0) {
     return { ok: false, attempts: steps.flatMap((s) => (isCallable(s) ? [] : [skipped(s)])), code: "MISSING_API_KEY" };
   }
@@ -687,13 +651,21 @@ export async function completeWithFallback(
       continue;
     }
     const { config: provider, apiKey } = step;
-    const signal = AbortSignal.any([AbortSignal.timeout(timeouts.attemptMs), deadline]);
+    if (cancel?.aborted) {
+      attempts.push({ provider: provider.id, model: provider.model, message: "Cancelled: the request was closed." });
+      break;
+    }
+    const signal = AbortSignal.any([AbortSignal.timeout(timeouts.attemptMs), deadline, ...(cancel ? [cancel] : [])]);
     try {
       const result = await callOpenAiCompatible(provider, apiKey, messages, secrets, signal);
       return { ok: true, result, attempts };
     } catch (err) {
       if (signal.aborted) {
         // Cut off, whatever the fetch threw on the way out.
+        if (cancel?.aborted) {
+          attempts.push({ provider: provider.id, model: provider.model, message: "Cancelled: the request was closed." });
+          break;
+        }
         if (deadline.aborted) {
           const untried = steps.slice(index + 1).filter(isCallable).length;
           attempts.push({
@@ -720,7 +692,7 @@ export async function completeWithFallback(
       ) {
         const attempt = err as ProviderAttemptError;
         attempts.push(attempt);
-        reportIfModelGone(attempt, provider.baseUrl, step.modelFrom ?? "default");
+        reportIfModelGone(attempt, provider.baseUrl);
       } else {
         attempts.push({
           provider: provider.id,
@@ -731,7 +703,7 @@ export async function completeWithFallback(
     }
   }
 
-  return { ok: false, attempts, code: "ALL_PROVIDERS_FAILED" };
+  return { ok: false, attempts, code: cancel?.aborted ? "CANCELLED" : "ALL_PROVIDERS_FAILED" };
 }
 
 /**
@@ -769,7 +741,7 @@ export type KeyTestResult =
 const KEY_TEST_REPLY_MAX_BYTES = 256 * 1024;
 
 /** How long a Test waits for the provider before calling it a failure. */
-export const KEY_TEST_TIMEOUT_MS = 15_000;
+const KEY_TEST_TIMEOUT_MS = 15_000;
 
 /**
  * One minimal call with one key and one model (`config.model`): the key Test
@@ -846,7 +818,7 @@ export type ModelListResult =
   | { ok: false; status: number | null; message: string };
 
 /** How long a model list waits for the provider. */
-export const MODEL_LIST_TIMEOUT_MS = 10_000;
+const MODEL_LIST_TIMEOUT_MS = 10_000;
 
 /** The most a list may be: OpenRouter's, the longest, is about 2 MB and 350 models. */
 export const MODEL_LIST_MAX_BYTES = 8 * 1024 * 1024;
@@ -1000,12 +972,4 @@ async function fetchModelList(
         : providerText(err instanceof Error ? err.message : "The provider could not be reached.", secrets, 300),
     };
   }
-}
-
-export function preferredModelLabel(
-  env: EnvMap = process.env,
-): string {
-  const first = resolveProviders(env)[0];
-  if (!first) return "free cascade (unconfigured)";
-  return `${first.label} · ${first.model}`;
 }

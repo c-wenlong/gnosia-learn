@@ -13,10 +13,11 @@ import {
   NewJobCard,
   NewJobRow,
 } from "@/components/studio/job-tile";
-import { FADE_IN } from "@/components/studio/motion";
+import { FADE_IN } from "@/components/ui/motion";
 import { PanelLink } from "@/components/studio/PanelLink";
 import { useStudioJobs } from "@/components/studio/JobsProvider";
-import { cx } from "@/components/ui/classes";
+import { TILE_THUMB } from "@/components/studio/surfaces";
+import { cx, FOCUS } from "@/components/ui/classes";
 import { useImageReveal } from "@/components/ui/use-image-reveal";
 import { finishedHeadline, jobShotHref, type Job } from "@/lib/studio-jobs";
 import {
@@ -89,7 +90,7 @@ export function TileJob({
   return (
     // Fades in over the tile as the job starts; opacity only, since a scale
     // would show the thumbnail round its edges for a moment.
-    <div className={cx("absolute inset-x-0 top-0 aspect-[4/3] overflow-hidden border-b border-border", FADE_IN)}>
+    <div className={cx("absolute inset-x-0 top-0 overflow-hidden border-b border-border", TILE_THUMB, FADE_IN)}>
       {/* Keyed by job, so a second job on the same diagram starts from its own pictures. */}
       <JobStage key={job.jobId} job={job} title={title} thumbnail={thumbnail} path={path} isNew={false} />
     </div>
@@ -128,7 +129,7 @@ export function JobRowLink({ jobId, label, path, children }: { jobId: string; la
       aria-label={label}
       // Shrinks before the title does, and never past about half the row:
       // the row's name is what identifies it, the status is extra.
-      className="relative z-10 flex min-w-0 max-w-[45%] items-center rounded px-1 hover:bg-surface2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      className={cx("relative z-10 flex min-w-0 max-w-[45%] items-center rounded px-1 hover:bg-surface2", FOCUS)}
     >
       {children}
     </PanelLink>

@@ -15,8 +15,7 @@ export const runtime = "nodejs";
  * else its default (docs/TUTOR-MODELS.md).
  *
  * The call and its reply are `providerKeyTestTurn` in
- * `@gnosia/tutor/server`, which the native sidecar calls over the same
- * contract. This file keeps the request-side guards and a tighter rate
+ * `@gnosia/tutor/server`. This file keeps the request-side guards and a tighter rate
  * limit, since each test spends a provider request.
  */
 export async function POST(req: Request): Promise<NextResponse> {

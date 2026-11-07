@@ -273,7 +273,7 @@ export function rawParamsOf(search: URLSearchParams): RawParams {
 }
 
 /** The parameters a verb's outcome rides on (`withOutcome`, `readOutcome`). */
-const OUTCOME_PARAMS = ["v", "ok", "m", "d"] as const;
+export const OUTCOME_PARAMS = ["v", "ok", "m", "d"] as const;
 
 /** The parameters that name a panel, and the ones a verb's outcome rides on. */
 const PANEL_KEYS = new Set(["draft", "job", "extend", "talk", "make", "sel", "shot", "settings", "play", ...OUTCOME_PARAMS]);

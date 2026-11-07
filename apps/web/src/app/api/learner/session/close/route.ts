@@ -17,6 +17,6 @@ import { turnRoute } from "@/lib/learner-api";
  * send it on every arrival at the close screen without a second event.
  *
  * The parse and the write are `sessionCloseTurn` in
- * `@gnosia/tutor/server/learner-writes`, which the sidecar runs too.
+ * `@gnosia/tutor/server/learner-writes`.
  */
 export const POST = turnRoute("session-close", sessionCloseTurn);

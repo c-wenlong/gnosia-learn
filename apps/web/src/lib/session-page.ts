@@ -166,7 +166,7 @@ export async function readSummaries(): Promise<ConceptSummary[]> {
  * The tutor's stored wrong options for one concept's checks, by check id;
  * none when the catalog cannot answer (`readWrittenOptions` degrades).
  */
-export async function readConceptOptions(workspace: Pick<ConceptWorkspace, "slug" | "checks">): Promise<WrittenOptions> {
+async function readConceptOptions(workspace: Pick<ConceptWorkspace, "slug" | "checks">): Promise<WrittenOptions> {
   if (workspace.checks.length === 0) return {};
   const written = await readWrittenOptions(catalogDatabase(), await currentOwner(), [workspace]);
   return written.get(workspace.slug) ?? {};

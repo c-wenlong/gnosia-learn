@@ -6,11 +6,12 @@ import { useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, ty
 
 import type { HistorySearch } from "@/components/studio/history-search";
 import { TextLink } from "@/components/ui/TextLink";
-import { cx, FIELD_TEXT, STATUS_TEXT } from "@/components/ui/classes";
+import { cx, FIELD_TEXT, iconButtonClasses } from "@/components/ui/classes";
 import { isImeKey } from "@/components/ui/composer-keys";
 import { Collapse } from "@/components/ui/Collapse";
 import { Glyph } from "@/components/ui/Glyph";
 import { Menu, MenuItem } from "@/components/ui/Menu";
+import { ErrorText } from "@/components/ui/ErrorText";
 import { isCurrentRow } from "@/lib/nav";
 import { recentGlyph } from "@/lib/recent-glyphs";
 import type { RecentChange } from "@/lib/recent-client";
@@ -238,11 +239,8 @@ export function Sections({ rail, onPick, search }: { rail: boolean; onPick: () =
         <SectionLabel id="sidebar-recent" rail={rail}>
           Recent
         </SectionLabel>
-        {pinError !== null && (
-          <p role="alert" className={cx(STATUS_TEXT, "px-2 pt-1 text-danger", LABEL_FADE, rail ? "opacity-0" : LABEL_SHOWN)}>
-            {pinError}
-          </p>
-        )}
+        {/* No fade-in on the rail: the line is hidden there, and the fade would flash it. */}
+        <ErrorText className={cx("px-2 pt-1", LABEL_FADE, rail ? "animate-none opacity-0" : LABEL_SHOWN)}>{pinError}</ErrorText>
         {search.words !== "" ? (
           // Faded out on the rail like every other label: the words stay
           // after focus leaves the field and the peek ends.
@@ -281,11 +279,7 @@ export function Sections({ rail, onPick, search }: { rail: boolean; onPick: () =
                 <TextLink onClick={() => void showOlder()} pending={loadingOlder} size="sm" className="px-1.5 py-1">
                   {loadingOlder ? "Reading older rows…" : "Show older"}
                 </TextLink>
-                {olderError !== null && (
-                  <p role="alert" className={cx(STATUS_TEXT, "px-1.5 text-danger")}>
-                    {olderError}
-                  </p>
-                )}
+                <ErrorText className="px-1.5">{olderError}</ErrorText>
               </div>
             )}
             {loaded && rows.length === 0 && !unlisted && !merged.more && (
@@ -355,11 +349,16 @@ function CoursesSection({
             inert={rail}
             aria-label="Browse courses"
             title="Browse courses"
-            className={cx(
-              "inline-flex size-7 items-center justify-center rounded-md text-text3 transition-[opacity,background-color,color] duration-150 hover:bg-surface2/60 hover:text-text motion-reduce:transition-none",
-              "focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent",
-              rail ? "opacity-0" : "opacity-0 group-hover/label:opacity-100 [@media(hover:none)]:opacity-100",
-            )}
+            className={iconButtonClasses({
+              size: "sm",
+              shape: "square",
+              tone: "muted",
+              inset: true,
+              className: cx(
+                "focus-visible:opacity-100",
+                rail ? "opacity-0" : "opacity-0 group-hover/label:opacity-100 [@media(hover:none)]:opacity-100",
+              ),
+            })}
           >
             <Glyph name="add" size={16} />
           </Link>
@@ -377,7 +376,7 @@ function CoursesSection({
           // Any page of the course: the row is where the owner is.
           const here = isCurrentRow(course.href, pathname, true);
           const name = `${course.code} ${course.title}`;
-          const resume = course.resume === null ? null : `${course.resume.order}. ${course.resume.title}`;
+          const resume = course.resume === null ? null : `${course.resume.number}. ${course.resume.title}`;
           return (
             <li key={course.slug}>
               <Link
@@ -493,17 +492,17 @@ function RecentRow({
           disabled={rail}
           onOpenChange={setMenu}
           trigger={
-            <svg aria-hidden viewBox="0 0 20 20" className="size-[18px]" fill="currentColor">
-              <circle cx="5" cy="10" r="1.4" />
-              <circle cx="10" cy="10" r="1.4" />
-              <circle cx="15" cy="10" r="1.4" />
-            </svg>
+            <Glyph name="more" size={18} />
           }
-          triggerClassName={cx(
-            "inline-flex size-7 items-center justify-center rounded-md text-text2 transition-[opacity,background-color] duration-150 hover:bg-surface2 hover:text-text motion-reduce:transition-none",
-            "focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent",
-            rail ? "opacity-0" : open ? "opacity-100" : "opacity-0 group-hover/row:opacity-100 [@media(hover:none)]:opacity-100",
-          )}
+          triggerClassName={iconButtonClasses({
+            size: "sm",
+            shape: "square",
+            inset: true,
+            className: cx(
+              "focus-visible:opacity-100",
+              rail ? "opacity-0" : open ? "opacity-100" : "opacity-0 group-hover/row:opacity-100 [@media(hover:none)]:opacity-100",
+            ),
+          })}
         >
           <MenuItem
             icon="pin"

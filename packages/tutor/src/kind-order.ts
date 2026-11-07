@@ -1,7 +1,7 @@
 /**
  * The library's kind taxonomy, moved verbatim out of
- * `apps/web/src/lib/library.ts` so the asset reads this package shares with
- * the sidecar sort and filter the same way the library page does.
+ * `apps/web/src/lib/library.ts` so the asset reads in this package sort and
+ * filter the same way the library page does.
  */
 
 /**
@@ -12,7 +12,7 @@
  * companion — that is the safe default, since a new kind must be opted out of
  * being silently filtered out by a list nobody remembered to update.
  */
-export const COMPANION_KINDS: ReadonlySet<string> = new Set([
+const COMPANION_KINDS: ReadonlySet<string> = new Set([
   "transcript",
   "captions",
   "chapters",

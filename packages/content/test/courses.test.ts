@@ -37,6 +37,23 @@ function tree(
   return fixture.root;
 }
 
+/** Two modules of the fixture course, orders 1 and 2. */
+function twoModules(): Record<string, unknown>[] {
+  const [first] = (JSON.parse(courseYaml()) as { modules: Record<string, unknown>[] }).modules;
+  return [
+    first!,
+    {
+      id: "xx1000-m2",
+      slug: "m2-second",
+      title: "Second Module",
+      order: 2,
+      topic: "alpha",
+      topics: [{ id: "xx1000-m2-t1", title: "Another item", subtopics: [] }],
+      resources: [],
+    },
+  ];
+}
+
 /**
  * A tree whose vocabulary maps `mapped` concepts per topic, and whose one
  * course lists `concepts` on its one checklist row.
@@ -163,6 +180,15 @@ describe("a course's cover:", () => {
   });
 });
 
+describe("a course's modules", () => {
+  it("come back in `order` whatever order the file wrote them in, as the database lists them (R3-2-06)", () => {
+    const [first, second] = twoModules();
+    const root = tree({ "xx1000.yaml": courseYaml({ modules: [{ ...second, order: 3 }, first] }) });
+    expect(loadCourses({ root })[0]!.modules.map((m) => m.id)).toEqual(["xx1000-m1", "xx1000-m2"]);
+    expect(parseCourse(courseYaml({ modules: [{ ...second, order: 3 }, first] }), "x").modules.map((m) => m.order)).toEqual([1, 3]);
+  });
+});
+
 describe("loadCourses refuses", () => {
   it("a module whose topic is not in the vocabulary", () => {
     const root = tree({ "xx1000.yaml": courseYaml() }, ["beta"]);
@@ -241,6 +267,11 @@ describe("loadCourses refuses", () => {
       }),
     });
     expect(() => loadCourses({ root })).toThrow(/order 1 is already used by/);
+  });
+
+  it("two modules of one course claiming one order (R3-2-06)", () => {
+    const root = tree({ "xx1000.yaml": courseYaml({ modules: [twoModules()[0], { ...twoModules()[1], order: 1 }] }) });
+    expect(() => loadCourses({ root })).toThrow(/module\[1\]: module order 1 is already used by .*module\[0\]/);
   });
 
   it("a missing slug", () => {

@@ -6,7 +6,7 @@ import type { Env } from "./deps";
 /**
  * Whether a model id holds a whole API key the owner's tutor could call with,
  * saved or server, for any provider (docs/TUTOR-MODELS.md, T11). The chain
- * write routes, the web app's and the sidecar's, refuse such an id, since a
+ * write routes refuse such an id, since a
  * chain row is stored in the clear and exported.
  *
  * Only a whole key counts. Refused or accepted is an answer the caller sees,

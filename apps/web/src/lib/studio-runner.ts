@@ -5,7 +5,7 @@ import { connect } from "node:net";
 import { studioOrigin } from "@/lib/studio";
 
 /** How long the look waits for the runner's port to take the connection. */
-export const RUNNER_LOOK_MS = 300;
+const RUNNER_LOOK_MS = 300;
 
 /**
  * Whether something is listening where the studio's runner should be

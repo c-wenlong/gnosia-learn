@@ -25,6 +25,7 @@ export function Select<V extends string>({
   describedBy,
   dataField,
   className,
+  disabled,
 }: {
   id?: string;
   label: string;
@@ -38,6 +39,8 @@ export function Select<V extends string>({
   describedBy?: string;
   dataField?: string;
   className?: string;
+  /** A field of a locked form: shown, never opened. */
+  disabled?: boolean;
 }) {
   return (
     <FilterMenu
@@ -54,6 +57,7 @@ export function Select<V extends string>({
       describedBy={describedBy}
       dataField={dataField}
       className={className}
+      disabled={disabled}
     />
   );
 }

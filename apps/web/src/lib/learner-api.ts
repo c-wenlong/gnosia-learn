@@ -57,8 +57,7 @@ export const MAX_BODY_BYTES = 64_000;
 
 /**
  * The longest scratch note, and the longest curriculum item id (authored,
- * `cs4263-m1-t1`, so short). One copy, in the learner writes the sidecar
- * shares.
+ * `cs4263-m1-t1`, so short). One copy, in the learner writes.
  */
 export { MAX_ID_CHARS };
 
@@ -80,18 +79,7 @@ export async function requestOwner(): Promise<string | NextResponse> {
   }
 }
 
-/**
- * The 401 for a request with no session, or null when it has one. For a route
- * whose reader resolves the owner itself: deciding it here first means a
- * request that got past the proxy is a 401, not the reader's `NoOwnerError`
- * surfacing as a 500 or as "the catalog is unreachable".
- */
-export async function refuseWithoutOwner(): Promise<NextResponse | null> {
-  const owner = await requestOwner();
-  return owner instanceof NextResponse ? owner : null;
-}
-
-export function badRequest(message: string): NextResponse {
+function badRequest(message: string): NextResponse {
   return NextResponse.json({ ok: false, error: message, code: "BAD_REQUEST" }, { status: 400 });
 }
 
@@ -101,7 +89,7 @@ export function badRequest(message: string): NextResponse {
  * drizzle message is the failed SQL with its bind parameters, which here are
  * the learner's notes, recaps and answers.
  */
-export function unavailable(error: unknown): NextResponse {
+function unavailable(error: unknown): NextResponse {
   console.warn(`learner write failed (${failureCode(error)})`);
   return NextResponse.json(
     { ok: false, error: "Not saved: the database is unreachable.", code: "STORE_UNAVAILABLE" },
@@ -221,13 +209,16 @@ export function handler<T>(
  * The seams a learner write reads, for one owner. Lazy on purpose: a write
  * uses the database, the scope and the time zone, and a body refused before
  * the write must not open the database (a rejected promise nobody awaits) or
- * build a content source and a blob store it never reads.
+ * build a content source and a blob store it never reads. `requestUrl` is
+ * for the Settings writes (`settingsRoute`), whose custom-provider turns
+ * refuse a base URL on this app's own port.
  */
-function learnerDeps(owner: string): TutorDeps {
+export function learnerDeps(owner: string, requestUrl?: string): TutorDeps {
   return {
     owner,
     scope: ownerScope(owner),
     env: process.env,
+    requestUrl,
     get db() {
       return catalogDatabase();
     },
@@ -242,10 +233,10 @@ function learnerDeps(owner: string): TutorDeps {
 
 /**
  * A route that is one of the shared learner writes
- * (`@gnosia/tutor/server/learner-writes`, the sidecar's too), with this app's
+ * (`@gnosia/tutor/server/learner-writes`), with this app's
  * guards in front: same origin, the session's owner, a rate limit on
  * `learner:<bucket>`, and the bounded body read. The parse, the write and the
- * answer are the turn's, so the web and the native app speak one protocol.
+ * answer are the turn's.
  */
 export function turnRoute(
   bucket: string,

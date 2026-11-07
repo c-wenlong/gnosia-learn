@@ -11,7 +11,8 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 
-import { createdAt, instant, updatedAt } from "./columns";
+import { createdAt, instant, NOW_MS, updatedAt } from "./columns";
+import { inList, quoted } from "./sql-in-list";
 import { concept, curriculumItem } from "./content";
 // `state` and `studio` reference each other: `event.session_id` points at
 // `session`, and `session.learner_id` points back at `learner`. Both are
@@ -41,9 +42,9 @@ import {
  * data, with one exception: `mastery` and `review` are derived and can be
  * rebuilt by replaying `event` from the beginning. Bundle 5 backfills all of
  * this from `learn/state/*.json` and the browser's localStorage, so the column
- * names below deliberately mirror `apps/web/src/lib/types.ts`, the
- * `KNOWLEDGE_LIMITS` in `apps/web/src/lib/storage.ts` and the constants in
- * `scripts/learn/lib/`.
+ * names below deliberately mirror the learner shapes in `./shared.ts`
+ * (`LearnerState`, `TopicKnowledge`), the `KNOWLEDGE_LIMITS` beside them
+ * and the constants in `scripts/learn/lib/`.
  */
 
 /*
@@ -56,12 +57,9 @@ import {
  * therefore safe in a client component.
  */
 
-const inList = (column: string, values: readonly string[]) =>
-  sql.raw(`${column} in (${values.map((v) => `'${v}'`).join(", ")})`);
-
 /** A `provider` column: a built-in provider, or a custom one's id (docs/TUTOR-MODELS.md, T14). */
 const providerName = (column: string) =>
-  sql.raw(`(${column} in (${PROVIDER_IDS.map((v) => `'${v}'`).join(", ")}) or ${column} regexp '${CUSTOM_PROVIDER_ID_SQL}')`);
+  sql.raw(`(${column} in (${quoted(PROVIDER_IDS)}) or ${column} regexp '${CUSTOM_PROVIDER_ID_SQL}')`);
 
 /**
  * One of `values` at random, each as likely as the next. Postgres drew with
@@ -122,7 +120,7 @@ export const event = sqliteTable(
     // Was `GENERATED ALWAYS AS IDENTITY`; a rowid alias fills the same role.
     id: integer("id").primaryKey({ autoIncrement: true }),
     /** When it happened, from the emitter. Not the same as `created_at`, which is when it landed. */
-    at: instant("at").notNull().default(sql`(cast(unixepoch('subsec') * 1000 as integer))`),
+    at: instant("at").notNull().default(NOW_MS),
     learnerId: text("learner_id")
       .notNull()
       .references(() => learner.id, { onDelete: "restrict", onUpdate: "cascade" }),
@@ -246,7 +244,7 @@ export const review = sqliteTable(
 
 /**
  * A ticked checklist row. Mirrors `LearnerState.completed` and
- * `LearnerState.notes` from `apps/web/src/lib/types.ts`, which are two maps
+ * `LearnerState.notes` from `./shared.ts`, which are two maps
  * keyed by the same curriculum item id and so are one table here. `completedAt` is nullable
  * because a note without a tick is a real state the web app already allows.
  */
@@ -275,7 +273,7 @@ export const progress = sqliteTable(
 
 /**
  * The durable "remind me what I learnt" record. One-for-one with
- * `TopicKnowledge` in `apps/web/src/lib/types.ts`, down to the `sessions`
+ * `TopicKnowledge` in `./shared.ts`, down to the `sessions`
  * counter.
  */
 export const recap = sqliteTable(

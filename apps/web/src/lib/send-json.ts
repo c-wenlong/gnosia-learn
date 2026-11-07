@@ -1,5 +1,5 @@
 /** How long `sendJson` waits for an answer before giving up on it. */
-export const SEND_TIMEOUT_MS = 60_000;
+const SEND_TIMEOUT_MS = 60_000;
 
 /**
  * A signal that aborts after `ms`, or when `outer` does, and the call that

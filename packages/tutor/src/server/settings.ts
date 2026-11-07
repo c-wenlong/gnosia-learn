@@ -3,11 +3,12 @@ import { readParams, readPreferences, type BktParams } from "@gnosia/catalog/sta
 import { PREFERENCE_KEYS } from "@gnosia/schema/shared";
 
 import { parseMotionMode, parseTutorStyle, type MotionMode, type TutorStyle } from "../preferences";
+import { failureCode } from "./provider-keys";
 
 /**
  * The owner's settings rows, the request-independent half of
  * `apps/web/src/lib/settings.ts`: the database handle is a promise and the
- * owner a parameter, so the same reads serve the Next app and the sidecar.
+ * owner a parameter.
  */
 
 export interface SettingsSnapshot {
@@ -32,8 +33,7 @@ export async function readSettings(
       bkt,
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.warn(`settings: preferences unavailable, ${message}`);
+    console.warn(`settings: preferences unavailable (${failureCode(error)})`);
     return {
       reachable: false,
       tutorStyle: parseTutorStyle(undefined),
@@ -51,8 +51,7 @@ export async function readTutorStyle(
     const preferences = await readPreferences(await db, owner);
     return parseTutorStyle(preferences[PREFERENCE_KEYS.tutorStyle]);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.warn(`settings: tutor style unavailable, ${message}`);
+    console.warn(`settings: tutor style unavailable (${failureCode(error)})`);
     return parseTutorStyle(undefined);
   }
 }

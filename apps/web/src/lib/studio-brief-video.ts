@@ -8,8 +8,12 @@
  * `video.narration.charsPerSecond` reports, which the runner takes from
  * gnosia-audio, so the card predicts the minutes the runner's validator
  * judged. This is the one definition of the brief's shape and its pure
- * helpers: the video job view (`studio-video-job.ts`) imports them.
+ * helpers: the video job view (`studio-video-job.ts`) imports them. The
+ * timing itself is `narrationSeconds` in `@gnosia/schema/shared`, the one the
+ * runner computes with.
  */
+
+import { isNarratedVoice, narrationSeconds, silentSeconds } from "@gnosia/schema/shared";
 
 export type VideoAudience = "new" | "familiar" | "expert";
 
@@ -107,32 +111,14 @@ export function switchedTool<T extends Pick<VideoBrief, "tool" | "toolReason">>(
   return next;
 }
 
-/** The voice value for a video with no narration. */
-export const SILENT = "none";
-
-/** The finished video over the speech: 1.03 to 1.15 measured, 1.08 taken. */
-export const VIDEO_OVER_SPEECH = 1.08;
-
 export function isNarrated(brief: Pick<VideoBrief, "voice">): boolean {
-  return brief.voice !== SILENT;
-}
-
-/**
- * Seconds of video the given narration lines predict, at the runner's speech
- * rate in characters a second. With no rate (a runner from before it reported
- * one) the answer is NaN, which the length lines show as unknown rather than
- * guess.
- */
-export function secondsForLines(lines: readonly string[], charsPerSecond: number | undefined): number {
-  if (charsPerSecond === undefined || !(charsPerSecond > 0)) return Number.NaN;
-  const characters = lines.reduce((sum, line) => sum + line.length, 0);
-  return (characters / charsPerSecond) * VIDEO_OVER_SPEECH;
+  return isNarratedVoice(brief.voice);
 }
 
 /** One scene's predicted seconds: its lines' speaking time, or its beats' `seconds` when silent. */
 export function sceneSeconds(scene: VideoScene, narrated: boolean, charsPerSecond: number | undefined): number {
-  if (!narrated) return scene.beats.reduce((sum, beat) => sum + (beat.seconds ?? 0), 0);
-  return secondsForLines(scene.beats.map((beat) => beat.say), charsPerSecond);
+  if (!narrated) return silentSeconds([scene]);
+  return narrationSeconds(scene.beats.map((beat) => beat.say), charsPerSecond);
 }
 
 /** The script's own prediction of the video's length, in seconds, never copied from `targetSeconds`. */

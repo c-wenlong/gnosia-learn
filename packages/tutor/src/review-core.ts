@@ -47,9 +47,17 @@ export interface ReviewItem {
    * Check cards only: where the wrong options came from. `tutor` when the
    * tutor model wrote them for this check (the store a session fills,
    * docs/LEARN.md "Wrong options"), `notes` when they are other notes'
-   * answers and summaries. A review never calls a model itself.
+   * answers and summaries. A review never calls a model while it renders.
    */
   wrong?: "tutor" | "notes";
+  /**
+   * Check cards whose wrong options came from the notes, when the check's
+   * answer is short enough and a tutor model can be asked: the note's check,
+   * by id. The page asks the tutor to write its options
+   * (`POST /api/agent/check-options`, stored per check) before showing the
+   * card, and lays it out again with them (`withTutorOptions`).
+   */
+  rewrite?: { check: string };
   /** How many check blocks the note holds. */
   checks: number;
   /** The interval each rating would give, in days, index = rating. */
@@ -80,8 +88,8 @@ export interface CheckLike {
 }
 
 /** The fewest wrong options a multiple-choice card is worth showing. */
-export const MIN_DISTRACTORS = 2;
-export const MAX_CHOICES = 4;
+const MIN_DISTRACTORS = 2;
+const MAX_CHOICES = 4;
 
 /**
  * FNV-1a over a string. A seed, not a hash anyone relies on: it makes the
@@ -97,20 +105,16 @@ export function seedOf(text: string): number {
   return h >>> 0;
 }
 
-/** A small deterministic PRNG (mulberry32), so a shuffle is repeatable. */
-function random(seed: number): () => number {
+/** A seeded Fisher-Yates, mulberry32 seeded, so the same seed always gives the same order. */
+export function shuffleWithSeed<T>(list: readonly T[], seed: number): T[] {
+  const out = [...list];
   let a = seed;
-  return () => {
+  const next = () => {
     a = (a + 0x6d2b79f5) | 0;
     let t = Math.imul(a ^ (a >>> 15), 1 | a);
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
-}
-
-function shuffled<T>(list: readonly T[], seed: number): T[] {
-  const out = [...list];
-  const next = random(seed);
   for (let i = out.length - 1; i > 0; i -= 1) {
     const j = Math.floor(next() * (i + 1));
     [out[i], out[j]] = [out[j] as T, out[i] as T];
@@ -152,9 +156,26 @@ export function buildChoices(
   const seed = seedOf(conceptId);
   // Draw from the front of the preference order, shuffled within it, so the
   // best distractors are used first but not always in the same slots.
-  const wrong = shuffled(candidates.slice(0, (MAX_CHOICES - 1) * 2), seed).slice(0, MAX_CHOICES - 1);
-  const choices = shuffled([answer.trim(), ...wrong], seed ^ 0x9e3779b9);
+  const wrong = shuffleWithSeed(candidates.slice(0, (MAX_CHOICES - 1) * 2), seed).slice(0, MAX_CHOICES - 1);
+  const choices = shuffleWithSeed([answer.trim(), ...wrong], seed ^ 0x9e3779b9);
   return { choices, correct: choices.indexOf(answer.trim()) };
+}
+
+/**
+ * A check card carrying `rewrite`, laid out again with the wrong options the
+ * tutor wrote for its check: the same order the queue gives the card once
+ * they are stored, since both seed `buildChoices` with the concept. Null when
+ * the card asks for no rewrite or the options cannot make one, and the page
+ * keeps the card it has.
+ */
+export function withTutorOptions(item: ReviewItem, options: readonly string[]): ReviewItem | null {
+  const { rewrite, ...rest } = item;
+  if (rewrite === undefined || item.choices === null || item.correct === null) return null;
+  const answer = item.choices[item.correct];
+  if (answer === undefined) return null;
+  const mc = buildChoices(item.conceptId, answer, options);
+  if (mc === null) return null;
+  return { ...rest, choices: mc.choices, correct: mc.correct, wrong: "tutor" };
 }
 
 /** Compact for the phone's rating buttons ("4d"), words for the desktop ("4 days"). */
@@ -203,7 +224,7 @@ export function formatDue(iso: string | null, now: Date): string | null {
  * Minutes left, at thirty seconds a card. A round number for a header, not a
  * measurement: nothing records how long a review takes.
  */
-export const SECONDS_PER_CARD = 30;
+const SECONDS_PER_CARD = 30;
 export function minutesLeft(cards: number): number {
   return Math.max(0, Math.ceil((cards * SECONDS_PER_CARD) / 60));
 }

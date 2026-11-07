@@ -1,6 +1,6 @@
 import { CHECK_DISTRACTOR_LIMITS } from "@gnosia/schema/shared";
 
-import { NOTE_DATA_LINE, noteAsData, type ConceptPromptInput } from "./prompt";
+import { NOTE_DATA_LINE, noteAsData, type ConceptPromptInput, unfence } from "./prompt";
 import { firstObject } from "./session-question";
 
 /**
@@ -25,7 +25,7 @@ import { firstObject } from "./session-question";
 export const CHECK_OPTIONS_VERSION = 1;
 
 /** The longest question and answer the prompt quotes. */
-export const CHECK_TEXT_LIMIT = 1_200;
+const CHECK_TEXT_LIMIT = 1_200;
 
 /**
  * The system prompt. The question and answer are quoted as data, as the note
@@ -35,7 +35,7 @@ export const CHECK_TEXT_LIMIT = 1_200;
 export function buildCheckOptionsPrompt(input: ConceptPromptInput, check: { question: string; answer: string }): string {
   const note = noteAsData(input.body);
   const quote = (text: string) =>
-    `\`\`\`text\n${text.trim().slice(0, CHECK_TEXT_LIMIT).replace(/`{3,}/g, (fence) => fence.split("").join(" "))}\n\`\`\``;
+    `\`\`\`text\n${unfence(text.trim().slice(0, CHECK_TEXT_LIMIT))}\n\`\`\``;
   const { max } = optionLengthBounds(check.answer);
   const length = check.answer.trim().length;
 
@@ -75,7 +75,7 @@ export const CHECK_OPTIONS_REQUEST = "Write the three wrong options now, as JSON
 export type ParsedOptions = { ok: true; options: string[] } | { ok: false; reason: string };
 
 /** How two options are compared: lowercase, runs of space collapsed, no closing full stop. */
-export function optionKey(text: string): string {
+function optionKey(text: string): string {
   return text.toLowerCase().replace(/\s+/g, " ").trim().replace(/[.!?;:,]+$/, "").trim();
 }
 

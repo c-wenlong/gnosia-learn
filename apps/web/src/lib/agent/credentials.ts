@@ -14,8 +14,8 @@ type Env = Record<string, string | undefined>;
 
 /**
  * The owner's provider credentials (docs/BYOK.md, docs/TUTOR-MODELS.md). The
- * resolution itself lives in `@gnosia/tutor/server/credentials`, which
- * the native sidecar calls with its own pool; this file hands it this app's.
+ * resolution itself lives in `@gnosia/tutor/server/credentials`; this file
+ * hands it this app's pool.
  */
 
 export async function tutorCredentials(owner: string, env: Env = process.env): Promise<ChainStep[]> {

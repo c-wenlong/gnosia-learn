@@ -12,6 +12,7 @@ import {
 } from "drizzle-orm/sqlite-core";
 
 import { archivedAt, createdAt, instant, ownerId, updatedAt } from "./columns";
+import { inList, quoted } from "./sql-in-list";
 // `content` and `state` reference each other: every content entity carries
 // `owner_id` pointing at `learner`, and `mastery`, `progress` and the rest
 // point back at `concept` and `curriculum_item`. Both directions are declared
@@ -23,10 +24,17 @@ import { session } from "./studio";
 
 /**
  * The content half of the catalog: what exists, and how the pieces refer to
- * one another. Everything here is *derived* from files in git (concept notes,
- * course data, manimkc topics, .tldr sources). It is rebuildable by re-running
- * the indexers, so nothing in this file is a source of truth. The state half
- * (state.ts) is the opposite: those rows are the only copy.
+ * one another. These rows are the authored content of record: since the phase
+ * 3 cut-over the repository holds no `content/` or `learn/`, so every topic,
+ * tag, concept note, session log, course and diagram exists here and nowhere
+ * else. Never drop them expecting an import to rebuild them: nothing in the
+ * repository can, and only an export taken first (`catalog export`, or the
+ * nightly one) brings them back. `content_revision` is their history, one row
+ * per write, except a session log's text, whose history is its append-only
+ * `session_log_entry` rows (D20), not a revision's snapshot. Only the video
+ * tools' rows are still derived, from each tool's `topics --json` report on
+ * `catalog import`. The state half (state.ts) is the learner's evidence about
+ * all of this, and is the only copy too.
  *
  * Kind columns are `text` plus a CHECK rather than a SQLite ENUM — SQLite has
  * no ENUM type at all, and a `text` CHECK is a one-line change in a migration,
@@ -83,7 +91,7 @@ export const BLOB_STORED_KINDS = [
  * by the Postgres-to-SQLite port (services/catalog/scripts/pg-to-sqlite.mjs);
  * null only where a port or a test made a row without one.
  */
-export const GENERATED_BY = [
+const GENERATED_BY = [
   "manimkc",
   "remotionkc",
   "revideokc",
@@ -111,11 +119,11 @@ export const SOURCE_REPOS = ["gnosia", "manimkc", "tldrawkc", "remotionkc", "rev
 export type SourceRepo = (typeof SOURCE_REPOS)[number];
 
 /** A `collection` is any ordered container. Courses and modules today, decks next. */
-export const COLLECTION_KINDS = ["course", "module", "deck"] as const;
+const COLLECTION_KINDS = ["course", "module", "deck"] as const;
 export type CollectionKind = (typeof COLLECTION_KINDS)[number];
 
 /** How one concept depends on another. `requires` is hard, `assumes` is soft. */
-export const PREREQUISITE_KINDS = ["requires", "assumes"] as const;
+const PREREQUISITE_KINDS = ["requires", "assumes"] as const;
 export type PrerequisiteKind = (typeof PREREQUISITE_KINDS)[number];
 
 /**
@@ -138,17 +146,12 @@ export const TOPIC_RELATION_KINDS = ["broader", "related", "precedes"] as const;
 export type TopicRelationKind = (typeof TOPIC_RELATION_KINDS)[number];
 
 /** Where a blob's bytes live. `fs` is the laptop's store under `~/.gnosia/blobs`. */
-export const BLOB_PROVIDERS = ["fs", "vercel-blob", "r2"] as const;
+const BLOB_PROVIDERS = ["fs", "vercel-blob", "r2"] as const;
 export type BlobProvider = (typeof BLOB_PROVIDERS)[number];
 
 /** `pending` from the row write until the store confirms the upload, then `present`. */
-export const BLOB_STATES = ["pending", "present"] as const;
+const BLOB_STATES = ["pending", "present"] as const;
 export type BlobState = (typeof BLOB_STATES)[number];
-
-const quoted = (values: readonly string[]) => values.map((v) => `'${v}'`).join(", ");
-
-const inList = (column: string, values: readonly string[]) =>
-  sql.raw(`${column} in (${quoted(values)})`);
 
 /**
  * The id rule the content readers enforce at parse time

@@ -1,7 +1,18 @@
 import { DEFAULT_TUTOR_STYLE, TUTOR_STYLES, type TutorStyle } from "./preferences";
-import type { Course, Module, Topic, TopicKnowledge } from "./types";
+import type { Course, Module, Topic } from "@gnosia/content";
+import { moduleNumber } from "@gnosia/content/module-number";
+import type { TopicKnowledge } from "@gnosia/schema/shared";
+import { formatTimecode } from "./media";
 import { buildLearningObjectives, buildSessionAngle } from "./objectives";
 import { formatPriorKnowledgeBlock } from "./summary";
+
+/**
+ * Text with every run of three or more backticks broken apart, so it can sit
+ * inside a fenced data block in a prompt without closing it early.
+ */
+export function unfence(text: string): string {
+  return text.replace(/`{3,}/g, (fence) => fence.split("").join(" "));
+}
 
 export interface AgentSessionContext {
   course: Course;
@@ -98,7 +109,7 @@ ${angle}
 - Capstone goal: ${course.capstone}
 
 ### Module
-- M${module.order}: ${module.title}
+- M${moduleNumber(course, module)}: ${module.title}
 - Other topics in this module:
 ${siblingTopics || "- (this is the only topic)"}
 
@@ -245,7 +256,7 @@ export function noteAsData(body: string | null | undefined): string | null {
   if (text === "") return null;
   const clipped = text.length > CONCEPT_BODY_LIMIT ? `${text.slice(0, CONCEPT_BODY_LIMIT)}\n\n[note truncated]` : text;
   const renamed = clipped.replace(/^(\s*`{3,})check\b/gm, "$1note-check");
-  return `\`\`\`text\n${renamed.replace(/`{3,}/g, (fence) => fence.split("").join(" "))}\n\`\`\``;
+  return `\`\`\`text\n${unfence(renamed)}\n\`\`\``;
 }
 
 /** The heading over `noteAsData`'s block: the block is data, never instructions. */
@@ -441,7 +452,7 @@ export const OPEN_SUBJECT_LIMIT = 200;
  */
 export function buildOpenTutorPrompt(subject: string, options: { style?: TutorStyle } = {}): string {
   const style = options.style ?? DEFAULT_TUTOR_STYLE;
-  const topic = subject.slice(0, OPEN_SUBJECT_LIMIT).replace(/`{3,}/g, (fence) => fence.split("").join(" "));
+  const topic = unfence(subject.slice(0, OPEN_SUBJECT_LIMIT));
   return `# Gnosia open tutor
 
 You are a Socratic tutor. The learner typed a subject they want to learn into their notebook's search box, and nothing in their notebook covers it yet. Help them start on it.
@@ -477,14 +488,6 @@ export const VIDEO_TRANSCRIPT_LIMIT = 24_000;
 export interface VideoLine {
   start: number;
   text: string;
-}
-
-function clock(seconds: number): string {
-  const total = Number.isFinite(seconds) && seconds > 0 ? Math.floor(seconds) : 0;
-  const h = Math.floor(total / 3600);
-  const m = Math.floor(total / 60) % 60;
-  const s = String(total % 60).padStart(2, "0");
-  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
 }
 
 /**
@@ -546,7 +549,6 @@ export function buildVideoAskPrompt(
   options: { style?: TutorStyle } = {},
 ): string {
   const style = options.style ?? DEFAULT_TUTOR_STYLE;
-  const unfence = (text: string) => text.replace(/`{3,}/g, (fence) => fence.split("").join(" "));
   const title = unfence(video.title.slice(0, OPEN_SUBJECT_LIMIT));
 
   let transcript: string;
@@ -554,15 +556,15 @@ export function buildVideoAskPrompt(
     transcript = "No transcript is indexed for this video, so you do not know exactly what it says. Answer from the title and general knowledge, and say when you are guessing at what the video covers.";
   } else {
     const window = transcriptWindow(video.transcript, at);
-    const lines = window.lines.map((line) => `[${clock(line.start)}] ${line.text}`);
+    const lines = window.lines.map((line) => `[${formatTimecode(line.start)}] ${line.text}`);
     const note = !window.cut
       ? ""
-      : `\nThe transcript is longer than this, so ${window.from === 0 ? "only its start is shown" : `only the lines around the player's position are shown (from [${clock(window.lines[0].start)}])`}; say so if a question is about a part not shown.`;
+      : `\nThe transcript is longer than this, so ${window.from === 0 ? "only its start is shown" : `only the lines around the player's position are shown (from [${formatTimecode(window.lines[0].start)}])`}; say so if a question is about a part not shown.`;
     transcript = `\`\`\`text\n${unfence(lines.join("\n"))}\n\`\`\`${note}`;
   }
 
   const position =
-    at === null ? "Not known." : `${clock(at)} into the video. "Just now" or "this part" means around here.`;
+    at === null ? "Not known." : `${formatTimecode(at)} into the video. "Just now" or "this part" means around here.`;
 
   return `# Gnosia video Ask
 
@@ -612,7 +614,6 @@ export function buildPageAskPrompt(
   options: { style?: TutorStyle } = {},
 ): string {
   const style = options.style ?? DEFAULT_TUTOR_STYLE;
-  const unfence = (text: string) => text.replace(/`{3,}/g, (fence) => fence.split("").join(" "));
   const title = unfence(page.title.slice(0, OPEN_SUBJECT_LIMIT));
   const what = page.kind === "note" ? "a note" : "a diagram";
 

@@ -8,7 +8,7 @@ import { withoutPin, withPin, type RecentModel } from "@/lib/recent-core";
 import { useDraftsWake } from "@/lib/use-drafts-wake";
 
 /** How long a run of navigations rests before Recent is read again. */
-export const RECENT_SETTLE_MS = 300;
+const RECENT_SETTLE_MS = 300;
 
 export interface RecentState {
   /** The last read that landed; null until one does. */
@@ -96,7 +96,7 @@ export function useRecent(drafts: boolean): RecentState {
 }
 
 /** What a change looks like before the server has said so. */
-export function applyChange(model: RecentModel, change: RecentChange): RecentModel {
+function applyChange(model: RecentModel, change: RecentChange): RecentModel {
   switch (change.action) {
     case "pin":
       return { ...model, pinned: withPin(model.pinned, { ...change.row, at: new Date().toISOString() }) };
@@ -106,7 +106,7 @@ export function applyChange(model: RecentModel, change: RecentChange): RecentMod
 }
 
 /** How long typing rests before the server is asked; the runner's search waits as long. */
-export const RECENT_SEARCH_DEBOUNCE_MS = 200;
+const RECENT_SEARCH_DEBOUNCE_MS = 200;
 
 export interface RecentSearch {
   /** The rows whose titles hold the words, newest first; null while they are read, or with no words. */

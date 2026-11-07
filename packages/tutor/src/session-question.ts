@@ -1,6 +1,6 @@
 import { NOTE_DATA_LINE, noteAsData, type ConceptPromptInput } from "./prompt";
 import { DEFAULT_TUTOR_STYLE, type TutorStyle } from "./preferences";
-import { seedOf } from "./review-core";
+import { seedOf, shuffleWithSeed } from "./review-core";
 import type { SessionQuestion } from "./session-core";
 
 /**
@@ -138,23 +138,6 @@ function text(value: unknown, max: number): string | null {
 export function firstSentence(value: string): string {
   const match = /^.+?[.!?](?=\s|$)/.exec(value.trim());
   return (match?.[0] ?? value).trim();
-}
-
-/** A seeded Fisher-Yates, so the same reply always lands in the same order. */
-export function shuffleWithSeed<T>(list: readonly T[], seed: number): T[] {
-  const out = [...list];
-  let a = seed;
-  const next = () => {
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-  for (let i = out.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(next() * (i + 1));
-    [out[i], out[j]] = [out[j] as T, out[i] as T];
-  }
-  return out;
 }
 
 /**

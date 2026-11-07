@@ -1,12 +1,7 @@
-import { providerLabel, type ProviderName } from "@gnosia/schema/shared";
-import { NextResponse } from "next/server";
+import { tutorModelAddTurn, tutorModelMoveTurn, tutorModelRemoveTurn, tutorModelSetTurn } from "@gnosia/tutor/server/turns";
 
-import { keyFor } from "@gnosia/tutor/providers";
-import { echoesKey } from "@gnosia/tutor/server/key-echo";
-import { answer, guard, readBody, readProvider, refuse } from "@/lib/provider-keys/requests";
-import { failureCode, openSavedKeys } from "@/lib/provider-keys/store";
-import { CHAIN_WRITE_RATE_LIMIT, chainFailed, readModel } from "@/lib/tutor-models/requests";
-import { addChainEntry, moveChainEntry, removeChainEntry, setChainEntry } from "@/lib/tutor-models/store";
+import { settingsRoute } from "@/lib/provider-keys/requests";
+import { CHAIN_WRITE_RATE_LIMIT } from "@/lib/tutor-models/requests";
 
 export const runtime = "nodejs";
 
@@ -27,100 +22,12 @@ export const runtime = "nodejs";
  * there, 403 from another origin, 429, 401 with no session, 503
  * `STORE_UNAVAILABLE` (the chain, or on an add the saved keys, could not be
  * read). The same guards as the provider-key routes, under
- * their own rate-limit buckets.
+ * their own rate-limit buckets. Each method is a turn in
+ * `@gnosia/tutor/server/turns` (`tutorModelAddTurn` and the rest), key gate
+ * included.
  */
 
-async function entry(req: Request) {
-  const owner = await guard(req, "write", CHAIN_WRITE_RATE_LIMIT, "tutor-model");
-  if (owner instanceof NextResponse) return owner;
-  const body = await readBody(req);
-  if (body instanceof NextResponse) return body;
-  const provider = readProvider(body);
-  if (provider instanceof NextResponse) return provider;
-  const model = readModel(body);
-  if (model instanceof NextResponse) return model;
-  return { owner, body, provider, model };
-}
-
-export async function POST(req: Request): Promise<NextResponse> {
-  const read = await entry(req);
-  if (read instanceof NextResponse) return read;
-  const gate = await keyGate(read.owner, read.provider, read.model, "added");
-  if (gate instanceof NextResponse) return gate;
-
-  try {
-    return answer({ ok: true, chain: await addChainEntry(read.owner, read.provider, read.model, gate.serverKey) });
-  } catch (error) {
-    return chainFailed("add", error);
-  }
-}
-
-export async function PUT(req: Request): Promise<NextResponse> {
-  const read = await entry(req);
-  if (read instanceof NextResponse) return read;
-  const gate = await keyGate(read.owner, read.provider, read.model, "saved");
-  if (gate instanceof NextResponse) return gate;
-
-  try {
-    return answer({ ok: true, chain: await setChainEntry(read.owner, read.provider, read.model, gate.serverKey) });
-  } catch (error) {
-    return chainFailed("saved", error);
-  }
-}
-
-/**
- * The key gate an add and a replace share (docs/TUTOR-MODELS.md): Settings
- * offers only providers with a key, and the route holds the same rule — a
- * key removed later leaves the entry in place, skipped (T4). A saved key
- * that cannot be read because the database is down is not "no key": say so,
- * and let the person try again. Answers the refusal, or the server's
- * key-holding for the write's own under-lock check.
- */
-async function keyGate(
-  owner: string,
-  provider: ProviderName,
-  model: string,
-  what: "added" | "saved",
-): Promise<NextResponse | { serverKey: boolean }> {
-  let saved: Partial<Record<ProviderName, string>>;
-  try {
-    saved = await openSavedKeys(owner);
-  } catch (error) {
-    console.warn(`tutor model ${what === "added" ? "add" : "set"}: saved provider keys unavailable (${failureCode(error)})`);
-    return refuse(`Not ${what}: your saved keys could not be read just now. Try again in a moment.`, "STORE_UNAVAILABLE", 503);
-  }
-  if (keyFor(provider, saved) === null) {
-    return refuse(`There is no key for ${providerLabel(provider)}. Add one under Providers first.`, "NO_KEY");
-  }
-  // A key pasted into the model field would be stored in the clear and
-  // exported (T11). `checkModelId` refuses anything shaped like a key; this
-  // refuses an id holding one of the owner's whole keys, saved or server,
-  // for every provider, whatever its shape, and never a part of one, which
-  // would answer guesses at a key. Neither answer repeats what was sent.
-  if (echoesKey(model, saved)) {
-    return refuse("That is one of your API keys, not a model id. Keys go in a provider's API key field.");
-  }
-  return { serverKey: keyFor(provider, {}) !== null };
-}
-
-export async function DELETE(req: Request): Promise<NextResponse> {
-  const read = await entry(req);
-  if (read instanceof NextResponse) return read;
-  try {
-    return answer({ ok: true, chain: await removeChainEntry(read.owner, read.provider, read.model) });
-  } catch (error) {
-    return chainFailed("remove", error);
-  }
-}
-
-export async function PATCH(req: Request): Promise<NextResponse> {
-  const read = await entry(req);
-  if (read instanceof NextResponse) return read;
-  const direction = read.body.direction;
-  if (direction !== "up" && direction !== "down") return refuse(`"direction" must be "up" or "down".`);
-  try {
-    return answer({ ok: true, chain: await moveChainEntry(read.owner, read.provider, read.model, direction) });
-  } catch (error) {
-    return chainFailed("move", error);
-  }
-}
+export const POST = settingsRoute("tutor-model", CHAIN_WRITE_RATE_LIMIT, tutorModelAddTurn);
+export const PUT = settingsRoute("tutor-model", CHAIN_WRITE_RATE_LIMIT, tutorModelSetTurn);
+export const DELETE = settingsRoute("tutor-model", CHAIN_WRITE_RATE_LIMIT, tutorModelRemoveTurn);
+export const PATCH = settingsRoute("tutor-model", CHAIN_WRITE_RATE_LIMIT, tutorModelMoveTurn);

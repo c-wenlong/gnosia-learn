@@ -1,0 +1,194 @@
+import { execFile } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { promisify } from "node:util";
+import { afterEach, describe, expect, it } from "vitest";
+
+import { catalogPathFrom, dataHomeEnvFile, readEnvFile, webMode } from "../src/env";
+
+/**
+ * The launchers' environment (S9-02): the web's, in the web's order, so the
+ * `AUTH_SECRET` that sealed a saved key on the web opens it here. The loader
+ * writes `process.env`, which is why it runs in a child process of its own.
+ */
+
+const run = promisify(execFile);
+const ENTRY = resolve(__dirname, "../src/env.ts");
+const TSX = resolve(__dirname, "../../../node_modules/tsx/dist/esm/index.mjs");
+
+let dirs: string[] = [];
+function temp(): string {
+  const dir = mkdtempSync(join(tmpdir(), "launch-env-"));
+  dirs.push(dir);
+  return dir;
+}
+
+afterEach(() => {
+  for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
+  dirs = [];
+});
+
+/** The keys `loadWebEnv` leaves in a child's environment, given its own environment and an app dir. */
+async function loaded(env: Record<string, string>, appDir: string, keys: string[]): Promise<Record<string, string>> {
+  const script = `
+    const { loadWebEnv } = await import(${JSON.stringify(ENTRY)});
+    await loadWebEnv({ appDir: ${JSON.stringify(appDir)} });
+    const keys = ${JSON.stringify(keys)};
+    process.stdout.write(JSON.stringify(Object.fromEntries(keys.filter((k) => process.env[k] !== undefined).map((k) => [k, process.env[k]]))));
+  `;
+  // Only PATH and HOME from this process: a developer's own AUTH_SECRET must not leak into the case.
+  const { stdout } = await run(process.execPath, ["--import", TSX, "--input-type=module", "-e", script], {
+    env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "", ...env },
+  });
+  return JSON.parse(stdout) as Record<string, string>;
+}
+
+/** What `childEnvironment` hands a launcher, given a child's own environment and an app dir. */
+async function child(env: Record<string, string>, appDir: string): Promise<Record<string, string>> {
+  const script = `
+    const { childEnvironment } = await import(${JSON.stringify(ENTRY)});
+    process.stdout.write(JSON.stringify(await childEnvironment({ appDir: ${JSON.stringify(appDir)} })));
+  `;
+  const { stdout } = await run(process.execPath, ["--import", TSX, "--input-type=module", "-e", script], {
+    env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "", ...env },
+  });
+  return JSON.parse(stdout) as Record<string, string>;
+}
+
+describe("the launchers' shared environment (S9-08)", () => {
+  it("pins the catalog at the data home's file when nothing names one", async () => {
+    const home = temp();
+    const env = await child({ GNOSIA_HOME: home, CATALOG_ENV_FILE: join(temp(), "none.env") }, temp());
+    expect(env.CATALOG_DB).toBe(join(home, "catalog.db"));
+  });
+
+  it("honours services/catalog/.env's DATABASE_URL, which a bare data-home pin used to outrank", async () => {
+    const catalogEnv = join(temp(), "catalog.env");
+    writeFileSync(catalogEnv, "DATABASE_URL=/elsewhere/catalog.db\nCATALOG_ONLY=1\n");
+    const env = await child({ GNOSIA_HOME: temp(), CATALOG_ENV_FILE: catalogEnv }, temp());
+    expect(env.CATALOG_DB).toBe("/elsewhere/catalog.db");
+    // Only the pin comes out of the catalog's own file; the catalog reads the rest itself.
+    expect(env.CATALOG_ONLY).toBeUndefined();
+  });
+
+  it("carries the data home's settings and the app's catalog path to every child", async () => {
+    const home = temp();
+    writeFileSync(join(home, ".env"), "STUDIO_DAILY_USD=5\nSTUDIO_ENABLED=1\n");
+    const app = temp();
+    writeFileSync(join(app, ".env.local"), "CATALOG_DB=./data/catalog.db\n");
+    const env = await child({ GNOSIA_HOME: home, CATALOG_ENV_FILE: join(temp(), "none.env") }, app);
+    expect(env).toMatchObject({ STUDIO_DAILY_USD: "5", STUDIO_ENABLED: "1", CATALOG_DB: join(app, "data/catalog.db") });
+  });
+
+  it("keeps services/catalog/.env's settings in the process itself, which reads that file once", async () => {
+    const home = temp();
+    const catalogEnv = join(temp(), "catalog.env");
+    writeFileSync(catalogEnv, `GNOSIA_HOME=${home}\n`);
+    const script = `
+      const { loadWebEnv, pinCatalogFile } = await import(${JSON.stringify(ENTRY)});
+      await loadWebEnv({ appDir: ${JSON.stringify(temp())} });
+      await pinCatalogFile();
+      process.stdout.write(JSON.stringify({ home: process.env.GNOSIA_HOME, db: process.env.CATALOG_DB }));
+    `;
+    const { stdout } = await run(process.execPath, ["--import", TSX, "--input-type=module", "-e", script], {
+      env: { PATH: process.env.PATH ?? "", HOME: process.env.HOME ?? "", CATALOG_ENV_FILE: catalogEnv },
+    });
+    expect(JSON.parse(stdout)).toEqual({ home, db: join(home, "catalog.db") });
+  });
+
+  it("reads the production files when the shell runs next start, as Next would", async () => {
+    const app = temp();
+    writeFileSync(join(app, ".env.development"), "AUTH_SECRET=from-development\n");
+    writeFileSync(join(app, ".env.production"), "AUTH_SECRET=from-production\n");
+    const none = join(temp(), "none.env");
+    const start = await child({ GNOSIA_HOME: temp(), CATALOG_ENV_FILE: none, GNOSIA_WEB_MODE: "start" }, app);
+    expect(start.AUTH_SECRET).toBe("from-production");
+    const dev = await child({ GNOSIA_HOME: temp(), CATALOG_ENV_FILE: none }, app);
+    expect(dev.AUTH_SECRET).toBe("from-development");
+  });
+
+  it("leaves out what would stop next dev loading its own files, and the parent's PWD", async () => {
+    const env = await child(
+      { GNOSIA_HOME: temp(), CATALOG_ENV_FILE: join(temp(), "none.env"), PWD: "/the/repo/root", KEEP_ME: "1" },
+      temp(),
+    );
+    expect(env.__NEXT_PROCESSED_ENV).toBeUndefined();
+    expect(env.PWD).toBeUndefined();
+    expect(env.KEEP_ME).toBe("1");
+  });
+
+  it("leaves a Postgres URL unpinned, for the catalog to refuse in its own words", async () => {
+    const env = await child(
+      { GNOSIA_HOME: temp(), CATALOG_ENV_FILE: join(temp(), "none.env"), DATABASE_URL: "postgres://x/y" },
+      temp(),
+    );
+    expect(env.CATALOG_DB).toBeUndefined();
+    expect(env.DATABASE_URL).toBe("postgres://x/y");
+  });
+});
+
+describe("the web's environment", () => {
+  it("reads the data home's .env, under what the process exports", async () => {
+    const home = temp();
+    writeFileSync(join(home, ".env"), 'AUTH_SECRET="from-the-data-home"\nSTUDIO_OWNER=home # a comment\n');
+    const app = temp();
+    const env = await loaded({ GNOSIA_HOME: home, STUDIO_OWNER: "exported" }, app, ["AUTH_SECRET", "STUDIO_OWNER"]);
+    expect(env).toEqual({ AUTH_SECRET: "from-the-data-home", STUDIO_OWNER: "exported" });
+  });
+
+  it("reads the web app's .env.local under the data home's", async () => {
+    const home = temp();
+    writeFileSync(join(home, ".env"), "GEMINI_API_KEY=from-home\n");
+    const app = temp();
+    writeFileSync(join(app, ".env.local"), "AUTH_SECRET=from-the-app\nGEMINI_API_KEY=from-the-app\n");
+    const env = await loaded({ GNOSIA_HOME: home }, app, ["AUTH_SECRET", "GEMINI_API_KEY"]);
+    expect(env).toEqual({ AUTH_SECRET: "from-the-app", GEMINI_API_KEY: "from-home" });
+  });
+
+  it("resolves a relative catalog path against the web app's directory, as the web does", async () => {
+    const home = temp();
+    writeFileSync(join(home, ".env"), "DATABASE_URL=data/from-home.db\n");
+    const app = temp();
+    writeFileSync(join(app, ".env.local"), "CATALOG_DB=./data/catalog.db\n");
+    const env = await loaded({ GNOSIA_HOME: home }, app, ["CATALOG_DB", "DATABASE_URL"]);
+    expect(env).toEqual({ CATALOG_DB: join(app, "data/catalog.db"), DATABASE_URL: join(app, "data/from-home.db") });
+  });
+
+  it("takes the web's mode from GNOSIA_WEB_MODE, dev unless it says start", () => {
+    expect(webMode({})).toBe("dev");
+    expect(webMode({ GNOSIA_WEB_MODE: " start " })).toBe("start");
+    expect(webMode({ GNOSIA_WEB_MODE: "dev" })).toBe("dev");
+  });
+
+  it("leaves every other form of catalog path alone", () => {
+    for (const raw of ["/abs/catalog.db", "~/catalog.db", "~", "sqlite:///abs.db", "file:///abs.db", ":memory:", "postgres://x/y", ""]) {
+      expect(catalogPathFrom("/app", raw)).toBe(raw);
+    }
+    expect(catalogPathFrom("/app", "rel.db")).toBe("/app/rel.db");
+  });
+
+  it("starts with neither file", async () => {
+    const env = await loaded({ GNOSIA_HOME: temp() }, join(temp(), "missing"), ["AUTH_SECRET"]);
+    expect(env).toEqual({});
+  });
+
+  it("reads the data home's file as the desktop shell does", () => {
+    // The same fixture apps/desktop's CheckoutTests holds Checkout.parseDotenv
+    // to: the shell hands the web the AUTH_SECRET it reads, and this read
+    // must open what that secret sealed.
+    const fixture = JSON.parse(readFileSync(resolve(__dirname, "fixtures/dotenv.json"), "utf8")) as {
+      text: string;
+      expected: Record<string, string>;
+    };
+    const file = join(temp(), ".env");
+    writeFileSync(file, fixture.text);
+    expect(readEnvFile(file)).toEqual(fixture.expected);
+  });
+
+  it("names the data home's file and reads a dotenv", () => {
+    expect(dataHomeEnvFile({ GNOSIA_HOME: "/x/y" })).toBe("/x/y/.env");
+    expect(dataHomeEnvFile({})).toMatch(/\.gnosia\/\.env$/);
+    expect(readEnvFile("/nonexistent/.env")).toEqual({});
+  });
+});

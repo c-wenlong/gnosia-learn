@@ -1,10 +1,10 @@
 import type {
   Course,
-  KnowledgeInput,
   Module,
   Topic,
-  TopicKnowledge,
-} from "./types";
+} from "@gnosia/content";
+import { moduleNumber } from "@gnosia/content/module-number";
+import type { KnowledgeInput, TopicKnowledge } from "@gnosia/schema/shared";
 import { buildLearningObjectives } from "./objectives";
 
 export interface TranscriptTurn {
@@ -29,7 +29,7 @@ You are summarising a finished Socratic micro-session so the learner can return 
 
 ## Context
 - Course: ${course.code} — ${course.title}
-- Module: M${module.order} ${module.title}
+- Module: M${moduleNumber(course, module)} ${module.title}
 - Topic: ${topic.title}
 - Subtopics: ${topic.subtopics.join("; ") || "(none listed)"}
 
@@ -161,7 +161,7 @@ export function formatKnowledgeMarkdown(
 
   return `## ${topic.title}
 
-*${course.code} ${course.title} · M${module.order} ${module.title}*
+*${course.code} ${course.title} · M${moduleNumber(course, module)} ${module.title}*
 *${knowledge.sessions} session${knowledge.sessions === 1 ? "" : "s"} · last updated ${knowledge.updatedAt.slice(0, 10)} · ${knowledge.source === "agent" ? "agent recap" : "written by hand"}*
 
 ${knowledge.summary}

@@ -2,10 +2,10 @@
 //  CheckoutTests.swift
 //  GnosiaWebTests
 //
-//  The data home's .env as the shell reads it must be what the macOS app's
-//  sidecar reads from the same file: AUTH_SECRET seals the provider keys
-//  the web saves, and the sidecar opens them. The fixture is Node's own
-//  `util.parseEnv` output (services/sidecar/test/fixtures/dotenv.json).
+//  The data home's .env as the shell reads it must be what the launchers'
+//  resolver reads from the same file: AUTH_SECRET seals the provider keys
+//  the web saves. The fixture is Node's own `util.parseEnv` output
+//  (services/launch-env/test/fixtures/dotenv.json).
 //
 
 import Foundation
@@ -16,7 +16,7 @@ final class CheckoutTests: XCTestCase {
     func testTheDotenvReadIsNodes() throws {
         let url = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
-            .appending(path: "../../../../services/sidecar/test/fixtures/dotenv.json")
+            .appending(path: "../../../../services/launch-env/test/fixtures/dotenv.json")
             .standardized
         let fixture = try XCTUnwrap(
             try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]
@@ -59,4 +59,85 @@ final class CheckoutTests: XCTestCase {
         XCTAssertFalse(shouldDownload(disposition: nil, canShowMIMEType: true))
         XCTAssertTrue(shouldDownload(disposition: nil, canShowMIMEType: false))
     }
+
+    /// A failed resolver run is not kept: the next prepare runs it again,
+    /// and an answer, once there is one, is reused.
+    func testAFailedResolverRunIsTriedAgain() async {
+        let calls = Calls()
+        let state = Checkout.ResolverState { _ in
+            calls.next() == 1
+                ? Checkout.Resolution(failure: "the resolver exited with status 1: boom")
+                : Checkout.Resolution(env: ["CATALOG_DB": "/x.db"])
+        }
+        let root = URL(fileURLWithPath: "/repo")
+        await state.prepare(root: root)
+        XCTAssertNil(state.resolved)
+        XCTAssertEqual(state.failure, "the resolver exited with status 1: boom")
+        await state.prepare(root: root)
+        XCTAssertEqual(state.resolved, ["CATALOG_DB": "/x.db"])
+        XCTAssertNil(state.failure)
+        await state.prepare(root: root)
+        XCTAssertEqual(calls.count, 2)
+    }
+
+    /// Launchers asking at once share one run.
+    func testConcurrentPreparesShareOneRun() async {
+        let calls = Calls()
+        let state = Checkout.ResolverState { _ in
+            _ = calls.next()
+            Thread.sleep(forTimeInterval: 0.2)
+            return Checkout.Resolution(env: [:])
+        }
+        let root = URL(fileURLWithPath: "/repo")
+        async let a: Void = state.prepare(root: root)
+        async let b: Void = state.prepare(root: root)
+        _ = await (a, b)
+        XCTAssertEqual(calls.count, 1)
+    }
+
+    /// The resolver's stderr is kept as it arrives, bounded, and a pipe a
+    /// grandchild holds open does not lose what was already printed.
+    func testTheResolversStderrTailIsKeptWhileThePipeIsHeld() throws {
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/bin/sh")
+        proc.arguments = ["-c", "printf 'x%.0s' $(seq 1 3000) >&2; echo; echo \"Error: Cannot find module 'tsx'\" >&2; (sleep 5) & exit 1"]
+        let err = Pipe()
+        proc.standardError = err
+        let capture = StderrCapture(pipe: err, limit: 1500)
+        try proc.run()
+        proc.waitUntilExit()
+        let began = Date()
+        capture.waitClosed(timeout: 0.5)
+        XCTAssertLessThan(Date().timeIntervalSince(began), 3)
+        XCTAssertLessThanOrEqual(capture.tail.count, 1500)
+        XCTAssertTrue(capture.tail.hasSuffix("Error: Cannot find module 'tsx'"), capture.tail)
+    }
+
+    /// The read before any spawn: a missing file and a refused one say
+    /// different things, and both name the path.
+    func testTheCheckoutAccessCheck() throws {
+        let dir = FileManager.default.temporaryDirectory.appending(path: "gnosia-access-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let missing = try XCTUnwrap(Checkout.accessProblem(root: dir))
+        XCTAssertTrue(missing.contains("There is no package.json at \(dir.path)"), missing)
+        try Data("{}".utf8).write(to: dir.appending(path: "package.json"))
+        XCTAssertNil(Checkout.accessProblem(root: dir))
+
+        let file = URL(fileURLWithPath: "/Users/o/Desktop/repo/package.json")
+        let refused = NSError(domain: NSCocoaErrorDomain, code: NSFileReadNoPermissionError, userInfo: [
+            NSUnderlyingErrorKey: NSError(domain: NSPOSIXErrorDomain, code: Int(EPERM)),
+        ])
+        let message = Checkout.accessMessage(file: file, error: refused)
+        XCTAssertTrue(message.contains(file.path), message)
+        XCTAssertTrue(message.contains("Privacy & Security > Files and Folders"), message)
+    }
+}
+
+/// How many times a stand-in resolver ran.
+private final class Calls: @unchecked Sendable {
+    private let lock = NSLock()
+    private var calls = 0
+    var count: Int { lock.withLock { calls } }
+    func next() -> Int { lock.withLock { calls += 1; return calls } }
 }

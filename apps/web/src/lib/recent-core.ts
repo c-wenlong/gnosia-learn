@@ -81,7 +81,7 @@ export interface ModulePlace {
   courseCode: string;
   courseTitle: string;
   moduleTitle: string | null;
-  moduleOrder: number | null;
+  moduleNumber: number | null;
 }
 
 /** A library video with a saved position: a `playback:<asset>` preference and the asset's title. */
@@ -132,7 +132,7 @@ export interface RecentSources {
   sessions?: readonly SessionTouch[];
 }
 
-/** "2:17", "1:02:03". */
+/** "2:17", "1:02:03", rounded down; the studio's video length badge rounds before it calls this. */
 export function clock(seconds: number): string {
   const s = Math.max(0, Math.floor(seconds));
   const h = Math.floor(s / 3600);
@@ -241,7 +241,7 @@ export function recentItems(sources: RecentSources): RecentItem[] {
       kind: "module",
       title: inModule ? (place.moduleTitle as string) : place.courseTitle,
       detail:
-        inModule && place.moduleOrder !== null ? `${place.courseCode} · Module ${place.moduleOrder}` : place.courseCode,
+        inModule && place.moduleNumber !== null ? `${place.courseCode} · Module ${place.moduleNumber}` : place.courseCode,
       href: inModule
         ? `/courses/${encodeURIComponent(visit.courseSlug)}/${encodeURIComponent(visit.moduleSlug as string)}`
         : `/courses/${encodeURIComponent(visit.courseSlug)}`,
@@ -341,7 +341,7 @@ export interface SidebarCourse {
   /** Where the row opens: the module visited last, else the course page, which shows the module the owner is on. */
   open: string;
   /** The module visited last, named under the course; null when none is recorded. */
-  resume: { title: string; order: number } | null;
+  resume: { title: string; number: number } | null;
 }
 
 /** What `GET /api/learner/recent` answers with: Recent's rows, the pins, and the courses. */
@@ -404,7 +404,7 @@ export function mergeStreams(streams: readonly { items: readonly RecentItem[]; m
 /* Day headings                                                               */
 /* -------------------------------------------------------------------------- */
 
-export const DAY_GROUPS = ["Today", "Yesterday", "Previous 7 days", "Previous 30 days", "Older"] as const;
+const DAY_GROUPS = ["Today", "Yesterday", "Previous 7 days", "Previous 30 days", "Older"] as const;
 
 export interface RecentGroup<T> {
   label: (typeof DAY_GROUPS)[number];
@@ -452,9 +452,9 @@ export interface PinnedRow {
 }
 
 /** The most pins kept. */
-export const MAX_PINS = 50;
+const MAX_PINS = 50;
 /** The longest title kept. */
-export const MAX_RECENT_TITLE = 200;
+const MAX_RECENT_TITLE = 200;
 const MAX_HREF = 1_000;
 const MAX_KEY = 600;
 
@@ -492,7 +492,7 @@ export function cleanTitle(value: unknown): string | null {
 }
 
 /** One stored pin read back, or null when it is not one. */
-export function asPinnedRow(value: unknown): PinnedRow | null {
+function asPinnedRow(value: unknown): PinnedRow | null {
   if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
   const raw = value as Record<string, unknown>;
   const kind = raw.kind;

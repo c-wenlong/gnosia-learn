@@ -30,7 +30,7 @@ import {
   type IndexRow,
 } from "@/lib/learn-index";
 import { bucketOf } from "@gnosia/tutor/mastery-bucket";
-import type { Course } from "@gnosia/tutor/types";
+import type { Course } from "@gnosia/content";
 
 export const metadata: Metadata = { title: "Learn" };
 
@@ -60,7 +60,7 @@ function toRow(
     overdue: due.overdue,
     lastSeenLabel: seenAgo(concept.lastSeen, now, timeZone),
     leech: concept.leech,
-    courseLabel: place ? `${place.courseCode} M${place.moduleOrder}` : null,
+    courseLabel: place ? `${place.courseCode} M${place.moduleNumber}` : null,
     courses: courseSlugsOf(courses, concept.topics),
     domain: concept.domain,
     ready: false,

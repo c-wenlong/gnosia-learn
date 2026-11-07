@@ -16,8 +16,8 @@ import { currentOwner } from "@/lib/owner";
 
 /**
  * The concept workspace's read. The assembly lives in
- * `@gnosia/tutor/server/concept-workspace`, which the native sidecar
- * calls with its own pool and owner; this file hands it this app's seams.
+ * `@gnosia/tutor/server/concept-workspace`; this file hands it this app's
+ * seams.
  */
 
 export { courseSlugsOf, placeOf };

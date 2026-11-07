@@ -7,6 +7,7 @@ import { PanelLink } from "@/components/studio/PanelLink";
 import { Button } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
 import { cx, linkClasses } from "@/components/ui/classes";
+import { ErrorText } from "@/components/ui/ErrorText";
 import type { TopicOption } from "@/data/topics";
 import { madeLine } from "@/lib/studio-cards";
 import type { DrawBlock } from "@/lib/studio-chat";
@@ -32,7 +33,8 @@ export const FOOTER = "mt-3.5 flex flex-col gap-2 border-t border-hair pt-3.5";
 /**
  * Use this brief, on a card the planner put on hold or one the conversation
  * moved past: the press's own busy state and the sentence it was refused with.
- * `use` runs the card's action, which resolves with an error sentence or null.
+ * `use` runs the card's action, which resolves with an error sentence or null;
+ * one that rejects is said as a refusal too.
  */
 export function useHoldAction() {
   const [using, setUsing] = useState(false);
@@ -41,21 +43,17 @@ export function useHoldAction() {
     if (action === undefined || using) return;
     setUsing(true);
     setUseError(null);
-    const error = await action();
-    setUsing(false);
-    setUseError(error);
+    // An action that throws (a load that failed past the client's own
+    // handling) must not leave the press on "Saving…" until a remount.
+    try {
+      setUseError(await action());
+    } catch {
+      setUseError("It could not be put back. Try again.");
+    } finally {
+      setUsing(false);
+    }
   }
   return { using, useError, use };
-}
-
-/** A refusal, said where it happened. Nothing when there is none. */
-export function FooterError({ text }: { text: string | null }) {
-  if (text === null) return null;
-  return (
-    <p role="alert" className="text-[13px] leading-5 text-danger">
-      {text}
-    </p>
-  );
 }
 
 /** On hold (D60): the planner's few words for why, and Use this brief. */
@@ -84,7 +82,7 @@ export function OnHoldFooter({
             {using ? "Saving…" : "Use this brief"}
           </Button>
         </div>
-        <FooterError text={error} />
+        <ErrorText>{error}</ErrorText>
       </div>
     </Reveal>
   );

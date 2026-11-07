@@ -54,7 +54,7 @@ export const THEME_COOKIE = "gnosia-theme";
 export const LEGACY_THEME_COOKIE = "self-learn-theme";
 
 /** A year. Long enough that it outlives the browser sessions that matter. */
-export const THEME_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
+const THEME_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
 export const PALETTE_LABELS: Record<ThemePalette, string> = {
   classic: "Classic",

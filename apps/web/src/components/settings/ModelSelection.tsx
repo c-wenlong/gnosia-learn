@@ -12,7 +12,7 @@ import { ConfirmFold } from "@/components/ui/ConfirmFold";
 import { FormRow } from "@/components/ui/FormRow";
 import { LiveStatus } from "@/components/ui/LiveStatus";
 import { Select } from "@/components/ui/Select";
-import { statusProps } from "@/components/ui/save-status";
+import { statusProps, type SaveStatus } from "@/components/ui/save-status";
 import type { ChainEntry } from "@gnosia/tutor/providers";
 import { TUTOR_STYLES, type TutorStyle } from "@gnosia/tutor/preferences";
 import type { ProvidersView } from "@/lib/providers/view";
@@ -20,7 +20,7 @@ import type { ByokInitial } from "@/lib/studio-byok";
 import { sendJson } from "@/lib/send-json";
 
 import { usePreference } from "./SettingsForm";
-import { failure, textOf, tone, type Reply, type Status } from "./status";
+import { failure, type Reply } from "./status";
 
 /**
  * The Model selection card: what the saved providers run. The tutor's side
@@ -108,9 +108,9 @@ export function ModelSelection({
 function TutorPick({ view, chain }: { view: ProvidersView; chain: ChainEntry[] }) {
   const router = useRouter();
   const base = useId();
-  const [status, setStatus] = useState<Status>({ kind: "idle" });
+  const [status, setStatus] = useState<SaveStatus>({ kind: "idle" });
   const [error, setError] = useState<string | null>(null);
-  const busy = status.kind === "busy";
+  const busy = status.kind === "saving";
   const disabled = !view.chainReachable;
   const [confirmingRemove, setConfirmingRemove] = useState(false);
   const removeButton = useRef<HTMLButtonElement>(null);
@@ -195,7 +195,7 @@ function TutorPick({ view, chain }: { view: ProvidersView; chain: ChainEntry[] }
     // The pressed button is disabled while the request runs, which drops its
     // focus; it goes to the model field, which stays.
     focusNext.current = `${base}-model`;
-    setStatus({ kind: "busy", text: "Saving…" });
+    setStatus({ kind: "saving", text: "Saving…" });
     setError(null);
     // One write for the whole chain (`PUT`): a refused save keeps the chain
     // it would have replaced.
@@ -204,35 +204,35 @@ function TutorPick({ view, chain }: { view: ProvidersView; chain: ChainEntry[] }
       setStatus({ kind: "idle" });
       return setError(failure("saved", reply));
     }
-    setStatus({ kind: "done", text: `Saved. The tutor calls ${picked.model}.` });
+    setStatus({ kind: "saved", text: `Saved. The tutor calls ${picked.model}.` });
     router.refresh();
   };
 
   const test = async () => {
     focusNext.current = `${base}-test`;
-    setStatus({ kind: "busy", text: `Testing ${picked.model}…` });
+    setStatus({ kind: "saving", text: `Testing ${picked.model}…` });
     const reply = await sendJson<Reply>("POST", "/api/learner/tutor-model/test", picked);
-    if (reply === null) setStatus({ kind: "error", text: "Not tested: the server did not answer." });
+    if (reply === null) setStatus({ kind: "error", message: "Not tested: the server did not answer." });
     else if (reply.status === 200 && reply.data.ok === true) {
-      setStatus({ kind: "done", text: `Works${reply.data.served && reply.data.served !== picked.model ? `, answered by ${reply.data.served}` : ""}.` });
+      setStatus({ kind: "saved", text: `Works${reply.data.served && reply.data.served !== picked.model ? `, answered by ${reply.data.served}` : ""}.` });
     } else if (reply.status === 200) {
       const outcome = typeof reply.data.status === "number" ? `Refused (HTTP ${reply.data.status})` : "No answer";
-      setStatus({ kind: "error", text: `${outcome}: ${reply.data.message ?? "no reason given."}` });
-    } else setStatus({ kind: "error", text: reply.data.error ?? `Not tested (HTTP ${reply.status}).` });
+      setStatus({ kind: "error", message: `${outcome}: ${reply.data.message ?? "no reason given."}` });
+    } else setStatus({ kind: "error", message: reply.data.error ?? `Not tested (HTTP ${reply.status}).` });
   };
 
   // One DELETE per entry: the route removes one at a time. A refusal part
   // way says what is left, so a chain cut short is never reported as whole
   // or as gone.
   const remove = async () => {
-    setStatus({ kind: "busy", text: "Removing…" });
+    setStatus({ kind: "saving", text: "Removing…" });
     let removed = 0;
     for (const entry of chain) {
       const reply = await sendJson<Reply>("DELETE", "/api/learner/tutor-model", { provider: entry.provider, model: entry.model });
       if (reply === null || reply.status !== 200 || reply.data.ok !== true) {
         const left = chain.length - removed;
         const kept = removed === 0 ? "" : ` ${removed} of ${chain.length} were removed before that; the tutor still tries the other ${left}.`;
-        setStatus({ kind: "error", text: `${failure("removed", reply)}${kept}` });
+        setStatus({ kind: "error", message: `${failure("removed", reply)}${kept}` });
         router.refresh();
         return;
       }
@@ -241,7 +241,7 @@ function TutorPick({ view, chain }: { view: ProvidersView; chain: ChainEntry[] }
     setConfirmingRemove(false);
     setProvider("");
     setModel("");
-    setStatus({ kind: "done", text: "Removed. The tutor has nothing to call until you save a model." });
+    setStatus({ kind: "saved", text: "Removed. The tutor has nothing to call until you save a model." });
     router.refresh();
   };
 
@@ -350,7 +350,7 @@ function TutorPick({ view, chain }: { view: ProvidersView; chain: ChainEntry[] }
         busy={busy}
         returnFocusTo={removeButton}
       />
-      <LiveStatus text={textOf(status)} tone={tone(status)} className="pt-0.5" />
+      <LiveStatus {...statusProps(status)} className="pt-0.5" />
     </div>
   );
 }

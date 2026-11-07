@@ -17,6 +17,7 @@ import { Mono, PanelHeading } from "@/components/studio/StudioChrome";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { buttonClasses, cx } from "@/components/ui/classes";
+import { Callout } from "@/components/ui/Callout";
 import {
   failureFooter,
   failureReport,
@@ -405,16 +406,21 @@ function Narration({ events, job }: { events: StudioEvent[]; job: Job }) {
 
 function FailureMessage({ job, report }: { job: Job; report: ReturnType<typeof failureReport> }) {
   return (
-    <div className="mb-3 rounded-md border border-danger/45 bg-danger/8 p-2 text-xs">
-      <p className="font-medium text-danger">
-        {report.code !== null && <span className="font-mono">exit {report.code}: </span>}
-        {report.headline}
-      </p>
-      {report.detail !== null && report.detail !== "" && (
-        <p className="mt-1 break-words text-danger opacity-90">{report.detail}</p>
-      )}
-      <p className="mt-2 text-text2">{failureFooter(job)}</p>
-    </div>
+    <Callout
+      tone="danger"
+      dense
+      bordered
+      className="mb-3"
+      title={
+        <>
+          {report.code !== null && <span className="font-mono">exit {report.code}: </span>}
+          {report.headline}
+        </>
+      }
+    >
+      {report.detail !== null && report.detail !== "" && <p className="break-words">{report.detail}</p>}
+      <p className="mt-1">{failureFooter(job)}</p>
+    </Callout>
   );
 }
 

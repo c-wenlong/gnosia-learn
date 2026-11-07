@@ -13,7 +13,7 @@ export const NODE_HALF_WIDTH = 56;
 /** Room kept above a dot, for the hover ring. */
 export const DOT_TOP = 12;
 /** From a dot's centre to the foot of its two-line label. */
-export const LABEL_BELOW = 46;
+const LABEL_BELOW = 46;
 /** Space between a group's edge and the concepts in it. */
 export const GROUP_PAD = 10;
 
@@ -210,7 +210,7 @@ export function labelFont(scale: number): number {
 export const TITLE_INSET = 12;
 export const TITLE_TOP = 7;
 /** The least room kept between the end of a title and its group's right edge, when the title has grown with the scale. */
-export const TITLE_END = 6;
+const TITLE_END = 6;
 
 /**
  * The size a topic's title is drawn at, in layout units, for a picture drawn
@@ -263,10 +263,8 @@ export interface AxesLayout {
   zone: Box | null;
 }
 
-/** The band left of the plot for the side caption, and above it for the zone's: the title band at its largest. */
-export const AXIS_BAND = TITLE_RESERVE;
 /** The top dot's centre: under the zone's caption at its largest, with room for the hover ring. */
-export const AXES_TOP = AXIS_BAND + 24;
+export const AXES_TOP = TITLE_RESERVE + 24;
 /** Two dots on the axes are never closer than this, centre to centre: the hover rings do not touch. */
 export const AXES_DOT_CLEAR = 40;
 /** Where the axis lines run, just outside the plot. */
@@ -307,7 +305,7 @@ export const AXES_CAPTIONS = {
 } as const;
 
 /** Where the side caption's baseline runs, rotated to read upward, left of the vertical axis. */
-export const sideCaptionX = (caption: number) => AXIS_BAND - AXIS_INSET - 6 - caption * 0.28;
+export const sideCaptionX = (caption: number) => TITLE_RESERVE - AXIS_INSET - 6 - caption * 0.28;
 
 /**
  * The boxes the axes' captions take inside the plot's reach at size
@@ -399,7 +397,7 @@ export function plateLeft(left: number, width: number, frame: Box): number {
 }
 
 /** The room either side of the text on a hover plate. */
-export const PLATE_PAD = 10;
+const PLATE_PAD = 10;
 
 /**
  * A title broken into lines no wider than `max` layout units at size `font`:
@@ -452,7 +450,7 @@ export function titlePlate(group: Box, title: string, font: number, frame: Box) 
 }
 
 /** From one line of a label to the next, at size `font`. */
-export const labelLine = (font: number) => (font * 28) / 25;
+const labelLine = (font: number) => (font * 28) / 25;
 /** From a dot's centre to the baseline of a label's line `k`, at size `font`. */
 export const labelBaseline = (font: number, k: number) => 16 + (font * 24) / 25 + k * labelLine(font);
 /**

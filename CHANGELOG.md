@@ -192,6 +192,31 @@ This project is continuously deployed and not versioned; entries are grouped by 
 
 ### Fixed
 
+- **The desktop shell (`apps/desktop`, Gnosia Web) no longer launches local
+  apps from a link, and says why when its server does not come up.** A
+  target=_blank link or `window.open` went to `NSWorkspace` whatever its
+  scheme, so a `file:///Applications/X.app` or a custom scheme opened a local
+  app; now only http and https go to the browser, and the window itself
+  shows only the app server's origin (subframes may also show loopback, for
+  the studio's canvas). Launched from Finder with the checkout under
+  `~/Desktop`, macOS privacy protection refused the children the folder and
+  they hung with nothing on stderr; the shell now reads `package.json`
+  itself first, so macOS asks up front (the bundle carries the Desktop,
+  Documents and Downloads usage strings) and a refusal names the path, and
+  a child silent for the whole wait says so. Each spawn's exit and stderr
+  stay its own, stderr is read to its end before the failure text is built,
+  a failed environment resolver run is retried by "Try again" (which now
+  runs at all) and its stderr is kept, the checkout path is quoted for the
+  shell, and `bundle-app.sh` fails when signing fails.
+
+- **The environment a launcher hands its children no longer carries
+  `__NEXT_PROCESSED_ENV` or the launcher's `PWD`.** `@next/env` sets the first
+  once it has loaded the files, and a `next dev` that finds it skips its own
+  `.env` load; the second named the repository root while the web runs in
+  `apps/web`. `@next/env` is now declared by `services/launch-env` rather than
+  reached through hoisting, and `MAX_NOTE_CHARS` is no longer exported from
+  the tutor's learner writes (nothing imported it).
+
 - **The three asset-presentation components now reset their own state when the
   file they are showing changes.** `VideoPlayer` kept the playback position,
   `DiagramView` kept a failed load and `AssetCard` kept a failed thumbnail, so
@@ -581,6 +606,17 @@ This project is continuously deployed and not versioned; entries are grouped by 
   documented with what it does not stop.
 
 ### Removed
+
+- **The native macOS app, `apps/macos`, and the sidecar server that served
+  it.** The owner removed the SwiftUI app (`Gnosia.app`) on 2026-11-07,
+  with its catalog snapshot script, its Swift ports and their contract
+  tests, and the loopback tutor API in `services/sidecar` that only it
+  called, along with three turns nothing else used (`preferenceTurn`,
+  `providerKeyStatusTurn`, `tutorModelChainTurn`). The launchers' shared
+  environment survives as `services/launch-env`, which the desktop shell
+  (`apps/desktop`, Gnosia Web) runs once per launch; its icon now lives at
+  `apps/desktop/Resources/AppIcon.png`. The contract fixtures moved beside
+  their TypeScript tests and stay as worked cases.
 
 - **`src/data/courses/*.ts`, `src/data/tags.ts` and
   `src/data/courses/parity.test.ts`.** The parity test existed to keep two

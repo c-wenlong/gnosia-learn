@@ -156,7 +156,7 @@ export function AssetRow({
  * is none. A concept named as the row's title is its mastery, as the line
  * prints it, and the "+N" follows either way.
  */
-export function sourceText(source: RowSource | null, title: string): string | undefined {
+function sourceText(source: RowSource | null, title: string): string | undefined {
   if (source === null) return undefined;
   if (source.origin !== undefined) return source.origin.title;
   const concept = source.concept;

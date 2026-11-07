@@ -23,7 +23,7 @@ export type SaveStatus =
   | { kind: "error"; message: string };
 
 /** The words most saves use. */
-export const SAVE_WORDS = { saving: "Saving…", saved: "Saved" } as const;
+const SAVE_WORDS = { saving: "Saving…", saved: "Saved" } as const;
 
 /** What a status says, as `LiveStatus` takes it: nothing while idle. */
 export function statusProps(

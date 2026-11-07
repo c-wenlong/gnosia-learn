@@ -3,13 +3,14 @@ import type { ReactNode } from "react";
 
 import { MathText } from "@/components/Math";
 import { NoteProse, type EmbedResolution } from "@/components/NoteProse";
-import { cx } from "@/components/ui/classes";
+import { cx, FOCUS } from "@/components/ui/classes";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import { TextLink } from "@/components/ui/TextLink";
 import type { CitationSource } from "@gnosia/tutor/prompt";
 import type { ConceptWorkspace, NeighbourRef } from "@gnosia/tutor/concept-workspace-core";
 
 import { NoteDisclosure } from "./NoteDisclosure";
+import { WorkspaceHeading } from "./WorkspaceHeading";
 
 /**
  * The workspace's left panel (hi-fi 04): the summary, what this concept needs
@@ -21,7 +22,7 @@ import { NoteDisclosure } from "./NoteDisclosure";
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="flex flex-col gap-2">
-      <h3 className="text-[13px] font-bold text-text">{title}</h3>
+      <WorkspaceHeading>{title}</WorkspaceHeading>
       {children}
     </section>
   );
@@ -35,7 +36,7 @@ function NeighbourList({ refs, empty, note }: { refs: NeighbourRef[]; empty: str
         <li key={r.slug}>
           <Link
             href={`/learn/${r.slug}`}
-            className="group inline-flex max-w-full items-center gap-2 rounded-sm text-[13px] text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            className={cx("group inline-flex max-w-full items-center gap-2 rounded-sm text-[13px] text-text", FOCUS)}
           >
             <MasteryDot bucket={r.bucket} size={12} />
             <span className="min-w-0 truncate group-hover:underline group-hover:underline-offset-4">{r.title}</span>

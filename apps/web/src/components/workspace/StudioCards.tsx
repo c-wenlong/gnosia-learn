@@ -1,13 +1,14 @@
 import Link from "next/link";
-import { useId, type ReactNode } from "react";
+import { useId } from "react";
 
 import { assetDisplayTitle, assetKindLabel } from "@gnosia/tutor/asset-meta";
 import { ConceptGraph } from "@/components/ConceptGraph";
 import { MathText } from "@/components/Math";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { cx } from "@/components/ui/classes";
+import { cx, FOCUS } from "@/components/ui/classes";
 import { AssetThumb } from "@/components/workspace/AssetThumb";
+import { WorkspaceHeading } from "@/components/workspace/WorkspaceHeading";
 import type { CheckStatus, ConceptWorkspace } from "@gnosia/tutor/concept-workspace-core";
 import { historyBars } from "@gnosia/tutor/concept-workspace-core";
 import { conceptMapHref } from "@/lib/learn-index";
@@ -18,10 +19,6 @@ import { assetHref } from "@/lib/library";
  * Mastery with its history and schedule, the note's checks, the assets that
  * explain it, and its neighbourhood graph. Server-rendered.
  */
-
-function CardHeading({ children }: { children: ReactNode }) {
-  return <h3 className="text-[13px] font-bold text-text">{children}</h3>;
-}
 
 const CHECK_DOT: Record<CheckStatus, string> = {
   passed: "bg-ok",
@@ -94,7 +91,7 @@ export function StudioCards({
       </Card>
 
       <Card tight aria-label="Checks">
-        <CardHeading>Checks · {checks.length}</CardHeading>
+        <WorkspaceHeading>Checks · {checks.length}</WorkspaceHeading>
         {checks.length === 0 ? (
           <p id={noChecksId} className="text-[13px] text-text3">
             The note has no checks yet.
@@ -124,7 +121,7 @@ export function StudioCards({
       </Card>
 
       <Card tight aria-label="Assets">
-        <CardHeading>Assets</CardHeading>
+        <WorkspaceHeading>Assets</WorkspaceHeading>
         {assets.length === 0 ? (
           <p className="text-[13px] text-text3">No video or diagram explains this yet.</p>
         ) : (
@@ -133,7 +130,7 @@ export function StudioCards({
               <li key={a.id}>
                 <Link
                   href={assetHref(a.id)}
-                  className="flex h-11 min-w-0 items-center gap-2.5 rounded-xl bg-surface2 px-2 text-[12px] text-text2 transition-colors duration-100 hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                  className={cx("flex h-11 min-w-0 items-center gap-2.5 rounded-xl bg-surface2 px-2 text-[12px] text-text2 transition-colors duration-100 hover:text-text", FOCUS)}
                 >
                   <AssetThumb src={a.thumbnail} />
                   <span className="min-w-0 flex-1 truncate px-1">
@@ -147,7 +144,7 @@ export function StudioCards({
       </Card>
 
       <Card tight aria-label="Neighbourhood">
-        <CardHeading>Neighbourhood</CardHeading>
+        <WorkspaceHeading>Neighbourhood</WorkspaceHeading>
         <div className="rounded-xl bg-surface2 px-1 py-1">
           <ConceptGraph
             nodes={w.graph.nodes}

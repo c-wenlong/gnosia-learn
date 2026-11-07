@@ -27,6 +27,6 @@ import { turnRoute } from "@/lib/learner-api";
  * minute, and a concept the catalog does not know is a 400, not a 503.
  *
  * The parse and the write are `reviewGradeTurn` in
- * `@gnosia/tutor/server/learner-writes`, which the sidecar runs too.
+ * `@gnosia/tutor/server/learner-writes`.
  */
 export const POST = turnRoute("review-grade", reviewGradeTurn);

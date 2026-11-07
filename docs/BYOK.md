@@ -18,7 +18,7 @@ are written down here before anything else.
 | Sealing and opening | `packages/tutor/src/server/seal.ts` (tests in `packages/tutor/test/seal.test.ts`) |
 | The web app's store, per owner | `apps/web/src/lib/provider-keys/store.ts` |
 | The studio runner's read of them (D12) | `services/studio/src/agent/byok-keys.ts`, the settings beside them in `services/studio/src/agent/byok.ts` |
-| The order the tutor tries keys in | `orderCredentials` in `packages/tutor/src/providers.ts`, `tutorCredentials` in `apps/web/src/lib/agent/credentials.ts` |
+| The order the tutor tries keys in | `tutorSteps` and `keyFor` in `packages/tutor/src/providers.ts`, the card's `order` in `apps/web/src/lib/provider-keys/settings.ts`, `tutorCredentials` in `apps/web/src/lib/agent/credentials.ts` |
 | Save and remove | `POST` and `DELETE /api/learner/provider-key` |
 | Test | `POST /api/learner/provider-key/test` |
 | The Settings card | `apps/web/src/components/settings/ProviderKeys.tsx`, fed by `apps/web/src/lib/provider-keys/settings.ts` |
@@ -65,6 +65,15 @@ that compared what it was sent with a fragment of a key, and refused or
 accepted on the result, would let a caller guess the key one character at a
 time. The model chain's key check compares whole keys only
 ([TUTOR-MODELS.md](TUTOR-MODELS.md), T11), and until 2026-10-30 it did not.
+A saved key goes only to the address it was saved for: a custom provider's
+base URL cannot move without a new key in the same write
+([TUTOR-MODELS.md](TUTOR-MODELS.md), T14), or one request moving the URL
+to a host of the caller's choosing and a second listing its models would
+have sent the key there. Until 2026-11-07 it could. And a call sends a
+custom key only when the URL it calls is the one the key was read beside,
+in the same statement (`pinToUrls` in `packages/tutor/src/server/credentials.ts`),
+so a move landing between a request's two reads cannot pair a key with the
+other URL.
 
 **D4. Resolved per request, for the signed-in owner.** (Since the model
 chain, this is the order for an owner with no chain; an owner with one gets
@@ -166,7 +175,7 @@ runs, and each one's Lite, Default and Max models, none of it a secret.
   so no agent, render or catalog CLI inherits them, whichever env builder
   that spawn uses.
 - **Where the secret comes from.** The runner's environment first (the
-  desktop shell and the macOS app hand it the web's). A runner started
+  desktop shell hands it the web's, from `services/launch-env`). A runner started
   without one (`npm run dev:up` hands its pane the catalog's variables, not
   `apps/web/.env.local`) asks `scripts/lib/dev-env.mjs` once, the helper
   `scripts/dev.sh` already uses: it reads the app's files with Next's own
@@ -253,12 +262,11 @@ the same `AUTH_SECRET` too: rotating it turns every Studio provider into
 "no key" until each key is re-entered in Settings, and the runner needs a
 restart to pick up a new value.
 
-**The macOS app's sidecar** (`services/sidecar`) opens and seals the same rows,
-so it needs the same `AUTH_SECRET`. It reads the environment the web reads, in
-the web's order: what the process exports, then `$GNOSIA_HOME/.env`, then
-`apps/web/.env.local` and its siblings through Next's own loader
-(`services/sidecar/src/env.ts`). Its `/api/health` answers `secret: false`
-when it has none, and the app's Settings says so.
+**The desktop shell** starts the web server and the studio runner with one
+environment (`services/launch-env`), read in the web's order: what the process
+exports, then `$GNOSIA_HOME/.env`, then `apps/web/.env.local` and its siblings
+through Next's own loader (`services/launch-env/src/env.ts`). Both children
+therefore hold the same `AUTH_SECRET` and open the same catalog file.
 
 ## Out of scope
 

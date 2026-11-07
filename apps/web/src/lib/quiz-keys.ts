@@ -3,7 +3,9 @@
  * before each page decides what to do with it: the part the two share.
  *
  * `null` when the key is not the page's at all: a modifier is held (Cmd+R
- * reloads, it does not rate), a write is still in flight, or the press is in
+ * reloads, it does not rate), the key is held down (the browser's repeats
+ * would answer, rate and answer the next card unseen), a write is still in
+ * flight, or the press is in
  * a field, where 1 to 4, Space and Enter are typing. Otherwise `number` is the
  * option 1 to 4 pressed, zero-based, or null, and `enter` and `space` say
  * whether that key was pressed with no focused link or button to take it:
@@ -20,6 +22,8 @@ export interface QuizKeyEvent {
   metaKey: boolean;
   ctrlKey: boolean;
   altKey: boolean;
+  /** A repeat the browser sends while the key is held down. */
+  repeat: boolean;
   target: EventTarget | null;
 }
 
@@ -33,7 +37,7 @@ export interface QuizKey {
 }
 
 export function quizKey(event: QuizKeyEvent, pending: boolean): QuizKey | null {
-  if (event.metaKey || event.ctrlKey || event.altKey || pending) return null;
+  if (event.metaKey || event.ctrlKey || event.altKey || event.repeat || pending) return null;
   const target = event.target as HTMLElement | null;
   if (target !== null && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return null;
   // Space and Enter on a focused link or button belong to that control.

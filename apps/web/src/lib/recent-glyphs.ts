@@ -11,7 +11,7 @@ import { isCourseVisit, type RecentKind } from "@/lib/recent-core";
  * React-free, so a server component (Home's card) and a client one (the
  * sidebar) both take it.
  */
-export const RECENT_GLYPHS: Record<RecentKind, { glyph: GlyphName; word: string }> = {
+const RECENT_GLYPHS: Record<RecentKind, { glyph: GlyphName; word: string }> = {
   module: { glyph: "book", word: "Course module" },
   video: { glyph: "video", word: "Video" },
   draft: { glyph: "compose", word: "Conversation" },

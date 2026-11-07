@@ -4,16 +4,16 @@
  *
  * This file deliberately pulls in nothing — not drizzle, not node. That is
  * what makes it importable from a `"use client"` component in `src/` through
- * the `@gnosia/schema/shared` subpath without dragging a Postgres driver
- * into the browser bundle (layering rule 8 in ARCHITECTURE.md), while
+ * the `@gnosia/schema/shared` subpath without dragging drizzle and a
+ * database driver into the browser bundle (layering rule 8 in ARCHITECTURE.md), while
  * `state.ts` re-exports the same values for the service and the migrations.
  *
  * Before bundle 5 these lived twice: `KNOWLEDGE_LIMITS` in the web app's
  * `storage.ts` and a copy in `state.ts`, with a comment asking the two to stay
  * in step. They are now one definition, because the web app clamps a recap on
  * the way in and the database refuses one that was not clamped, and those two
- * numbers being different is a 23514 the learner sees as "save failed" for no
- * visible reason.
+ * numbers being different is a CHECK failure the learner sees as "save
+ * failed" for no visible reason.
  */
 
 /** Bounds on a recap, so one runaway session cannot fill a column or a quota. */
@@ -57,7 +57,7 @@ export const LOCAL_LEARNER_ID = "local";
 
 /**
  * The deployment secrets' environment names, shared so the web app's auth
- * core, the BYOK seal and the sidecar all read the same variables.
+ * core, the BYOK seal and the launchers all read the same variables.
  */
 export const OWNER_PASSWORD_VAR = "OWNER_PASSWORD";
 export const AUTH_SECRET_VAR = "AUTH_SECRET";
@@ -148,8 +148,7 @@ export const EVENT_TYPES = [
 export type EventType = (typeof EVENT_TYPES)[number];
 
 /**
- * Where a recap came from. Mirrors `KnowledgeSource` in
- * `packages/tutor/src/types.ts`.
+ * Where a recap came from: `KnowledgeSource`, below, is this same list.
  */
 export const RECAP_SOURCES = ["agent", "manual"] as const;
 export type RecapSource = (typeof RECAP_SOURCES)[number];
@@ -183,10 +182,10 @@ export type ProviderId = (typeof PROVIDER_IDS)[number];
  * `provider` columns as a built-in's, so its key is a `provider_key` row and
  * its models are chain entries like any other.
  */
-export const CUSTOM_PROVIDER_PREFIX = "custom-";
+const CUSTOM_PROVIDER_PREFIX = "custom-";
 /** `custom-`, then 1 to 40 lowercase letters, digits and hyphens, not starting or ending with a hyphen. */
-export const CUSTOM_PROVIDER_ID_PATTERN = /^custom-[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/;
-/** The same rule, written for a Postgres CHECK. */
+const CUSTOM_PROVIDER_ID_PATTERN = /^custom-[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/;
+/** The same rule, written for the table's CHECK (a JavaScript pattern, read by the `regexp` function `connect` registers). */
 export const CUSTOM_PROVIDER_ID_SQL = "^custom-[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$";
 export type CustomProviderId = `custom-${string}`;
 /** A built-in provider or one the owner added: what a `provider` column holds. */
@@ -210,10 +209,10 @@ const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 /**
  * A custom provider's base URL, checked (T14): `https:`, or `http:` to this
  * machine only (a local Ollama or LM Studio), with no user name, password,
- * query or fragment, at most `maxBaseUrlChars`, and a trailing slash
- * dropped, since the tutor appends `/chat/completions` and `/models`. The
- * owner's key for the provider is sent to exactly this URL and no built-in
- * key ever is. The reason never repeats the value.
+ * query, fragment or `@` in the path, at most `maxBaseUrlChars` as typed and
+ * as stored, and a trailing slash dropped, since the tutor appends
+ * `/chat/completions` and `/models`. The owner's key for the provider is sent
+ * to exactly this URL and no built-in key ever is. The reason never repeats the value.
  */
 export function checkBaseUrl(value: unknown): { ok: true; url: string } | { ok: false; reason: string } {
   if (typeof value !== "string") return { ok: false, reason: "The base URL must be text." };
@@ -234,7 +233,16 @@ export function checkBaseUrl(value: unknown): { ok: true; url: string } | { ok: 
   }
   if (url.username !== "" || url.password !== "") return { ok: false, reason: "Put the key in the API key field, not in the URL." };
   if (url.search !== "" || url.hash !== "") return { ok: false, reason: "The base URL takes no query or fragment." };
-  return { ok: true, url: `${url.origin}${url.pathname}`.replace(/\/+$/, "") };
+  // The table's CHECK refuses an `@` anywhere in the path, so this says why
+  // here rather than letting the write fail (R3-2-08).
+  if (url.pathname.includes("@")) return { ok: false, reason: "The base URL's path cannot contain @." };
+  const normal = `${url.origin}${url.pathname}`.replace(/\/+$/, "");
+  // Parsing percent-encodes what it must (a space is three characters), so
+  // the stored value is measured again against the CHECK's limit.
+  if (normal.length > CUSTOM_PROVIDER_LIMITS.maxBaseUrlChars) {
+    return { ok: false, reason: `The base URL is longer than ${CUSTOM_PROVIDER_LIMITS.maxBaseUrlChars} characters.` };
+  }
+  return { ok: true, url: normal };
 }
 
 /** A custom provider's name, checked: 1 to `maxLabelChars` characters with no control characters. */
@@ -298,7 +306,7 @@ export function providerLabel(value: string): string {
 }
 
 /** Whether `value` names a provider the tutor knows. */
-export function isProviderId(value: unknown): value is ProviderId {
+function isProviderId(value: unknown): value is ProviderId {
   return typeof value === "string" && (PROVIDER_IDS as readonly string[]).includes(value);
 }
 
@@ -430,7 +438,8 @@ export const PREFERENCE_KEYS = {
   /**
    * `"system"` (follow the operating system's reduced-motion setting, the
    * default) or `"always"` (reduce motion whatever the system says). Written
-   * from Settings; nothing reads it yet.
+   * from Settings; read by the signed-in layout through
+   * `apps/web/src/lib/motion-preference.ts`, which `lib/motion.ts` builds on.
    */
   reducedMotion: "reducedMotion",
   /**
@@ -524,15 +533,14 @@ export function clampSummary(value: unknown): string {
 /**
  * What a learner snapshot looks like once it leaves the database.
  *
- * These are declared here rather than in `packages/tutor/src/types.ts` because
- * both sides now need them: `services/catalog/src/state/` builds the snapshot
- * and the web app's provider consumes it. `apps/web/src/lib/types.ts`
- * re-exports them, so components keep importing from where they always did.
+ * These are declared here because both sides need them:
+ * `services/catalog/src/state/` builds the snapshot and the web app's
+ * provider consumes it, importing them from `@gnosia/schema/shared`.
  *
  * The keys deliberately match the old localStorage document, minus `version`.
  * They are the argument to `/api/learner/import`, and a component reading
  * `state.completed[id]` should not have to care that the bytes now come from
- * Postgres.
+ * the catalog.
  */
 
 /**
@@ -859,8 +867,9 @@ export type CostSource = (typeof COST_SOURCES)[number];
  * A job in any of these owns `target_path` and no second job may take it: an
  * unaccepted candidate still holds it, because the next brief would be written
  * against a file the first job has not landed yet. Enforced by the partial
- * unique index `job_active_target_key`, so the refusal is a `23505` naming the
- * holder rather than a race nobody sees.
+ * unique index `job_active_target_key`, so the refusal is a unique-constraint
+ * failure (the catalog's `sqlstate` reads it as `23505`) naming the holder
+ * rather than a race nobody sees.
  */
 export const JOB_ACTIVE_STATES = ["queued", "running", "awaiting_review"] as const;
 export type JobActiveState = (typeof JOB_ACTIVE_STATES)[number];
@@ -902,8 +911,9 @@ export const JOB_TRANSITIONS: Readonly<Record<JobState, readonly JobState[]>> = 
 
 /**
  * What a studio draft's briefs produce (D42 of docs/STUDIO-CHAT-FIRST.md):
- * a diagram, or a manimkc video (docs/STUDIO-VIDEOS.md, D51), chosen before
- * the draft's first paid turn and fixed after it.
+ * a diagram or a video. A draft's `kind` is its newest brief's, for display
+ * (D62 of docs/STUDIO-MENTIONS.md, which superseded D51's kind fixed after
+ * the first paid turn).
  */
 export const DRAFT_KINDS = ["diagram", "video"] as const;
 export type DraftKind = (typeof DRAFT_KINDS)[number];
@@ -982,4 +992,40 @@ export function canonical(value: unknown): JsonValue {
 /** The canonical serialisation. `JSON.stringify` of a canonical value is already stable. */
 export function canonicalJson(value: unknown): string {
   return JSON.stringify(canonical(value));
+}
+
+/**
+ * A studio video's narration timing, shared by the web app's brief card and
+ * the studio runner's validator and gate so the two cannot predict different
+ * lengths for the same script. The speech rate itself is gnosia-audio's,
+ * which each side reads at run time (the runner from `home --json`, the card
+ * from the runner's `/api/health`), so it is a parameter here.
+ */
+
+/** The voice value for a video with no narration. */
+export const SILENT_VOICE = "none";
+
+/** The finished video over the speech: 1.03 to 1.15 measured, 1.08 taken. */
+export const VIDEO_OVER_SPEECH = 1.08;
+
+/**
+ * Seconds of video the given narration lines predict at `charsPerSecond`.
+ * NaN when there is no usable rate, which a caller shows as unknown rather
+ * than guess.
+ */
+export function narrationSeconds(lines: readonly string[], charsPerSecond: number | undefined): number {
+  // Infinity is no rate either: it would predict every script as 0 seconds.
+  if (charsPerSecond === undefined || !Number.isFinite(charsPerSecond) || charsPerSecond <= 0) return Number.NaN;
+  const characters = lines.reduce((sum, line) => sum + line.length, 0);
+  return (characters / charsPerSecond) * VIDEO_OVER_SPEECH;
+}
+
+/** Whether a brief's `voice` narrates the video: anything but `SILENT_VOICE`. */
+export function isNarratedVoice(voice: string): boolean {
+  return voice !== SILENT_VOICE;
+}
+
+/** A silent video's predicted seconds: every beat's `seconds`, a beat with none counting 0. */
+export function silentSeconds(scenes: ReadonlyArray<{ beats: ReadonlyArray<{ seconds?: number }> }>): number {
+  return scenes.reduce((sum, scene) => sum + scene.beats.reduce((s, beat) => s + (beat.seconds ?? 0), 0), 0);
 }

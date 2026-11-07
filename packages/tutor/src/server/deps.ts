@@ -9,8 +9,7 @@ export type Env = Record<string, string | undefined>;
 /**
  * The seams the asset reads need once the caller holds the database itself.
  * `resolveAsset` and the readers built on it take this beside `db`, because
- * the asset routes in the web app already have `db` in scope and the sidecar
- * holds the same three seams in one place.
+ * the asset routes in the web app already have `db` in scope.
  */
 export interface AssetSeams {
   /** The requesting owner's rows and the commons' (phase 4). */
@@ -34,11 +33,23 @@ export interface TutorDeps extends AssetSeams {
   owner: string;
   env: Env;
   /**
+   * The URL the request came in on, when the host has one. A custom
+   * provider's base URL on this port is this app, not a model server
+   * (`pointsAtThisApp`), so a save names it too.
+   */
+  requestUrl?: string;
+  /**
+   * The request's abort signal, when the host has one. A model call made for
+   * the turn is aborted when it fires, so a closed tab stops paying for an
+   * answer nobody will read.
+   */
+  signal?: AbortSignal;
+  /**
    * The functions a turn delegates to, overridable so a host binds them to
    * the seams its own tests mock. The web app binds each to the shim that
    * re-exports this package (`@/lib/concept-workspace` and friends), which is
-   * what its route tests stub; the sidecar leaves them unset and the package
-   * implementations answer.
+   * what its route tests stub; a host that leaves them unset gets the
+   * package implementations.
    */
   seams?: TurnSeams;
 }
@@ -49,13 +60,14 @@ export interface TutorDeps extends AssetSeams {
  * identity and scope off the same object.
  */
 export interface TurnSeams {
-  courses?: () => Promise<import("../types").Course[]>;
+  courses?: () => Promise<import("@gnosia/content").Course[]>;
   readWorkspace?: (deps: TutorDeps, slug: string) => Promise<import("./concept-workspace").ConceptWorkspaceRead>;
   tutorStyle?: (deps: TutorDeps) => Promise<import("../preferences").TutorStyle>;
   credentials?: (deps: TutorDeps) => Promise<import("../providers").ChainStep[]>;
   complete?: (
     messages: import("../providers").ChatMessage[],
     steps: readonly import("../providers").ChainStep[],
+    signal?: AbortSignal,
   ) => Promise<import("../providers").CompleteOutcome>;
   assetDetail?: (deps: TutorDeps, id: string) => Promise<import("./asset-detail").AssetDetail>;
   assetText?: (deps: TutorDeps, db: CatalogDatabase, id: string, limit?: number) => Promise<string | null>;

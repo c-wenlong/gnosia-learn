@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { FilterMenu } from "@/components/ui/FilterMenu";
 import { Collapse, CollapseChevron } from "@/components/ui/Collapse";
-import { ProgressBar } from "@/components/ui/ProgressBar";
+import { CourseProgress } from "@/components/ui/CourseProgress";
 import { SearchField } from "@/components/ui/SearchField";
 import { CARD_TITLE, chipClasses, cx, FOCUS, PAGE_TITLE, SECTION_TITLE } from "@/components/ui/classes";
 import { CourseCover } from "@/components/courses/CourseCover";
@@ -26,6 +26,7 @@ import {
   type CourseSummary,
 } from "@/lib/course-summary";
 import { useLearner } from "@/lib/learner-context";
+import { FADE_IN } from "@/components/ui/motion";
 
 /**
  * The Courses page's interactive half, in two sections after Coursera.
@@ -148,7 +149,7 @@ export function CourseList({
           </h2>
           <ul className="flex flex-col gap-4">
             {continuingShown.map((entry) => (
-              <li key={entry.summary.slug} className="animate-fade-in motion-reduce:animate-none">
+              <li key={entry.summary.slug} className={FADE_IN}>
                 <ContinueCard entry={entry} />
               </li>
             ))}
@@ -265,13 +266,13 @@ function ContinueCard({ entry: { summary, status } }: { entry: CourseEntry }) {
             {summary.code} {summary.title}
           </Link>
         </h3>
-        <p className="text-[14px] text-text2">
-          {courseCounts(summary)} · {status.percent}% done
-        </p>
-        <ProgressBar
+        <CourseProgress
+          variant="percent"
+          code={summary.code}
+          done={status.completed}
+          total={status.total}
           percent={status.percent}
-          label={`${summary.code} progress, ${status.completed} of ${status.total} topics`}
-          className="mt-2"
+          lead={courseCounts(summary)}
         />
       </div>
       {next !== null && (
@@ -281,7 +282,7 @@ function ContinueCard({ entry: { summary, status } }: { entry: CourseEntry }) {
               {next.title}
             </p>
             <p className="mt-1 truncate text-[13px] text-text2" title={next.moduleTitle}>
-              Module {next.moduleOrder} · {next.moduleTitle}
+              Module {next.moduleNumber} · {next.moduleTitle}
             </p>
           </div>
           <Button
@@ -306,7 +307,7 @@ function CourseGrid({ courses, render }: { courses: CourseSummary[]; render: (s:
   return (
     <ul className="grid grid-cols-2 gap-3 sm:gap-4 sm:[grid-template-columns:repeat(auto-fill,minmax(280px,1fr))]">
       {courses.map((s) => (
-        <li key={s.slug} className="group relative flex animate-fade-in motion-reduce:animate-none">
+        <li key={s.slug} className={cx("group relative flex", FADE_IN)}>
           {render(s)}
         </li>
       ))}

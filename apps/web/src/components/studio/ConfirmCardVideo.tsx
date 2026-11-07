@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { Reveal } from "@/components/studio/motion-parts";
-import { FooterError, FOOTER, LiveFooter, MadeFooter, OnHoldFooter, ProposedTopic, useHoldAction } from "@/components/studio/brief-card-parts";
+import { FOOTER, LiveFooter, MadeFooter, OnHoldFooter, ProposedTopic, useHoldAction } from "@/components/studio/brief-card-parts";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -12,6 +12,7 @@ import { FilterMenu } from "@/components/ui/FilterMenu";
 import { CARD_TITLE, cx } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
 import { Callout } from "@/components/ui/Callout";
+import { ErrorText } from "@/components/ui/ErrorText";
 import type { TopicOption } from "@/data/topics";
 import {
   abbreviations,
@@ -191,7 +192,7 @@ export function ConfirmCardVideo({
                 The conversation moved on after this brief, so Make video would not use it. Use it as it is, or ask for a change.
               </p>
             ) : (
-              <FooterError text={useError} />
+              <ErrorText>{useError}</ErrorText>
             )}
           </div>
         </Reveal>
@@ -337,7 +338,7 @@ function ToolRow({
         {row.line !== null && row.line !== "" && <span className="min-w-0 text-[13px] leading-5 text-text2">{row.line}</span>}
       </div>
       {row.stop !== null && <p className="text-[12px] leading-4 text-text2">{row.stop}</p>}
-      <FooterError text={error} />
+      <ErrorText>{error}</ErrorText>
     </div>
   );
 }

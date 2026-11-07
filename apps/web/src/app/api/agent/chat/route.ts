@@ -11,9 +11,9 @@ export const runtime = "nodejs";
  * `POST /api/agent/chat`. One of four shapes, dispatched on the body: the
  * topic tutor sends `courseSlug`, `moduleSlug` and `topicId`; the concept
  * tutor sends `conceptSlug`; the open tutor sends `subject`; Ask on a library
- * asset sends `assetId`. The turn itself — validation, prompt, the model
- * chain, the response shape — is `chatTurn` in `@gnosia/tutor/server`,
- * which the native sidecar calls over the same contract. This file keeps the
+ * asset sends `assetId`. The turn itself (validation, prompt, the model
+ * chain, the response shape) is `chatTurn` in `@gnosia/tutor/server`.
+ * This file keeps the
  * request-side guards (origin, rate limit, the owner the session resolves)
  * and maps the plain reply onto `NextResponse`.
  */
@@ -34,5 +34,5 @@ export async function POST(req: Request): Promise<NextResponse> {
   const tooLarge = payloadTooLarge(body.messages, typeof body.learnerNote === "string" ? body.learnerNote : undefined);
   if (tooLarge) return turnResponse(tooLarge);
 
-  return turnResponse(await chatTurn(tutorDeps(owner), body));
+  return turnResponse(await chatTurn(tutorDeps(owner, req.signal), body));
 }

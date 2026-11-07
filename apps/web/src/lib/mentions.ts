@@ -171,7 +171,7 @@ export function carryMentions<K extends string>(previous: MentionValue<K>, text:
 }
 
 /** The fallback's line about adding a tag, where reloading the page costs nothing. */
-export const FALLBACK_NOTE = "Tags could not load; reload the page to add one.";
+const FALLBACK_NOTE = "Tags could not load; reload the page to add one.";
 
 /**
  * The fallback's line under the field. It cannot draw chips, so it names the

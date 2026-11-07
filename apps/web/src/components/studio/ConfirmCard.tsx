@@ -2,10 +2,10 @@
 
 import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
-import { FADE_IN } from "@/components/studio/motion";
+import { FADE_IN } from "@/components/ui/motion";
 import { Reveal } from "@/components/studio/motion-parts";
 import { FOOTER, LiveFooter, MadeFooter, OnHoldFooter, ProposedTopic, useHoldAction } from "@/components/studio/brief-card-parts";
-import { Arrow, ElementsEditor, Problem, RelationsEditor } from "@/components/studio/brief-editor";
+import { Arrow, ElementsEditor, RelationsEditor } from "@/components/studio/brief-editor";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
@@ -29,6 +29,7 @@ import {
   type FieldProblem,
 } from "@/lib/studio-brief-edit";
 import { composerKey } from "@/components/ui/composer-keys";
+import { ErrorText } from "@/components/ui/ErrorText";
 import { kindCardEditable, pressLabel, type KindCardStatus } from "@/lib/studio-cards";
 import { modeLine, type DrawBlock } from "@/lib/studio-chat";
 import type { PendingTopic } from "@/lib/studio-drafts";
@@ -397,7 +398,7 @@ export function ConfirmCard({
               </Button>
             )}
           </div>
-          <Problem id={messageId("title")} problem={titleProblem} />
+          <ErrorText id={messageId("title")} className="mt-1">{titleProblem?.message}</ErrorText>
           {status === "stale" && !frozen && (
             <p className="mt-0.5 text-[12px] text-text3">An earlier brief. The newest one is below.</p>
           )}
@@ -433,7 +434,7 @@ export function ConfirmCard({
               onPick={(slug) => change((current) => ({ ...current, topic: slug }), ["topic"])}
             />
           )}
-          <Problem id={messageId("topic")} problem={topicProblem} />
+          <ErrorText id={messageId("topic")} className="mt-1">{topicProblem?.message}</ErrorText>
         </Row>
 
         <Row label="Saved as">
@@ -566,9 +567,7 @@ export function ConfirmCard({
               </Button>
             </div>
             {general !== null ? (
-              <p role="alert" className="text-[13px] leading-5 text-danger">
-                {general.message}
-              </p>
+              <ErrorText>{general.message}</ErrorText>
             ) : (
               <p className="text-[12px] text-text3">
                 The planner hears about your changes on its next reply.
@@ -586,9 +585,7 @@ export function ConfirmCard({
               </Button>
             </div>
             {general !== null ? (
-              <p role="alert" className="text-[13px] leading-5 text-danger">
-                {general.message}
-              </p>
+              <ErrorText>{general.message}</ErrorText>
             ) : (
               <p className="text-[12px] leading-4 text-text2">
                 The conversation moved on after this brief, so Draw would not use it. Use it as it is, or edit it first.

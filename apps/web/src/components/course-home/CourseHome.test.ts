@@ -3,14 +3,14 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-import type { Course } from "@gnosia/tutor/types";
+import type { Course } from "@gnosia/content";
 
 // The learner's ticks decide the current module; none ticked is a new course.
 const learner = {
   state: {
     completed: {} as Record<string, true>,
     userResources: {} as Record<string, { id: string; title: string; url: string }[]>,
-    notes: {},
+    notes: {} as Record<string, string>,
     knowledge: {},
     epoch: 0,
   },
@@ -62,6 +62,7 @@ afterEach(() => {
   while (mounted.length) mounted.pop()?.();
   learner.state.completed = {};
   learner.state.userResources = {};
+  learner.state.notes = {};
   learner.updateNote.mockClear();
   router.replace.mockClear();
   window.location.hash = "";
@@ -76,14 +77,14 @@ function type(field: HTMLTextAreaElement, text: string) {
   });
 }
 
-function render(moduleSlug?: string) {
+function render(moduleSlug?: string, shown: Course = course) {
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
   const draw = () =>
     act(() =>
       root.render(
-        createElement(CourseHome, { course, moduleSlug, mastery: {}, modules: {}, assetsReachable: true, related: [] }),
+        createElement(CourseHome, { course: shown, moduleSlug, mastery: {}, modules: {}, assetsReachable: true, related: [] }),
       ),
     );
   draw();
@@ -180,6 +181,30 @@ describe("CourseHome", () => {
     expect(panel.textContent).toContain("m1-a covers this");
   });
 
+  it("numbers modules by their place in the course, not their authored order", () => {
+    // Authored orders 1 and 3, as archiving the middle module leaves them.
+    const gapped = { ...course, modules: [mod(1), mod(3)] } as Course;
+    const header = (host: HTMLElement) => host.querySelector("h1")?.previousElementSibling?.textContent;
+    const rowTitles = (host: HTMLElement) =>
+      sidebarRows(host).map((a) => a.querySelector("span.flex-1")?.textContent);
+    const neighbour = (host: HTMLElement) =>
+      [...host.querySelectorAll("nav[aria-label='Other modules'] a span.block.truncate")].map((s) => s.textContent);
+
+    const first = render("m1", gapped).host;
+    expect(header(first)).toBe("Module 1 of 2");
+    expect(rowTitles(first)).toEqual(["1. Module 1 title", "2. Module 3 title"]);
+    expect(neighbour(first)).toEqual(["2. Module 3 title"]);
+    mounted.pop()?.();
+
+    const last = render("m3", gapped).host;
+    expect(header(last)).toBe("Module 2 of 2");
+    expect(neighbour(last)).toEqual(["1. Module 1 title"]);
+    const narrow = [...last.querySelectorAll("button[aria-expanded] span.block")].map((s) => s.textContent);
+    expect(narrow).toContain("Module 2 of 2");
+    const locked = [...last.querySelectorAll("p")].find((p) => p.textContent?.startsWith("Opens once you start"));
+    expect(locked?.querySelector("a")?.textContent).toBe("Module 1: Module 1 title");
+  });
+
   it("links the modules either side of the one on screen", () => {
     const { host } = render("m2");
     const nav = host.querySelector("nav[aria-label='Other modules']")!;
@@ -230,6 +255,64 @@ describe("CourseHome", () => {
     expect(learner.updateNote).toHaveBeenCalledWith("m1-a", "closing the tab");
     act(() => mounted.pop()?.());
     expect(learner.updateNote).toHaveBeenCalledTimes(1);
+  });
+
+  it("takes a newer note from another tab into an open panel, and never writes the old draft back", () => {
+    vi.useFakeTimers();
+    try {
+      learner.state.notes = { "m1-a": "x" };
+      const { host, draw } = render("m1");
+      act(() => topicToggle(host, "m1-a").click());
+      const field = host.querySelector("textarea")!;
+      expect(field.value).toBe("x");
+      // The provider adopts a snapshot another tab wrote; nothing was typed here.
+      learner.state.notes = { "m1-a": "x and more" };
+      draw();
+      act(() => void vi.advanceTimersByTime(1_000));
+      expect(field.value).toBe("x and more");
+      act(() => void window.dispatchEvent(new Event("pagehide")));
+      act(() => mounted.pop()?.());
+      expect(learner.updateNote).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps an edit being typed when a newer note arrives, and saves it", () => {
+    vi.useFakeTimers();
+    try {
+      learner.state.notes = { "m1-a": "x" };
+      const { host, draw } = render("m1");
+      act(() => topicToggle(host, "m1-a").click());
+      const field = host.querySelector("textarea")!;
+      type(field, "x typed here");
+      learner.state.notes = { "m1-a": "x from elsewhere" };
+      draw();
+      expect(field.value).toBe("x typed here");
+      act(() => void vi.advanceTimersByTime(400));
+      expect(learner.updateNote).toHaveBeenCalledWith("m1-a", "x typed here");
+      expect(learner.updateNote).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("saves nothing when an edit is typed back to the saved note", () => {
+    vi.useFakeTimers();
+    try {
+      learner.state.notes = { "m1-a": "x" };
+      const { host } = render("m1");
+      act(() => topicToggle(host, "m1-a").click());
+      const field = host.querySelector("textarea")!;
+      type(field, "x and a typo");
+      type(field, "x");
+      act(() => void vi.advanceTimersByTime(1_000));
+      act(() => field.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
+      act(() => mounted.pop()?.());
+      expect(learner.updateNote).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("saves a note at once when the field loses focus, and only once", () => {

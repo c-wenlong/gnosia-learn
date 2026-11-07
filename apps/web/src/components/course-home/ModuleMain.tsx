@@ -6,6 +6,7 @@ import { useId, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { COLUMN_TITLE, cx, FOCUS } from "@/components/ui/classes";
 import { Collapse, CollapseChevron } from "@/components/ui/Collapse";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { TextLink } from "@/components/ui/TextLink";
 import {
@@ -17,7 +18,8 @@ import {
   type ModuleStatus,
   type TopicMastery,
 } from "@/lib/course-path";
-import type { Course, Module } from "@gnosia/tutor/types";
+import type { Course, Module } from "@gnosia/content";
+import { moduleNumber, modulePlace, numberedTitle } from "@gnosia/content/module-number";
 
 import { Glyph } from "@/components/ui/Glyph";
 
@@ -75,21 +77,18 @@ export function ModuleMain({
       {/* A new module's words fade in over the panel, which stays put. */}
       {/* The panel's own 16px is the inset: the reading gets the width. */}
       <div className="flex animate-fade-in flex-col px-1 py-1 motion-reduce:animate-none">
-        <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
-          <div className="min-w-0 flex-1">
-            <p className="text-[14px] leading-5 text-text2">
-              Module {module.order} of {course.modules.length}
-            </p>
-            <h1 className={cx(COLUMN_TITLE, "mt-1")}>
-              {module.title}
-            </h1>
-          </div>
-          {data?.guidebook && (
-            <Button href={conceptHref(data.guidebook)} variant="secondary" size="sm">
-              Guidebook
-            </Button>
-          )}
-        </div>
+        <PageHeader
+          eyebrow={modulePlace(course, module)}
+          title={module.title}
+          titleClass={COLUMN_TITLE}
+          actions={
+            data?.guidebook && (
+              <Button href={conceptHref(data.guidebook)} variant="secondary" size="sm">
+                Guidebook
+              </Button>
+            )
+          }
+        />
 
         <ul className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1 text-[14px] leading-6 text-text">
           {meta.map((part) => (
@@ -106,7 +105,7 @@ export function ModuleMain({
             <span>
               Opens once you start{" "}
               <TextLink href={moduleHref(course.slug, previous.slug)}>
-                Module {previous.order}: {previous.title}
+                Module {moduleNumber(course, previous)}: {previous.title}
               </TextLink>
               . Its topics are here to read in the meantime.
             </span>
@@ -129,11 +128,11 @@ export function ModuleMain({
         {(previous || next) && (
           <nav aria-label="Other modules" className="-mx-2 mt-6 grid gap-2 border-t border-hair pt-4 sm:grid-cols-2">
             {previous ? (
-              <NeighbourLink href={moduleHref(course.slug, previous.slug)} direction="previous" module={previous} />
+              <NeighbourLink href={moduleHref(course.slug, previous.slug)} direction="previous" label={numberedTitle(course, previous)} />
             ) : (
               <span aria-hidden className="max-sm:hidden" />
             )}
-            {next && <NeighbourLink href={moduleHref(course.slug, next.slug)} direction="next" module={next} />}
+            {next && <NeighbourLink href={moduleHref(course.slug, next.slug)} direction="next" label={numberedTitle(course, next)} />}
           </nav>
         )}
       </div>
@@ -175,11 +174,12 @@ function Objectives({ items }: { items: string[] }) {
 function NeighbourLink({
   href,
   direction,
-  module,
+  label,
 }: {
   href: string;
   direction: "previous" | "next";
-  module: Module;
+  /** The module's numbered title, "2. Agentic frameworks" (`numberedTitle`). */
+  label: string;
 }) {
   const next = direction === "next";
   return (
@@ -196,7 +196,7 @@ function NeighbourLink({
       <span className="min-w-0">
         <span className={ROW_META}>{next ? "Next module" : "Previous module"}</span>
         <span className="block truncate text-[16px] font-semibold leading-6 text-text">
-          {module.order}. {module.title}
+          {label}
         </span>
       </span>
       {next && <Glyph name="next" className="text-text2" />}

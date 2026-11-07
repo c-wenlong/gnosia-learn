@@ -23,7 +23,7 @@ import { fileSource, selectSource, type SelectedSource } from "@gnosia/content";
  * Read only: `vitest.setup.ts` fails a test file that changes a byte under
  * `seed/`, and this reader never writes.
  */
-export const TEST_CONTENT_ROOT = path.resolve(import.meta.dirname, "..", "..", "..", "..", "seed");
+const TEST_CONTENT_ROOT = path.resolve(import.meta.dirname, "..", "..", "..", "..", "seed");
 
 const files = fileSource(TEST_CONTENT_ROOT);
 

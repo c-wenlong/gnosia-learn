@@ -4,7 +4,8 @@ import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-import type { Course, Module, Topic, TopicKnowledge } from "@gnosia/tutor/types";
+import type { Course, Module, Topic } from "@gnosia/content";
+import type { TopicKnowledge } from "@gnosia/schema/shared";
 import { RecapCard, RecapEditor, TopicRecap } from "./TopicRecap";
 
 // Saving writes the recap where the next render reads it, as the provider does.

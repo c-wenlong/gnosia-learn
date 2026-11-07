@@ -120,7 +120,7 @@ export function runnerSettings(raw: unknown): {
     models: models.length > 0 ? models : null,
     defaults,
     resolved: resolved.turns === null && resolved.video === null && resolved.diagram === null ? null : resolved,
-    // The model `byok.json` names, for a BYOK conversation's meta row — its
+    // The model the runner's BYOK settings name, for a BYOK conversation's meta row — its
     // turns run on it, not on the claude pick this menu otherwise offers.
     byokModel,
     byokTiers,
@@ -200,7 +200,7 @@ export function agentDefaults(raw: unknown): AgentDefaults | null {
 }
 
 /** "Claude Code default (Fable 5.1)", or without the name when it is not known. */
-export function defaultLabel(resolved: string | null | undefined, known: boolean, words: (value: string) => string = (value) => value): string {
+function defaultLabel(resolved: string | null | undefined, known: boolean, words: (value: string) => string = (value) => value): string {
   if (!known) return "Claude Code default";
   return resolved === null || resolved === undefined ? "Claude Code default (the CLI's own)" : `Claude Code default (${words(resolved)})`;
 }

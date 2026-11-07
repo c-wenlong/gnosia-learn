@@ -20,6 +20,7 @@ import type { ContentType } from "@gnosia/content";
 import { isRenderSource, uploadCommand, type RouteProblemCode } from "../asset-problems";
 import { ContentUnavailableError } from "./content-source";
 import type { AssetSeams } from "./deps";
+import { failureCode } from "./provider-keys";
 
 /**
  * Turning an `asset` row into bytes a browser can play.
@@ -58,7 +59,7 @@ import type { AssetSeams } from "./deps";
  * still the right type, since the point is to put it in an `<img>`; the
  * sandbox is what makes it safe.
  */
-export const CONTENT_TYPES: Readonly<Record<string, string>> = {
+const CONTENT_TYPES: Readonly<Record<string, string>> = {
   ".mp4": "video/mp4",
   ".svg": "image/svg+xml",
   ".vtt": "text/vtt",
@@ -176,8 +177,7 @@ export function blobStoreProblem(error: unknown): AssetFileProblem {
   if (error instanceof BlobNotFoundError) {
     return notUploaded("The blob store no longer holds this object. Run `npm run catalog -- blob audit`.");
   }
-  const message = error instanceof Error ? error.message : String(error);
-  console.warn(`asset file: blob store unavailable: ${message}`);
+  console.warn(`asset file: blob store unavailable (${failureCode(error)})`);
   return {
     ok: false,
     status: 503,
@@ -192,14 +192,14 @@ export function blobStoreProblem(error: unknown): AssetFileProblem {
  * store. `name` is what the saved file is called: the asset's logical path,
  * whose extension is replaced by the object's (a poster is `<video>.jpg`).
  */
-export async function resolveBlob(seams: AssetSeams, blob: AssetBlob, name: string): Promise<AssetStored | AssetFileProblem> {
+async function resolveBlob(seams: AssetSeams, blob: AssetBlob, name: string): Promise<AssetStored | AssetFileProblem> {
   if (blob.state !== "present") {
     return notUploaded(
       `Asset ${blob.assetId} is kept in the blob store and its upload has not been confirmed. Rerun the upload.`,
     );
   }
   const ext = path.extname(blob.key).toLowerCase();
-  const contentType = CONTENT_TYPES[ext] ?? null;
+  const contentType = contentTypeFor(blob.key);
   if (contentType === null) {
     console.warn(`asset file: refusing ${blob.assetId}, unrecognised blob extension`);
     return missing("unsupported-type", `Asset ${blob.assetId} is stored with an extension this route will not serve.`);
@@ -257,7 +257,7 @@ const ROW_CONTENT_TYPES: Readonly<Record<ContentType, string | undefined>> = {
 };
 
 /** The kinds `ROW_KINDS` covers, for a caller deciding servability without the text. */
-export function rowTypeFor(kind: string): ContentType | null {
+function rowTypeFor(kind: string): ContentType | null {
   return ROW_KINDS[kind] ?? null;
 }
 
@@ -283,7 +283,7 @@ const notFlipped = (error: ContentUnavailableError): AssetFileProblem => ({
  * the route answers `catalog-unreachable`; only a type that is not flipped is
  * an answer of its own.
  */
-export async function resolveRowText(
+async function resolveRowText(
   seams: AssetSeams,
   db: CatalogDatabase,
   row: AssetRef,
@@ -552,6 +552,9 @@ const BYTES_RANGE = /^bytes=(\d*)-(\d*)$/i;
  * than handed the whole thing again; anything else is ignored and the whole
  * file is sent, which RFC 9110 explicitly permits and which is the right
  * answer for a header that is malformed or asks for a unit we do not speak.
+ * A reversed range (`bytes=5-2`) is malformed too: RFC 9110 (14.1.1) calls a
+ * last position before the first invalid, and an invalid range is ignored,
+ * not refused, so it gets the whole file rather than a 416.
  *
  * Multiple ranges (`bytes=0-9,20-29`) fall into that last group. A multipart
  * response is real work and no browser needs one to scrub a video.
@@ -566,6 +569,10 @@ export function parseRange(header: string | null, size: number): RangeRequest {
 
   const [, rawStart = "", rawEnd = ""] = match;
   if (rawStart === "" && rawEnd === "") return { kind: "whole" };
+  // Judged before the size: a reversed range is invalid on any file, an empty one included.
+  // As BigInts, since both are digit strings and `Number` rounds two bounds past
+  // 2^53 to one value, which would hide the reversal and answer 416.
+  if (rawStart !== "" && rawEnd !== "" && BigInt(rawEnd) < BigInt(rawStart)) return { kind: "whole" };
 
   // An empty file can satisfy nothing, and `bytes=0-` against it would
   // otherwise compute the range 0..-1.

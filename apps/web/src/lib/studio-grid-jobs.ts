@@ -26,7 +26,7 @@ import { isVideoJob, videoFailureLine, videoHeadline, type VideoJob } from "@/li
  * diagram tiles and gets its own. A row from a runner that predates `kind` is
  * a diagram (`jobKindOf`).
  */
-export function isDiagramJob(job: Pick<Job, "kind"> & Partial<Pick<Job, "target">>): boolean {
+function isDiagramJob(job: Pick<Job, "kind"> & Partial<Pick<Job, "target">>): boolean {
   return jobKindOf(job) === "diagram";
 }
 

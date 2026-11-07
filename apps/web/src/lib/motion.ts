@@ -28,7 +28,7 @@ export const MOTION_COOKIE = "gnosia-motion";
 export const LEGACY_MOTION_COOKIE = "self-learn-motion";
 
 /** A year, as the theme cookie. */
-export const MOTION_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
+const MOTION_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
 /** The mode a cookie value names, or null when it names none (missing, or garbage). */
 export function asMotionMode(value: string | undefined | null): MotionMode | null {

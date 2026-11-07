@@ -1,27 +1,24 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { providerLabel } from "@gnosia/schema/shared";
-import { MathText } from "@/components/Math";
-import { NoteProse } from "@/components/NoteProse";
+import { providerLabel, type KnowledgeInput, type TopicKnowledge } from "@gnosia/schema/shared";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { Card } from "@/components/ui/Card";
-import { cx, LABEL, NOTE, PAGE_TITLE } from "@/components/ui/classes";
+import { BackLink } from "@/components/ui/BackLink";
+import { cx, LABEL, NOTE } from "@/components/ui/classes";
 import { Collapse } from "@/components/ui/Collapse";
 import { Composer } from "@/components/ui/Composer";
 import { LiveStatus } from "@/components/ui/LiveStatus";
-import { TutorMessage, UserMessage } from "@/components/ui/Message";
-import { TextLink } from "@/components/ui/TextLink";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { TypingDots } from "@/components/ui/TypingDots";
 import { useCopied } from "@/components/ui/use-copied";
 import type {
   Course,
-  KnowledgeInput,
   Module,
   Topic,
-  TopicKnowledge,
-} from "@gnosia/tutor/types";
+} from "@gnosia/content";
+import { moduleNumber } from "@gnosia/content/module-number";
 import { useLearner } from "@/lib/learner-context";
 import { buildAgentSessionContext } from "@gnosia/tutor/prompt";
 import { RecapCard, RecapEditor } from "@/components/TopicRecap";
@@ -44,6 +41,10 @@ import { scrollBehavior } from "@/lib/motion";
 import { tutorProblem } from "@/lib/tutor-errors";
 import { recapTurns, topicRequestTurns } from "@/lib/tutor-thread";
 import { ownValue } from "@gnosia/tutor/own-key";
+import { randomToken } from "@/lib/random-token";
+import { FADE_IN } from "@/components/ui/motion";
+import { TurnError } from "@/components/workspace/TurnError";
+import { ChatTurn } from "@/components/workspace/ChatTurn";
 
 type Role = "user" | "assistant";
 
@@ -63,10 +64,6 @@ interface UiMessage {
    */
   choice?: ChoiceAnswer | null;
   recall?: RecallPick | null;
-}
-
-function uid() {
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 export function AgentSession({
@@ -200,7 +197,7 @@ export function AgentSession({
       setMessages([
         ...store.read(),
         {
-          id: uid(),
+          id: randomToken(),
           role: "assistant",
           content,
           // The route keeps a check only when it names a concept this topic declares.
@@ -282,7 +279,7 @@ export function AgentSession({
     if (started || busy) return;
     setStarted(true);
     const seed: UiMessage = {
-      id: uid(),
+      id: randomToken(),
       role: "user",
       content: session.openingUserSeed,
     };
@@ -307,7 +304,7 @@ export function AgentSession({
     sessionTitle: `${course.code} · ${topic.title}`,
     sessionGoal: topic.id,
     conceptOf,
-    newTurn: (fields) => ({ id: uid(), ...fields }),
+    newTurn: (fields) => ({ id: randomToken(), ...fields }),
   });
 
   /** The composer's send: Enter, or the Send button. */
@@ -355,20 +352,16 @@ export function AgentSession({
   return (
     // A 48rem reading measure, centred in the `app` layout's wider column.
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
-      <nav>
-        <TextLink href={backHref} size="md">
-          ← Back to module
-        </TextLink>
+      {/* The way back is the page's one navigation, so it keeps its landmark. */}
+      <nav aria-label="Breadcrumb">
+        <BackLink href={backHref}>Back to module</BackLink>
       </nav>
 
-      <header className="flex flex-col gap-3">
-        <p className="text-[13px] font-medium text-accent-text">Micro-learning</p>
-        <h1 className={PAGE_TITLE}>{topic.title}</h1>
-        <p className="text-[14px] text-text2">
-          {course.code} · M{module.order} {module.title}
-        </p>
+      <div className="flex flex-col gap-3">
+        <PageHeader eyebrow={`${course.code} · Module ${moduleNumber(course, module)} · ${module.title}`} title={topic.title} />
+        {/* The session's brief is a paragraph, read at 14px rather than as a note. */}
         <p className="text-[14px] text-text2">{session.angle}</p>
-      </header>
+      </div>
 
       {priorKnowledge && (
         <section className="flex flex-col gap-2">
@@ -450,20 +443,9 @@ export function AgentSession({
             // A card's answer is the card's to show; the turn holds what the tutor was sent.
             if (m.role === "user" && (m.choice || m.recall)) return [<CheckRow key={`v${i}`} at={i} {...slotProps} />];
             return [
-              // The kit's two voices: the tutor's bare prose and the learner's
-              // tinted bubble, told apart by shape, so no turn carries a
-              // speaker label; only the provider, when there is one, is shown.
-              m.role === "assistant" ? (
-                <TutorMessage key={m.id} className="animate-enter motion-reduce:animate-none">
-                  {m.meta && <p className={cx(NOTE, "mb-1")}>{m.meta}</p>}
-                  {/* The tutor writes markdown, as the concept tutor's does; an image in it is a link. */}
-                  <NoteProse source={m.content} idPrefix={`t${i}-`} images="link" />
-                </TutorMessage>
-              ) : (
-                <UserMessage key={m.id} className="animate-enter motion-reduce:animate-none">
-                  <MathText text={m.content} />
-                </UserMessage>
-              ),
+              // ChatTurn draws the kit's two voices; the only label is the
+              // provider above the tutor's prose, when there is one.
+              <ChatTurn key={m.id} turn={m} idPrefix={`t${i}-`} meta={m.meta} />,
               m.role === "assistant" ? <CheckCard key={`c${i}`} at={i} {...slotProps} /> : null,
               <CheckRow key={`v${i}`} at={i} {...slotProps} />,
             ];
@@ -475,21 +457,8 @@ export function AgentSession({
             </p>
           )}
           {error && (
-            <Callout
-              tone="danger"
-              role="alert"
-              className="animate-fade-in motion-reduce:animate-none"
-              actions={
-                // The learner's turn went unanswered: send it again, rather than typing it twice.
-                takeUnanswered(messages) !== null ? (
-                  <Button variant="secondary" size="sm" onClick={() => void retry()}>
-                    Try again
-                  </Button>
-                ) : undefined
-              }
-            >
-              {error}
-            </Callout>
+            // The learner's turn went unanswered: send it again, rather than typing it twice.
+            <TurnError tone="danger" error={error} onRetry={takeUnanswered(messages) !== null ? () => void retry() : undefined} />
           )}
           <div ref={bottomRef} />
         </div>
@@ -549,13 +518,13 @@ export function AgentSession({
         )}
 
         {recapError && (
-          <Callout role="status" className="animate-fade-in motion-reduce:animate-none">
+          <Callout role="status" className={FADE_IN}>
             {recapError}
           </Callout>
         )}
 
         {saveError && (
-          <Callout tone="danger" role="alert" className="animate-fade-in motion-reduce:animate-none">
+          <Callout tone="danger" role="alert" className={FADE_IN}>
             {saveError}
           </Callout>
         )}
@@ -564,7 +533,7 @@ export function AgentSession({
           <RecapEditor
             initial={recapDraft}
             submitLabel="Save recap"
-            className="animate-fade-in motion-reduce:animate-none"
+            className={FADE_IN}
             onSave={(input) => {
               saveKnowledge(topic.id, input);
               setRecapDraft(null);
@@ -576,7 +545,7 @@ export function AgentSession({
         )}
 
         {storedKnowledge && !recapDraft && (
-          <div className="flex flex-col gap-2 animate-fade-in motion-reduce:animate-none">
+          <div className={cx("flex flex-col gap-2", FADE_IN)}>
             <LiveStatus
               text={
                 justSaved === null

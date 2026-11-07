@@ -26,6 +26,7 @@ import type {
   Topic,
   TopicEntry,
 } from "./types";
+import { RESOURCE_TYPES } from "./types";
 
 /**
  * `content/courses/*.yaml`: one file per course, and the only parser of them.
@@ -47,8 +48,6 @@ export const COURSES_DIR = "content/courses";
 
 /** What a course code may be: it names the file, `<code>.yaml` in lowercase. */
 const COURSE_CODE = /^[A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)*$/;
-
-const RESOURCE_TYPES: readonly ResourceType[] = ["paper", "docs", "video", "book", "other", "practice"];
 
 /**
  * The asset id prefixes a listed video may carry: the four video tools'
@@ -130,7 +129,7 @@ export interface LoadCoursesOptions extends LoadOptions {
 /**
  * The image types a cover file may be, by extension: the same closed list as
  * `COURSE_COVER_TYPES` in `@gnosia/schema`, which this package does not
- * import. `catalog course cover` decides the type from the bytes; the export
+ * import; the catalog's export-import suite holds the two equal. `catalog course cover` decides the type from the bytes; the export
  * names the file by it.
  */
 export const COURSE_COVER_EXTENSIONS = ["webp", "jpg", "png"] as const;
@@ -482,6 +481,8 @@ function readCourse(
   const moduleSlugs = new Map<string, string>();
   /** Where each module was read, for the lessons check after the loop. */
   const moduleAt = new Map<string, string>();
+  /** Each module `order` in this course and where it was read. */
+  const moduleOrders = new Map<number, string>();
   for (const [i, rawModule] of rawModules.entries()) {
     const mod = rawModule as RawModule;
     const at = `${where} module[${i}]`;
@@ -539,11 +540,25 @@ function readCourse(
     const moduleSlug = urlSlug(requireText(mod.slug, at, "slug"), at, "slug");
     claim(moduleSlugs, "module slug", moduleSlug, at);
 
+    // The database keeps a module's `order` as its position and lists a
+    // course's modules by it, and a module is numbered by its place in that
+    // list (`moduleNumber`), so two modules of one course sharing an order
+    // would have no knowable number.
+    const moduleOrder = requireInteger(mod.order, at, "order");
+    const orderTakenBy = moduleOrders.get(moduleOrder);
+    if (orderTakenBy !== undefined) {
+      throw new ContentError(
+        `${at}: module order ${moduleOrder} is already used by ${orderTakenBy}. ` +
+          `Module order is the course's module order, so it has to be unambiguous.`,
+      );
+    }
+    moduleOrders.set(moduleOrder, at);
+
     const read: Module = {
       id: moduleId,
       slug: moduleSlug,
       title: requireText(mod.title, at, "title"),
-      order: requireInteger(mod.order, at, "order"),
+      order: moduleOrder,
       topic: topicSlug ?? "",
       topics,
       resources,
@@ -580,7 +595,9 @@ function readCourse(
     order,
     inferred: requireBoolean(parsed.inferred, where, "inferred"),
     tags: stringList(parsed.tags, where, "tags"),
-    modules,
+    // In `order`, as the database reader lists them, whatever order the file
+    // wrote them in: the two readers must number a module the same (R3-2-06).
+    modules: modules.sort((a, b) => a.order - b.order),
     capstone: requireText(parsed.capstone, where, "capstone"),
   };
   // Optional keys are omitted rather than set to undefined: the shape has to

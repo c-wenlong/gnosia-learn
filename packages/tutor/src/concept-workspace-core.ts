@@ -31,7 +31,8 @@ export interface ConceptPlace {
   courseCode: string;
   courseTitle: string;
   moduleSlug: string;
-  moduleOrder: number;
+  /** The module's number in the course, 1-based (`moduleNumber`), never its authored `order`. */
+  moduleNumber: number;
   moduleTitle: string;
   topicId: string;
   topicTitle: string;
@@ -112,7 +113,7 @@ export interface WorkspaceEvent {
   [key: string]: unknown;
 }
 
-export function graphNodeOf(concept: KbConcept, courses: readonly string[] = []): GraphNode {
+function graphNodeOf(concept: KbConcept, courses: readonly string[] = []): GraphNode {
   return {
     id: concept.id,
     title: concept.title,
@@ -245,7 +246,7 @@ function promptNeighbour(ref: NeighbourRef): ConceptPromptNeighbour {
 /** "CP4281 · Module 2 · Transformations". */
 export function placeLabel(place: ConceptPlace | null): string | null {
   if (place === null) return null;
-  return `${place.courseCode} · Module ${place.moduleOrder} · ${place.topicTitle}`;
+  return `${place.courseCode} · Module ${place.moduleNumber} · ${place.topicTitle}`;
 }
 
 /** Strip the frontmatter off a note file, leaving the body the tutor reads. */
@@ -257,7 +258,7 @@ export function noteBody(source: string): string {
 }
 
 /** How many recent answers the tutor is shown. */
-export const PROMPT_RECENT_ANSWERS = 5;
+const PROMPT_RECENT_ANSWERS = 5;
 
 /** The tutor's view of a workspace: what `buildConceptSessionContext` takes. */
 export function toConceptPromptInput(workspace: ConceptWorkspace): ConceptPromptInput {

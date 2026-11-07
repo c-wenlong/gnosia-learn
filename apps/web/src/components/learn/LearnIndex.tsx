@@ -8,10 +8,11 @@ import { DomainCards, DomainView, type Place } from "@/components/learn/DomainBr
 import type { MapMark } from "@/components/learn/DomainGraph";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { cardClasses, cx, LABEL, NOTE, PAGE_TITLE } from "@/components/ui/classes";
+import { cardClasses, cx, FOCUS, LABEL } from "@/components/ui/classes";
 import { isImeKey } from "@/components/ui/composer-keys";
 import { FilterMenu } from "@/components/ui/FilterMenu";
 import { MasteryDot } from "@/components/ui/MasteryDot";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SearchField } from "@/components/ui/SearchField";
 import { Callout } from "@/components/ui/Callout";
@@ -39,6 +40,7 @@ import {
   type IndexView,
   type MapLayout,
 } from "@/lib/learn-index";
+import { FADE_IN } from "@/components/ui/motion";
 
 
 const VIEW_ITEMS: SegmentItem<IndexView>[] = [
@@ -83,11 +85,14 @@ function placeOf(
   asked: { view: IndexView; selected: string | null; domain: string | null; topic: string | null },
 ): Place {
   if (asked.view !== "graph") return { domain: null, topic: null };
+  // Own keys only: both records are plain objects, so `in` or a bare index
+  // would take `constructor` or `__proto__` from a hand-typed URL for a
+  // domain, and the layout read below would throw during render.
   const domain =
-    asked.domain !== null && asked.domain in map.layouts
+    asked.domain !== null && Object.hasOwn(map.layouts, asked.domain)
       ? asked.domain
-      : asked.domain === null && asked.selected !== null
-        ? (domainOf[asked.selected] ?? null)
+      : asked.domain === null && asked.selected !== null && Object.hasOwn(domainOf, asked.selected)
+        ? domainOf[asked.selected]
         : null;
   const topic = domain !== null && asked.topic !== null && map.layouts[domain].groups.some((g) => g.topic === asked.topic) ? asked.topic : null;
   return { domain, topic };
@@ -211,36 +216,39 @@ export function LearnIndex({
 
   return (
     <div className="flex flex-col gap-4">
-      <header className="flex flex-wrap items-center gap-x-4 gap-y-3">
-        <div className="flex min-w-0 flex-1 basis-[20rem] flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h1 className={PAGE_TITLE}>Learn</h1>
-          <p className={NOTE}>
+      <PageHeader
+        title="Learn"
+        noteBeside
+        note={
+          <>
             {rows.length} concept{rows.length === 1 ? "" : "s"} · {counts.mastered} mastered · {counts.learning} learning ·{" "}
             {counts.untouched} {MASTERY_BUCKET_LABEL.untouched.toLowerCase()}
-          </p>
-        </div>
-        <SearchField
-          label="Search concepts"
-          placeholder="Search concepts"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onClear={() => setQuery("")}
-          onKeyDown={(e) => {
-            // On the map, Enter opens the best match in its domain (D8).
-            // The Enter that confirms an input method's word is not a search.
-            if (e.key !== "Enter" || isImeKey(e.nativeEvent) || view !== "graph") return;
-            // Only among the rows on screen (the filter and the search both), so Enter
-            // never lands on a concept the map has dimmed.
-            const id = firstMatch(visible, query);
-            if (id !== null) {
-              e.preventDefault();
-              if (domainOf[id] === place.domain && place.topic === null) setSelected(id);
-              else go({ domain: domainOf[id] ?? null, topic: null }, id);
-            }
-          }}
-          className="w-full sm:w-[280px]"
-        />
-      </header>
+          </>
+        }
+        actions={
+          <SearchField
+            label="Search concepts"
+            placeholder="Search concepts"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onClear={() => setQuery("")}
+            onKeyDown={(e) => {
+              // On the map, Enter opens the best match in its domain (D8).
+              // The Enter that confirms an input method's word is not a search.
+              if (e.key !== "Enter" || isImeKey(e.nativeEvent) || view !== "graph") return;
+              // Only among the rows on screen (the filter and the search both), so Enter
+              // never lands on a concept the map has dimmed.
+              const id = firstMatch(visible, query);
+              if (id !== null) {
+                e.preventDefault();
+                if (domainOf[id] === place.domain && place.topic === null) setSelected(id);
+                else go({ domain: domainOf[id] ?? null, topic: null }, id);
+              }
+            }}
+            className="w-full sm:w-[280px]"
+          />
+        }
+      />
 
       <div className="flex flex-wrap items-center gap-2">
         <FilterMenu label="Status" options={statusOptions} value={filter} defaultValue="all" onChange={setFilter} />
@@ -265,7 +273,7 @@ export function LearnIndex({
         // sidebar takes 60 or 260px of it, so a viewport breakpoint docked the
         // graph beside a table with no room left for the concept titles. It
         // fades in over the map it replaces.
-        <div className="@container animate-fade-in motion-reduce:animate-none">
+        <div className={cx("@container", FADE_IN)}>
           <div className="grid grid-cols-1 items-start gap-5 @4xl:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]">
             <ConceptTable rows={visible} selected={selected} onSelect={setSelected} total={rows.length} />
             <GraphCard
@@ -280,7 +288,7 @@ export function LearnIndex({
         </div>
       ) : domain === null || domainLayout === null ? (
         // Keyed by level, so each one fades in over the one it replaces.
-        <div key="domains" className="animate-fade-in motion-reduce:animate-none">
+        <div key="domains" className={FADE_IN}>
           <DomainCards
             tree={map.tree}
             rows={byId}
@@ -290,7 +298,7 @@ export function LearnIndex({
           />
         </div>
       ) : (
-        <div key={`${domain.slug}:${place.topic ?? ""}`} className="animate-fade-in motion-reduce:animate-none">
+        <div key={`${domain.slug}:${place.topic ?? ""}`} className={FADE_IN}>
           <DomainView
             domain={domain}
             layout={domainLayout}
@@ -391,7 +399,7 @@ function ConceptTable({
                       onClick={(e) => e.stopPropagation()}
                       // Tabbing through the titles moves the graph along with the focus.
                       onFocus={() => onSelect(r.id)}
-                      className="min-w-0 truncate rounded-sm text-[14px] text-text underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                      className={cx("min-w-0 truncate rounded-sm text-[14px] text-text underline-offset-4 hover:underline", FOCUS)}
                     >
                       {r.title}
                     </Link>
@@ -498,7 +506,7 @@ function GraphCard({
             {/* Keyed on what it draws, so a new concept's graph fades in rather than snapping into the old one's place. */}
             <ConceptGraph
               key={drawn}
-              className="animate-fade-in motion-reduce:animate-none"
+              className={FADE_IN}
               nodes={shown.nodes}
               edges={shown.edges}
               focus={focus.id}

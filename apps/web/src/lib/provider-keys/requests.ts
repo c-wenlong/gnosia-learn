@@ -2,9 +2,11 @@ import "server-only";
 
 import { NextResponse } from "next/server";
 import { isProviderName, PROVIDER_IDS, type ProviderName } from "@gnosia/schema/shared";
+import type { TutorDeps } from "@gnosia/tutor/server/deps";
+import type { TurnReply } from "@gnosia/tutor/server/turns";
 
 import { enforceRateLimit, enforceSameOrigin, type RateLimitRule } from "@/lib/agent/guard";
-import { BodyTooLarge, readBodyText, requestOwner } from "@/lib/learner-api";
+import { BodyTooLarge, learnerDeps, readBodyText, requestOwner } from "@/lib/learner-api";
 
 /**
  * The guards in front of `/api/learner/provider-key` and its `test`, the same
@@ -28,7 +30,7 @@ export function answer(body: unknown, status = 200): NextResponse {
   return NextResponse.json(body, { status, headers: { "Cache-Control": "no-store" } });
 }
 
-export function refuse(error: string, code = "BAD_REQUEST", status = 400): NextResponse {
+function refuse(error: string, code = "BAD_REQUEST", status = 400): NextResponse {
   return answer({ ok: false, error, code }, status);
 }
 
@@ -73,4 +75,42 @@ export function readProvider(body: Record<string, unknown>): ProviderName | Next
   return isProviderName(body.provider)
     ? body.provider
     : refuse(`"provider" must be one of ${PROVIDER_IDS.join(", ")}, or one of your own providers' ids (custom-…).`);
+}
+
+/**
+ * A Settings write answered by its turn in `@gnosia/tutor/server/turns`,
+ * behind this file's guards: same origin,
+ * the owner, the owner's rate limit under `scope`, then the body, read
+ * within the 4 KB this file allows. So a fix to a write's rules lands once,
+ * in the turn.
+ *
+ * `after` is a step only the web app has, run on a 200 with the body the
+ * turn took and its answer; what it returns joins the answer (the studio's
+ * provider list, D95, as `byok`). The turn sees the request's URL, so a
+ * custom provider pointed at this app's own port is refused by that port.
+ * The deps are the learner writes' lazy ones: the database and the blob
+ * store open only when the turn reads them, so a refused body touches
+ * neither, and these writes never need the blob store at all.
+ */
+export function settingsRoute(
+  scope: "provider-key" | "tutor-model",
+  rule: RateLimitRule,
+  turn: (deps: TutorDeps, body: unknown) => Promise<TurnReply>,
+  after?: (body: Record<string, unknown>, answered: Record<string, unknown>) => Promise<Record<string, unknown>>,
+): (req: Request) => Promise<NextResponse> {
+  return async (req: Request) => {
+    const owner = await guard(req, "write", rule, scope);
+    if (owner instanceof NextResponse) return owner;
+    const body = await readBody(req);
+    if (body instanceof NextResponse) return body;
+    const { status, body: answered } = await turn(learnerDeps(owner, req.url), body);
+    const record = answered as Record<string, unknown>;
+    const extra = status === 200 && after !== undefined ? await after(body, record) : {};
+    return answer({ ...record, ...extra }, status);
+  };
+}
+
+/** What `after` adds for the studio's provider list: `byok` when the runner was asked, nothing when it was not. */
+export function byokField(byok: boolean | undefined): Record<string, unknown> {
+  return byok === undefined ? {} : { byok };
 }

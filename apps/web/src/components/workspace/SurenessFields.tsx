@@ -15,7 +15,7 @@ import { SESSION_TEXT_LIMIT } from "@gnosia/tutor/session-core";
  */
 
 /** The confidence stops as segmented-control items. */
-export const STOP_ITEMS = CONFIDENCE_STOPS.map((stop) => ({ id: String(stop), label: `${stop}%` }));
+const STOP_ITEMS = CONFIDENCE_STOPS.map((stop) => ({ id: String(stop), label: `${stop}%` }));
 
 export function ConfidenceField({
   value,

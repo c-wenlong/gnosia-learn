@@ -11,8 +11,7 @@ import {
   missingKeyMessage,
   listProviderModels,
   MODEL_LIST_MAX_BYTES,
-  orderCredentials,
-  resetGoneModelReports,
+  providerConfigs,
   turnTimeouts,
   tutorSteps,
   type ChainEntry,
@@ -28,7 +27,6 @@ import {
  */
 
 afterEach(() => {
-  resetGoneModelReports();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -192,8 +190,9 @@ describe("completeWithFallback over a chain", () => {
 describe("listProviderModels", () => {
   const key = "sk-or-v1-ListKeyExample0123456789abcdef0123456789";
   const credential = (id: "nvidia" | "gemini" | "openrouter", env: Record<string, string> = {}): ProviderCredential => {
-    const [c] = orderCredentials({ [id]: key }, env);
-    return c!;
+    // The shape `entryCredential` builds for a model list.
+    const config = providerConfigs(env).find((c) => c.id === id)!;
+    return { config, ...keyFor(id, { [id]: key }, env)!, modelFrom: "chain" };
   };
 
   function listing(data: unknown, init: { status?: number } = {}) {
@@ -337,16 +336,17 @@ describe("a turn's time limits", () => {
     const walk = completeWithFallback(
       [{ role: "user", content: "hi" }],
       tutorSteps([{ provider: "nvidia", model: "hangs" }, { provider: "openrouter", model: "answers" }], {}, ENV),
-      { attemptMs: 60, deadlineMs: 5_000 },
+      // The shortest limit `turnTimeouts` allows, so the message is one a person can see.
+      { attemptMs: 1_000, deadlineMs: 5_000 },
     );
     // The first entry's limit, and no more: the second answers at once.
-    await vi.advanceTimersByTimeAsync(60);
+    await vi.advanceTimersByTimeAsync(1_000);
     const outcome = await walk;
     expect(outcome.ok).toBe(true);
     if (!outcome.ok) return;
     expect(outcome.result.content).toBe("from the second");
     expect(outcome.attempts).toEqual([
-      { provider: "nvidia", model: "hangs", message: "No answer within 0 seconds, so the tutor moved on.", timedOut: true },
+      { provider: "nvidia", model: "hangs", message: "No answer within 1 second, so the tutor moved on.", timedOut: true },
     ]);
   });
 
@@ -365,16 +365,16 @@ describe("a turn's time limits", () => {
         {},
         ENV,
       ),
-      // Each attempt may take 80 ms, the whole turn 200: the third is cut
-      // off by the turn's deadline, and the fourth is never started.
-      { attemptMs: 80, deadlineMs: 200 },
+      // Each attempt may take 2 s, the whole turn 5: the third is cut off by
+      // the turn's deadline, and the fourth is never started.
+      { attemptMs: 2_000, deadlineMs: 5_000 },
     ).finally(() => {
       settled = true;
     });
-    // Two whole attempts end at 160 ms; the walk is still on the third.
-    await vi.advanceTimersByTimeAsync(199);
+    // Two whole attempts end at 4 s; the walk is still on the third.
+    await vi.advanceTimersByTimeAsync(4_999);
     expect(settled).toBe(false);
-    // The deadline, not the third attempt's own limit (240 ms), ends it.
+    // The deadline, not the third attempt's own limit (6 s), ends it.
     await vi.advanceTimersByTimeAsync(1);
     expect(settled).toBe(true);
     const outcome = await walk;
@@ -385,7 +385,40 @@ describe("a turn's time limits", () => {
       ["second", true],
       ["third", true],
     ]);
-    expect(outcome.attempts[2]?.message).toMatch(/^Cut off: the turn ran out of its 0 seconds, so 1 more model was not tried\.$/);
+    expect(outcome.attempts[2]?.message).toMatch(/^Cut off: the turn ran out of its 5 seconds, so 1 more model was not tried\.$/);
+  });
+
+  it("aborts the call in flight and tries nothing more when the caller's signal fires", async () => {
+    const fetchMock = hanging();
+    vi.stubGlobal("fetch", fetchMock);
+    const cancel = new AbortController();
+    const walk = completeWithFallback(
+      [{ role: "user", content: "hi" }],
+      tutorSteps([{ provider: "nvidia", model: "first" }, { provider: "openrouter", model: "second" }], {}, ENV),
+      { attemptMs: 5_000, deadlineMs: 10_000 },
+      cancel.signal,
+    );
+    await vi.advanceTimersByTimeAsync(10);
+    cancel.abort();
+    const outcome = await walk;
+    expect(outcome).toMatchObject({ ok: false, code: "CANCELLED" });
+    if (outcome.ok) return;
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect((fetchMock.mock.calls[0]?.[1] as RequestInit).signal?.aborted).toBe(true);
+    expect(outcome.attempts).toEqual([{ provider: "nvidia", model: "first", message: "Cancelled: the request was closed." }]);
+  });
+
+  it("calls nothing when the caller's signal has already fired", async () => {
+    const fetchMock = hanging();
+    vi.stubGlobal("fetch", fetchMock);
+    const outcome = await completeWithFallback(
+      [{ role: "user", content: "hi" }],
+      tutorSteps([{ provider: "nvidia", model: "first" }], {}, ENV),
+      undefined,
+      AbortSignal.abort(),
+    );
+    expect(outcome).toMatchObject({ ok: false, code: "CANCELLED" });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("reads its limits from the environment, within bounds, and defaults otherwise", () => {
@@ -435,5 +468,61 @@ describe("keyTestModel", () => {
     // either way now — the tutor calls nothing but the chain (T15).
     expect(keyTestModel(chain, "gemini", {})).toEqual({ model: "gemini-2.5-flash", modelFrom: "default", used: false });
     expect(keyTestModel([], "gemini", {})).toEqual({ model: "gemini-2.5-flash", modelFrom: "default", used: false });
+  });
+});
+
+describe("reading a model's reply", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  async function attemptWith(body: string) {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(body, { status: 200 })));
+    return completeWithFallback([{ role: "user", content: "hi" }], tutorSteps([{ provider: "nvidia", model: "m" }], {}, ENV));
+  }
+
+  it("refuses a reply past its 2 MB cap without reading the rest, and moves on", async () => {
+    // An endless body of 512 KiB chunks: only a reader that stops can finish.
+    const chunk = new Uint8Array(512 * 1024).fill(0x78);
+    let pulled = 0;
+    let cancelled = false;
+    const endless = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled += 1;
+        controller.enqueue(chunk);
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) =>
+        JSON.parse(String(init?.body)).model === "huge"
+          ? new Response(endless, { status: 200 })
+          : new Response(JSON.stringify({ choices: [{ message: { content: "From the second." } }] }), { status: 200 }),
+      ),
+    );
+    const outcome = await completeWithFallback(
+      [{ role: "user", content: "hi" }],
+      tutorSteps([{ provider: "nvidia", model: "huge" }, { provider: "openrouter", model: "small" }], {}, ENV),
+    );
+    expect(cancelled).toBe(true);
+    // Five chunks pass 2 MB; the stream may have queued one more ahead.
+    expect(pulled).toBeLessThanOrEqual(6);
+    expect(outcome).toMatchObject({ ok: true, result: { content: "From the second." } });
+    if (!outcome.ok) return;
+    expect(outcome.attempts).toEqual([{ provider: "nvidia", model: "huge", message: "The reply was too large to read." }]);
+  });
+
+  it("says a reply that is not JSON was not JSON", async () => {
+    const outcome = await attemptWith("<html>Bad gateway</html>");
+    if (outcome.ok) throw new Error("expected a failure");
+    expect(outcome.attempts).toEqual([{ provider: "nvidia", model: "m", message: "The reply was not JSON." }]);
+  });
+
+  it("reads a real streamed body under the cap", async () => {
+    const outcome = await attemptWith(JSON.stringify({ choices: [{ message: { content: "Hello." } }], model: "m" }));
+    expect(outcome).toMatchObject({ ok: true, result: { content: "Hello." } });
   });
 });

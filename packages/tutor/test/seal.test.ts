@@ -11,7 +11,7 @@ import { checkKeyShape, CURRENT_KEY_VERSION, openKey, sealKey, type Sealed } fro
  * null, the "treat it as missing" the tutor and Settings act on, and never
  * as a throw.
  *
- * This is the copy that runs: the web routes, the sidecar and
+ * This is the copy that runs: the web routes and
  * `provider-keys.ts` all seal and open through `src/server/seal.ts`.
  */
 

@@ -16,10 +16,9 @@ import {
 /**
  * The parts of the asset file route that need no database and no filesystem.
  *
- * They are here rather than folded into the route suite because the route
- * suite skips itself without Postgres, and range arithmetic and header
- * hygiene are exactly the things that should still be a gate on a laptop with
- * the database down.
+ * They are here rather than folded into the route suite because range
+ * arithmetic and header hygiene need no catalog at all, and a test of them
+ * should not have to build one.
  */
 
 describe("parseRange", () => {
@@ -45,6 +44,16 @@ describe("parseRange", () => {
     expect(parseRange("bytes=-10", 100)).toEqual({ kind: "partial", start: 90, end: 99 });
     // Longer than the file is the whole file, not an error.
     expect(parseRange("bytes=-500", 100)).toEqual({ kind: "partial", start: 0, end: 99 });
+  });
+
+  it("ignores a reversed range and sends the whole file, as RFC 9110 asks of an invalid one", () => {
+    expect(parseRange("bytes=5-2", 100)).toEqual({ kind: "whole" });
+    expect(parseRange("bytes=99-0", 100)).toEqual({ kind: "whole" });
+    // Past the end and reversed is still reversed: invalid, so not a 416.
+    expect(parseRange("bytes=500-200", 100)).toEqual({ kind: "whole" });
+    expect(parseRange("bytes=5-2", 0)).toEqual({ kind: "whole" });
+    // Past 2^53, where Number rounds both bounds to 9007199254740992.
+    expect(parseRange("bytes=9007199254740993-9007199254740992", 100)).toEqual({ kind: "whole" });
   });
 
   it("calls a range the file cannot satisfy unsatisfiable, not empty", () => {

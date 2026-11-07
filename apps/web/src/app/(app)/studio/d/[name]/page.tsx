@@ -8,7 +8,7 @@ import { ExtendLink } from "@/components/studio/ExtendLink";
 import { JobPanel } from "@/components/studio/JobPanel";
 import { JobStrip } from "@/components/studio/JobStrip";
 import { MirrorKeepAlive } from "@/components/studio/MirrorKeepAlive";
-import { FADE_IN } from "@/components/studio/motion";
+import { FADE_IN } from "@/components/ui/motion";
 import { SheetFocus } from "@/components/studio/SheetFocus";
 import { ShotView } from "@/components/studio/ShotView";
 import { Badge } from "@/components/ui/Badge";

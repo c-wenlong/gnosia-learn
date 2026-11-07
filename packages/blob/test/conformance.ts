@@ -20,8 +20,8 @@ import {
  * An adapter is correct when this passes against it unchanged. The `fs`
  * adapter runs it in `fs.test.ts`; a cloud adapter adds one file beside that
  * one calling `conformance("r2", () => r2Store(...), { skip })`, with `skip`
- * set to a named reason when its token is absent, the way the Postgres suites
- * skip on a laptop with no database.
+ * set to a named reason when its token is absent, so a machine without the
+ * token skips it by name rather than failing.
  *
  * Everything the suite writes sits under two owner ids unique to the run, so
  * it can share a bucket with real data and still clean up exactly what it

@@ -7,23 +7,24 @@ import {
   readKnowledgeBase,
   readCards,
 } from "@gnosia/catalog/state";
-import type { ContentSource } from "@gnosia/content";
+import type { ContentSource, Course } from "@gnosia/content";
+import { moduleNumber } from "@gnosia/content/module-number";
 import type { OwnerScope } from "@gnosia/schema/shared";
 
 import { findTopicAcrossCourses } from "../lookup";
-import type { Course } from "../types";
 import {
   buildConceptWorkspace,
   type ConceptPlace,
   type ConceptWorkspace,
 } from "../concept-workspace-core";
 import { readConceptNote } from "./concept-note";
+import { failureCode } from "./provider-keys";
 
 /**
  * The concept workspace's read, the request-independent half of
  * `apps/web/src/lib/concept-workspace.ts`: the pool handle, owner, scope and
  * content seam are parameters, so the workspace the chat's context is built
- * from is assembled once and shared by the web route and the sidecar.
+ * from is assembled in one place.
  */
 
 export type ConceptWorkspaceRead =
@@ -49,7 +50,7 @@ export function placeOf(courses: readonly Course[], topicIds: readonly string[])
       courseCode: found.course.code,
       courseTitle: found.course.title,
       moduleSlug: found.module.slug,
-      moduleOrder: found.module.order,
+      moduleNumber: moduleNumber(found.course, found.module),
       moduleTitle: found.module.title,
       topicId: found.topic.id,
       topicTitle: found.topic.title,
@@ -81,8 +82,7 @@ export async function readConceptWorkspace(deps: WorkspaceDeps, slug: string): P
   try {
     kb = { kb: await readKnowledgeBase(await deps.db, deps.owner), reachable: true };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.warn(`concept workspace: knowledge base unavailable — ${message}`);
+    console.warn(`concept workspace: knowledge base unavailable (${failureCode(error)})`);
     kb = { kb: EMPTY_KNOWLEDGE_BASE, reachable: false };
   }
   if (!kb.reachable) return { state: "unreachable", message: "The catalog database could not be reached." };
@@ -114,8 +114,8 @@ export async function readConceptWorkspace(deps: WorkspaceDeps, slug: string): P
     });
     return workspace === null ? { state: "not-found" } : { state: "ok", workspace };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.warn(`concept workspace: ${slug} unavailable, ${message}`);
-    return { state: "unreachable", message };
+    // The code only: a drizzle error's message is its SQL and bind parameters.
+    console.warn(`concept workspace: ${slug} unavailable (${failureCode(error)})`);
+    return { state: "unreachable", message: "The catalog database could not be reached." };
   }
 }

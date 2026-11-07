@@ -11,7 +11,8 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 
-import { createdAt, instant, ownerId, updatedAt } from "./columns";
+import { createdAt, instant, NOW_MS, ownerId, updatedAt } from "./columns";
+import { inList, quoted } from "./sql-in-list";
 import { asset, topic } from "./content";
 import { learner } from "./state";
 import {
@@ -45,9 +46,6 @@ import {
  * about a learner and nothing projects it into `mastery`), and no column on
  * `asset` pointing back at a job (see `asset_job`).
  */
-
-const inList = (column: string, values: readonly string[]) =>
-  sql.raw(`${column} in (${values.map((v) => `'${v}'`).join(", ")})`);
 
 const jsonObject = (column: string, nullable = false) =>
   sql.raw(
@@ -92,7 +90,7 @@ export const session = sqliteTable(
       onDelete: "set null",
       onUpdate: "cascade",
     }),
-    startedAt: instant("started_at").notNull().default(sql`(cast(unixepoch('subsec') * 1000 as integer))`),
+    startedAt: instant("started_at").notNull().default(NOW_MS),
     endedAt: instant("ended_at"),
     /** Last sign of life. A stale one plus a dead process is `interrupted`. */
     heartbeatAt: instant("heartbeat_at"),
@@ -135,8 +133,9 @@ export const session = sqliteTable(
  * drawing and a second Draw, or a second diagram in the same conversation, is
  * the normal case, and a `draft.job_id` would overwrite the first job's link.
  *
- * `kind` is what the draft's briefs produce (D42). Only `diagram` exists; the
- * column is here now so a second kind needs no backfill.
+ * `kind` mirrors the newest brief's kind, for display: `diagram` or `video`
+ * (`DRAFT_KINDS`, D62 of docs/STUDIO-MENTIONS.md), `diagram` before any
+ * brief. It changes when a newer brief of another kind arrives.
  *
  * `name` is the owner's, `title` the planner's: a conversation shows its
  * name, else its title, else the person's first message (the runner has
@@ -202,14 +201,14 @@ export const draft = sqliteTable(
     check(
       "draft_cost_source_check",
       sql.raw(
-        `cost_source is null or cost_source in (${COST_SOURCES.map((v) => `'${v}'`).join(", ")})`,
+        `cost_source is null or cost_source in (${quoted(COST_SOURCES)})`,
       ),
     ),
     check("draft_cost_source_paired_check", sql`cost_source is null or cost_usd is not null`),
     check(
       "draft_error_kind_check",
       sql.raw(
-        `error_kind is null or error_kind in (${DRAFT_ERROR_KINDS.map((v) => `'${v}'`).join(", ")})`,
+        `error_kind is null or error_kind in (${quoted(DRAFT_ERROR_KINDS)})`,
       ),
     ),
     index("draft_owner_id_idx").on(t.ownerId),
@@ -230,10 +229,11 @@ export const draft = sqliteTable(
  * still holding.
  *
  * **`topic_slug` is a column and a foreign key, and the rest of the brief is
- * jsonb.** A foreign key does not survive being stuffed into JSON, and the
+ * JSON text.** A foreign key does not survive being stuffed into JSON, and the
  * topic is the earliest moment "refuse, never skip" can fire: an agent naming a
- * slug that is not in `content/topics.yaml` fails the enqueue with a `23503`
- * before any GPU time, rather than producing a file the indexer then refuses.
+ * slug that is not a topic row fails the enqueue with a foreign key failure
+ * (which the catalog's `sqlstate` reads as `23503`) before any GPU time,
+ * rather than producing a file the indexer then refuses.
  *
  * **`state` is checked and `phase` is not.** `state` is what a transition is
  * guarded with, so it stays small enough to reason about; `phase` is the
@@ -291,7 +291,7 @@ export const job = sqliteTable(
     idempotencyKey: text("idempotency_key").notNull(),
     /** How many times a runner has claimed it. Capped at three by the runner. */
     attempt: integer("attempt").notNull().default(0),
-    requestedAt: instant("requested_at").notNull().default(sql`(cast(unixepoch('subsec') * 1000 as integer))`),
+    requestedAt: instant("requested_at").notNull().default(NOW_MS),
     startedAt: instant("started_at"),
     finishedAt: instant("finished_at"),
     /** When a person accepted or discarded it. */
@@ -355,7 +355,7 @@ export const job = sqliteTable(
     check(
       "job_cost_source_check",
       sql.raw(
-        `cost_source is null or cost_source in (${COST_SOURCES.map((v) => `'${v}'`).join(", ")})`,
+        `cost_source is null or cost_source in (${quoted(COST_SOURCES)})`,
       ),
     ),
     // A source with no figure beside it says where a number came from and then
@@ -412,7 +412,7 @@ export const assetJob = sqliteTable(
     /** sha256 of the bytes the job landed, lowercase hex. */
     contentHash: text("content_hash").notNull(),
     bytes: integer("bytes").notNull(),
-    writtenAt: instant("written_at").notNull().default(sql`(cast(unixepoch('subsec') * 1000 as integer))`),
+    writtenAt: instant("written_at").notNull().default(NOW_MS),
     ownerId: ownerId(() => learner.id),
     createdAt: createdAt(),
     updatedAt: updatedAt(),

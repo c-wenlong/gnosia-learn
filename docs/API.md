@@ -1,11 +1,10 @@
 # API
 
-The three HTTP surfaces this system exposes, route by route: the web app's
-own handlers, the sidecar the macOS app talks to, and the studio runner.
-Each binds differently and on purpose — the web app is a deployed Next.js
-service behind a session cookie, the other two are loopback-only locals that
-answer no CORS headers, so a browser page elsewhere can neither read them
-nor send them a JSON body.
+The two HTTP surfaces this system exposes, route by route: the web app's
+own handlers and the studio runner. They bind differently and on purpose: the
+web app is a deployed Next.js service behind a session cookie, and the runner
+is a loopback-only local that answers no CORS headers, so a browser page
+elsewhere can neither read it nor send it a JSON body.
 
 Conventions worth knowing before the tables:
 
@@ -16,22 +15,18 @@ Conventions worth knowing before the tables:
   a 60/minute rate limit, a bounded body, then validation. The agent routes
   carry the same two guards directly. Errors are `{ error, code }`; reads
   degrade (`reachable: false` and empty lists) where a blank page would lie.
-- **The sidecar and the studio are loopback, and say so.** Both check that
-  `Host` names their own socket, that a body is `application/json` (a type a
-  cross-origin form cannot send), and that `Origin`/`Sec-Fetch-Site`, when
-  present, name the server itself — DNS rebinding is the attack that shape
-  exists for. Their errors are `{ error, code }` and `{ error, detail }`
-  respectively.
-- **Both local services write the same catalog file the web app uses.** There is
-  no second catalog; the sidecar is another door onto it for one owner, and
-  the studio's routes run its runner's own tables and files.
+- **The studio is loopback, and says so.** It checks that `Host` names its own
+  socket, that a body is `application/json` (a type a cross-origin form cannot
+  send), and that `Origin`/`Sec-Fetch-Site`, when present, name the server
+  itself. DNS rebinding is the attack that shape exists for. Its errors are
+  `{ error, detail }`.
+- **The studio uses the same catalog file the web app does.** There is no
+  second catalog; the studio's routes run its runner's own tables and files.
 
 ## The web app
 
 `apps/web/src/app/api/**/route.ts`, 39 handlers. Agent calls are the
-`packages/tutor` `*Turn` functions behind the app's guards — the same
-functions the sidecar serves, so the two surfaces cannot disagree about what
-a turn does.
+`packages/tutor` `*Turn` functions behind the app's guards.
 
 ### Auth
 
@@ -88,8 +83,8 @@ the database fails rather than degrades.
 ### Learner — settings
 
 The BYOK and model-chain routes. `POST`/`PUT`/`PATCH`/`DELETE` as below;
-`GET`s for these do not exist here — the web reads them server-side, and the
-sidecar adds the two read routes the native pane needs.
+`GET`s for these do not exist here: the web reads them server-side while
+rendering Settings.
 
 | Route | Body | Does |
 | --- | --- | --- |
@@ -128,42 +123,6 @@ Two routes are the web app's edge of `services/studio`, both under `(app)/`:
 | --- | --- |
 | `(app)/studio/api/[...segments]` (`GET`, `POST`, `PUT`, `DELETE`) | The proxy every studio fetch goes through: forwards to `127.0.0.1:7250`, strips browser-origin headers (`host`, `origin`, `cookie`, `sec-fetch-*`, …) and adds the signed-in `STUDIO_OWNER_HEADER`; 401 with no owner, `502 RUNNER_DOWN` when nothing listens; streams bodies so the SSE routes work |
 | `GET /studio/made/[draft]` | The catalog rows a conversation's runs landed; `reachable: false, made: []` rather than an error when the catalog is down |
-
-## The sidecar
-
-`services/sidecar/src/api.ts` — one `TURNS` map, method-aware, and the whole
-surface. It serves the web app's tutor contract verbatim for the macOS app:
-the same paths, the same `*Turn` functions, the same reply envelopes, plus
-the two reads the web does server-side. `GET /api/health` is the one route
-the web app does not have.
-
-| Route | Method | Turn / does |
-| --- | --- | --- |
-| `/api/agent/chat` | POST | `chatTurn` |
-| `/api/agent/judge` | POST | `judgeTurn` |
-| `/api/agent/session` | POST | `sessionQuestionTurn` |
-| `/api/agent/summarize` | POST | `summarizeTurn` |
-| `/api/learner/provider-key` | GET | `providerKeyStatusTurn` — which providers hold keys |
-| | POST | `providerKeySaveTurn` |
-| | DELETE | `providerKeyRemoveTurn` |
-| `/api/learner/provider-key/test` | POST | `providerKeyTestTurn` |
-| `/api/learner/tutor-model` | GET | `tutorModelChainTurn` — the owner's chain |
-| | POST | `tutorModelAddTurn` |
-| | PUT | `tutorModelSetTurn` |
-| | PATCH | `tutorModelMoveTurn` |
-| | DELETE | `tutorModelRemoveTurn` |
-| `/api/learner/tutor-model/provider` | PATCH | `tutorProviderMoveTurn` |
-| | DELETE | `tutorProviderRemoveTurn` |
-| `/api/learner/tutor-model/test` | POST | `tutorModelTestTurn` |
-| `/api/learner/tutor-model/models` | POST | `modelListTurn` |
-| `/api/health` | GET | `{ ok, service: "gnosia-sidecar", owner }` |
-
-The dispatch contract, enforced before any turn runs: an unknown path is a
-404 `NOT_FOUND`, a known path with a wrong method a 405
-`METHOD_NOT_ALLOWED`, an unreadable JSON body a 400 `BAD_REQUEST`, a body
-over 64 KiB a 413 `PAYLOAD_TOO_LARGE`, and a failed origin/host guard a 403
-`ORIGIN_MISMATCH`. `GET` routes receive `null` as their body; non-GET reads
-and parses the JSON.
 
 ## The studio
 
@@ -237,25 +196,3 @@ table's routes.
 | `PUT /api/settings/byok/models` | `{ provider, models: { lite?, default?, max? } }`: tier picks, merged — omitted keeps, empty clears |
 | `PUT /api/settings/byok/active` | `{ provider }`: which connected provider a `byok` turn runs on |
 | `GET /api/health` | The blocked-or-ready answer in one read: dependencies, cached-probe freshness, jobs and queues, agent settings, catalog reachability, vocabulary, cost caps, diagram and video readiness, manual and tool health |
-
-## What the native app calls
-
-`SidecarClient.swift` and `StudioClient.swift` are the whole boundary. The
-sidecar surface is consumed in full — health, all four agent turns, every
-provider-key and tutor-model route — because the native Settings pane owns
-the same edits the web Settings page does.
-
-Against the studio the app reads health, diagrams (+ one diagram, its svg,
-and the export/verify/inspect/commit verbs), vocabulary, the merged jobs
-list, one job, its log and shot and sheets, the media route for the AVPlayer,
-the videos listing, drafts (+ one draft, messages, draw, abandon, create),
-and `POST /api/mirrors` for Open canvas. It deliberately does not call the
-SSE routes (`jobs/{id}/events`, `drafts/{id}/events`) — a four-second poll
-is the whole progress story there — nor the settings routes, the mirrors
-reads and close, the draft `PUT`s and slot routes: those stay the web
-surface's, which is why the app's Studio page says the runner applies its
-own defaults.
-
-The sidecar routes named `GET /api/learner/provider-key` and
-`GET /api/learner/tutor-model` exist only on the sidecar: the web app reads
-both server-side while rendering Settings and has no GET handler for them.

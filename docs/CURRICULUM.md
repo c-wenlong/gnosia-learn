@@ -24,7 +24,7 @@ repository held is at the tag `content-files-final`. In an export
 
 There is no TypeScript copy. `apps/web/src/data/courses/index.ts` is a thin
 server-only module over the reader, holding `getCourses()` and the lookups pages
-call (`getCourse`, `getModule`, `findTopic`, `getAllTopicIds`,
+call (`getCourse`, `getModule`, `getAllTopicIds`,
 `getRelatedCourses`) and nothing else. It reads through the
 content seam once per request, from the database, so an import shows on the
 next page load of a running server, with no restart.
