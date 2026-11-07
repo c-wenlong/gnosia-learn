@@ -7,7 +7,9 @@
 //  launch whatever local app claims it.
 //
 
+import AppKit
 import Foundation
+import WebKit
 import XCTest
 @testable import GnosiaWeb
 
@@ -63,13 +65,68 @@ final class NavigationPolicyTests: XCTestCase {
         XCTAssertEqual(verdict("https://www.youtube.com/embed/x", mainFrame: false), .cancel)
     }
 
-    func testOnlyWebLinksOpenANewWindowInTheBrowser() {
-        XCTAssertTrue(opensInBrowser(URL(string: "https://example.com/a")))
-        XCTAssertTrue(opensInBrowser(URL(string: "HTTP://example.com/a")))
-        XCTAssertFalse(opensInBrowser(URL(string: "file:///Applications/Terminal.app")))
-        XCTAssertFalse(opensInBrowser(URL(string: "ssh://host")))
-        XCTAssertFalse(opensInBrowser(URL(string: "about:blank")))
-        XCTAssertFalse(opensInBrowser(nil))
+    private func newWindow(_ string: String) -> NewWindowVerdict {
+        newWindowVerdict(for: URL(string: string), appOrigin: app)
+    }
+
+    /// The app's own pages (a PDF, a diagram at full size, a raw file) open
+    /// in a second shell window, which has the session; the browser would
+    /// open them signed out.
+    func testANewWindowForTheAppStaysInTheShell() {
+        XCTAssertEqual(newWindow("http://127.0.0.1:51234/api/assets/pdf%3Ax/file"), .openInShell)
+        XCTAssertEqual(newWindow("http://localhost:51234/library/x"), .openInShell)
+        XCTAssertEqual(newWindow("HTTP://127.0.0.1:51234/x"), .openInShell)
+        XCTAssertEqual(newWindow("blob:http://127.0.0.1:51234/7d2c0f9e"), .openInShell)
+    }
+
+    func testANewWindowForAnotherOriginGoesToTheBrowser() {
+        XCTAssertEqual(newWindow("https://example.com/a"), .openInBrowser)
+        XCTAssertEqual(newWindow("HTTP://example.com/a"), .openInBrowser)
+        // Another port on this machine is not the app.
+        XCTAssertEqual(newWindow("http://127.0.0.1:7250/api/health"), .openInBrowser)
+        XCTAssertEqual(newWindow("https://127.0.0.1:51234/x"), .openInBrowser)
+        XCTAssertEqual(newWindow("http://127.0.0.1.evil.com:51234/"), .openInBrowser)
+    }
+
+    func testANewWindowForAnyOtherSchemeIsDropped() {
+        for url in [
+            "file:///Applications/Terminal.app",
+            "ssh://host",
+            "about:blank",
+            "about:srcdoc",
+            "javascript:alert(1)",
+            "data:text/html,x",
+            "blob:http://127.0.0.1:7250/x",
+            "x-apple.systempreferences:com.apple.preference.security",
+        ] {
+            XCTAssertEqual(newWindow(url), .cancel, url)
+        }
+        XCTAssertEqual(newWindowVerdict(for: nil, appOrigin: app), .cancel)
+    }
+
+    /// Cmd- and Shift-click on a link the window would load open it in a
+    /// new window, as a browser opens a new tab; a plain click, another
+    /// kind of navigation, a subframe or a link the window would not load
+    /// changes nothing.
+    func testAModifierClickOpensANewWindow() {
+        func opens(
+            _ type: WKNavigationType = .linkActivated, _ modifiers: NSEvent.ModifierFlags,
+            mainFrame: Bool = true, verdict: NavigationVerdict = .allow
+        ) -> Bool {
+            opensInNewWindow(navigationType: type, modifiers: modifiers, mainFrame: mainFrame, verdict: verdict)
+        }
+        XCTAssertTrue(opens(.linkActivated, .command))
+        XCTAssertTrue(opens(.linkActivated, .shift))
+        XCTAssertTrue(opens(.linkActivated, [.command, .shift]))
+        XCTAssertFalse(opens(.linkActivated, []))
+        XCTAssertFalse(opens(.linkActivated, .option))
+        XCTAssertFalse(opens(.linkActivated, .control))
+        XCTAssertFalse(opens(.formSubmitted, .command))
+        XCTAssertFalse(opens(.other, .command))
+        XCTAssertFalse(opens(.reload, .shift))
+        XCTAssertFalse(opens(.linkActivated, .command, mainFrame: false))
+        XCTAssertFalse(opens(.linkActivated, .command, verdict: .openInBrowser))
+        XCTAssertFalse(opens(.linkActivated, .command, verdict: .cancel))
     }
 
     /// Only the bare `about:blank` and `about:srcdoc` load; a fragment or

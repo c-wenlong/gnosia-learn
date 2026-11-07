@@ -12,6 +12,11 @@
 //  dev-mode's slow first compiles do not matter — any HTTP response, even
 //  a redirect to sign-in, means the server is up.
 //
+//  The first attempt takes the port the last launch used, when it is free,
+//  and only then a random one: localStorage belongs to an origin, port
+//  included, so a new port each launch forgot the page's own settings
+//  (the subtitles choice) every time.
+//
 //  Next 16 refuses a second dev server for one directory and prints the
 //  running one's URL; when that happens the shell adopts it rather than
 //  failing — the window just connects to what is already up.
@@ -81,7 +86,12 @@ final class WebServer {
             return
         }
         for attempt in 1 ... 3 {
-            let port = Int.random(in: 49200 ... 59800)
+            let port = Self.port(
+                attempt: attempt,
+                remembered: UserDefaults.standard.object(forKey: Self.lastPortKey) as? Int,
+                isFree: Self.portIsFree,
+                random: { Int.random(in: Self.portRange) }
+            )
             guard let capture = spawn(root: root, port: port) else { return }  // no node: status is failed
             let outcome = await waitReady(port: port)
             if case .ready(let url) = outcome, await proveOwned(url) {
@@ -92,6 +102,7 @@ final class WebServer {
                 // (S7-09): anything else answering on the port, or a log of
                 // request URLs, never sees the secret.
                 launchToken = localToken
+                UserDefaults.standard.set(port, forKey: Self.lastPortKey)
                 status = .running(url.appending(path: "api/auth/local"))
                 return
             }
@@ -115,6 +126,47 @@ final class WebServer {
                 return
             case .retry:
                 continue
+            }
+        }
+    }
+
+    /// The ports a spawned server may take.
+    nonisolated static let portRange = 49200 ... 59800
+
+    /// Where the last spawned server's port is kept, for the next launch.
+    nonisolated static let lastPortKey = "GnosiaWebLastPort"
+
+    /// The port an attempt asks Next for, as a pure rule: the first attempt
+    /// takes the remembered port when it is in range and nothing holds it,
+    /// so the window keeps its origin, and with it localStorage, across
+    /// launches; any other attempt, or no usable remembered port, a random
+    /// one. The free check is also what keeps the launch token's probe
+    /// honest: a process already listening on the remembered port would
+    /// otherwise answer it in our server's place.
+    nonisolated static func port(
+        attempt: Int, remembered: Int?, isFree: (Int) -> Bool, random: () -> Int
+    ) -> Int {
+        if attempt == 1, let remembered, portRange.contains(remembered), isFree(remembered) { return remembered }
+        return random()
+    }
+
+    /// Whether 127.0.0.1:`port` can be bound now: a bind and a close, with
+    /// SO_REUSEADDR as Node's own listen sets it, so a port whose last
+    /// connections linger in TIME_WAIT still counts as free.
+    nonisolated static func portIsFree(_ port: Int) -> Bool {
+        let socket = Darwin.socket(AF_INET, SOCK_STREAM, 0)
+        guard socket >= 0 else { return false }
+        defer { close(socket) }
+        var yes: Int32 = 1
+        setsockopt(socket, SOL_SOCKET, SO_REUSEADDR, &yes, socklen_t(MemoryLayout<Int32>.size))
+        var address = sockaddr_in()
+        address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        address.sin_family = sa_family_t(AF_INET)
+        address.sin_port = in_port_t(UInt16(clamping: port)).bigEndian
+        address.sin_addr.s_addr = inet_addr("127.0.0.1")
+        return withUnsafePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                bind(socket, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) == 0
             }
         }
     }

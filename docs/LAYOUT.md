@@ -148,7 +148,9 @@ apps/desktop/
 | File | Owns |
 | --- | --- |
 | `GnosiaWebApp.swift` | The entry point and the window |
-| `WebView.swift` | The WKWebView: it shows only the app server's origin, other web pages go to the real browser and other schemes are dropped; cookies persist across launches |
+| `WebView.swift` | The WKWebView: it shows only the app server's origin, other web pages go to the real browser and other schemes are dropped; cookies persist across launches. Also the extra windows a new-window request opens |
+| `FindBar.swift` | The window's find bar: Cmd+F finds in the page through `window.find` |
+| `NotificationBridge.swift` | The page's `Notification`: a script-message bridge to `UNUserNotificationCenter`, in the bundled app only |
 | `WebServer.swift` | The lifecycle of the Next server the window loads |
 | `StudioRunner.swift` | The lifecycle of the studio runner, adopted when one already answers on its port |
 | `Checkout.swift` | Where the repository and the data home are, and the environment each child starts with, read once per launch from `services/launch-env` |

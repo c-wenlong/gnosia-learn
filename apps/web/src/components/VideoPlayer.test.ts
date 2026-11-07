@@ -72,6 +72,90 @@ function currentChapter(host: HTMLElement) {
 }
 
 describe("VideoPlayer", () => {
+  it("offers full screen only where the view allows it", () => {
+    // A WKWebView with element fullscreen off says so here, as an iframe
+    // without `allowfullscreen` does; a button then would do nothing.
+    const fullscreenButton = (host: HTMLElement) =>
+      host.querySelector('button[aria-label="Full screen (f)"]');
+    const requestFullscreen = vi.fn(() => Promise.resolve());
+    const original = Object.getOwnPropertyDescriptor(Document.prototype, "fullscreenEnabled");
+    try {
+      Object.defineProperty(document, "fullscreenEnabled", { configurable: true, value: false });
+      const refused = mount(createElement(VideoPlayer, { src: "/v.mp4" }));
+      Object.defineProperty(HTMLElement.prototype, "requestFullscreen", {
+        configurable: true,
+        value: requestFullscreen,
+      });
+      expect(fullscreenButton(refused)).toBeNull();
+      press(video(refused), "f");
+      act(() => video(refused).dispatchEvent(new MouseEvent("dblclick", { bubbles: true })));
+      expect(requestFullscreen).not.toHaveBeenCalled();
+
+      Object.defineProperty(document, "fullscreenEnabled", { configurable: true, value: true });
+      const allowed = mount(createElement(VideoPlayer, { src: "/v.mp4" }));
+      expect(fullscreenButton(allowed)).not.toBeNull();
+      press(video(allowed), "f");
+      expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    } finally {
+      delete (HTMLElement.prototype as unknown as { requestFullscreen?: unknown }).requestFullscreen;
+      delete (document as unknown as { fullscreenEnabled?: boolean }).fullscreenEnabled;
+      if (original) Object.defineProperty(Document.prototype, "fullscreenEnabled", original);
+    }
+  });
+
+  it("ignores its keys while a modifier is held, so the window's shortcuts still work", () => {
+    // Cmd+F is the shell's Find and Cmd+R its Reload: a press with Command,
+    // Control or Option held is the browser's, never the player's.
+    const host = mount(createElement(VideoPlayer, { src: "/v.mp4", chapters }));
+    const el = video(host);
+    el.currentTime = 10;
+    const frame = el.parentElement as HTMLElement;
+    for (const key of ["ArrowRight", "arrowright", "j", "l", "f", "m", "c", "k", " "]) {
+      for (const modifier of ["metaKey", "ctrlKey", "altKey"] as const) {
+        act(() => frame.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, [modifier]: true })));
+      }
+    }
+    expect(el.currentTime).toBe(10);
+    expect(el.muted).toBe(false);
+    expect(host.querySelector("[data-skip]")).toBeNull();
+  });
+
+  it("answers j, l, m and Space the same way the arrows and buttons do", () => {
+    const host = mount(createElement(VideoPlayer, { src: "/v.mp4", chapters }));
+    const el = video(host);
+    el.currentTime = 20;
+    let paused = true;
+    Object.defineProperty(el, "paused", { get: () => paused, configurable: true });
+    el.play = () => {
+      paused = false;
+      return Promise.resolve();
+    };
+    el.pause = () => {
+      paused = true;
+    };
+    const frame = el.parentElement as HTMLElement;
+    press(frame, "j");
+    expect(el.currentTime).toBe(10);
+    press(frame, "l");
+    expect(el.currentTime).toBe(20);
+    press(frame, "m");
+    expect(el.muted).toBe(true);
+    press(frame, "m");
+    expect(el.muted).toBe(false);
+    press(frame, " ");
+    expect(paused).toBe(false);
+    press(frame, " ");
+    expect(paused).toBe(true);
+
+    // A focused control keeps its own keys: Space on the speed button is
+    // its press, not the player's pause, and nothing else moves.
+    const speed = host.querySelector('button[aria-label="Playback speed, 1×"]') as HTMLButtonElement;
+    press(speed, " ");
+    press(speed, "Enter");
+    expect(paused).toBe(true);
+    expect(el.playbackRate).toBe(1);
+  });
+
   it("seeks the video when a chapter is clicked", () => {
     const host = mount(createElement(VideoPlayer, { src: "/v.mp4", chapters }));
     goToChapter(host, 2);
