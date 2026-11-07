@@ -482,12 +482,12 @@ describe("owner-bearing catalog calls in the web app", () => {
       "3 recordObservation",
       "4 readEvents",
       "6 dbSource",
+      "7 readEvents",
       "8 readEvents",
       "9 readEvents",
       "10 readEvents",
-      "11 readEvents",
+      "11 recordObservation",
       "12 recordObservation",
-      "13 recordObservation",
     ]);
     const good = [
       `import { readEvents, recordObservation } from "${DOOR}";`,
