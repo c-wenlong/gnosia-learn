@@ -40,24 +40,31 @@ function popoverOf(el: HTMLElement, method: string) {
   }
 }
 
+function setOpen(el: HTMLElement, open: boolean) {
+  if (open) {
+    showRule(el.ownerDocument);
+    el.setAttribute(OPEN, "");
+  } else {
+    el.removeAttribute(OPEN);
+  }
+}
+
 export function installPopoverShim() {
   if (typeof HTMLElement === "undefined" || typeof HTMLElement.prototype.showPopover === "function") return;
   const proto = HTMLElement.prototype;
   proto.showPopover = function showPopover(this: HTMLElement) {
     popoverOf(this, "showPopover");
-    showRule(this.ownerDocument);
-    this.setAttribute(OPEN, "");
+    setOpen(this, true);
   };
   proto.hidePopover = function hidePopover(this: HTMLElement) {
     popoverOf(this, "hidePopover");
-    this.removeAttribute(OPEN);
+    setOpen(this, false);
   };
   proto.togglePopover = function togglePopover(this: HTMLElement, options?: boolean | { force?: boolean }) {
     popoverOf(this, "togglePopover");
     const force = typeof options === "boolean" ? options : options?.force;
     const open = force ?? !this.hasAttribute(OPEN);
-    if (open) this.showPopover();
-    else this.hidePopover();
+    setOpen(this, open);
     return open;
   };
 }
