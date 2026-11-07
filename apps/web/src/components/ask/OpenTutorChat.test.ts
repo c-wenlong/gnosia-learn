@@ -118,4 +118,44 @@ describe("the open tutor's request", () => {
     expect(host.textContent).toContain("Good start.");
     expect(host.querySelector('[role="alert"]')).toBeNull();
   });
+
+  it("waits for Start when the Ask box asked about another subject, and drops the mark", async () => {
+    sessionStorage.setItem(ASK_START_KEY, "Skip lists");
+    const fetchMock = vi.fn(() => new Promise<Response>(() => {}));
+    vi.stubGlobal("fetch", fetchMock);
+    const host = await mount();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(button(host, "Start")).toBeDefined();
+    expect(host.querySelector("textarea")).toBeNull();
+    expect(sessionStorage.getItem(ASK_START_KEY)).toBeNull();
+  });
+
+  it("resends the same thread on Try again after a failed turn", async () => {
+    const bodies: Array<{ subject: string; messages: Array<{ role: string; content: string }> }> = [];
+    let status = 503;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        bodies.push(JSON.parse(String(init?.body)));
+        return status === 200
+          ? new Response(JSON.stringify({ message: { role: "assistant", content: "Where are you with hashing?" } }), { status })
+          : new Response(JSON.stringify({ error: "No provider answered" }), { status });
+      }),
+    );
+    const host = await mount();
+    await act(async () => button(host, "Start")!.click());
+    await settle();
+    expect(bodies).toHaveLength(1);
+    expect(host.querySelector('[role="alert"]')).not.toBeNull();
+
+    status = 200;
+    await act(async () => button(host, "Try again")!.click());
+    await settle();
+    expect(bodies).toHaveLength(2);
+    expect(bodies[0].messages).toEqual([{ role: "user", content: "I want to learn about Bloom filters." }]);
+    expect(bodies[1].messages).toEqual(bodies[0].messages);
+    expect(bodies[1].subject).toBe("Bloom filters");
+    expect(host.textContent).toContain("Where are you with hashing?");
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+  });
 });

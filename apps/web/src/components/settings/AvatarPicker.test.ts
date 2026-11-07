@@ -34,13 +34,16 @@ function mount() {
   const container = document.createElement("div");
   document.body.append(container);
   const root: Root = createRoot(container);
-  act(() => root.render(createElement(AvatarPicker)));
+  // Draws again with whatever `learner` holds now, as the provider's new state would.
+  const draw = () => act(() => root.render(createElement(AvatarPicker)));
+  draw();
   mounted.push(() => {
     act(() => root.unmount());
     container.remove();
   });
   const radios = () => [...container.querySelectorAll<HTMLInputElement>('input[type="radio"]')];
-  return { container, radios };
+  const radio = (value: string) => radios().find((r) => r.value === value)!;
+  return { container, radios, radio, draw };
 }
 
 describe("AvatarPicker", () => {
@@ -52,35 +55,50 @@ describe("AvatarPicker", () => {
   });
 
   it("saves a choice through the provider and says so", async () => {
-    const { radios, container } = mount();
-    await act(async () => radios().find((r) => r.value === "fox")?.click());
+    const { radio, container } = mount();
+    await act(async () => radio("fox").click());
     expect(learner.setAvatar).toHaveBeenCalledWith("fox");
     expect(container.textContent).toContain("Saved");
   });
 
   it("says when a choice was not stored", async () => {
     learner.setAvatar.mockResolvedValue(false);
-    const { radios, container } = mount();
-    await act(async () => radios().find((r) => r.value === "bat")?.click());
+    const { radio, container } = mount();
+    await act(async () => radio("bat").click());
     expect(container.textContent).toContain("Not saved");
   });
 
   it("tries again when the sprite a failed save left showing is chosen again", async () => {
     learner.setAvatar.mockResolvedValue(false);
-    const { radios, container } = mount();
-    await act(async () => radios().find((r) => r.value === "bat")?.click());
+    const { radio, container, draw } = mount();
+    await act(async () => radio("bat").click());
     expect(container.textContent).toContain("Not saved");
-    // The provider keeps the attempted sprite in its state, as it does for a refused write.
+    // The provider keeps the attempted sprite in its state, as it does for a
+    // refused write, so the picker now draws bat as the current sprite.
     learner.avatar = "bat";
+    draw();
+    expect(radio("bat").checked).toBe(true);
     learner.setAvatar.mockResolvedValue(true);
-    await act(async () => radios().find((r) => r.value === "bat")?.click());
+    await act(async () => radio("bat").click());
     expect(learner.setAvatar).toHaveBeenCalledTimes(2);
+    expect(learner.setAvatar).toHaveBeenLastCalledWith("bat");
     expect(container.textContent).toContain("Saved");
+    expect(container.textContent).not.toContain("Not saved");
+  });
+
+  it("does not save again when the sprite a good save stored is chosen again", async () => {
+    const { radio, container, draw } = mount();
+    await act(async () => radio("bat").click());
+    expect(container.textContent).toContain("Saved");
+    learner.avatar = "bat";
+    draw();
+    await act(async () => radio("bat").click());
+    expect(learner.setAvatar).toHaveBeenCalledTimes(1);
   });
 
   it("does not save again when the stored sprite is chosen", async () => {
-    const { radios } = mount();
-    await act(async () => radios().find((r) => r.value === "owl")?.click());
+    const { radio } = mount();
+    await act(async () => radio("owl").click());
     expect(learner.setAvatar).not.toHaveBeenCalled();
   });
 

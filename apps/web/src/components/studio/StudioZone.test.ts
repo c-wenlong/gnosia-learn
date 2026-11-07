@@ -24,15 +24,18 @@ beforeAll(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllEnvs();
   document.body.innerHTML = "";
 });
 
-function render(timeZone: string | undefined, at: string, as: "ago" | "day" | "dayTime"): string {
+/** A StudioTime under a StudioZone naming `timeZone`, or under no StudioZone at all when it is `null`. */
+function render(timeZone: string | undefined | null, at: string, as: "ago" | "day" | "dayTime"): string {
   vi.useFakeTimers({ now: NOW });
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
-  act(() => root.render(createElement(StudioZone, { timeZone }, createElement(StudioTime, { at, as }))));
+  const time = createElement(StudioTime, { at, as });
+  act(() => root.render(timeZone === null ? time : createElement(StudioZone, { timeZone }, time)));
   const text = host.textContent ?? "";
   act(() => root.unmount());
   return text;
@@ -53,6 +56,15 @@ describe("StudioTime", () => {
   it("words an age by calendar day in that zone", () => {
     // 01:00 on 4 Oct in Singapore, 37 hours before NOW.
     expect(render("Asia/Singapore", new Date(NOW - 37 * 3_600_000).toISOString(), "ago")).toBe("Yesterday");
+  });
+
+  it("counts days in the runtime's zone with no provider, or one that names no zone", () => {
+    vi.stubEnv("TZ", "Asia/Singapore");
+    expect(render(null, CREATED, "day")).toBe("30 Sept");
+    expect(render(undefined, CREATED, "dayTime")).toBe("30 Sept, 04:25");
+    vi.stubEnv("TZ", "UTC");
+    expect(render(null, CREATED, "day")).toBe("29 Sept");
+    expect(render(undefined, CREATED, "dayTime")).toBe("29 Sept, 20:25");
   });
 });
 
