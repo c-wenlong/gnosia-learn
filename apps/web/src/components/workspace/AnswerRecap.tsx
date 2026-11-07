@@ -15,8 +15,8 @@ import { cx } from "@/components/ui/classes";
  *   label and value share a line, wrapping when they must, and the
  *   confidence trails the option.
  *
- * React-free and stateless, so either card (both client components) or a
- * server one can draw it.
+ * No state, no hooks and no `"use client"`, so either card (both client
+ * components) or a server one can draw it.
  */
 export function AnswerRecap({
   layout,

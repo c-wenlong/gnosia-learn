@@ -3,13 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type FocusEvent } from "react";
 
-import { NoteProse } from "@/components/NoteProse";
 import { Button } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
 import { cx } from "@/components/ui/classes";
 import { Cite } from "@/components/ui/Cite";
 import { Composer } from "@/components/ui/Composer";
-import { MathText } from "@/components/Math";
 import { MentionChip } from "@/components/ui/MentionChip";
 import type { MentionComposerHandle } from "@/components/ui/MentionComposer";
 import type { MentionValue } from "@/lib/mentions";
@@ -38,6 +36,7 @@ import { restoreCardCheck } from "@gnosia/tutor/check-block";
 import { CHAT_ANSWER_LIMIT, pendingCheck, recallOpening, type TurnCheck } from "@gnosia/tutor/tutor-check";
 
 import { CheckCard, CheckRow, slotPlan, useCheckThread, type SlotOptions } from "./use-check-thread";
+import { ChatTurn, TutorThinking } from "./ChatTurn";
 import { takeUnanswered } from "./unanswered";
 import { NOTE_HASH } from "./WorkspacePanels";
 import { ENTER, FADE_IN } from "@/components/ui/motion";
@@ -50,7 +49,8 @@ import { Callout } from "@/components/ui/Callout";
  * The thread is kept per concept in `sessionStorage`: it survives a reload and
  * a trip to another page in the same tab, and goes when the tab closes.
  *
- * Tutor turns render through `NoteProse`, the same renderer the note uses, so
+ * Turns render through `ChatTurn`, as every tutor chat's do: the tutor's
+ * through `NoteProse`, the same renderer the note uses, so
  * a list or a formula in a reply reads the way it does in the note. A `[n]`
  * the reply uses becomes a `Cite` chip under the turn when `n` is one of the
  * numbered sources; anything else stays as the text it was.
@@ -551,12 +551,12 @@ export function TutorChat({
           const item = turn.role === "studio" ? (
             <Handed key={i} marker={turn} className={enter} />
           ) : turn.role === "user" ? (
-            <UserMessage key={i} className={enter}>
-              <MathText text={turn.content} />
-            </UserMessage>
+            <ChatTurn key={i} turn={turn} idPrefix={`t${i}-`} className={enter} />
           ) : (
-            <TutorMessage
+            <ChatTurn
               key={i}
+              turn={turn}
+              idPrefix={`t${i}-`}
               className={enter}
               cites={citedNumbers(turn.content, known).map((n) => {
                 const s = byNumber.get(n);
@@ -571,18 +571,12 @@ export function TutorChat({
                   </Button>
                 ) : undefined
               }
-            >
-              <NoteProse source={turn.content} idPrefix={`t${i}-`} images="link" />
-            </TutorMessage>
+            />
           );
           return [item, <CheckCard key={`c${i}`} at={i} {...slotProps} />, <CheckRow key={`v${i}`} at={i} {...slotProps} />];
         })}
 
-        {busy && (
-          <p className="animate-fade-in px-1.5 text-[13px] text-text3 motion-reduce:animate-none" role="status">
-            The tutor is thinking…
-          </p>
-        )}
+        {busy && <TutorThinking />}
 
         {!busy && recall !== null && turns.length > 0 && pendingCheck(turns) === null && (
           // R3 on a thread the learner already had: the card is due, so recall is one press away.

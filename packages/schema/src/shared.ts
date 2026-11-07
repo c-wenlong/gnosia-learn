@@ -1014,7 +1014,18 @@ export const VIDEO_OVER_SPEECH = 1.08;
  * than guess.
  */
 export function narrationSeconds(lines: readonly string[], charsPerSecond: number | undefined): number {
-  if (charsPerSecond === undefined || !(charsPerSecond > 0)) return Number.NaN;
+  // Infinity is no rate either: it would predict every script as 0 seconds.
+  if (charsPerSecond === undefined || !Number.isFinite(charsPerSecond) || charsPerSecond <= 0) return Number.NaN;
   const characters = lines.reduce((sum, line) => sum + line.length, 0);
   return (characters / charsPerSecond) * VIDEO_OVER_SPEECH;
+}
+
+/** Whether a brief's `voice` narrates the video: anything but `SILENT_VOICE`. */
+export function isNarratedVoice(voice: string): boolean {
+  return voice !== SILENT_VOICE;
+}
+
+/** A silent video's predicted seconds: every beat's `seconds`, a beat with none counting 0. */
+export function silentSeconds(scenes: ReadonlyArray<{ beats: ReadonlyArray<{ seconds?: number }> }>): number {
+  return scenes.reduce((sum, scene) => sum + scene.beats.reduce((s, beat) => s + (beat.seconds ?? 0), 0), 0);
 }

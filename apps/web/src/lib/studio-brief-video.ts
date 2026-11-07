@@ -13,7 +13,7 @@
  * runner computes with.
  */
 
-import { narrationSeconds, SILENT_VOICE } from "@gnosia/schema/shared";
+import { isNarratedVoice, narrationSeconds, silentSeconds } from "@gnosia/schema/shared";
 
 export type VideoAudience = "new" | "familiar" | "expert";
 
@@ -112,12 +112,12 @@ export function switchedTool<T extends Pick<VideoBrief, "tool" | "toolReason">>(
 }
 
 export function isNarrated(brief: Pick<VideoBrief, "voice">): boolean {
-  return brief.voice !== SILENT_VOICE;
+  return isNarratedVoice(brief.voice);
 }
 
 /** One scene's predicted seconds: its lines' speaking time, or its beats' `seconds` when silent. */
 export function sceneSeconds(scene: VideoScene, narrated: boolean, charsPerSecond: number | undefined): number {
-  if (!narrated) return scene.beats.reduce((sum, beat) => sum + (beat.seconds ?? 0), 0);
+  if (!narrated) return silentSeconds([scene]);
   return narrationSeconds(scene.beats.map((beat) => beat.say), charsPerSecond);
 }
 

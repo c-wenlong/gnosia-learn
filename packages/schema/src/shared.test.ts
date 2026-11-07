@@ -106,6 +106,22 @@ describe("narrationSeconds", () => {
 
   it("is NaN without a usable rate, so a caller shows unknown", async () => {
     const { narrationSeconds } = await import("./shared");
-    for (const rate of [undefined, 0, -1, Number.NaN]) expect(narrationSeconds(["hello"], rate)).toBeNaN();
+    for (const rate of [undefined, 0, -1, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      expect(narrationSeconds(["hello"], rate), String(rate)).toBeNaN();
+    }
+  });
+});
+
+describe("isNarratedVoice and silentSeconds", () => {
+  it("calls every voice but the silent one narrated", async () => {
+    const { isNarratedVoice, SILENT_VOICE } = await import("./shared");
+    expect(isNarratedVoice(SILENT_VOICE)).toBe(false);
+    expect(isNarratedVoice("af_heart")).toBe(true);
+  });
+
+  it("sums a silent video's beat seconds, a beat with none counting 0", async () => {
+    const { silentSeconds } = await import("./shared");
+    expect(silentSeconds([{ beats: [{ seconds: 4 }, {}] }, { beats: [{ seconds: 2.5 }] }])).toBe(6.5);
+    expect(silentSeconds([])).toBe(0);
   });
 });

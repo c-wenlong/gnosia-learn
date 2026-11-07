@@ -44,6 +44,15 @@ describe("TranscriptLine", () => {
     expect(onSeek).toHaveBeenCalledWith(75);
   });
 
+  it("does not call a seekable line current unless told", async () => {
+    const host = await mount(createElement(TranscriptLine, { start: 12, text: "First the client asks.", onSeek: vi.fn() }));
+    const button = host.querySelector("button") as HTMLButtonElement;
+    expect(button.hasAttribute("aria-current")).toBe(false);
+
+    const told = await mount(createElement(TranscriptLine, { start: 12, text: "First the client asks.", current: false, onSeek: vi.fn() }));
+    expect((told.querySelector("button") as HTMLButtonElement).hasAttribute("aria-current")).toBe(false);
+  });
+
   it("is a paragraph with no hover or focus ring without onSeek, and not current unless told", async () => {
     const host = await mount(createElement(TranscriptLine, { start: 0, text: "Hello.", className: "text-text2" }));
     expect(host.querySelector("button")).toBeNull();

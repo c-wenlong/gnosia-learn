@@ -656,7 +656,11 @@ export function calloutClasses({
 }: { tone?: CalloutTone; bordered?: boolean; dense?: boolean; actionsAt?: "below" | "end"; className?: string } = {}): string {
   return cx(
     "flex min-w-0 text-text",
-    actionsAt === "end" ? "flex-row flex-wrap items-center gap-3" : cx("flex-col", dense ? "gap-1" : "gap-2"),
+    // Dense keeps its small gap either way: 4px between wrapped lines, and
+    // 8px (the box's own padding) between the words and an action at the end.
+    actionsAt === "end"
+      ? cx("flex-row flex-wrap items-center", dense ? "gap-x-2 gap-y-1" : "gap-3")
+      : cx("flex-col", dense ? "gap-1" : "gap-2"),
     dense ? "rounded-md p-2 text-[12px] leading-4" : "rounded-xl px-4 py-3 text-[13px] leading-5",
     CALLOUT_TONE[tone],
     bordered && cx(dense ? "border" : "border-2", CALLOUT_BORDER[tone]),

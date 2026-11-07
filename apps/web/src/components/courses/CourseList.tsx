@@ -271,6 +271,7 @@ function ContinueCard({ entry: { summary, status } }: { entry: CourseEntry }) {
           code={summary.code}
           done={status.completed}
           total={status.total}
+          percent={status.percent}
           lead={courseCounts(summary)}
         />
       </div>

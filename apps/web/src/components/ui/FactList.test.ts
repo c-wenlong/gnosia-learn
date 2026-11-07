@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { FactList } from "./FactList";
 
@@ -75,5 +75,50 @@ describe("FactList", () => {
     expect(dense.className).toContain("min-h-8");
     expect(dense.className).toContain("border-b");
     expect(dense.querySelector("dd")?.className).toContain("text-xs");
+  });
+
+  it("keeps two rows with the same label apart, through an update", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    cleanups.push(() => {
+      act(() => root.unmount());
+      host.remove();
+      error.mockRestore();
+    });
+    const both = [
+      { label: "Concept", value: "Paging" },
+      { label: "Concept", value: "TLB" },
+    ];
+    await act(async () => root.render(createElement(FactList, { facts: both })));
+    await act(async () => root.render(createElement(FactList, { facts: [both[1], both[0], { label: "Concept", value: "Swap" }] })));
+    expect(pairs(host)).toEqual([
+      ["DT:Concept", "DD:TLB"],
+      ["DT:Concept", "DD:Paging"],
+      ["DT:Concept", "DD:Swap"],
+    ]);
+    expect(error.mock.calls.flat().join(" ")).not.toMatch(/same key/);
+  });
+
+  it("keys a row by the key it is given, so a row keeps its element when the list reorders", async () => {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    cleanups.push(() => {
+      act(() => root.unmount());
+      host.remove();
+    });
+    const x = { key: "a", label: "Tag", value: "x" };
+    const y = { key: "b", label: "Tag", value: "y" };
+    await act(async () => root.render(createElement(FactList, { facts: [x, y] })));
+    const rowX = host.querySelector("dl > div")!;
+    await act(async () => root.render(createElement(FactList, { facts: [y, x] })));
+    expect(pairs(host)).toEqual([
+      ["DT:Tag", "DD:y"],
+      ["DT:Tag", "DD:x"],
+    ]);
+    // Moved, not redrawn: the element that held x still holds it.
+    expect(rowX.textContent).toBe("Tagx");
   });
 });

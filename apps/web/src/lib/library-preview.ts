@@ -19,7 +19,7 @@ import { studioConversationHref } from "@/lib/row-menu";
  */
 
 /** The search parameter that names the asset open in the panel: `/library?open=<id>`. */
-const OPEN_PARAM = "open";
+export const OPEN_PARAM = "open";
 
 /**
  * Longer than any asset id the catalog writes (a manimkc id is a path under

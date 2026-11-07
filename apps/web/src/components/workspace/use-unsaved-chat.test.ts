@@ -29,8 +29,12 @@ interface Call {
   answer: (status: number, payload: unknown) => void;
 }
 
-/** A fetch whose every call waits until the test answers it. */
-function pendingFetch(): Call[] {
+/**
+ * A fetch whose every call waits until the test answers it. `ignoreAbort`
+ * makes one that still answers after its signal aborted, as a reply already
+ * on the wire does.
+ */
+function pendingFetch({ ignoreAbort = false }: { ignoreAbort?: boolean } = {}): Call[] {
   const calls: Call[] = [];
   vi.stubGlobal(
     "fetch",
@@ -38,7 +42,7 @@ function pendingFetch(): Call[] {
       (_url: string, init?: RequestInit) =>
         new Promise<Response>((resolve, reject) => {
           const signal = init!.signal!;
-          signal.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+          if (!ignoreAbort) signal.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
           calls.push({
             body: JSON.parse(String(init?.body)),
             signal,
@@ -183,5 +187,65 @@ describe("useUnsavedChat", () => {
     expect(view.chat.turns).toEqual([]);
     await settle();
     expect(view.chat.turns).toEqual([]);
+  });
+
+  it("puts a question asked after a failed turn in place of the unanswered one", async () => {
+    const calls = pendingFetch();
+    const view = mount(() => ({ subject: "Bloom filters" }));
+    act(() => view.chat.ask("First?"));
+    calls[0].answer(502, { error: "The provider failed" });
+    await settle();
+    expect(view.chat.error).not.toBeNull();
+
+    act(() => view.chat.ask("Second?"));
+    expect(calls).toHaveLength(2);
+    // Never two learner turns in a row: "First?" went unanswered, so "Second?" replaces it.
+    expect(calls[1].body.messages).toEqual([{ role: "user", content: "Second?" }]);
+    expect(view.chat.turns).toEqual([{ role: "user", content: "Second?" }]);
+    expect(view.chat.error).toBeNull();
+  });
+
+  it("calls a 200 with no message a failed turn, keeping the question", async () => {
+    const calls = pendingFetch();
+    const view = mount(() => ({ subject: "Bloom filters" }));
+    act(() => view.chat.ask("Where do I start?"));
+    calls[0].answer(200, {});
+    await settle();
+    expect(view.chat.busy).toBe(false);
+    expect(view.chat.error).toBe("The tutor did not answer (HTTP 200).");
+    expect(view.chat.turns).toEqual([{ role: "user", content: "Where do I start?" }]);
+  });
+
+  it("shows nothing for an aborted turn, even one whose failure arrives after the abort", async () => {
+    const calls = pendingFetch({ ignoreAbort: true });
+    const view = mount(() => ({ subject: "Bloom filters" }));
+    act(() => view.chat.ask("First?"));
+    act(() => view.chat.begin([{ role: "user", content: "Opening" }]));
+    await settle();
+    expect(calls[0].signal.aborted).toBe(true);
+
+    // The replaced turn's failure lands while its replacement is still in flight.
+    calls[0].answer(500, { error: "The provider failed" });
+    await settle();
+    expect(view.chat.error).toBeNull();
+    expect(view.chat.busy).toBe(true);
+    expect(view.chat.turns).toEqual([{ role: "user", content: "Opening" }]);
+
+    calls[1].answer(200, reply("Where are you with hashing?"));
+    await settle();
+    expect(view.chat.error).toBeNull();
+    expect(view.chat.busy).toBe(false);
+  });
+
+  it("shows nothing for a turn aborted while its request was still open", async () => {
+    const calls = pendingFetch();
+    const view = mount(() => ({ subject: "Bloom filters" }));
+    act(() => view.chat.ask("First?"));
+    act(() => view.chat.begin([{ role: "user", content: "Opening" }]));
+    await settle();
+    // The first fetch rejected with an AbortError; that is not "could not be reached".
+    expect(calls[0].signal.aborted).toBe(true);
+    expect(view.chat.error).toBeNull();
+    expect(view.chat.busy).toBe(true);
   });
 });

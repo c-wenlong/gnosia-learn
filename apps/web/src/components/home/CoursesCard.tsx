@@ -26,6 +26,7 @@ export function CoursesCard({ courses: { rows: courses, total } }: { courses: { 
                 code={c.code}
                 done={c.completed}
                 total={c.total}
+                percent={c.percent}
                 lead={
                   <Link
                     href={`/courses/${c.slug}`}

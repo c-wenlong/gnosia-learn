@@ -60,7 +60,7 @@ export function CourseRail({
   return (
     <div className={cx("flex min-w-0 flex-col gap-4", className)}>
       <RailCard title="Course progress">
-        <CourseProgress variant="headline" code={course.code} done={status.doneCount} total={status.total} conceptBacked={status.conceptBacked} />
+        <CourseProgress variant="headline" code={course.code} done={status.doneCount} total={status.total} percent={status.percent} conceptBacked={status.conceptBacked} />
         <div className="flex flex-wrap items-center gap-2.5">
           {continueHref ? (
             <Button href={continueHref} size="sm">

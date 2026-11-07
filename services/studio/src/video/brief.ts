@@ -1,4 +1,4 @@
-import { narrationSeconds, SILENT_VOICE, VIDEO_OVER_SPEECH } from "@gnosia/schema/shared";
+import { isNarratedVoice, narrationSeconds, silentSeconds, SILENT_VOICE, VIDEO_OVER_SPEECH } from "@gnosia/schema/shared";
 
 import { agentModelName, BriefError, SLUG_PATTERN, type Vocabulary } from "../diagram/brief";
 import { charsPerSecond } from "./narration";
@@ -77,14 +77,12 @@ export interface ValidVideoBrief extends VideoBrief {
 export const LENGTH_TOLERANCE = 0.2;
 
 export function isNarrated(brief: Pick<VideoBrief, "voice">): boolean {
-  return brief.voice !== SILENT;
+  return isNarratedVoice(brief.voice);
 }
 
 /** The script's own prediction of the video's length, in seconds. */
 export function predictedSeconds(brief: Pick<VideoBrief, "voice" | "scenes">): number {
-  if (!isNarrated(brief)) {
-    return brief.scenes.reduce((sum, scene) => sum + scene.beats.reduce((s, beat) => s + (beat.seconds ?? 0), 0), 0);
-  }
+  if (!isNarrated(brief)) return silentSeconds(brief.scenes);
   return secondsForLines(brief.scenes.flatMap((scene) => scene.beats.map((beat) => beat.say)));
 }
 

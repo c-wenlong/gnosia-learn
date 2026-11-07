@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import { MathText } from "@/components/Math";
 import { NoteProse } from "@/components/NoteProse";
 import { cx, NOTE } from "@/components/ui/classes";
@@ -13,33 +15,50 @@ import { ENTER } from "@/components/ui/motion";
  *
  * `idPrefix` keeps the ids NoteProse writes for headings and footnotes unique
  * across a thread, so it differs per turn. `meta` is a line above the tutor's
- * prose, the provider that answered it where one is shown.
+ * prose, the provider that answered it where one is shown. `cites` and
+ * `actions` are the row under a tutor turn (the concept tutor's citation
+ * chips and its Why?), and `className` replaces the rise for a turn that
+ * should only fade (a thread restored from storage).
  */
 export function ChatTurn({
   turn,
   idPrefix,
   meta,
+  cites,
+  actions,
+  className = ENTER,
 }: {
   turn: { role: "user" | "assistant"; content: string };
   idPrefix: string;
   meta?: string;
+  cites?: ReactNode;
+  actions?: ReactNode;
+  className?: string;
 }) {
   if (turn.role === "user") {
     return (
-      <UserMessage className={ENTER}>
+      <UserMessage className={className}>
         <MathText text={turn.content} />
       </UserMessage>
     );
   }
   return (
-    <TutorMessage className={ENTER}>
+    <TutorMessage className={className} cites={cites} actions={actions}>
       {meta && <p className={cx(NOTE, "mb-1")}>{meta}</p>}
       <NoteProse source={turn.content} idPrefix={idPrefix} images="link" />
     </TutorMessage>
   );
 }
 
-/** The line a saved-nowhere chat shows while the tutor's reply is on its way. */
+/**
+ * The line a chat shows while the tutor's reply is on its way. A status of
+ * its own, so it is announced wherever it sits: AskPanel draws it outside its
+ * thread's live region.
+ */
 export function TutorThinking() {
-  return <p className="animate-fade-in px-1.5 text-[14px] text-text2 motion-reduce:animate-none">The tutor is thinking…</p>;
+  return (
+    <p role="status" className="animate-fade-in px-1.5 text-[14px] text-text2 motion-reduce:animate-none">
+      The tutor is thinking…
+    </p>
+  );
 }
