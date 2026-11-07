@@ -2,16 +2,13 @@ import { createHash } from "node:crypto";
 
 import {
   blobStoreProblem,
-  isRangeRefusal,
-  openBlob,
   parseRange,
   resolveAsset,
-  webStreamFrom,
   type AssetRowText,
   type AssetSource,
   type AssetStored,
 } from "@/lib/asset-files";
-import { lookupFailed, matchesEtag, problemResponse, signedRedirect } from "@/lib/asset-response";
+import { lookupFailed, matchesEtag, problemResponse, serveBlobRange, signedRedirect } from "@/lib/asset-response";
 import { contentDisposition } from "@/lib/download-name";
 import { withLearnerStore } from "@/lib/learner-store";
 
@@ -221,40 +218,7 @@ async function serveBlob(request: Request, stored: AssetStored): Promise<Respons
   const headers = baseHeaders(request, stored, `"${stored.sha256}"`);
   const asked = conditional(request, headers.ETag);
   if (asked.fresh) return notModified(headers);
-  const range = parseRange(asked.range, stored.bytes);
-  if (range.kind === "unsatisfiable") {
-    return new Response(null, {
-      status: 416,
-      headers: { ...headers, "Content-Range": `bytes */${stored.bytes}` },
-    });
-  }
-
-  try {
-    if (range.kind === "partial") {
-      const read = await openBlob(stored.key, { start: range.start, end: range.end });
-      return new Response(webStreamFrom(read.body), {
-        status: 206,
-        headers: {
-          ...headers,
-          "Content-Range": `bytes ${read.start}-${read.end}/${read.size}`,
-          "Content-Length": String(read.end - read.start + 1),
-        },
-      });
-    }
-    const read = await openBlob(stored.key);
-    return new Response(webStreamFrom(read.body), {
-      status: 200,
-      headers: { ...headers, "Content-Length": String(read.size) },
-    });
-  } catch (error) {
-    if (isRangeRefusal(error)) {
-      return new Response(null, {
-        status: 416,
-        headers: { ...headers, "Content-Range": `bytes */${stored.bytes}` },
-      });
-    }
-    return problemResponse(blobStoreProblem(error));
-  }
+  return serveBlobRange(stored.key, stored.bytes, headers, asked.range);
 }
 
 /**

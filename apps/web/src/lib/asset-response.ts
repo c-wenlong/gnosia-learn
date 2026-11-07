@@ -2,7 +2,15 @@ import "server-only";
 
 import { NextResponse } from "next/server";
 
-import { blobStoreProblem, openBlob, webStreamFrom, type AssetFileProblem, type AssetStored } from "@/lib/asset-files";
+import {
+  blobStoreProblem,
+  isRangeRefusal,
+  openBlob,
+  parseRange,
+  webStreamFrom,
+  type AssetFileProblem,
+  type AssetStored,
+} from "@/lib/asset-files";
 import { assetBlobStore, SIGNED_URL_TTL_SECONDS } from "@/lib/blob-store";
 import { unauthenticated } from "@/lib/learner-api";
 import { NoOwnerError } from "@/lib/owner";
@@ -12,8 +20,8 @@ import { failureCode } from "@gnosia/tutor/server/provider-keys";
  * What the asset routes share (S6-09 of the library audit): the answer for a
  * lookup that threw, the JSON body for a problem the resolver named, the tag
  * rule for `If-None-Match`, the signed-URL redirect, and the whole-object
- * responder the poster and PDF routes are. The file route keeps its own
- * ranged responder beside these, since only it serves a player.
+ * responder the poster and PDF routes are, and the ranged responder the file
+ * and cover routes both stream a stored object through.
  */
 
 /**
@@ -123,6 +131,57 @@ export async function serveStoredWhole(
       headers: { ...headers, "Content-Length": String(read.size) },
     });
   } catch (error) {
+    return problemResponse(blobStoreProblem(error));
+  }
+}
+
+/**
+ * A stored object streamed with the Range answers `parseRange` decides, the
+ * one body the file and cover routes share. The caller has already done what
+ * differs between them (the auth check, the 304, the signed-URL redirect, and
+ * which Range header to honour, so an `If-Range` that names other bytes is
+ * dropped to `null` before it gets here) and passes the headers every answer
+ * carries.
+ *
+ * - no, malformed, non-`bytes` or multi-range header: 200, the whole object
+ * - a satisfiable range: 206 with `Content-Range` and `Content-Length` as
+ *   the store reports the slice it holds
+ * - a range past the end, or one the store refuses: 416 with a
+ *   `Content-Range` of `bytes`, a star, a slash and the size
+ * - any other store failure: the problem response `blobStoreProblem` names
+ *
+ * `bytes` is the size the resolver measured, used to judge the range before
+ * the object is opened.
+ */
+export async function serveBlobRange(
+  key: string,
+  bytes: number,
+  headers: Record<string, string>,
+  rangeHeader: string | null,
+): Promise<Response> {
+  const unsatisfiable = () =>
+    new Response(null, { status: 416, headers: { ...headers, "Content-Range": `bytes */${bytes}` } });
+  const range = parseRange(rangeHeader, bytes);
+  if (range.kind === "unsatisfiable") return unsatisfiable();
+  try {
+    if (range.kind === "partial") {
+      const read = await openBlob(key, { start: range.start, end: range.end });
+      return new Response(webStreamFrom(read.body), {
+        status: 206,
+        headers: {
+          ...headers,
+          "Content-Range": `bytes ${read.start}-${read.end}/${read.size}`,
+          "Content-Length": String(read.end - read.start + 1),
+        },
+      });
+    }
+    const read = await openBlob(key);
+    return new Response(webStreamFrom(read.body), {
+      status: 200,
+      headers: { ...headers, "Content-Length": String(read.size) },
+    });
+  } catch (error) {
+    if (isRangeRefusal(error)) return unsatisfiable();
     return problemResponse(blobStoreProblem(error));
   }
 }
