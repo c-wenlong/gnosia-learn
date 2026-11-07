@@ -15,13 +15,11 @@ import type { OwnerScope } from "@gnosia/schema/shared";
 
 /**
  * The content seam's composition root, moved out of
- * `apps/web/src/data/source.ts` so the sidecar composes the same seam the web
- * app does: every type resolved to files is refused by name, because both
- * processes read authored content from the database only.
+ * `apps/web/src/data/source.ts`: every type resolved to files is refused by
+ * name, because the app reads authored content from the database only.
  *
- * The three hooks are the difference between the two processes:
- * `mark` is Next's `connection()` for the web app and a no-op for the
- * sidecar; `rethrow` is `unstable_rethrow`, which keeps Next's control-flow
+ * The three hooks are what a host supplies: `mark` is Next's `connection()`
+ * for the web app (a no-op elsewhere); `rethrow` is `unstable_rethrow`, which keeps Next's control-flow
  * errors (redirects, prerender bailouts) out of the outage path; `warn` is
  * each host's own logging. `warnedCause` lives inside, so each outage is
  * reported once per cause, and a successful read clears it.

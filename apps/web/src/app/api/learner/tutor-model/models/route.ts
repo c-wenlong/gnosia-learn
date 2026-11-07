@@ -13,8 +13,8 @@ export const runtime = "nodejs";
  * configured base URL, which no request can change, with the key the tutor
  * would use; the key never reaches the browser.
  *
- * The call and its reply are `modelListTurn` in `@gnosia/tutor/server`,
- * which the native sidecar calls over the same contract. A POST rather than a
+ * The call and its reply are `modelListTurn` in `@gnosia/tutor/server`.
+ * A POST rather than a
  * GET so the same-origin check applies: a browser sends no `Origin` on a
  * same-origin GET.
  */

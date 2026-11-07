@@ -9,8 +9,7 @@ export type Env = Record<string, string | undefined>;
 /**
  * The seams the asset reads need once the caller holds the database itself.
  * `resolveAsset` and the readers built on it take this beside `db`, because
- * the asset routes in the web app already have `db` in scope and the sidecar
- * holds the same three seams in one place.
+ * the asset routes in the web app already have `db` in scope.
  */
 export interface AssetSeams {
   /** The requesting owner's rows and the commons' (phase 4). */
@@ -49,8 +48,8 @@ export interface TutorDeps extends AssetSeams {
    * The functions a turn delegates to, overridable so a host binds them to
    * the seams its own tests mock. The web app binds each to the shim that
    * re-exports this package (`@/lib/concept-workspace` and friends), which is
-   * what its route tests stub; the sidecar leaves them unset and the package
-   * implementations answer.
+   * what its route tests stub; a host that leaves them unset gets the
+   * package implementations.
    */
   seams?: TurnSeams;
 }

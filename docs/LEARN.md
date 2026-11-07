@@ -395,7 +395,7 @@ the three wrong options come from one of two places, best first
 
 1. **The tutor's, stored.** The first time a session or a week check asks a
    check, the page asks the tutor model for three plausible wrong answers to
-   it (`POST /api/agent/check-options`, served by the sidecar too), given the
+   it (`POST /api/agent/check-options`), given the
    question, the answer and the note. The reply must be exactly three
    distinct options near the answer's length, none equal to the answer,
    holding it, or a part of it (`parseCheckOptions` in
@@ -431,19 +431,9 @@ page or came from the store. One generation sends the note (clipped to 8,000
 characters) and the check, roughly 1,000 to 3,000 input tokens and 100
 output tokens, once per check per learner.
 
-The macOS app builds its questions itself and follows the same rules: its
-port of `checkQuestion` (`apps/macos/Sources/Gnosia/SessionModel.swift`)
-is held to the web's by one fixture
-(`apps/macos/Tests/GnosiaTests/Fixtures/wrong-options.json`), and its
-concept session and module check ask the sidecar's
-`POST /api/agent/check-options`. Its review cards read the store as the
-web's review queue does, and never ask: the app's snapshot mirrors this
-owner's `check_distractor` rows (`apps/macos/scripts/catalog-snapshot.mjs`,
-format 5), and the app keeps a row only while its hash matches the check as
-the note now reads (`StoredCheckOptions.swift`), held to `checkHash`,
-`readWrittenOptions` and `toReviewItem` by a second fixture
-(`apps/macos/Tests/GnosiaTests/Fixtures/review-options.json`). Options a
-session stored reach the review cards at the app's next snapshot refresh.
+Golden fixtures pin the layout of the options
+(`packages/tutor/test/fixtures/wrong-options.json`) and how the review cards
+use stored options (`apps/web/src/lib/fixtures/review-options.json`).
 
 ### Folders and ids
 

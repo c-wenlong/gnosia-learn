@@ -1,7 +1,7 @@
 /**
  * The library's kind taxonomy, moved verbatim out of
- * `apps/web/src/lib/library.ts` so the asset reads this package shares with
- * the sidecar sort and filter the same way the library page does.
+ * `apps/web/src/lib/library.ts` so the asset reads in this package sort and
+ * filter the same way the library page does.
  */
 
 /**

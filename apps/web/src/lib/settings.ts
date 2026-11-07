@@ -13,8 +13,8 @@ import { currentOwner } from "@/lib/owner";
 
 /**
  * The owner's settings rows. The reads live in
- * `@gnosia/tutor/server/settings`, which the native sidecar calls with
- * its own pool and owner; this file hands them this app's.
+ * `@gnosia/tutor/server/settings`; this file hands them this app's pool and
+ * owner.
  */
 
 export type { SettingsSnapshot };

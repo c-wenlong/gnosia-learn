@@ -9,8 +9,7 @@
  * `order` and refuses two modules of a course sharing one. So a module's
  * place in it runs 1..N with no gaps and never passes the count. Every header, sidebar
  * row, neighbour link, label and prompt that names a module by number goes
- * through here, and the macOS app's `CatalogCourse.number(of:)` ports the
- * same rule against `apps/macos/Tests/GnosiaTests/Fixtures/module-numbers.json`.
+ * through here; `test/fixtures/module-numbers.json` holds the worked cases.
  *
  * Pure and import-free, so client components can take it from
  * `@gnosia/content/module-number` without reaching the file reader.

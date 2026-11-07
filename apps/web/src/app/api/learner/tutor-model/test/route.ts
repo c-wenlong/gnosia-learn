@@ -13,8 +13,7 @@ export const runtime = "nodejs";
  * (docs/TUTOR-MODELS.md, T2), and what came back.
  *
  * The call and its reply are `tutorModelTestTurn` in
- * `@gnosia/tutor/server`, which the native sidecar calls over the same
- * contract. This file keeps the request-side guards and the key Test's rate
+ * `@gnosia/tutor/server`. This file keeps the request-side guards and the key Test's rate
  * limit, in a bucket of its own.
  */
 export async function POST(req: Request): Promise<NextResponse> {

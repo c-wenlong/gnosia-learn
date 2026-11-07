@@ -57,7 +57,7 @@ export const LOCAL_LEARNER_ID = "local";
 
 /**
  * The deployment secrets' environment names, shared so the web app's auth
- * core, the BYOK seal and the sidecar all read the same variables.
+ * core, the BYOK seal and the launchers all read the same variables.
  */
 export const OWNER_PASSWORD_VAR = "OWNER_PASSWORD";
 export const AUTH_SECRET_VAR = "AUTH_SECRET";

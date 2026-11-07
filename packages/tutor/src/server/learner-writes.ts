@@ -58,28 +58,20 @@ import { appTimeZone } from "./time-zone";
 import type { TurnReply } from "./turns";
 
 /**
- * The learner-state writes behind `/api/learner/*`: one copy, which both the
- * web routes and the sidecar call, so the native app and the web write the
- * same rows through the same parser. Bodies, field refusals, the
- * `{ ok, result }` / `{ ok, error, code }` envelopes and the statuses are the
- * protocol; a change here changes both at once (S9-07 of the 2026-10 audit:
- * two copies had drifted apart before, and a macOS write the sidecar refused
- * with a 4xx was dropped for good).
+ * The learner-state writes behind `/api/learner/*`, as turns the web routes
+ * call. Bodies, field refusals, the `{ ok, result }` / `{ ok, error, code }`
+ * envelopes and the statuses are the protocol.
  *
- * What each caller adds is its own: the web's `turnRoute`
+ * What the caller adds is its own: the web's `turnRoute`
  * (`apps/web/src/lib/learner-api.ts`) checks the origin, resolves the owner
- * from the session and applies the rate limit; the sidecar's `guard.ts` has
- * its own origin check and a fixed owner. `deps.owner` is the owner every
- * write lands against.
+ * from the session and applies the rate limit. `deps.owner` is the owner
+ * every write lands against.
  *
- * Not here, because the web keeps them to itself: `preference`'s other keys
- * (theme, resources, Settings choices; `preferenceTurn` takes only
- * `lastVisited`, the one the native app writes, and the web route reuses
- * `rememberVisit` and `lastVisitedValue` for it), `recent` (pins are the web
- * sidebar's), `avatar`, `export`, `import`, `reset`, `recap`, `home` and
- * `ask` (reads, destructive resets or surfaces the app has no equivalent of).
- * `custom-provider` is a Settings write rather than a learner-state one, so it
- * lives in `turns.ts` with the provider-key and tutor-model routes.
+ * Not here, because the web route keeps it to itself: `preference` (the web
+ * route reuses `rememberVisit` and `lastVisitedValue` for its `lastVisited`
+ * key), `recent`, `avatar`, `export`, `import`, `reset`, `recap`, `home` and
+ * `ask`. `custom-provider` is a Settings write rather than a learner-state
+ * one, so it lives in `turns.ts` with the provider-key and tutor-model routes.
  */
 
 function reply(status: number, body: unknown): TurnReply {
@@ -101,12 +93,11 @@ function unavailable(error: unknown): TurnReply {
   return reply(503, { ok: false, error: "Not saved: the database is unreachable.", code: "STORE_UNAVAILABLE" });
 }
 
-/** A payload's fault, so a 400, never a 503. The web's `learner-api.ts` re-exports this one class, so either side's parsers can throw it. */
+/** A payload's fault, so a 400, never a 503. The web's `learner-api.ts` re-exports this one class, so its parsers and these can throw it. */
 export class BadRequest extends Error {}
 
 /**
- * `handler` in learner-api.ts, minus the guards the sidecar does not carry:
- * parse the body (400 on a bad one), run the write (a `StateError` is a 400,
+ * `handler` in learner-api.ts, minus the guards the route adds: parse the body (400 on a bad one), run the write (a `StateError` is a 400,
  * anything else a 503), answer `{ ok: true, result }`.
  */
 async function learnerWrite<T>(
@@ -510,8 +501,7 @@ function parseObserve(body: Record<string, unknown>): ObserveRequest {
  * evidence — `recordObservation`, the same write `learn observe` and the web
  * route run: an `observation` event, then the mastery row (a correct answer
  * spread to the prerequisites), then the review card, all under the learner
- * lock in one transaction. The native session posts the same body the web's
- * session page does, and mastery is recomputed here, never taken from the
+ * lock in one transaction. Mastery is recomputed here, never taken from the
  * caller — a replayed `requestId` records nothing and answers `replayed`.
  */
 export async function observeTurn(deps: TutorDeps, body: unknown): Promise<TurnReply> {
@@ -574,7 +564,7 @@ export async function observeTurn(deps: TutorDeps, body: unknown): Promise<TurnR
 
 /**
  * `POST /api/review/grade` with `{ conceptId, grade, requestId? }`, the
- * review page's route ported for the native app's queued mirror: `grade` is
+ * review page's write: `grade` is
  * the button pressed (0 Again, 1 Hard, 2 Good, 3 Easy), mapped onto SM-2's
  * 1, 3, 4, 5 by `gradeForRating`, and `gradeReview` writes the `review`
  * event, the rescheduled card and the mastery move in one transaction — the
@@ -650,7 +640,7 @@ export async function sessionCloseTurn(deps: TutorDeps, body: unknown): Promise<
 }
 
 /* -------------------------------------------------------------------------- */
-/* Preference — the one key the native app writes                              */
+/* Preference: the web route's `lastVisited` key                               */
 /* -------------------------------------------------------------------------- */
 
 /** `object` in the web route: the `value` field read as a record, or a 400. */
@@ -661,7 +651,7 @@ function object(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-/** A `lastVisited` value: the visit's validator, for the preference turn and the web route's same key. */
+/** A `lastVisited` value: the visit's validator, for the web route's key. */
 export function lastVisitedValue(value: unknown): LastVisited {
   const raw = object(value);
   const courseSlug = raw.courseSlug;
@@ -717,28 +707,4 @@ export async function rememberVisit(db: CatalogDatabase, value: unknown, owner: 
     }
     await writePreference(tx, PREFERENCE_KEYS.lastVisited, value, owner);
   });
-}
-
-/**
- * `POST /api/learner/preference` with `{ key: "lastVisited", value }`: the
- * one key of the web route's allow-list the native app writes — the rest
- * are the browser's own and refuse as the web's unlisted keys do. The write
- * is `rememberVisit`, so what the app records lands on the web's Recent and
- * Home exactly as a browser's visit does.
- */
-export async function preferenceTurn(deps: TutorDeps, body: unknown): Promise<TurnReply> {
-  return learnerWrite(
-    deps,
-    body,
-    (record) => {
-      if (record.key !== PREFERENCE_KEYS.lastVisited) {
-        throw new BadRequest(`"key" must be "${PREFERENCE_KEYS.lastVisited}".`);
-      }
-      return { key: record.key, value: lastVisitedValue(record.value) };
-    },
-    async (db, input, owner) => {
-      await rememberVisit(db, input.value, owner);
-      return { key: input.key };
-    },
-  );
 }

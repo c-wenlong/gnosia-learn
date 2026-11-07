@@ -31,8 +31,8 @@ export type {
 
 /**
  * Turning an `asset` row into bytes a browser can play. The resolution itself
- * lives in `@gnosia/tutor/server/asset-files`, which the native sidecar
- * calls with its own blob store; this file hands it this app's three seams:
+ * lives in `@gnosia/tutor/server/asset-files`; this file hands it this app's
+ * three seams:
  * the request's owner scope, the selected content source and the blob store.
  */
 /**

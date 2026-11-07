@@ -15,7 +15,7 @@ import type { ChainEntry } from "../providers";
 /**
  * The owner's model chain (docs/TUTOR-MODELS.md), the request-independent
  * half of `apps/web/src/lib/tutor-models/store.ts`: the database handle is a
- * parameter, so the Next app and the sidecar read the same rows.
+ * parameter.
  */
 
 function entries(rows: readonly ChainEntry[]): ChainEntry[] {

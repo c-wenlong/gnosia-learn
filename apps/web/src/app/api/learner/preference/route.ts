@@ -31,7 +31,7 @@ import {
  * thing that has a reason to. `bktParams` is not here either — that belongs to
  * the `learn` CLI, and a browser has no business retuning the BKT model.
  * `recentModules` is not here because the route keeps it itself, beside every
- * `lastVisited` write (`rememberVisit`, shared with the sidecar). `dailyTarget` and `dailyLeeway` went with the
+ * `lastVisited` write (`rememberVisit`). `dailyTarget` and `dailyLeeway` went with the
  * habit layer (H1 of docs/proposals/home-page.md): their rows stay, and nothing
  * writes them.
  */

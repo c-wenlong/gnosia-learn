@@ -37,13 +37,12 @@ enum Checkout {
     }
 
     /// The environment every spawned service starts from (S9-08): the
-    /// launchers' one rule, `services/sidecar/src/child-env.ts`, run once per
+    /// launchers' one rule, `services/launch-env/src/child-env.ts`, run once per
     /// launch by `prepare()`. It is the web's environment (exports, then
     /// `$GNOSIA_HOME/.env`, then apps/web's `.env` files) with `CATALOG_DB`
     /// pinned at the file the catalog's own resolver names, so a
     /// `DATABASE_URL` in services/catalog/.env reaches the web and the
-    /// runner here exactly as it reaches the macOS app's sidecar and
-    /// snapshot. Until `prepare()` has run, or when the resolver cannot
+    /// runner here exactly as it reaches the catalog's own CLI. Until `prepare()` has run, or when the resolver cannot
     /// (no node, a stripped checkout), `fallbackEnv()` stands in.
     static func childEnv() -> [String: String] {
         state.resolved ?? fallbackEnv()
@@ -97,16 +96,16 @@ enum Checkout {
     /// a login profile that stalls must not hold the window on its spinner.
     static let resolverDeadline: TimeInterval = 20
 
-    /// `node --import tsx services/sidecar/src/child-env.ts` through the
+    /// `node --import tsx services/launch-env/src/child-env.ts` through the
     /// login shell (so the owner's nvm/volta PATH and exports reach it),
     /// read as one JSON object of strings. `GNOSIA_WEB_MODE` reaches it from
     /// this process, so a `next start` launch reads the production `.env`
     /// files. Nil on any failure, or past `resolverDeadline`.
     fileprivate static func runResolver(root: URL) -> [String: String]? {
-        guard FileManager.default.fileExists(atPath: root.appending(path: "services/sidecar/src/child-env.ts").path) else { return nil }
+        guard FileManager.default.fileExists(atPath: root.appending(path: "services/launch-env/src/child-env.ts").path) else { return nil }
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        proc.arguments = ["-lc", "exec node --import tsx services/sidecar/src/child-env.ts"]
+        proc.arguments = ["-lc", "exec node --import tsx services/launch-env/src/child-env.ts"]
         proc.currentDirectoryURL = root
         let out = Pipe()
         proc.standardOutput = out
@@ -166,14 +165,14 @@ enum Checkout {
     }
 
     /// A dotenv file read as Node's `util.parseEnv` reads it, which is how
-    /// the macOS app's sidecar reads this same file
-    /// (services/sidecar/src/env.ts). The two must agree to the byte: the
-    /// AUTH_SECRET read here seals the provider keys the web saves, and the
-    /// sidecar opens them with its own read. Blanks and `#` lines skipped;
+    /// the launchers' resolver reads this same file
+    /// (services/launch-env/src/env.ts). The two must agree to the byte:
+    /// with no resolver, the AUTH_SECRET read here is the one the web seals
+    /// the provider keys under. Blanks and `#` lines skipped;
     /// an `export ` prefix dropped; a value in matching quotes is what the
     /// quotes hold, whatever follows them (a double-quoted `\n` is a
     /// newline); an unquoted value ends at its first `#`. Pinned by
-    /// services/sidecar/test/fixtures/dotenv.json, which Node wrote.
+    /// services/launch-env/test/fixtures/dotenv.json, which Node wrote.
     static func parseDotenv(_ text: String) -> [String: String] {
         var env: [String: String] = [:]
         for raw in text.split(omittingEmptySubsequences: true, whereSeparator: { $0 == "\n" || $0 == "\r\n" }) {

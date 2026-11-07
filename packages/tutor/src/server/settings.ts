@@ -8,7 +8,7 @@ import { failureCode } from "./provider-keys";
 /**
  * The owner's settings rows, the request-independent half of
  * `apps/web/src/lib/settings.ts`: the database handle is a promise and the
- * owner a parameter, so the same reads serve the Next app and the sidecar.
+ * owner a parameter.
  */
 
 export interface SettingsSnapshot {

@@ -6,11 +6,9 @@ import { describe, expect, it } from "vitest";
 import { moduleNumber, modulePlace, numberedTitle } from "../src/module-number";
 
 /**
- * The module-number contract with the macOS app: a module is numbered by its
- * place in the course's module list, so a course whose modules carry
- * authored `order` 1 and 3 reads "Module 1 of 2" and "Module 2 of 2".
- * apps/macos/Tests/GnosiaTests/CourseNumberingTests.swift asserts the Swift
- * port against this same file.
+ * A module is numbered by its place in the course's module list, so a
+ * course whose modules carry authored `order` 1 and 3 reads "Module 1 of 2"
+ * and "Module 2 of 2".
  */
 
 interface Fixture {
@@ -21,7 +19,7 @@ interface Fixture {
   }[];
 }
 
-const FIXTURE = resolve(__dirname, "../../../apps/macos/Tests/GnosiaTests/Fixtures/module-numbers.json");
+const FIXTURE = resolve(__dirname, "fixtures/module-numbers.json");
 const fixture = JSON.parse(readFileSync(FIXTURE, "utf8")) as Fixture;
 
 describe("module numbers", () => {
