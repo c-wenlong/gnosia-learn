@@ -85,9 +85,12 @@ describe("FilterMenu", () => {
 
 describe("Select", () => {
   it("puts its list in the top layer as a manual popover, at least as wide as the field", () => {
+    // Recorded on top of the setup file's stand-in (apps/web/src/test/popover-shim.ts).
     const shown: Element[] = [];
-    HTMLElement.prototype.showPopover ??= function (this: HTMLElement) {
+    const showPopover = HTMLElement.prototype.showPopover;
+    HTMLElement.prototype.showPopover = function (this: HTMLElement) {
       shown.push(this);
+      showPopover.call(this);
     };
     const { container } = mount(
       createElement(Select<string>, { label: "Motion", options: [{ value: "a", label: "A" }], value: "a", onChange: () => undefined }),
