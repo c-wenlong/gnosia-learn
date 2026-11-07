@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { ProgressBar } from "@/components/ui/ProgressBar";
+import { CourseProgress } from "@/components/ui/CourseProgress";
 import type { CourseInProgress } from "@/lib/home-core";
 import { cx, FOCUS } from "@/components/ui/classes";
 
@@ -20,19 +20,21 @@ export function CoursesCard({ courses: { rows: courses, total } }: { courses: { 
       ) : (
         <ul className="flex flex-col gap-4">
           {courses.map((c) => (
-            <li key={c.slug} className="flex flex-col gap-2">
-              <div className="flex min-w-0 items-baseline gap-3">
-                <Link
-                  href={`/courses/${c.slug}`}
-                  className={cx("min-w-0 flex-1 truncate rounded-sm text-[14px] font-medium text-text underline-offset-4 hover:underline", FOCUS)}
-                >
-                  {c.code} {c.title}
-                </Link>
-                <span className="shrink-0 text-[12px] text-text2 tabular-nums">
-                  {c.completed} of {c.total} topics
-                </span>
-              </div>
-              <ProgressBar percent={c.percent} label={`${c.code} progress`} />
+            <li key={c.slug}>
+              <CourseProgress
+                variant="count"
+                code={c.code}
+                done={c.completed}
+                total={c.total}
+                lead={
+                  <Link
+                    href={`/courses/${c.slug}`}
+                    className={cx("min-w-0 flex-1 truncate rounded-sm text-[14px] font-medium text-text underline-offset-4 hover:underline", FOCUS)}
+                  >
+                    {c.code} {c.title}
+                  </Link>
+                }
+              />
             </li>
           ))}
         </ul>

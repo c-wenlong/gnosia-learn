@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { FilterMenu } from "@/components/ui/FilterMenu";
 import { Collapse, CollapseChevron } from "@/components/ui/Collapse";
-import { ProgressBar } from "@/components/ui/ProgressBar";
+import { CourseProgress } from "@/components/ui/CourseProgress";
 import { SearchField } from "@/components/ui/SearchField";
 import { CARD_TITLE, chipClasses, cx, FOCUS, PAGE_TITLE, SECTION_TITLE } from "@/components/ui/classes";
 import { CourseCover } from "@/components/courses/CourseCover";
@@ -266,13 +266,12 @@ function ContinueCard({ entry: { summary, status } }: { entry: CourseEntry }) {
             {summary.code} {summary.title}
           </Link>
         </h3>
-        <p className="text-[14px] text-text2">
-          {courseCounts(summary)} · {status.percent}% done
-        </p>
-        <ProgressBar
-          percent={status.percent}
-          label={`${summary.code} progress, ${status.completed} of ${status.total} topics`}
-          className="mt-2"
+        <CourseProgress
+          variant="percent"
+          code={summary.code}
+          done={status.completed}
+          total={status.total}
+          lead={courseCounts(summary)}
         />
       </div>
       {next !== null && (
