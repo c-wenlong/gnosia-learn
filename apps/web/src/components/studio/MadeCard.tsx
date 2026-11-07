@@ -14,6 +14,7 @@ import { buttonClasses, cx, FOCUS } from "@/components/ui/classes";
 import { CollapseChevron } from "@/components/ui/Collapse";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Glyph } from "@/components/ui/Glyph";
+import { LinkRow } from "@/components/ui/LinkRow";
 import {
   madeListLabel,
   madeOpenHref,
@@ -171,27 +172,35 @@ function MadeRow({ item }: { item: MadeItem }) {
   const kind = item.kind === "video" ? "video" : "diagram";
   return (
     <li>
-      <Link
+      {/* 13px like the rest of the studio's thread; the row's padding and ring are LinkRow's. */}
+      <LinkRow
         href={madeOpenHref(item.id)}
-        className="flex min-w-0 items-center gap-3 px-3 py-2 text-[13px] text-text first:rounded-t-xl last:rounded-b-xl hover:bg-surface2 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
-      >
-        <span
-          className={cx(
-            "flex h-8 w-12 shrink-0 items-center justify-center overflow-hidden rounded border border-border",
-            kind === "video" ? "bg-black" : "bg-diagram-matte",
-          )}
-        >
-          <MadeThumb src={thumb} kind={kind} glyph={16} className={kind === "video" ? "object-cover" : "object-contain p-0.5"} />
-        </span>
-        <span className="min-w-0 flex-1 truncate font-medium">
-          <KindWord kind={kind} />
-          {title}
-        </span>
-        <KindBadge kind={kind} inline />
-        <time dateTime={item.madeAt} className="shrink-0 text-[12px] text-text3">
-          <StudioTime at={item.madeAt} />
-        </time>
-      </Link>
+        className="text-[13px]"
+        lead={
+          <span
+            className={cx(
+              "flex h-8 w-12 shrink-0 items-center justify-center overflow-hidden rounded border border-border",
+              kind === "video" ? "bg-black" : "bg-diagram-matte",
+            )}
+          >
+            <MadeThumb src={thumb} kind={kind} glyph={16} className={kind === "video" ? "object-cover" : "object-contain p-0.5"} />
+          </span>
+        }
+        title={
+          <span className="font-medium">
+            <KindWord kind={kind} />
+            {title}
+          </span>
+        }
+        trailing={
+          <>
+            <KindBadge kind={kind} inline />
+            <time dateTime={item.madeAt} className="shrink-0 text-[12px] text-text3">
+              <StudioTime at={item.madeAt} />
+            </time>
+          </>
+        }
+      />
     </li>
   );
 }
