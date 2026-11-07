@@ -16,6 +16,11 @@ final class FindBarTests: XCTestCase {
     func testTheTermIsAStringLiteralWhateverItHolds() {
         XCTAssertEqual(findJavaScript(term: "needle", backwards: false), #"window.find("needle", false, false, true)"#)
         XCTAssertEqual(findJavaScript(term: "needle", backwards: true), #"window.find("needle", false, true, true)"#)
+        // A typed search anchors at the match it refines; a walk does not.
+        XCTAssertEqual(
+            findJavaScript(term: "needle", backwards: false, anchored: true),
+            #"var s=getSelection();if(s.rangeCount)s.collapseToStart();window.find("needle", false, false, true)"#
+        )
         for term in [#"say "hi""#, #"C:\path"#, "one\ntwo", #"'); alert(1); //"#] {
             let script = findJavaScript(term: term, backwards: false)
             XCTAssertTrue(script.hasPrefix("window.find("), script)

@@ -20,10 +20,14 @@ import WebKit
 /// The JavaScript that finds `term` in the page. `window.find` takes the
 /// term, case-insensitive, forward or back, and always wraps, as a
 /// browser's find does; the JSON encoding of the term is already a valid
-/// JavaScript string literal, quotes and all.
-func findJavaScript(term: String, backwards: Bool) -> String {
+/// JavaScript string literal, quotes and all. `anchored` is for a search
+/// typed in the field: it first collapses the selection to where the
+/// current match starts, so extending the term refines the same match
+/// instead of walking on to the next occurrence the way the walk keys do.
+func findJavaScript(term: String, backwards: Bool, anchored: Bool = false) -> String {
     let encoded = (try? JSONEncoder().encode(term)).flatMap { String(data: $0, encoding: .utf8) } ?? "\"\""
-    return "window.find(\(encoded), false, \(backwards ? "true" : "false"), true)"
+    let anchor = anchored ? "var s=getSelection();if(s.rangeCount)s.collapseToStart();" : ""
+    return "\(anchor)window.find(\(encoded), false, \(backwards ? "true" : "false"), true)"
 }
 
 /// What putting the bar away runs: drop the match's selection, which is
@@ -37,8 +41,8 @@ let clearFindJavaScript = "getSelection().empty()"
 /// through `found`, which is what turns the field's text red on a miss.
 @MainActor
 final class FindBarController: NSTitlebarAccessoryViewController, NSTextFieldDelegate {
-    /// Runs `window.find` in the window's page: (term, backwards).
-    var run: (String, Bool) -> Void = { _, _ in }
+    /// Runs `window.find` in the window's page: (term, backwards, anchored).
+    var run: (String, Bool, Bool) -> Void = { _, _, _ in }
     /// The bar is going away; the page's selection should go with it.
     var clear: () -> Void = {}
 
@@ -102,18 +106,19 @@ final class FindBarController: NSTitlebarAccessoryViewController, NSTextFieldDel
         clear()
     }
 
-    /// Find as the field is typed, forward. An emptied field finds
+    /// Find as the field is typed, forward and anchored at the match so
+    /// refining the term cannot walk past it. An emptied field finds
     /// nothing, and the page's selection goes.
     func controlTextDidChange(_ notification: Notification) {
         found = true
-        run(field.stringValue, false)
+        run(field.stringValue, false, true)
     }
 
     /// Enter walks forward, Shift-Enter back, and Esc closes the bar.
     func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
         switch selector {
         case #selector(NSResponder.insertNewline):
-            run(field.stringValue, NSApp.currentEvent?.modifierFlags.contains(.shift) == true)
+            run(field.stringValue, NSApp.currentEvent?.modifierFlags.contains(.shift) == true, false)
             return true
         case #selector(NSResponder.cancelOperation):
             closeBar()
@@ -123,6 +128,6 @@ final class FindBarController: NSTitlebarAccessoryViewController, NSTextFieldDel
         }
     }
 
-    @objc private func goPrevious() { run(field.stringValue, true) }
-    @objc private func goNext() { run(field.stringValue, false) }
+    @objc private func goPrevious() { run(field.stringValue, true, false) }
+    @objc private func goNext() { run(field.stringValue, false, false) }
 }

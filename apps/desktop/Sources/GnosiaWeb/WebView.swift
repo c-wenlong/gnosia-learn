@@ -237,6 +237,9 @@ struct WebView: NSViewRepresentable {
             configureWebView(view)
             view.navigationDelegate = self
             view.uiDelegate = self
+            // A bundled app's notification bridge pushes permission changes
+            // into every window's page, this one included.
+            NotificationBridge.track(view)
             // The page's <title> becomes the window title — the web app sets
             // meaningful ones ("Review · Gnosia"), and a bare "Gnosia" window
             // loses them.
@@ -319,8 +322,8 @@ struct WebView: NSViewRepresentable {
             guard let view = front, let window = view.window else { return }
             if findBar == nil {
                 let bar = FindBarController()
-                bar.run = { [weak self, weak view] term, backwards in
-                    self?.runFind(term: term, backwards: backwards, in: view)
+                bar.run = { [weak self, weak view] term, backwards, anchored in
+                    self?.runFind(term: term, backwards: backwards, anchored: anchored, in: view)
                 }
                 bar.clear = { [weak view, weak window] in
                     view?.evaluateJavaScript(clearFindJavaScript, completionHandler: nil)
@@ -340,18 +343,19 @@ struct WebView: NSViewRepresentable {
         private func findAgain(backwards: Bool) {
             guard let view = front else { return }
             guard let bar = findBar, !bar.term.isEmpty else { find(); return }
-            runFind(term: bar.term, backwards: backwards, in: view)
+            runFind(term: bar.term, backwards: backwards, anchored: false, in: view)
         }
 
         /// `window.find` in the page, with the answer going to the bar so a
-        /// miss turns its field's text red.
-        private func runFind(term: String, backwards: Bool, in view: WKWebView?) {
+        /// miss turns its field's text red. `anchored` keeps a typed search
+        /// at the match it is refining.
+        private func runFind(term: String, backwards: Bool, anchored: Bool, in view: WKWebView?) {
             guard let view else { return }
             if term.isEmpty {
                 view.evaluateJavaScript(clearFindJavaScript, completionHandler: nil)
                 return
             }
-            view.evaluateJavaScript(findJavaScript(term: term, backwards: backwards)) { [weak findBar] result, _ in
+            view.evaluateJavaScript(findJavaScript(term: term, backwards: backwards, anchored: anchored)) { [weak findBar] result, _ in
                 findBar?.found = result as? Bool ?? false
             }
         }

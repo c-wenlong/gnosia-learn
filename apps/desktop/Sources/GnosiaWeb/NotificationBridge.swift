@@ -10,11 +10,17 @@
 //  notification center's permission or posts a notification.
 //
 //  What page script can reach through it is a notification, and nothing
-//  else: the handler takes three message kinds, reads only a title and a
-//  body as plain strings, cuts them to a length, and hands them to
+//  else: the handler takes three message kinds, reads only a title, a body
+//  and a tag as plain strings, cuts them to a length, and hands them to
 //  UNUserNotificationCenter as text (no HTML anywhere, no URL, no action).
 //  It answers only the main frame of the app's own origin, so a framed page
 //  (the studio's live canvas on another loopback port) cannot post one.
+//
+//  The tag keeps a browser's own rule: a notification with a tag an earlier
+//  one already used replaces it, so two windows announcing one job stack to
+//  one banner. And the page's `permission` is pushed back into the open
+//  windows when the app comes forward again or a grant lands, so a change
+//  made in System Settings while the app ran is not stale until a reload.
 //
 
 import AppKit
@@ -28,17 +34,18 @@ enum NotificationRequest: Equatable {
     case permission
     /// `Notification.requestPermission()`: ask, the first time.
     case requestPermission
-    /// `new Notification(title, { body })`.
-    case show(title: String, body: String)
+    /// `new Notification(title, { body, tag })`.
+    case show(title: String, body: String, tag: String)
 }
 
-/// The longest title and body the bridge passes on; the rest is cut.
+/// The longest title, body and tag the bridge passes on; the rest is cut.
 let notificationTitleLimit = 200
 let notificationBodyLimit = 1000
+let notificationTagLimit = 200
 
 /// The message the shim posts, read as a pure rule: a dictionary with a
-/// known `kind`, and for `show` a string `title` and an optional string
-/// `body`. Anything else is nil and does nothing.
+/// known `kind`, and for `show` a string `title` and optional string
+/// `body` and `tag`. Anything else is nil and does nothing.
 func notificationRequest(from body: Any) -> NotificationRequest? {
     guard let message = body as? [String: Any], let kind = message["kind"] as? String else { return nil }
     switch kind {
@@ -54,7 +61,17 @@ func notificationRequest(from body: Any) -> NotificationRequest? {
         case let value as String: text = value
         default: return nil
         }
-        return .show(title: String(title.prefix(notificationTitleLimit)), body: String(text.prefix(notificationBodyLimit)))
+        let tag: String
+        switch message["tag"] {
+        case nil, is NSNull: tag = ""
+        case let value as String: tag = value
+        default: return nil
+        }
+        return .show(
+            title: String(title.prefix(notificationTitleLimit)),
+            body: String(text.prefix(notificationBodyLimit)),
+            tag: String(tag.prefix(notificationTagLimit))
+        )
     default:
         return nil
     }
@@ -92,7 +109,14 @@ func originURL(protocol scheme: String, host: String, port: Int) -> URL? {
 @MainActor
 final class NotificationBridge: NSObject, WKScriptMessageHandlerWithReply, UNUserNotificationCenterDelegate {
     nonisolated static let handlerName = "gnosiaNotification"
+    /// The page-side function the shim defines for a permission pushed at it.
+    nonisolated static let syncFunctionName = "__gnosiaNotificationSync"
     static let shared = NotificationBridge()
+
+    /// The windows holding a page the shim may be in, so a permission
+    /// change can reach them all. Weak: a closed window's view goes on its
+    /// own.
+    private let views = NSHashTable<WKWebView>.weakObjects()
 
     /// The notification center needs an app bundle: in an unbundled
     /// `swift run`, or the test runner, `UNUserNotificationCenter.current()`
@@ -109,10 +133,44 @@ final class NotificationBridge: NSObject, WKScriptMessageHandlerWithReply, UNUse
         controller.addScriptMessageHandler(shared, contentWorld: .page, name: handlerName)
     }
 
+    /// Track a window's view for `pushPermission`. Called for every view,
+    /// bundled or not, so the guard lives here rather than at the call.
+    static func track(_ view: WKWebView) {
+        guard isAvailable else { return }
+        shared.views.add(view)
+    }
+
+    override init() {
+        super.init()
+        // Permission can change in System Settings while the app runs; the
+        // pages learn it the next time the app comes forward.
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(applicationBecameActive),
+            name: NSApplication.didBecomeActiveNotification, object: nil
+        )
+    }
+
     private var center: UNUserNotificationCenter {
         let center = UNUserNotificationCenter.current()
         if center.delegate == nil { center.delegate = self }
         return center
+    }
+
+    @objc private func applicationBecameActive() {
+        Task { await pushPermission() }
+    }
+
+    /// The center's current permission pushed into every tracked page's
+    /// shim, so a window that missed the grant does not stay on `denied`.
+    /// The `&&` no-ops on a page the shim never defined itself in.
+    private func pushPermission() async {
+        let value = notificationPermission(for: await center.notificationSettings().authorizationStatus)
+        let source = "window.\(Self.syncFunctionName) && window.\(Self.syncFunctionName)(\"\(value)\")"
+        for view in views.allObjects {
+            // A page mid-navigation can refuse the call; its shim asks for
+            // the permission itself at load anyway.
+            _ = try? await view.evaluateJavaScript(source)
+        }
     }
 
     func userContentController(
@@ -130,15 +188,19 @@ final class NotificationBridge: NSObject, WKScriptMessageHandlerWithReply, UNUse
             return (notificationPermission(for: await center.notificationSettings().authorizationStatus), nil)
         case .requestPermission:
             _ = try? await center.requestAuthorization(options: [.alert, .sound])
+            await pushPermission()
             return (notificationPermission(for: await center.notificationSettings().authorizationStatus), nil)
-        case .show(let title, let body):
+        case .show(let title, let body, let tag):
             guard notificationPermission(for: await center.notificationSettings().authorizationStatus) == "granted"
             else { return (nil, nil) }
             let content = UNMutableNotificationContent()
             content.title = title
             content.body = body
             content.sound = .default
-            try? await center.add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
+            // A second show on one tag replaces the first, as a browser's
+            // `tag` does: two windows announcing one job stay one banner.
+            let identifier = tag.isEmpty ? UUID().uuidString : "gnosia.\(tag)"
+            try? await center.add(UNNotificationRequest(identifier: identifier, content: content, trigger: nil))
             return (nil, nil)
         }
     }
@@ -154,9 +216,10 @@ final class NotificationBridge: NSObject, WKScriptMessageHandlerWithReply, UNUse
 }
 
 /// The page's `Notification`, defined only where the page has none (inside
-/// the shell). It keeps the permission it last heard, so `permission` reads
-/// synchronously as the web API's does, and posts only `kind`, `title` and
-/// `body`.
+/// the shell). It keeps the permission it last heard, so `permission`
+/// reads synchronously as the web API's does, posts only `kind`, `title`,
+/// `body` and `tag`, and hears a pushed permission through
+/// `__gnosiaNotificationSync`.
 let notificationShimSource = """
 (() => {
   if (typeof window.Notification !== "undefined") return;
@@ -177,7 +240,7 @@ let notificationShimSource = """
       this.onerror = null;
       this.onshow = null;
       if (permission === "granted") {
-        handler.postMessage({ kind: "show", title: this.title, body: this.body }).catch(() => undefined);
+        handler.postMessage({ kind: "show", title: this.title, body: this.body, tag: this.tag }).catch(() => undefined);
       }
     }
     static get permission() { return permission; }
@@ -191,6 +254,7 @@ let notificationShimSource = """
     removeEventListener() {}
   }
   Object.defineProperty(window, "Notification", { value: Notification, configurable: true, writable: true });
+  Object.defineProperty(window, "\(NotificationBridge.syncFunctionName)", { value: heard });
   handler.postMessage({ kind: "permission" }).then(heard, () => undefined);
 })();
 """

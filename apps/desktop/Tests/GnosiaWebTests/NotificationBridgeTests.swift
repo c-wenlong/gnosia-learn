@@ -17,16 +17,24 @@ final class NotificationBridgeTests: XCTestCase {
         XCTAssertEqual(notificationRequest(from: ["kind": "requestPermission"]), .requestPermission)
         XCTAssertEqual(
             notificationRequest(from: ["kind": "show", "title": "Diagram ready", "body": "Graph"]),
-            .show(title: "Diagram ready", body: "Graph")
+            .show(title: "Diagram ready", body: "Graph", tag: "")
         )
-        XCTAssertEqual(notificationRequest(from: ["kind": "show", "title": "t"]), .show(title: "t", body: ""))
-        XCTAssertEqual(notificationRequest(from: ["kind": "show", "title": "t", "body": NSNull()]), .show(title: "t", body: ""))
+        XCTAssertEqual(
+            notificationRequest(from: ["kind": "show", "title": "Diagram ready", "body": "Graph", "tag": "job-1"]),
+            .show(title: "Diagram ready", body: "Graph", tag: "job-1")
+        )
+        XCTAssertEqual(notificationRequest(from: ["kind": "show", "title": "t"]), .show(title: "t", body: "", tag: ""))
+        XCTAssertEqual(
+            notificationRequest(from: ["kind": "show", "title": "t", "body": NSNull(), "tag": NSNull()]),
+            .show(title: "t", body: "", tag: "")
+        )
         for body: Any in [
             "show",
             ["kind": "open", "url": "file:///Applications/Terminal.app"],
             ["kind": "show"],
             ["kind": "show", "title": 3],
             ["kind": "show", "title": "t", "body": ["html": "<b>x</b>"]],
+            ["kind": "show", "title": "t", "tag": 3],
             ["title": "t"],
             [String: Any](),
         ] {
@@ -34,12 +42,15 @@ final class NotificationBridgeTests: XCTestCase {
         }
     }
 
-    func testATitleAndBodyAreCutToTheirLimits() {
+    func testATitleAndBodyAndTagAreCutToTheirLimits() {
         let long = String(repeating: "x", count: 5000)
-        guard case .show(let title, let body) = notificationRequest(from: ["kind": "show", "title": long, "body": long])
+        guard case .show(let title, let body, let tag) = notificationRequest(
+            from: ["kind": "show", "title": long, "body": long, "tag": long]
+        )
         else { return XCTFail("not a show") }
         XCTAssertEqual(title.count, notificationTitleLimit)
         XCTAssertEqual(body.count, notificationBodyLimit)
+        XCTAssertEqual(tag.count, notificationTagLimit)
     }
 
     func testThePermissionReadsAsTheWebAPIs() {
@@ -75,7 +86,8 @@ final class NotificationBridgeTests: XCTestCase {
 
     /// The shim itself, run in JavaScriptCore with a stand-in for the
     /// message handler: it posts `permission` at load, a `requestPermission`
-    /// when asked, and a `show` with only the title and body once granted.
+    /// when asked, and a `show` with only the title, body and tag once
+    /// granted, and hears a pushed permission through the sync function.
     func testTheShimPostsTheMessagesTheHandlerReads() throws {
         let context = try XCTUnwrap(JSContext())
         var posted: [[String: Any]] = []
@@ -107,11 +119,20 @@ final class NotificationBridgeTests: XCTestCase {
         context.evaluateScript("new Notification('Diagram ready', { body: 'Graph', tag: 'job-1', icon: 'x.png' })")
         XCTAssertNil(context.exception)
         let shown = try XCTUnwrap(posted.last)
-        XCTAssertEqual(Set(shown.keys), ["kind", "title", "body"])
+        XCTAssertEqual(Set(shown.keys), ["kind", "title", "body", "tag"])
         XCTAssertEqual(shown["kind"] as? String, "show")
         XCTAssertEqual(shown["title"] as? String, "Diagram ready")
         XCTAssertEqual(shown["body"] as? String, "Graph")
-        XCTAssertEqual(notificationRequest(from: shown), .show(title: "Diagram ready", body: "Graph"))
+        XCTAssertEqual(shown["tag"] as? String, "job-1")
+        XCTAssertEqual(notificationRequest(from: shown), .show(title: "Diagram ready", body: "Graph", tag: "job-1"))
+
+        // A permission the app pushes (a grant in System Settings or in
+        // another window) lands through the sync function.
+        context.evaluateScript("\(NotificationBridge.syncFunctionName)('denied')")
+        XCTAssertEqual(context.evaluateScript("Notification.permission").toString(), "denied")
+        // And a value it does not know is ignored.
+        context.evaluateScript("\(NotificationBridge.syncFunctionName)('maybe')")
+        XCTAssertEqual(context.evaluateScript("Notification.permission").toString(), "denied")
     }
 
     /// A page that already has a `Notification` (a browser) keeps its own.
