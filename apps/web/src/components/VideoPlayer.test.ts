@@ -72,6 +72,37 @@ function currentChapter(host: HTMLElement) {
 }
 
 describe("VideoPlayer", () => {
+  it("offers full screen only where the view allows it", () => {
+    // A WKWebView with element fullscreen off says so here, as an iframe
+    // without `allowfullscreen` does; a button then would do nothing.
+    const fullscreenButton = (host: HTMLElement) =>
+      host.querySelector('button[aria-label="Full screen (f)"]');
+    const requestFullscreen = vi.fn(() => Promise.resolve());
+    const original = Object.getOwnPropertyDescriptor(Document.prototype, "fullscreenEnabled");
+    try {
+      Object.defineProperty(document, "fullscreenEnabled", { configurable: true, value: false });
+      const refused = mount(createElement(VideoPlayer, { src: "/v.mp4" }));
+      Object.defineProperty(HTMLElement.prototype, "requestFullscreen", {
+        configurable: true,
+        value: requestFullscreen,
+      });
+      expect(fullscreenButton(refused)).toBeNull();
+      press(video(refused), "f");
+      act(() => video(refused).dispatchEvent(new MouseEvent("dblclick", { bubbles: true })));
+      expect(requestFullscreen).not.toHaveBeenCalled();
+
+      Object.defineProperty(document, "fullscreenEnabled", { configurable: true, value: true });
+      const allowed = mount(createElement(VideoPlayer, { src: "/v.mp4" }));
+      expect(fullscreenButton(allowed)).not.toBeNull();
+      press(video(allowed), "f");
+      expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    } finally {
+      delete (HTMLElement.prototype as unknown as { requestFullscreen?: unknown }).requestFullscreen;
+      delete (document as unknown as { fullscreenEnabled?: boolean }).fullscreenEnabled;
+      if (original) Object.defineProperty(Document.prototype, "fullscreenEnabled", original);
+    }
+  });
+
   it("seeks the video when a chapter is clicked", () => {
     const host = mount(createElement(VideoPlayer, { src: "/v.mp4", chapters }));
     goToChapter(host, 2);

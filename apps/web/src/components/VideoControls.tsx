@@ -27,6 +27,7 @@ export function VideoControls({
   rate,
   fullscreen,
   canPip,
+  canFullscreen,
   hasSubtitles,
   subtitles,
   chapterTitle,
@@ -54,6 +55,8 @@ export function VideoControls({
   rate: number;
   fullscreen: boolean;
   canPip: boolean;
+  /** Whether the view lets the player go fullscreen (`document.fullscreenEnabled`). */
+  canFullscreen: boolean;
   hasSubtitles: boolean;
   /** Whether subtitles are on. */
   subtitles: boolean;
@@ -144,12 +147,14 @@ export function VideoControls({
                 <Icon name="pip" className="size-5" />
               </ControlButton>
             )}
-            <ControlButton
-              label={fullscreen ? "Exit full screen (f)" : "Full screen (f)"}
-              onClick={onToggleFullscreen}
-            >
-              <Icon name={fullscreen ? "shrink" : "expand"} className="size-5" />
-            </ControlButton>
+            {canFullscreen && (
+              <ControlButton
+                label={fullscreen ? "Exit full screen (f)" : "Full screen (f)"}
+                onClick={onToggleFullscreen}
+              >
+                <Icon name={fullscreen ? "shrink" : "expand"} className="size-5" />
+              </ControlButton>
+            )}
           </div>
         </div>
   );

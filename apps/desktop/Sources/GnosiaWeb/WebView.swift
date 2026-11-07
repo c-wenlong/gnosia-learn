@@ -4,14 +4,17 @@
 //
 //  The whole product surface: a WKWebView pointed at the local Next server.
 //  Two policies keep the window self-contained. The window shows only the
-//  app server's own origin (`navigationVerdict`): any other http(s) page,
-//  and every target=_blank link, goes to the real browser, and any other
-//  scheme (file:, a custom app scheme) is dropped, never handed to
-//  NSWorkspace, which would launch whatever app claims it. And the app's
-//  cookies live in the default persistent data store so sign-in survives
-//  relaunches. The View > Reload menu posts
-//  .gnosiaWebReload, which the coordinator wires to webView.reload(), and
-//  Back and Forward post their own; a two-finger swipe does the same.
+//  app server's own origin (`navigationVerdict`): any other http(s) page
+//  goes to the real browser, and any other scheme (file:, a custom app
+//  scheme) is dropped, never handed to NSWorkspace, which would launch
+//  whatever app claims it. A new-window request (target=_blank, the context
+//  menu's "Open Link in New Window", a Cmd- or Shift-click) for the app's
+//  own origin opens a second shell window on the same data store, so it is
+//  signed in; a foreign one goes to the browser (`newWindowVerdict`). And
+//  the app's cookies live in the default persistent data store so sign-in
+//  survives relaunches. The View menu's items (Reload, Back, Forward, the
+//  zoom steps) and File > Print post notifications that only the front
+//  window's coordinator acts on; a two-finger swipe goes back and forward.
 //
 //  A response the server sends as an attachment (Settings' Export, the
 //  Library's Download) or one the view cannot show is saved, not shown
@@ -27,6 +30,10 @@ extension Notification.Name {
     static let gnosiaWebReload = Notification.Name("gnosiaWebReload")
     static let gnosiaWebBack = Notification.Name("gnosiaWebBack")
     static let gnosiaWebForward = Notification.Name("gnosiaWebForward")
+    static let gnosiaWebZoomIn = Notification.Name("gnosiaWebZoomIn")
+    static let gnosiaWebZoomOut = Notification.Name("gnosiaWebZoomOut")
+    static let gnosiaWebActualSize = Notification.Name("gnosiaWebActualSize")
+    static let gnosiaWebPrint = Notification.Name("gnosiaWebPrint")
 }
 
 /// Whether a response is saved rather than shown: one the server marks
@@ -97,24 +104,98 @@ func navigationVerdict(for url: URL?, appOrigin: URL, mainFrame: Bool) -> Naviga
     }
 }
 
-/// Whether a new-window request (target=_blank, window.open) goes to the
-/// browser: http and https only. Anything else is dropped, since
-/// NSWorkspace opens a file: URL or a custom scheme with whatever local
-/// app claims it.
-func opensInBrowser(_ url: URL?) -> Bool {
-    guard let scheme = url?.scheme?.lowercased() else { return false }
-    return scheme == "http" || scheme == "https"
+/// What a new-window request does.
+enum NewWindowVerdict: Equatable {
+    /// Open a second shell window: the app's own page, signed in.
+    case openInShell
+    /// Hand it to the real browser (http and https only).
+    case openInBrowser
+    /// Drop it.
+    case cancel
 }
 
-/// The web view's configuration. Tab reaches links as well as form controls,
-/// as it does in Chrome and Firefox: WebKit's default (Safari's "Press Tab to
-/// highlight each item" off) skips every link, so a keyboard user of the
-/// window could not reach the sidebar, a card's "All reviews" or a row link
-/// with Tab at all, only with Option-Tab.
-func webViewConfiguration() -> WKWebViewConfiguration {
+/// The new-window policy (target=_blank, the context menu's "Open Link in
+/// New Window", a modifier click), as a pure rule. The app's own origin, as
+/// http(s) or a blob it made, stays in the shell, where the window has the
+/// session cookie: the browser would open it signed out, on the sign-in
+/// page or a 401. A foreign http(s) page goes to the browser. Everything
+/// else is dropped, `about:blank` included (an empty window), and above all
+/// file: and custom schemes, which NSWorkspace would open with whatever
+/// local app claims them.
+func newWindowVerdict(for url: URL?, appOrigin: URL) -> NewWindowVerdict {
+    guard let url, let scheme = url.scheme?.lowercased() else { return .cancel }
+    switch navigationVerdict(for: url, appOrigin: appOrigin, mainFrame: true) {
+    case .allow:
+        return scheme == "http" || scheme == "https" || scheme == "blob" ? .openInShell : .cancel
+    case .openInBrowser:
+        return .openInBrowser
+    case .cancel:
+        return .cancel
+    }
+}
+
+/// Whether a navigation the main frame would load opens a new shell window
+/// instead: a link Cmd- or Shift-clicked, as a browser opens it in a new tab
+/// or window. Only a link click, only in the main frame, and only one the
+/// window would load; a foreign link already goes to the browser.
+func opensInNewWindow(
+    navigationType: WKNavigationType, modifiers: NSEvent.ModifierFlags,
+    mainFrame: Bool, verdict: NavigationVerdict
+) -> Bool {
+    guard navigationType == .linkActivated, mainFrame, verdict == .allow else { return false }
+    return !modifiers.intersection([.command, .shift]).isEmpty
+}
+
+/// The page zoom steps View > Zoom In and Zoom Out move through, Safari's.
+let zoomSteps: [CGFloat] = [0.5, 0.75, 0.85, 1, 1.15, 1.25, 1.5, 1.75, 2, 2.5, 3]
+
+/// The next zoom step from `current`, up or down; the end step stays put.
+/// A zoom between steps (a pinch never sets `pageZoom`, but be safe) moves
+/// to the nearest step in that direction.
+func nextZoom(from current: CGFloat, zoomingIn: Bool) -> CGFloat {
+    let epsilon: CGFloat = 0.001
+    if zoomingIn { return zoomSteps.first { $0 > current + epsilon } ?? zoomSteps.last! }
+    return zoomSteps.last { $0 < current - epsilon } ?? zoomSteps.first!
+}
+
+/// The web view's configuration, shared by every shell window.
+///
+/// Tab reaches links as well as form controls, as it does in Chrome and
+/// Firefox: WebKit's default (Safari's "Press Tab to highlight each item"
+/// off) skips every link, so a keyboard user of the window could not reach
+/// the sidebar, a card's "All reviews" or a row link with Tab at all, only
+/// with Option-Tab.
+///
+/// Element fullscreen is on, so the video player's Full screen works: off,
+/// WebKit's default, `requestFullscreen` does nothing and
+/// `document.fullscreenEnabled` is false.
+///
+/// Script cannot open a window without a click, as a browser's popup
+/// blocker has it: every new window is one the person asked for.
+///
+/// With `notifications`, the page gets a `Notification` that posts through
+/// `NotificationBridge` (the app bundle only: an unbundled `swift run`
+/// cannot use the notification center).
+@MainActor
+func webViewConfiguration(notifications: Bool = NotificationBridge.isAvailable) -> WKWebViewConfiguration {
     let configuration = WKWebViewConfiguration()
     configuration.preferences.tabFocusesLinks = true
+    
+    configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
+    if notifications { NotificationBridge.install(in: configuration.userContentController) }
     return configuration
+}
+
+/// What every shell window's web view sets on itself.
+@MainActor
+func configureWebView(_ view: WKWebView) {
+    view.allowsBackForwardNavigationGestures = true
+    // Pinch to zoom, as in Safari.
+    view.allowsMagnification = true
+    #if DEBUG
+    // Safari's Web Inspector reaches a debug build only.
+    view.isInspectable = true
+    #endif
 }
 
 struct WebView: NSViewRepresentable {
@@ -126,23 +207,7 @@ struct WebView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> WKWebView {
         let view = WKWebView(frame: .zero, configuration: webViewConfiguration())
-        view.allowsBackForwardNavigationGestures = true
-        view.navigationDelegate = context.coordinator
-        view.uiDelegate = context.coordinator
-        // The page's <title> becomes the window title — the web app sets
-        // meaningful ones ("Review · Gnosia"), and a bare "Gnosia" window
-        // loses them.
-        context.coordinator.titleObservation = view.observe(\.title) { view, _ in
-            view.window?.title = view.title?.isEmpty == false ? view.title! : "Gnosia"
-        }
-        context.coordinator.webView = view
-        for (name, selector) in [
-            (Notification.Name.gnosiaWebReload, #selector(Coordinator.reloadPage)),
-            (.gnosiaWebBack, #selector(Coordinator.goBack)),
-            (.gnosiaWebForward, #selector(Coordinator.goForward)),
-        ] {
-            NotificationCenter.default.addObserver(context.coordinator, selector: selector, name: name, object: nil)
-        }
+        context.coordinator.attach(to: view)
         var request = URLRequest(url: url)
         if let token { request.setValue(token, forHTTPHeaderField: "x-gnosia-local-token") }
         view.load(request)
@@ -163,20 +228,75 @@ struct WebView: NSViewRepresentable {
             self.origin = origin
         }
 
-        @objc func reloadPage() {
-            webView?.reload()
+        /// Become `view`'s delegates, title its window, and listen for the
+        /// menu's commands.
+        func attach(to view: WKWebView) {
+            configureWebView(view)
+            view.navigationDelegate = self
+            view.uiDelegate = self
+            // The page's <title> becomes the window title — the web app sets
+            // meaningful ones ("Review · Gnosia"), and a bare "Gnosia" window
+            // loses them.
+            titleObservation = view.observe(\.title) { view, _ in
+                view.window?.title = view.title?.isEmpty == false ? view.title! : "Gnosia"
+            }
+            webView = view
+            for (name, selector) in [
+                (Notification.Name.gnosiaWebReload, #selector(reloadPage)),
+                (.gnosiaWebBack, #selector(goBack)),
+                (.gnosiaWebForward, #selector(goForward)),
+                (.gnosiaWebZoomIn, #selector(zoomIn)),
+                (.gnosiaWebZoomOut, #selector(zoomOut)),
+                (.gnosiaWebActualSize, #selector(actualSize)),
+                (.gnosiaWebPrint, #selector(printPage)),
+            ] {
+                NotificationCenter.default.addObserver(self, selector: selector, name: name, object: nil)
+            }
         }
 
-        /// Back and Forward move the front window only: every window's
-        /// coordinator hears the menu's notification.
+        /// The menu's commands act on the front window only: every window's
+        /// coordinator hears the notification.
+        private var front: WKWebView? {
+            guard let webView, webView.window?.isKeyWindow == true else { return nil }
+            return webView
+        }
+
+        @objc func reloadPage() {
+            front?.reload()
+        }
+
         @objc func goBack() {
-            guard webView?.window?.isKeyWindow == true else { return }
-            webView?.goBack()
+            front?.goBack()
         }
 
         @objc func goForward() {
-            guard webView?.window?.isKeyWindow == true else { return }
-            webView?.goForward()
+            front?.goForward()
+        }
+
+        @objc func zoomIn() {
+            guard let view = front else { return }
+            view.pageZoom = nextZoom(from: view.pageZoom, zoomingIn: true)
+        }
+
+        @objc func zoomOut() {
+            guard let view = front else { return }
+            view.pageZoom = nextZoom(from: view.pageZoom, zoomingIn: false)
+        }
+
+        @objc func actualSize() {
+            guard let view = front else { return }
+            view.pageZoom = 1
+            view.magnification = 1
+        }
+
+        /// File > Print: WebKit's own print operation, as a sheet on the
+        /// window. Its view needs the web view's frame, or the pages print
+        /// blank.
+        @objc func printPage() {
+            guard let view = front, let window = view.window else { return }
+            let operation = view.printOperation(with: NSPrintInfo.shared)
+            operation.view?.frame = view.bounds
+            operation.runModal(for: window, delegate: nil, didRun: nil, contextInfo: nil)
         }
 
         /// Each download's chosen file, while its bytes land in a sibling
@@ -195,6 +315,13 @@ struct WebView: NSViewRepresentable {
             // window does not drop. The app's own downloads are responses
             // marked `attachment`, decided below.
             if action.shouldPerformDownload, verdict != .cancel { return .download }
+            if opensInNewWindow(
+                navigationType: action.navigationType, modifiers: action.modifierFlags,
+                mainFrame: mainFrame, verdict: verdict
+            ) {
+                ShellWindows.shared.open(request: action.request, origin: origin)
+                return .cancel
+            }
             switch verdict {
             case .allow:
                 return .allow
@@ -277,17 +404,93 @@ struct WebView: NSViewRepresentable {
             if let window = webView?.window { alert.beginSheetModal(for: window) } else { alert.runModal() }
         }
 
-        /// target=_blank gets no second window: an http(s) link opens in the
-        /// real browser where external pages belong, and anything else is
-        /// dropped.
+        /// A new-window request: the app's own page opens a second shell
+        /// window, built on the configuration WebKit hands over (the same
+        /// data store, so the same session), and WebKit loads the request
+        /// into it. A foreign http(s) page goes to the browser; anything
+        /// else is dropped.
         func webView(
             _ webView: WKWebView,
             createWebViewWith configuration: WKWebViewConfiguration,
             for action: WKNavigationAction,
             windowFeatures: WKWindowFeatures
         ) -> WKWebView? {
-            if let url = action.request.url, opensInBrowser(url) { NSWorkspace.shared.open(url) }
-            return nil
+            switch newWindowVerdict(for: action.request.url, appOrigin: origin) {
+            case .openInShell:
+                return ShellWindows.shared.open(configuration: configuration, origin: origin)
+            case .openInBrowser:
+                if let url = action.request.url { NSWorkspace.shared.open(url) }
+                return nil
+            case .cancel:
+                return nil
+            }
+        }
+
+        /// `window.close()` from a page: honoured for a window the shell
+        /// opened, never for the main one.
+        func webViewDidClose(_ webView: WKWebView) {
+            ShellWindows.shared.close(webView)
         }
     }
 }
+
+/// The shell windows opened for a new-window request, each an AppKit window
+/// holding a web view with its own coordinator. The main window stays
+/// SwiftUI's; these are kept here until they close.
+@MainActor
+final class ShellWindows: NSObject, NSWindowDelegate {
+    static let shared = ShellWindows()
+
+    private var open: [ObjectIdentifier: (window: NSWindow, coordinator: WebView.Coordinator)] = [:]
+
+    /// A window for a request the shell loads itself (a modifier click).
+    func open(request: URLRequest, origin: URL) {
+        open(configuration: webViewConfiguration(), origin: origin).load(request)
+    }
+
+    /// A window whose web view WebKit loads (`createWebViewWith`), which
+    /// must be built on the configuration WebKit passed.
+    @discardableResult
+    func open(configuration: WKWebViewConfiguration, origin: URL) -> WKWebView {
+        let parent = NSApp.keyWindow
+        let size = parent?.frame.size ?? NSSize(width: 1240, height: 800)
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered, defer: false
+        )
+        window.isReleasedWhenClosed = false
+        window.title = "Gnosia"
+        window.contentMinSize = shellWindowMinimumSize
+        window.delegate = self
+        let view = WKWebView(frame: NSRect(origin: .zero, size: size), configuration: configuration)
+        let coordinator = WebView.Coordinator(origin: origin)
+        coordinator.attach(to: view)
+        window.contentView = view
+        if let parent {
+            // Cascaded from the window it came from, as a browser's is.
+            window.setFrameTopLeftPoint(NSPoint(x: parent.frame.minX + 22, y: parent.frame.maxY - 22))
+        } else {
+            window.center()
+        }
+        open[ObjectIdentifier(window)] = (window, coordinator)
+        window.makeKeyAndOrderFront(nil)
+        return view
+    }
+
+    /// Close the shell-opened window holding `view`; the main window is
+    /// not in the list, so a page cannot close it.
+    func close(_ view: WKWebView) {
+        guard let window = view.window, open[ObjectIdentifier(window)] != nil else { return }
+        window.close()
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow else { return }
+        open.removeValue(forKey: ObjectIdentifier(window))
+    }
+}
+
+/// The smallest a shell window gets: narrow enough for the web app's phone
+/// and tablet layouts, which a browser window reaches by being resized.
+let shellWindowMinimumSize = NSSize(width: 480, height: 600)

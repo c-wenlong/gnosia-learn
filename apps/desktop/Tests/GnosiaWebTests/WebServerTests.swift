@@ -174,4 +174,44 @@ final class WebServerTests: XCTestCase {
             )
         }
     }
+
+    /// The first attempt keeps the last launch's port, and with it the
+    /// window's origin and localStorage; anything else takes a random one.
+    func testTheFirstAttemptTakesTheRememberedPortWhenItIsFree() {
+        func port(_ attempt: Int, _ remembered: Int?, free: Bool = true) -> Int {
+            WebServer.port(attempt: attempt, remembered: remembered, isFree: { _ in free }, random: { 50001 })
+        }
+        XCTAssertEqual(port(1, 51234), 51234)
+        XCTAssertEqual(port(1, nil), 50001)
+        // Held by something else: a random port, never the held one.
+        XCTAssertEqual(port(1, 51234, free: false), 50001)
+        // A retry means the remembered port failed.
+        XCTAssertEqual(port(2, 51234), 50001)
+        XCTAssertEqual(port(3, 51234), 50001)
+        // Out of range, as a hand-edited default could be.
+        XCTAssertEqual(port(1, 80), 50001)
+        XCTAssertEqual(port(1, 70000), 50001)
+        XCTAssertEqual(port(1, WebServer.portRange.upperBound), WebServer.portRange.upperBound)
+    }
+
+    func testTheFreeCheckSeesAListener() {
+        let listener = Darwin.socket(AF_INET, SOCK_STREAM, 0)
+        var address = sockaddr_in()
+        address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        address.sin_family = sa_family_t(AF_INET)
+        address.sin_port = 0
+        address.sin_addr.s_addr = inet_addr("127.0.0.1")
+        var length = socklen_t(MemoryLayout<sockaddr_in>.size)
+        let bound = withUnsafeMutablePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { pointer in
+                Darwin.bind(listener, pointer, length) == 0 && Darwin.listen(listener, 1) == 0
+                    && Darwin.getsockname(listener, pointer, &length) == 0
+            }
+        }
+        XCTAssertTrue(bound)
+        let port = Int(UInt16(bigEndian: address.sin_port))
+        XCTAssertFalse(WebServer.portIsFree(port))
+        Darwin.close(listener)
+        XCTAssertTrue(WebServer.portIsFree(port))
+    }
 }
