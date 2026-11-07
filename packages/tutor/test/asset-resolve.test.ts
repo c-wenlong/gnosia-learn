@@ -1,12 +1,13 @@
 import { BlobError } from "@gnosia/blob";
-import { blobObject, learner, LOCAL_LEARNER_ID, ownerScope } from "@gnosia/schema";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { asset, assetDerivation, blobObject, learner, LOCAL_LEARNER_ID, ownerScope } from "@gnosia/schema";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ContentUnavailableError } from "../src/server/content-source";
 import type { AssetSeams } from "../src/server/deps";
 import { pdfSource, posterSource, resolveAsset, servedAssets } from "../src/server/asset-files";
 import { migratedScratchDatabase, probe, type Scratch } from "../../../services/catalog/test/scratch-database";
 import { ASSETS, seedAssets, seedContent } from "../../../services/catalog/test/state-fixture";
+import { storedBlob } from "../../../services/catalog/test/stored-blob";
 
 /**
  * The asset resolvers every file route and page check goes through, against
@@ -18,6 +19,9 @@ import { ASSETS, seedAssets, seedContent } from "../../../services/catalog/test/
 
 const reachable = await probe();
 const OTHER = "owner-b";
+// A second video, with a stored poster and a stored PDF derived from it. The
+// fixture's own video keeps neither, so the miss paths stay tested on it.
+const FILED = { video: "fx:filed-video", poster: "fx:filed-poster", pdf: "fx:filed-pdf" };
 
 describe.skipIf(!reachable.ok)("asset resolvers", () => {
   let scratch: Scratch;
@@ -54,6 +58,15 @@ describe.skipIf(!reachable.ok)("asset resolvers", () => {
     });
     await scratch.pool.query(`update asset set blob_key = '${OTHER}/${sha}.svg' where id = '${ASSETS.diagram}'`);
     await scratch.pool.query(`insert into asset_concept (asset_id, concept_slug) values ('${ASSETS.pinned}', 'alpha') on conflict do nothing`);
+    await scratch.db.insert(asset).values([
+      { id: FILED.video, kind: "video", path: "out/fixtures/filed.mp4", sourceRepo: "manimkc", blobKey: await storedBlob(scratch.db, FILED.video, "mp4") },
+      { id: FILED.poster, kind: "poster", path: "out/fixtures/filed.jpg", sourceRepo: "manimkc", blobKey: await storedBlob(scratch.db, FILED.poster, "jpg") },
+      { id: FILED.pdf, kind: "pdf", path: "out/fixtures/filed.pdf", sourceRepo: "manimkc", blobKey: await storedBlob(scratch.db, FILED.pdf, "pdf") },
+    ]);
+    await scratch.db.insert(assetDerivation).values([
+      { assetId: FILED.poster, sourceAssetId: FILED.video },
+      { assetId: FILED.pdf, sourceAssetId: FILED.video },
+    ]);
   }, 60_000);
 
   afterAll(async () => {
@@ -65,6 +78,10 @@ describe.skipIf(!reachable.ok)("asset resolvers", () => {
     concept.mockClear();
     resolution.mockClear();
     vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.mocked(console.warn).mockRestore();
   });
 
   it("answers another owner's asset as not in the catalog, the same as an id nobody has", async () => {
@@ -104,6 +121,12 @@ describe.skipIf(!reachable.ok)("asset resolvers", () => {
     expect(await resolveAsset(seams(), scratch.db, ASSETS.pinned)).toMatchObject({ ok: false, status: 503, code: "not-flipped" });
   });
 
+  it("lets a catalog read that fails for any other reason propagate, rather than calling it the store's", async () => {
+    const down = new Error("catalog down");
+    concept.mockRejectedValueOnce(down);
+    await expect(resolveAsset(seams(), scratch.db, ASSETS.pinned)).rejects.toBe(down);
+  });
+
   it("has no file for a link", async () => {
     expect(await resolveAsset(seams(), scratch.db, ASSETS.link)).toMatchObject({ ok: false, code: "no-file" });
   });
@@ -120,6 +143,27 @@ describe.skipIf(!reachable.ok)("asset resolvers", () => {
     expect([...(await servedAssets(seams(), scratch.db, rows))]).toEqual([ASSETS.video]);
     resolution.mockRejectedValueOnce(new Error("catalog down"));
     expect([...(await servedAssets(seams(), scratch.db, rows))]).toEqual([ASSETS.video]);
+  });
+
+  it("serves a video's stored poster and stored PDF from the blob store, by what each is", async () => {
+    const posterKey = await storedBlob(scratch.db, FILED.poster, "jpg");
+    const pdfKey = await storedBlob(scratch.db, FILED.pdf, "pdf");
+    stat.mockResolvedValue({ bytes: 77 });
+    expect(await posterSource(seams(), scratch.db, FILED.video)).toMatchObject({
+      ok: true,
+      source: "blob",
+      key: posterKey,
+      bytes: 77,
+      contentType: "image/jpeg",
+    });
+    expect(await pdfSource(seams(), scratch.db, FILED.video)).toMatchObject({
+      ok: true,
+      source: "blob",
+      key: pdfKey,
+      bytes: 77,
+      contentType: "application/pdf",
+    });
+    expect(stat.mock.calls).toEqual([[posterKey], [pdfKey]]);
   });
 
   it("finds a poster or a PDF only for a video, and says how to make one that is missing", async () => {

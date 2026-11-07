@@ -69,21 +69,35 @@ function elements(node: ReactNode, into: { type: unknown; props: Record<string, 
   return into;
 }
 
-function start(query: Record<string, string> = {}): Promise<ReactNode> {
-  return CanvasPage({ params: Promise.resolve({ name: "dot-product" }), searchParams: Promise.resolve(query) }) as Promise<ReactNode>;
+function start(query: Record<string, string> = {}, name = "dot-product"): Promise<ReactNode> {
+  return CanvasPage({ params: Promise.resolve({ name }), searchParams: Promise.resolve(query) }) as Promise<ReactNode>;
 }
 
+const mirrorOk: Answer = { ok: true, data: { file: "dot-product.tldr", url: "http://127.0.0.1:9/", port: 9, healthy: true, note: "" } };
+
 /** Answers every call the page makes, as a healthy runner would, until it draws. */
-async function drawn(query: Record<string, string> = {}, health: Record<string, unknown> = healthy): Promise<ReactNode> {
-  const pending = start(query);
+async function drawn(
+  query: Record<string, string> = {},
+  health: Record<string, unknown> = healthy,
+  options: { name?: string; listing?: Record<string, unknown>; jobs?: unknown[]; mirror?: Answer; one?: Answer } = {},
+): Promise<ReactNode> {
+  const name = options.name ?? "dot-product";
+  const pending = start(query, name);
   await vi.waitFor(() => expect(calls.length).toBeGreaterThanOrEqual(3));
   answer("/api/health", { ok: true, data: health });
-  answer("/api/diagrams", { ok: true, data: listing });
-  answer("/api/jobs", { ok: true, data: { jobs: [] } });
+  answer("/api/diagrams", { ok: true, data: options.listing ?? listing });
+  answer("/api/jobs", { ok: true, data: { jobs: options.jobs ?? [] } });
   await vi.waitFor(() => expect(calls.some((call) => call.path === "/api/mirrors")).toBe(true));
-  answer("/api/mirrors", { ok: true, data: { file: "dot-product.tldr", url: "http://127.0.0.1:9/", port: 9, healthy: true, note: "" } });
-  await vi.waitFor(() => expect(calls.some((call) => call.path === "/api/diagrams/dot-product")).toBe(true));
-  answer("/api/diagrams/dot-product", { ok: true, data: diagram });
+  answer("/api/mirrors", options.mirror ?? mirrorOk);
+  // The page decodes the segment (`safeDecode`) before it re-encodes for the runner.
+  let decoded = name;
+  try {
+    decoded = decodeURIComponent(name);
+  } catch {
+    decoded = name;
+  }
+  await vi.waitFor(() => expect(calls.some((call) => call.path === `/api/diagrams/${encodeURIComponent(decoded)}`)).toBe(true));
+  answer(`/api/diagrams/${encodeURIComponent(decoded)}`, options.one ?? { ok: true, data: diagram });
   return pending;
 }
 
@@ -149,6 +163,86 @@ describe("the job panel on a small screen (S2-23)", () => {
     const inside = elements(sheet.props.children as ReactNode);
     expect(inside.some((element) => element.type === DiagramInspector)).toBe(true);
     expect(inside.some((element) => element.props.href === "/studio/d/dot-product")).toBe(true);
+  });
+});
+
+describe("the canvas route's missing and broken documents", () => {
+  it("is a 404 for a name the listing neither has nor could not read", async () => {
+    const pending = start({}, "ghost");
+    await vi.waitFor(() => expect(calls.length).toBeGreaterThanOrEqual(3));
+    answer("/api/health", { ok: true, data: healthy });
+    answer("/api/diagrams", { ok: true, data: listing });
+    answer("/api/jobs", { ok: true, data: { jobs: [] } });
+    await expect(pending).rejects.toMatchObject({ digest: expect.stringMatching(/;404$/) });
+  });
+
+  it("is an error card naming the line, not a 404, for a file that will not parse", async () => {
+    const broken = { name: "broken", path: "broken.tldr", message: "line 3: unexpected token" };
+    const pending = start({}, "broken");
+    await vi.waitFor(() => expect(calls.length).toBeGreaterThanOrEqual(3));
+    answer("/api/health", { ok: true, data: healthy });
+    answer("/api/diagrams", { ok: true, data: { ...listing, errors: [broken] } });
+    answer("/api/jobs", { ok: true, data: { jobs: [] } });
+    const tree = await pending;
+    const card = elements(tree).find((element) => element.type === BlockedCard);
+    expect(card?.props.title).toBe("broken will not parse");
+    expect(card?.props.lines).toEqual([{ name: "parse", status: "fail", detail: "line 3: unexpected token" }]);
+  });
+
+  it("is an error card with the runner's words when the listing itself fails", async () => {
+    const pending = start();
+    await vi.waitFor(() => expect(calls.length).toBeGreaterThanOrEqual(3));
+    answer("/api/health", { ok: true, data: healthy });
+    answer("/api/diagrams", { ok: false, reason: "refused", status: 500, headline: "The listing failed", detail: "boom" });
+    answer("/api/jobs", { ok: true, data: { jobs: [] } });
+    const tree = await pending;
+    const card = elements(tree).find((element) => element.type === BlockedCard);
+    expect(card?.props.title).toBe("The listing failed");
+  });
+});
+
+describe("the canvas's mirror", () => {
+  it("is a restartable failure, not a blank frame, when the mirror refuses to start", async () => {
+    const tree = await drawn({}, healthy, {
+      mirror: { ok: false, reason: "refused", status: 502, headline: "serve failed", detail: "checkout locked" },
+    });
+    expect(elements(tree).some((element) => element.type === "iframe")).toBe(false);
+    expect(elements(tree).some((element) => element.props.headline === "serve failed")).toBe(true);
+  });
+
+  it("says so with the port it knows when the mirror's own health check fails", async () => {
+    const tree = await drawn({}, healthy, {
+      mirror: { ok: true, data: { file: "dot-product.tldr", url: "http://127.0.0.1:9/", port: 9, healthy: false, note: "" } },
+    });
+    expect(elements(tree).some((element) => element.type === "iframe")).toBe(false);
+    const problem = elements(tree).find((element) => element.props.headline === "The canvas server is not answering.");
+    expect(problem).toBeDefined();
+    expect(String(problem?.props.detail)).toContain("port 9");
+  });
+});
+
+describe("the canvas's jobs", () => {
+  it("shows the inspector only the jobs aimed at this document's file", async () => {
+    const jobs = [
+      { jobId: "j1", state: "done", title: "This one", target: "dot-product.tldr", requested: "2026-01-01T00:00:00Z" },
+      { jobId: "j2", state: "done", title: "Another's", target: "other.tldr", requested: "2026-01-01T00:00:00Z" },
+    ];
+    const tree = await drawn({}, healthy, { jobs });
+    const inspector = elements(tree).find((element) => element.type === DiagramInspector);
+    expect(inspector?.props.jobs).toEqual([jobs[0]]);
+  });
+});
+
+describe("the canvas route's name", () => {
+  it("decodes the segment before looking it up, and re-encodes it for the runner", async () => {
+    const named = { ...diagram, name: "my diagram" };
+    const tree = await drawn({}, healthy, {
+      name: "my%20diagram",
+      listing: { ...listing, diagrams: [named] },
+      one: { ok: true, data: named },
+    });
+    expect(calls.some((call) => call.path === "/api/diagrams/my%20diagram")).toBe(true);
+    expect(elements(tree).some((element) => element.type === "iframe")).toBe(true);
   });
 });
 

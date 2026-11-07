@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { studioCanTag } from "@/lib/tutor-studio";
+import { HEALTH_TIMEOUT_MS, readHealth, studioCanTag, whenIdle } from "@/lib/tutor-studio";
 
 /**
  * D67 of docs/STUDIO-TUTOR-HANDOFF.md: the tutor shows tags, and loads the
@@ -36,5 +36,60 @@ describe("whether a health answer lets the tutor tag", () => {
 
   it("says yes with the day's cap spent: the menu shows, both entries disabled with the reason", () => {
     expect(studioCanTag({ ...good, dailyCap: { totalUsd: 12, capUsd: 10, exceeded: true } })).toBe(true);
+  });
+});
+
+describe("readHealth", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("fetches through the studio's proxy, uncached and on the one deadline every runner read shares", async () => {
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    const fetchMock = vi.fn(async () => new Response('{"ok":true}', { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    expect(await readHealth()).toEqual({ ok: true });
+    expect(fetchMock).toHaveBeenCalledWith("/studio/api/health", expect.objectContaining({ cache: "no-store" }));
+    expect(timeout).toHaveBeenCalledWith(HEALTH_TIMEOUT_MS);
+  });
+
+  it("is null when the proxy refuses, when the runner cannot be reached, and when the answer is not one", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("down", { status: 503 })));
+    expect(await readHealth()).toBeNull();
+    vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new TypeError("fetch failed"))));
+    expect(await readHealth()).toBeNull();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("not json", { status: 200 })));
+    expect(await readHealth()).toBeNull();
+  });
+});
+
+describe("whenIdle", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("schedules on the browser's idle callback when there is one, and cancels it", () => {
+    const task = vi.fn();
+    const windowStub = {
+      requestIdleCallback: vi.fn(() => 42),
+      cancelIdleCallback: vi.fn(),
+      setTimeout: vi.fn(),
+      clearTimeout: vi.fn(),
+    };
+    vi.stubGlobal("window", windowStub);
+    const stop = whenIdle(task);
+    expect(windowStub.requestIdleCallback).toHaveBeenCalledWith(task, { timeout: 4_000 });
+    expect(windowStub.setTimeout).not.toHaveBeenCalled();
+    stop();
+    expect(windowStub.cancelIdleCallback).toHaveBeenCalledWith(42);
+  });
+
+  it("falls back to a short timer where there is no idle callback, and cancels it", () => {
+    const task = vi.fn();
+    const windowStub = { requestIdleCallback: undefined, setTimeout: vi.fn(() => 7), clearTimeout: vi.fn() };
+    vi.stubGlobal("window", windowStub);
+    const stop = whenIdle(task);
+    expect(windowStub.setTimeout).toHaveBeenCalledWith(task, 200);
+    stop();
+    expect(windowStub.clearTimeout).toHaveBeenCalledWith(7);
   });
 });
