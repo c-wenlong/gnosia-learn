@@ -223,7 +223,7 @@ export default async function AssetPage({
     ) : (
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         {heading}
-        <div className="flex shrink-0 flex-wrap items-start gap-2.5">
+        <div className="flex min-w-0 max-w-full flex-wrap items-start gap-2.5">
           {leading}
           {trailing}
         </div>
