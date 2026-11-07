@@ -132,7 +132,7 @@ async function learnerWrite<T>(
 /* -------------------------------------------------------------------------- */
 
 /** The longest scratch note the checklist will store. */
-export const MAX_NOTE_CHARS = 20_000;
+const MAX_NOTE_CHARS = 20_000;
 
 /** Curriculum item ids are authored (`cs4263-m1-t1`), so they are short. */
 export const MAX_ID_CHARS = 128;
