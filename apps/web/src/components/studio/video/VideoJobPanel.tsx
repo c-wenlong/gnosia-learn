@@ -24,6 +24,7 @@ import { InlineConfirm } from "@/components/ui/InlineConfirm";
 import { Textarea } from "@/components/ui/Textarea";
 import { TextLink } from "@/components/ui/TextLink";
 import { useFollowFoot } from "@/components/ui/use-follow-foot";
+import { ErrorText } from "@/components/ui/ErrorText";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { modelName } from "@/lib/model-name";
 import { announceOpener, leaveOpener, sessionStore } from "@/lib/studio-extend";
@@ -269,39 +270,42 @@ function FailureCard({ job, path, inConversation }: { job: VideoJob; path: strin
   };
 
   return (
-    <div className="flex min-w-0 flex-col gap-3 rounded-xl border border-danger/45 bg-danger/8 px-4 py-3">
-      {failure.detail !== null && failure.detail !== "" && (
-        <p className="text-[13px] break-words text-text">{failure.detail}</p>
-      )}
-      <p className="text-[13px] text-text2">Nothing landed in the catalog. The source the agent wrote is kept.</p>
-      <div className="flex flex-wrap items-center gap-2">
-        {failure.actions.includes("resume") && (
-          <Button size="sm" disabled={busy} onClick={() => void resume()}>
-            {busy ? "Resuming" : "Resume"}
-          </Button>
+    // The 2px ring of a bordered callout: the box sits on the panel's pale ground.
+    <Callout tone="danger" bordered>
+      <div className="flex flex-col gap-3">
+        {failure.detail !== null && failure.detail !== "" && (
+          <p className="break-words">{failure.detail}</p>
         )}
-        {failure.actions.includes("revise") && !changing && (
-          <Button size="sm" variant="secondary" onClick={() => setChanging(true)}>
-            Try again with a change
-          </Button>
-        )}
-        {failure.actions.includes("talk") && !inConversation && typeof job.draftId === "string" && (
-          <PanelLink
-            href={conversationHref(path, job.draftId)}
-            scroll={false}
-            className={buttonClasses({ size: "sm", variant: "ghost" })}
-          >
-            Back to the conversation
-          </PanelLink>
-        )}
-      </div>
-      {changing && (
-        <div className={FADE_IN}>
-          <ChangeForm job={job} path={path} onClose={() => setChanging(false)} />
+        <p className="text-text2">Nothing landed in the catalog. The source the agent wrote is kept.</p>
+        <div className="flex flex-wrap items-center gap-2">
+          {failure.actions.includes("resume") && (
+            <Button size="sm" disabled={busy} onClick={() => void resume()}>
+              {busy ? "Resuming" : "Resume"}
+            </Button>
+          )}
+          {failure.actions.includes("revise") && !changing && (
+            <Button size="sm" variant="secondary" onClick={() => setChanging(true)}>
+              Try again with a change
+            </Button>
+          )}
+          {failure.actions.includes("talk") && !inConversation && typeof job.draftId === "string" && (
+            <PanelLink
+              href={conversationHref(path, job.draftId)}
+              scroll={false}
+              className={buttonClasses({ size: "sm", variant: "ghost" })}
+            >
+              Back to the conversation
+            </PanelLink>
+          )}
         </div>
-      )}
-      {said !== null && <p role="alert" className="text-[13px] text-danger">{said}</p>}
-    </div>
+        {changing && (
+          <div className={FADE_IN}>
+            <ChangeForm job={job} path={path} onClose={() => setChanging(false)} />
+          </div>
+        )}
+        <ErrorText>{said}</ErrorText>
+      </div>
+    </Callout>
   );
 }
 
@@ -889,11 +893,7 @@ function Actions({ job, path, accept, discard, change }: { job: VideoJob; path: 
           <ChangeForm job={job} path={path} onClose={() => setChanging(false)} />
         </div>
       )}
-      {said !== null && (
-        <p role="alert" className="text-[13px] text-danger">
-          {said.text}
-        </p>
-      )}
+      <ErrorText>{said?.text}</ErrorText>
     </div>
   );
 }
@@ -993,11 +993,7 @@ function ChangeForm({ job, path, onClose }: { job: VideoJob; path: string; onClo
       <p id={hintId} className="text-[12px] leading-4 text-text3">
         {changeHint(reviewing, canTalk)}
       </p>
-      {problem !== null && (
-        <p role="alert" className="text-[13px] text-danger">
-          {problem}
-        </p>
-      )}
+      <ErrorText>{problem}</ErrorText>
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" disabled={busy} onClick={() => void revise()} aria-keyshortcuts="Meta+Enter Control+Enter">
           {busy ? "Starting" : "Change the picture"}

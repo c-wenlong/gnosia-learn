@@ -2,11 +2,11 @@
 
 import type { ReactNode } from "react";
 
-import { Failure } from "@/components/studio/draft/ThreadFoot";
 import type { RecordStatus } from "@/components/studio/draft/use-draft-record";
 import { PinnedDiagram } from "@/components/studio/PinnedDiagram";
 import { DialogHeader } from "@/components/studio/StudioDialog";
 import { Button } from "@/components/ui/Button";
+import { ErrorText } from "@/components/ui/ErrorText";
 import { GONE } from "@/lib/studio-chat";
 import { makeVideoTitle } from "@/lib/studio-extend";
 
@@ -46,7 +46,7 @@ export function DraftStatus({
           <Button onClick={onNewConversation} disabled={starting}>
             New conversation
           </Button>
-          <Failure text={startError} />
+          <ErrorText>{startError}</ErrorText>
         </Empty>
       </>
     );

@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useJobVerb } from "@/components/studio/use-job-verb";
 import { Button } from "@/components/ui/Button";
 import { cx } from "@/components/ui/classes";
+import { ErrorTip } from "@/components/ui/ErrorTip";
 import { formatDuration, type Job } from "@/lib/studio-jobs";
 import type { VerbOutcome } from "@/lib/studio-job-verb";
 import { useElapsed } from "@/lib/use-elapsed";
@@ -163,12 +164,7 @@ export function CancelJobButton({
       // `pointer-events-auto` on the button only: the bar under it takes no clicks.
       <span className="relative inline-flex shrink-0">
         {button}
-        <span
-          role="alert"
-          className="absolute right-0 bottom-full z-20 mb-1 w-max max-w-44 rounded-md border border-border bg-surface px-2 py-1.5 text-left text-xs leading-4 font-normal text-danger shadow-sm"
-        >
-          {said}
-        </span>
+        <ErrorTip place="above">{said}</ErrorTip>
       </span>
     );
   }

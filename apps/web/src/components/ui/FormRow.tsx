@@ -1,6 +1,7 @@
 import { useId, type ReactNode } from "react";
 
-import { cx, LABEL, STATUS_TEXT } from "./classes";
+import { cx, LABEL } from "./classes";
+import { ErrorText } from "./ErrorText";
 import { LiveStatus, type StatusTone } from "./LiveStatus";
 
 /** What a row's control is handed: the ids that tie it to the row's words. */
@@ -22,7 +23,7 @@ export interface FormRowField {
  *
  * The control is a function of the row (`children(field)`): it takes `id` for
  * the label, `describedBy` for the hint and the error, and `invalid`. The
- * error is a `role="alert"` line under the control; the status is a
+ * error is an `ErrorText` (a `role="alert"` line) under the control; the status is a
  * `LiveStatus` ("Saving…", "Saved", why a save failed), which glides in and
  * out.
  *
@@ -76,11 +77,7 @@ export function FormRow({
       {hint}
     </p>
   );
-  const errorLine = error !== null && (
-    <p id={errorId} role="alert" className={cx(STATUS_TEXT, "animate-fade-in text-danger motion-reduce:animate-none")}>
-      {error}
-    </p>
-  );
+  const errorLine = error !== null && <ErrorText id={errorId}>{error}</ErrorText>;
   const statusLine = status !== undefined && <LiveStatus text={status.text} tone={status.tone} />;
 
   if (inline) {

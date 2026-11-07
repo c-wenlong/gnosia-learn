@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/Button";
-import { cx, STATUS_TEXT } from "@/components/ui/classes";
+import { ErrorText } from "@/components/ui/ErrorText";
 import { markWatched } from "@/lib/asset-actions";
 
 type State = { kind: "idle" } | { kind: "saving" } | { kind: "saved" } | { kind: "failed"; message: string };
@@ -46,11 +46,7 @@ export function MarkWatched({ assetId }: { assetId: string }) {
       <Button size="sm" onClick={mark} disabled={state.kind === "saving"} aria-live="polite">
         {label}
       </Button>
-      {state.kind === "failed" && (
-        <p role="alert" className={cx(STATUS_TEXT, "text-danger")}>
-          {state.message}
-        </p>
-      )}
+      {state.kind === "failed" && <ErrorText>{state.message}</ErrorText>}
     </div>
   );
 }

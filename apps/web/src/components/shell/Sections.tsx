@@ -6,11 +6,12 @@ import { useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, ty
 
 import type { HistorySearch } from "@/components/studio/history-search";
 import { TextLink } from "@/components/ui/TextLink";
-import { cx, FIELD_TEXT, iconButtonClasses, STATUS_TEXT } from "@/components/ui/classes";
+import { cx, FIELD_TEXT, iconButtonClasses } from "@/components/ui/classes";
 import { isImeKey } from "@/components/ui/composer-keys";
 import { Collapse } from "@/components/ui/Collapse";
 import { Glyph } from "@/components/ui/Glyph";
 import { Menu, MenuItem } from "@/components/ui/Menu";
+import { ErrorText } from "@/components/ui/ErrorText";
 import { isCurrentRow } from "@/lib/nav";
 import { recentGlyph } from "@/lib/recent-glyphs";
 import type { RecentChange } from "@/lib/recent-client";
@@ -238,11 +239,8 @@ export function Sections({ rail, onPick, search }: { rail: boolean; onPick: () =
         <SectionLabel id="sidebar-recent" rail={rail}>
           Recent
         </SectionLabel>
-        {pinError !== null && (
-          <p role="alert" className={cx(STATUS_TEXT, "px-2 pt-1 text-danger", LABEL_FADE, rail ? "opacity-0" : LABEL_SHOWN)}>
-            {pinError}
-          </p>
-        )}
+        {/* No fade-in on the rail: the line is hidden there, and the fade would flash it. */}
+        <ErrorText className={cx("px-2 pt-1", LABEL_FADE, rail ? "animate-none opacity-0" : LABEL_SHOWN)}>{pinError}</ErrorText>
         {search.words !== "" ? (
           // Faded out on the rail like every other label: the words stay
           // after focus leaves the field and the peek ends.
@@ -281,11 +279,7 @@ export function Sections({ rail, onPick, search }: { rail: boolean; onPick: () =
                 <TextLink onClick={() => void showOlder()} pending={loadingOlder} size="sm" className="px-1.5 py-1">
                   {loadingOlder ? "Reading older rows…" : "Show older"}
                 </TextLink>
-                {olderError !== null && (
-                  <p role="alert" className={cx(STATUS_TEXT, "px-1.5 text-danger")}>
-                    {olderError}
-                  </p>
-                )}
+                <ErrorText className="px-1.5">{olderError}</ErrorText>
               </div>
             )}
             {loaded && rows.length === 0 && !unlisted && !merged.more && (

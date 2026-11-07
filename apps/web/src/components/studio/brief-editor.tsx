@@ -9,6 +9,7 @@ import { Glyph } from "@/components/ui/Glyph";
 import { IconButton } from "@/components/ui/IconButton";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
+import { ErrorText } from "@/components/ui/ErrorText";
 import type { BriefEdit, EditRelation, FieldKey, FieldProblem } from "@/lib/studio-brief-edit";
 
 /**
@@ -24,15 +25,6 @@ export function Arrow() {
     <span aria-hidden className="px-1.5 text-text3">
       →
     </span>
-  );
-}
-
-export function Problem({ id, problem }: { id: string; problem: FieldProblem | null }) {
-  if (problem === null) return null;
-  return (
-    <p id={id} role="alert" className="mt-1 text-[13px] leading-5 text-danger">
-      {problem.message}
-    </p>
   );
 }
 
@@ -122,13 +114,11 @@ export function ElementsEditor({
           </button>
         </li>
       </ul>
-      {group !== null && <Problem id={messageId("elements")} problem={group} />}
+      {group !== null && <ErrorText id={messageId("elements")} className="mt-1">{group.message}</ErrorText>}
       {refused.map(({ element, at, problem }) => (
-        <Problem
-          key={element.id}
-          id={messageId(`element:${element.id}`)}
-          problem={problem === null ? null : { ...problem, message: `Element ${at + 1}: ${problem.message}` }}
-        />
+        <ErrorText key={element.id} id={messageId(`element:${element.id}`)} className="mt-1">
+          {problem === null ? null : `Element ${at + 1}: ${problem.message}`}
+        </ErrorText>
       ))}
     </div>
   );
@@ -221,7 +211,9 @@ export function RelationsEditor({
                   </span>
                 </div>
                 {shown.map((end) => (
-                  <Problem key={end} id={messageId(`relation:${relation.id}:${end}`)} problem={problem(end)} />
+                  <ErrorText key={end} id={messageId(`relation:${relation.id}:${end}`)} className="mt-1">
+                    {problem(end)?.message}
+                  </ErrorText>
                 ))}
               </li>
             );
@@ -239,7 +231,7 @@ export function RelationsEditor({
           <span aria-hidden>+</span> Add an arrow
         </button>
       </div>
-      {group !== null && <Problem id={messageId("relations")} problem={group} />}
+      {group !== null && <ErrorText id={messageId("relations")} className="mt-1">{group.message}</ErrorText>}
     </div>
   );
 }

@@ -12,7 +12,9 @@ import { calloutClasses, cx, type CalloutTone } from "./classes";
  * With a `title`, the title is the verdict (14px semibold) and the words under
  * it are the detail, in `--text2`. Without one the words are the verdict and
  * stay `--text`. `actions` go in a row under the words, so a long message
- * never squeezes its button. No state and no hooks, so a server component can
+ * never squeezes its button; `actionsAt="end"` puts them at the end of the
+ * words' line instead, wrapping under them when the line is too narrow.
+ * `dense` is the small box for a side panel or a list row. No state and no hooks, so a server component can
  * draw it; the motion of something that mounts (`animate-enter`) is the
  * caller's `className`.
  */
@@ -22,6 +24,8 @@ export function Callout({
   actions,
   role,
   bordered = false,
+  dense = false,
+  actionsAt = "below",
   id,
   className,
   children,
@@ -37,6 +41,10 @@ export function Callout({
   role?: "status" | "alert" | "group" | "note";
   /** A 2px ring in the tone, for a box on a ground as pale as its own. */
   bordered?: boolean;
+  /** The small box: radius 6, padding 8, 12px words, a 1px ring when bordered. */
+  dense?: boolean;
+  /** `end` puts the actions on the words' line, after them; `below` (the default) in a row under them. */
+  actionsAt?: "below" | "end";
   id?: string;
   className?: string;
   children?: ReactNode;
@@ -44,6 +52,7 @@ export function Callout({
   "aria-label"?: string;
   "aria-labelledby"?: string;
 }) {
+  const end = actionsAt === "end";
   return (
     <div
       ref={ref}
@@ -51,13 +60,15 @@ export function Callout({
       role={role}
       aria-label={ariaLabel}
       aria-labelledby={ariaLabelledby}
-      className={calloutClasses({ tone, bordered, className })}
+      className={calloutClasses({ tone, bordered, dense, actionsAt, className })}
     >
-      {title !== undefined && <p className="text-[14px] font-semibold text-text">{title}</p>}
-      {children !== undefined && children !== null && children !== false && (
-        <div className={cx("min-w-0 break-words", title !== undefined && "text-text2")}>{children}</div>
+      {title !== undefined && (
+        <p className={cx(dense ? "font-semibold" : "text-[14px] font-semibold", "text-text", end && "basis-full")}>{title}</p>
       )}
-      {actions !== undefined && <div className="flex flex-wrap items-center gap-2 pt-1">{actions}</div>}
+      {children !== undefined && children !== null && children !== false && (
+        <div className={cx("min-w-0 break-words", title !== undefined && "text-text2", end && "flex-1")}>{children}</div>
+      )}
+      {actions !== undefined && <div className={cx("flex flex-wrap items-center gap-2", !end && "pt-1")}>{actions}</div>}
     </div>
   );
 }

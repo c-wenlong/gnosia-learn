@@ -11,6 +11,7 @@ import { InlineConfirm } from "@/components/ui/InlineConfirm";
 import { Input } from "@/components/ui/Input";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Select } from "@/components/ui/Select";
+import { ErrorText } from "@/components/ui/ErrorText";
 import { BYOK_PROVIDERS, byokToTutor } from "@/lib/byok-providers";
 import { sendJson } from "@/lib/send-json";
 import {
@@ -612,11 +613,7 @@ export function ByokConfig({
         </>
       )}
 
-      {error !== null && (
-        <p role="alert" className="text-[13px] leading-5 text-danger">
-          {error}
-        </p>
-      )}
+      <ErrorText>{error}</ErrorText>
     </div>
   );
 }

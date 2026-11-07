@@ -42,6 +42,7 @@ import { recapTurns, topicRequestTurns } from "@/lib/tutor-thread";
 import { ownValue } from "@gnosia/tutor/own-key";
 import { randomToken } from "@/lib/random-token";
 import { FADE_IN } from "@/components/ui/motion";
+import { TurnError } from "@/components/workspace/TurnError";
 import { ChatTurn } from "@/components/workspace/ChatTurn";
 
 type Role = "user" | "assistant";
@@ -459,21 +460,8 @@ export function AgentSession({
             </p>
           )}
           {error && (
-            <Callout
-              tone="danger"
-              role="alert"
-              className={FADE_IN}
-              actions={
-                // The learner's turn went unanswered: send it again, rather than typing it twice.
-                takeUnanswered(messages) !== null ? (
-                  <Button variant="secondary" size="sm" onClick={() => void retry()}>
-                    Try again
-                  </Button>
-                ) : undefined
-              }
-            >
-              {error}
-            </Callout>
+            // The learner's turn went unanswered: send it again, rather than typing it twice.
+            <TurnError error={error} onRetry={takeUnanswered(messages) !== null ? () => void retry() : undefined} />
           )}
           <div ref={bottomRef} />
         </div>
