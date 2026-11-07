@@ -144,7 +144,7 @@ describe("BackLink", () => {
     expect(link.textContent?.trim()).toBe("Studio");
     // No text arrow in this look: the kit glyph, hidden from a screen reader.
     expect(link.textContent).not.toContain("←");
-    expect(link.querySelector("svg")?.getAttribute("aria-hidden")).not.toBeNull();
+    expect(link.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
     expect(tokens(link)).not.toContain("self-start");
   });
 });
