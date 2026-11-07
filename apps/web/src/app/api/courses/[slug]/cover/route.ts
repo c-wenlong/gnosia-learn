@@ -2,16 +2,9 @@ import { classifyConnectionFailure, courseCoverBlob, type CourseCoverBlob } from
 import { COURSE_COVER_TYPES } from "@gnosia/schema/shared";
 import { NextResponse } from "next/server";
 
-import {
-  blobStoreProblem,
-  isRangeRefusal,
-  openBlob,
-  parseRange,
-  webStreamFrom,
-  type AssetFileProblem,
-} from "@/lib/asset-files";
+import { blobStoreProblem, type AssetFileProblem } from "@/lib/asset-files";
 import type { RouteProblemCode } from "@gnosia/tutor/asset-problems";
-import { matchesEtag, problemResponse, signedRedirect } from "@/lib/asset-response";
+import { matchesEtag, problemResponse, serveBlobRange, signedRedirect } from "@/lib/asset-response";
 import { assetBlobStore } from "@/lib/blob-store";
 import { COVER_VERSION_PARAM, coverVersion } from "@/lib/course-summary";
 import { unauthenticated } from "@/lib/learner-api";
@@ -169,31 +162,5 @@ async function serve(request: Request, cover: CoverServed): Promise<Response> {
   }
   if (redirect !== null) return redirect;
 
-  const range = parseRange(request.headers.get("range"), cover.bytes);
-  if (range.kind === "unsatisfiable") {
-    return new Response(null, { status: 416, headers: { ...headers, "Content-Range": `bytes */${cover.bytes}` } });
-  }
-  try {
-    if (range.kind === "partial") {
-      const read = await openBlob(cover.key, { start: range.start, end: range.end });
-      return new Response(webStreamFrom(read.body), {
-        status: 206,
-        headers: {
-          ...headers,
-          "Content-Range": `bytes ${read.start}-${read.end}/${read.size}`,
-          "Content-Length": String(read.end - read.start + 1),
-        },
-      });
-    }
-    const read = await openBlob(cover.key);
-    return new Response(webStreamFrom(read.body), {
-      status: 200,
-      headers: { ...headers, "Content-Length": String(read.size) },
-    });
-  } catch (error) {
-    if (isRangeRefusal(error)) {
-      return new Response(null, { status: 416, headers: { ...headers, "Content-Range": `bytes */${cover.bytes}` } });
-    }
-    return problemResponse(blobStoreProblem(error));
-  }
+  return serveBlobRange(cover.key, cover.bytes, headers, request.headers.get("range"));
 }
