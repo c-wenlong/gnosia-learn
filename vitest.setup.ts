@@ -17,6 +17,12 @@ import { fileURLToPath } from "node:url";
 import { afterAll, expect, vi } from "vitest";
 
 import { isolateCatalog } from "./services/catalog/test/catalog-isolation";
+import { installPopoverShim } from "./apps/web/src/test/popover-shim";
+
+// jsdom has no Popover API, so a kit popover would never show in a jsdom
+// suite (apps/web/src/test/popover-shim.ts says why that matters). A no-op
+// in the node environment.
+installPopoverShim();
 
 /** Where vitest.setup.ts leaves the open check for the `better-sqlite3` mock below. */
 interface CatalogGuardGlobal {
