@@ -1,10 +1,9 @@
 import type { ReactNode } from "react";
 
 import { PanelLink } from "@/components/studio/PanelLink";
+import { BackLink } from "@/components/ui/BackLink";
 import { Banner } from "@/components/ui/Banner";
-import { Button } from "@/components/ui/Button";
 import { cx, LABEL } from "@/components/ui/classes";
-import { Glyph } from "@/components/ui/Glyph";
 
 /**
  * The small, shared pieces of the studio's own chrome.
@@ -69,16 +68,15 @@ export function StudioStrip({ children, surface = false }: { children: ReactNode
 }
 
 /**
- * The way back to the grid from a canvas, first on its strip: a ghost kit
- * `Button` at `xs`, drawn by the canvas page and by its loading frame, so it
- * works before the canvas does.
+ * The way back to the grid from a canvas, first on its strip: the kit
+ * `BackLink` in its toolbar look, drawn by the canvas page and by its loading
+ * frame, so it works before the canvas does.
  */
 export function BackToStudio() {
   return (
-    <Button href="/studio" variant="ghost" size="xs" aria-label="Back to the studio">
-      <Glyph name="previous" size={16} className="-ml-0.5" />
+    <BackLink href="/studio" variant="toolbar" label="Back to the studio">
       Studio
-    </Button>
+    </BackLink>
   );
 }
 
