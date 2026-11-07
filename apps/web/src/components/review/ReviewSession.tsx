@@ -11,12 +11,14 @@ import { Eyebrow } from "@/components/ui/Eyebrow";
 import { MathText } from "@/components/Math";
 import { WrongSourceNote } from "@/components/WrongSourceNote";
 import { FeedbackBar } from "@/components/ui/FeedbackBar";
+import { FocusHeading } from "@/components/ui/FocusHeading";
+import { Notice } from "@/components/ui/Notice";
 import { FocusFrame } from "@/components/session/FocusFrame";
 import { useWrittenOptions } from "@/components/session/use-written-options";
 import { Placeholder } from "@/components/ui/Placeholder";
 import { RatingButton } from "@/components/ui/RatingButton";
 import { StatTile } from "@/components/ui/StatTile";
-import { CLOSE_TITLE, cx } from "@/components/ui/classes";
+import { cx } from "@/components/ui/classes";
 import { ErrorText } from "@/components/ui/ErrorText";
 import { conceptHref } from "@/lib/course-path";
 import { scrollBehavior } from "@/lib/motion";
@@ -298,10 +300,17 @@ export function ReviewSession({
   if (!initial.reachable) {
     return (
       <FocusFrame percent={0} label="Review" exit={exit} progressLabel="Review progress" stepKey="empty" columnRef={columnRef}>
-        <Closing
+        <Notice
           title="Reviews are unavailable"
-          lead="The catalog could not be read, so there is no queue to show and nothing could be graded. Check it with npm run catalog -- status, then reload."
-        />
+          level={1}
+          align="center"
+          command="npm run catalog -- status"
+          actions={<Button href="/home">Back to Home</Button>}
+          className="mt-6 md:mt-10"
+        >
+          The catalog could not be read, so there is no queue to show and nothing could be graded. Check it with this,
+          then reload.
+        </Notice>
       </FocusFrame>
     );
   }
@@ -641,16 +650,11 @@ function CheckBody({
   );
 }
 
-/** The end of the queue, an empty queue, or an unreachable one: a title, a line, and the way out. */
+/** The end of the queue or an empty one: a title, a line, and the way out. */
 function Closing({ title, lead, children }: { title: string; lead: string; children?: ReactNode }) {
   return (
     <div className="flex flex-col items-center gap-6 pt-6 text-center md:pt-10">
-      <div className="flex flex-col items-center gap-1.5">
-        <h1 tabIndex={-1} className={cx(CLOSE_TITLE, "outline-none")}>
-          {title}
-        </h1>
-        <p className="max-w-[480px] text-[14px] text-text2">{lead}</p>
-      </div>
+      <FocusHeading title={title} lead={lead} />
       {children}
       <Button href="/home">Back to Home</Button>
     </div>

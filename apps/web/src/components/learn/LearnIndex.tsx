@@ -8,10 +8,11 @@ import { DomainCards, DomainView, type Place } from "@/components/learn/DomainBr
 import type { MapMark } from "@/components/learn/DomainGraph";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { cardClasses, cx, FOCUS, LABEL, NOTE, PAGE_TITLE } from "@/components/ui/classes";
+import { cardClasses, cx, FOCUS, LABEL } from "@/components/ui/classes";
 import { isImeKey } from "@/components/ui/composer-keys";
 import { FilterMenu } from "@/components/ui/FilterMenu";
 import { MasteryDot } from "@/components/ui/MasteryDot";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SearchField } from "@/components/ui/SearchField";
 import { Callout } from "@/components/ui/Callout";
@@ -215,36 +216,39 @@ export function LearnIndex({
 
   return (
     <div className="flex flex-col gap-4">
-      <header className="flex flex-wrap items-center gap-x-4 gap-y-3">
-        <div className="flex min-w-0 flex-1 basis-[20rem] flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h1 className={PAGE_TITLE}>Learn</h1>
-          <p className={NOTE}>
+      <PageHeader
+        title="Learn"
+        noteBeside
+        note={
+          <>
             {rows.length} concept{rows.length === 1 ? "" : "s"} · {counts.mastered} mastered · {counts.learning} learning ·{" "}
             {counts.untouched} {MASTERY_BUCKET_LABEL.untouched.toLowerCase()}
-          </p>
-        </div>
-        <SearchField
-          label="Search concepts"
-          placeholder="Search concepts"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onClear={() => setQuery("")}
-          onKeyDown={(e) => {
-            // On the map, Enter opens the best match in its domain (D8).
-            // The Enter that confirms an input method's word is not a search.
-            if (e.key !== "Enter" || isImeKey(e.nativeEvent) || view !== "graph") return;
-            // Only among the rows on screen (the filter and the search both), so Enter
-            // never lands on a concept the map has dimmed.
-            const id = firstMatch(visible, query);
-            if (id !== null) {
-              e.preventDefault();
-              if (domainOf[id] === place.domain && place.topic === null) setSelected(id);
-              else go({ domain: domainOf[id] ?? null, topic: null }, id);
-            }
-          }}
-          className="w-full sm:w-[280px]"
-        />
-      </header>
+          </>
+        }
+        actions={
+          <SearchField
+            label="Search concepts"
+            placeholder="Search concepts"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onClear={() => setQuery("")}
+            onKeyDown={(e) => {
+              // On the map, Enter opens the best match in its domain (D8).
+              // The Enter that confirms an input method's word is not a search.
+              if (e.key !== "Enter" || isImeKey(e.nativeEvent) || view !== "graph") return;
+              // Only among the rows on screen (the filter and the search both), so Enter
+              // never lands on a concept the map has dimmed.
+              const id = firstMatch(visible, query);
+              if (id !== null) {
+                e.preventDefault();
+                if (domainOf[id] === place.domain && place.topic === null) setSelected(id);
+                else go({ domain: domainOf[id] ?? null, topic: null }, id);
+              }
+            }}
+            className="w-full sm:w-[280px]"
+          />
+        }
+      />
 
       <div className="flex flex-wrap items-center gap-2">
         <FilterMenu label="Status" options={statusOptions} value={filter} defaultValue="all" onChange={setFilter} />

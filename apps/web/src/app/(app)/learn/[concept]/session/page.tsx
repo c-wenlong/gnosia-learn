@@ -12,7 +12,7 @@ import { loadConceptWorkspace } from "@/lib/concept-workspace";
 import { parseMode, teachProse } from "@gnosia/tutor/session-core";
 import { loadSessionPage, noteResolvers, type TeachAsset } from "@/lib/session-page";
 import { TextLink } from "@/components/ui/TextLink";
-import { PAGE_TITLE } from "@/components/ui/classes";
+import { Notice } from "@/components/ui/Notice";
 
 /**
  * Session focus mode (hi-fi 05, 06 and 07, and 15 on a phone): one concept
@@ -153,16 +153,17 @@ function assetElement(asset: TeachAsset, compact: boolean) {
 function Unreachable({ slug }: { slug: string }) {
   return (
     <div data-layout="focus">
-      <div className="mx-auto flex max-w-[720px] flex-col items-center gap-4 px-4 pt-16 text-center">
-        <h1 className={PAGE_TITLE}>The session cannot start</h1>
-        <p className="text-[14px] text-text2">
+      <div className="mx-auto max-w-[720px] px-4 pt-16">
+        <Notice
+          title="The session cannot start"
+          level={1}
+          align="center"
+          command="npm run catalog -- status"
+          actions={<TextLink href={`/learn/${slug}`} size="md">Back to the workspace</TextLink>}
+        >
           The catalog could not be read, so there is no note to teach from and nowhere to record an answer. Nothing is
           lost. Check it with this, then reload.
-        </p>
-        <pre className="overflow-x-auto rounded-lg bg-surface2 p-3 text-[12px]">npm run catalog -- status</pre>
-        <TextLink href={`/learn/${slug}`} size="md">
-          Back to the workspace
-        </TextLink>
+        </Notice>
       </div>
     </div>
   );

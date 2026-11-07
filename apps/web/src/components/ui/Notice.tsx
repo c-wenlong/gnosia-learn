@@ -15,7 +15,9 @@ import { CARD_TITLE, cardClasses, cx } from "./classes";
  * with `\`. `dense` is the narrow form for a region rather than a page (the
  * studio's): the tight card and 14px heading. `level` is the heading's level,
  * 2 by default; a notice that replaces a whole region with no heading of its
- * own above it takes 1. No state and no hooks, so a server component draws it.
+ * own above it takes 1. `align="center"` centres the heading, the words, the
+ * commands and the actions, for a focus page, whose column is centred text.
+ * No state and no hooks, so a server component draws it.
  */
 export function Notice({
   title,
@@ -25,6 +27,7 @@ export function Notice({
   actions,
   dense = false,
   level = 2,
+  align = "start",
   className,
   children,
 }: {
@@ -38,13 +41,19 @@ export function Notice({
   actions?: ReactNode;
   dense?: boolean;
   level?: 1 | 2 | 3;
+  /** Centred for a focus page; start-aligned by default. */
+  align?: "start" | "center";
   className?: string;
   children?: ReactNode;
 }) {
   const Heading = `h${level}` as const;
   const lines = [...(command === undefined ? [] : [command]), ...(commands ?? [])];
+  const centred = align === "center";
   return (
-    <section role={role} className={cardClasses({ tight: dense, className: cx("items-start", className) })}>
+    <section
+      role={role}
+      className={cardClasses({ tight: dense, className: cx(centred ? "items-center text-center" : "items-start", className) })}
+    >
       <Heading className={dense ? "text-[14px] leading-5 font-bold text-text" : CARD_TITLE}>
         {title}
       </Heading>
@@ -54,7 +63,7 @@ export function Notice({
         </div>
       )}
       {lines.length > 0 && (
-        <div className="flex max-w-full flex-col items-start gap-1.5">
+        <div className={cx("flex max-w-full flex-col gap-1.5", centred ? "items-center" : "items-start")}>
           {lines.map((line) => (
             <code
               key={line}
@@ -65,7 +74,9 @@ export function Notice({
           ))}
         </div>
       )}
-      {actions !== undefined && <div className="flex flex-wrap items-center gap-2 pt-1">{actions}</div>}
+      {actions !== undefined && (
+        <div className={cx("flex flex-wrap items-center gap-2 pt-1", centred && "justify-center")}>{actions}</div>
+      )}
     </section>
   );
 }

@@ -7,7 +7,7 @@ import { unlessUnreachable } from "@/data/source";
 import { moduleHref } from "@/lib/course-path";
 import { loadWeekCheck } from "@/lib/week-check-page";
 import { TextLink } from "@/components/ui/TextLink";
-import { PAGE_TITLE } from "@/components/ui/classes";
+import { Notice } from "@/components/ui/Notice";
 
 /**
  * A module's week check (phase 4 of docs/proposals/module-learning-path.md):
@@ -76,15 +76,17 @@ export default async function WeekCheckPage({ params }: Props) {
 function Unreachable({ href }: { href: string }) {
   return (
     <div data-layout="focus">
-      <div className="mx-auto flex max-w-[720px] flex-col items-center gap-4 px-4 pt-16 text-center">
-        <h1 className={PAGE_TITLE}>The module check cannot start</h1>
-        <p className="text-[14px] text-text2">
+      <div className="mx-auto max-w-[720px] px-4 pt-16">
+        <Notice
+          title="The module check cannot start"
+          level={1}
+          align="center"
+          command="npm run catalog -- status"
+          actions={<TextLink href={href} size="md">Back to the module</TextLink>}
+        >
           The database could not be reached, so there is no mastery to start from and nowhere to record an answer.
-          Nothing is lost. Run <code className="font-mono text-[13px]">npm run catalog -- status</code> to see why, then reload.
-        </p>
-        <TextLink href={href} size="md">
-          Back to the module
-        </TextLink>
+          Nothing is lost. Check it with this, then reload.
+        </Notice>
       </div>
     </div>
   );

@@ -8,6 +8,7 @@ import { loadLibraryView, renderLibraryPage } from "@/components/library/library
 import { Previewer } from "@/components/library/Previewer";
 import { loadPreview } from "@/components/library/preview-content";
 import { Notice } from "@/components/ui/Notice";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { SearchField } from "@/components/ui/SearchField";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { cx, NOTE, PAGE_TITLE, STATUS_TEXT } from "@/components/ui/classes";
@@ -240,7 +241,7 @@ export default async function LibraryPage({
     // filter, a sort or a search is a navigation that keeps it (measured), so
     // only the rows that arrive fade then.
     <div data-layout="app" className={cx("group/library flex flex-col gap-6", PAGE_ENTER)}>
-      {(!reachable || facets.total === 0) && <h1 className={PAGE_TITLE}>Library</h1>}
+      {(!reachable || facets.total === 0) && <PageHeader title="Library" />}
 
       {!reachable ? (
         <Notice title="The catalog is unreachable" command="npm run catalog -- status">
