@@ -1,3 +1,4 @@
+import { NextResponse } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ConceptWorkspace } from "@gnosia/tutor/concept-workspace-core";
@@ -123,6 +124,16 @@ describe("POST /api/agent/session", () => {
     expect(readConceptWorkspace).not.toHaveBeenCalled();
   });
 
+  it("answers a 429 once the owner's window is spent, before any read or provider call", async () => {
+    enforceRateLimit.mockReturnValueOnce(NextResponse.json({ code: "RATE_LIMITED" }, { status: 429 }));
+    const { status, json } = await call({ conceptSlug: "dot-product", step: "probe" });
+    expect(status).toBe(429);
+    expect(json.code).toBe("RATE_LIMITED");
+    expect(enforceRateLimit).toHaveBeenCalledWith("local", "session", expect.anything());
+    expect(readConceptWorkspace).not.toHaveBeenCalled();
+    expect(completeWithFallback).not.toHaveBeenCalled();
+  });
+
   it("refuses another origin before reading anything", async () => {
     expect((await call({ conceptSlug: "dot-product", step: "probe" }, "https://evil.example")).status).toBe(403);
     expect(readConceptWorkspace).not.toHaveBeenCalled();
@@ -156,6 +167,7 @@ describe("POST /api/agent/session", () => {
     );
     const { status, json } = await call({ conceptSlug: "dot-product", step: "check", avoid: ["Earlier?"] });
     expect(status).toBe(200);
+    expect(readConceptWorkspace).toHaveBeenCalledWith("dot-product", "local");
     const question = json.question as { choices: string[]; correct: number; origin: string };
     expect(question.choices[question.correct]).toBe("Right");
     expect(question.origin).toBe("model");

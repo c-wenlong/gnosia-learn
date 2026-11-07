@@ -122,6 +122,28 @@ describe("POST /api/auth/sign-in", () => {
     expect(cookieOf(response)).toBe("");
   });
 
+  it("says unconfigured too when only the secret is missing", async () => {
+    delete process.env.AUTH_SECRET;
+    const response = await signIn(post("/api/auth/sign-in", { password: "anything" }));
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/sign-in?error=unconfigured");
+    expect(cookieOf(response)).toBe("");
+  });
+
+  it("answers a body that is not a form post like a wrong password, never a 500", async () => {
+    // The right password in a JSON body still cannot sign in: only the form
+    // post the page sends is read, and anything else is a guess that missed.
+    const request = new Request(`${ORIGIN}/api/auth/sign-in`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "sec-fetch-site": "same-origin" },
+      body: JSON.stringify({ password: "correct horse battery staple" }),
+    });
+    const response = await signIn(request);
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/sign-in?error=password");
+    expect(cookieOf(response)).toBe("");
+  });
+
   it("accepts a proxied post whose Origin is https while the hop to Node is http", async () => {
     const request = new Request(`${ORIGIN}/api/auth/sign-out`, {
       method: "POST",
@@ -197,16 +219,17 @@ describe("POST /api/auth/sign-in", () => {
   });
 
   it("refuses a cross-site post before reading the body", async () => {
-    const response = await signIn(post("/api/auth/sign-in", { password: "correct horse battery staple" }, { "sec-fetch-site": "cross-site" }));
-    expect(response.status).toBe(403);
-    const byOrigin = await signIn(
-      new Request(`${ORIGIN}/api/auth/sign-in`, {
-        method: "POST",
-        headers: { "content-type": "application/x-www-form-urlencoded", host: "localhost:3000", origin: "https://evil.example" },
-        body: new URLSearchParams({ password: "correct horse battery staple" }),
-      }),
-    );
-    expect(byOrigin.status).toBe(403);
+    const byFetchSite = post("/api/auth/sign-in", { password: "correct horse battery staple" }, { "sec-fetch-site": "cross-site" });
+    expect((await signIn(byFetchSite)).status).toBe(403);
+    // The right password sat unread in the body: the origin check ran first.
+    expect(byFetchSite.bodyUsed).toBe(false);
+    const byOrigin = new Request(`${ORIGIN}/api/auth/sign-in`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded", host: "localhost:3000", origin: "https://evil.example" },
+      body: new URLSearchParams({ password: "correct horse battery staple" }),
+    });
+    expect((await signIn(byOrigin)).status).toBe(403);
+    expect(byOrigin.bodyUsed).toBe(false);
   });
 });
 
@@ -332,6 +355,7 @@ describe("ending every session (S7-03)", () => {
   });
 
   it("the desktop shell's launch token signs under the current epoch", async () => {
+    const local = process.env.GNOSIA_LOCAL_TOKEN;
     process.env.SESSION_EPOCH = "7";
     process.env.GNOSIA_LOCAL_TOKEN = "launch-secret-0123456789abcdef-0123456789";
     resetLocalTokenForTests();
@@ -342,7 +366,7 @@ describe("ending every session (S7-03)", () => {
       await expect(verifySession({ ...CONFIG, epoch: "7" }, token, now)).resolves.toBe(true);
       await expect(verifySession(CONFIG, token, now)).resolves.toBe(false);
     } finally {
-      delete process.env.GNOSIA_LOCAL_TOKEN;
+      restoreEnv("GNOSIA_LOCAL_TOKEN", local);
     }
   });
 });

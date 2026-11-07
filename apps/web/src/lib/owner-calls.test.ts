@@ -209,12 +209,37 @@ interface Violation {
   why: string;
 }
 
+/**
+ * An expression that is no owner at all: `null`, `undefined` or `void x`,
+ * seen through parentheses and type assertions (`null as unknown as string`).
+ * Passing one is the same as leaving the owner out: the catalog's default
+ * takes over.
+ */
+function isNoOwner(node: ts.Expression): boolean {
+  let expr = node;
+  while (
+    ts.isParenthesizedExpression(expr) ||
+    ts.isAsExpression(expr) ||
+    ts.isTypeAssertionExpression(expr) ||
+    ts.isNonNullExpression(expr) ||
+    ts.isSatisfiesExpression(expr)
+  ) {
+    expr = expr.expression;
+  }
+  return (
+    expr.kind === ts.SyntaxKind.NullKeyword ||
+    (ts.isIdentifier(expr) && expr.text === "undefined") ||
+    ts.isVoidExpression(expr)
+  );
+}
+
+/** An object literal naming `learnerId` with a value that is an owner. */
 function hasLearnerKey(node: ts.Expression): boolean {
   return (
     ts.isObjectLiteralExpression(node) &&
     node.properties.some(
       (p) =>
-        (ts.isPropertyAssignment(p) || ts.isShorthandPropertyAssignment(p)) &&
+        ((ts.isPropertyAssignment(p) && !isNoOwner(p.initializer)) || ts.isShorthandPropertyAssignment(p)) &&
         p.name !== undefined &&
         p.name.getText() === "learnerId",
     )
@@ -365,7 +390,7 @@ function violationsIn(
         } else {
           const arg = parent.arguments[slot.index];
           if (slot.kind === "positional") {
-            if (arg === undefined || (ts.isIdentifier(arg) && arg.text === "undefined")) {
+            if (arg === undefined || isNoOwner(arg)) {
               report(node, name, `argument ${slot.index + 1} (the owner) is missing`);
             }
           } else if (arg === undefined || !hasLearnerKey(arg)) {
@@ -444,17 +469,31 @@ describe("owner-bearing catalog calls in the web app", () => {
       `await withLearnerStore(readEvents);`,
       `const { dbSource } = await import("${DOOR}");`,
       `dbSource(db);`,
+      // An owner that is no owner leaves the catalog's default in charge just the same.
+      `await readEvents(db, null);`,
+      `await readEvents(db, undefined);`,
+      `await readEvents(db, (null as unknown as string));`,
+      `await readEvents(db, void 0);`,
+      `await recordObservation(db, { conceptId, learnerId: undefined });`,
+      `await recordObservation(db, { conceptId, learnerId: null });`,
     ].join("\n");
     expect(violationsIn("bad.ts", bad, table).map((v) => `${v.line} ${v.name}`)).toEqual([
       "2 readEvents",
       "3 recordObservation",
       "4 readEvents",
       "6 dbSource",
+      "7 readEvents",
+      "8 readEvents",
+      "9 readEvents",
+      "10 readEvents",
+      "11 recordObservation",
+      "12 recordObservation",
     ]);
     const good = [
       `import { readEvents, recordObservation } from "${DOOR}";`,
       `await readEvents(db, owner);`,
       `await recordObservation(db, { conceptId, correct, learnerId: owner });`,
+      `await recordObservation(db, { conceptId, learnerId });`,
       `const { dbSource } = await import("${DOOR}");`,
       `dbSource(db, ownerScope(owner));`,
       `export type { KnowledgeBase } from "${DOOR}";`,

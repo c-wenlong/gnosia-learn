@@ -1,11 +1,13 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { searchableText } from "./library";
 
-// A signed-in request, so the owner seam (`@/lib/owner`) resolves `local`.
+// A signed-in request, so the owner seam (`@/lib/owner`) resolves `local`;
+// a test that wants a signed-out one says so once.
+const isSignedIn = vi.hoisted(() => vi.fn(async () => true));
 vi.mock("@/lib/auth/session", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth/session")>()),
-  isSignedIn: async () => true,
+  isSignedIn,
 }));
 
 /**
@@ -48,18 +50,27 @@ const notes = ["graphs", "constructor", "__proto__"].map((slug) => ({
   topics: [],
 }));
 
-vi.mock("@/lib/learner-store", () => ({ catalogDatabase: async () => ({}) }));
+const catalogDatabase = vi.hoisted(() => vi.fn(async () => ({})));
+vi.mock("@/lib/learner-store", () => ({ catalogDatabase }));
 
 const assetParents = vi.hoisted(() => vi.fn(async (): Promise<Record<string, unknown>> => ({})));
-
-vi.mock("@gnosia/catalog/state", () => ({
-  assetParents,
-  listAssets: async (_db: unknown, filter: { ids?: string[]; kind?: string } = {}) =>
+const readEvents = vi.hoisted(() => vi.fn(async (): Promise<unknown[]> => []));
+const readPreferencesWithPrefix = vi.hoisted(() => vi.fn(async (): Promise<Record<string, unknown>> => ({})));
+const listAssets = vi.hoisted(() =>
+  vi.fn(async (_db: unknown, filter: { ids?: string[]; kind?: string } = {}): Promise<unknown[]> =>
     filter.kind === "note"
       ? notes
       : filter.ids === undefined
         ? rows
         : [...rows, ...notes].filter((r) => filter.ids!.includes(r.id)),
+  ),
+);
+
+vi.mock("@gnosia/catalog/state", () => ({
+  assetParents,
+  listAssets,
+  readEvents,
+  readPreferencesWithPrefix,
   assetCounts: async () => [{ kind: "video", count: 1 }],
   assetDerivations: async () => ({ sources: [], derived: [] }),
   readAssetNaming: async () => null,
@@ -82,9 +93,81 @@ vi.mock("@gnosia/catalog/state", () => ({
 
 vi.mock("next/server", () => ({ connection: async () => undefined }));
 
-const { loadAssetParents, readLibrary, readAssetDetail, readSearchText } = await import(
+const { loadAssetParents, loadFavorites, loadLastWatched, readLibrary, readAssetDetail, readSearchText } = await import(
   "@/lib/asset-library"
 );
+const { NoOwnerError } = await import("@/lib/owner");
+
+// The failures below are logged on purpose; keep them off the test output.
+beforeEach(() => {
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+});
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe("readLibrary when the catalog fails", () => {
+  it("answers unreachable with no rows when the rows cannot be read", async () => {
+    listAssets.mockRejectedValueOnce(new Error("rows unavailable"));
+    const snapshot = await readLibrary();
+    expect(snapshot.reachable).toBe(false);
+    expect(snapshot.rows).toEqual([]);
+    expect(snapshot.counts).toEqual([]);
+  });
+
+  it("answers unreachable with no rows when the database cannot be opened", async () => {
+    catalogDatabase.mockRejectedValueOnce(new Error("cannot open"));
+    const snapshot = await readLibrary();
+    expect(snapshot.reachable).toBe(false);
+    expect(snapshot.rows).toEqual([]);
+  });
+
+  it("rejects a signed-out request rather than reading it an empty library", async () => {
+    isSignedIn.mockResolvedValueOnce(false);
+    await expect(readLibrary()).rejects.toBeInstanceOf(NoOwnerError);
+    // Nothing was read for a request with no owner.
+    expect(listAssets).not.toHaveBeenCalled();
+  });
+});
+
+describe("loadFavorites", () => {
+  it("answers the starred ids, and an empty set for none", async () => {
+    readPreferencesWithPrefix.mockResolvedValueOnce({
+      "favorite:fx:video": { at: "2026-10-02T00:00:00Z" },
+      // A row under the prefix this code did not write is no star either.
+      "favorite:fx:diagram": "yes",
+    });
+    expect(await loadFavorites()).toEqual(new Set(["fx:video"]));
+    readPreferencesWithPrefix.mockResolvedValueOnce({});
+    expect(await loadFavorites()).toEqual(new Set());
+  });
+
+  it("answers null, not an empty set, when the store cannot be read", async () => {
+    readPreferencesWithPrefix.mockRejectedValueOnce(new Error("store unavailable"));
+    expect(await loadFavorites()).toBeNull();
+  });
+});
+
+describe("loadLastWatched", () => {
+  it("answers null for an asset never watched", async () => {
+    readEvents.mockResolvedValueOnce([]);
+    expect(await loadLastWatched("manimkc:out/x/y.mp4")).toBeNull();
+  });
+
+  it("answers the last watched time", async () => {
+    readEvents.mockResolvedValueOnce([
+      { type: "watched", asset: "manimkc:out/x/y.mp4", at: "2026-10-01T00:00:00Z" },
+      { type: "watched", asset: "manimkc:out/x/y.mp4", at: "2026-10-02T00:00:00Z" },
+      { type: "watched", asset: "manimkc:out/other.mp4", at: "2026-10-03T00:00:00Z" },
+    ]);
+    expect(await loadLastWatched("manimkc:out/x/y.mp4")).toBe("2026-10-02T00:00:00Z");
+  });
+
+  it("answers undefined, not null, when the log cannot be read", async () => {
+    readEvents.mockRejectedValueOnce(new Error("log unavailable"));
+    expect(await loadLastWatched("manimkc:out/x/y.mp4")).toBeUndefined();
+  });
+});
 
 describe("loadAssetParents, for the previewer's Conversation tool", () => {
   const made = { places: [], concepts: [], conversations: [{ id: "d1", title: "T", name: null, updatedAt: null }], sessions: [] };

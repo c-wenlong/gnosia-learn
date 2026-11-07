@@ -206,6 +206,16 @@ describe.skipIf(!reachable.ok)("asset routes on a flipped database", () => {
     await scratch.db.insert(assetDerivation).values({ assetId: `poster:${STORED_ID}`, sourceAssetId: STORED_ID });
     for (const type of ["concepts", "sessions", "diagrams"] as const) await flip(scratch.db, { type });
 
+    // A line committed to the note's row after the flip: the file, the search
+    // read and the page read all have to answer with it, and each test below
+    // runs on its own.
+    const base = await noteRevision(scratch.db, "base");
+    const current = (await dbSource(scratch.db, ownerScope(LOCAL_LEARNER_ID)).concept("base"))?.markdown ?? "";
+    await commitNoteText(scratch.db, "base", current.replace(/\n$/, "\n\nA line only the row has.\n"), {
+      base,
+      reason: "a test commit after the flip",
+    });
+
     ({ GET: FILE } = (await import("./[id]/file/route")) as { GET: Handler });
     ({ GET: STATUS } = (await import("./[id]/status/route")) as { GET: Handler });
     library = await import("@/lib/asset-library");
@@ -223,13 +233,6 @@ describe.skipIf(!reachable.ok)("asset routes on a flipped database", () => {
   });
 
   it("serves a note as its row renders it, with a line committed after the flip", async () => {
-    const base = await noteRevision(scratch.db, "base");
-    const current = (await dbSource(scratch.db, ownerScope(LOCAL_LEARNER_ID)).concept("base"))?.markdown ?? "";
-    await commitNoteText(scratch.db, "base", current.replace(/\n$/, "\n\nA line only the row has.\n"), {
-      base,
-      reason: "a test commit after the flip",
-    });
-
     const response = await call(FILE, "file", NOTE_ID);
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("text/markdown; charset=utf-8");

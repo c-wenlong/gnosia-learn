@@ -7,6 +7,7 @@ import {
   type Scratch,
 } from "../../../../../../services/catalog/test/scratch-database";
 import { ITEMS, seedContent } from "../../../../../../services/catalog/test/state-fixture";
+import { collection, curriculumItem, event, learner, preference, progress, recap } from "@gnosia/schema";
 
 // A signed-in request, so the owner seam (`@/lib/owner`) resolves `local`.
 vi.mock("@/lib/auth/session", async (importOriginal) => ({
@@ -31,6 +32,25 @@ vi.mock("@/lib/auth/session", async (importOriginal) => ({
 
 const reachable = await probe();
 
+/** Another owner, and a curriculum item under a course of theirs. */
+const OTHER = "someone-else";
+const THEIR_ITEM = "theirs-m1-t1";
+
+async function seedOtherOwner(db: Scratch["db"]) {
+  await db.insert(learner).values({ id: OTHER }).onConflictDoNothing();
+  await db
+    .insert(collection)
+    .values([
+      { id: "theirs", kind: "course", slug: "theirs", title: "Their course", ownerId: OTHER },
+      { id: "theirs-m1", kind: "module", slug: "m1", title: "Their module", parentId: "theirs", ownerId: OTHER },
+    ])
+    .onConflictDoNothing();
+  await db
+    .insert(curriculumItem)
+    .values({ id: THEIR_ITEM, collectionId: "theirs-m1", position: 0, title: "Their item", ownerId: OTHER })
+    .onConflictDoNothing();
+}
+
 const ORIGIN = "http://localhost:3000";
 
 function request(body: unknown, origin: string | null = ORIGIN): Request {
@@ -50,10 +70,13 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
   let routes: Record<string, Handler>;
   let readLearnerSnapshot: typeof import("@gnosia/catalog/state").readLearnerSnapshot;
   let recentGet: (req: Request) => Promise<Response>;
+  let previousDatabaseUrl: string | undefined;
 
   beforeAll(async () => {
     scratch = await migratedScratchDatabase();
     await seedContent(scratch.db);
+    await seedOtherOwner(scratch.db);
+    previousDatabaseUrl = process.env.DATABASE_URL;
     process.env.DATABASE_URL = scratch.url;
 
     const [progress, note, reset, recap, preference, importRoute, name, avatar, assetName, recent, state] = await Promise.all([
@@ -86,12 +109,20 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
   }, 60_000);
 
   afterAll(async () => {
+    if (previousDatabaseUrl === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = previousDatabaseUrl;
     await scratch?.drop();
   });
 
   beforeEach(async () => {
     await clearTables(scratch.db, ["event", "mastery", "review", "progress", "recap", "preference"]);
   });
+
+  /** Every progress and recap row, whoever's, as `learner:item`. */
+  const progressRows = async () =>
+    (await scratch.db.select().from(progress)).map((r) => `${r.learnerId}:${r.curriculumItemId}`).sort();
+  const recapRows = async () =>
+    (await scratch.db.select().from(recap)).map((r) => `${r.learnerId}:${r.curriculumItemId}`).sort();
 
   const call = async (name: string, body: unknown, origin?: string | null) => {
     const handler = routes[name];
@@ -450,6 +481,8 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
     it("hands back the snapshot, the model chain and the event log as a download", async () => {
       await call("progress", { curriculumItemId: ITEMS[0], completed: true });
       await call("preference", { key: "tutorStyle", value: "direct" });
+      // A visit appends a `visit` event, so the log has a known row to carry.
+      await call("preference", { key: "lastVisited", value: { courseSlug: "fx", moduleSlug: "m1" } });
       const { addTutorModel } = await import("../../../../../../services/catalog/src/state");
       await addTutorModel(scratch.db, "local", "gemini", "gemini-2.5-flash");
       const { GET } = await import("./export/route");
@@ -469,7 +502,86 @@ describe.skipIf(!reachable.ok)("learner API routes", () => {
       // Every preference row, not only the ones the snapshot folds in.
       expect(body.preferences).toMatchObject({ tutorStyle: "direct" });
       expect(body.learner.completed).toEqual({ [ITEMS[0]]: true });
-      expect(Array.isArray(body.events)).toBe(true);
+      expect(body.events).toContainEqual(expect.objectContaining({ type: "visit", course: "fx", module: "m1" }));
+    });
+
+    it("carries none of another learner's rows", async () => {
+      await call("progress", { curriculumItemId: ITEMS[0], completed: true });
+      await scratch.db.insert(preference).values({ learnerId: OTHER, key: "tutorStyle", value: "their-secret-style" });
+      await scratch.db
+        .insert(progress)
+        .values({ learnerId: OTHER, curriculumItemId: ITEMS[1], completedAt: new Date(), note: "their-secret-note" });
+      await scratch.db
+        .insert(event)
+        .values({ learnerId: OTHER, type: "visit", payload: { course: "their-secret-course" } });
+      const { GET } = await import("./export/route");
+      const response = await GET(new Request(`${ORIGIN}/api/learner/export`, { headers: { host: "localhost:3000" } }));
+      expect(response.status).toBe(200);
+      const text = await response.text();
+      for (const secret of ["their-secret-style", "their-secret-note", "their-secret-course"]) {
+        expect(text).not.toContain(secret);
+      }
+      const body = JSON.parse(text) as {
+        learner: { completed: Record<string, true>; notes: Record<string, string> };
+        preferences: Record<string, unknown>;
+        events: { type: string }[];
+      };
+      expect(body.learner.completed).toEqual({ [ITEMS[0]]: true });
+      expect(body.learner.notes).toEqual({});
+      expect(body.preferences.tutorStyle).toBeUndefined();
+      expect(body.events).toEqual([]);
+    });
+  });
+
+  describe("another owner's curriculum item", () => {
+    it("refuses a tick on it as a 400, writing nothing", async () => {
+      const { status, body } = await call("progress", { curriculumItemId: THEIR_ITEM, completed: true });
+      expect(status).toBe(400);
+      expect(body.code).toBe("BAD_REQUEST");
+      expect(await progressRows()).toEqual([]);
+    });
+
+    it("refuses a note on it as a 400, writing nothing", async () => {
+      const { status, body } = await call("note", { curriculumItemId: THEIR_ITEM, note: "mine?" });
+      expect(status).toBe(400);
+      expect(body.code).toBe("BAD_REQUEST");
+      expect(await progressRows()).toEqual([]);
+    });
+
+    it("refuses a recap on it as a 400, writing nothing", async () => {
+      const { status } = await call("recap", { curriculumItemId: THEIR_ITEM, summary: "mine?", source: "manual" });
+      expect(status).toBe(400);
+      expect(await recapRows()).toEqual([]);
+    });
+
+    it("imports nothing onto it, reporting it unknown as a missing item is", async () => {
+      // Not a 400 by design: a legacy import carries what it can and names
+      // the rest (`importLegacyState`), so one stale id does not lose the lot.
+      const { status, body } = await call("import", {
+        completed: { [THEIR_ITEM]: true },
+        notes: { [THEIR_ITEM]: "mine?" },
+        knowledge: { [THEIR_ITEM]: { summary: "mine?", keyPoints: [], source: "manual" } },
+      });
+      expect(status).toBe(200);
+      expect(body.result).toMatchObject({ progress: 0, notes: 0, recaps: 0, unknownItems: [THEIR_ITEM] });
+      expect(await progressRows()).toEqual([]);
+      expect(await recapRows()).toEqual([]);
+    });
+
+    it("resets only the learner's own rows on items they may read", async () => {
+      // Not a 400 by design: a reset clears what it can (`resetProgress`). A
+      // row of the learner's own on another owner's item (none can be written
+      // through the routes) is neither counted nor touched, and another
+      // learner's row on the same commons item survives.
+      await call("progress", { curriculumItemId: ITEMS[0], completed: true });
+      await scratch.db.insert(progress).values([
+        { learnerId: "local", curriculumItemId: THEIR_ITEM, completedAt: new Date() },
+        { learnerId: OTHER, curriculumItemId: ITEMS[0], completedAt: new Date() },
+      ]);
+      const { status, body } = await call("reset", { curriculumItemIds: [ITEMS[0], THEIR_ITEM] });
+      expect(status).toBe(200);
+      expect(body.result).toMatchObject({ cleared: 1 });
+      expect(await progressRows()).toEqual([`local:${THEIR_ITEM}`, `${OTHER}:${ITEMS[0]}`]);
     });
   });
 
