@@ -23,8 +23,8 @@
     "katex": "0.18.9",
     "lexical": "0.52.0",
     "next": "16.4.3",
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
     "server-only": "^0.0.1",
     "tailwind-merge": "^3.7.0",
     "@gnosia/tutor": "*"
