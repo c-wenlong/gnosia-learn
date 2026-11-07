@@ -34,7 +34,7 @@ export const BYOK_SETTINGS_CHANGED = "gnosia:byok-settings";
 function announceByokWrite<T>(result: Promise<T>): Promise<T> {
   void result.then((outcome) => {
     if (typeof window !== "undefined" && (outcome as { ok?: boolean }).ok === true) {
-      window.dispatchEvent(new Event(BYOK_SETTINGS_CHANGED));
+
     }
   });
   return result;

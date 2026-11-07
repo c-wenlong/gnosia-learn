@@ -58,13 +58,16 @@ describe("parseTranscript", () => {
         segments: [
           { start: 1, text: "kept" },
           { start: "1", text: "a string start" },
-          { start: Number.NaN, text: "not a number" },
+          { start: "NON_FINITE", text: "not a finite number" },
           { start: -2, text: "before the video began" },
           { text: "no start at all" },
           null,
           "not an object",
         ],
-      }),
+        // JSON.stringify writes NaN and Infinity as null, so the only way a
+        // non-finite number reaches the parser is a literal that overflows
+        // when JSON.parse reads it: 1e999 parses as Infinity.
+      }).replace('"NON_FINITE"', "1e999"),
     );
     expect(parsed?.cues.map((c) => c.text)).toEqual(["kept"]);
     expect(parsed?.dropped).toBe(6);
@@ -97,9 +100,9 @@ describe("parseTranscript", () => {
         segments: [
           { start: 10, text: "no end" },
           { start: 20, end: 12, text: "end before start" },
-          { start: 30, end: Number.POSITIVE_INFINITY, text: "infinite end" },
+          { start: 30, end: "NON_FINITE", text: "infinite end" },
         ],
-      }),
+      }).replace('"NON_FINITE"', "1e999"),
     );
     expect(parsed?.cues).toEqual([
       { scene: undefined, start: 10, end: 10, text: "no end" },

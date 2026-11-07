@@ -45,11 +45,15 @@ describe("buildChoices", () => {
     expect(buildChoices("softmax", "The right one.", pool)).toEqual(buildChoices("softmax", "The right one.", pool));
   });
 
-  it("draws from the front of the pool, best distractors first", () => {
-    const built = buildChoices("softmax", "The right one.", pool);
-    for (const choice of built?.choices ?? []) {
-      expect(["The right one.", ...pool.slice(0, 6)]).toContain(choice);
+  it("draws from the first six of the pool, best distractors first", () => {
+    // Eight candidates: the seventh and eighth must never be drawn, whatever
+    // the concept's seed, while each of the first six is drawn for some seed.
+    const eight = [...pool, "Wrong six.", "Wrong seven.", "Wrong eight."];
+    const drawn = new Set<string>();
+    for (let i = 0; i < 200; i += 1) {
+      for (const choice of buildChoices(`concept-${i}`, "The right one.", eight)?.choices ?? []) drawn.add(choice);
     }
+    expect([...drawn].sort()).toEqual(["The right one.", ...eight.slice(0, 6)].sort());
   });
 
   it("drops blanks and anything that repeats the answer, whitespace and case aside", () => {
