@@ -134,6 +134,19 @@ describe("BackLink", () => {
     expect(named.textContent?.trim()).toBe("Back to module");
     expect(tokens(link)).toContain("self-start");
   });
+
+  it("draws the toolbar look as a ghost button, its glyph silent and its label the full name", () => {
+    const link = draw(
+      createElement(BackLink, { href: "/studio", variant: "toolbar", label: "Back to the studio" } as ComponentProps<typeof BackLink>, "Studio"),
+    ).querySelector("a")!;
+    expect(link.getAttribute("href")).toBe("/studio");
+    expect(link.getAttribute("aria-label")).toBe("Back to the studio");
+    expect(link.textContent?.trim()).toBe("Studio");
+    // No text arrow in this look: the kit glyph, hidden from a screen reader.
+    expect(link.textContent).not.toContain("←");
+    expect(link.querySelector("svg")?.getAttribute("aria-hidden")).not.toBeNull();
+    expect(tokens(link)).not.toContain("self-start");
+  });
 });
 
 describe("Notice, centred", () => {
