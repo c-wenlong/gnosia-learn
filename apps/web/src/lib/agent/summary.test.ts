@@ -87,6 +87,31 @@ describe("parseKnowledgeResponse", () => {
     expect(parsed?.keyPoints).toEqual(["first", "second"]);
   });
 
+  it("keeps only the strings of a list that mixes in other types", () => {
+    const parsed = parseKnowledgeResponse(
+      '{"summary":"S","keyPoints":["a",3,null,"b"]}',
+    );
+    expect(parsed?.keyPoints).toEqual(["a", "b"]);
+  });
+
+  it("splits a semicolon-joined string where a list was expected", () => {
+    const parsed = parseKnowledgeResponse(
+      '{"summary":"S","keyPoints":"first; second;third"}',
+    );
+    expect(parsed?.keyPoints).toEqual(["first", "second", "third"]);
+  });
+
+  it("strips a list marker but keeps a number the item starts with", () => {
+    const parsed = parseKnowledgeResponse(
+      '{"summary":"S","keyPoints":"- 3 heads attend\\n1. the rest\\n2) vote"}',
+    );
+    expect(parsed?.keyPoints).toEqual([
+      "3 heads attend",
+      "the rest",
+      "vote",
+    ]);
+  });
+
   it("returns null for unusable responses", () => {
     expect(parseKnowledgeResponse("I could not summarise that.")).toBeNull();
     expect(parseKnowledgeResponse("{not json}")).toBeNull();
