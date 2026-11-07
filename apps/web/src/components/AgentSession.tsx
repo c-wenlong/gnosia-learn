@@ -352,7 +352,10 @@ export function AgentSession({
   return (
     // A 48rem reading measure, centred in the `app` layout's wider column.
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
-      <BackLink href={backHref}>Back to module</BackLink>
+      {/* The way back is the page's one navigation, so it keeps its landmark. */}
+      <nav aria-label="Breadcrumb">
+        <BackLink href={backHref}>Back to module</BackLink>
+      </nav>
 
       <div className="flex flex-col gap-3">
         <PageHeader eyebrow={`${course.code} · Module ${moduleNumber(course, module)} · ${module.title}`} title={topic.title} />
@@ -455,7 +458,7 @@ export function AgentSession({
           )}
           {error && (
             // The learner's turn went unanswered: send it again, rather than typing it twice.
-            <TurnError error={error} onRetry={takeUnanswered(messages) !== null ? () => void retry() : undefined} />
+            <TurnError tone="danger" error={error} onRetry={takeUnanswered(messages) !== null ? () => void retry() : undefined} />
           )}
           <div ref={bottomRef} />
         </div>

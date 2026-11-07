@@ -10,8 +10,8 @@ import type { DraftKind } from "@/lib/studio-drafts";
 
 /**
  * What sits at the thread's foot besides the entries: the reply being
- * written, and a problem in its place when a turn fails without adding an
- * entry. `Failure` is the line a press that did nothing leaves where it was.
+ * written (`Streaming`), and a problem in its place when a turn fails without
+ * adding an entry (`Problem`).
  */
 
 /**

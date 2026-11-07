@@ -552,6 +552,9 @@ const BYTES_RANGE = /^bytes=(\d*)-(\d*)$/i;
  * than handed the whole thing again; anything else is ignored and the whole
  * file is sent, which RFC 9110 explicitly permits and which is the right
  * answer for a header that is malformed or asks for a unit we do not speak.
+ * A reversed range (`bytes=5-2`) is malformed too: RFC 9110 (14.1.1) calls a
+ * last position before the first invalid, and an invalid range is ignored,
+ * not refused, so it gets the whole file rather than a 416.
  *
  * Multiple ranges (`bytes=0-9,20-29`) fall into that last group. A multipart
  * response is real work and no browser needs one to scrub a video.
@@ -566,6 +569,8 @@ export function parseRange(header: string | null, size: number): RangeRequest {
 
   const [, rawStart = "", rawEnd = ""] = match;
   if (rawStart === "" && rawEnd === "") return { kind: "whole" };
+  // Judged before the size: a reversed range is invalid on any file, an empty one included.
+  if (rawStart !== "" && rawEnd !== "" && Number(rawEnd) < Number(rawStart)) return { kind: "whole" };
 
   // An empty file can satisfy nothing, and `bytes=0-` against it would
   // otherwise compute the range 0..-1.

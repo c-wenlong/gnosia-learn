@@ -82,6 +82,23 @@ describe("ErrorText", () => {
   });
 });
 
+describe("FormRow with an empty error", () => {
+  it("treats it as no error: no alert, no aria-invalid, no describedby naming a missing line", () => {
+    const out = draw(
+      createElement(FormRow, {
+        label: "Name",
+        error: "",
+        children: (field: { id: string; describedBy: string | undefined; invalid: boolean }) =>
+          createElement("input", { id: field.id, "aria-describedby": field.describedBy, "aria-invalid": field.invalid }),
+      } as ComponentProps<typeof FormRow>),
+    );
+    const input = out.querySelector("input")!;
+    expect(out.querySelector('[role="alert"]')).toBeNull();
+    expect(input.getAttribute("aria-invalid")).toBe("false");
+    expect(input.hasAttribute("aria-describedby")).toBe(false);
+  });
+});
+
 describe("ErrorTip", () => {
   it("floats under the button by default, as an alert on a surface card", () => {
     const tip = draw(createElement(ErrorTip, null, "Could not open it.")).querySelector("span")!;
@@ -124,6 +141,13 @@ describe("Callout's dense and actionsAt", () => {
     const actions = box.querySelector("button")!.parentElement!;
     expect(tokens(actions)).not.toContain("pt-1");
     expect(words.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("keeps the dense gap with the actions at the end", () => {
+    const dense = calloutClasses({ dense: true, actionsAt: "end" }).split(" ");
+    expect(dense).toEqual(expect.arrayContaining(["flex-row", "gap-x-2", "gap-y-1"]));
+    expect(dense).not.toContain("gap-3");
+    expect(calloutClasses({ actionsAt: "end" }).split(" ")).toContain("gap-3");
   });
 
   it("keeps the actions under the words by default", () => {

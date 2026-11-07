@@ -1,15 +1,15 @@
 import type { ReactNode } from "react";
 
-import { doneWord, percentOf } from "@/lib/course-path";
+import { doneWord } from "@/lib/course-path";
 
 import { cx } from "./classes";
 import { ProgressBar } from "./ProgressBar";
 
 /**
  * Kit course progress: how far along a course is, as a bar and the words
- * beside it. The percentage is worked out here from `done` and `total`
- * (`percentOf`, so a course with no topics is 0%, never NaN), and the bar is
- * named after the course code.
+ * beside it. The percentage is the caller's: every status that draws it
+ * already carries `percent`, worked out once by `percentOf` (so a course with
+ * no topics is 0%, never NaN), and the bar is named after the course code.
  *
  * Three places draw it, each keeping its own words:
  *
@@ -31,6 +31,8 @@ type CourseProgressProps = {
   code: string;
   done: number;
   total: number;
+  /** The status's own `percent` (`percentOf(done, total)`). */
+  percent: number;
   className?: string;
 } & (
   | { variant: "count"; lead: ReactNode }
@@ -39,8 +41,7 @@ type CourseProgressProps = {
 );
 
 export function CourseProgress(props: CourseProgressProps) {
-  const { code, done, total, className } = props;
-  const percent = percentOf(done, total);
+  const { code, done, total, percent, className } = props;
   if (props.variant === "count") {
     return (
       <div className={cx("flex flex-col gap-2", className)}>

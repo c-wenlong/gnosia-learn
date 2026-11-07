@@ -6,6 +6,8 @@ import { cx, LABEL } from "./classes";
 export interface Fact {
   label: string;
   value: ReactNode;
+  /** The row's React key, for a list whose facts move; the place and the label otherwise, so two rows with one label never collide. */
+  key?: string;
 }
 
 /**
@@ -38,10 +40,10 @@ export function FactList({
   const dense = density === "dense";
   return (
     <dl className={cx("flex flex-col", !dense && "gap-2", className)}>
-      {facts.map((fact) =>
+      {facts.map((fact, at) =>
         fact ? (
           <div
-            key={fact.label}
+            key={fact.key ?? `${at}:${fact.label}`}
             className={
               dense
                 ? "grid min-h-8 grid-cols-[6rem_minmax(0,1fr)] items-start gap-3 border-b border-border py-1.5 last:border-b-0"

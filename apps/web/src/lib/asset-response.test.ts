@@ -146,6 +146,29 @@ describe("serveBlobRange", () => {
     }
   });
 
+  it("ignores a reversed range (bytes=5-2) and sends the whole object as a 200", async () => {
+    const response = await serve("bytes=5-2");
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe(BODY);
+    expect(response.headers.get("Content-Length")).toBe("10");
+    expect(response.headers.get("Content-Range")).toBeNull();
+    expect(openBlob).toHaveBeenCalledWith("owner/key.webp");
+  });
+
+  it("serves a 0-byte object whole with no Range, and answers bytes=0- with a 416", async () => {
+    openBlob.mockImplementation(async () => ({ body: Readable.from([]), size: 0, start: 0, end: -1 }));
+    const whole = await serveBlobRange("owner/empty.webp", 0, headers, null);
+    expect(whole.status).toBe(200);
+    expect(whole.headers.get("Content-Length")).toBe("0");
+    expect(await whole.text()).toBe("");
+
+    openBlob.mockClear();
+    const ranged = await serveBlobRange("owner/empty.webp", 0, headers, "bytes=0-");
+    expect(ranged.status).toBe(416);
+    expect(ranged.headers.get("Content-Range")).toBe("bytes */0");
+    expect(openBlob).not.toHaveBeenCalled();
+  });
+
   it("ignores a multi-range header and sends the whole object", async () => {
     const response = await serve("bytes=0-1,4-5");
     expect(response.status).toBe(200);

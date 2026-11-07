@@ -72,4 +72,24 @@ describe("LinkRow", () => {
     expect(a.className).not.toContain("text-[14px]");
     expect(a.className).toContain("text-text");
   });
+
+  it("draws a divided list's row square, its ends on the list's radius, and its ring inside", () => {
+    const a = draw({ href: "/x", title: "X", variant: "divided" }).querySelector("a")!;
+    const classes = a.className.split(" ");
+    expect(classes).toEqual(
+      expect.arrayContaining([
+        "rounded-none",
+        "px-3",
+        "py-2",
+        "[li:first-child>&]:rounded-t-xl",
+        "[li:last-child>&]:rounded-b-xl",
+        "focus-visible:-outline-offset-2",
+        "focus-visible:outline-2",
+        "focus-visible:outline-accent",
+      ]),
+    );
+    expect(classes).not.toContain("rounded-lg");
+    expect(classes).not.toContain("p-2");
+    expect(classes).not.toContain("focus-visible:outline-offset-2");
+  });
 });

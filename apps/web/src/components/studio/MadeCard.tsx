@@ -172,8 +172,9 @@ function MadeRow({ item }: { item: MadeItem }) {
   const kind = item.kind === "video" ? "video" : "diagram";
   return (
     <li>
-      {/* 13px like the rest of the studio's thread; the row's padding and ring are LinkRow's. */}
+      {/* 13px like the rest of the studio's thread; the row's padding, corners and inset ring are LinkRow's divided row's. */}
       <LinkRow
+        variant="divided"
         href={madeOpenHref(item.id)}
         className="text-[13px]"
         lead={

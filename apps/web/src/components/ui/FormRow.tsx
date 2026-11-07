@@ -49,7 +49,7 @@ export function FormRow({
   label: ReactNode;
   /** A line about the field: what it is for, what happens on a change. */
   hint?: ReactNode;
-  /** Why the value was refused; null or absent when it was not. */
+  /** Why the value was refused; null, absent or empty when it was not. */
   error?: string | null;
   /** The status line, as `LiveStatus` takes it. An inline row keeps its column whether or not one is given. */
   status?: { text: string | null; tone?: StatusTone };
@@ -63,8 +63,11 @@ export function FormRow({
   const id = given ?? made;
   const hintId = `${id}-hint`;
   const errorId = `${id}-error`;
-  const describedBy = [hint !== undefined ? hintId : null, error !== null ? errorId : null].filter((part) => part !== null).join(" ") || undefined;
-  const field: FormRowField = { id, labelId: `${id}-label`, describedBy, invalid: error !== null };
+  // An empty error is no error: `ErrorText` draws nothing for it, so the
+  // control must not point at a line that is not there or say it is invalid.
+  const failed = error !== null && error !== "";
+  const describedBy = [hint !== undefined ? hintId : null, failed ? errorId : null].filter((part) => part !== null).join(" ") || undefined;
+  const field: FormRowField = { id, labelId: `${id}-label`, describedBy, invalid: failed };
   const inline = layout === "inline";
 
   const labelLine = (
@@ -77,7 +80,7 @@ export function FormRow({
       {hint}
     </p>
   );
-  const errorLine = error !== null && <ErrorText id={errorId}>{error}</ErrorText>;
+  const errorLine = failed && <ErrorText id={errorId}>{error}</ErrorText>;
   const statusLine = status !== undefined && <LiveStatus text={status.text} tone={status.tone} />;
 
   if (inline) {
