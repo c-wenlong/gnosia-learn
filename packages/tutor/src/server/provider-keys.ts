@@ -25,8 +25,8 @@ type Env = Record<string, string | undefined>;
 /**
  * The owner's saved provider keys (docs/BYOK.md), the request-independent
  * half of `apps/web/src/lib/provider-keys/store.ts`: the database handle and
- * the environment are parameters, so the Next app, the sidecar and the studio
- * runner resolve the same sealed rows the same way.
+ * the environment are parameters, so the Next app and the studio runner
+ * resolve the same sealed rows the same way.
  */
 
 /** The secret keys are sealed under, or null when the deployment has none worth the name. */

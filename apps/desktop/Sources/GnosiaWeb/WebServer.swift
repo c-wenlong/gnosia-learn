@@ -116,9 +116,7 @@ final class WebServer {
         proc.arguments = shell.arguments
         proc.currentDirectoryURL = launch.directory
         // The shared child environment (Checkout.childEnv: the launchers'
-        // one resolver, with the catalog's file pinned). GNOSIA_CATALOG is deliberately not
-        // consulted — it names the native app's read snapshot, not the live
-        // database. GNOSIA_LOCAL_TOKEN is the per-launch secret
+        // one resolver, with the catalog's file pinned). GNOSIA_LOCAL_TOKEN is the per-launch secret
         // /api/auth/local redeems for a session cookie.
         var env = Checkout.childEnv()
         env["GNOSIA_LOCAL_TOKEN"] = localToken

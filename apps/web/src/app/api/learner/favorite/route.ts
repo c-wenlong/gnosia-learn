@@ -11,6 +11,6 @@ import { turnRoute } from "@/lib/learner-api";
  * page is a 400 rather than a row pointing at nothing.
  *
  * The parse and the write are `favoriteTurn` in
- * `@gnosia/tutor/server/learner-writes`, which the sidecar runs too.
+ * `@gnosia/tutor/server/learner-writes`.
  */
 export const POST = turnRoute("favorite", favoriteTurn);

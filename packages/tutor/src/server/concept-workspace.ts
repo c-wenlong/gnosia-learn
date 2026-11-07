@@ -24,7 +24,7 @@ import { failureCode } from "./provider-keys";
  * The concept workspace's read, the request-independent half of
  * `apps/web/src/lib/concept-workspace.ts`: the pool handle, owner, scope and
  * content seam are parameters, so the workspace the chat's context is built
- * from is assembled once and shared by the web route and the sidecar.
+ * from is assembled in one place.
  */
 
 export type ConceptWorkspaceRead =

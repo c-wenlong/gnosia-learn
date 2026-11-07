@@ -1,4 +1,0 @@
-# SwiftPM build products. The repo's root .gitignore only anchors `/build`,
-# which does not reach here.
-.build/
-Package.resolved

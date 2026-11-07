@@ -168,7 +168,7 @@ not reach it. `checkModelId` refuses an id with a known key prefix (`nvapi-`,
 `sk-`, `AIza`) or a run of 20 or more letters and digits holding both, which
 random key material has and model ids, whose words are split by `-`, `.`, `/`
 and `:`, do not; the catalog function and every route share it. The add and
-replace writes (the web route and the sidecar's turns, through `echoesKey` in
+replace writes (the web route's turns, through `echoesKey` in
 `packages/tutor/src/server/key-echo.ts`) also refuse an id that is or contains
 a whole key the owner's tutor could call with, saved or server, for any
 provider, skipping a server key shorter than 16 characters. They never refuse

@@ -12,8 +12,7 @@ export { CHAT_RATE_LIMIT, SUMMARIZE_RATE_LIMIT, type RateLimitRule } from "@gnos
 
 /**
  * Abuse prevention for the `/api/agent/*` routes. Payload measurement and
- * the fixed-window limiter live in `@gnosia/tutor/guards`, which the native
- * sidecar calls directly; the same-origin rule is `requestIsSameOrigin` in
+ * the fixed-window limiter live in `@gnosia/tutor/guards`; the same-origin rule is `requestIsSameOrigin` in
  * `@/lib/auth/core`. This file keeps only the `NextResponse` wrappers.
  */
 

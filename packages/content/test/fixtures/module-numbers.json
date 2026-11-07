@@ -1,0 +1,123 @@
+{
+  "//": "Module numbers. A module is numbered by its 1-based place in the course's module list, never by its authored order. packages/content/test/module-number.test.ts holds the rule (packages/content/src/module-number.ts) to this file.",
+  "cases": [
+    {
+      "name": "a gap in the authored order: 1 and 3",
+      "modules": [
+        {
+          "id": "m1",
+          "order": 1,
+          "title": "Foundations"
+        },
+        {
+          "id": "m3",
+          "order": 3,
+          "title": "Agentic frameworks"
+        }
+      ],
+      "expected": [
+        {
+          "number": 1,
+          "place": "Module 1 of 2",
+          "numberedTitle": "1. Foundations"
+        },
+        {
+          "number": 2,
+          "place": "Module 2 of 2",
+          "numberedTitle": "2. Agentic frameworks"
+        }
+      ]
+    },
+    {
+      "name": "an order with no gaps",
+      "modules": [
+        {
+          "id": "m1",
+          "order": 1,
+          "title": "Sets"
+        },
+        {
+          "id": "m2",
+          "order": 2,
+          "title": "Relations"
+        },
+        {
+          "id": "m3",
+          "order": 3,
+          "title": "Functions"
+        }
+      ],
+      "expected": [
+        {
+          "number": 1,
+          "place": "Module 1 of 3",
+          "numberedTitle": "1. Sets"
+        },
+        {
+          "number": 2,
+          "place": "Module 2 of 3",
+          "numberedTitle": "2. Relations"
+        },
+        {
+          "number": 3,
+          "place": "Module 3 of 3",
+          "numberedTitle": "3. Functions"
+        }
+      ]
+    },
+    {
+      "name": "an order from zero with wide steps",
+      "modules": [
+        {
+          "id": "m0",
+          "order": 0,
+          "title": "Welcome"
+        },
+        {
+          "id": "m5",
+          "order": 5,
+          "title": "Search"
+        },
+        {
+          "id": "m10",
+          "order": 10,
+          "title": "Planning"
+        }
+      ],
+      "expected": [
+        {
+          "number": 1,
+          "place": "Module 1 of 3",
+          "numberedTitle": "1. Welcome"
+        },
+        {
+          "number": 2,
+          "place": "Module 2 of 3",
+          "numberedTitle": "2. Search"
+        },
+        {
+          "number": 3,
+          "place": "Module 3 of 3",
+          "numberedTitle": "3. Planning"
+        }
+      ]
+    },
+    {
+      "name": "one module",
+      "modules": [
+        {
+          "id": "m7",
+          "order": 7,
+          "title": "Capstone"
+        }
+      ],
+      "expected": [
+        {
+          "number": 1,
+          "place": "Module 1 of 1",
+          "numberedTitle": "1. Capstone"
+        }
+      ]
+    }
+  ]
+}

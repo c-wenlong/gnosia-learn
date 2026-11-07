@@ -2,10 +2,10 @@
 //  CheckoutTests.swift
 //  GnosiaWebTests
 //
-//  The data home's .env as the shell reads it must be what the macOS app's
-//  sidecar reads from the same file: AUTH_SECRET seals the provider keys
-//  the web saves, and the sidecar opens them. The fixture is Node's own
-//  `util.parseEnv` output (services/sidecar/test/fixtures/dotenv.json).
+//  The data home's .env as the shell reads it must be what the launchers'
+//  resolver reads from the same file: AUTH_SECRET seals the provider keys
+//  the web saves. The fixture is Node's own `util.parseEnv` output
+//  (services/launch-env/test/fixtures/dotenv.json).
 //
 
 import Foundation
@@ -16,7 +16,7 @@ final class CheckoutTests: XCTestCase {
     func testTheDotenvReadIsNodes() throws {
         let url = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
-            .appending(path: "../../../../services/sidecar/test/fixtures/dotenv.json")
+            .appending(path: "../../../../services/launch-env/test/fixtures/dotenv.json")
             .standardized
         let fixture = try XCTUnwrap(
             try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]

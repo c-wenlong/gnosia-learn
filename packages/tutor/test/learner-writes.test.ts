@@ -9,7 +9,7 @@ import { migratedScratchDatabase, probe, type Scratch } from "../../../services/
 import { ASSETS, seedAssets, seedContent } from "../../../services/catalog/test/state-fixture";
 
 /**
- * The learner write turns the web routes and the sidecar share, against a
+ * The learner write turns the web routes call, against a
  * real scratch catalog: a star, a watched mark and a playback save land only
  * on an asset the owner may read (theirs or the commons'), never on another
  * owner's, and a playback row stored with a `watchedAt` that is not a date

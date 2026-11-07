@@ -18,9 +18,8 @@ import { cachedModelList } from "@gnosia/tutor/server/model-list";
 import { readChain } from "@/lib/tutor-models/store";
 
 /**
- * The seams a tutor endpoint reads through, resolved for one request. The
- * sidecar builds the same object around its own pool and a fixed owner and
- * leaves `seams` unset, so the package's own readers answer; here each is
+ * The seams a tutor endpoint reads through, resolved for one request. A host
+ * that leaves `seams` unset gets the package's own readers; here each is
  * bound to this app's own reader (`@/lib/*`, `@/data/*`) or the package's
  * function, imported here by name, which is what this app's route tests
  * stub. `signal` is the request's, so a provider call stops when the

@@ -14,9 +14,8 @@ import { catalogDatabase } from "@/lib/learner-store";
 
 /**
  * The owner's saved provider keys (docs/BYOK.md). The reads and writes live
- * in `@gnosia/tutor/server/provider-keys`, which the native sidecar calls
- * with its own pool; this file hands them this app's pool and its
- * `process.env`.
+ * in `@gnosia/tutor/server/provider-keys`; this file hands them this app's
+ * pool and its `process.env`.
  */
 
 export { failureCode, NoKeySecretError };

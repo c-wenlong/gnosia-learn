@@ -1,0 +1,18 @@
+{
+  "//": "Its own tsconfig, like every other workspace. It compiles the `@gnosia/catalog/state` sources it imports, so it keeps the options those need: no `noUncheckedIndexedAccess`, and the DOM libs.",
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "types": ["node"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "allowJs": true,
+    "allowImportingTsExtensions": true
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts"]
+}

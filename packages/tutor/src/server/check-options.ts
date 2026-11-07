@@ -75,8 +75,8 @@ export async function readWrittenOptions(
  * Generations in flight, by learner, concept, check and hash. A second caller
  * for the same check (two tabs, or a week check and a session at once) waits
  * on the first one's promise instead of calling the model again. Per process:
- * the web app and the sidecar each hold their own, and the row's upsert makes
- * a rare double write harmless.
+ * a second process holds its own, and the row's upsert makes a rare double
+ * write harmless.
  */
 const inFlight = new Map<string, Promise<unknown>>();
 

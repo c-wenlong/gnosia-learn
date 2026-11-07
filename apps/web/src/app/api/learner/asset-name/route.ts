@@ -13,6 +13,6 @@ import { turnRoute } from "@/lib/learner-api";
  * so no import undoes the name.
  *
  * The parse and the write are `assetNameTurn` in
- * `@gnosia/tutor/server/learner-writes`, which the sidecar runs too.
+ * `@gnosia/tutor/server/learner-writes`.
  */
 export const POST = turnRoute("asset-name", assetNameTurn);

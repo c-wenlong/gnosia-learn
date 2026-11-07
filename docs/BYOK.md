@@ -175,7 +175,7 @@ runs, and each one's Lite, Default and Max models, none of it a secret.
   so no agent, render or catalog CLI inherits them, whichever env builder
   that spawn uses.
 - **Where the secret comes from.** The runner's environment first (the
-  desktop shell and the macOS app hand it the web's). A runner started
+  desktop shell hands it the web's, from `services/launch-env`). A runner started
   without one (`npm run dev:up` hands its pane the catalog's variables, not
   `apps/web/.env.local`) asks `scripts/lib/dev-env.mjs` once, the helper
   `scripts/dev.sh` already uses: it reads the app's files with Next's own
@@ -262,12 +262,11 @@ the same `AUTH_SECRET` too: rotating it turns every Studio provider into
 "no key" until each key is re-entered in Settings, and the runner needs a
 restart to pick up a new value.
 
-**The macOS app's sidecar** (`services/sidecar`) opens and seals the same rows,
-so it needs the same `AUTH_SECRET`. It reads the environment the web reads, in
-the web's order: what the process exports, then `$GNOSIA_HOME/.env`, then
-`apps/web/.env.local` and its siblings through Next's own loader
-(`services/sidecar/src/env.ts`). Its `/api/health` answers `secret: false`
-when it has none, and the app's Settings says so.
+**The desktop shell** starts the web server and the studio runner with one
+environment (`services/launch-env`), read in the web's order: what the process
+exports, then `$GNOSIA_HOME/.env`, then `apps/web/.env.local` and its siblings
+through Next's own loader (`services/launch-env/src/env.ts`). Both children
+therefore hold the same `AUTH_SECRET` and open the same catalog file.
 
 ## Out of scope
 

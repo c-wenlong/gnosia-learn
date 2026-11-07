@@ -57,8 +57,7 @@ export const MAX_BODY_BYTES = 64_000;
 
 /**
  * The longest scratch note, and the longest curriculum item id (authored,
- * `cs4263-m1-t1`, so short). One copy, in the learner writes the sidecar
- * shares.
+ * `cs4263-m1-t1`, so short). One copy, in the learner writes.
  */
 export { MAX_ID_CHARS };
 
@@ -234,10 +233,10 @@ export function learnerDeps(owner: string, requestUrl?: string): TutorDeps {
 
 /**
  * A route that is one of the shared learner writes
- * (`@gnosia/tutor/server/learner-writes`, the sidecar's too), with this app's
+ * (`@gnosia/tutor/server/learner-writes`), with this app's
  * guards in front: same origin, the session's owner, a rate limit on
  * `learner:<bucket>`, and the bounded body read. The parse, the write and the
- * answer are the turn's, so the web and the native app speak one protocol.
+ * answer are the turn's.
  */
 export function turnRoute(
   bucket: string,

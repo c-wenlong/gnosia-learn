@@ -1,15 +1,15 @@
 #!/bin/bash
 # Bundle .build/release/GnosiaWeb into .build/"Gnosia Web.app" — Info.plist
-# plus the brand .icns shared with apps/macos. The shell has no SwiftPM
-# resources of its own; everything it renders comes from the server it
-# spawns. Adhoc-signed like the native bundle.
+# plus the brand .icns made from Resources/AppIcon.png. The shell has no
+# SwiftPM resources of its own; everything it renders comes from the server
+# it spawns. Adhoc-signed.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
 APP='.build/Gnosia Web.app'
 CONTENTS="$APP/Contents"
-MARK=../macos/Sources/Gnosia/AppIcon.png
+MARK=Resources/AppIcon.png
 
 swift build -c release
 
@@ -18,7 +18,7 @@ mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources"
 
 cp .build/release/GnosiaWeb "$CONTENTS/MacOS/GnosiaWeb"
 
-# Icon: the brand mark at every required size, same source as apps/macos.
+# Icon: the brand mark at every required size.
 ICONSET=$(mktemp -d)/AppIcon.iconset
 mkdir -p "$ICONSET"
 for size in 16 32 128 256 512; do

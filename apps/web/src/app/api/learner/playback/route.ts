@@ -21,6 +21,6 @@ import { turnRoute } from "@/lib/learner-api";
  * save that crosses the threshold.
  *
  * The parse and the write are `playbackTurn` in
- * `@gnosia/tutor/server/learner-writes`, which the sidecar runs too.
+ * `@gnosia/tutor/server/learner-writes`.
  */
 export const POST = turnRoute("playback", playbackTurn);

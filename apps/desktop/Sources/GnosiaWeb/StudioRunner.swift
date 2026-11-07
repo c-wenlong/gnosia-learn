@@ -9,12 +9,10 @@
 //  answering" card. So the app that hosts the window also hosts the runner:
 //  spawned with it, SIGTERM'd when it quits.
 //
-//  **Managed, on purpose — and the opposite of apps/macos.** The native
-//  shell launches `npm run studio` detached (nohup) because a runner killed
-//  with the app marks an in-flight render `interrupted`, and its surfaces
-//  treat starting the runner as an owner's call. Here the window is the
-//  whole product surface and quitting it is the owner saying the machine
-//  should go quiet, so the child is terminated on willTerminate. That is
+//  **Managed, on purpose.** A runner killed with the app marks an in-flight
+//  render `interrupted`, but the window is the whole product surface and
+//  quitting it is the owner saying the machine should go quiet, so the
+//  child is terminated on willTerminate. That is
 //  not a rude death: SIGTERM runs the runner's own shutdown — mirrors
 //  closed, drains waited on, the running job stopped — the same signal
 //  `scripts/dev.sh stop` relies on. A job caught mid-flight lands in the
@@ -166,10 +164,9 @@ final class StudioRunner {
 
     /// Polls health until the runner answers or the child exits. The first
     /// minute of a run is doctor and manual work before the port binds, so
-    /// the window the native app gives a launch — 2½ minutes — is also the
-    /// point where this says "still not answering" and names the log; the
-    /// poll carries on past it so a slow first run that does bind still
-    /// lands on `.running`.
+    /// 2½ minutes is the point where this says "still not answering" and
+    /// names the log; the poll carries on past it so a slow first run that
+    /// does bind still lands on `.running`.
     private func watchHealth() async {
         let slow = ContinuousClock.now + .seconds(150)
         while !Task.isCancelled, !exited {

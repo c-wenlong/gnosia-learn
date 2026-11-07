@@ -78,11 +78,11 @@ export function readProvider(body: Record<string, unknown>): ProviderName | Next
 }
 
 /**
- * A Settings write answered by the same turn the sidecar answers it with
- * (`@gnosia/tutor/server/turns`), behind this file's guards: same origin,
+ * A Settings write answered by its turn in `@gnosia/tutor/server/turns`,
+ * behind this file's guards: same origin,
  * the owner, the owner's rate limit under `scope`, then the body, read
  * within the 4 KB this file allows. So a fix to a write's rules lands once,
- * for both hosts.
+ * in the turn.
  *
  * `after` is a step only the web app has, run on a 200 with the body the
  * turn took and its answer; what it returns joins the answer (the studio's

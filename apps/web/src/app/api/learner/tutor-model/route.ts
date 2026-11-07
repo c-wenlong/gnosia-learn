@@ -22,8 +22,9 @@ export const runtime = "nodejs";
  * there, 403 from another origin, 429, 401 with no session, 503
  * `STORE_UNAVAILABLE` (the chain, or on an add the saved keys, could not be
  * read). The same guards as the provider-key routes, under
- * their own rate-limit buckets. Each method is the turn the sidecar answers
- * with (`tutorModelAddTurn` and the rest), key gate included.
+ * their own rate-limit buckets. Each method is a turn in
+ * `@gnosia/tutor/server/turns` (`tutorModelAddTurn` and the rest), key gate
+ * included.
  */
 
 export const POST = settingsRoute("tutor-model", CHAIN_WRITE_RATE_LIMIT, tutorModelAddTurn);

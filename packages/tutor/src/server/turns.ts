@@ -20,10 +20,8 @@ import {
   availableProviderSummary,
   type ChatMessage,
   completeWithFallback,
-  customProviderConfig,
   keyFor,
   missingKeyMessage,
-  providerConfigs,
   type SavedKeys,
   skippedEntries,
   testProviderKey,
@@ -75,8 +73,6 @@ import { entryCredential, keyTestCredential, tutorCredentials } from "./credenti
 import {
   changeCustomProvider,
   createCustomProvider,
-  readOwnerCustomProviders,
-  type CustomProvider,
 } from "./custom-providers";
 import type { Env, TutorDeps } from "./deps";
 import { echoesKey } from "./key-echo";
@@ -87,9 +83,7 @@ import {
   NoKeySecretError,
   openSavedKeys,
   removeProviderKey,
-  savedKeyStatuses,
   saveProviderKey,
-  type SavedKeyStatus,
 } from "./provider-keys";
 import { checkKeyShape } from "./seal";
 import { readTutorStyle } from "./settings";
@@ -113,8 +107,8 @@ import { checkModelId, KNOWLEDGE_LIMITS, providerLabel, type TopicKnowledge } fr
  * route handlers — the provider-call reads and the Settings writes alike.
  * Each function takes the request's resolved seams (`TutorDeps`) and a parsed
  * body, and answers a plain `{ status, body, headers }` the transport writes
- * out — the Next routes map it onto `NextResponse.json`, the sidecar writes
- * it directly. Nothing here knows `Request`/`NextResponse`/cookies.
+ * out: the Next routes map it onto `NextResponse.json`. Nothing here knows
+ * `Request`/`NextResponse`/cookies.
  */
 
 export interface TurnReply {
@@ -1100,12 +1094,11 @@ export async function modelListTurn(deps: TutorDeps, body: unknown): Promise<Tur
  * `/api/learner/custom-provider` and `/api/learner/tutor-model` write
  * routes (docs/BYOK.md,
  * docs/TUTOR-MODELS.md): the same bodies, the same `{ ok, error, code }`
- * answers and statuses the Next routes give. What is not ported is what a
- * loopback single-owner service does not have — the session, origin and
- * rate-limit guards (the sidecar's own `guard.ts` answers origin) — and the
- * `byok` mirror, which is the web deployment telling the studio runner which
- * saved key to use; a deployment without the runner omits the
- * field there too, so its absence here is the same contract.
+ * answers and statuses the Next routes give. What stays in the routes is the
+ * session, origin and rate-limit guards, and the `byok` mirror, which is the
+ * web deployment telling the studio runner which saved key to use; a
+ * deployment without the runner omits the field there too, so its absence
+ * here is the same contract.
  *
  * `AUTH_SECRET` reads `process.env`, never `deps.env`: `env` is the provider
  * map a request resolves keys and models against (a test hands in `{}` for
@@ -1192,76 +1185,6 @@ function keyWriteFailed(what: string, error: unknown): TurnReply {
   }
   console.warn(`provider key ${what} failed (${failureCode(error)})`);
   return writeRefuse("Not saved: the database is unreachable.", "STORE_UNAVAILABLE", 503);
-}
-
-/** One provider's row in the status answer: what Settings may know — never the key, never its ciphertext. */
-export interface ProviderKeyRow {
-  id: ProviderName;
-  label: string;
-  /** The model the provider's key Test would call: its default, or "" for an owner's own provider. */
-  model: string;
-  keyUrl?: string;
-  /** A provider the owner added (T14): its base URL. Absent for a built-in. */
-  custom?: { baseUrl: string };
-  saved: { last4: string; /** ISO instant of the last save. */ updatedAt: string; readable: boolean } | null;
-  /** The server's environment holds a key for this provider. */
-  server: boolean;
-  /** Whose key the tutor calls this provider with now, or null when it has none. */
-  inUse: "saved" | "server" | null;
-}
-
-/**
- * `GET /api/learner/provider-key`: the Provider keys card's rows — every
- * provider, built-in and the owner's own, with its key state. The web page
- * builds the same rows server-side (`providerKeyViews`); a native client has
- * no server component, so the sidecar answers them. Never throws: a database
- * that cannot be read answers `reachable: false` and rows holding the
- * server's keys only, as the web's `loadProviderKeys` does.
- */
-export async function providerKeyStatusTurn(deps: TutorDeps): Promise<TurnReply> {
-  let statuses: SavedKeyStatus[] = [];
-  let custom: CustomProvider[] = [];
-  let reachable = true;
-  try {
-    const db = await deps.db;
-    [statuses, custom] = await Promise.all([
-      savedKeyStatuses(db, deps.owner, process.env),
-      readOwnerCustomProviders(db, deps.owner),
-    ]);
-  } catch (error) {
-    console.warn(`settings: saved provider keys unavailable (${failureCode(error)})`);
-    reachable = false;
-  }
-
-  const byProvider = new Map<string, SavedKeyStatus>(statuses.map((s) => [s.provider, s]));
-  const configs = [...providerConfigs(deps.env), ...custom.map(customProviderConfig)];
-  const rows = configs.map((config): ProviderKeyRow => {
-    const status = byProvider.get(config.id);
-    const server = config.apiKeyEnv !== "" && Boolean(deps.env[config.apiKeyEnv]?.trim());
-    const own = status?.readable === true;
-    return {
-      id: config.id,
-      label: config.label,
-      model: config.model,
-      ...(config.keyUrl === undefined ? {} : { keyUrl: config.keyUrl }),
-      ...(config.custom ? { custom: { baseUrl: config.baseUrl } } : {}),
-      saved:
-        status === undefined
-          ? null
-          : { last4: status.last4, updatedAt: status.updatedAt, readable: status.readable },
-      server,
-      inUse: own ? "saved" : server ? "server" : null,
-    };
-  });
-  // `providerKeyViews`' order: the owner's usable keys in the cascade's
-  // order, then the server's. A custom provider has no built-in default and
-  // is never in it (T14).
-  const builtIn = rows.filter((row) => row.custom === undefined);
-  const order = [
-    ...builtIn.filter((row) => row.inUse === "saved"),
-    ...builtIn.filter((row) => row.inUse === "server"),
-  ].map((row) => ({ id: row.id, label: `${row.label} (${row.model})`, source: row.inUse }));
-  return writeAnswer({ ok: true, reachable, rows, order });
 }
 
 /** `{ provider, model }` read from a body, or the refusal the web's `entry` gives. */
@@ -1423,21 +1346,6 @@ export async function tutorProviderRemoveTurn(deps: TutorDeps, body: unknown): P
     return writeAnswer({ ok: true, ...removed });
   } catch (error) {
     return chainWriteFailed("remove", error);
-  }
-}
-
-/**
- * `GET /api/learner/tutor-model`: the owner's chain, top first. The web page
- * reads it server-side (`loadTutorModels`); a native client has no server
- * component, so the sidecar answers it. Never throws: a database that cannot
- * be read answers `reachable: false` and an empty chain.
- */
-export async function tutorModelChainTurn(deps: TutorDeps): Promise<TurnReply> {
-  try {
-    return writeAnswer({ ok: true, reachable: true, chain: await readChain(await deps.db, deps.owner) });
-  } catch (error) {
-    console.warn(`settings: model chain unavailable (${failureCode(error)})`);
-    return writeAnswer({ ok: true, reachable: false, chain: [] });
   }
 }
 

@@ -22,7 +22,7 @@
 /*
  * The same-origin rule is not here. It is `requestIsSameOrigin` in the web
  * app's `apps/web/src/lib/auth/core.ts`, the one rule every guarded route
- * uses; the native sidecar has no browser in front of it to ask.
+ * uses.
  */
 
 

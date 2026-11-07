@@ -20,8 +20,9 @@ export const runtime = "nodejs";
  * Write-only. No answer carries the key or its ciphertext, and nothing is
  * logged but a code: a refused key is refused without repeating it, and a
  * failed write is reported without the driver's message, which would quote
- * the sealed bytes. The save and the removal are the sidecar's turns
- * (`providerKeySaveTurn`, `providerKeyRemoveTurn`); telling Studio's list
+ * the sealed bytes. The save and the removal are turns in
+ * `@gnosia/tutor/server/turns` (`providerKeySaveTurn`,
+ * `providerKeyRemoveTurn`); telling Studio's list
  * is this app's own step after them.
  */
 

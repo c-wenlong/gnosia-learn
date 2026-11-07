@@ -582,6 +582,17 @@ This project is continuously deployed and not versioned; entries are grouped by 
 
 ### Removed
 
+- **The native macOS app, `apps/macos`, and the sidecar server that served
+  it.** The owner removed the SwiftUI app (`Gnosia.app`) on 2026-11-07,
+  with its catalog snapshot script, its Swift ports and their contract
+  tests, and the loopback tutor API in `services/sidecar` that only it
+  called, along with three turns nothing else used (`preferenceTurn`,
+  `providerKeyStatusTurn`, `tutorModelChainTurn`). The launchers' shared
+  environment survives as `services/launch-env`, which the desktop shell
+  (`apps/desktop`, Gnosia Web) runs once per launch; its icon now lives at
+  `apps/desktop/Resources/AppIcon.png`. The contract fixtures moved beside
+  their TypeScript tests and stay as worked cases.
+
 - **`src/data/courses/*.ts`, `src/data/tags.ts` and
   `src/data/courses/parity.test.ts`.** The parity test existed to keep two
   representations of the same courses in step; with one representation left

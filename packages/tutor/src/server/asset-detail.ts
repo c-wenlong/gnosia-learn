@@ -23,7 +23,7 @@ import type { RouteProblemCode } from "../asset-problems";
 /**
  * The asset detail and text reads `apps/web/src/lib/asset-library.ts` holds
  * for the detail page and the asset Ask route, parameterized on the same
- * seams `resolveAsset` takes so the sidecar's Ask answers from the same rows.
+ * seams `resolveAsset` takes.
  */
 
 /** The longest asset id accepted anywhere: a body field can claim more than a row can hold. */

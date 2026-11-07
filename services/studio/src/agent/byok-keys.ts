@@ -20,7 +20,7 @@ import { REPO_ROOT } from "../paths";
  * in `byok.ts`) and nothing writes it again.
  *
  * Reads go through `@gnosia/tutor/server/provider-keys`, the module the web
- * app and the sidecar read the same rows through, which reaches the table
+ * app reads the same rows through, which reaches the table
  * only through the catalog's one door to it. Nothing here names the table.
  *
  * The secret is held in this module and taken out of `process.env` at start
