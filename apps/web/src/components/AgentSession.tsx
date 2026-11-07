@@ -5,11 +5,12 @@ import { providerLabel, type KnowledgeInput, type TopicKnowledge } from "@gnosia
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { Card } from "@/components/ui/Card";
-import { cx, LABEL, NOTE, PAGE_TITLE } from "@/components/ui/classes";
+import { BackLink } from "@/components/ui/BackLink";
+import { cx, LABEL, NOTE } from "@/components/ui/classes";
 import { Collapse } from "@/components/ui/Collapse";
 import { Composer } from "@/components/ui/Composer";
 import { LiveStatus } from "@/components/ui/LiveStatus";
-import { TextLink } from "@/components/ui/TextLink";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { TypingDots } from "@/components/ui/TypingDots";
 import { useCopied } from "@/components/ui/use-copied";
 import type {
@@ -42,6 +43,7 @@ import { recapTurns, topicRequestTurns } from "@/lib/tutor-thread";
 import { ownValue } from "@gnosia/tutor/own-key";
 import { randomToken } from "@/lib/random-token";
 import { FADE_IN } from "@/components/ui/motion";
+import { TurnError } from "@/components/workspace/TurnError";
 import { ChatTurn } from "@/components/workspace/ChatTurn";
 
 type Role = "user" | "assistant";
@@ -350,20 +352,16 @@ export function AgentSession({
   return (
     // A 48rem reading measure, centred in the `app` layout's wider column.
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
-      <nav>
-        <TextLink href={backHref} size="md">
-          ← Back to module
-        </TextLink>
+      {/* The way back is the page's one navigation, so it keeps its landmark. */}
+      <nav aria-label="Breadcrumb">
+        <BackLink href={backHref}>Back to module</BackLink>
       </nav>
 
-      <header className="flex flex-col gap-3">
-        <p className="text-[13px] font-medium text-accent-text">Micro-learning</p>
-        <h1 className={PAGE_TITLE}>{topic.title}</h1>
-        <p className="text-[14px] text-text2">
-          {course.code} · M{moduleNumber(course, module)} {module.title}
-        </p>
+      <div className="flex flex-col gap-3">
+        <PageHeader eyebrow={`${course.code} · Module ${moduleNumber(course, module)} · ${module.title}`} title={topic.title} />
+        {/* The session's brief is a paragraph, read at 14px rather than as a note. */}
         <p className="text-[14px] text-text2">{session.angle}</p>
-      </header>
+      </div>
 
       {priorKnowledge && (
         <section className="flex flex-col gap-2">
@@ -459,21 +457,8 @@ export function AgentSession({
             </p>
           )}
           {error && (
-            <Callout
-              tone="danger"
-              role="alert"
-              className={FADE_IN}
-              actions={
-                // The learner's turn went unanswered: send it again, rather than typing it twice.
-                takeUnanswered(messages) !== null ? (
-                  <Button variant="secondary" size="sm" onClick={() => void retry()}>
-                    Try again
-                  </Button>
-                ) : undefined
-              }
-            >
-              {error}
-            </Callout>
+            // The learner's turn went unanswered: send it again, rather than typing it twice.
+            <TurnError tone="danger" error={error} onRetry={takeUnanswered(messages) !== null ? () => void retry() : undefined} />
           )}
           <div ref={bottomRef} />
         </div>

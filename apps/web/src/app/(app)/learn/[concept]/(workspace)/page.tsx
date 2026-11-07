@@ -3,11 +3,11 @@ import { notFound } from "next/navigation";
 
 import { PAGE_ENTER, WORKSPACE_ROOT } from "@/components/PageLoading";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
-import { Eyebrow } from "@/components/ui/Eyebrow";
 import { MasteryDot } from "@/components/ui/MasteryDot";
+import { Notice } from "@/components/ui/Notice";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { TextLink } from "@/components/ui/TextLink";
-import { CONCEPT_TITLE, cx, NOTE } from "@/components/ui/classes";
+import { CONCEPT_TITLE, cx } from "@/components/ui/classes";
 import { NoteAndSources } from "@/components/workspace/NoteAndSources";
 import { StudioCards, type StudioAsset } from "@/components/workspace/StudioCards";
 import { dueRecall } from "@gnosia/tutor/tutor-check";
@@ -101,25 +101,26 @@ export default async function ConceptWorkspacePage({ params, searchParams }: Par
 
   return (
     <div data-layout="workspace" className={cx(WORKSPACE_ROOT, PAGE_ENTER)}>
-      <header className="flex shrink-0 flex-wrap items-center gap-x-3.5 gap-y-3">
-        <div className="min-w-0 flex-1 basis-[18rem]">
-          <Eyebrow>{eyebrow}</Eyebrow>
-          <h1 className={cx(CONCEPT_TITLE, "mt-1")}>{w.title}</h1>
-        </div>
-        <MasteryDot bucket={w.bucket} showLabel pL={w.pL} />
-        <div className="flex flex-wrap items-center gap-3.5">
-          <Button href={`/learn/${w.slug}/session`} aria-describedby={canAsk ? undefined : "session-asks-nothing"}>
-            {/* No "· focus mode" suffix: the session page is the focus layout, and
-                Home's button to the same page already says "Continue teaching". */}
-            Teach me
-          </Button>
-        </div>
-        {!canAsk && (
-          <p id="session-asks-nothing" className={cx(NOTE, "basis-full")}>
-            {NOTHING_TO_ASK} A session here teaches and asks nothing, so nothing is recorded.
-          </p>
-        )}
-      </header>
+      <PageHeader
+        className="shrink-0"
+        eyebrow={eyebrow}
+        title={w.title}
+        titleClass={CONCEPT_TITLE}
+        // Teach me's description, under the header: the session it opens
+        // still teaches when it can ask nothing, so the button stays live.
+        note={canAsk ? undefined : `${NOTHING_TO_ASK} A session here teaches and asks nothing, so nothing is recorded.`}
+        noteId="session-asks-nothing"
+        actions={
+          <>
+            <MasteryDot bucket={w.bucket} showLabel pL={w.pL} />
+            <Button href={`/learn/${w.slug}/session`} aria-describedby={canAsk ? undefined : "session-asks-nothing"}>
+              {/* No "· focus mode" suffix: the session page is the focus layout, and
+                  Home's button to the same page already says "Continue teaching". */}
+              Teach me
+            </Button>
+          </>
+        }
+      />
 
       <WorkspacePanels
         note={
@@ -164,13 +165,10 @@ export default async function ConceptWorkspacePage({ params, searchParams }: Par
 function Unreachable() {
   return (
     <div data-layout="workspace" className={cx(WORKSPACE_ROOT, "ws:overflow-y-auto")}>
-      <Card title="Knowledge base unavailable" className="max-w-2xl">
-        <p className="text-[14px] text-text2">
-          The database could not be reached, so this concept cannot be shown. Nothing is lost: the note, the mastery and
-          the schedule are all in the database, and show again once it answers.
-        </p>
-        <pre className="overflow-x-auto rounded-lg bg-surface2 p-3 text-[12px]">npm run catalog -- status</pre>
-      </Card>
+      <Notice title="Knowledge base unavailable" level={1} command="npm run catalog -- status" className="max-w-2xl">
+        The database could not be reached, so this concept cannot be shown. Nothing is lost: the note, the mastery and
+        the schedule are all in the database, and show again once it answers.
+      </Notice>
     </div>
   );
 }

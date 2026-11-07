@@ -3,12 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
-import { Callout } from "@/components/ui/Callout";
 import { Composer } from "@/components/ui/Composer";
 import { ASK_START_KEY } from "@/lib/ask-core";
 import { ChatTurn, TutorThinking } from "@/components/workspace/ChatTurn";
 import { useUnsavedChat } from "@/components/workspace/use-unsaved-chat";
-import { FADE_IN } from "@/components/ui/motion";
+import { TurnError } from "@/components/workspace/TurnError";
 
 /**
  * The open tutor's chat (docs/proposals/home-page.md, part 1): a conversation
@@ -84,19 +83,7 @@ export function OpenTutorChat({ subject }: { subject: string }) {
           <ChatTurn key={i} turn={turn} idPrefix={`t${i}-`} />
         ))}
         {busy && <TutorThinking />}
-        {error !== null && (
-          <Callout
-            role="alert"
-            className={FADE_IN}
-            actions={
-              <Button variant="secondary" size="sm" onClick={retry}>
-                Try again
-              </Button>
-            }
-          >
-            {error}
-          </Callout>
-        )}
+        {error !== null && <TurnError error={error} onRetry={retry} />}
       </div>
       <Composer
         value={draft}

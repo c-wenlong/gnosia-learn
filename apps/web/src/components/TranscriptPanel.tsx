@@ -3,12 +3,12 @@
 import { memo, useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import {
   activeCueIndex,
-  formatTimecode,
   transcriptCounter,
   type TranscriptCue,
 } from "@gnosia/tutor/media";
 import { cardClasses, cx } from "@/components/ui/classes";
 import { TextLink } from "@/components/ui/TextLink";
+import { TranscriptLine } from "@/components/TranscriptLine";
 import { CARD_TITLE } from "@/components/ui/classes";
 
 /**
@@ -193,39 +193,10 @@ const CueLine = memo(function CueLine({
   onSeek?: (seconds: number) => void;
 }) {
   const isActive = state === "active";
-  const content = (
-    <>
-      <span className="pt-px text-[12px] tabular-nums text-text3">{formatTimecode(cue.start)}</span>
-      {/* A spoken line across a full-width card is a line nobody reads. */}
-      <span className="max-w-[80ch]">{cue.text}</span>
-    </>
-  );
   const tone = isActive ? "bg-tint font-medium text-text" : state === "spoken" ? "text-text3" : "text-text2";
   return (
     <li ref={lineRef}>
-      {onSeek ? (
-        <button
-          type="button"
-          onClick={() => onSeek(cue.start)}
-          aria-current={isActive ? "true" : undefined}
-          className={cx(
-            "grid w-full grid-cols-[3rem_minmax(0,1fr)] gap-2 rounded-lg px-2 py-1 text-left text-[14px] leading-[22px] transition-colors duration-150 hover:bg-surface2 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent motion-reduce:transition-none",
-            tone,
-          )}
-        >
-          {content}
-        </button>
-      ) : (
-        <p
-          aria-current={isActive ? "true" : undefined}
-          className={cx(
-            "grid grid-cols-[3rem_minmax(0,1fr)] gap-2 rounded-lg px-2 py-1 text-[14px] leading-[22px] transition-colors duration-150 motion-reduce:transition-none",
-            tone,
-          )}
-        >
-          {content}
-        </p>
-      )}
+      <TranscriptLine start={cue.start} text={cue.text} current={isActive} onSeek={onSeek} className={tone} />
     </li>
   );
 });

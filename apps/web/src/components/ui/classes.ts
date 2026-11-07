@@ -638,6 +638,10 @@ export type CalloutTone = "warn" | "neutral" | "danger";
  * the `--surface2` one (a status that is not a problem), `danger` a red tint
  * for something lost. `bordered` adds a 2px ring in the tone, for a box that
  * sits on a card of the same pale ground (a confirm, a settings card's status).
+ * `dense` is the small box inside a side panel or a list row: radius 6,
+ * padding 8, 12px words, and a 1px ring when bordered. `actionsAt: "end"`
+ * lays the words and the actions in one wrapping row, for a one-line message
+ * with one button (the tutor's Try again).
  *
  * The words stay `--text` on every tint, never the tone's own text colour: the
  * amber on its tint clears 4.5:1 but is the lightest text on the page, fine for
@@ -646,12 +650,20 @@ export type CalloutTone = "warn" | "neutral" | "danger";
 export function calloutClasses({
   tone = "warn",
   bordered = false,
+  dense = false,
+  actionsAt = "below",
   className,
-}: { tone?: CalloutTone; bordered?: boolean; className?: string } = {}): string {
+}: { tone?: CalloutTone; bordered?: boolean; dense?: boolean; actionsAt?: "below" | "end"; className?: string } = {}): string {
   return cx(
-    "flex min-w-0 flex-col gap-2 rounded-xl px-4 py-3 text-[13px] leading-5 text-text",
+    "flex min-w-0 text-text",
+    // Dense keeps its small gap either way: 4px between wrapped lines, and
+    // 8px (the box's own padding) between the words and an action at the end.
+    actionsAt === "end"
+      ? cx("flex-row flex-wrap items-center", dense ? "gap-x-2 gap-y-1" : "gap-3")
+      : cx("flex-col", dense ? "gap-1" : "gap-2"),
+    dense ? "rounded-md p-2 text-[12px] leading-4" : "rounded-xl px-4 py-3 text-[13px] leading-5",
     CALLOUT_TONE[tone],
-    bordered && cx("border-2", CALLOUT_BORDER[tone]),
+    bordered && cx(dense ? "border" : "border-2", CALLOUT_BORDER[tone]),
     className,
   );
 }

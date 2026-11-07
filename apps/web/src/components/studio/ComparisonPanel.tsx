@@ -139,12 +139,7 @@ export function ComparisonPanel({ job, path }: { job: Job; path: string }) {
       )}
 
       {said !== null && (
-        <div
-          className={cx(
-            "mt-2 rounded-md border p-2 text-xs",
-            said.ok ? "border-ok/40 bg-surface2 text-text2" : "border-danger/45 bg-danger/8 text-danger",
-          )}
-        >
+        <Callout tone={said.ok ? "neutral" : "danger"} dense bordered className="mt-2">
           <p className="break-words">{said.text}</p>
           {said.recompare === true && (
             <div className="mt-2">
@@ -158,7 +153,7 @@ export function ComparisonPanel({ job, path }: { job: Job; path: string }) {
               </p>
             </div>
           )}
-        </div>
+        </Callout>
       )}
 
       {reviewable && (

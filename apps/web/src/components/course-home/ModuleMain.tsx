@@ -6,6 +6,7 @@ import { useId, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { COLUMN_TITLE, cx, FOCUS } from "@/components/ui/classes";
 import { Collapse, CollapseChevron } from "@/components/ui/Collapse";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { Panel } from "@/components/ui/Panel";
 import { TextLink } from "@/components/ui/TextLink";
 import {
@@ -76,21 +77,18 @@ export function ModuleMain({
       {/* A new module's words fade in over the panel, which stays put. */}
       {/* The panel's own 16px is the inset: the reading gets the width. */}
       <div className="flex animate-fade-in flex-col px-1 py-1 motion-reduce:animate-none">
-        <div className="flex flex-wrap items-start gap-x-4 gap-y-2">
-          <div className="min-w-0 flex-1">
-            <p className="text-[14px] leading-5 text-text2">
-              {modulePlace(course, module)}
-            </p>
-            <h1 className={cx(COLUMN_TITLE, "mt-1")}>
-              {module.title}
-            </h1>
-          </div>
-          {data?.guidebook && (
-            <Button href={conceptHref(data.guidebook)} variant="secondary" size="sm">
-              Guidebook
-            </Button>
-          )}
-        </div>
+        <PageHeader
+          eyebrow={modulePlace(course, module)}
+          title={module.title}
+          titleClass={COLUMN_TITLE}
+          actions={
+            data?.guidebook && (
+              <Button href={conceptHref(data.guidebook)} variant="secondary" size="sm">
+                Guidebook
+              </Button>
+            )
+          }
+        />
 
         <ul className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1 text-[14px] leading-6 text-text">
           {meta.map((part) => (

@@ -10,10 +10,10 @@ import { AssetTabs, assetTabItems, type AssetTabsInput } from "@/components/libr
 import { AssetTitle } from "@/components/library/AssetTitle";
 import { WatchProgress } from "@/components/library/WatchProgress";
 import { MarkWatched } from "@/components/library/MarkWatched";
+import { BackLink } from "@/components/ui/BackLink";
 import { Notice } from "@/components/ui/Notice";
 import { Button } from "@/components/ui/Button";
 import { cx } from "@/components/ui/classes";
-import { TextLink } from "@/components/ui/TextLink";
 import { loadAssetDetail, loadFavorite, loadLastWatched, loadPlayback } from "@/lib/asset-library";
 import { appTimeZone } from "@gnosia/tutor/server/time-zone";
 import { dayKey } from "@gnosia/tutor/days";
@@ -83,11 +83,7 @@ export default async function AssetPage({
   const id = decodeAssetId((await params).id);
   const back = assetBackLink((await searchParams).from);
   // Every state of the page has a way back to where it was opened from.
-  const backLink = (
-    <TextLink href={back.href} size="sm" className="self-start">
-      <span aria-hidden>←</span> {back.label}
-    </TextLink>
-  );
+  const backLink = <BackLink href={back.href}>{back.label}</BackLink>;
   const detailRead = loadAssetDetail(id);
   const [detail, { kb }, lastWatched, playback, favorite] = await Promise.all([
     detailRead,
@@ -227,7 +223,7 @@ export default async function AssetPage({
     ) : (
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         {heading}
-        <div className="flex shrink-0 flex-wrap items-start gap-2.5">
+        <div className="flex min-w-0 max-w-full flex-wrap items-start gap-2.5">
           {leading}
           {trailing}
         </div>

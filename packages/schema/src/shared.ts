@@ -993,3 +993,39 @@ export function canonical(value: unknown): JsonValue {
 export function canonicalJson(value: unknown): string {
   return JSON.stringify(canonical(value));
 }
+
+/**
+ * A studio video's narration timing, shared by the web app's brief card and
+ * the studio runner's validator and gate so the two cannot predict different
+ * lengths for the same script. The speech rate itself is gnosia-audio's,
+ * which each side reads at run time (the runner from `home --json`, the card
+ * from the runner's `/api/health`), so it is a parameter here.
+ */
+
+/** The voice value for a video with no narration. */
+export const SILENT_VOICE = "none";
+
+/** The finished video over the speech: 1.03 to 1.15 measured, 1.08 taken. */
+export const VIDEO_OVER_SPEECH = 1.08;
+
+/**
+ * Seconds of video the given narration lines predict at `charsPerSecond`.
+ * NaN when there is no usable rate, which a caller shows as unknown rather
+ * than guess.
+ */
+export function narrationSeconds(lines: readonly string[], charsPerSecond: number | undefined): number {
+  // Infinity is no rate either: it would predict every script as 0 seconds.
+  if (charsPerSecond === undefined || !Number.isFinite(charsPerSecond) || charsPerSecond <= 0) return Number.NaN;
+  const characters = lines.reduce((sum, line) => sum + line.length, 0);
+  return (characters / charsPerSecond) * VIDEO_OVER_SPEECH;
+}
+
+/** Whether a brief's `voice` narrates the video: anything but `SILENT_VOICE`. */
+export function isNarratedVoice(voice: string): boolean {
+  return voice !== SILENT_VOICE;
+}
+
+/** A silent video's predicted seconds: every beat's `seconds`, a beat with none counting 0. */
+export function silentSeconds(scenes: ReadonlyArray<{ beats: ReadonlyArray<{ seconds?: number }> }>): number {
+  return scenes.reduce((sum, scene) => sum + scene.beats.reduce((s, beat) => s + (beat.seconds ?? 0), 0), 0);
+}

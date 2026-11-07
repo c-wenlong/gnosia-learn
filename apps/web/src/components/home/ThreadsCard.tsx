@@ -1,8 +1,7 @@
-import Link from "next/link";
-
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Glyph } from "@/components/ui/Glyph";
+import { LinkRow } from "@/components/ui/LinkRow";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import type { Thread } from "@/lib/home-core";
@@ -38,17 +37,13 @@ export function ThreadsCard({ threads, reachable }: { threads: Thread[]; reachab
             const kind = recentGlyph(t);
             return (
               <li key={t.key}>
-                <Link
+                <LinkRow
                   href={t.href}
-                  className="flex min-w-0 items-center gap-3 rounded-lg px-2 py-2 transition-colors duration-100 hover:bg-surface2 motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-accent"
-                >
-                  <Glyph name={kind.glyph} className="text-text2" />
-                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span className="truncate text-[14px] font-medium text-text">
-                      <span className="sr-only">{kind.word}: </span>
-                      {t.title}
-                    </span>
-                    <span className="flex min-w-0 items-center gap-2 text-[12px] text-text2">
+                  srKind={kind.word}
+                  lead={<Glyph name={kind.glyph} className="text-text2" />}
+                  title={t.title}
+                  meta={
+                    <>
                       {t.kind === "concept" && t.bucket !== undefined ? (
                         <MasteryDot bucket={t.bucket} pL={t.pL} size={10} showLabel />
                       ) : (
@@ -60,12 +55,14 @@ export function ThreadsCard({ threads, reachable }: { threads: Thread[]; reachab
                           <ProgressBar percent={t.percent} size="sm" label={`${t.percent}% watched`} />
                         </span>
                       )}
-                    </span>
-                  </span>
-                  <time dateTime={t.at} className="shrink-0 text-[12px] text-text3">
-                    {t.day}
-                  </time>
-                </Link>
+                    </>
+                  }
+                  trailing={
+                    <time dateTime={t.at} className="shrink-0 text-[12px] text-text3">
+                      {t.day}
+                    </time>
+                  }
+                />
               </li>
             );
           })}

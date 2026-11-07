@@ -6,6 +6,7 @@ import { assetDisplayTitle, assetKindLabel, formatBytes } from "@gnosia/tutor/as
 import { Button } from "@/components/ui/Button";
 import { CardAction } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
+import { FactList } from "@/components/ui/FactList";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import { Placeholder } from "@/components/ui/Placeholder";
 import { Tabs, type TabItem } from "@/components/ui/Tabs";
@@ -259,43 +260,38 @@ function CatalogFacts({
 }) {
   const size = formatBytes(asset.bytes);
   return (
-    <dl className={cx("flex flex-col gap-2", className)}>
-      {progress !== undefined && <Fact label={progress.label}>{progress.value}</Fact>}
-      <Fact label="Kind">{assetKindLabel(asset.kind)}</Fact>
-      <Fact label="Indexed">{indexed}</Fact>
-      <Fact label="Id">
-        <span className="font-mono text-[12px]">{asset.id}</span>
-      </Fact>
-      <Fact label={asset.path === null ? "URL" : "Path"}>
-        <span className="font-mono text-[12px]">{asset.path ?? asset.url ?? "none"}</span>
-      </Fact>
-      <Fact label="Source">{asset.sourceRepo}</Fact>
-      <Fact label="Size">
-        {asset.bytes === null ? "unknown" : `${size} (${asset.bytes.toLocaleString("en")} bytes)`}
-      </Fact>
-      <Fact label="Topics">
-        {asset.topics.length === 0 ? (
-          "none"
-        ) : (
-          <span className="flex flex-wrap gap-1.5">
-            {asset.topics.map((slug) => (
-              <Chip key={slug} size="sm" href={libraryHref({ topic: slug })} title={ownValue(titles, slug) ?? slug}>
-                <span className="font-mono">{slug}</span>
-              </Chip>
-            ))}
-          </span>
-        )}
-      </Fact>
-    </dl>
-  );
-}
-
-/** A labelled fact. Two columns on anything wider than a phone. */
-function Fact({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="grid grid-cols-1 gap-0.5 sm:grid-cols-[6rem_minmax(0,1fr)] sm:gap-4">
-      <dt className={cx(LABEL, "pt-0.5")}>{label}</dt>
-      <dd className="min-w-0 break-words text-[13px] text-text2">{children}</dd>
-    </div>
+    <FactList
+      className={className}
+      facts={[
+        progress,
+        { label: "Kind", value: assetKindLabel(asset.kind) },
+        { label: "Indexed", value: indexed },
+        { label: "Id", value: <span className="font-mono text-[12px]">{asset.id}</span> },
+        {
+          label: asset.path === null ? "URL" : "Path",
+          value: <span className="font-mono text-[12px]">{asset.path ?? asset.url ?? "none"}</span>,
+        },
+        { label: "Source", value: asset.sourceRepo },
+        {
+          label: "Size",
+          value: asset.bytes === null ? "unknown" : `${size} (${asset.bytes.toLocaleString("en")} bytes)`,
+        },
+        {
+          label: "Topics",
+          value:
+            asset.topics.length === 0 ? (
+              "none"
+            ) : (
+              <span className="flex flex-wrap gap-1.5">
+                {asset.topics.map((slug) => (
+                  <Chip key={slug} size="sm" href={libraryHref({ topic: slug })} title={ownValue(titles, slug) ?? slug}>
+                    <span className="font-mono">{slug}</span>
+                  </Chip>
+                ))}
+              </span>
+            ),
+        },
+      ]}
+    />
   );
 }

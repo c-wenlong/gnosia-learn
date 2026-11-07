@@ -6,6 +6,8 @@
  * helpers, apart from the server pagination in `@/lib/library-pages` (S6-16
  * of the library audit). Pure, so the list and a test both call them.
  */
+import { OPEN_PARAM } from "@/lib/library-preview";
+
 /** How many pages the reader had drawn and where they had scrolled, kept per view for back and forward. */
 export interface HeldPages {
   pages: number;
@@ -51,7 +53,7 @@ export function sameLibraryView(url: string, href: string): boolean {
     } catch {
       return null;
     }
-    parsed.searchParams.delete("open");
+    parsed.searchParams.delete(OPEN_PARAM);
     parsed.searchParams.sort();
     return `${parsed.pathname}?${parsed.searchParams.toString()}`;
   };
