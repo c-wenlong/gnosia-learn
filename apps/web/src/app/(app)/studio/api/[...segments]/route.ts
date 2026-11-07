@@ -160,8 +160,11 @@ async function proxy(request: NextRequest, segments: string[]): Promise<Response
   let owner: string;
   try {
     owner = await currentOwner();
-  } catch {
-    owner = "local";
+  } catch (error) {
+    if (error instanceof NoOwnerError) {
+      return NextResponse.json({ error: "sign in first", detail: null }, { status: 401 });
+    }
+    throw error;
   }
 
   const search = request.nextUrl.search;
