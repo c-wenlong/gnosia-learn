@@ -230,11 +230,18 @@ describe("focus, with a composer that loads late", () => {
         await vi.advanceTimersByTimeAsync(30_000);
       });
       expect(mocks.focus).not.toHaveBeenCalled();
+      // The clock stays fake through the chunk's landing: a focus poll would
+      // show up as a scheduled timer, where the only legitimate one is the
+      // age line's one-second tick.
+      expect(vi.getTimerCount()).toBe(1);
+      await act(async () => mocks.release());
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(vi.getTimerCount()).toBe(1);
     } finally {
       vi.useRealTimers();
     }
-    await act(async () => mocks.release());
-    await settle();
     expect(mocks.composer).not.toBeNull();
     expect(mocks.focus).toHaveBeenCalledTimes(1);
   });

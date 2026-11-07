@@ -213,13 +213,16 @@ describe("LibraryToolbar's picks", () => {
 
   it("builds a second pick on the first while its navigation is still in flight", async () => {
     const c = toolbar(null, false);
+    const root = c.firstElementChild as HTMLElement;
     const notes = links(c).find((a) => a.textContent === "Notes")!;
     act(() => trigger(c, "Sort").dispatchEvent(mouse()));
-    // Both picks inside one act: the first's transition has not settled, so
-    // `latest` still holds its kind — the second URL keeps it rather than
-    // rebuilding from the page's last filters.
     await act(async () => {
       notes.dispatchEvent(mouse());
+      // Yield so the first pick's pending render commits — its `pending` is
+      // true when the second pick runs, which is when a `latest` reset on any
+      // render would drop the kind before the second URL is built.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(root.hasAttribute("data-pending")).toBe(true);
       row(c, "Title").dispatchEvent(mouse());
       await new Promise((resolve) => setTimeout(resolve, 0));
     });

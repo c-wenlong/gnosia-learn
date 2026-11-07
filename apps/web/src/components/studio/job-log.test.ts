@@ -134,26 +134,32 @@ describe("JobLog", () => {
   });
 
   it("drops a late answer for the job it just left", async () => {
-    let landA: (response: Response) => void = () => undefined;
+    let landTailA: (response: Response) => void = () => undefined;
     const fetch = vi.fn((url: string) => {
       const job = decodeURIComponent(/jobs\/([^/]+)\/log/.exec(url)![1]!);
       if (job === "a") {
+        // The count lands at once; only the tail is held, so the late answer
+        // below is the read completing, not merely a first request ending.
+        const params = new URL(url, "http://x").searchParams;
+        if (params.get("limit") === "1") {
+          return Promise.resolve(new Response(JSON.stringify({ total: 1, lines: ["from a"] }), { status: 200 }));
+        }
         return new Promise<Response>((resolve) => {
-          landA = resolve;
+          landTailA = resolve;
         });
       }
       return Promise.resolve(new Response(JSON.stringify({ total: 1, lines: ["from b"] }), { status: 200 }));
     });
     vi.stubGlobal("fetch", fetch);
     const { render, text } = mount();
-    // `a`'s first read is still in flight when the panel moves on to `b`.
+    // `a`'s tail read is still in flight when the panel moves on to `b`.
     await render("a");
     await render("b");
     expect(text().log).toBe("from b");
 
-    // `a`'s read lands a job too late: `b`'s tail stays, and nothing of `a` is drawn.
+    // `a`'s tail lands a job too late: `b`'s tail stays, and nothing of `a` is drawn.
     await act(async () => {
-      landA(new Response(JSON.stringify({ total: 1, lines: ["from a"] }), { status: 200 }));
+      landTailA(new Response(JSON.stringify({ total: 1, lines: ["from a"] }), { status: 200 }));
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(text().log).toBe("from b");
