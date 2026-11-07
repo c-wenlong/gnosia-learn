@@ -26,7 +26,7 @@ struct GnosiaWebApp: App {
         WindowGroup("Gnosia") {
             ContentView()
                 .environment(server)
-                .frame(minWidth: 1240, minHeight: 720)
+                .frame(minWidth: shellWindowMinimumSize.width, minHeight: shellWindowMinimumSize.height)
                 // Two .task modifiers, not one awaited pair: the runner's
                 // first minute is heavy and the window should not hold its
                 // own server start behind it, nor vice versa.
@@ -91,20 +91,30 @@ private struct AppCommands: Commands {
             Button("Paste") { send(Selector("paste:")) }.keyboardShortcut("v")
             Button("Select All") { send(Selector("selectAll:")) }.keyboardShortcut("a")
         }
-        CommandMenu("View") {
-            Button("Reload") {
-                NotificationCenter.default.post(name: .gnosiaWebReload, object: nil)
-            }
-            .keyboardShortcut("r")
-            Button("Back") {
-                NotificationCenter.default.post(name: .gnosiaWebBack, object: nil)
-            }
-            .keyboardShortcut("[")
-            Button("Forward") {
-                NotificationCenter.default.post(name: .gnosiaWebForward, object: nil)
-            }
-            .keyboardShortcut("]")
+        CommandGroup(after: .pasteboard) {
+            Divider()
+            Button("Find…") { post(.gnosiaWebFind) }.keyboardShortcut("f")
+            Button("Find Next") { post(.gnosiaWebFindNext) }.keyboardShortcut("g")
+            Button("Find Previous") { post(.gnosiaWebFindPrevious) }
+                .keyboardShortcut("g", modifiers: [.command, .shift])
         }
+        CommandGroup(replacing: .printItem) {
+            Button("Print…") { post(.gnosiaWebPrint) }.keyboardShortcut("p")
+        }
+        CommandMenu("View") {
+            Button("Reload") { post(.gnosiaWebReload) }.keyboardShortcut("r")
+            Button("Back") { post(.gnosiaWebBack) }.keyboardShortcut("[")
+            Button("Forward") { post(.gnosiaWebForward) }.keyboardShortcut("]")
+            Divider()
+            Button("Actual Size") { post(.gnosiaWebActualSize) }.keyboardShortcut("0")
+            Button("Zoom In") { post(.gnosiaWebZoomIn) }.keyboardShortcut("=")
+            Button("Zoom Out") { post(.gnosiaWebZoomOut) }.keyboardShortcut("-")
+        }
+    }
+
+    /// Every window's coordinator hears it; the front one acts.
+    private func post(_ name: Notification.Name) {
+        NotificationCenter.default.post(name: name, object: nil)
     }
 
     private func send(_ sel: Selector) {
