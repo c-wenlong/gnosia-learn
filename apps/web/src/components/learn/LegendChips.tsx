@@ -2,7 +2,7 @@
 
 import { memo, useMemo, useState } from "react";
 
-import { cx, FOCUS } from "@/components/ui/classes";
+import { chipClasses, cx } from "@/components/ui/classes";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import { LEGEND_GROUPS, type IndexFilter, type LegendGroup } from "@/lib/learn-index";
 
@@ -90,12 +90,10 @@ export const LegendChips = memo(function LegendChips({
             onMouseLeave={preview.leave}
             onFocus={() => preview.focus(key)}
             onBlur={preview.blur}
-            className={cx(
-              "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-[12px] font-medium whitespace-nowrap",
-              "transition-[color,background-color,border-color] duration-150 motion-reduce:transition-none",
-              FOCUS,
-              on ? "border-accent bg-tint text-accent-text" : "border-border bg-surface text-text hover:bg-surface2",
-            )}
+            // The kit's small tint chip, with the group's name in primary
+            // text while off, as it was drawn before: the count beside it is
+            // the secondary part.
+            className={chipClasses({ size: "sm", tone: "tint", active: on, className: on ? undefined : "text-text" })}
           >
             {key === "ready" ? (
               <ReadyRing />

@@ -11,6 +11,7 @@ import { DEFAULT_CONFIDENCE, type RecallCheck, type RecallPick } from "@gnosia/t
 import { SESSION_TEXT_LIMIT } from "@gnosia/tutor/session-core";
 import type { Verdict } from "@gnosia/tutor/tutor-check";
 
+import { AnswerRecap } from "./AnswerRecap";
 import { ConfidenceField, ReasoningField } from "./SurenessFields";
 import { VerdictRow } from "./VerdictRow";
 
@@ -124,22 +125,12 @@ export function RecallCheckCard({
         </>
       ) : (
         <>
-          <dl className="flex flex-col gap-2 rounded-lg bg-surface2 px-3 py-2 text-[13px]">
-            <div className="flex flex-col gap-0.5">
-              <dt className="text-text3">
-                Your answer <span className="text-text2">· {pick.confidence}% sure</span>
-              </dt>
-              <dd className="min-w-0 whitespace-pre-wrap text-text">
-                <MathText text={pick.answer} />
-              </dd>
-            </div>
-            {pick.thinking !== null && (
-              <div className="flex flex-col gap-0.5">
-                <dt className="text-text3">Your reasoning</dt>
-                <dd className="min-w-0 whitespace-pre-wrap text-text">{pick.thinking}</dd>
-              </div>
-            )}
-          </dl>
+          <AnswerRecap
+            layout="stacked"
+            answer={<MathText text={pick.answer} />}
+            confidence={pick.confidence}
+            thinking={pick.thinking}
+          />
           <div className="flex flex-col gap-0.5 text-[14px] leading-6">
             <p className="text-[13px] text-text3">The tutor&apos;s answer</p>
             <p className="whitespace-pre-wrap text-text">
