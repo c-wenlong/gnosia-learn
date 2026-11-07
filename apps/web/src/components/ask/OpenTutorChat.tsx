@@ -2,23 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { MathText } from "@/components/Math";
-import { NoteProse } from "@/components/NoteProse";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { Composer } from "@/components/ui/Composer";
-import { TutorMessage, UserMessage } from "@/components/ui/Message";
 import { ASK_START_KEY } from "@/lib/ask-core";
-import { tutorProblem } from "@/lib/tutor-errors";
-import { trimForRequest, type TutorTurn } from "@/lib/tutor-thread";
-import { takeUnanswered } from "@/components/workspace/unanswered";
-import { ENTER, FADE_IN } from "@/components/ui/motion";
-
-interface ChatReply {
-  message?: { role: "assistant"; content: string };
-  error?: string;
-  code?: string;
-}
+import { ChatTurn, TutorThinking } from "@/components/workspace/ChatTurn";
+import { useUnsavedChat } from "@/components/workspace/use-unsaved-chat";
+import { FADE_IN } from "@/components/ui/motion";
 
 /**
  * The open tutor's chat (docs/proposals/home-page.md, part 1): a conversation
@@ -41,72 +31,23 @@ interface ChatReply {
  * saved).
  */
 export function OpenTutorChat({ subject }: { subject: string }) {
-  const [turns, setTurns] = useState<TutorTurn[]>([]);
-  const [draft, setDraft] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // The turn in flight is aborted when the chat goes away (a new subject
+  // remounts it, and so does leaving the page), so a reply nobody will see is
+  // not paid for to the end and never lands.
+  const { turns, draft, setDraft, busy, error, ask, retry, begin } = useUnsavedChat(() => ({ subject }));
   /** Null until the browser has said whether the Ask box asked for this subject. */
   const [waiting, setWaiting] = useState<boolean | null>(null);
   const started = useRef(false);
-  /**
-   * The turn in flight, aborted when the chat goes away (a new subject
-   * remounts it, and so does leaving the page), so a reply nobody will see
-   * is not paid for to the end and never lands.
-   */
-  const inflight = useRef<AbortController | null>(null);
-  useEffect(() => () => inflight.current?.abort(), []);
-
-  const send = useCallback(
-    async (thread: TutorTurn[]) => {
-      const controller = new AbortController();
-      inflight.current = controller;
-      setBusy(true);
-      setError(null);
-      try {
-        const res = await fetch("/api/agent/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ subject, messages: trimForRequest(thread) }),
-          signal: controller.signal,
-        });
-        const data = (await res.json().catch(() => ({}))) as ChatReply;
-        if (controller.signal.aborted) return;
-        if (!res.ok || data.message === undefined) {
-          setError(tutorProblem(res.status, data));
-          return;
-        }
-        setTurns([...thread, { role: "assistant", content: data.message.content }]);
-      } catch {
-        if (!controller.signal.aborted) setError("The tutor did not answer: the server could not be reached.");
-      } finally {
-        if (inflight.current === controller) inflight.current = null;
-        if (!controller.signal.aborted) setBusy(false);
-      }
-    },
-    [subject],
-  );
-
-  const ask = (text: string) => {
-    const content = text.trim();
-    if (content === "" || busy) return;
-    // A question after a failed one takes its place, so two learner turns never go out in a row.
-    const thread: TutorTurn[] = [...(takeUnanswered(turns)?.rest ?? turns), { role: "user", content }];
-    setTurns(thread);
-    setDraft("");
-    void send(thread);
-  };
 
   const start = useCallback(() => {
     if (started.current) return;
     started.current = true;
     setWaiting(false);
-    const opening: TutorTurn[] = [{ role: "user", content: `I want to learn about ${subject}.` }];
-    setTurns(opening);
-    // Sent from a callback, as the concept tutor's opening is: under React's
-    // development double effect the abort above runs between the two passes,
+    // Sent on a microtask, as the concept tutor's opening is: under React's
+    // development double effect the hook's abort runs between the two passes,
     // and would cut a request the effect below had already sent.
-    void Promise.resolve().then(() => send(opening));
-  }, [send, subject]);
+    begin([{ role: "user", content: `I want to learn about ${subject}.` }]);
+  }, [begin, subject]);
 
   useEffect(() => {
     let asked = false;
@@ -139,24 +80,16 @@ export function OpenTutorChat({ subject }: { subject: string }) {
   return (
     <div className="flex animate-fade-in flex-col gap-5 motion-reduce:animate-none">
       <div className="flex flex-col gap-4" aria-live="polite">
-        {turns.map((turn, i) =>
-          turn.role === "user" ? (
-            <UserMessage key={i} className={ENTER}>
-              <MathText text={turn.content} />
-            </UserMessage>
-          ) : (
-            <TutorMessage key={i} className={ENTER}>
-              <NoteProse source={turn.content} idPrefix={`t${i}-`} images="link" />
-            </TutorMessage>
-          ),
-        )}
-        {busy && <p className="animate-fade-in px-1.5 text-[14px] text-text2 motion-reduce:animate-none">The tutor is thinking…</p>}
+        {turns.map((turn, i) => (
+          <ChatTurn key={i} turn={turn} idPrefix={`t${i}-`} />
+        ))}
+        {busy && <TutorThinking />}
         {error !== null && (
           <Callout
             role="alert"
             className={FADE_IN}
             actions={
-              <Button variant="secondary" size="sm" onClick={() => void send(turns)}>
+              <Button variant="secondary" size="sm" onClick={retry}>
                 Try again
               </Button>
             }

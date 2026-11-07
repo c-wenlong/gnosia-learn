@@ -2,8 +2,6 @@
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { providerLabel, type KnowledgeInput, type TopicKnowledge } from "@gnosia/schema/shared";
-import { MathText } from "@/components/Math";
-import { NoteProse } from "@/components/NoteProse";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { Card } from "@/components/ui/Card";
@@ -11,7 +9,6 @@ import { cx, LABEL, NOTE, PAGE_TITLE } from "@/components/ui/classes";
 import { Collapse } from "@/components/ui/Collapse";
 import { Composer } from "@/components/ui/Composer";
 import { LiveStatus } from "@/components/ui/LiveStatus";
-import { TutorMessage, UserMessage } from "@/components/ui/Message";
 import { TextLink } from "@/components/ui/TextLink";
 import { TypingDots } from "@/components/ui/TypingDots";
 import { useCopied } from "@/components/ui/use-copied";
@@ -44,7 +41,8 @@ import { tutorProblem } from "@/lib/tutor-errors";
 import { recapTurns, topicRequestTurns } from "@/lib/tutor-thread";
 import { ownValue } from "@gnosia/tutor/own-key";
 import { randomToken } from "@/lib/random-token";
-import { ENTER, FADE_IN } from "@/components/ui/motion";
+import { FADE_IN } from "@/components/ui/motion";
+import { ChatTurn } from "@/components/workspace/ChatTurn";
 
 type Role = "user" | "assistant";
 
@@ -447,20 +445,9 @@ export function AgentSession({
             // A card's answer is the card's to show; the turn holds what the tutor was sent.
             if (m.role === "user" && (m.choice || m.recall)) return [<CheckRow key={`v${i}`} at={i} {...slotProps} />];
             return [
-              // The kit's two voices: the tutor's bare prose and the learner's
-              // tinted bubble, told apart by shape, so no turn carries a
-              // speaker label; only the provider, when there is one, is shown.
-              m.role === "assistant" ? (
-                <TutorMessage key={m.id} className={ENTER}>
-                  {m.meta && <p className={cx(NOTE, "mb-1")}>{m.meta}</p>}
-                  {/* The tutor writes markdown, as the concept tutor's does; an image in it is a link. */}
-                  <NoteProse source={m.content} idPrefix={`t${i}-`} images="link" />
-                </TutorMessage>
-              ) : (
-                <UserMessage key={m.id} className={ENTER}>
-                  <MathText text={m.content} />
-                </UserMessage>
-              ),
+              // ChatTurn draws the kit's two voices; the only label is the
+              // provider above the tutor's prose, when there is one.
+              <ChatTurn key={m.id} turn={m} idPrefix={`t${i}-`} meta={m.meta} />,
               m.role === "assistant" ? <CheckCard key={`c${i}`} at={i} {...slotProps} /> : null,
               <CheckRow key={`v${i}`} at={i} {...slotProps} />,
             ];
