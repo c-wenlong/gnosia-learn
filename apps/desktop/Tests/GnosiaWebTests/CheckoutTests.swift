@@ -95,11 +95,22 @@ final class CheckoutTests: XCTestCase {
         XCTAssertEqual(calls.count, 1)
     }
 
-    func testTheResolversStderrTailIsKept() {
-        let long = String(repeating: "x", count: 3000) + "\nError: Cannot find module 'tsx'\n"
-        let tail = Checkout.stderrTail(Data(long.utf8))
-        XCTAssertLessThanOrEqual(tail.count, 1500)
-        XCTAssertTrue(tail.hasSuffix("Error: Cannot find module 'tsx'"))
+    /// The resolver's stderr is kept as it arrives, bounded, and a pipe a
+    /// grandchild holds open does not lose what was already printed.
+    func testTheResolversStderrTailIsKeptWhileThePipeIsHeld() throws {
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: "/bin/sh")
+        proc.arguments = ["-c", "printf 'x%.0s' $(seq 1 3000) >&2; echo; echo \"Error: Cannot find module 'tsx'\" >&2; (sleep 5) & exit 1"]
+        let err = Pipe()
+        proc.standardError = err
+        let capture = StderrCapture(pipe: err, limit: 1500)
+        try proc.run()
+        proc.waitUntilExit()
+        let began = Date()
+        capture.waitClosed(timeout: 0.5)
+        XCTAssertLessThan(Date().timeIntervalSince(began), 3)
+        XCTAssertLessThanOrEqual(capture.tail.count, 1500)
+        XCTAssertTrue(capture.tail.hasSuffix("Error: Cannot find module 'tsx'"), capture.tail)
     }
 
     /// The read before any spawn: a missing file and a refused one say

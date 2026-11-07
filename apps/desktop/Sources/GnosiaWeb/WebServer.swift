@@ -74,12 +74,12 @@ final class WebServer {
             status = .failed("No checkout found — set GNOSIA_REPO to the repository root.")
             return
         }
-        // Before any child: the read that lets macOS ask for the folder.
-        if let problem = await Checkout.checkAccess(root) {
+        // Before any child: the read that lets macOS ask for the folder,
+        // then the shared environment.
+        if let problem = await Checkout.prepare() {
             status = .failed(problem)
             return
         }
-        await Checkout.prepare()
         for attempt in 1 ... 3 {
             let port = Int.random(in: 49200 ... 59800)
             guard let capture = spawn(root: root, port: port) else { return }  // no node: status is failed
@@ -298,6 +298,8 @@ final class StderrCapture: @unchecked Sendable {
     private var text = ""
     private var closed = false
     private var waiters: [CheckedContinuation<Void, Never>] = []
+    /// Signalled once, by `close()`, for a caller on a plain thread.
+    private let closedSignalled = DispatchSemaphore(value: 0)
 
     init(pipe: Pipe, limit: Int = 4000) {
         handle = pipe.fileHandleForReading
@@ -336,6 +338,14 @@ final class StderrCapture: @unchecked Sendable {
         }
         handle.readabilityHandler = nil
         waiting.forEach { $0.resume() }
+        closedSignalled.signal()
+    }
+
+    /// `settle()` for a caller on a plain thread (the resolver's): wait for
+    /// end of file, at most `timeout` seconds, then stop reading.
+    func waitClosed(timeout: TimeInterval) {
+        _ = closedSignalled.wait(timeout: .now() + timeout)
+        close()
     }
 
     /// Wait for end of file, at most `timeout`, then stop reading either

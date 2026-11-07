@@ -117,13 +117,23 @@ enum Checkout {
         }
     }
 
-    /// Run the shared resolver, once, off the main thread. Every launcher
-    /// awaits it before its first spawn; a later call reuses the answer, or
-    /// runs it again after a failure.
-    static func prepare() async {
-        guard let root = repoRoot() else { return }
+    /// Every launcher's one step before its first spawn: the access check,
+    /// then the shared resolver, run once off the main thread. A later call
+    /// reuses the answer, or runs it again after a failure. The answer is
+    /// why the checkout cannot be read, when it cannot, and then nothing
+    /// is spawned, the resolver included: it would hang on the same folder
+    /// while macOS waits for the owner.
+    @discardableResult
+    static func prepare() async -> String? {
+        guard let root = repoRoot() else { return nil }
+        if let problem = await checkAccess(root) { return problem }
         await state.prepare(root: root)
+        return nil
     }
+
+    /// Whether the resolver has answered, so children get its environment
+    /// rather than `fallbackEnv()`.
+    static var isResolved: Bool { state.resolved != nil }
 
     /// How long the resolver may take before the launch goes on without it:
     /// a login profile that stalls must not hold the window on its spinner.
@@ -151,16 +161,11 @@ enum Checkout {
         do { try proc.run() } catch {
             return Resolution(failure: "the resolver could not start: \(error.localizedDescription)")
         }
-        // stderr is drained beside stdout, so a chatty stderr cannot fill
-        // its pipe and stall the child while stdout is being read.
-        let errText = Locked(Data())
+        // stderr is read as it arrives, beside stdout, so a chatty stderr
+        // cannot fill its pipe and stall the child, and what it printed is
+        // kept even if something the login shell started holds it open.
+        let errText = StderrCapture(pipe: err, limit: 1500)
         let stopped = Locked(false)
-        let errDone = DispatchGroup()
-        errDone.enter()
-        DispatchQueue.global().async {
-            errText.set(err.fileHandleForReading.readDataToEndOfFile())
-            errDone.leave()
-        }
         // Past the deadline the child is stopped; its pipe then closes and
         // the read below ends.
         let deadline = DispatchWorkItem {
@@ -175,8 +180,8 @@ enum Checkout {
         deadline.cancel()
         // Something the login shell started can hold stderr open; do not
         // wait on it for long.
-        _ = errDone.wait(timeout: .now() + 2)
-        let tail = stderrTail(errText.get())
+        errText.waitClosed(timeout: 2)
+        let tail = errText.tail
         func failed(_ why: String) -> Resolution {
             Resolution(failure: tail.isEmpty ? why : "\(why): \(tail)")
         }
@@ -191,12 +196,6 @@ enum Checkout {
         }
         guard let env = parseResolved(data) else { return failed("the resolver printed no environment") }
         return Resolution(env: env)
-    }
-
-    /// The last ~1500 characters of a child's stderr, trimmed.
-    static func stderrTail(_ data: Data) -> String {
-        String(String(decoding: data, as: UTF8.self).suffix(1500))
-            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// A value another thread fills in.
