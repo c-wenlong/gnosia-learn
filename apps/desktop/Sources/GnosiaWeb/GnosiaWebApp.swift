@@ -5,7 +5,8 @@
 //  The desktop shell for the web app: one window hosting a WKWebView on a
 //  locally spawned Next server, so the app people use is the app itself —
 //  no second UI to keep in parity. Runs unbundled from `swift run` too, so
-//  init() asks for a regular activation policy the way GnosiaApp does.
+//  init() asks for a regular activation policy: an unbundled executable
+//  otherwise gets no Dock icon and no menu bar.
 //
 
 import AppKit

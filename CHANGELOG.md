@@ -192,6 +192,23 @@ This project is continuously deployed and not versioned; entries are grouped by 
 
 ### Fixed
 
+- **The desktop shell (`apps/desktop`, Gnosia Web) no longer launches local
+  apps from a link, and says why when its server does not come up.** A
+  target=_blank link or `window.open` went to `NSWorkspace` whatever its
+  scheme, so a `file:///Applications/X.app` or a custom scheme opened a local
+  app; now only http and https go to the browser, and the window itself
+  shows only the app server's origin (subframes may also show loopback, for
+  the studio's canvas). Launched from Finder with the checkout under
+  `~/Desktop`, macOS privacy protection refused the children the folder and
+  they hung with nothing on stderr; the shell now reads `package.json`
+  itself first, so macOS asks up front (the bundle carries the Desktop,
+  Documents and Downloads usage strings) and a refusal names the path, and
+  a child silent for the whole wait says so. Each spawn's exit and stderr
+  stay its own, stderr is read to its end before the failure text is built,
+  a failed environment resolver run is retried by "Try again" (which now
+  runs at all) and its stderr is kept, the checkout path is quoted for the
+  shell, and `bundle-app.sh` fails when signing fails.
+
 - **The three asset-presentation components now reset their own state when the
   file they are showing changes.** `VideoPlayer` kept the playback position,
   `DiagramView` kept a failed load and `AssetCard` kept a failed thumbnail, so

@@ -44,8 +44,13 @@ final class WebServer {
     private let localToken = UUID().uuidString + UUID().uuidString
 
     private var process: Process?
-    private var exited = true
-    private var stderrTail = ""
+    /// Each spawn's turn: a terminated attempt's terminationHandler can land
+    /// after the next spawn began, and must not mark that one exited.
+    private var attempts = AttemptClock()
+    /// The current spawn's stderr capture. Held here because its handler
+    /// holds it only weakly: a capture nobody holds stops reading, and a
+    /// running server writing to a pipe nobody reads blocks once it fills.
+    private var stderr: StderrCapture?
 
     init() {
         NotificationCenter.default.addObserver(
@@ -57,14 +62,29 @@ final class WebServer {
         }
     }
 
+    /// Bring the server up. Runs from `.off`, and again from `.failed`
+    /// (the window's "Try again").
     func start() async {
-        guard case .off = status else { return }
+        switch status {
+        case .off, .failed: break
+        case .starting, .running: return
+        }
         status = .starting
+        guard let root = Checkout.repoRoot() else {
+            status = .failed("No checkout found — set GNOSIA_REPO to the repository root.")
+            return
+        }
+        // Before any child: the read that lets macOS ask for the folder.
+        if let problem = await Checkout.checkAccess(root) {
+            status = .failed(problem)
+            return
+        }
         await Checkout.prepare()
         for attempt in 1 ... 3 {
             let port = Int.random(in: 49200 ... 59800)
-            guard spawn(port: port) else { return }  // no repo/node — status is failed
-            if let url = await waitReady(port: port), await proveOwned(url) {
+            guard let capture = spawn(root: root, port: port) else { return }  // no node: status is failed
+            let outcome = await waitReady(port: port)
+            if case .ready(let url) = outcome, await proveOwned(url) {
                 // The window's first load: redeem the launch token for the
                 // session cookie, which 303s onward to /home. The token is
                 // only ever sent after the server proves it hosts our
@@ -77,36 +97,58 @@ final class WebServer {
             }
             process?.terminate()
             process = nil
+            stderr = nil
+            // Everything this attempt printed, before reading it: a child
+            // that exits with its reason still in the pipe would otherwise
+            // be reported as having said nothing.
+            await capture.settle()
+            let tail = capture.tail
             // The dev-singleton case: Next refused the port because the app
             // dir already has a server, and named where it lives. That
             // server has no GNOSIA_LOCAL_TOKEN of ours, so the window opens
             // on the bare URL and the owner signs in once as usual.
-            if let existing = existingServer() {
+            if let existing = Self.existingServer(in: tail) {
                 status = .running(existing)
                 return
             }
+            // Alive and silent for the whole wait: another port changes
+            // nothing, and the likeliest cause is macOS refusing the child
+            // the checkout's folder.
+            if outcome == .timedOut, tail.isEmpty {
+                status = .failed(Self.withResolverNote(Self.silentMessage(root: root, seconds: Self.readyTimeout)))
+                return
+            }
             if attempt == 3 {
-                status = .failed(stderrTail.isEmpty
+                status = .failed(Self.withResolverNote(tail.isEmpty
                     ? "The web server did not come up after three ports."
-                    : stderrTail)
+                    : tail))
             }
         }
     }
 
-    /// False when the spawn itself could not be set up (no checkout, no
-    /// node binary); a process that starts but never listens returns true
-    /// and lets waitReady report it.
-    private func spawn(port: Int) -> Bool {
-        exited = false
-        stderrTail = ""
-        guard let root = Checkout.repoRoot() else {
-            status = .failed("No checkout found — set GNOSIA_REPO to the repository root.")
-            return false
-        }
+    /// The failure text for a child that ran the whole wait and printed nothing.
+    nonisolated static func silentMessage(root: URL, seconds: Int) -> String {
+        "The web server is still running but silent after \(seconds) s; "
+            + "macOS may be blocking access to \(root.path). Allow Gnosia Web in "
+            + "System Settings > Privacy & Security > Files and Folders, or move the checkout."
+    }
+
+    /// The resolver's failure, when it failed, under a launch failure: the
+    /// children then ran on the fallback environment, which may be why.
+    private static func withResolverNote(_ message: String) -> String {
+        guard let why = Checkout.resolverFailure else { return message }
+        return message + "\n\nThe environment resolver also failed: " + why
+    }
+
+    /// Nil when the spawn itself could not be set up (no node binary); a
+    /// process that starts but never listens returns its stderr capture and
+    /// lets waitReady report it.
+    private func spawn(root: URL, port: Int) -> StderrCapture? {
+        let turn = attempts.begin()
         let next = root.appending(path: "node_modules/next/dist/bin/next")
         guard FileManager.default.fileExists(atPath: next.path) else {
             status = .failed("next is not installed — run `npm install` in \(root.path).")
-            return false
+            return nil
         }
 
         let proc = Process()
@@ -124,21 +166,21 @@ final class WebServer {
         let err = Pipe()
         proc.standardError = err
         proc.standardOutput = FileHandle.nullDevice
-        err.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            let chunk = handle.availableData
-            guard let text = String(data: chunk, encoding: .utf8) else { return }
-            Task { @MainActor in self?.keepStderr(text) }
-        }
+        // This spawn's own pipe and turn: nothing it reports can reach the
+        // next attempt.
+        let capture = StderrCapture(pipe: err)
         proc.terminationHandler = { [weak self] _ in
-            Task { @MainActor in self?.exited = true }
+            Task { @MainActor in self?.attempts.ended(turn) }
         }
         do {
             try proc.run()
             process = proc
-            return true
+            stderr = capture
+            return capture
         } catch {
+            capture.close()
             status = .failed("Could not spawn node: \(error.localizedDescription)")
-            return false
+            return nil
         }
     }
 
@@ -152,7 +194,7 @@ final class WebServer {
     /// (scripts/lib/dev-env.mjs).
     nonisolated static func launch(root: URL, next: URL, mode: String, port: Int) -> (command: String, directory: URL) {
         let web = root.appending(path: "apps/web")
-        return ("exec node '\(next.path)' \(mode) -p \(port) -H 127.0.0.1", web)
+        return ("exec node \(Checkout.shellQuoted(next.path)) \(mode) -p \(port) -H 127.0.0.1", web)
     }
 
     /// `dev` by default: it is slower on the first hit of each route but it
@@ -185,7 +227,7 @@ final class WebServer {
     /// "Another next dev server is already running … You can access the
     /// existing server at <url>" — the URL from the refusal, when there is
     /// one, so the window can adopt it instead of dying.
-    private func existingServer() -> URL? {
+    nonisolated static func existingServer(in stderrTail: String) -> URL? {
         guard let range = stderrTail.range(of: "access the existing server at ") else { return nil }
         let rest = stderrTail[range.upperBound...]
         guard let end = rest.firstIndex(where: { $0 == " " || $0 == "\n" || $0 == "," || $0 == "\u{1B}" }) else {
@@ -194,27 +236,132 @@ final class WebServer {
         return URL(string: String(rest[..<end]))
     }
 
+    /// How one wait for the server ended.
+    enum ReadyOutcome: Equatable {
+        case ready(URL)
+        /// The process exited first.
+        case exited
+        /// The process outlived the whole wait without answering.
+        case timedOut
+    }
+
+    /// Ninety seconds covers a dev-mode cold compile on a slow machine.
+    static let readyTimeout = 90
+
     /// Polls the socket until any response arrives — a redirect to
-    /// /sign-in still proves the server bound. Ninety seconds covers a
-    /// dev-mode cold compile on a slow machine; the process dying first
+    /// /sign-in still proves the server bound. The process dying first
     /// ends the wait early so a port clash falls through to the retry.
-    private func waitReady(port: Int) async -> URL? {
+    private func waitReady(port: Int) async -> ReadyOutcome {
         let url = URL(string: "http://127.0.0.1:\(port)/")!
-        let deadline = ContinuousClock.now + .seconds(90)
+        let deadline = ContinuousClock.now + .seconds(Self.readyTimeout)
         var request = URLRequest(url: url)
         request.timeoutInterval = 3
         while ContinuousClock.now < deadline {
-            if exited { return nil }
+            if attempts.exited { return .exited }
             do {
                 let (_, response) = try await URLSession.shared.data(for: request)
-                if response is HTTPURLResponse { return url }
+                if response is HTTPURLResponse { return .ready(url) }
             } catch { /* not listening yet */ }
             try? await Task.sleep(for: .milliseconds(400))
         }
-        return nil
+        return attempts.exited ? .exited : .timedOut
+    }
+}
+
+/// Which spawn is current, and whether it has exited. Each spawn takes a
+/// turn; an exit reported for an older turn (a terminated attempt whose
+/// terminationHandler lands after the next spawn) changes nothing.
+struct AttemptClock {
+    private(set) var current = 0
+    private(set) var exited = true
+
+    mutating func begin() -> Int {
+        current += 1
+        exited = false
+        return current
     }
 
-    private func keepStderr(_ text: String) {
-        stderrTail = String((stderrTail + text).suffix(4000))
+    mutating func ended(_ turn: Int) {
+        if turn == current { exited = true }
+    }
+}
+
+/// One child's stderr, kept to its last `limit` characters. The handler
+/// is cleared at end of file (where it would otherwise fire again and again
+/// with nothing) and by `close()`, and it writes only to this capture, so
+/// one spawn's output never lands in another's tail. Reads and writes go
+/// through a lock, in the order the pipe delivered them.
+final class StderrCapture: @unchecked Sendable {
+    private let lock = NSLock()
+    private let handle: FileHandle
+    private let limit: Int
+    private var text = ""
+    private var closed = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    init(pipe: Pipe, limit: Int = 4000) {
+        handle = pipe.fileHandleForReading
+        self.limit = limit
+        handle.readabilityHandler = { [weak self] handle in
+            let chunk = handle.availableData
+            guard let self else {
+                handle.readabilityHandler = nil
+                return
+            }
+            if chunk.isEmpty { self.close() } else { self.append(chunk) }
+        }
+    }
+
+    /// What the child has printed so far, trimmed.
+    var tail: String {
+        lock.withLock { text }.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var isClosed: Bool { lock.withLock { closed } }
+
+    private func append(_ chunk: Data) {
+        lock.withLock {
+            guard !closed else { return }
+            text = String((text + String(decoding: chunk, as: UTF8.self)).suffix(limit))
+        }
+    }
+
+    /// Stop reading: end of file, or the attempt is over.
+    func close() {
+        let waiting: [CheckedContinuation<Void, Never>] = lock.withLock {
+            if closed { return [] }
+            closed = true
+            defer { waiters = [] }
+            return waiters
+        }
+        handle.readabilityHandler = nil
+        waiting.forEach { $0.resume() }
+    }
+
+    /// Wait for end of file, at most `timeout`, then stop reading either
+    /// way: a grandchild (a Next worker) can hold the pipe open after the
+    /// child itself is gone.
+    func settle(timeout: Duration = .seconds(1)) async {
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await self.closedSignal() }
+            group.addTask {
+                try? await Task.sleep(for: timeout)
+                self.close()
+            }
+            await group.next()
+            group.cancelAll()
+        }
+        close()
+    }
+
+    private func closedSignal() async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            let done: Bool = lock.withLock {
+                if closed { return true }
+                waiters.append(continuation)
+                return false
+            }
+            if done { continuation.resume() }
+        }
     }
 }

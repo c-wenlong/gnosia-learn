@@ -59,4 +59,74 @@ final class CheckoutTests: XCTestCase {
         XCTAssertFalse(shouldDownload(disposition: nil, canShowMIMEType: true))
         XCTAssertTrue(shouldDownload(disposition: nil, canShowMIMEType: false))
     }
+
+    /// A failed resolver run is not kept: the next prepare runs it again,
+    /// and an answer, once there is one, is reused.
+    func testAFailedResolverRunIsTriedAgain() async {
+        let calls = Calls()
+        let state = Checkout.ResolverState { _ in
+            calls.next() == 1
+                ? Checkout.Resolution(failure: "the resolver exited with status 1: boom")
+                : Checkout.Resolution(env: ["CATALOG_DB": "/x.db"])
+        }
+        let root = URL(fileURLWithPath: "/repo")
+        await state.prepare(root: root)
+        XCTAssertNil(state.resolved)
+        XCTAssertEqual(state.failure, "the resolver exited with status 1: boom")
+        await state.prepare(root: root)
+        XCTAssertEqual(state.resolved, ["CATALOG_DB": "/x.db"])
+        XCTAssertNil(state.failure)
+        await state.prepare(root: root)
+        XCTAssertEqual(calls.count, 2)
+    }
+
+    /// Launchers asking at once share one run.
+    func testConcurrentPreparesShareOneRun() async {
+        let calls = Calls()
+        let state = Checkout.ResolverState { _ in
+            _ = calls.next()
+            Thread.sleep(forTimeInterval: 0.2)
+            return Checkout.Resolution(env: [:])
+        }
+        let root = URL(fileURLWithPath: "/repo")
+        async let a: Void = state.prepare(root: root)
+        async let b: Void = state.prepare(root: root)
+        _ = await (a, b)
+        XCTAssertEqual(calls.count, 1)
+    }
+
+    func testTheResolversStderrTailIsKept() {
+        let long = String(repeating: "x", count: 3000) + "\nError: Cannot find module 'tsx'\n"
+        let tail = Checkout.stderrTail(Data(long.utf8))
+        XCTAssertLessThanOrEqual(tail.count, 1500)
+        XCTAssertTrue(tail.hasSuffix("Error: Cannot find module 'tsx'"))
+    }
+
+    /// The read before any spawn: a missing file and a refused one say
+    /// different things, and both name the path.
+    func testTheCheckoutAccessCheck() throws {
+        let dir = FileManager.default.temporaryDirectory.appending(path: "gnosia-access-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let missing = try XCTUnwrap(Checkout.accessProblem(root: dir))
+        XCTAssertTrue(missing.contains("There is no package.json at \(dir.path)"), missing)
+        try Data("{}".utf8).write(to: dir.appending(path: "package.json"))
+        XCTAssertNil(Checkout.accessProblem(root: dir))
+
+        let file = URL(fileURLWithPath: "/Users/o/Desktop/repo/package.json")
+        let refused = NSError(domain: NSCocoaErrorDomain, code: NSFileReadNoPermissionError, userInfo: [
+            NSUnderlyingErrorKey: NSError(domain: NSPOSIXErrorDomain, code: Int(EPERM)),
+        ])
+        let message = Checkout.accessMessage(file: file, error: refused)
+        XCTAssertTrue(message.contains(file.path), message)
+        XCTAssertTrue(message.contains("Privacy & Security > Files and Folders"), message)
+    }
+}
+
+/// How many times a stand-in resolver ran.
+private final class Calls: @unchecked Sendable {
+    private let lock = NSLock()
+    private var calls = 0
+    var count: Int { lock.withLock { calls } }
+    func next() -> Int { lock.withLock { calls += 1; return calls } }
 }

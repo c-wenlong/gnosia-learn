@@ -12,8 +12,8 @@
 import Foundation
 
 enum Checkout {
-    /// The repository root, found the way the other apps find it:
-    /// `GNOSIA_REPO` wins, then the walk up from this file's compile-time
+    /// The repository root: `GNOSIA_REPO` wins (the bundle bakes it into
+    /// its Info.plist's LSEnvironment), then the walk up from this file's compile-time
     /// path (`apps/desktop/Sources/GnosiaWeb` → root is five deletions).
     static func repoRoot() -> URL? {
         if let env = ProcessInfo.processInfo.environment["GNOSIA_REPO"], !env.isEmpty {
@@ -60,36 +60,69 @@ enum Checkout {
             : (URL(fileURLWithPath: "/bin/sh"), ["-c", command])
     }
 
-    private static let state = ResolverState()
+    private static let state = ResolverState(run: { runResolver(root: $0) })
+
+    /// Why the last resolver run failed, when it did: its exit and the tail
+    /// of what it printed on stderr. Nil once a run has answered.
+    static var resolverFailure: String? { state.failure }
+
+    /// One resolver run's result: the environment, or why there is none.
+    struct Resolution: Sendable {
+        var env: [String: String]?
+        var failure: String?
+    }
 
     /// The resolver's answer and the one run that produces it, from any
     /// thread: every launcher awaits the same task, so a cold launch runs
-    /// the login shell and node once, not once per launcher.
-    private final class ResolverState: @unchecked Sendable {
+    /// the login shell and node once, not once per launcher. Only an answer
+    /// is kept. A failed run is forgotten, so the next `prepare()` (the
+    /// window's "Try again") runs the resolver again rather than reusing
+    /// the failure for the rest of the app's life.
+    final class ResolverState: @unchecked Sendable {
         private let lock = NSLock()
+        private let run: @Sendable (URL) -> Resolution
         private var answer: [String: String]?
-        private var running: Task<[String: String]?, Never>?
-        var resolved: [String: String]? { lock.withLock { answer } }
+        private var lastFailure: String?
+        private var running: Task<Void, Never>?
 
-        func task(root: URL) -> Task<[String: String]?, Never> {
+        init(run: @escaping @Sendable (URL) -> Resolution) {
+            self.run = run
+        }
+
+        var resolved: [String: String]? { lock.withLock { answer } }
+        var failure: String? { lock.withLock { lastFailure } }
+
+        /// The run in flight, a new one, or nil when there is an answer.
+        func task(root: URL) -> Task<Void, Never>? {
             lock.withLock {
+                if answer != nil { return nil }
                 if let running { return running }
-                let task = Task.detached { () -> [String: String]? in
-                    let env = Checkout.runResolver(root: root)
-                    if let env { self.lock.withLock { self.answer = env } }
-                    return env
+                // Created under the lock, so the task's own clean-up below
+                // cannot run before `running` names it.
+                let task = Task.detached {
+                    let result = self.run(root)
+                    self.lock.withLock {
+                        self.answer = result.env
+                        self.lastFailure = result.env == nil ? (result.failure ?? "the resolver gave no answer") : nil
+                        self.running = nil
+                    }
                 }
                 running = task
                 return task
             }
         }
+
+        func prepare(root: URL) async {
+            await task(root: root)?.value
+        }
     }
 
     /// Run the shared resolver, once, off the main thread. Every launcher
-    /// awaits it before its first spawn; a later call reuses the answer.
+    /// awaits it before its first spawn; a later call reuses the answer, or
+    /// runs it again after a failure.
     static func prepare() async {
         guard let root = repoRoot() else { return }
-        _ = await state.task(root: root).value
+        await state.prepare(root: root)
     }
 
     /// How long the resolver may take before the launch goes on without it:
@@ -100,26 +133,121 @@ enum Checkout {
     /// login shell (so the owner's nvm/volta PATH and exports reach it),
     /// read as one JSON object of strings. `GNOSIA_WEB_MODE` reaches it from
     /// this process, so a `next start` launch reads the production `.env`
-    /// files. Nil on any failure, or past `resolverDeadline`.
-    fileprivate static func runResolver(root: URL) -> [String: String]? {
-        guard FileManager.default.fileExists(atPath: root.appending(path: "services/launch-env/src/child-env.ts").path) else { return nil }
+    /// files. No environment on any failure, or past `resolverDeadline`,
+    /// with the reason and the tail of its stderr.
+    fileprivate static func runResolver(root: URL) -> Resolution {
+        let entry = root.appending(path: "services/launch-env/src/child-env.ts")
+        guard FileManager.default.fileExists(atPath: entry.path) else {
+            return Resolution(failure: "\(entry.path) is missing")
+        }
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/bin/zsh")
         proc.arguments = ["-lc", "exec node --import tsx services/launch-env/src/child-env.ts"]
         proc.currentDirectoryURL = root
         let out = Pipe()
+        let err = Pipe()
         proc.standardOutput = out
-        proc.standardError = FileHandle.nullDevice
-        do { try proc.run() } catch { return nil }
+        proc.standardError = err
+        do { try proc.run() } catch {
+            return Resolution(failure: "the resolver could not start: \(error.localizedDescription)")
+        }
+        // stderr is drained beside stdout, so a chatty stderr cannot fill
+        // its pipe and stall the child while stdout is being read.
+        let errText = Locked(Data())
+        let stopped = Locked(false)
+        let errDone = DispatchGroup()
+        errDone.enter()
+        DispatchQueue.global().async {
+            errText.set(err.fileHandleForReading.readDataToEndOfFile())
+            errDone.leave()
+        }
         // Past the deadline the child is stopped; its pipe then closes and
         // the read below ends.
-        let deadline = DispatchWorkItem { if proc.isRunning { proc.terminate() } }
+        let deadline = DispatchWorkItem {
+            if proc.isRunning {
+                stopped.set(true)
+                proc.terminate()
+            }
+        }
         DispatchQueue.global().asyncAfter(deadline: .now() + resolverDeadline, execute: deadline)
         let data = out.fileHandleForReading.readDataToEndOfFile()
         proc.waitUntilExit()
         deadline.cancel()
-        guard proc.terminationReason == .exit, proc.terminationStatus == 0 else { return nil }
-        return parseResolved(data)
+        // Something the login shell started can hold stderr open; do not
+        // wait on it for long.
+        _ = errDone.wait(timeout: .now() + 2)
+        let tail = stderrTail(errText.get())
+        func failed(_ why: String) -> Resolution {
+            Resolution(failure: tail.isEmpty ? why : "\(why): \(tail)")
+        }
+        if stopped.get() {
+            return failed("the resolver was stopped after \(Int(resolverDeadline)) s")
+        }
+        guard proc.terminationReason == .exit else {
+            return failed("the resolver was killed by signal \(proc.terminationStatus)")
+        }
+        guard proc.terminationStatus == 0 else {
+            return failed("the resolver exited with status \(proc.terminationStatus)")
+        }
+        guard let env = parseResolved(data) else { return failed("the resolver printed no environment") }
+        return Resolution(env: env)
+    }
+
+    /// The last ~1500 characters of a child's stderr, trimmed.
+    static func stderrTail(_ data: Data) -> String {
+        String(String(decoding: data, as: UTF8.self).suffix(1500))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// A value another thread fills in.
+    private final class Locked<Value>: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value: Value
+        init(_ value: Value) { self.value = value }
+        func set(_ new: Value) { lock.withLock { value = new } }
+        func get() -> Value { lock.withLock { value } }
+    }
+
+    /// `text` as one word for `/bin/sh` and `zsh`: single-quoted, with each
+    /// `'` closed, escaped and reopened, so a path holding a quote, a space
+    /// or a `$` stays one literal argument.
+    static func shellQuoted(_ text: String) -> String {
+        "'" + text.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    /// Read a real file in the checkout from this process before any child
+    /// is spawned. Under the checkout in Desktop, Documents or Downloads,
+    /// macOS privacy protection asks the owner at this read, with the
+    /// bundle's usage string, and a refusal is a message naming the path.
+    /// Without it the children were refused instead, and hung with nothing
+    /// on stderr. Off the main thread: the system prompt holds the read.
+    static func checkAccess(_ root: URL) async -> String? {
+        await Task.detached { accessProblem(root: root) }.value
+    }
+
+    /// Nil when `package.json` at the root reads, else why not.
+    static func accessProblem(root: URL) -> String? {
+        let file = root.appending(path: "package.json")
+        do {
+            _ = try Data(contentsOf: file)
+            return nil
+        } catch {
+            return accessMessage(file: file, error: error)
+        }
+    }
+
+    static func accessMessage(file: URL, error: Error) -> String {
+        let ns = error as NSError
+        let underlying = ns.userInfo[NSUnderlyingErrorKey] as? NSError
+        let missing = (ns.domain == NSCocoaErrorDomain && ns.code == NSFileReadNoSuchFileError)
+            || (underlying?.domain == NSPOSIXErrorDomain && underlying?.code == Int(ENOENT))
+        if missing {
+            return "There is no \(file.lastPathComponent) at \(file.deletingLastPathComponent().path). "
+                + "GNOSIA_REPO may not name the repository root."
+        }
+        return "macOS did not let Gnosia Web read \(file.path) (\(ns.localizedDescription)). "
+            + "Allow Gnosia Web in System Settings > Privacy & Security > Files and Folders, "
+            + "or move the checkout out of Desktop, Documents and Downloads, then try again."
     }
 
     /// The resolver's stdout: a JSON object whose values are all strings.
