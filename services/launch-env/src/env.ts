@@ -34,6 +34,15 @@ import { parseEnv } from "node:util";
  * the root.
  */
 
+/**
+ * Variables of this process that a child must not inherit. `@next/env` sets
+ * `__NEXT_PROCESSED_ENV` once it has loaded the files, and `next dev` skips
+ * its own `.env` load when it finds it (a loader that sees it set returns the
+ * process environment as it is); `PWD` is the repository root this runs from,
+ * while the web runs in `apps/web`.
+ */
+const NOT_FOR_CHILDREN: ReadonlySet<string> = new Set(["__NEXT_PROCESSED_ENV", "PWD"]);
+
 /** The settings that name the catalog's file (`databaseUrl()` in services/catalog/src/env.ts). */
 const CATALOG_PATH_KEYS = ["CATALOG_DB", "DATABASE_URL"] as const;
 
@@ -154,7 +163,9 @@ export async function pinCatalogFile(): Promise<string | null> {
  */
 export async function childEnvironment(options: { appDir?: string; dev?: boolean } = {}): Promise<Record<string, string>> {
   await loadWebEnv(options);
-  const web = Object.entries(process.env).filter((e): e is [string, string] => e[1] !== undefined);
+  const web = Object.entries(process.env).filter(
+    (e): e is [string, string] => e[1] !== undefined && !NOT_FOR_CHILDREN.has(e[0]),
+  );
   const file = await pinCatalogFile();
   // Only the pin comes out of services/catalog/.env: every catalog process
   // reads the rest of that file itself.

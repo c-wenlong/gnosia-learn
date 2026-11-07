@@ -108,6 +108,16 @@ describe("the launchers' shared environment (S9-08)", () => {
     expect(dev.AUTH_SECRET).toBe("from-development");
   });
 
+  it("leaves out what would stop next dev loading its own files, and the parent's PWD", async () => {
+    const env = await child(
+      { GNOSIA_HOME: temp(), CATALOG_ENV_FILE: join(temp(), "none.env"), PWD: "/the/repo/root", KEEP_ME: "1" },
+      temp(),
+    );
+    expect(env.__NEXT_PROCESSED_ENV).toBeUndefined();
+    expect(env.PWD).toBeUndefined();
+    expect(env.KEEP_ME).toBe("1");
+  });
+
   it("leaves a Postgres URL unpinned, for the catalog to refuse in its own words", async () => {
     const env = await child(
       { GNOSIA_HOME: temp(), CATALOG_ENV_FILE: join(temp(), "none.env"), DATABASE_URL: "postgres://x/y" },
