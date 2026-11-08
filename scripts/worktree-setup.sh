@@ -26,14 +26,16 @@ Set up a fresh clone or git worktree. Run it once, from anywhere.
                     neither.
   -h, --help        show this help and exit
 
-What it does, in order: checks Node (>= 22, the engines floor), runs `npm ci`
-when node_modules is missing or older than the manifests, writes
-apps/web/.env.local from .env.example with a generated AUTH_SECRET when none
-exists, `git submodule update --init` for each of the five submodules (the
-three private video tools degrade to a warning without access), `npm ci` and
-`npm run build` inside tools/tldrawkc when present and stale, and migrates a
-scratch catalog file under the OS temp directory as the sanity check. It
-never touches ~/.gnosia or the real catalog.
+What it does, in order: checks the toolchain against package.json engines
+(Node 22.22.2 or newer, npm 10 or newer), runs `npm ci` when node_modules is
+missing or older than the manifests, writes apps/web/.env.local from
+.env.example with a generated AUTH_SECRET when none exists, `git submodule
+update --init` for each of the five submodules (the three private video
+tools degrade to a warning without access), `npm ci` and `npm run build`
+inside the tldrawkc checkout `npm run canvas` resolves (the submodule, or
+TLDRAWKC_ROOT's), and migrates a scratch catalog file under the OS temp
+directory as the sanity check. It never touches ~/.gnosia or the real
+catalog.
 EOF
 }
 
@@ -56,10 +58,16 @@ for arg in "$@"; do
 done
 
 # ------------------------------------------------------------------ toolchain
-major="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
-[ "$major" -ge 22 ] || die "Node 22 or newer is required (found $major)"
-command -v npm >/dev/null 2>&1 || die "npm is not on PATH"
+# Checked before anything installs, so a too-old toolchain fails here with
+# the version to get rather than inside npm ci or a build. The floors are the
+# engines block in package.json: Node 22.22.2 and npm 10.
+command -v node >/dev/null 2>&1 || die "node is not on PATH (need 22.22.2 or newer)"
+command -v npm >/dev/null 2>&1 || die "npm is not on PATH (need 10 or newer)"
 command -v git >/dev/null 2>&1 || die "git is not on PATH"
+node -e 'const r=[22,22,2],c=process.versions.node.split(".").map(Number);for(let i=0;i<3;i++){if(c[i]!==r[i])process.exit(c[i]>r[i]?0:1)}process.exit(0)' \
+  || die "Node 22.22.2 or newer is required (found $(node --version))"
+npm_major="$(npm --version | cut -d. -f1)"
+[ "$npm_major" -ge 10 ] 2>/dev/null || die "npm 10 or newer is required (found $(npm --version))"
 
 # ------------------------------------------------------------------- npm ci
 # node_modules/.package-lock.json is the marker npm itself writes on install;
@@ -94,13 +102,37 @@ else
   say "apps/web/.env.local exists; leaving it alone"
 fi
 
+# ------------------------------------------------------- the tldrawkc root
+# `npm run canvas` resolves the checkout through resolveTldrawkcRoot
+# (services/catalog/src/env.ts): TLDRAWKC_ROOT from the environment or
+# services/catalog/.env, else the submodule. Building the default while the
+# variable points elsewhere would leave the checkout canvas actually runs
+# unbuilt, so the same resolver decides what this script fetches and builds.
+# The second line of its answer is whether the root is the default; comparing
+# paths there rather than here keeps a symlinked checkout from looking
+# configured when it is not.
+tldraw="$script_root/tools/tldrawkc"
+tldraw_configured=0
+resolved_info="$(node --import tsx -e 'import("./services/catalog/src/env.ts").then(m=>{const r=m.resolveTldrawkcRoot();const d=require("node:path").join(m.REPO_ROOT,m.TLDRAWKC_DIR);process.stdout.write(r+"\n"+(r===d?0:1))})' 2>/dev/null || true)"
+if [ -n "$resolved_info" ]; then
+  tldraw="${resolved_info%%$'\n'*}"
+  [ "${resolved_info##*$'\n'}" = 1 ] && tldraw_configured=1
+fi
+
 # ------------------------------------------------------------------ submodules
 # The app, the tests and the seed import all work with the three private
 # video tools missing (README.md, Install), so a fetch that fails is a
 # warning, not a stop. GIT_TERMINAL_PROMPT=0 keeps an auth question from
-# hanging a non-interactive run; it fails fast instead.
+# hanging a non-interactive run; it fails fast instead. tldrawkc's submodule
+# is skipped under --skip-tldraw, and skipped too when TLDRAWKC_ROOT names
+# another checkout: fetching the in-repo copy would spend bandwidth on the
+# checkout nothing will run.
 for name in tldrawkc blenderkc manimkc remotionkc revideokc; do
   path="tools/$name"
+  if [ "$name" = tldrawkc ]; then
+    [ "$skip_tldraw" = 1 ] && continue
+    [ "$tldraw_configured" = 1 ] && continue
+  fi
   recursive=""
   [ "$name" = manimkc ] && recursive="--recursive"   # manim is nested inside it
   if GIT_TERMINAL_PROMPT=0 git submodule update --init $recursive "$path" >/dev/null 2>&1; then
@@ -113,15 +145,18 @@ for name in tldrawkc blenderkc manimkc remotionkc revideokc; do
 done
 
 # ------------------------------------------------------------------- tldrawkc
-# `npm run canvas` executes tools/tldrawkc/dist/, which is build output and is
-# not committed, and `npm run e2e` borrows playwright-core from its
+# `npm run canvas` executes the checkout's dist/, which is build output and
+# is not committed, and `npm run e2e` borrows playwright-core from its
 # node_modules. Both came out of session failures, so a stale tree is rebuilt
 # rather than trusted.
-tldraw=tools/tldrawkc
 if [ "$skip_tldraw" = 1 ]; then
-  say "skipping $tldraw (--skip-tldraw)"
-elif [ ! -e "$tldraw/.git" ]; then
-  warn "$tldraw is not checked out; npm run canvas and npm run e2e will not work"
+  say "skipping tldrawkc (--skip-tldraw)"
+elif [ ! -f "$tldraw/package.json" ]; then
+  if [ "$tldraw_configured" = 1 ]; then
+    warn "TLDRAWKC_ROOT resolves to $tldraw, which is not a checkout; npm run canvas will fail there"
+  else
+    warn "$tldraw is not checked out; npm run canvas and npm run e2e will not work"
+  fi
 else
   t_needs_install=1
   if [ -f "$tldraw/node_modules/.package-lock.json" ]; then
