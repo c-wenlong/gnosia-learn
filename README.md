@@ -137,6 +137,11 @@ cp .env.example apps/web/.env.local   # Next reads it from apps/web/, never the 
 npm run dev
 ```
 
+`npm run worktree-setup` (`scripts/worktree-setup.sh`) runs the install steps
+above plus the submodule fetch and the `tools/tldrawkc` build below, which
+makes it the one command to run on a worktree or a fresh clone. It does not
+set `OWNER_PASSWORD`.
+
 Do not add `--recursive`: three video-tool submodules under `tools/`
 (manimkc, remotionkc, revideokc) are private repositories, so a
 recursive clone fails on them. Nothing above needs them, and CI skips them
