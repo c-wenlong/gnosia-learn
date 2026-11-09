@@ -168,6 +168,10 @@ them for sign-in. The mark stays at 1.9em and the lettering at 0.8em in bars.
 
 ## The mascot
 
+**Replacement pending (#662).** The current teal mascot stays until the owner
+chooses a new character direction and its six poses are ready. The first
+terracotta concept round was rejected; none of that artwork ships in the app.
+
 A small living tome: teal covers folded into a **dark hood**, cream pages
 fanned behind it, gold line accents along the cover, the **star sigil**
 glowing on the brow, **two glowing crescent eyes** in the hood's shadow, two
