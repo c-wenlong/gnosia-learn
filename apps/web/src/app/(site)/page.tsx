@@ -1,12 +1,10 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import type { ReactNode } from "react";
 
 import { GnosiaMascot, type MascotPose } from "@/components/brand/GnosiaMascot";
 import { Button } from "@/components/ui/Button";
 import { cx } from "@/components/ui/classes";
 
-import banner from "../../../public/banner.png";
 import { ProbeDemo } from "./ProbeDemo";
 import { GITHUB_URL, siteLink } from "./site";
 
@@ -22,7 +20,7 @@ export const metadata: Metadata = {
  * The landing page at `/`, for a visitor who is not signed in (proxy.ts sends
  * a signed-in one to `/home` before this renders). Laid out as a book: a
  * title page with one working probe, three chapters, a contents page with a
- * colophon, and the world art as the last page. A server component apart from
+ * colophon, and a closing invitation. A server component apart from
  * `ProbeDemo`; no data, no auth, CSS-only motion. Every claim on it maps to
  * something the product does today; the reasoning is in docs/design/BRAND.md.
  */
@@ -365,32 +363,19 @@ function Colophon() {
 
 /* --------------------------------------------------------------- closing */
 
-/** The last page: the world art, full bleed, with the one call to action on it. */
+/** A quiet closing invitation while the owner's world art is repainted. */
 function Closing() {
   return (
-    // `dark` scopes the dark brand values to this band whatever the theme, so
-    // the brand button is the lifted teal with a navy label on the night sky.
-    <section aria-labelledby="closing-title" className="dark relative isolate overflow-hidden bg-[#0d1c2b]">
-      {/* On a phone the art is a strip above the words; from md it fills the
-          band and the words sit on its dark left side. */}
-      <div className="absolute inset-x-0 top-0 -z-10 h-[300px] sm:h-[420px] md:inset-y-0 md:h-auto">
-        <Image src={banner} alt="" sizes="100vw" className="h-full w-full object-cover object-[72%_center]" />
-        {/* Navy from the side the words sit on, so cream text always reads. */}
-        <span
-          aria-hidden
-          className="absolute inset-0 bg-gradient-to-t from-[#0d1c2b] via-[#0d1c2b]/20 via-40% to-transparent md:bg-gradient-to-r md:from-[#0d1c2b] md:from-10% md:via-[#0d1c2b]/45 md:via-40% md:to-transparent md:to-70%"
-        />
-      </div>
-      <div className={cx(WRAP, "flex flex-col pt-[260px] pb-16 sm:pt-[380px] md:min-h-[640px] md:justify-center md:py-24")}>
-        <div className="max-w-[30rem]">
-          <p className="font-book text-[19px] text-[#e2b95e] italic">The next page</p>
+    <section aria-labelledby="closing-title" className="dark bg-brand-earth text-brand-ink">
+      <div className={cx(WRAP, "py-16 md:py-24")}>
+        <div className="max-w-[38rem]">
           <h2
             id="closing-title"
-            className="mt-3 font-book text-[40px] leading-[1.04] font-medium tracking-[-0.02em] text-balance text-[#faf6ec] md:text-[60px]"
+            className="font-book text-[40px] leading-[1.08] font-medium tracking-[-0.02em] text-balance md:text-[56px]"
           >
             Pick up where your book left off.
           </h2>
-          <p className="mt-5 text-[17px] leading-relaxed text-[#faf6ec]/80">
+          <p className="mt-5 text-[17px] leading-relaxed text-brand-mist">
             Sign in to pick up where you left off.
           </p>
           <div className="mt-9">
