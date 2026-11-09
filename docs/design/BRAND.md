@@ -221,7 +221,7 @@ the owner on 2026-10-04 over study objects, a garden and a night sky.
 
 Each is a 16 by 16 grid in
 [sprites.ts](../../apps/web/src/components/avatar/sprites.ts), outlined in
-`--brand-navy` and drawn mostly in the brand's teal, cream and gold, with a
+`--brand-earth` and drawn mostly in the brand's terracotta and cream, with a
 few colours of the creatures' own (the fox's orange, the frog's greens), on
 a light disc of its own tint. `PixelAvatar` draws one as SVG rects with
 `crispEdges`, so the pixels stay square at any size. The colours are fixed,
@@ -240,18 +240,16 @@ Rules:
 ## Motion and surfaces
 
 The public pages allow what the app kit does not: soft shadows, translucent
-cards (`.gnosia-glass`, frosted white on cream, a teal-tinted pane on navy,
+cards (`.gnosia-glass`, frosted white on cream, a terracotta-tinted pane on earth,
 now only on the sign-in card), sheets of paper (`.gnosia-paper`, the warm
 white card every product glimpse on the landing page sits on) and three flat
-chapter washes (`.gnosia-panel-teal`, `-gold`, `-mist`: 11 to 42% of a brand
+chapter washes (`.gnosia-panel-terracotta`, `-clay`, `-mist`: 11 to 42% of a brand
 colour mixed into the ground). The app keeps its flat, border-only kit. Motion is limited to the
 mascot's float and a single 0.9 second rise on the hero text, all of it
 behind `prefers-reduced-motion: no-preference`. Nothing moves on scroll.
 
-**The star as a state.** The mark's star, drawn alone, marks the next concept
-on the frontier in chapter two, and heads the colophon.
-Reuse it the same way in the app: the active item, a mastered concept, an
-insight. Not as a bullet or an ornament.
+**The ring as a state.** A small ring marks the next concept in the
+landing page's frontier illustration. The old star glyph is retired.
 
 ## Where each piece appears
 
@@ -261,7 +259,7 @@ insight. Not as a bullet or an ornament.
 | `GnosiaLockup` | The sign-in card |
 | `GnosiaMascot` | Landing hero (`curious`), chapters one to three (`reading`, `excited`, `happy`), sign-in (`happy`) |
 | `PixelAvatar` | The sidebar's account row (32px), and the picker on Settings' Profile tab (48px) |
-| The brand button (`variant="brand"` in [classes.ts](../../apps/web/src/components/ui/classes.ts)) | The landing page's calls to action and the sign-in button. Teal face, navy lip and cream label in light; in dark the lip is teal sunk halfway into navy and the label turns navy |
+| The brand button (`variant="brand"` in [classes.ts](../../apps/web/src/components/ui/classes.ts)) | The landing page's calls to action and the sign-in button. Deep terracotta face, earth lip and cream label in light; pale terracotta face and earth label in dark |
 | `.gnosia-ground` | The `(site)` layout |
 | `.gnosia-paper`, `.gnosia-panel-*` | The landing page's probe, chapter glimpses and chapter panels |
 | `.gnosia-glass` | The sign-in card |

@@ -1,10 +1,24 @@
 // WCAG 2 luminance checks for the actual CSS values, including blended site
 // surfaces. Run `node scripts/brand-contrast.mjs` to refresh BRAND.md's tables.
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const root = new URL('../', import.meta.url);
 const css = readFileSync(new URL('apps/web/src/app/globals.css', root), 'utf8');
+
+function rule(selector) {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const body = new RegExp(`(?:^|\\n)${escaped} \\{([^}]+)\\}`).exec(css)?.[1];
+  if (!body) throw new Error(`Missing CSS rule: ${selector}`);
+  return body;
+}
+
+function mixStrength(selector, colour) {
+  const escaped = colour.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const amount = new RegExp(`color-mix\\(in srgb, ${escaped} (\\d+(?:\\.\\d+)?)%`).exec(rule(selector))?.[1];
+  if (!amount) throw new Error(`Missing CSS mix: ${selector}, ${colour}`);
+  return Number(amount) / 100;
+}
 
 function tokens(selector) {
   const result = {};
@@ -50,15 +64,24 @@ function siteRows(dark) {
   const t = { ...tokens(':root'), ...(dark ? tokens('.dark') : {}) };
   const ground = t[dark ? 'brand-earth' : 'brand-cream'];
   // Both washes at their strongest at once: a conservative overlap bound.
-  const glow = blend(t['brand-terracotta'], blend(t['brand-clay-soft'], ground, dark ? 0.06 : 0.20), dark ? 0.16 : 0.06);
+  const groundRule = dark ? '.dark .gnosia-ground' : '.gnosia-ground';
+  const glow = blend(t['brand-terracotta'], blend(t['brand-clay-soft'], ground,
+    mixStrength(groundRule, 'var(--brand-clay-soft)')), mixStrength(groundRule, 'var(--brand-terracotta)'));
+  const glassRule = dark ? '.dark .gnosia-glass' : '.gnosia-glass';
+  const glassColour = dark ? t['brand-terracotta'] : '#ffffff';
+  const glassStrength = mixStrength(glassRule, dark ? 'var(--brand-terracotta)' : 'white');
+  const paper = dark ? blend(t['brand-cream'], ground, mixStrength('.dark .gnosia-paper', 'var(--brand-cream)'))
+    : /background:\s*(#[\da-f]{6})/i.exec(rule('.gnosia-paper'))?.[1];
+  if (!paper) throw new Error('Missing paper background');
+  const panel = (name, colour) => blend(t[colour], ground, mixStrength(`${dark ? '.dark ' : ''}.gnosia-panel-${name}`, `var(--${colour})`));
   const surfaces = {
     ground, glow,
-    glass: blend(dark ? t['brand-terracotta'] : '#ffffff', ground, dark ? 0.07 : 0.62),
-    'glass over glow': blend(dark ? t['brand-terracotta'] : '#ffffff', glow, dark ? 0.07 : 0.62),
-    paper: dark ? blend(t['brand-cream'], ground, 0.06) : '#fffdf8',
-    'terracotta panel': blend(t['brand-terracotta'], ground, dark ? 0.13 : 0.12),
-    'clay panel': blend(t[dark ? 'brand-clay' : 'brand-clay-soft'], ground, dark ? 0.11 : 0.42),
-    'mist panel': blend(t['brand-mist'], ground, dark ? 0.12 : 0.11),
+    glass: blend(glassColour, ground, glassStrength),
+    'glass over glow': blend(glassColour, glow, glassStrength),
+    paper,
+    'terracotta panel': panel('terracotta', 'brand-terracotta'),
+    'clay panel': panel('clay', dark ? 'brand-clay' : 'brand-clay-soft'),
+    'mist panel': panel('mist', 'brand-mist'),
   };
   const rows = Object.entries(surfaces).flatMap(([name, bg]) => ['ink', 'mist', 'terracotta'].map((fg) => ({
     pair: `${fg} on ${name}`, ratio: contrast(t[`brand-${fg}`], bg), minimum: 4.5,
@@ -77,9 +100,9 @@ export function markdownTables() {
   return Object.entries(audits).map(([name, [light, dark]]) => `### ${name}: contrast\n\n| Pair | Light | Dark | Needs |\n| --- | --- | --- | --- |\n` + light.map((row, i) => `| ${row.pair} | ${row.ratio.toFixed(2)} | ${dark[i].ratio.toFixed(2)} | ${row.minimum || '(gap / reported)'} |`).join('\n')).join('\n\n');
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
   console.log(markdownTables());
-  const failures = Object.values(audits).flat(2).filter((row) => row.ratio < row.minimum);
+  const failures = Object.values(audits).flat(2).filter((row) => !Number.isFinite(row.ratio) || row.ratio < row.minimum);
   if (failures.length) {
     console.error(failures);
     process.exitCode = 1;
