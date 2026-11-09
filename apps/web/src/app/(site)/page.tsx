@@ -3,7 +3,6 @@ import Image from "next/image";
 import type { ReactNode } from "react";
 
 import { GnosiaMascot, type MascotPose } from "@/components/brand/GnosiaMascot";
-import { MARK_STAR } from "@/components/brand/GnosiaMark";
 import { Button } from "@/components/ui/Button";
 import { cx } from "@/components/ui/classes";
 
@@ -56,7 +55,7 @@ function Hero() {
           id="hero-title"
           className="gnosia-rise mx-auto max-w-[12ch] font-book text-[48px] leading-[1.02] font-medium tracking-[-0.025em] text-balance text-brand-ink sm:text-[64px] lg:mx-0 lg:text-[84px]"
         >
-          A book that <em className="font-normal text-brand-teal">grows</em> as you do.
+          A book that <em className="font-normal text-brand-terracotta">grows</em> as you do.
         </h1>
         <p className="gnosia-rise gnosia-rise-2 mx-auto mt-7 max-w-[30rem] text-[18px] leading-relaxed text-pretty text-brand-mist md:text-[20px] lg:mx-0">
           Gnosia keeps a living model of what you know, concept by concept, and teaches you what comes next.
@@ -68,7 +67,7 @@ function Hero() {
           <a
             href={GITHUB_URL}
             className={siteLink(
-              "rounded-md text-[15px] font-semibold text-brand-ink underline decoration-brand-ink/25 underline-offset-[6px] hover:decoration-brand-teal",
+              "rounded-md text-[15px] font-semibold text-brand-ink underline decoration-brand-ink/25 underline-offset-[6px] hover:decoration-brand-terracotta",
             )}
           >
             Read the source
@@ -108,7 +107,7 @@ const CHAPTERS: Chapter[] = [
     name: "Probe",
     title: "It starts from what you already know.",
     body: "A few questions before any teaching, so your book begins with you rather than with page one. Every concept gets a probability that you know it, and every answer after that moves it.",
-    panel: "gnosia-panel-teal",
+    panel: "gnosia-panel-terracotta",
     pose: "reading",
     art: <KnownArt />,
   },
@@ -117,7 +116,7 @@ const CHAPTERS: Chapter[] = [
     name: "Plan",
     title: "Next is whatever you are ready for.",
     body: "Concepts sit in a graph of prerequisites. When the ones underneath are known, the one above lights up. No fixed syllabus, just the next thing in reach.",
-    panel: "gnosia-panel-gold",
+    panel: "gnosia-panel-clay",
     pose: "excited",
     art: <FrontierArt />,
   },
@@ -142,9 +141,9 @@ function Chapters() {
           className={cx(WRAP, "grid items-center gap-10 md:grid-cols-2 md:gap-14 lg:gap-20")}
         >
           <div className={cx("max-w-[34rem]", i % 2 === 1 && "md:order-2")}>
-            <p className="flex items-baseline gap-3 text-brand-teal">
+            <p className="flex items-baseline gap-3 text-brand-terracotta">
               <span className="font-book text-[20px] italic">Chapter {c.n}</span>
-              <span aria-hidden className="h-px w-8 translate-y-[-5px] bg-brand-teal/40" />
+              <span aria-hidden className="h-px w-8 translate-y-[-5px] bg-brand-terracotta/40" />
               <span className="text-[15px] font-semibold">{c.name}</span>
             </p>
             <h2
@@ -195,7 +194,7 @@ function KnownArt() {
             </span>
             <span className="h-1.5 overflow-hidden rounded-full bg-brand-ink/10">
               <span
-                className={cx("block h-full rounded-full", r.p >= 0.5 ? "bg-brand-teal" : "bg-brand-ink/30")}
+                className={cx("block h-full rounded-full", r.p >= 0.5 ? "bg-brand-terracotta" : "bg-brand-ink/30")}
                 style={{ width: `${r.p * 100}%` }}
               />
             </span>
@@ -216,7 +215,7 @@ function FrontierArt() {
           <path
             key={y}
             d={`M160 ${y} C 196 ${y}, 196 130, 222 130`}
-            className="stroke-brand-teal"
+            className="stroke-brand-terracotta"
             strokeWidth="2"
             strokeLinecap="round"
           />
@@ -230,7 +229,7 @@ function FrontierArt() {
             className="gnosia-paper absolute left-0 flex h-[13.8%] w-[40%] items-center gap-[2cqw] rounded-full px-[2.75cqw] text-[3.25cqw] font-medium whitespace-nowrap text-brand-ink"
             style={{ top: `${(8.5 + i * 34.6).toFixed(1)}%` }}
           >
-            <span className="grid size-[4cqw] shrink-0 place-items-center rounded-full bg-brand-teal text-brand-cream dark:text-brand-navy">
+            <span className="grid size-[4cqw] shrink-0 place-items-center rounded-full bg-brand-terracotta text-brand-cream dark:text-brand-earth">
               <svg viewBox="0 0 16 16" className="size-[2.5cqw]" fill="none">
                 <path d="M4 8.5 7 11.5 12.5 5" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
@@ -238,8 +237,8 @@ function FrontierArt() {
             <span className="truncate">{k}</span>
           </li>
         ))}
-        <li className="absolute top-[40.4%] left-[55.5%] flex h-[19.2%] w-[44.5%] items-center gap-[2cqw] rounded-[4cqw] border-2 border-brand-gold bg-[#fffdf8] px-[3cqw] text-[3.5cqw] font-semibold whitespace-nowrap text-brand-ink shadow-[0_12px_28px_-14px_color-mix(in_srgb,var(--brand-gold)_70%,transparent)] dark:bg-[color-mix(in_srgb,var(--brand-cream)_6%,var(--brand-navy))]">
-          <StarGlyph className="size-[4cqw] shrink-0 text-brand-gold" />
+        <li className="absolute top-[40.4%] left-[55.5%] flex h-[19.2%] w-[44.5%] items-center gap-[2cqw] rounded-[4cqw] border-2 border-brand-clay bg-[#fffdf8] px-[3cqw] text-[3.5cqw] font-semibold whitespace-nowrap text-brand-ink shadow-[0_12px_28px_-14px_color-mix(in_srgb,var(--brand-clay)_70%,transparent)] dark:bg-[color-mix(in_srgb,var(--brand-cream)_6%,var(--brand-earth))]">
+          <span aria-hidden className="size-[3cqw] shrink-0 rounded-full border-2 border-brand-terracotta" />
           <span>Attention weights</span>
         </li>
         <li className="absolute top-[76%] left-[55.5%] flex h-[13.8%] w-[44.5%] items-center rounded-full border border-dashed border-brand-ink/25 px-[3cqw] text-[3.25cqw] whitespace-nowrap text-brand-mist">
@@ -270,7 +269,7 @@ function ReviewArt() {
               className={cx(
                 "rounded-xl py-2 text-center text-[12px] font-semibold",
                 r === "Good"
-                  ? "bg-brand-teal text-brand-cream shadow-[0_3px_0_var(--brand-navy)] dark:text-brand-navy dark:shadow-[0_3px_0_color-mix(in_srgb,var(--brand-teal)_50%,var(--brand-navy))]"
+                  ? "bg-brand-terracotta text-brand-cream shadow-[0_3px_0_var(--brand-earth)] dark:text-brand-earth dark:shadow-[0_3px_0_color-mix(in_srgb,var(--brand-terracotta)_50%,var(--brand-earth))]"
                   : "border border-brand-ink/12 text-brand-mist",
               )}
             >
@@ -326,7 +325,7 @@ function Contents() {
         <ol className="mt-12 flex flex-col md:mt-14">
           {CONTENTS.map((c, i) => (
             <li key={c.title} className="grid grid-cols-[2.25rem_1fr] gap-x-3 border-t border-brand-ink/10 py-6 md:grid-cols-[3rem_1fr]">
-              <span className="pt-1 font-book text-[18px] text-brand-teal italic">{ROMAN[i]}.</span>
+              <span className="pt-1 font-book text-[18px] text-brand-terracotta italic">{ROMAN[i]}.</span>
               <div>
                 <p className="font-book text-[21px] font-medium text-brand-ink md:text-[24px]">{c.title}</p>
                 <p className="mt-2 max-w-[36rem] text-[15px] leading-relaxed text-brand-mist">{c.body}</p>
@@ -345,7 +344,6 @@ function Contents() {
 function Colophon() {
   return (
     <aside aria-labelledby="colophon-title" className="mt-14 border-t border-brand-ink/10 pt-10 text-center md:mt-16">
-      <StarGlyph className="mx-auto size-4 text-brand-gold" />
       <h2 id="colophon-title" className="mt-4 font-book text-[20px] font-medium text-brand-ink">
         Colophon
       </h2>
@@ -355,7 +353,7 @@ function Colophon() {
         Literata and Figtree. The{" "}
         <a
           href={GITHUB_URL}
-          className={siteLink("rounded-sm text-brand-teal underline decoration-brand-teal/40 underline-offset-4 hover:decoration-brand-teal")}
+          className={siteLink("rounded-sm text-brand-terracotta underline decoration-brand-terracotta/40 underline-offset-4 hover:decoration-brand-terracotta")}
         >
           source is open
         </a>
@@ -403,16 +401,5 @@ function Closing() {
         </div>
       </div>
     </section>
-  );
-}
-
-/* ---------------------------------------------------------------- pieces */
-
-/** The mark's star on its own, for "this one is next" and the colophon. */
-function StarGlyph({ className }: { className?: string }) {
-  return (
-    <svg viewBox="22 18 20 22" className={className} aria-hidden focusable="false">
-      <path d={MARK_STAR} fill="currentColor" />
-    </svg>
   );
 }

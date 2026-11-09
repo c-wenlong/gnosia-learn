@@ -38,7 +38,7 @@ export default function SiteLayout({ children }: { children: ReactNode }) {
     >
       <a
         href="#main"
-        className="sr-only rounded-full bg-brand-teal px-4 py-2 text-[14px] font-semibold text-brand-cream focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 dark:text-brand-navy"
+        className="sr-only rounded-full bg-brand-terracotta px-4 py-2 text-[14px] font-semibold text-brand-cream focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 dark:text-brand-earth"
       >
         Skip to content
       </a>
@@ -58,7 +58,7 @@ export default function SiteLayout({ children }: { children: ReactNode }) {
               <Link
                 href="/sign-in"
                 className={siteLink(
-                  "rounded-md px-1 py-2 text-[15px] font-semibold text-brand-ink underline-offset-[6px] hover:text-brand-teal hover:underline",
+                  "rounded-md px-1 py-2 text-[15px] font-semibold text-brand-ink underline-offset-[6px] hover:text-brand-terracotta hover:underline",
                 )}
               >
                 Sign in

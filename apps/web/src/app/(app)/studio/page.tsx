@@ -304,8 +304,8 @@ export default async function StudioPage({
             >
               {/* The brand's glow drifting behind the heading (`.studio-glow` in globals.css). */}
               <div aria-hidden className="studio-glow">
-                <span className="studio-glow-teal" />
-                <span className="studio-glow-gold" />
+                <span className="studio-glow-terracotta" />
+                <span className="studio-glow-clay" />
                 <span className="studio-glow-mist" />
               </div>
               {/* z-20: the composer's @ menu opens downwards out of this block;
