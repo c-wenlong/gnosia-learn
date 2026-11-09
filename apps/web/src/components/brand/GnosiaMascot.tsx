@@ -11,10 +11,10 @@ import sleepy from "../../../public/brand/mascot/sleepy.png";
 
 /**
  * The mascot: the hooded tome with the glowing crescent eyes. Each pose is
- * one of the owner's renders, drawn on a transparent ground, trimmed to the
+ * a terracotta refresh of the owner's renders, on a transparent ground, trimmed to the
  * art and scaled to 900px on its longest side under `public/brand/mascot/`.
- * The full 1254px renders are in docs/design/brand/mascot/, and the mascot
- * sheet (docs/design/brand/mascot-sheet.png) stays as the reference.
+ * The full renders are in docs/design/brand/mascot/, and the refreshed pose
+ * sheet is docs/design/brand/mascot-terracotta-sheet.png.
  *
  * Always decorative (`alt=""`). Size it by height with a class
  * (`h-[200px] lg:h-[400px]`); the width follows the pose's own proportions.

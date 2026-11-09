@@ -114,7 +114,7 @@ reduction of it, and where the two disagree the art wins.
 | [docs/design/brand/logo-sheet.png](brand/logo-sheet.png) | The primary lockup, the symbol alone, the wordmark alone, both on light and dark, and the app icon | The original lockup reference; superseded for the interface by the logo files below. Historical reference only; `GnosiaMark.ts` and the preview kit now reproduce the supplied 8-5 rings |
 | [docs/design/brand/app-icon.png](brand/app-icon.png) | The first app icon: the old mark on a navy-to-teal rounded square, 1254px | Reference only. Every shipped icon is now cut from `logo/mark.png` |
 | [docs/design/brand/mascot-sheet.png](brand/mascot-sheet.png) | The mascot in six poses: neutral, happy, reading, curious, excited, sleepy | Reference only; the shipped poses come from the renders below |
-| [docs/design/brand/mascot/](brand/mascot/) `{neutral,happy,reading,curious,excited,sleepy}.png` | The six poses as separate renders, one file per pose, 1254px square on a transparent ground | Source of the shipped poses below |
+| [docs/design/brand/mascot/](brand/mascot/) `{neutral,happy,reading,curious,excited,sleepy}.png` | The six refreshed poses as separate renders, one file per pose, refreshed in terracotta and cream on a transparent ground | Source of the shipped poses below |
 | [docs/design/brand/hero-lockup.png](brand/hero-lockup.png) | The mark, the wordmark, the tagline and the mascot together on cream | Source of the social card |
 | [docs/design/brand/composite.png](brand/composite.png) | The lockup, the mascot and the icons on one board | Reference only |
 | [docs/design/brand/world-staircase.png](brand/world-staircase.png) | The world: a staircase of books into a sky city, the mascot beside it | Source of `public/banner.png` |
@@ -124,7 +124,7 @@ reduction of it, and where the two disagree the art wins.
 | [apps/web/src/app/icon.png](../../apps/web/src/app/icon.png) (512), `icon.svg`, `favicon.ico` | The new mark, supplied as final art: PNG, a hand-pixelled SVG and a multi-size ICO | Favicon and PWA icon |
 | [apps/web/src/app/apple-icon.png](../../apps/web/src/app/apple-icon.png) (180) | The new mark on an opaque square, supplied as final art; opaque, because iOS fills a transparent home-screen icon with black, and square, because iOS rounds the corners itself | Home-screen icon |
 | [apps/desktop/Resources/AppIcon.png](../../apps/desktop/Resources/AppIcon.png) (1024) | The new mark, supplied as final art; `scripts/bundle-app.sh` renders the `.icns` from it | macOS app icon |
-| [apps/web/public/brand/mascot/](../../apps/web/public/brand/mascot/) `{neutral,happy,reading,curious,excited,sleepy}.png` | Cut from the renders in `docs/design/brand/mascot/`: trimmed to the art plus 8px and scaled to 900px on the longest side (620 to 880px wide) | `GnosiaMascot` |
+| [apps/web/public/brand/mascot/](../../apps/web/public/brand/mascot/) `{neutral,happy,reading,curious,excited,sleepy}.png` | Cut from the refreshed renders in `docs/design/brand/mascot/`: alpha-trimmed, padded by 8px and scaled to 900px on the longest side | `GnosiaMascot` |
 | [apps/web/public/opengraph-image.png](../../apps/web/public/opengraph-image.png) (1200 by 630) | Interim 8-5 mark and terracotta wordmark on cream, from `kit/social-card.svg` | The social card; the owner's hand-cut art replaces it later |
 | [apps/web/public/banner.png](../../apps/web/public/banner.png) | Made from `world-staircase.png` | A wide banner, for the repository and campaign use |
 
@@ -168,27 +168,21 @@ them for sign-in. The mark stays at 1.9em and the lettering at 0.8em in bars.
 
 ## The mascot
 
-A small living tome: teal covers folded into a **dark hood**, cream pages
-fanned behind it, gold line accents along the cover, the **star sigil**
-glowing on the brow, **two glowing crescent eyes** in the hood's shadow, two
-small cloth hands, and a **ribbon tail** in teal and green trailing below.
-Its expression lives in the eyes: closed smiles for neutral and happy,
-round for reading and curious, squeezed shut for excited, downturned
-crescents for sleepy. Happy and excited raise both hands with gold strokes
-either side, and excited adds four-point sparkles; reading holds an open
-book up, sleepy holds one low.
+A small living tome: terracotta covers folded into a hood, warm earth in
+its shadow, cream pages, cream edge trim and glowing cream eyes. A cream
+tree-ring emblem replaces the old star sigil. Hands and the long ribbon
+tail keep their original shapes; the six expressions still carry the pose.
 
-Each pose is its own render from the owner, 1254px square on a transparent
-ground, kept in [docs/design/brand/mascot/](brand/mascot/). The renders have
-no background, no fringe and no baked shadow, so the same file works on
-cream and on navy. The copies the app ships are trimmed to the art plus 8px
-and scaled to 900px on the longest side, which covers the 400px hero at 2x.
-[GnosiaMascot](../../apps/web/src/components/brand/GnosiaMascot.tsx) renders
-a pose from `public/brand/mascot/` with `next/image`, `alt=""`, sized by
-height with a class. The poses are static imports, so each ships under a
-content-hashed URL and `next/image` reads its pixel size from the file: a
-replaced file needs no size edited anywhere and never leaves a browser on
-the old picture.
+The 2026-11-09 refresh was generated from the owner's individual pose
+renders and the supplied 8-5 logo, keeping the character, gestures and
+composition. Sources remain in `docs/design/brand/mascot/` and the reviewed
+six-pose sheet is `brand/mascot-terracotta-sheet.png`. The original teal
+sheet is a historical reference, preserved alongside the new one.
+
+The shipped copies are alpha-trimmed, padded by 8px and sized to 900px on
+the longest side. `GnosiaMascot` uses static imports, so a replacement gets
+a fresh content-hashed URL and its dimensions follow the file. Every pose
+is decorative, with an empty alternative description.
 
 | Pose | Where it goes |
 | --- | --- |
