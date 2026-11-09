@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="apps/web/public/banner.png" alt="A staircase of teal books climbing through clouds towards a glowing four-point star, with the Gnosia mascot, a floating book with bright eyes and a ribbon tail, hovering beside it" width="800">
-</p>
-
 <h1 align="center">
 Gnosia
 </h1>

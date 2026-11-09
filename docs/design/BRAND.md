@@ -112,12 +112,12 @@ reduction of it, and where the two disagree the art wins.
 | File | What it is | Used for |
 | --- | --- | --- |
 | [docs/design/brand/logo-sheet.png](brand/logo-sheet.png) | The primary lockup, the symbol alone, the wordmark alone, both on light and dark, and the app icon | The original lockup reference; superseded for the interface by the logo files below. Historical reference only; `GnosiaMark.ts` and the preview kit now reproduce the supplied 8-5 rings |
-| [docs/design/brand/app-icon.png](brand/app-icon.png) | The first app icon: the old mark on a navy-to-teal rounded square, 1254px | Reference only. Every shipped icon is now cut from `logo/mark.png` |
+| [docs/design/brand/app-icon.png](brand/app-icon.png) | The first app icon: the old mark on a navy-to-teal rounded square, 1254px | Historical reference only. Every shipped icon now uses the supplied 8-5 art |
 | [docs/design/brand/mascot-sheet.png](brand/mascot-sheet.png) | The mascot in six poses: neutral, happy, reading, curious, excited, sleepy | Reference only; the shipped poses come from the renders below |
 | [docs/design/brand/mascot/](brand/mascot/) `{neutral,happy,reading,curious,excited,sleepy}.png` | The six poses as separate renders, one file per pose, 1254px square on a transparent ground | Source of the shipped poses below |
 | [docs/design/brand/hero-lockup.png](brand/hero-lockup.png) | The mark, the wordmark, the tagline and the mascot together on cream | Source of the social card |
 | [docs/design/brand/composite.png](brand/composite.png) | The lockup, the mascot and the icons on one board | Reference only |
-| [docs/design/brand/world-staircase.png](brand/world-staircase.png) | The world: a staircase of books into a sky city, the mascot beside it | Source of `public/banner.png` |
+| [docs/design/brand/world-staircase.png](brand/world-staircase.png) | The world: a staircase of books into a sky city, the mascot beside it | Historical banner source; withheld until repainted |
 | [docs/design/brand/pixel-art-sheet.png](brand/pixel-art-sheet.png) | A pixel-art take on the book, the wordmark and the world | **Campaign art only, never product UI.** It uses its own palette (royal blue, red ribbon) and its own letterforms, so it must not leak into the app or the landing page. The [avatar sprites](#avatar-sprites) are pixel art too, but their own, in the brand palette |
 | [docs/design/brand/logo/](brand/logo/) `mark.png`, `wordmark-ink.png`, `wordmark-cream.png` | The owner's logo art, 2026-09-27: the mark alone (1254px), and the GNOSIA letters in deep teal (for light grounds) and in cream (for dark grounds), 2172 by 724, all on transparent grounds | Source of the four files below |
 | [apps/web/public/brand/](../../apps/web/public/brand/) `mark.png` (256), `mark.svg` | The mark, concept 8-5 "Bold medium thin": a terracotta-on-cream tree cross-section with one bold, one medium and one thin ring, supplied as final art. `wordmark-ink.png` is retained as the alpha-mask source for CSS-coloured lettering; the old cream raster is reference only | `GnosiaWordmark` and `GnosiaLockup` |
@@ -126,7 +126,7 @@ reduction of it, and where the two disagree the art wins.
 | [apps/desktop/Resources/AppIcon.png](../../apps/desktop/Resources/AppIcon.png) (1024) | The new mark, supplied as final art; `scripts/bundle-app.sh` renders the `.icns` from it | macOS app icon |
 | [apps/web/public/brand/mascot/](../../apps/web/public/brand/mascot/) `{neutral,happy,reading,curious,excited,sleepy}.png` | Cut from the renders in `docs/design/brand/mascot/`: trimmed to the art plus 8px and scaled to 900px on the longest side (620 to 880px wide) | `GnosiaMascot` |
 | [apps/web/public/opengraph-image.png](../../apps/web/public/opengraph-image.png) (1200 by 630) | Interim 8-5 mark and terracotta wordmark on cream, from `kit/social-card.svg` | The social card; the owner's hand-cut art replaces it later |
-| [apps/web/public/banner.png](../../apps/web/public/banner.png) | Made from `world-staircase.png` | A wide banner, for the repository and campaign use |
+| Historical banner (`brand/world-staircase.png`) | The old teal world art is retained as a reference; `public/banner.png` is removed | Repaint before restoring it to the repository, campaigns or landing page |
 
 The icon files and historical banner are supplied or cut by hand from
 the art; do not regenerate them from code. Issue #662 authorizes the interim
@@ -267,9 +267,9 @@ landing page's frontier illustration. The old star glyph is retired.
 | `.gnosia-paper`, `.gnosia-panel-*` | The landing page's probe, chapter glimpses and chapter panels |
 | `.gnosia-glass` | The sign-in card |
 | Literata (`font-book`) | Every title on the public pages, the chapter and contents numerals, the colophon |
-| The world art (`public/banner.png`) | The landing page's closing band |
+| The closing band | Text and a brand button on earth while the banner awaits repainting |
 | `ThemeToggle` (moon in light, sun in dark) | The public header, beside Sign in and on the sign-in page. Light is the default for a visitor with no cookie; a click flips the appearance and keeps the palette (Gnosia light and Gnosia dark, or Light and Dark), and writes the app's theme cookie; the saved row wins over that cookie in the app whenever the database answers, so signing in brings the saved theme back, and the row and other devices are untouched, since only the app's theme control (Settings and the avatar menu) saves it |
-| Icons, social card, banner | See [The source art](#the-source-art) |
+| Icons and social card | See [The source art](#the-source-art) |
 
 ## The Gnosia theme inside the app
 
@@ -587,10 +587,11 @@ products (captured at 1440px on 2026-09-27):
 The book is the organising idea, so the page is laid out as one: a title
 page with the probe, three chapters (Probe, Plan, Review), a contents page
 numbered in roman numerals, a colophon naming the mechanics
-and the typefaces, and the world as the last page. **Literata** was picked
+and the typefaces, and a closing invitation as the last page. **Literata** was picked
 because it was drawn for reading long-form books on screens; it is loaded by
 `(site)/layout.tsx` only, so no signed-in page downloads it, and the
-`font-book` utility names it. The closing band carries the `dark` class so
+`font-book` utility names it. The world artwork is withheld until repainted; the closing invitation keeps
+a plain earth ground. The band carries the `dark` class so
 the brand values and the brand button inside it are the dark ones in every
 theme.
 
