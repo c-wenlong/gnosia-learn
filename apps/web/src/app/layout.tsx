@@ -39,7 +39,7 @@ export const metadata: Metadata = {
         url: "/opengraph-image.png",
         width: 1200,
         height: 630,
-        alt: "The Gnosia wordmark and the line A book that grows as you do, beside the Gnosia mascot: a floating teal book with a glowing four-point star on its cover, two bright eyes under the hood of its pages, and a long ribbon tail",
+        alt: "Gnosia: a terracotta tree-ring mark above the wordmark on cream",
       },
     ],
   },

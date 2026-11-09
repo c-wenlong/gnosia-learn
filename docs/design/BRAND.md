@@ -125,11 +125,14 @@ reduction of it, and where the two disagree the art wins.
 | [apps/web/src/app/apple-icon.png](../../apps/web/src/app/apple-icon.png) (180) | The new mark on an opaque square, supplied as final art; opaque, because iOS fills a transparent home-screen icon with black, and square, because iOS rounds the corners itself | Home-screen icon |
 | [apps/desktop/Resources/AppIcon.png](../../apps/desktop/Resources/AppIcon.png) (1024) | The new mark, supplied as final art; `scripts/bundle-app.sh` renders the `.icns` from it | macOS app icon |
 | [apps/web/public/brand/mascot/](../../apps/web/public/brand/mascot/) `{neutral,happy,reading,curious,excited,sleepy}.png` | Cut from the renders in `docs/design/brand/mascot/`: trimmed to the art plus 8px and scaled to 900px on the longest side (620 to 880px wide) | `GnosiaMascot` |
-| [apps/web/public/opengraph-image.png](../../apps/web/public/opengraph-image.png) (1200 by 630) | Made from `hero-lockup.png` | The social card |
+| [apps/web/public/opengraph-image.png](../../apps/web/public/opengraph-image.png) (1200 by 630) | Interim 8-5 mark and terracotta wordmark on cream, from `kit/social-card.svg` | The social card; the owner's hand-cut art replaces it later |
 | [apps/web/public/banner.png](../../apps/web/public/banner.png) | Made from `world-staircase.png` | A wide banner, for the repository and campaign use |
 
-The two icon files, the social card and the banner are cut by hand from
-the art; do not regenerate them from code. [kit/render.mjs](kit/render.mjs)
+The icon files and historical banner are supplied or cut by hand from
+the art; do not regenerate them from code. Issue #662 authorizes the interim
+social card in `kit/social-card.svg`, composed from the exact mark paths and
+letter alpha mask. It will give way to the owner's hand-cut art.
+[kit/render.mjs](kit/render.mjs)
 (SVG or HTML to PNG, fonts loaded, optional transparent ground) and
 [kit/gen-icons.mjs](kit/gen-icons.mjs) (the flat mark on a tile, read from
 `GnosiaMark.ts`) exist for previews and for any size the art does not cover.
