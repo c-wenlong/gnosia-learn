@@ -16,6 +16,14 @@ npm run dev
 npm test
 ```
 
+A fresh clone or worktree can do the mechanical half of that in one command:
+`npm run worktree-setup` (`scripts/worktree-setup.sh`) runs `npm ci`, writes
+`apps/web/.env.local` with a generated `AUTH_SECRET`, fetches the submodules
+it can reach, builds `tools/tldrawkc` and migrates a scratch catalog as the
+sanity check. `--with-video-env` adds the video tools' environments on
+machines with access; `--skip-tldraw` leaves the diagram tool out. It does
+not set `OWNER_PASSWORD`.
+
 The web app reads everything from the catalog, and a fresh clone's catalog is
 built from [`seed/`](seed/README.md), the only content the repository holds:
 

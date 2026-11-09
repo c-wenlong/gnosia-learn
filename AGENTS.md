@@ -48,6 +48,43 @@ This version has breaking changes — APIs, conventions, and file structure may 
 | [docs/design/IMPLEMENTATION.md](docs/design/IMPLEMENTATION.md) | Building the redesign: the phases and their status, the token and component contract, the shell (the sidebar, the phone header, `data-layout`), the habit data, `/courses`, and the screenshot tool |
 | [docs/design/BRAND.md](docs/design/BRAND.md) | The Gnosia brand: the idea, the seven `--brand-*` tokens with their contrast ratios, how the mark is built, the mascot rules, and where each piece appears |
 
+## A fresh checkout or worktree
+
+Run `npm run worktree-setup` (`scripts/worktree-setup.sh`) once. It checks
+Node, runs `npm ci` when the installed tree is missing or stale, writes
+`apps/web/.env.local` from `.env.example` with a generated `AUTH_SECRET`,
+runs `git submodule update --init` on each submodule it can reach, builds
+`tools/tldrawkc` (the `dist/` that `npm run canvas` executes, and the
+`playwright-core` that `npm run e2e` borrows), and migrates a scratch catalog
+as the sanity check. It is idempotent, so run it again after a pull.
+`--with-video-env` adds each checked-out video tool's environment (heavy,
+needs `uv` and access to the private submodules); `--skip-tldraw` leaves the
+diagram tool out.
+
+A worktree inherits nothing untracked: no `node_modules`, no `.env.local`,
+empty submodule directories, and no `.venv` inside any video tool. Sessions
+have failed on each of these: `tools/tldrawkc/dist/cli/index.js does not
+exist`, `playwright-core not found at tools/tldrawkc/node_modules/...`, and
+`.venv/bin/python: no such file` for the video tools. The script exists so
+none of that is rediscovered one failure at a time.
+
+The toolchain is Node 22.22.2 or newer and npm 10 or newer (`engines` in
+package.json; CI runs Node 22), plus git and bash for the scripts.
+Conditional tools, with what needs each: ffmpeg for `catalog asset upload`
+posters and `npm run demo:record`; tmux for `npm run dev:up`; the `claude`
+CLI for the studio's agents; `uv` and Python 3.12 or 3.13 for every video
+tool's `.venv` and `narration-deps`; a Chrome or Playwright Chromium for
+`npm run canvas` and `npm run e2e` (`cd tools/tldrawkc && npx playwright
+install chromium` installs one).
+
+Plan for long commands. `npm test` is minutes, not seconds: the CI step
+measured 8 to 13 minutes on two cores, and a laptop is faster but still
+minutes. `npm run build` is about a minute, `npm run typecheck` similar,
+`npm run lint` less. `npm run e2e` needs a current build and a Chromium and
+runs for minutes itself. Give these an explicit long timeout or a background
+run: a default two-minute timeout cuts them mid-run, and that was the single
+largest mechanical failure source in the session audit.
+
 ## The learning pipeline
 
 This repo holds a Probe → Plan → Teach → Close tutoring loop. It is split in
