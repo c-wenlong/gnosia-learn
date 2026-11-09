@@ -510,6 +510,7 @@
   /* Gnosia brand colours (the block at the end of this file, and
      docs/design/BRAND.md): `bg-brand-cream`, `text-brand-teal` and so on. */
   --color-brand-teal: var(--brand-teal);
+  --color-brand-terracotta: var(--brand-terracotta);
   --color-brand-navy: var(--brand-navy);
   --color-brand-cream: var(--brand-cream);
   --color-brand-gold: var(--brand-gold);
@@ -814,6 +815,7 @@ body {
  * ========================================================================== */
 :root {
   --brand-teal: #0f5f61;
+  --brand-terracotta: #9e4a2e;
   --brand-navy: #0d1c2b;
   --brand-cream: #faf6ec;
   --brand-gold: #b3842c;
@@ -824,6 +826,7 @@ body {
 
 .dark {
   --brand-teal: #5cbab3;
+  --brand-terracotta: #edaa8e;
   --brand-navy: #0a1621;
   --brand-cream: #f4ecdc;
   --brand-gold: #e2b95e;

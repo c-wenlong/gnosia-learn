@@ -6,6 +6,13 @@ how the mark is built, the rules for the mascot, and where each piece appears.
 The app's own token and component contract is still
 [IMPLEMENTATION.md](IMPLEMENTATION.md); the brand sits beside it.
 
+**8-5 migration (2026-11-09).** The supplied terracotta tree-ring mark now
+owns the icon slots and `GnosiaMark.ts`'s preview paths. The interface preserves
+the owner's GNOSIA letterforms with an alpha mask, coloured deep terracotta
+(`#9e4a2e`) on light grounds and cream on dark ones. The remaining palette
+and artwork migration is tracked in issue #662; the older descriptions
+below are updated with that palette change.
+
 ## The idea
 
 One sentence carries the whole brand: **"A book that grows as you do."**
