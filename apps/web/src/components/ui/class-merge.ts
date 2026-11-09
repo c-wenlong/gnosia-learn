@@ -61,6 +61,7 @@ export const THEME_COLOURS = [
   "on-tone",
   "diagram-matte",
   "brand-teal",
+  "brand-terracotta",
   "brand-navy",
   "brand-cream",
   "brand-gold",

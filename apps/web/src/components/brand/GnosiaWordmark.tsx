@@ -3,32 +3,32 @@ import Image from "next/image";
 import { cx } from "@/components/ui/classes";
 
 import mark from "../../../public/brand/mark.png";
-import wordmarkCream from "../../../public/brand/wordmark-cream.png";
 import wordmarkInk from "../../../public/brand/wordmark-ink.png";
 
 /**
  * The owner's logo art: the mark, and the GNOSIA letters in two colourways,
- * deep teal for light grounds and cream for dark ones. Sources are in
+ * terracotta for light grounds and cream for dark ones. Sources are in
  * docs/design/brand/logo/; the copies under `public/brand/` are trimmed of
  * the faint haze round the art and scaled down (the mark to 256px, the
  * letters to 96px tall).
  *
- * The letters swap on the `dark` class, in CSS, so the first paint is right
- * in every theme. Only one of the two is ever displayed, and `display: none`
- * takes the other out of the accessibility tree, so a screen reader hears
- * "Gnosia" once. The mark is decorative beside it.
+ * The original letter art is an alpha mask: CSS changes its colour without
+ * redrawing the owner's letterforms. A screen reader hears "Gnosia" once.
+ * The mark is decorative beside it.
  */
 function Letters({ className }: { className?: string }) {
   return (
-    <>
-      <Image src={wordmarkInk} alt="Gnosia" draggable={false} className={cx("w-auto max-w-none dark:hidden", className)} />
-      <Image
-        src={wordmarkCream}
-        alt="Gnosia"
-        draggable={false}
-        className={cx("hidden w-auto max-w-none dark:block", className)}
-      />
-    </>
+    <span
+      role="img"
+      aria-label="Gnosia"
+      className={cx("inline-block shrink-0 bg-current text-brand-terracotta dark:text-brand-cream", className)}
+      style={{
+        aspectRatio: `${wordmarkInk.width} / ${wordmarkInk.height}`,
+        maskImage: `url(${wordmarkInk.src})`,
+        maskSize: "100% 100%",
+        maskRepeat: "no-repeat",
+      }}
+    />
   );
 }
 
