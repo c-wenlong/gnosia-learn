@@ -64,16 +64,16 @@ export function ProbeDemo() {
                 onClick={() => choose(i)}
                 className={cx(
                   "flex w-full items-center justify-between gap-3 rounded-2xl border-2 px-4 py-3 text-left text-[15px] font-medium transition-colors duration-150",
-                  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-teal",
-                  !answered && "border-brand-ink/12 text-brand-ink hover:border-brand-teal/60 hover:bg-brand-teal/5",
+                  "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-terracotta",
+                  !answered && "border-brand-ink/12 text-brand-ink hover:border-brand-terracotta/60 hover:bg-brand-terracotta/5",
                   answered && !showRight && !showWrong && "border-brand-ink/8 text-brand-mist",
-                  showRight && "border-brand-teal bg-brand-teal/10 text-brand-ink",
-                  showWrong && "border-brand-gold bg-brand-gold/10 text-brand-ink",
+                  showRight && "border-brand-terracotta bg-brand-terracotta/10 text-brand-ink",
+                  showWrong && "border-brand-clay bg-brand-clay/10 text-brand-ink",
                 )}
               >
                 <span>{c}</span>
-                {showRight && <Mark d="M4 8.5 7 11.5 12.5 5" className="text-brand-teal" />}
-                {showWrong && <Mark d="M5 5l6 6M11 5l-6 6" className="text-brand-gold" />}
+                {showRight && <Mark d="M4 8.5 7 11.5 12.5 5" className="text-brand-terracotta" />}
+                {showWrong && <Mark d="M5 5l6 6M11 5l-6 6" className="text-brand-clay" />}
               </button>
             </li>
           );
@@ -89,7 +89,7 @@ export function ProbeDemo() {
           <span
             className={cx(
               "block h-full rounded-full transition-[width] duration-700 ease-out motion-reduce:transition-none",
-              answered && !right ? "bg-brand-gold" : "bg-brand-teal",
+              answered && !right ? "bg-brand-clay" : "bg-brand-terracotta",
             )}
             style={{ width: `${p * 100}%` }}
           />
@@ -108,7 +108,7 @@ export function ProbeDemo() {
             ref={retryRef}
             type="button"
             onClick={() => choose(null)}
-            className={siteLink("mt-1 rounded-md text-[14px] font-semibold text-brand-teal underline-offset-4 hover:underline")}
+            className={siteLink("mt-1 rounded-md text-[14px] font-semibold text-brand-terracotta underline-offset-4 hover:underline")}
           >
             Try again
           </button>

@@ -176,8 +176,8 @@ const RAISED: Record<"primary" | "ok" | "warn" | "accent" | "brand", { face: str
   // over a navy lip with cream text in light; in dark the teal lightens, so the
   // label turns navy and the lip is the teal sunk halfway into navy.
   brand: {
-    face: "bg-brand-teal text-brand-cream dark:text-brand-navy",
-    lip: "shadow-[0_4px_0_var(--brand-navy)] dark:shadow-[0_4px_0_color-mix(in_srgb,var(--brand-teal)_50%,var(--brand-navy))]",
+    face: "bg-brand-terracotta text-brand-cream dark:text-brand-earth",
+    lip: "shadow-[0_4px_0_var(--brand-earth)] dark:shadow-[0_4px_0_color-mix(in_srgb,var(--brand-terracotta)_50%,var(--brand-earth))]",
   },
 };
 

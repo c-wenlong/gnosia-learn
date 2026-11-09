@@ -16,30 +16,30 @@ import type { AvatarId } from "@gnosia/schema/shared";
 export const PALETTE = {
   /** light bark */
   "B": "#b08a5a",
-  /** light gold (`--brand-gold`, dark) */
-  "G": "#e2b95e",
+  /** light clay (`--brand-clay`, dark) */
+  "G": "#edaa8e",
   /** leaf */
   "N": "#8cc46a",
-  /** light teal (`--brand-teal`, dark) */
-  "T": "#5cbab3",
+  /** light terracotta (`--brand-terracotta`, dark) */
+  "T": "#edaa8e",
   /** bark */
   "b": "#7a5233",
   /** cream (`--brand-cream`) */
   "c": "#faf6ec",
-  /** gold (`--brand-gold`) */
-  "g": "#b3842c",
-  /** navy outline (`--brand-navy`) */
-  "k": "#0d1c2b",
+  /** clay (`--brand-clay`) */
+  "g": "#c2603f",
+  /** earth outline (`--brand-earth`) */
+  "k": "#211815",
   /** slate */
-  "m": "#4f6173",
+  "m": "#66554d",
   /** fox orange */
   "o": "#d9822b",
   /** blush */
   "p": "#e7a0a0",
   /** mist (`--brand-mist`, dark) */
-  "s": "#a3b2bf",
-  /** teal (`--brand-teal`) */
-  "t": "#0f5f61",
+  "s": "#c7b2a5",
+  /** terracotta (`--brand-terracotta`) */
+  "t": "#9e4a2e",
 } as const;
 
 export type PaletteKey = keyof typeof PALETTE;

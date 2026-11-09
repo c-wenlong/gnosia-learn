@@ -55,7 +55,7 @@ export function ThemeToggle() {
       aria-label="Dark theme"
       aria-pressed={dark}
       className={siteLink(
-        "grid size-10 place-items-center rounded-full text-brand-ink hover:bg-brand-ink/5 hover:text-brand-teal",
+        "grid size-10 place-items-center rounded-full text-brand-ink hover:bg-brand-ink/5 hover:text-brand-terracotta",
       )}
     >
       {/* A moon in light (switch to dark), a sun in dark (switch back). */}
