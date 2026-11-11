@@ -5,7 +5,7 @@ import { run } from "../proc";
 
 /**
  * What the studio takes from gnosia-audio, manimkc's narration layer as a
- * package of its own (github.com/c-wenlong/gnosia-audio, installed into
+ * package of its own (github.com/promethevs-labs/gnosia-audio, installed into
  * manimkc's `.venv` by `make narration-deps`).
  *
  * Three things, all through its JSON contract (schema 1, its docs/CLI.md)

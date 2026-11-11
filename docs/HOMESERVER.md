@@ -103,7 +103,7 @@ and points there.
    tools); serving needs none of them, so a plain clone is enough to start:
 
    ```bash
-   git clone https://github.com/c-wenlong/gnosia-learn ~/gnosia
+   git clone https://github.com/promethevs-labs/hermes-studio ~/gnosia
    cd ~/gnosia && npm ci
    ```
 

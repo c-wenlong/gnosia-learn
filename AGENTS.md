@@ -142,7 +142,7 @@ beyond the videos made so far.
 ## Asset generation: tools/manimkc/
 
 `tools/manimkc/` is a git **submodule** (its own private repo,
-github.com/c-wenlong/manimkc) that renders narrated animation videos with
+github.com/promethevs-labs/manimkc) that renders narrated animation videos with
 manim: ManimGL as the primary flavour, a Manim Community port alongside it,
 and a TTS narration layer synced to the animations. It exists so the
 tutoring loop can produce assets beyond text and SVG when a concept has
@@ -162,7 +162,7 @@ Rules of engagement:
   plus the venv setup in its AGENTS.md before anything renders.
 - **Narration is the gnosia-audio package, and each machine installs it.**
   Since manimkc#40, `lib/narration.py` is a shim over
-  [gnosia-audio](https://github.com/c-wenlong/gnosia-audio), pinned to one
+  [gnosia-audio](https://github.com/promethevs-labs/gnosia-audio), pinned to one
   commit in `tools/manimkc/requirements-narration.txt`. Run
   `make narration-deps` in `tools/manimkc` on a fresh clone after the venv
   setup, and again on every machine after a pointer bump that moves that pin,
@@ -226,7 +226,7 @@ Rules of engagement:
 ## Asset generation: tools/remotionkc/
 
 `tools/remotionkc/` is the third git **submodule** (its own private repo,
-github.com/c-wenlong/remotionkc): narrated explainer videos made with
+github.com/promethevs-labs/remotionkc): narrated explainer videos made with
 Remotion, the second video tool beside manimkc. Its renders enter the catalog
 the way manimkc's do, as `video` assets with transcript, chapters and
 captions sidecars, labelled "remotion" in the web app.
@@ -272,7 +272,7 @@ Rules of engagement:
 ## Asset generation: tools/revideokc/
 
 `tools/revideokc/` is the fourth git **submodule** (its own private repo,
-github.com/c-wenlong/revideokc): narrated explainer videos made with Revideo
+github.com/promethevs-labs/revideokc): narrated explainer videos made with Revideo
 0.11, the maintained fork of Motion Canvas that renders headless, the third
 video tool. It is shaped like remotionkc on purpose: the same CLI verbs, the
 same `topics --json` report, the same narration through manimkc and the
@@ -322,7 +322,7 @@ Rules of engagement:
 ## Asset generation: tools/blenderkc/
 
 `tools/blenderkc/` is the fifth git **submodule** (its own public repo,
-github.com/c-wenlong/blenderkc): narrated explainer videos whose pictures are
+github.com/promethevs-labs/blenderkc-public): narrated explainer videos whose pictures are
 photoreal 3D, rendered by Blender's Cycles through `bpy` 5.2.2 from PyPI, the
 fourth video tool. It is shaped like revideokc: the same CLI verbs, the same
 `topics --json` report, the same narration through gnosia-audio and the same
@@ -384,7 +384,7 @@ Rules of engagement:
 ## Diagrams: tools/tldrawkc/
 
 `tools/tldrawkc/` is the second git **submodule** (its own repo,
-github.com/c-wenlong/tldrawkc). It draws teaching diagrams on a real tldraw
+github.com/promethevs-labs/tldrawkc). It draws teaching diagrams on a real tldraw
 canvas in headless Chromium, screenshots them so the agent can look, lints
 them, and exports a self-contained SVG. It exists because hand-written SVG
 shipped overlapping text and arrows pointing at nothing often enough that
