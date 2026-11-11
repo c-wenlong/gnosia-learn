@@ -1,4 +1,4 @@
-import { JOB_ACTIVE_STATES, type JobState } from "@gnosia/schema/shared";
+import { JOB_ACTIVE_STATES, type JobState } from "@hermes/schema/shared";
 
 import type { Comparison } from "@/lib/studio-compare";
 import { jobStateInline } from "@/lib/studio-job-state";

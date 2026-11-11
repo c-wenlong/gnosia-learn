@@ -1,7 +1,7 @@
 import AppKit
 import WebKit
 import XCTest
-@testable import GnosiaWeb
+@testable import HermesWeb
 
 /// The window's web view is configured like a desktop browser.
 @MainActor
@@ -72,7 +72,7 @@ final class WebViewConfigurationTests: XCTestCase {
         let view = SpyWebView(frame: .zero, configuration: webViewConfiguration())
         let coordinator = WebView.Coordinator(origin: URL(string: "http://127.0.0.1:51234/")!)
         coordinator.attach(to: view)
-        for name in [Notification.Name.gnosiaWebReload, .gnosiaWebBack, .gnosiaWebForward, .gnosiaWebZoomIn] {
+        for name in [Notification.Name.hermesWebReload, .hermesWebBack, .hermesWebForward, .hermesWebZoomIn] {
             NotificationCenter.default.post(name: name, object: nil)
         }
         XCTAssertEqual(view.calls, [])

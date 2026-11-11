@@ -1,5 +1,5 @@
-import { loadTags, TAGS_FILE } from "@gnosia/content";
-import type { NewTag } from "@gnosia/schema";
+import { loadTags, TAGS_FILE } from "@hermes/content";
+import type { NewTag } from "@hermes/schema";
 
 import { asIndexError } from "./content-errors";
 import type { Indexer } from "./source";

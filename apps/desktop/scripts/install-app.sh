@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build "Gnosia Web.app" and install it to /Applications, replacing whatever
+# Build "Hermes Web.app" and install it to /Applications, replacing whatever
 # copy is there. Quits a running instance first — replacing the bundle from
 # under a live process corrupts the copy it is running, and a graceful quit
 # also lets the shell stop the web server and the studio runner it owns.
@@ -7,10 +7,10 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-if pgrep -x GnosiaWeb >/dev/null; then
-  osascript -e 'tell application "Gnosia Web" to quit' 2>/dev/null || true
+if pgrep -x HermesWeb >/dev/null; then
+  osascript -e 'tell application "Hermes Web" to quit' 2>/dev/null || true
   for _ in 1 2 3 4 5; do
-    pgrep -x GnosiaWeb >/dev/null || break
+    pgrep -x HermesWeb >/dev/null || break
     sleep 1
   done
 fi
@@ -19,8 +19,8 @@ fi
 # notification, which a POSIX signal never fires — pkill would orphan them,
 # and a healthy orphan gets adopted by the relaunched copy still running
 # its pre-merge code.
-if pgrep -x GnosiaWeb >/dev/null; then
-  echo "Gnosia Web did not quit — close it by hand and re-run." >&2
+if pgrep -x HermesWeb >/dev/null; then
+  echo "Hermes Web did not quit — close it by hand and re-run." >&2
   exit 1
 fi
 
@@ -38,8 +38,8 @@ lsof -nP -iTCP:7250 -sTCP:LISTEN >/dev/null 2>&1 &&
 
 bash scripts/bundle-app.sh
 
-APP='.build/Gnosia Web.app'
-DEST='/Applications/Gnosia Web.app'
+APP='.build/Hermes Web.app'
+DEST='/Applications/Hermes Web.app'
 
 # Copy beside the target first: deleting the installed app before its
 # replacement exists turns a failed or interrupted copy into no app at all.

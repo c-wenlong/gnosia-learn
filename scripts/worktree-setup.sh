@@ -17,7 +17,7 @@ Set up a fresh clone or git worktree. Run it once, from anywhere.
                     remotionkc's node_modules and narration deps, revideokc's
                     node_modules (PUPPETEER_SKIP_DOWNLOAD=1) and narration
                     deps, blenderkc's .venv (make deps) and narration deps.
-                    Heavy (manim, bpy, the pinned gnosia-audio) and only
+                    Heavy (manim, bpy, the pinned hermes-audio) and only
                     needed for video work. Needs uv on PATH and, for the three
                     private submodules, access to them.
   --skip-tldraw     leave tools/tldrawkc alone: `npm run canvas` then has no
@@ -34,7 +34,7 @@ update --init` for each of the five submodules (the three private video
 tools degrade to a warning without access), `npm ci` and `npm run build`
 inside the tldrawkc checkout `npm run canvas` resolves (the submodule, or
 TLDRAWKC_ROOT's), and migrates a scratch catalog file under the OS temp
-directory as the sanity check. It never touches ~/.gnosia or the real
+directory as the sanity check. It never touches ~/.hermes or the real
 catalog.
 EOF
 }
@@ -238,7 +238,7 @@ fi
 # workspaces resolve, the better-sqlite3 native addon opens a database and
 # the migrations apply. A native addon built for another Node version fails
 # here, where it names the fix.
-scratch="$(mktemp -d "${TMPDIR:-/tmp}/gnosia-setup.XXXXXX")"
+scratch="$(mktemp -d "${TMPDIR:-/tmp}/hermes-setup.XXXXXX")"
 trap 'rm -rf "$scratch"' EXIT
 say "sanity check: catalog migrate on a scratch database"
 if ! CATALOG_DB="$scratch/catalog.db" npm run --silent catalog -- migrate; then
@@ -249,5 +249,5 @@ say ""
 say "ready. The PR gate is: npm run lint && npm run typecheck && npm test && npm run build"
 say "npm test is the long pole (minutes, not seconds); give it a long timeout"
 say "or a background run. npm run dev needs OWNER_PASSWORD set in"
-say "apps/web/.env.local and a catalog to serve (default ~/.gnosia/catalog.db;"
+say "apps/web/.env.local and a catalog to serve (default ~/.hermes/catalog.db;"
 say "README.md, Install, builds one from seed/)."

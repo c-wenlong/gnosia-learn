@@ -1,6 +1,6 @@
 //
 //  CheckoutTests.swift
-//  GnosiaWebTests
+//  HermesWebTests
 //
 //  The data home's .env as the shell reads it must be what the launchers'
 //  resolver reads from the same file: AUTH_SECRET seals the provider keys
@@ -10,7 +10,7 @@
 
 import Foundation
 import XCTest
-@testable import GnosiaWeb
+@testable import HermesWeb
 
 final class CheckoutTests: XCTestCase {
     func testTheDotenvReadIsNodes() throws {
@@ -53,7 +53,7 @@ final class CheckoutTests: XCTestCase {
 
     /// S9-10: an attachment, or a type the view cannot show, is saved.
     func testAttachmentsAreSavedNotShown() {
-        XCTAssertTrue(shouldDownload(disposition: "attachment; filename=\"gnosia-export.json\"", canShowMIMEType: true))
+        XCTAssertTrue(shouldDownload(disposition: "attachment; filename=\"hermes-export.json\"", canShowMIMEType: true))
         XCTAssertTrue(shouldDownload(disposition: "Attachment", canShowMIMEType: true))
         XCTAssertFalse(shouldDownload(disposition: "inline; filename=\"a.mp4\"", canShowMIMEType: true))
         XCTAssertFalse(shouldDownload(disposition: nil, canShowMIMEType: true))
@@ -116,7 +116,7 @@ final class CheckoutTests: XCTestCase {
     /// The read before any spawn: a missing file and a refused one say
     /// different things, and both name the path.
     func testTheCheckoutAccessCheck() throws {
-        let dir = FileManager.default.temporaryDirectory.appending(path: "gnosia-access-\(UUID().uuidString)")
+        let dir = FileManager.default.temporaryDirectory.appending(path: "hermes-access-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
         let missing = try XCTUnwrap(Checkout.accessProblem(root: dir))

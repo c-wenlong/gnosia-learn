@@ -128,7 +128,7 @@ const scenario = await import(pathToFileURL(SCENARIO).href);
 if (typeof scenario.run !== 'function') missing(`${SCENARIO} exports no run() function`);
 const { chromium } = await import(pathToFileURL(corePath).href);
 
-const WORK = mkdtempSync(join(tmpdir(), 'gnosia-demo-'));
+const WORK = mkdtempSync(join(tmpdir(), 'hermes-demo-'));
 const DB = join(WORK, 'catalog.db');
 const HOME = join(WORK, 'home');
 const SERVER_LOG = join(WORK, 'server.log');

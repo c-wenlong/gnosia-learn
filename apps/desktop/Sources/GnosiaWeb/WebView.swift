@@ -1,6 +1,6 @@
 //
 //  WebView.swift
-//  GnosiaWeb
+//  HermesWeb
 //
 //  The whole product surface: a WKWebView pointed at the local Next server.
 //  Two policies keep the window self-contained. The window shows only the
@@ -27,16 +27,16 @@ import SwiftUI
 import WebKit
 
 extension Notification.Name {
-    static let gnosiaWebReload = Notification.Name("gnosiaWebReload")
-    static let gnosiaWebBack = Notification.Name("gnosiaWebBack")
-    static let gnosiaWebForward = Notification.Name("gnosiaWebForward")
-    static let gnosiaWebZoomIn = Notification.Name("gnosiaWebZoomIn")
-    static let gnosiaWebZoomOut = Notification.Name("gnosiaWebZoomOut")
-    static let gnosiaWebActualSize = Notification.Name("gnosiaWebActualSize")
-    static let gnosiaWebPrint = Notification.Name("gnosiaWebPrint")
-    static let gnosiaWebFind = Notification.Name("gnosiaWebFind")
-    static let gnosiaWebFindNext = Notification.Name("gnosiaWebFindNext")
-    static let gnosiaWebFindPrevious = Notification.Name("gnosiaWebFindPrevious")
+    static let hermesWebReload = Notification.Name("hermesWebReload")
+    static let hermesWebBack = Notification.Name("hermesWebBack")
+    static let hermesWebForward = Notification.Name("hermesWebForward")
+    static let hermesWebZoomIn = Notification.Name("hermesWebZoomIn")
+    static let hermesWebZoomOut = Notification.Name("hermesWebZoomOut")
+    static let hermesWebActualSize = Notification.Name("hermesWebActualSize")
+    static let hermesWebPrint = Notification.Name("hermesWebPrint")
+    static let hermesWebFind = Notification.Name("hermesWebFind")
+    static let hermesWebFindNext = Notification.Name("hermesWebFindNext")
+    static let hermesWebFindPrevious = Notification.Name("hermesWebFindPrevious")
 }
 
 /// Whether a response is saved rather than shown: one the server marks
@@ -212,7 +212,7 @@ struct WebView: NSViewRepresentable {
         let view = WKWebView(frame: .zero, configuration: webViewConfiguration())
         context.coordinator.attach(to: view)
         var request = URLRequest(url: url)
-        if let token { request.setValue(token, forHTTPHeaderField: "x-gnosia-local-token") }
+        if let token { request.setValue(token, forHTTPHeaderField: "x-hermes-local-token") }
         view.load(request)
         return view
     }
@@ -241,27 +241,27 @@ struct WebView: NSViewRepresentable {
             // into every window's page, this one included.
             NotificationBridge.track(view)
             // The page's <title> becomes the window title — the web app sets
-            // meaningful ones ("Review · Gnosia"), and a bare "Gnosia" window
+            // meaningful ones ("Review · Hermes"), and a bare "Hermes" window
             // loses them.
             titleObservation = view.observe(\.title) { view, _ in
                 // The handler is Sendable but always fires on the main
                 // thread, which is where the window may be titled.
                 MainActor.assumeIsolated {
-                    view.window?.title = view.title?.isEmpty == false ? view.title! : "Gnosia"
+                    view.window?.title = view.title?.isEmpty == false ? view.title! : "Hermes"
                 }
             }
             webView = view
             for (name, selector) in [
-                (Notification.Name.gnosiaWebReload, #selector(reloadPage)),
-                (.gnosiaWebBack, #selector(goBack)),
-                (.gnosiaWebForward, #selector(goForward)),
-                (.gnosiaWebZoomIn, #selector(zoomIn)),
-                (.gnosiaWebZoomOut, #selector(zoomOut)),
-                (.gnosiaWebActualSize, #selector(actualSize)),
-                (.gnosiaWebPrint, #selector(printPage)),
-                (.gnosiaWebFind, #selector(find)),
-                (.gnosiaWebFindNext, #selector(findNext)),
-                (.gnosiaWebFindPrevious, #selector(findPrevious)),
+                (Notification.Name.hermesWebReload, #selector(reloadPage)),
+                (.hermesWebBack, #selector(goBack)),
+                (.hermesWebForward, #selector(goForward)),
+                (.hermesWebZoomIn, #selector(zoomIn)),
+                (.hermesWebZoomOut, #selector(zoomOut)),
+                (.hermesWebActualSize, #selector(actualSize)),
+                (.hermesWebPrint, #selector(printPage)),
+                (.hermesWebFind, #selector(find)),
+                (.hermesWebFindNext, #selector(findNext)),
+                (.hermesWebFindPrevious, #selector(findPrevious)),
             ] {
                 NotificationCenter.default.addObserver(self, selector: selector, name: name, object: nil)
             }
@@ -521,7 +521,7 @@ final class ShellWindows: NSObject, NSWindowDelegate {
             backing: .buffered, defer: false
         )
         window.isReleasedWhenClosed = false
-        window.title = "Gnosia"
+        window.title = "Hermes"
         window.contentMinSize = shellWindowMinimumSize
         window.delegate = self
         let view = WKWebView(frame: NSRect(origin: .zero, size: size), configuration: configuration)

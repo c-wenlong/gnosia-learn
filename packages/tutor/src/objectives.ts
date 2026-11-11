@@ -1,5 +1,5 @@
-import type { Course, Module, Topic } from "@gnosia/content";
-import { moduleNumber } from "@gnosia/content/module-number";
+import type { Course, Module, Topic } from "@hermes/content";
+import { moduleNumber } from "@hermes/content/module-number";
 
 /**
  * Derive concrete end-of-session learning objectives for a topic.

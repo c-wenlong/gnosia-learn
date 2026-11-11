@@ -406,7 +406,7 @@ print(json.dumps(out))
     }
   }, 300_000);
 
-  it("names each clip through gnosia-audio's keys in the render profile as the narration step wrote it, and times a cued line", async (context) => {
+  it("names each clip through hermes-audio's keys in the render profile as the narration step wrote it, and times a cued line", async (context) => {
     if (skip !== "") return context.skip(skip);
     const scene = path.join(run.paths.checkout, "topics", "studio", "cues", "cues.py");
     await mkdir(path.dirname(scene), { recursive: true });

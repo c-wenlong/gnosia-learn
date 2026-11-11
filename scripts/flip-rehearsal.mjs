@@ -17,7 +17,7 @@
 //      frontmatter, the .tldr key order), and a rehearsal leaves the owner's
 //      working tree alone.
 //   3. Runs the procedure below against the copy, with CATALOG_COPY_OK=1 and
-//      GNOSIA_HOME at a temp directory, so blobs go nowhere real.
+//      HERMES_HOME at a temp directory, so blobs go nowhere real.
 //   4. Prints a summary, and removes the copy and the temp directories unless
 //      --keep.
 //
@@ -134,7 +134,7 @@
 // That is the rehearsal of the owner's own cut-over, before --real. The copy's
 // rows name blobs flip day stored (the export reads the diagram SVGs back), so
 // the rehearsal copies the store --blob-store names (default: the one the
-// environment's GNOSIA_HOME names, which --real would use) into its own
+// environment's HERMES_HOME names, which --real would use) into its own
 // temp one first, as a clone where the file system can, and writes nothing to
 // the original. The copy leaves out the store's .owner marker, which names the
 // database flip day ran on, so the rehearsal's copy claims its own.
@@ -527,7 +527,7 @@ function defaultDatabase() {
   if (fromCatalogDb) return tilde(fromCatalogDb);
   const raw = process.env.DATABASE_URL?.trim();
   if (raw && !raw.startsWith('postgres')) return tilde(raw);
-  return join(process.env.GNOSIA_HOME?.trim() || join(homedir(), '.gnosia'), 'catalog.db');
+  return join(process.env.HERMES_HOME?.trim() || join(homedir(), '.hermes'), 'catalog.db');
 }
 
 /** One argument for a POSIX shell, quoted only when it has to be. */
@@ -615,7 +615,7 @@ async function describeCheckout(root) {
 /**
  * The blob store's root as the catalog resolves it, asked of the blob package
  * itself rather than guessed here, so the line the operator confirms is the
- * directory the uploads will write to (and a GNOSIA_HOME the package
+ * directory the uploads will write to (and a HERMES_HOME the package
  * refuses is refused before anything runs).
  */
 async function blobRoot(env) {
@@ -626,12 +626,12 @@ async function blobRoot(env) {
       'tsx',
       '--input-type=module',
       '--eval',
-      "const { defaultBlobRoot } = await import('@gnosia/blob'); process.stdout.write(defaultBlobRoot());",
+      "const { defaultBlobRoot } = await import('@hermes/blob'); process.stdout.write(defaultBlobRoot());",
     ],
     { env, cwd: ROOT },
   );
   if (ran.status !== 0 || ran.stdout === '') {
-    throw new Refusal(`could not resolve the blob store from GNOSIA_HOME: ${ran.stderr.trim().split('\n').at(-1)}`);
+    throw new Refusal(`could not resolve the blob store from HERMES_HOME: ${ran.stderr.trim().split('\n').at(-1)}`);
   }
   return ran.stdout;
 }
@@ -692,12 +692,12 @@ async function main(argv) {
   const day = cutover ? 'the cut-over' : 'flip day';
   const stamp = `${process.pid}_${Date.now().toString(36)}`;
   /** The throwaway copy the first import runs on, named in the report so a caller can check it was removed. */
-  const preflight = `gnosia_preflight_${stamp}`;
-  const scratch = real ? null : realpathSync(mkdtempSync(join(tmpdir(), 'gnosia-flip-rehearsal-')));
+  const preflight = `hermes_preflight_${stamp}`;
+  const scratch = real ? null : realpathSync(mkdtempSync(join(tmpdir(), 'hermes-flip-rehearsal-')));
   const from = opts.from === undefined ? resolve(defaultDatabase()) : resolve(tilde(opts.from));
   const database = real
     ? resolve(tilde(opts.database.trim()))
-    : resolve(tilde(opts.name ?? join(scratch, `gnosia_rehearsal_${stamp}.db`)));
+    : resolve(tilde(opts.name ?? join(scratch, `hermes_rehearsal_${stamp}.db`)));
   if (!real && database === from) {
     throw new Refusal(`--name ${opts.name ?? database} is the template; a rehearsal never runs on its template.`);
   }
@@ -727,11 +727,11 @@ async function main(argv) {
     ...process.env,
     CATALOG_DB: database,
     DATABASE_URL: database,
-    GNOSIA_OWNER_BYTES_CAP: '',
-    GNOSIA_OWNER_UPLOADS_PER_DAY: '',
+    HERMES_OWNER_BYTES_CAP: '',
+    HERMES_OWNER_UPLOADS_PER_DAY: '',
   };
   if (real) delete env.CATALOG_COPY_OK;
-  else Object.assign(env, { CATALOG_COPY_OK: '1', GNOSIA_HOME: join(scratch, 'home') });
+  else Object.assign(env, { CATALOG_COPY_OK: '1', HERMES_HOME: join(scratch, 'home') });
   const kept = real ? homedir() : scratch;
   /** The backup's name is the database file's own, minus a `.db`/`*.sqlite*` suffix: `catalog-preflip-<UTC>.db`. */
   const stem = (file) => basename(file).replace(/\.(db|sqlite\d*)$/, '');
@@ -891,9 +891,9 @@ async function main(argv) {
     importIntoCopy: async () => {
       // Beside the tree on a rehearsal (removed with it unless --keep); its
       // own temp directory on a real run.
-      const dir = scratch ?? mkdtempSync(join(tmpdir(), 'gnosia-flip-preflight-'));
+      const dir = scratch ?? mkdtempSync(join(tmpdir(), 'hermes-flip-preflight-'));
       const file = join(dir, `${preflight}.db`);
-      const home = mkdtempSync(join(tmpdir(), 'gnosia-flip-preflight-'));
+      const home = mkdtempSync(join(tmpdir(), 'hermes-flip-preflight-'));
       try {
         await copyDatabase(database, file, { created: () => made.add(file) });
         if (report.interrupted) return { problem: 'interrupted', result: null };
@@ -902,7 +902,7 @@ async function main(argv) {
           CATALOG_DB: file,
           DATABASE_URL: file,
           CATALOG_COPY_OK: '1',
-          GNOSIA_HOME: home,
+          HERMES_HOME: home,
         });
         const problem = failed ?? removesNothing(json);
         return {
@@ -978,7 +978,7 @@ async function main(argv) {
       // held to the database too.
       let headParity = null;
       if (edits.unexpected.length === 0 && edits.rewrites.length > 0) {
-        const dir = mkdtempSync(join(tmpdir(), 'gnosia-cutover-head-'));
+        const dir = mkdtempSync(join(tmpdir(), 'hermes-cutover-head-'));
         try {
           const wrote = await writeHeadTree(tree, dir, status.untracked);
           if (wrote !== null) return { problem: wrote, result: null };
@@ -1258,7 +1258,7 @@ async function main(argv) {
         );
       }
       await confirm(database, lines, stopping.signal, day);
-      if (cutover) state.exportDir = mkdtempSync(join(tmpdir(), 'gnosia-cutover-export-'));
+      if (cutover) state.exportDir = mkdtempSync(join(tmpdir(), 'hermes-cutover-export-'));
     } else if (inPlace) {
       // The owner's cut-over, rehearsed: a copy of a database flip day ran
       // on, and the worktree it ran from, read in place.

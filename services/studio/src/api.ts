@@ -8,7 +8,7 @@ import { byokStatus, checkByokProvider, listByokModels, removeByokProvider, save
 import { keyAccessNow } from "./agent/byok-keys";
 import { canvas, doctor, doctorChecks, type DoctorCheck } from "./canvas/canvas";
 import { preferenceSet, videoList } from "./data/catalog";
-import { STUDIO_OWNER_HEADER, studioAgentPreference } from "@gnosia/schema/shared";
+import { STUDIO_OWNER_HEADER, studioAgentPreference } from "@hermes/schema/shared";
 
 import { agentAuthReport, CONCURRENCY, HOST, PORT, studioOwner, VERB_TIMEOUT_MS } from "./config";
 import { recompare } from "./diagram/compare";

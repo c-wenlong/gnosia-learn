@@ -1,5 +1,5 @@
-import { checkDistractor } from "@gnosia/schema";
-import { CHECK_DISTRACTOR_LIMITS } from "@gnosia/schema/shared";
+import { checkDistractor } from "@hermes/schema";
+import { CHECK_DISTRACTOR_LIMITS } from "@hermes/schema/shared";
 import { and, eq, inArray, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";

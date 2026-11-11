@@ -1,7 +1,7 @@
 import "server-only";
 
-import { PREFERENCE_KEYS } from "@gnosia/schema/shared";
-import { asLastVisited, asRecentModules, readPreferences } from "@gnosia/catalog/state";
+import { PREFERENCE_KEYS } from "@hermes/schema/shared";
+import { asLastVisited, asRecentModules, readPreferences } from "@hermes/catalog/state";
 
 import { catalogDatabase } from "@/lib/learner-store";
 

@@ -1,4 +1,4 @@
-import type { JobState } from "@gnosia/schema";
+import type { JobState } from "@hermes/schema";
 
 import type { AgentAuth } from "../config";
 import type { CostSource } from "../cost";

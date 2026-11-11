@@ -1,10 +1,10 @@
 //
 //  Checkout.swift
-//  GnosiaWeb
+//  HermesWeb
 //
 //  What every spawned process needs to know about the checkout it runs
 //  from: where the repository is, where the local instance keeps its data
-//  ($GNOSIA_HOME or ~/.gnosia), and the environment a child inherits.
+//  ($HERMES_HOME or ~/.hermes), and the environment a child inherits.
 //  WebServer and StudioRunner share this so the Next server and the studio
 //  runner cannot end up pointed at two different databases by the same app.
 //
@@ -12,14 +12,14 @@
 import Foundation
 
 enum Checkout {
-    /// The repository root: `GNOSIA_REPO` wins (the bundle bakes it into
+    /// The repository root: `HERMES_REPO` wins (the bundle bakes it into
     /// its Info.plist's LSEnvironment), then the walk up from this file's compile-time
-    /// path (`apps/desktop/Sources/GnosiaWeb` → root is five deletions).
+    /// path (`apps/desktop/Sources/HermesWeb` → root is five deletions).
     static func repoRoot() -> URL? {
-        if let env = ProcessInfo.processInfo.environment["GNOSIA_REPO"], !env.isEmpty {
+        if let env = ProcessInfo.processInfo.environment["HERMES_REPO"], !env.isEmpty {
             return URL(fileURLWithPath: env)
         }
-        // #filePath: <root>/apps/desktop/Sources/GnosiaWeb/Checkout.swift
+        // #filePath: <root>/apps/desktop/Sources/HermesWeb/Checkout.swift
         var here = URL(fileURLWithPath: #filePath)
         for _ in 0 ..< 5 { here.deleteLastPathComponent() }
         if FileManager.default.fileExists(atPath: here.appending(path: "apps/web").path) {
@@ -28,18 +28,29 @@ enum Checkout {
         return nil
     }
 
-    /// The data-home directory: `$GNOSIA_HOME` or `~/.gnosia`.
+    /// The data-home directory: `$HERMES_HOME`, else `$GNOSIA_HOME`, else
+    /// `~/.hermes` when it exists, else an existing `~/.gnosia`.
     static func dataHome() -> URL {
-        if let home = ProcessInfo.processInfo.environment["GNOSIA_HOME"], !home.isEmpty {
+        let env = ProcessInfo.processInfo.environment
+        if let home = env["HERMES_HOME"], !home.isEmpty {
             return URL(fileURLWithPath: home)
         }
-        return FileManager.default.homeDirectoryForCurrentUser.appending(path: ".gnosia")
+        if let home = env["GNOSIA_HOME"], !home.isEmpty {
+            return URL(fileURLWithPath: home)
+        }
+        let base = FileManager.default.homeDirectoryForCurrentUser
+        let next = base.appending(path: ".hermes")
+        let legacy = base.appending(path: ".gnosia")
+        if FileManager.default.fileExists(atPath: next.path) || !FileManager.default.fileExists(atPath: legacy.path) {
+            return next
+        }
+        return legacy
     }
 
     /// The environment every spawned service starts from (S9-08): the
     /// launchers' one rule, `services/launch-env/src/child-env.ts`, run once per
     /// launch by `prepare()`. It is the web's environment (exports, then
-    /// `$GNOSIA_HOME/.env`, then apps/web's `.env` files) with `CATALOG_DB`
+    /// `$HERMES_HOME/.env`, then apps/web's `.env` files) with `CATALOG_DB`
     /// pinned at the file the catalog's own resolver names, so a
     /// `DATABASE_URL` in services/catalog/.env reaches the web and the
     /// runner here exactly as it reaches the catalog's own CLI. Until `prepare()` has run, or when the resolver cannot
@@ -141,7 +152,7 @@ enum Checkout {
 
     /// `node --import tsx services/launch-env/src/child-env.ts` through the
     /// login shell (so the owner's nvm/volta PATH and exports reach it),
-    /// read as one JSON object of strings. `GNOSIA_WEB_MODE` reaches it from
+    /// read as one JSON object of strings. `HERMES_WEB_MODE` reaches it from
     /// this process, so a `next start` launch reads the production `.env`
     /// files. No environment on any failure, or past `resolverDeadline`,
     /// with the reason and the tail of its stderr.
@@ -242,10 +253,10 @@ enum Checkout {
             || (underlying?.domain == NSPOSIXErrorDomain && underlying?.code == Int(ENOENT))
         if missing {
             return "There is no \(file.lastPathComponent) at \(file.deletingLastPathComponent().path). "
-                + "GNOSIA_REPO may not name the repository root."
+                + "HERMES_REPO may not name the repository root."
         }
-        return "macOS did not let Gnosia Web read \(file.path) (\(ns.localizedDescription)). "
-            + "Allow Gnosia Web in System Settings > Privacy & Security > Files and Folders, "
+        return "macOS did not let Hermes Web read \(file.path) (\(ns.localizedDescription)). "
+            + "Allow Hermes Web in System Settings > Privacy & Security > Files and Folders, "
             + "or move the checkout out of Desktop, Documents and Downloads, then try again."
     }
 
@@ -264,7 +275,7 @@ enum Checkout {
         return env
     }
 
-    /// The environment before the resolver answers: `$GNOSIA_HOME/.env`
+    /// The environment before the resolver answers: `$HERMES_HOME/.env`
     /// under the real environment, and `CATALOG_DB` at the data home's file
     /// when nothing names it. The pin keeps a stale `DATABASE_URL` the
     /// shell exports from being read as a path; the resolver, which reads
@@ -285,7 +296,7 @@ enum Checkout {
         return !["", "0", "false", "off", "no"].contains(value)
     }
 
-    /// KEY=VALUE pairs from `$GNOSIA_HOME/.env` (default `~/.gnosia/.env`).
+    /// KEY=VALUE pairs from `$HERMES_HOME/.env` (default `~/.hermes/.env`).
     static func dataHomeEnv() -> [String: String] {
         guard let text = try? String(contentsOfFile: dataHome().appending(path: ".env").path, encoding: .utf8) else { return [:] }
         return parseDotenv(text)

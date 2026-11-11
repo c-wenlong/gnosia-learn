@@ -56,7 +56,7 @@ export const LABEL = "text-[12px] font-semibold leading-4 text-text2";
  * page to page, so a page title is the same size on every page. The sizes
  * are DESIGN.md's (the hi-fi and what changed on top of it); the table, with
  * the exceptions and their reasons, is "Type roles" in IMPLEMENTATION.md.
- * The lint rules `gnosia/h1-role` and `gnosia/type-size` fail an `<h1>` that
+ * The lint rules `hermes/h1-role` and `hermes/type-size` fail an `<h1>` that
  * takes none of the title roles and is not one of its named exceptions, and
  * any text under 12px, the floor.
  *
@@ -172,7 +172,7 @@ const RAISED: Record<"primary" | "ok" | "warn" | "accent" | "brand", { face: str
   ok: { face: "bg-ok text-[var(--ok-on)]", lip: "shadow-[0_4px_0_var(--ok-lip)]" },
   warn: { face: "bg-warn text-[var(--warn-on)]", lip: "shadow-[0_4px_0_var(--warn-lip)]" },
   accent: { face: "bg-accent text-white", lip: "shadow-[0_4px_0_var(--accent-lip)]" },
-  // The Gnosia pill for the public pages (docs/design/BRAND.md): a teal face
+  // The Hermes pill for the public pages (docs/design/BRAND.md): a teal face
   // over a navy lip with cream text in light; in dark the teal lightens, so the
   // label turns navy and the lip is the teal sunk halfway into navy.
   brand: {
@@ -467,7 +467,7 @@ export function linkClasses({
  * phone held in landscape is wider than 768px, so the width alone cannot say
  * "phone": the pointer does. The pixel size goes in the name, written out so
  * Tailwind finds each class. Every field takes its size from here; a bare
- * `text-sm` on an `<input>` brings the zoom back (the lint rule `gnosia/field-text`).
+ * `text-sm` on an `<input>` brings the zoom back (the lint rule `hermes/field-text`).
  */
 export const FIELD_TEXT = {
   xs: "text-base md:pointer-fine:text-xs",
@@ -550,7 +550,7 @@ export function textareaClasses({ className }: { className?: string } = {}): str
  * account menu, the studio's menus, and the lists that keep the focus in
  * their own field (Home's Ask box, the @ menu). Width is the caller's:
  * a list as wide as its words (`w-max`), a field's list as wide as the field,
- * a suggestion list as wide as its box. The lint rule `gnosia/kit-menu-box`
+ * a suggestion list as wide as its box. The lint rule `hermes/kit-menu-box`
  * fails a second copy drawn by hand.
  */
 export const MENU_PANEL = cx(

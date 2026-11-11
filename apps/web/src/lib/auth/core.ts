@@ -1,7 +1,7 @@
 /**
  * Single-owner sessions: the pure half.
  *
- * Gnosia has one learner and no accounts, so signing in is proving you hold
+ * Hermes has one learner and no accounts, so signing in is proving you hold
  * the owner's password. The proof is a cookie carrying an HMAC over its own
  * issue time, signed with a key derived from `AUTH_SECRET`, the password and
  * `SESSION_EPOCH` (`sessionKey`); nothing is stored server-side, which is
@@ -17,7 +17,7 @@
  * `cookies()` or `process.env` lives in `./session.ts`.
  */
 
-export const SESSION_COOKIE = "gnosia_session";
+export const SESSION_COOKIE = "hermes_session";
 
 /** Thirty days. The owner signs in on their own machines; a shorter life is a nag. */
 export const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30;
@@ -30,11 +30,11 @@ export const HOME_PATH = "/home";
 
 /**
  * The deployment secrets' environment names. The constants live in
- * `@gnosia/schema/shared` so the BYOK seal in `@gnosia/tutor` reads
+ * `@hermes/schema/shared` so the BYOK seal in `@hermes/tutor` reads
  * the same variable this session cookie is signed with.
  */
-export { OWNER_PASSWORD_VAR, AUTH_SECRET_VAR, LOCAL_TOKEN_VAR, MIN_SECRET_LENGTH } from "@gnosia/schema/shared";
-import { AUTH_SECRET_VAR, MIN_SECRET_LENGTH, OWNER_PASSWORD_VAR } from "@gnosia/schema/shared";
+export { OWNER_PASSWORD_VAR, AUTH_SECRET_VAR, LOCAL_TOKEN_VAR, MIN_SECRET_LENGTH } from "@hermes/schema/shared";
+import { AUTH_SECRET_VAR, MIN_SECRET_LENGTH, OWNER_PASSWORD_VAR } from "@hermes/schema/shared";
 
 /**
  * Optional. Any value; change it (`1`, `2`, ...) to end every session without
@@ -174,7 +174,7 @@ function sessionKey(inputs: SessionKeyInputs): Promise<CryptoKey> {
 async function deriveSessionKey({ secret, password, epoch }: SessionKeyInputs): Promise<CryptoKey> {
   const base = await crypto.subtle.importKey("raw", encoder.encode(password), "PBKDF2", false, ["deriveBits"]);
   const digest = await crypto.subtle.deriveBits(
-    { name: "PBKDF2", hash: "SHA-256", salt: encoder.encode(`gnosia/session-password/v1\u0000${secret}`), iterations: PASSWORD_ROUNDS },
+    { name: "PBKDF2", hash: "SHA-256", salt: encoder.encode(`hermes/session-password/v1\u0000${secret}`), iterations: PASSWORD_ROUNDS },
     base,
     256,
   );
@@ -183,13 +183,13 @@ async function deriveSessionKey({ secret, password, epoch }: SessionKeyInputs): 
   const material = await crypto.subtle.sign(
     "HMAC",
     outer,
-    encoder.encode(JSON.stringify(["gnosia/session-key", 1, toBase64Url(new Uint8Array(digest)), epoch])),
+    encoder.encode(JSON.stringify(["hermes/session-key", 1, toBase64Url(new Uint8Array(digest)), epoch])),
   );
   return crypto.subtle.importKey("raw", material, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
 }
 
 async function signature(inputs: SessionKeyInputs, issuedAt: number): Promise<string> {
-  const mac = await crypto.subtle.sign("HMAC", await sessionKey(inputs), encoder.encode(`gnosia-session:${issuedAt}`));
+  const mac = await crypto.subtle.sign("HMAC", await sessionKey(inputs), encoder.encode(`hermes-session:${issuedAt}`));
   return toBase64Url(new Uint8Array(mac));
 }
 

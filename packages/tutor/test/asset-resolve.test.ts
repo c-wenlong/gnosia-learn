@@ -1,5 +1,5 @@
-import { BlobError } from "@gnosia/blob";
-import { blobObject, learner, LOCAL_LEARNER_ID, ownerScope } from "@gnosia/schema";
+import { BlobError } from "@hermes/blob";
+import { blobObject, learner, LOCAL_LEARNER_ID, ownerScope } from "@hermes/schema";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ContentUnavailableError } from "../src/server/content-source";

@@ -43,10 +43,10 @@ This version has breaking changes — APIs, conventions, and file structure may 
 | [docs/VIDEO-TOOLS.md](docs/VIDEO-TOOLS.md) | Which of the four video tools (manimkc, remotionkc, revideokc, blenderkc) makes a given video: what each is good for, a capability matrix with where each claim was proven, the risks, and the routing procedure the `video-router` skill runs |
 | [docs/STUDIO-VIDEO-TOOLS.md](docs/STUDIO-VIDEO-TOOLS.md) | Built in phases, phase 3 (remotionkc) the last: the studio picks a video tool. The planner proposes manimkc, remotionkc or revideokc in the brief with a reason (a TOOLS block pinned to VIDEO-TOOLS.md), the card shows it as a switchable chip, the runner gets a backend per tool, and headless Chrome runs inside the job's Seatbelt profile (measured). D71 to D80 |
 | [docs/CONTENT-MIGRATION.md](docs/CONTENT-MIGRATION.md) | Moving authored content out of files in git into the database (Postgres at the time) and object storage, built through the phase 3 cut-over: the phases, the revision table, the blob store and the decisions behind them |
-| [docs/SQLITE-MIGRATION.md](docs/SQLITE-MIGRATION.md) | The catalog moved from a Postgres server to one SQLite file, `$GNOSIA_HOME/catalog.db` (default `~/.gnosia/catalog.db`): where the file is, `CATALOG_DB` and `DATABASE_URL`, porting an old Postgres database with `services/catalog/scripts/pg-to-sqlite.mjs`, and what changed under the same API |
+| [docs/SQLITE-MIGRATION.md](docs/SQLITE-MIGRATION.md) | The catalog moved from a Postgres server to one SQLite file, `$HERMES_HOME/catalog.db` (default `~/.hermes/catalog.db`): where the file is, `CATALOG_DB` and `DATABASE_URL`, porting an old Postgres database with `services/catalog/scripts/pg-to-sqlite.mjs`, and what changed under the same API |
 | [docs/design/DESIGN.md](docs/design/DESIGN.md) | The redesign: sixteen decisions, the routes and screens, the hi-fi tokens and where each came from |
 | [docs/design/IMPLEMENTATION.md](docs/design/IMPLEMENTATION.md) | Building the redesign: the phases and their status, the token and component contract, the shell (the sidebar, the phone header, `data-layout`), the habit data, `/courses`, and the screenshot tool |
-| [docs/design/BRAND.md](docs/design/BRAND.md) | The Gnosia brand: the idea, the seven `--brand-*` tokens with their contrast ratios, how the mark is built, the mascot rules, and where each piece appears |
+| [docs/design/BRAND.md](docs/design/BRAND.md) | The Hermes brand: the idea, the seven `--brand-*` tokens with their contrast ratios, how the mark is built, the mascot rules, and where each piece appears |
 
 ## A fresh checkout or worktree
 
@@ -114,7 +114,7 @@ reachable at the tag `content-files-final` (`git show
 content-files-final:content/topics.yaml`). Obsidian reads the notes from a
 **vault**:
 `npm run learn -- vault pull` writes every note, every log and every diagram's
-SVG (under `assets/`, read-only) to `~/.gnosia/vault/`, and
+SVG (under `assets/`, read-only) to `~/.hermes/vault/`, and
 `npm run learn -- vault push --reason R` takes edited notes back, one revision
 each, refusing a note that moved in the database since the pull. Neither
 command overwrites an edit nobody pushed, and a vault inside any checkout of
@@ -160,9 +160,9 @@ Rules of engagement:
 - Its venvs (`.venv`, `.venv-ce`) are local artifacts. A fresh clone needs
   `git submodule update --init --recursive` (manim is a nested submodule)
   plus the venv setup in its AGENTS.md before anything renders.
-- **Narration is the gnosia-audio package, and each machine installs it.**
+- **Narration is the hermes-audio package, and each machine installs it.**
   Since manimkc#40, `lib/narration.py` is a shim over
-  [gnosia-audio](https://github.com/promethevs-labs/gnosia-audio), pinned to one
+  [hermes-audio](https://github.com/promethevs-labs/hermes-audio), pinned to one
   commit in `tools/manimkc/requirements-narration.txt`. Run
   `make narration-deps` in `tools/manimkc` on a fresh clone after the venv
   setup, and again on every machine after a pointer bump that moves that pin,
@@ -180,7 +180,7 @@ Rules of engagement:
   which is exactly why it can live elsewhere: moving this submodule from
   `manimkc/` into `tools/` on 2026-09-13 deleted 25 rendered videos and the whole
   clip cache, because git does not carry gitignored files across a move. Point
-  `MANIMKC_HOME` outside the checkout (`manimkc home --migrate ~/.gnosia`)
+  `MANIMKC_HOME` outside the checkout (`manimkc home --migrate ~/.hermes`)
   and a repo relayout cannot do that again.
 - **Never join a manimkc path onto the submodule root.** `manimkc topics --json`
   and `manimkc mirrors --json` report a top-level absolute `outRoot`; a
@@ -258,13 +258,13 @@ Rules of engagement:
   it from the report's `outRoot` and records it on
   `index_run.metadata.outRoot`. **Never join a remotionkc path onto the
   submodule root**; a deliverable is `outRoot + path`.
-- **remotionkc narrates through gnosia-audio in its own `.venv`, not
-  manimkc's.** It pins gnosia-audio in `requirements-narration.txt`, and
+- **remotionkc narrates through hermes-audio in its own `.venv`, not
+  manimkc's.** It pins hermes-audio in `requirements-narration.txt`, and
   `npm run narration-deps` in `tools/remotionkc` installs it (non-editable,
   with uv). Run that after a fresh clone and after any pointer move that
   changes the pin, or `narrate` and `build` refuse and `doctor` fails. Only
   `topics --json`, which the catalog runs, works without it. It still hands
-  gnosia-audio a manimkc checkout (`MANIMKC_ROOT`, or a sibling `../manimkc`),
+  hermes-audio a manimkc checkout (`MANIMKC_ROOT`, or a sibling `../manimkc`),
   because that is where the voice settings live, and so the clip keys.
 - The end-to-end process is the `remotionkc-video` skill, which lives in the
   submodule and is symlinked into `.claude/skills/remotionkc-video`.
@@ -306,16 +306,16 @@ Rules of engagement:
   the submodule root.**
 - **Rendering needs a Chrome**: the system Chrome, or `REVIDEOKC_CHROME`.
   Install with `PUPPETEER_SKIP_DOWNLOAD=1 npm ci` in the submodule.
-- **revideokc narrates through gnosia-audio in its own `.venv`**, as
+- **revideokc narrates through hermes-audio in its own `.venv`**, as
   remotionkc does (revideokc#5). `npm run narration-deps` in
-  `tools/revideokc` installs the pinned gnosia-audio (non-editable, with uv);
+  `tools/revideokc` installs the pinned hermes-audio (non-editable, with uv);
   run it after a fresh clone and after any pointer move that changes the pin,
   or `narrate`, `still` and `build` refuse and `doctor` fails. Only
   `topics --json`, which the catalog runs, works without it
   (`services/catalog/test/revideokc-pinned.test.ts` holds that). It hands
-  gnosia-audio a manimkc checkout (`MANIMKC_ROOT`, or a sibling
+  hermes-audio a manimkc checkout (`MANIMKC_ROOT`, or a sibling
   `../manimkc`) for the voice settings and so the clip keys; without one,
-  gnosia-audio falls back to its own voice, which is not the series'.
+  hermes-audio falls back to its own voice, which is not the series'.
 - The end-to-end process is the `revideokc-video` skill, which lives in the
   submodule and is symlinked into `.claude/skills/revideokc-video`.
 
@@ -325,7 +325,7 @@ Rules of engagement:
 github.com/promethevs-labs/blenderkc-public): narrated explainer videos whose pictures are
 photoreal 3D, rendered by Blender's Cycles through `bpy` 5.2.2 from PyPI, the
 fourth video tool. It is shaped like revideokc: the same CLI verbs, the same
-`topics --json` report, the same narration through gnosia-audio and the same
+`topics --json` report, the same narration through hermes-audio and the same
 sidecars, so the catalog indexes it through the same descriptor in
 `services/catalog/src/index/video-tool.ts`, labelled "blender" in the web app.
 It is for videos whose subject is a physical object (a chip package, a die
@@ -358,17 +358,17 @@ Rules of engagement:
   the same split as the others: the catalog reads the first
   (`services/catalog/src/env.ts`, defaulting to `tools/blenderkc`) and takes
   the second from the report's `outRoot`. On the owner's Mac the data root is
-  `~/.gnosia/blenderkc`, set by a `BLENDERKC_HOME=` line in the
+  `~/.hermes/blenderkc`, set by a `BLENDERKC_HOME=` line in the
   checkout's `.env` (blenderkc reads the checkout's `.env`, never the data
   root's). A worktree's submodule has no `.env`, so set the variable in the
   environment there. **Never join a blenderkc path onto the submodule root.**
 - **`make deps` then `make narration-deps` in `tools/blenderkc`** make its one
-  `.venv`: Python 3.13 with bpy and Pillow, and the pinned gnosia-audio
+  `.venv`: Python 3.13 with bpy and Pillow, and the pinned hermes-audio
   beside them (non-editable, with uv). Run them after a fresh clone and after
   any pointer move that changes either pin. Only `topics --json`, which the
   catalog runs, works without them
   (`services/catalog/test/blenderkc-pinned.test.ts` holds that). Like the
-  others it hands gnosia-audio a manimkc checkout (`MANIMKC_ROOT`, or a
+  others it hands hermes-audio a manimkc checkout (`MANIMKC_ROOT`, or a
   sibling `../manimkc`) for the series' voice.
 - **The 3D renders on the homeserver**: `build <topic> --host home` copies a
   snapshot of the checkout to the host (Ubuntu, a GTX 1070), renders each
@@ -492,7 +492,7 @@ Rules of engagement:
   vocabulary is that owner's topics and the commons', a topic the planner
   proposed is filed as theirs, and its jobs and sessions are that owner's;
   `services/studio/test/owner.test.ts` fails a verb that leaves it out. The web app names the signed-in owner in
-  `x-gnosia-owner` (`STUDIO_OWNER_HEADER`), set by its server from the
+  `x-hermes-owner` (`STUDIO_OWNER_HEADER`), set by its server from the
   session after dropping any value a page sent, and the runner refuses a
   request naming anyone else: its queue, checkouts, cached list and agent
   account are that one owner's, so there is no view of them to scope.
@@ -650,9 +650,9 @@ Rules of engagement:
   running clean, makes `/api/health` report `manual: stale`, and
   `services/studio/test/manual-snippets.test.ts` fails on either. Editing a
   snippet means running that test with tldrawkc built.
-- **The video kind's narration is gnosia-audio, asked through its JSON
+- **The video kind's narration is hermes-audio, asked through its JSON
   contract, never through manimkc's `lib/`.** `services/studio/src/video/narration.ts`
-  runs `gnosia-audio home --json` in manimkc's `.venv` at each toolchain
+  runs `hermes-audio home --json` in manimkc's `.venv` at each toolchain
   discovery for the speech rate (`charsPerSecond` in its `timing.json`, the
   one figure the brief's validator and the card use; the card gets it from
   `/api/health`'s `video.narration`, never from a copy in `apps/web`) and the
@@ -660,8 +660,8 @@ Rules of engagement:
   video brief in the transcript carries `abbreviations`, and the planner is
   told of them in a STUDIO note on the next turn, once per new word
   (`abbreviationCheck` in `drafts.ts`; a note, never a refusal). `seed.ts` names clips
-  with `gnosia-audio keys --json` inside the job's render profile and seeds
-  each clip's `.words.json` with it. Without gnosia-audio in `.venv`,
+  with `hermes-audio keys --json` inside the job's render profile and seeds
+  each clip's `.words.json` with it. Without hermes-audio in `.venv`,
   `toolchainProblems` names `make narration-deps` and the doctor turns videos
   off. It must stay a non-editable install: the sandbox reads the venvs and
   nothing beside them, which `services/studio/test/video-sandbox.test.ts`
@@ -827,7 +827,7 @@ Say in the merge report that CI did not run and why.
 
 ### After a merge: reinstall the desktop shell
 
-`/Applications/Gnosia Web.app` is a frozen copy of the checkout's
+`/Applications/Hermes Web.app` is a frozen copy of the checkout's
 `apps/desktop` build: a `git pull` that lands a merged PR does not touch it,
 while everything the shell spawns (`next dev`, the studio runner) runs from
 the pulled tree. After every merge to `main`, run
@@ -836,7 +836,7 @@ graceful quit, which also stops the web server and any studio runner the
 shell owns — rebuilds, and replaces the installed bundle.
 
 Between merges the finer question is what a given change needs to reach the
-window. The shell serves this checkout (`GNOSIA_REPO` is baked into the
+window. The shell serves this checkout (`HERMES_REPO` is baked into the
 bundle), whichever branch is checked out, so the answer turns on which
 process holds the changed code:
 
@@ -844,7 +844,7 @@ process holds the changed code:
 | --- | --- |
 | `apps/web`, or `packages/` code it imports | Nothing: the spawned server is `next dev`, which hot-reloads the checkout; reload the page |
 | `services/studio` | Restart the runner, however it runs: relaunch the app when the shell owns it, but a runner started by hand (`npm run studio`) is adopted and survives the quit — restart that one where it runs, and the "not answering" card clears on the next page load |
-| `~/.gnosia/.env`, `STUDIO_*`, `next.config` | Relaunch the app: a child's environment and the server's config are read once at launch — and for `STUDIO_*` an external runner keeps the environment it was started with, so restart it like the studio row |
+| `~/.hermes/.env`, `STUDIO_*`, `next.config` | Relaunch the app: a child's environment and the server's config are read once at launch — and for `STUDIO_*` an external runner keeps the environment it was started with, so restart it like the studio row |
 | a new dependency | `npm install`, then relaunch the app — a running child cannot see a package installed after it spawned |
 | `apps/desktop` | `apps/desktop/scripts/install-app.sh`: the bundle is a frozen binary |
 
@@ -887,19 +887,19 @@ not have to be worked out again.
   locally included: that is deliberate, see "Signing in" in
   `docs/DEPLOYMENT.md`.
 - **The theme is six modes on two axes and two classes, and `dark:` is only
-  one of them.** A mode is a palette (`classic`, `gnosia`) and an appearance
-  (`light`, `dark`, `system`), stored as one string: `light`, `gnosia`,
-  `dark`, `system`, `gnosia-dark`, `gnosia-system` in `THEME_MODES`
+  one of them.** A mode is a palette (`classic`, `hermes`) and an appearance
+  (`light`, `dark`, `system`), stored as one string: `light`, `hermes`,
+  `dark`, `system`, `hermes-dark`, `hermes-system` in `THEME_MODES`
   (`packages/schema/src/shared.ts`), with `paletteOf`, `appearanceOf` and
   `themeModeFor` beside it. The first four keep the meaning they had before
-  the palette axis (`gnosia` is Gnosia light, `system` is Classic), so never
-  rename one. `<html>` gets `gnosia` for the brand palette and `dark` for a
-  dark appearance, both for Gnosia dark. A component that hard-codes a colour
-  for "light" is wrong under `gnosia`, so it reads tokens only, and a new
+  the palette axis (`hermes` is Hermes light, `system` is Classic), so never
+  rename one. `<html>` gets `hermes` for the brand palette and `dark` for a
+  dark appearance, both for Hermes dark. A component that hard-codes a colour
+  for "light" is wrong under `hermes`, so it reads tokens only, and a new
   token gets a value in every block of `apps/web/src/app/globals.css`
-  (`:root`, `.dark`, `.gnosia`, `.gnosia.dark`) or it silently falls back.
-  `.gnosia.dark` must declare every token `.gnosia` sets: under both classes
-  the later of the two one-class blocks wins, so a token only `.gnosia`
+  (`:root`, `.dark`, `.hermes`, `.hermes.dark`) or it silently falls back.
+  `.hermes.dark` must declare every token `.hermes` sets: under both classes
+  the later of the two one-class blocks wins, so a token only `.hermes`
   defines would leak its light value into the dark palette. Both system modes
   are resolved by an inline script in the root layout, not by CSS, so
   `matchMedia` is the only place `prefers-color-scheme` is read.
@@ -919,7 +919,7 @@ not have to be worked out again.
   status or a place; a one-off convention nobody else uses (a mono caps
   kicker, internal jargon) does not count. The contract is
   [docs/design/DESIGN.md](docs/design/DESIGN.md#sentence-case-2026-09-29), and
-  the lint rule `gnosia/sentence-case` (eslint-rules/gnosia.mjs) fails an
+  the lint rule `hermes/sentence-case` (eslint-rules/hermes.mjs) fails an
   `uppercase` class, wide tracking, or JSX text typed in capitals, and
   `apps/web/src/app/stylesheets.test.ts` does the same for the stylesheet.
 - **The OG image is declared by hand in `apps/web/src/app/layout.tsx`.** Next 16 builds
@@ -950,7 +950,7 @@ not have to be worked out again.
   (`*.ts`), and the app's config lives in `apps/web/` where it cannot reach
   `tools/` at all. Do not re-add an exclude for a directory nothing includes.
 - **`npm run canvas` needs `--silent`, or `--json` is unparseable.** npm
-  prints a two-line banner (`> gnosia@0.1.0 canvas` and the resolved
+  prints a two-line banner (`> hermes@0.1.0 canvas` and the resolved
   command) on stdout before the tool writes anything, so
   `npm run canvas -- inspect x.tldr --json | jq` fails on the first token.
   `npm run --silent canvas -- ...` suppresses it. The same applies to
@@ -1030,7 +1030,7 @@ not have to be worked out again.
   checkout pointed at a database still at `0009` shows that panel, and one
   never imported has nothing to show: migrate, import the seed (or an export)
   and flip it (README.md, "Install"). A new reader takes `getCourses()`, `getTopics()`
-  or `getTags()` from `@/data/*`, never a parser from `@gnosia/content`;
+  or `getTags()` from `@/data/*`, never a parser from `@hermes/content`;
   a test that wants real course data mocks `contentSource` with
   `apps/web/src/test/content-files.ts`, which reads `seed/`, rather than
   opening a database. There
@@ -1044,7 +1044,7 @@ not have to be worked out again.
   fails and says why. Setting a type to `files` only makes sense in a suite
   that hands the seam a tree of its own; the web app refuses it, and there is
   no tree in the repository to point it at.
-- **`@gnosia/content` needs no `transpilePackages` entry.** Next 16 builds
+- **`@hermes/content` needs no `transpilePackages` entry.** Next 16 builds
   with Turbopack, which transpiles npm workspace packages automatically
   (`node_modules/next/dist/docs/01-app/03-api-reference/05-config/01-next-config-js/transpilePackages.md`).
   Adding one would be cargo cult. The package ships raw TypeScript with
@@ -1075,7 +1075,7 @@ not have to be worked out again.
   root config lints them correctly.
 - **The catalog is a SQLite file, and there is no server to start.** The
   file is `CATALOG_DB`, else `DATABASE_URL` when it names a path, else
-  `$GNOSIA_HOME/catalog.db`, else `~/.gnosia/catalog.db` (`databaseUrl()` in
+  `$HERMES_HOME/catalog.db`, else `~/.hermes/catalog.db` (`databaseUrl()` in
   `services/catalog/src/env.ts`), and `connect` creates it and its directory
   on first use (`services/catalog/src/db.ts`), so there is no `createdb`
   step. A `postgres://` value is refused with a pointer to
@@ -1170,7 +1170,7 @@ not have to be worked out again.
 - **The nightly export is the readable backup, and it lives outside the
   checkout.** `npm run export:nightly` (`scripts/nightly-export.mjs [--keep N]
   [--json]`) runs `catalog export --out` into
-  `$GNOSIA_HOME/archive/<UTC time>/` (default `~/.gnosia/archive/`).
+  `$HERMES_HOME/archive/<UTC time>/` (default `~/.hermes/archive/`).
   It writes into `.<UTC time>.partial` first and renames it on success,
   replaces the `latest` symlink with a rename so the link is never missing,
   keeps the newest 30, removes partials more than a day old, and refuses an
@@ -1204,7 +1204,7 @@ not have to be worked out again.
   the hashes drizzle recorded. So an edited applied file shows as pending
   forever while drizzle skips it on every run, and `catalog migrate` now
   refuses with `MigrationSkipped` naming it rather than report success. Change
-  `packages/schema/src/`, then `npm run generate -w @gnosia/catalog`, which
+  `packages/schema/src/`, then `npm run generate -w @hermes/catalog`, which
   writes into `drizzle-sqlite/` (`services/catalog/drizzle.config.ts`). The
   old `services/catalog/drizzle/` folder is the Postgres journal, kept as a
   reference for porting an old database (docs/SQLITE-MIGRATION.md); nothing
@@ -1279,7 +1279,7 @@ not have to be worked out again.
   no owner at all, so accounts need every type flipped first. Do not answer
   a scoped read's error by reading unscoped: `scopedRead` does that only
   after the catalog says `owner_id` is absent.
-- **The web app imports `@gnosia/catalog/state`, and its driver stays
+- **The web app imports `@hermes/catalog/state`, and its driver stays
   external.** The catalog's driver is `better-sqlite3`
   (`services/catalog/package.json`), a native addon no bundler can pack, and
   Next keeps it external with no configuration: it is on Next's built-in
@@ -1289,8 +1289,8 @@ not have to be worked out again.
   `transpilePackages` is deliberately *not* there —
   Turbopack transpiles workspace packages on its own, verified by removing an
   entry and building. A client component must take the shared constants from
-  `@gnosia/schema/shared`, which imports nothing; taking them from
-  `@gnosia/schema` would drag drizzle into the browser bundle, and
+  `@hermes/schema/shared`, which imports nothing; taking them from
+  `@hermes/schema` would drag drizzle into the browser bundle, and
   `apps/web/src/lib/learner-store.ts` carries `import "server-only"` so that mistake
   fails the build rather than shipping a database driver.
 - **Every page under `(app)/` has a loading boundary, and must keep one.**

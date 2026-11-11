@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AssetDerivations, AssetRef, AssetWithTopics } from "@gnosia/catalog/state";
+import type { AssetDerivations, AssetRef, AssetWithTopics } from "@hermes/catalog/state";
 
 import { assetTabItems } from "./AssetTabs";
 
@@ -10,7 +10,7 @@ const asset = {
   url: null,
   title: "X",
   bytes: 10,
-  sourceRepo: "gnosia",
+  sourceRepo: "hermes",
   topics: ["t"],
 } as unknown as AssetWithTopics;
 

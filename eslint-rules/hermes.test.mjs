@@ -41,26 +41,26 @@ function cases(rule, { bad = [], good = [], file = COMPONENT }) {
 const jsx = (body) => `export const Probe = () => ${body};\n`;
 
 describe("the kit's elements", () => {
-  cases("gnosia/kit-select", { bad: [jsx("<select />")] });
+  cases("hermes/kit-select", { bad: [jsx("<select />")] });
   it("holds even the kit to the select rule", async () => {
-    expect(await broken(jsx("<select />"), "gnosia/kit-select", KIT)).not.toEqual([]);
+    expect(await broken(jsx("<select />"), "hermes/kit-select", KIT)).not.toEqual([]);
   });
-  cases("gnosia/kit-dialog", { bad: [jsx("<dialog open />")], good: [jsx("<Dialog open />")] });
+  cases("hermes/kit-dialog", { bad: [jsx("<dialog open />")], good: [jsx("<Dialog open />")] });
   it("lets the kit's Dialog draw a <dialog>", async () => {
-    expect(await broken(jsx("<dialog open />"), "gnosia/kit-dialog", "apps/web/src/components/ui/Dialog.tsx")).toEqual([]);
+    expect(await broken(jsx("<dialog open />"), "hermes/kit-dialog", "apps/web/src/components/ui/Dialog.tsx")).toEqual([]);
   });
-  cases("gnosia/kit-fields", {
+  cases("hermes/kit-fields", {
     bad: [jsx("<datalist id='x' />"), jsx("<textarea\n  rows={3}\n/>"), jsx('<input\n  onChange={() => {}}\n  type="checkbox"\n/>')],
     good: [jsx('<input type="text" />'), jsx("<Textarea rows={3} />")],
   });
   it("lets components/ui draw the fields", async () => {
-    expect(await broken(jsx("<textarea />"), "gnosia/kit-fields", KIT)).toEqual([]);
+    expect(await broken(jsx("<textarea />"), "hermes/kit-fields", KIT)).toEqual([]);
   });
-  cases("gnosia/kit-details", { bad: [jsx("<details><summary>Menu</summary></details>")] });
+  cases("hermes/kit-details", { bad: [jsx("<details><summary>Menu</summary></details>")] });
   it("lets a named fold of text be a <details>", async () => {
-    expect(await broken(jsx("<details />"), "gnosia/kit-details", "apps/web/src/components/workspace/NoteDisclosure.tsx")).toEqual([]);
+    expect(await broken(jsx("<details />"), "hermes/kit-details", "apps/web/src/components/workspace/NoteDisclosure.tsx")).toEqual([]);
   });
-  cases("gnosia/kit-roles", {
+  cases("hermes/kit-roles", {
     bad: [
       jsx('<div role="radiogroup" />'),
       jsx('<button role="radio" />'),
@@ -74,43 +74,43 @@ describe("the kit's elements", () => {
     ],
     good: [jsx("<div role={`tabpanel`} />"), jsx('<div role="tabpanel" />'), jsx('<div role={wide ? undefined : "tabpanel"} />'), "export const p = { id, role: 'tabpanel' };", jsx('<div role="group" />')],
   });
-  cases("gnosia/kit-popover", { bad: [jsx('<div popover="auto" />'), "export const open = (el) => el.showPopover();"] });
-  cases("gnosia/kit-menu-box", {
+  cases("hermes/kit-popover", { bad: [jsx('<div popover="auto" />'), "export const open = (el) => el.showPopover();"] });
+  cases("hermes/kit-menu-box", {
     bad: ['export const BOX = "rounded-2xl border-2 border-border bg-surface p-1.5 shadow";'],
     good: ['export const BOX = "rounded-2xl border-2 bg-surface p-2";'],
   });
-  cases("gnosia/kit-menu-panel", {
+  cases("hermes/kit-menu-panel", {
     bad: [jsx('<ul role="listbox" className="rounded-xl" />'), jsx('<div role="menu" />')],
     good: [`import { MENU_PANEL } from "@/components/ui/classes";\n${jsx('<div role="menu" className={MENU_PANEL} />')}`],
   });
-  cases("gnosia/kit-focus-ring", {
+  cases("hermes/kit-focus-ring", {
     bad: [
       'const RING = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";\nexport { RING };',
       "const RING = `focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent`;\nexport { RING };",
     ],
   });
-  cases("gnosia/kit-text-link", {
+  cases("hermes/kit-text-link", {
     bad: [jsx('<a className="text-accent-text font-semibold hover:underline" />')],
     good: [jsx('<a className="text-accent-text" />')],
   });
-  cases("gnosia/kit-glyph", {
+  cases("hermes/kit-glyph", {
     bad: [jsx('<path d="M5 5l10 10M15 5L5 15" />'), jsx('<path d="M3.5 5.5h13M3.5 10h13" />')],
     good: [jsx('<path d="M4 10h12" />')],
   });
   it("draws the field pieces' marks with Glyph", async () => {
-    expect(await broken(jsx("<svg />"), "gnosia/kit-no-svg", "apps/web/src/components/ui/Checkbox.tsx")).not.toEqual([]);
-    expect(await broken(jsx("<svg />"), "gnosia/kit-no-svg", KIT)).toEqual([]);
+    expect(await broken(jsx("<svg />"), "hermes/kit-no-svg", "apps/web/src/components/ui/Checkbox.tsx")).not.toEqual([]);
+    expect(await broken(jsx("<svg />"), "hermes/kit-no-svg", KIT)).toEqual([]);
   });
-  cases("gnosia/kit-collapse-padding", {
+  cases("hermes/kit-collapse-padding", {
     bad: [jsx('<Collapse open={n > 0} className="pt-8" />'), jsx('<Reveal open={a} className={cx("md:px-3", b)} />')],
     good: [jsx('<Collapse open={n > 0} className="min-w-0" />'), jsx('<Collapse open={open}><p className="pt-4" /></Collapse>')],
   });
-  cases("gnosia/kit-card", { bad: ['export const C = "rounded-[20px] border-2 border-border bg-surface p-5";'] });
-  cases("gnosia/kit-typing-dots", {
+  cases("hermes/kit-card", { bad: ['export const C = "rounded-[20px] border-2 border-border bg-surface p-5";'] });
+  cases("hermes/kit-typing-dots", {
     bad: ["export const dot = (at) => ({ animationDelay: `${at * 180}ms` });"],
     good: ["export const dot = (at) => ({ animationDelay: `${at * 90}ms` });"],
   });
-  cases("gnosia/kit-warn-box", {
+  cases("hermes/kit-warn-box", {
     bad: [
       jsx('<p className={cx("rounded-xl px-4", ok ? "bg-ok-tint" : "bg-warn-tint")}>no</p>'),
       jsx('<p className="rounded-lg bg-warn-tint p-3">no</p>'),
@@ -125,7 +125,7 @@ describe("the browser's confirm()", () => {
   const confirms = async (code) =>
     [
       ...(await broken(code, "no-restricted-globals", LIB)),
-      ...(await broken(code, "gnosia/kit-confirm", LIB)),
+      ...(await broken(code, "hermes/kit-confirm", LIB)),
     ].length;
 
   it("is caught bare, through window, and through a chain of globals", async () => {
@@ -149,7 +149,7 @@ describe("the browser's confirm()", () => {
 });
 
 describe("class lists", () => {
-  cases("gnosia/cx-only", {
+  cases("hermes/cx-only", {
     bad: [
       jsx("<p className={`p-2 ${b}`} />"),
       jsx('<p className={"p-2 " + b} />'),
@@ -179,7 +179,7 @@ describe("class lists", () => {
 });
 
 describe("type", () => {
-  cases("gnosia/type-size", {
+  cases("hermes/type-size", {
     bad: [
       jsx('<span className="text-[11px]" />'),
       jsx('<span className="md:text-[10.5px]" />'),
@@ -203,34 +203,34 @@ describe("type", () => {
     ],
   });
   it("lets the public site draw to its own scale", async () => {
-    expect(await broken(jsx('<span className="text-[11px]" />'), "gnosia/type-size", "apps/web/src/app/(site)/probe.tsx")).toEqual([]);
+    expect(await broken(jsx('<span className="text-[11px]" />'), "hermes/type-size", "apps/web/src/app/(site)/probe.tsx")).toEqual([]);
   });
   it("lets the workspace graph's one allowed size through, and only it", async () => {
     const graph = "apps/web/src/components/ConceptGraph.tsx";
     const allowed = "export const f = (compact: boolean) => { const fontSize = compact ? 12 : 11.5; return fontSize; };";
-    expect(await broken(allowed, "gnosia/type-size", graph)).toEqual([]);
-    expect(await broken(`${allowed}\n${jsx('<span className="text-[10px]" />')}`, "gnosia/type-size", graph)).toHaveLength(1);
-    expect(await broken("export const x = 1;", "gnosia/type-size", graph)).toEqual([expect.stringContaining("matches nothing")]);
+    expect(await broken(allowed, "hermes/type-size", graph)).toEqual([]);
+    expect(await broken(`${allowed}\n${jsx('<span className="text-[10px]" />')}`, "hermes/type-size", graph)).toHaveLength(1);
+    expect(await broken("export const x = 1;", "hermes/type-size", graph)).toEqual([expect.stringContaining("matches nothing")]);
   });
 
-  cases("gnosia/h1-role", {
+  cases("hermes/h1-role", {
     bad: [jsx('<h1 className="font-display text-[28px] font-bold">x</h1>')],
     good: [jsx('<h1 className={cx(PAGE_TITLE, "mb-3")}>x</h1>')],
   });
   it("counts a file's allowed <h1>s exactly", async () => {
     const review = "apps/web/src/components/review/ReviewSession.tsx";
-    expect(await broken(jsx("<h1>x</h1>"), "gnosia/h1-role", review)).toEqual([]);
-    expect(await broken(jsx("<><h1>x</h1><h1>y</h1></>"), "gnosia/h1-role", review)).toHaveLength(1);
-    expect(await broken("export const x = 1;", "gnosia/h1-role", review)).toEqual([expect.stringContaining("lower the allowance")]);
+    expect(await broken(jsx("<h1>x</h1>"), "hermes/h1-role", review)).toEqual([]);
+    expect(await broken(jsx("<><h1>x</h1><h1>y</h1></>"), "hermes/h1-role", review)).toHaveLength(1);
+    expect(await broken("export const x = 1;", "hermes/h1-role", review)).toEqual([expect.stringContaining("lower the allowance")]);
   });
 });
 
 describe("dialogs", () => {
-  cases("gnosia/dialog-close-mark", {
+  cases("hermes/dialog-close-mark", {
     bad: [jsx("<button data-dialog-close />"), 'export const p = { "data-dialog-close": "" };', 'export const f = (el) => el.setAttribute("data-dialog-close", "");'],
     good: ['export const f = (el) => el.hasAttribute("data-dialog-close");'],
   });
-  cases("gnosia/dialog-header", {
+  cases("hermes/dialog-header", {
     bad: [
       jsx('<Dialog open><IconButton onClick={() => close()} label="Close" /></Dialog>'),
       jsx("<Dialog open><IconButton label={'Close'} size=\"sm\" /></Dialog>"),
@@ -246,23 +246,23 @@ describe("dialogs", () => {
 });
 
 describe("one place for each question", () => {
-  cases("gnosia/ime", {
+  cases("hermes/ime", {
     bad: ["export const f = (e: KeyboardEvent) => e.isComposing;", "export const f = (e: KeyboardEvent) => e.keyCode === 229;"],
     good: ["export const f = (editor: { isComposing(): boolean }) => editor.isComposing();"],
   });
   it("moves a tab row by tabKeyIndex", async () => {
     const code = "export const next = (i: number, n: number) => (i + 1) % n;";
-    expect(await broken(code, "gnosia/roving-keys", "apps/web/src/components/ui/TabList.tsx")).not.toEqual([]);
-    expect(await broken(code, "gnosia/roving-keys", KIT)).toEqual([]);
+    expect(await broken(code, "hermes/roving-keys", "apps/web/src/components/ui/TabList.tsx")).not.toEqual([]);
+    expect(await broken(code, "hermes/roving-keys", KIT)).toEqual([]);
   });
-  cases("gnosia/save-status", {
+  cases("hermes/save-status", {
     bad: [
       `import { LiveStatus } from "@/components/ui/LiveStatus";\nexport const S = ({ save }) => <LiveStatus tone={save.kind === "error" ? "danger" : "muted"} />;`,
       `import { FormRow } from "@/components/ui/FormRow";\nexport function tone(kind: string) { switch (kind) { case "saved": return { tone: "ok", text: "Saved" }; default: return null; } }`,
     ],
     good: [`export const tone = (save) => (save.kind === "error" ? "danger" : "ok");`],
   });
-  cases("gnosia/image-reveal", {
+  cases("hermes/image-reveal", {
     bad: [
       "export const f = (img: HTMLImageElement) => img.complete;",
       "export const f = (ref: { current: HTMLImageElement }) => ref.current.complete;",
@@ -271,14 +271,14 @@ describe("one place for each question", () => {
     ],
     good: ["export const f = (job: { complete: boolean }) => job.complete;"],
   });
-  cases("gnosia/plain-click", {
+  cases("hermes/plain-click", {
     bad: [
       "export const f = (e: MouseEvent) => e.button !== 0 || e.metaKey || e.ctrlKey;",
       "export const f = (e: MouseEvent) => e.metaKey || e.button === 1;",
     ],
     good: ["export const f = (e: KeyboardEvent) => e.metaKey || e.ctrlKey;"],
   });
-  cases("gnosia/motion", {
+  cases("hermes/motion", {
     bad: [
       'export const q = "(prefers-reduced-motion: reduce)";',
       'export const f = (el: Element) => el.scrollIntoView({ behavior: "smooth" });',
@@ -288,7 +288,7 @@ describe("one place for each question", () => {
     good: ["export const f = (el: Element) => el.scrollIntoView({ behavior: scrollBehavior() });"],
     file: LIB,
   });
-  cases("gnosia/client-cookie", {
+  cases("hermes/client-cookie", {
     bad: ['export const f = () => { document.cookie = "a=1"; };'],
     good: ["export const f = () => document.cookie.split(';');"],
     file: LIB,
@@ -298,21 +298,21 @@ describe("one place for each question", () => {
   });
   it("reads a slug-keyed record through ownValue", async () => {
     const file = "apps/web/src/app/(app)/library/[id]/page.tsx";
-    expect(await broken("export const f = (notes: Record<string, string>, slug: string) => notes[slug];", "gnosia/own-key", file)).not.toEqual([]);
-    expect(await broken("export const f = (notes: Record<string, string>, slug: string) => notes?.[slug];", "gnosia/own-key", file)).not.toEqual([]);
-    expect(await broken("export const f = (notes: string[]) => notes[0];", "gnosia/own-key", file)).toEqual([]);
-    expect(await broken("export const f = (other: Record<string, string>, slug: string) => other[slug];", "gnosia/own-key", file)).toEqual([]);
+    expect(await broken("export const f = (notes: Record<string, string>, slug: string) => notes[slug];", "hermes/own-key", file)).not.toEqual([]);
+    expect(await broken("export const f = (notes: Record<string, string>, slug: string) => notes?.[slug];", "hermes/own-key", file)).not.toEqual([]);
+    expect(await broken("export const f = (notes: string[]) => notes[0];", "hermes/own-key", file)).toEqual([]);
+    expect(await broken("export const f = (other: Record<string, string>, slug: string) => other[slug];", "hermes/own-key", file)).toEqual([]);
   });
 });
 
 describe("the studio", () => {
   const STUDIO = "apps/web/src/components/studio/Probe.tsx";
-  cases("gnosia/studio-job-state", {
+  cases("hermes/studio-job-state", {
     bad: [jsx("<p>{job.state}</p>"), jsx("<p>{row.state}</p>")],
     good: [jsx("<p>{jobStateLabel(job.state)}</p>"), jsx('<p data-state={job.state}>{job.state === "running" ? "Busy" : null}</p>')],
     file: STUDIO,
   });
-  cases("gnosia/studio-kit", {
+  cases("hermes/studio-kit", {
     bad: [
       "export function Button() { return null; }",
       "export const ChipLink = () => null;",
@@ -330,18 +330,18 @@ describe("the studio", () => {
   it("gates every studio entry point first", async () => {
     const page = "apps/web/src/app/(app)/studio/probe/page.tsx";
     const gated = 'import { requireStudio } from "@/lib/studio";\nexport default async function P() { requireStudio(); return null; }';
-    expect(await broken(gated, "gnosia/studio-gate", page)).toEqual([]);
-    expect(await broken('import { requireStudio } from "@/lib/studio";\nexport default async function P() { await x(); requireStudio(); return null; }', "gnosia/studio-gate", page)).toHaveLength(1);
-    expect(await broken(`${gated}\nexport async function generateMetadata() { return {}; }`, "gnosia/studio-gate", page)).toHaveLength(1);
-    expect(await broken('export { default } from "./other";', "gnosia/studio-gate", page)).not.toEqual([]);
+    expect(await broken(gated, "hermes/studio-gate", page)).toEqual([]);
+    expect(await broken('import { requireStudio } from "@/lib/studio";\nexport default async function P() { await x(); requireStudio(); return null; }', "hermes/studio-gate", page)).toHaveLength(1);
+    expect(await broken(`${gated}\nexport async function generateMetadata() { return {}; }`, "hermes/studio-gate", page)).toHaveLength(1);
+    expect(await broken('export { default } from "./other";', "hermes/studio-gate", page)).not.toEqual([]);
     const actions = "apps/web/src/app/(app)/studio/actions.ts";
-    expect(await broken('"use server";\nexport async function a() { requireStudio(); }\nexport const b = async () => 1;', "gnosia/studio-gate", actions)).toHaveLength(1);
+    expect(await broken('"use server";\nexport async function a() { requireStudio(); }\nexport const b = async () => 1;', "hermes/studio-gate", actions)).toHaveLength(1);
     const route = "apps/web/src/app/(app)/studio/x/[y]/route.ts";
-    expect(await broken("export async function GET() { return new Response(); }", "gnosia/studio-gate", route)).toHaveLength(1);
+    expect(await broken("export async function GET() { return new Response(); }", "hermes/studio-gate", route)).toHaveLength(1);
     // An export list is followed to each function it names (Greptile on #556).
     const mixed = 'import { requireStudio } from "@/lib/studio";\nexport async function GET() { requireStudio(); return new Response(); }\nasync function POST() { return new Response(); }\nconst PUT = async () => { requireStudio(); return new Response(); };\nexport { POST, PUT };';
-    expect(await broken(mixed, "gnosia/studio-gate", route)).toEqual([expect.stringContaining("POST")]);
-    expect(await broken('async function Page() { return null; }\nexport default Page;', "gnosia/studio-gate", page)).toHaveLength(1);
+    expect(await broken(mixed, "hermes/studio-gate", route)).toEqual([expect.stringContaining("POST")]);
+    expect(await broken('async function Page() { return null; }\nexport default Page;', "hermes/studio-gate", page)).toHaveLength(1);
   });
   it("keeps TutorChat's first load free of the studio", async () => {
     const file = "apps/web/src/components/workspace/TutorChat.tsx";
@@ -355,7 +355,7 @@ describe("the studio", () => {
 });
 
 describe("theme tokens", () => {
-  cases("gnosia/theme-tokens", {
+  cases("hermes/theme-tokens", {
     bad: [
       'export const c = "#f7f6f3";',
       jsx('<p className="bg-[#111]" />'),
@@ -382,20 +382,20 @@ describe("theme tokens", () => {
     ],
   });
   it("leaves the brand pages and the familiars' pixel art their colours", async () => {
-    expect(await broken('export const c = "#f7f6f3";', "gnosia/theme-tokens", "apps/web/src/app/(site)/page.tsx")).toEqual([]);
-    expect(await broken('export const c = "#f7f6f3";', "gnosia/theme-tokens", "apps/web/src/components/avatar/sprites.ts")).toEqual([]);
-    expect(await broken('export const c = "#f7f6f3";', "gnosia/theme-tokens", LIB)).toEqual([]);
+    expect(await broken('export const c = "#f7f6f3";', "hermes/theme-tokens", "apps/web/src/app/(site)/page.tsx")).toEqual([]);
+    expect(await broken('export const c = "#f7f6f3";', "hermes/theme-tokens", "apps/web/src/components/avatar/sprites.ts")).toEqual([]);
+    expect(await broken('export const c = "#f7f6f3";', "hermes/theme-tokens", LIB)).toEqual([]);
   });
   it("still holds the brand pages and the pixel art to the token names (Greptile on #556)", async () => {
     for (const file of ["apps/web/src/app/(site)/page.tsx", "apps/web/src/components/avatar/sprites.ts"]) {
-      expect(await broken('export const c = "text-[var(--muted)]";', "gnosia/theme-tokens", file)).not.toEqual([]);
-      expect(await broken('export const c = "bg-[var(--surface2)]";', "gnosia/theme-tokens", file)).not.toEqual([]);
+      expect(await broken('export const c = "text-[var(--muted)]";', "hermes/theme-tokens", file)).not.toEqual([]);
+      expect(await broken('export const c = "bg-[var(--surface2)]";', "hermes/theme-tokens", file)).not.toEqual([]);
     }
   });
 });
 
 describe("sentence case", () => {
-  cases("gnosia/sentence-case", {
+  cases("hermes/sentence-case", {
     bad: [
       'export const c = "text-[11px] uppercase";',
       'export const c = "md:uppercase text-xs";',
@@ -418,13 +418,13 @@ describe("sentence case", () => {
 });
 
 describe("a field's text", () => {
-  cases("gnosia/field-text", {
+  cases("hermes/field-text", {
     bad: [jsx('<input className="text-sm" />'), 'const local = "rounded text-xs";\nexport const A = () => <textarea className={local} />;'],
     good: [jsx('<input className="text-base" />'), jsx('<input type="checkbox" className="text-xs" />'), jsx('<p className="text-sm" />')],
   });
   it("follows a class imported one module away", async () => {
     // NOTE in components/ui/classes.ts is 12px: right for a note, wrong for a field.
     const code = 'import { NOTE } from "@/components/ui/classes";\nexport const A = () => <input className={NOTE} />;';
-    expect(await broken(code, "gnosia/field-text")).toEqual([expect.stringContaining("text-[12px]")]);
+    expect(await broken(code, "hermes/field-text")).toEqual([expect.stringContaining("text-[12px]")]);
   });
 });

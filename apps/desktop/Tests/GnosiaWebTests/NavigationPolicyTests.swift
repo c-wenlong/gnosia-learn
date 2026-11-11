@@ -1,6 +1,6 @@
 //
 //  NavigationPolicyTests.swift
-//  GnosiaWebTests
+//  HermesWebTests
 //
 //  The window shows the app server's origin only: other web pages go to
 //  the browser, and no other scheme reaches NSWorkspace, which would
@@ -11,7 +11,7 @@ import AppKit
 import Foundation
 import WebKit
 import XCTest
-@testable import GnosiaWeb
+@testable import HermesWeb
 
 final class NavigationPolicyTests: XCTestCase {
     private let app = URL(string: "http://127.0.0.1:51234/api/auth/local")!

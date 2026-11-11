@@ -29,7 +29,7 @@ export interface ByokSettingsView {
 export type ByokInitial = { state: "up"; data: ByokSettingsView } | { state: "down" };
 
 /** Window event a successful BYOK write fires, so open composers and panes re-read the tiers (D94). */
-export const BYOK_SETTINGS_CHANGED = "gnosia:byok-settings";
+export const BYOK_SETTINGS_CHANGED = "hermes:byok-settings";
 
 function announceByokWrite<T>(result: Promise<T>): Promise<T> {
   void result.then((outcome) => {

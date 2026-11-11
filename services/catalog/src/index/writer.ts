@@ -25,7 +25,7 @@ import {
   tag,
   topic,
   topicRelation,
-} from "@gnosia/schema";
+} from "@hermes/schema";
 import { and, eq, getTableName, inArray, isNull, notInArray, sql, type SQL } from "drizzle-orm";
 import type { SQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core";
 

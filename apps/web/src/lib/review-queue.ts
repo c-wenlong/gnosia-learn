@@ -6,16 +6,16 @@ import {
   reviewQueue,
   type ConceptSummary,
   type ReviewQueueItem,
-} from "@gnosia/catalog/state";
+} from "@hermes/catalog/state";
 
-import type { ConceptCheck } from "@gnosia/tutor/concept-note-core";
+import type { ConceptCheck } from "@hermes/tutor/concept-note-core";
 import { readConceptNote } from "@/lib/concept-note";
-import { readWrittenOptions } from "@gnosia/tutor/server/check-options";
-import { canWriteOptionsFor } from "@gnosia/tutor/check-options";
+import { readWrittenOptions } from "@hermes/tutor/server/check-options";
+import { canWriteOptionsFor } from "@hermes/tutor/check-options";
 import { tutorModelConfigured } from "@/lib/session-page";
 import { catalogDatabase } from "@/lib/learner-store";
 import { currentOwner, ownerScope } from "@/lib/owner";
-import { buildChoices, recallPrompt, type ReviewItem, type ReviewSessionData } from "@gnosia/tutor/review-core";
+import { buildChoices, recallPrompt, type ReviewItem, type ReviewSessionData } from "@hermes/tutor/review-core";
 
 /**
  * The review queue as cards a page can render: the due list from the catalog,
@@ -43,7 +43,7 @@ function firstCheck(checks: readonly ConceptCheck[]): ConceptCheck | null {
  * Wrong options for one card, best first: other due notes' check answers in the
  * same domain, then in any domain, then same-domain summaries, then the rest.
  * Check answers lead because they are shaped like answers; summaries only fill.
- * Not the session's `distractorPool` (`@gnosia/tutor/session-core`), which
+ * Not the session's `distractorPool` (`@hermes/tutor/session-core`), which
  * ranks summaries by how near each concept sits to the one being asked about.
  */
 function reviewDistractorPool(

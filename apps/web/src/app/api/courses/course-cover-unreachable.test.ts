@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { ownerScope } from "@gnosia/schema/shared";
+import { ownerScope } from "@hermes/schema/shared";
 
 /**
  * The course cover route and the course list's cover read with the catalog
@@ -74,8 +74,8 @@ describe("course covers with no catalog", () => {
       ...(await importOriginal<typeof import("@/lib/learner-store")>()),
       withLearnerStore: async <T,>(fn: (db: never) => Promise<T>) => fn({} as never),
     }));
-    vi.doMock("@gnosia/catalog/state", async (importOriginal) => ({
-      ...(await importOriginal<typeof import("@gnosia/catalog/state")>()),
+    vi.doMock("@hermes/catalog/state", async (importOriginal) => ({
+      ...(await importOriginal<typeof import("@hermes/catalog/state")>()),
       courseCoverBlob: async () => {
         throw new Error("no such column: cover_blob_key");
       },
@@ -85,7 +85,7 @@ describe("course covers with no catalog", () => {
       await expect(fresh(...request())).rejects.toThrow("no such column");
     } finally {
       vi.doUnmock("@/lib/learner-store");
-      vi.doUnmock("@gnosia/catalog/state");
+      vi.doUnmock("@hermes/catalog/state");
     }
   });
 });

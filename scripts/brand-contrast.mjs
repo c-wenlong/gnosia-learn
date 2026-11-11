@@ -22,7 +22,7 @@ function mixStrength(selector, colour) {
 
 function tokens(selector) {
   const result = {};
-  for (const match of css.matchAll(/(?:^|\n)(:root|\.dark|\.gnosia|\.gnosia\.dark) \{([^}]+)\}/g)) {
+  for (const match of css.matchAll(/(?:^|\n)(:root|\.dark|\.hermes|\.hermes\.dark) \{([^}]+)\}/g)) {
     if (match[1] !== selector) continue;
     for (const [, name, value] of match[2].matchAll(/--([\w-]+):\s*(#[\da-f]{6})/gi)) result[name] = value;
   }
@@ -64,16 +64,16 @@ function siteRows(dark) {
   const t = { ...tokens(':root'), ...(dark ? tokens('.dark') : {}) };
   const ground = t[dark ? 'brand-earth' : 'brand-cream'];
   // Both washes at their strongest at once: a conservative overlap bound.
-  const groundRule = dark ? '.dark .gnosia-ground' : '.gnosia-ground';
+  const groundRule = dark ? '.dark .hermes-ground' : '.hermes-ground';
   const glow = blend(t['brand-terracotta'], blend(t['brand-clay-soft'], ground,
     mixStrength(groundRule, 'var(--brand-clay-soft)')), mixStrength(groundRule, 'var(--brand-terracotta)'));
-  const glassRule = dark ? '.dark .gnosia-glass' : '.gnosia-glass';
+  const glassRule = dark ? '.dark .hermes-glass' : '.hermes-glass';
   const glassColour = dark ? t['brand-terracotta'] : '#ffffff';
   const glassStrength = mixStrength(glassRule, dark ? 'var(--brand-terracotta)' : 'white');
-  const paper = dark ? blend(t['brand-cream'], ground, mixStrength('.dark .gnosia-paper', 'var(--brand-cream)'))
-    : /background:\s*(#[\da-f]{6})/i.exec(rule('.gnosia-paper'))?.[1];
+  const paper = dark ? blend(t['brand-cream'], ground, mixStrength('.dark .hermes-paper', 'var(--brand-cream)'))
+    : /background:\s*(#[\da-f]{6})/i.exec(rule('.hermes-paper'))?.[1];
   if (!paper) throw new Error('Missing paper background');
-  const panel = (name, colour) => blend(t[colour], ground, mixStrength(`${dark ? '.dark ' : ''}.gnosia-panel-${name}`, `var(--${colour})`));
+  const panel = (name, colour) => blend(t[colour], ground, mixStrength(`${dark ? '.dark ' : ''}.hermes-panel-${name}`, `var(--${colour})`));
   const surfaces = {
     ground, glow,
     glass: blend(glassColour, ground, glassStrength),
@@ -93,7 +93,7 @@ function siteRows(dark) {
 
 export const audits = {
   'Public brand': [siteRows(false), siteRows(true)],
-  'Gnosia app': [appRows('.gnosia'), appRows('.gnosia.dark')],
+  'Hermes app': [appRows('.hermes'), appRows('.hermes.dark')],
 };
 
 export function markdownTables() {

@@ -15,14 +15,14 @@ describe("theme modes", () => {
     expect([paletteOf("light"), appearanceOf("light")]).toEqual(["classic", "light"]);
     expect([paletteOf("dark"), appearanceOf("dark")]).toEqual(["classic", "dark"]);
     expect([paletteOf("system"), appearanceOf("system")]).toEqual(["classic", "system"]);
-    expect([paletteOf("gnosia"), appearanceOf("gnosia")]).toEqual(["gnosia", "light"]);
+    expect([paletteOf("hermes"), appearanceOf("hermes")]).toEqual(["hermes", "light"]);
   });
 
-  it("names the two Gnosia modes that follow a dark or a device appearance", () => {
-    expect(themeModeFor("gnosia", "dark")).toBe("gnosia-dark");
-    expect(themeModeFor("gnosia", "system")).toBe("gnosia-system");
-    expect([paletteOf("gnosia-dark"), appearanceOf("gnosia-dark")]).toEqual(["gnosia", "dark"]);
-    expect([paletteOf("gnosia-system"), appearanceOf("gnosia-system")]).toEqual(["gnosia", "system"]);
+  it("names the two Hermes modes that follow a dark or a device appearance", () => {
+    expect(themeModeFor("hermes", "dark")).toBe("hermes-dark");
+    expect(themeModeFor("hermes", "system")).toBe("hermes-system");
+    expect([paletteOf("hermes-dark"), appearanceOf("hermes-dark")]).toEqual(["hermes", "dark"]);
+    expect([paletteOf("hermes-system"), appearanceOf("hermes-system")]).toEqual(["hermes", "system"]);
   });
 
   it("is a bijection between the modes and every palette and appearance pair", () => {
@@ -42,7 +42,7 @@ describe("theme modes", () => {
 
   it("accepts exactly the six modes", () => {
     for (const mode of THEME_MODES) expect(asThemeMode(mode)).toBe(mode);
-    for (const bad of [undefined, null, "", "classic", "gnosia-light", "Gnosia-dark", "dark ", 1, {}]) {
+    for (const bad of [undefined, null, "", "classic", "hermes-light", "Hermes-dark", "dark ", 1, {}]) {
       expect(asThemeMode(bad)).toBeNull();
     }
   });

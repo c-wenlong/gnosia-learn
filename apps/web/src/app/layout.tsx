@@ -4,7 +4,7 @@ import { Figtree, Geist_Mono } from "next/font/google";
 import { cx } from "@/components/ui/classes";
 import { NONCE_HEADER } from "@/lib/auth/csp";
 import { asMotionMode, LEGACY_MOTION_COOKIE, MOTION_COOKIE, motionAttribute } from "@/lib/motion";
-import { resolveSiteUrl } from "@gnosia/tutor/site-url";
+import { resolveSiteUrl } from "@hermes/tutor/site-url";
 import { asThemeMode, LEGACY_THEME_COOKIE, SYSTEM_THEME_SCRIPT, THEME_COOKIE, themeClass } from "@/lib/theme-cookie";
 import "./globals.css";
 
@@ -25,8 +25,8 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   metadataBase: resolveSiteUrl(),
   title: {
-    default: "Gnosia",
-    template: "%s · Gnosia",
+    default: "Hermes",
+    template: "%s · Hermes",
   },
   description:
     "A book that grows as you do. A living personal knowledge system that learns what you know and teaches what comes next.",
@@ -39,7 +39,7 @@ export const metadata: Metadata = {
         url: "/opengraph-image.png",
         width: 1200,
         height: 630,
-        alt: "Gnosia: a terracotta tree-ring mark above the wordmark on cream",
+        alt: "Hermes: a terracotta tree-ring mark above the wordmark on cream",
       },
     ],
   },
@@ -62,8 +62,8 @@ export const metadata: Metadata = {
  * the class to match on hydration, so a new browser gets the right theme one
  * frame late rather than a query on every public page.
  *
- * A system appearance (`system`, `gnosia-system`) is what the server cannot
- * resolve. It is rendered light, with `gnosia` already on for the brand
+ * A system appearance (`system`, `hermes-system`) is what the server cannot
+ * resolve. It is rendered light, with `hermes` already on for the brand
  * palette and `data-theme` naming the mode, and the first thing in `<body>`
  * is a two-line script that adds `dark` when the device prefers it, before
  * anything paints (see `SYSTEM_THEME_SCRIPT` in `@/lib/theme-cookie`).

@@ -251,7 +251,7 @@ revideokc's `narrate` calls manimkc's `lib/narration.py` in manimkc's TTS venv,
 so the narrate profile, the kokoro model and the per-job clip cache are
 manimkc's, reached through `MANIMKC_ROOT` pointing at a read-only view of the
 real checkout. The remotionkc session is moving narration into its own
-package, gnosia-audio, with a JSON CLI; when that lands, every backend's
+package, hermes-audio, with a JSON CLI; when that lands, every backend's
 narrate step becomes one call to it and this decision is replaced. Until then,
 nothing here builds a second narration path.
 
@@ -414,9 +414,9 @@ passes in 21 s.
 | Topic | `topic.yml`, `narration.json` from the brief's lines (one chapter per scene, named `<PREFIX><n>_<Name>` as manimkc names its classes) and `revideokc new`'s stub scene, written by the runner |
 | Ports | Each job takes an even base in 47000 to 48998, the first pair free on both loopback addresses starting from where a hash of its id points, written to `jobs/<id>/ports.json` and into its profile once; the doctor takes a pair in 46990 to 46998. Below the macOS ephemeral range (49152 up), clear of 7250, 5432 and 3000. A pair is held from setup until the job ends and the searches run one at a time, so a revideokc job and a remotionkc job running together never get one pair (open question 1). The wrapper checks both ports before a render and names one that is still held |
 | render profile | D76, with node's binary alone (the spike allowed its whole store directory) and no shell (the spike allowed `/bin/sh`, `/bin/bash` and `/usr/bin/env`; none was needed), the system ffmpeg the CLI masters and tiles with, `(deny file-link)`, and no Python: `build --no-narrate` starts none |
-| narrate profile | node, gnosia-audio's console script and interpreter in revideokc's `.venv`, kokoro's in manimkc's `.venv-tts`, the model; writes the clip cache, the staged clips, the build's work folder and the deliverable's folder (for `sidecars`). gnosia-audio runs on its own environment with `MANIMKC_HOME` at the job's `render/`, so the clip keys are a manimkc job's and the shared cache seeds a revideokc job too. The clip keys run here, since the render profile has no Python |
+| narrate profile | node, hermes-audio's console script and interpreter in revideokc's `.venv`, kokoro's in manimkc's `.venv-tts`, the model; writes the clip cache, the staged clips, the build's work folder and the deliverable's folder (for `sidecars`). hermes-audio runs on its own environment with `MANIMKC_HOME` at the job's `render/`, so the clip keys are a manimkc job's and the shared cache seeds a revideokc job too. The clip keys run here, since the render profile has no Python |
 | gate profile | node, ffmpeg and ffprobe; reads `candidate/` and the TypeScript package; writes the poster |
-| Hard links | refused in every profile: gnosia-audio stages clips with a link when it can, and the runner keeps only single-link files, so the staging copies |
+| Hard links | refused in every profile: hermes-audio stages clips with a link when it can, and the runner keeps only single-link files, so the staging copies |
 | Wrapper | `api`, `lint` (`tsc --noEmit`), `narrate`, `still [frame or 12.5s ...]` (narrate, then `still --no-narrate`), `build` (narrate, `build --no-narrate --workers 2`, then `sidecars` in the narrate profile). The recorded `sceneSha256` is one hash over every source file (`revideokc/source.ts`, the same function compiled into the wrapper) |
 | Gate | Steps 1 to 3 as D77, the parse in the gate profile, the whole source held to the catalog's own size limit (one constant, `video-source-limits.ts`), and the labels looked for only in files `scene.tsx` reaches by its imports (why not per scene: the note in `revideokc/gate.ts`); step 5 copies every source file, each held to the hash it was read with; step 10 is the tool's own (`VideoGateChecks.looked`): a still of every scene, of the source the gate checked, its sheet Read before a later still replaced it, and the build's sheet Read after the build |
 | Manual | `revideokc-video` rewritten for one command, `revideokc api`'s listing from the real checkout, and the doctor's fixture as the worked scene |
@@ -433,7 +433,7 @@ Where this differs from the decisions above, and why:
   stumbles on, or give a 3D move a `hold`, would be worse off than
   manimkc's. Its chapter names and order are checked exactly, and `hold`
   is at most three seconds.
-- **D78 is replaced as it said it would be**: narration is gnosia-audio,
+- **D78 is replaced as it said it would be**: narration is hermes-audio,
   in revideokc's own `.venv`, run by revideokc's `narrate` verb in the
   narrate profile.
 - **A silent revideokc brief is refused** by the validator: revideokc's
@@ -470,7 +470,7 @@ failing without it, under the default `STUDIO_HOME` (inside this repository):
 | Config searches | browserslist, which webpack asks for a target, walks up from the checkout reading every `package.json` to the root; the repository's, refused, ended the bundle with EPERM (the class of revideokc's Puppeteer bug). remotionkc bounds it with `BROWSERSLIST_ROOT_PATH` at the checkout, the same answer as before: no config. Remotion's own `package.json` lookup finds the checkout's copy first, so no `.puppeteerrc.json` analogue is needed |
 | Caches | webpack's cache moved from `node_modules/.cache/webpack` to the data root, but is off in a job (`REMOTIONKC_BUNDLE_CACHE=off`): storing it snapshots every loader's resolution, statting each directory above `node_modules` to the root, and the first refused stat drops the store after the work is spent. A bundle then takes about 6 s where a warm cache took 1.6 s. Bundles and Chrome's profile are under `render/tmp` |
 | Telemetry | none: Remotion sends a usage event only when given a license key, and remotionkc passes none; the profile blocks the network anyway |
-| narrate profile | revideokc's, for the same gnosia-audio in remotionkc's own `.venv`; `/bin/sh` and the shell macOS runs as `sh` are allowed only when uv wrote the console script in its `#!/bin/sh` form, which it does for an interpreter path too long for a shebang (measured: a checkout under the session's temporary directory got it, and narration died on "Failed to exec /bin/bash as variant for /bin/sh") |
+| narrate profile | revideokc's, for the same hermes-audio in remotionkc's own `.venv`; `/bin/sh` and the shell macOS runs as `sh` are allowed only when uv wrote the console script in its `#!/bin/sh` form, which it does for an interpreter path too long for a shebang (measured: a checkout under the session's temporary directory got it, and narration died on "Failed to exec /bin/bash as variant for /bin/sh") |
 | gate profile | revideokc's, but the parse uses the studio's own TypeScript (6), since remotionkc's TypeScript 7 is a native compiler with no JavaScript API; the parse needs only the syntax |
 | Wrapper | `api`, `lint` (the native `tsc`, run directly), `narrate`, `still` (narrate, then `still --no-narrate`), `build` (narrate, `build --no-narrate` at remotionkc's concurrency of three, then `sidecars` in the narrate profile), with revideokc's pipes, held-port check and records |
 | Checkout | `lib/`, `src/`, `tools/`, `package.json`, `tsconfig.json`, `remotion.config.ts` and `requirements-narration.txt` copied; Remotion's markup guides (the `remotion-markup` part of the skill remotionkc vendors) copied to `docs/remotion/` for the agent; `node_modules` and `.venv` linked |

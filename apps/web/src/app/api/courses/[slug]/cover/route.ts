@@ -1,9 +1,9 @@
-import { classifyConnectionFailure, courseCoverBlob, type CourseCoverBlob } from "@gnosia/catalog/state";
-import { COURSE_COVER_TYPES } from "@gnosia/schema/shared";
+import { classifyConnectionFailure, courseCoverBlob, type CourseCoverBlob } from "@hermes/catalog/state";
+import { COURSE_COVER_TYPES } from "@hermes/schema/shared";
 import { NextResponse } from "next/server";
 
 import { blobStoreProblem, type AssetFileProblem } from "@/lib/asset-files";
-import type { RouteProblemCode } from "@gnosia/tutor/asset-problems";
+import type { RouteProblemCode } from "@hermes/tutor/asset-problems";
 import { matchesEtag, problemResponse, serveBlobRange, signedRedirect } from "@/lib/asset-response";
 import { assetBlobStore } from "@/lib/blob-store";
 import { COVER_VERSION_PARAM, coverVersion } from "@/lib/course-summary";

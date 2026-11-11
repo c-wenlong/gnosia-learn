@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { resetRateLimits } from "@gnosia/tutor/guards";
+import { resetRateLimits } from "@hermes/tutor/guards";
 import { BodyTooLarge, handler, MAX_BODY_BYTES, readBodyText, turnRoute } from "./learner-api";
 
 const session = vi.hoisted(() => ({ signedIn: true }));

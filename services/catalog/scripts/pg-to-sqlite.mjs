@@ -2,10 +2,10 @@
 /**
  * One-shot Postgres-to-SQLite port for the catalog (docs/SQLITE-MIGRATION.md).
  *
- *   node services/catalog/scripts/pg-to-sqlite.mjs --from postgres://… --to ~/.gnosia/catalog.db
+ *   node services/catalog/scripts/pg-to-sqlite.mjs --from postgres://… --to ~/.hermes/catalog.db
  *
  * `--from` defaults to DATABASE_URL, `--to` to CATALOG_DB and then
- * $GNOSIA_HOME/catalog.db (`~/.gnosia/catalog.db`). The target file is
+ * $HERMES_HOME/catalog.db (`~/.hermes/catalog.db`). The target file is
  * migrated to head first, so the port reads today's tables and columns
  * straight out of sqlite_master rather than a copy of the schema list.
  *
@@ -22,7 +22,7 @@
  *
  * Values a later Postgres migration renamed are renamed on the way (RENAMES),
  * so a database that never ran that migration still ports: an `asset` from
- * before 0032 says `source_repo = 'self-learn'`, which is `gnosia` now.
+ * before 0032 says `source_repo = 'self-learn'`, which is `hermes` now.
  *
  * `asset.generated_by` is new with the port and backfilled from the `id`'s
  * `tool:` prefix (`manimkc:…` names manimkc, `video` names a studio video,
@@ -46,8 +46,8 @@ const SKIP_TABLES = new Set(["__drizzle_migrations", "catalog_armed_rule"]);
  * what that migration would have done.
  */
 export const RENAMES = [
-  // drizzle/0032_gnosia.sql: the self-learn -> gnosia rename.
-  { table: "asset", column: "source_repo", from: "self-learn", to: "gnosia" },
+  // drizzle/0032_hermes.sql: the self-learn -> hermes rename.
+  { table: "asset", column: "source_repo", from: "self-learn", to: "hermes" },
 ];
 
 /** A value as the target should hold it: a renamed value's new name, anything else unchanged. */
@@ -394,7 +394,7 @@ function fail(message, details = []) {
 async function main() {
   const source = arg("from") ?? process.env.DATABASE_URL;
   if (!source?.startsWith("postgres")) fail("no Postgres URL: pass --from postgres://… or set DATABASE_URL");
-  const home = process.env.GNOSIA_HOME?.trim() || path.join(homedir(), ".gnosia");
+  const home = process.env.HERMES_HOME?.trim() || process.env.GNOSIA_HOME?.trim() || path.join(homedir(), ".hermes");
   const target = path.resolve(arg("to") ?? process.env.CATALOG_DB ?? path.join(home, "catalog.db"));
   if (existsSync(target)) fail(`${target} already exists; the port writes a fresh file, it does not merge`);
 

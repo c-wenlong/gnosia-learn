@@ -78,7 +78,7 @@ export interface Toolchain {
   /** The owner's shared TTS cache, read to seed a job and never written. Null when manimkc cannot say. */
   sharedAudioCache: string | null;
   /**
-   * gnosia-audio, the narration package in `<manimkc>/.venv`, as its
+   * hermes-audio, the narration package in `<manimkc>/.venv`, as its
    * `home --json` answered (narration.ts). Null when it is not installed
    * there, which is `make narration-deps` in the checkout. Optional so a
    * toolchain built by hand (a test's) need not name it; `discoverToolchain`
@@ -305,7 +305,7 @@ export function toolchainProblems(tools: Toolchain): string[] {
   if (tools.venvPython === null) problems.push(`${tools.manimkcRoot}/.venv is missing: run manimkc doctor for the fix`);
   if (tools.ttsPython === null) problems.push(`${tools.manimkcRoot}/.venv-tts is missing, so no narrated video can be voiced`);
   if (tools.venvPython !== null && tools.narration === null) {
-    problems.push(`gnosia-audio, the narration package, does not answer in ${tools.manimkcRoot}/.venv: run make narration-deps there`);
+    problems.push(`hermes-audio, the narration package, does not answer in ${tools.manimkcRoot}/.venv: run make narration-deps there`);
   }
   if (tools.kokoroModel === null) problems.push("the kokoro model is not in the Hugging Face cache, and the narration step never downloads it (V9)");
   if (!/^[A-Za-z0-9/._-]+$/.test(tools.node)) problems.push(`node's path ${JSON.stringify(tools.node)} holds a character the wrapper's first line cannot carry`);

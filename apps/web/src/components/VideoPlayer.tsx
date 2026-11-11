@@ -18,7 +18,7 @@ import {
   type SkipFlash,
   type TranscriptCue,
   type VideoChapter,
-} from "@gnosia/tutor/media";
+} from "@hermes/tutor/media";
 import { TranscriptPanel } from "@/components/TranscriptPanel";
 import { cx } from "@/components/ui/classes";
 import { Tabs, type TabItem } from "@/components/ui/Tabs";

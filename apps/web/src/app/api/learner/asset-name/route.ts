@@ -1,4 +1,4 @@
-import { assetNameTurn } from "@gnosia/tutor/server/learner-writes";
+import { assetNameTurn } from "@hermes/tutor/server/learner-writes";
 
 import { turnRoute } from "@/lib/learner-api";
 
@@ -13,6 +13,6 @@ import { turnRoute } from "@/lib/learner-api";
  * so no import undoes the name.
  *
  * The parse and the write are `assetNameTurn` in
- * `@gnosia/tutor/server/learner-writes`.
+ * `@hermes/tutor/server/learner-writes`.
  */
 export const POST = turnRoute("asset-name", assetNameTurn);

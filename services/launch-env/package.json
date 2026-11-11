@@ -1,16 +1,16 @@
 {
-  "name": "@gnosia/launch-env",
+  "name": "@hermes/launch-env",
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
   "type": "module",
-  "//": "The environment a launcher hands every service it spawns: the web's own (exports, then $GNOSIA_HOME/.env, then apps/web's .env files) with the catalog's file pinned. The desktop shell (apps/desktop's Checkout.swift) runs src/child-env.ts once per launch, so the web server and the studio runner it starts open one catalog file.",
+  "//": "The environment a launcher hands every service it spawns: the web's own (exports, then $HERMES_HOME/.env, then apps/web's .env files) with the catalog's file pinned. The desktop shell (apps/desktop's Checkout.swift) runs src/child-env.ts once per launch, so the web server and the studio runner it starts open one catalog file.",
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run test"
   },
   "dependencies": {
-    "@gnosia/catalog": "*",
+    "@hermes/catalog": "*",
     "@next/env": "16.4.3"
   },
   "devDependencies": {

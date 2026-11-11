@@ -1,6 +1,6 @@
 # Video tools: which one makes this video
 
-gnosia has four tools that turn a narrated script into an MP4, each a
+hermes has four tools that turn a narrated script into an MP4, each a
 submodule under `tools/` with its own CLI and operating manual. They
 share one voice (manimkc's narration layer), one report shape (`topics
 --json`, indexed by one reader in `services/catalog/src/index/video-tool.ts`)
@@ -80,7 +80,7 @@ missing or poor.
 
 ## Shared ground, and what it allows
 
-- **One voice.** All four narrate through gnosia-audio, each pinned in its
+- **One voice.** All four narrate through hermes-audio, each pinned in its
   own `.venv`, with manimkc's voice settings, so all four sound the same and
   share the kokoro clip cache. None of them has a narration layer of its own,
   on purpose.

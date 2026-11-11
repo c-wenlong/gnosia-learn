@@ -4,7 +4,7 @@
 // usage: npm run e2e [-- --keep-db] [-- --headed] [-- --copy]
 //
 // What it does, in order:
-//   1. Builds `gnosia_e2e_<pid>_<time>`: an empty database, migrated,
+//   1. Builds `hermes_e2e_<pid>_<time>`: an empty database, migrated,
 //      `catalog import seed/`, all six types flipped (the app reads content
 //      from the database only), and one `learn observe` so a review card is
 //      due. The default since phase 3 of docs/CONTENT-MIGRATION.md removed
@@ -14,7 +14,7 @@
 //      SQLite backup API. Every flow below that grades (a review rating, a
 //      session answer, Mark watched, a settings change) writes real rows, and
 //      AGENTS.md is plain that anything which grades runs against a copy,
-//      never `gnosia`. Either database's file is removed in `finally`,
+//      never `hermes`. Either database's file is removed in `finally`,
 //      on a failure and on Ctrl-C too.
 //   2. Starts `next start` from `apps/web/` on a free port, pointed at the copy,
 //      with a fixed test password and secret and with every provider key blank.
@@ -28,7 +28,7 @@
 // Options:
 //   --keep-db    leave the copy behind and print its name, to look at afterwards
 //   --headed     show the browser instead of running headless
-//   --copy       copy gnosia (or E2E_TEMPLATE_DB) rather than build from
+//   --copy       copy hermes (or E2E_TEMPLATE_DB) rather than build from
 //                seed/. Built from the seed, which has no videos (D7), the
 //                video step is skipped and says so, and the blob store
 //                is a temp directory.
@@ -80,23 +80,23 @@ if (flags.size > 0 || (SEED_FLAG && COPY)) {
   process.exit(2);
 }
 // Built from seed/ unless a copy was asked for: the repository has held no
-// content of its own since the cut-over, and gnosia is the owner's.
+// content of its own since the cut-over, and hermes is the owner's.
 const SEED = !COPY;
 
 /** The password the server is started with (scripts/lib/app-harness.mjs). A test value only. */
 const PASSWORD = TEST_PASSWORD;
 // The database file copied with --copy. The catalog's own by default
-// ($GNOSIA_HOME/catalog.db, else ~/.gnosia); E2E_TEMPLATE_DB names
+// ($HERMES_HOME/catalog.db, else ~/.hermes); E2E_TEMPLATE_DB names
 // another, such as a scratch copy flipped for a rehearsal, since the app
 // reads content from the database only and an unflipped template fails every
 // content page.
 const TEMPLATE_DB =
   process.env.E2E_TEMPLATE_DB ||
-  join(process.env.GNOSIA_HOME ?? join(homedir(), '.gnosia'), 'catalog.db');
+  join(process.env.HERMES_HOME ?? join(homedir(), '.hermes'), 'catalog.db');
 // The pid and the start time, so a later run that happens to get the same pid
 // can never collide with (or remove) a copy an earlier run kept with
 // --keep-db.
-const COPY_DB = join(tmpdir(), `gnosia_e2e_${process.pid}_${Date.now().toString(36)}.db`);
+const COPY_DB = join(tmpdir(), `hermes_e2e_${process.pid}_${Date.now().toString(36)}.db`);
 
 // ---------------------------------------------------------------------------
 // Prerequisites. Each one names what is missing and how to get it, then exits 2.
@@ -125,13 +125,13 @@ if (chromiumPath !== undefined && !existsSync(chromiumPath)) {
 
 const { chromium } = await import(pathToFileURL(corePath).href);
 
-const OUT = mkdtempSync(join(tmpdir(), 'gnosia-e2e-'));
+const OUT = mkdtempSync(join(tmpdir(), 'hermes-e2e-'));
 const SERVER_LOG = join(OUT, 'server.log');
 console.log(`e2e: screenshots and the server log go to ${OUT}`);
 
 /**
  * With --seed, the blob store the import puts the seed's diagram SVG in, and
- * the server reads it from: under OUT, never `~/.gnosia`. And an empty
+ * the server reads it from: under OUT, never `~/.hermes`. And an empty
  * manimkc root, so the import runs no manimkc source: the seed maps no topic
  * folder (it has no videos), and a real checkout's renders would be refused
  * as folders no topic maps. The same empty directory is the remotionkc,

@@ -1,4 +1,4 @@
-import { draft } from "@gnosia/schema";
+import { draft } from "@hermes/schema";
 import { and, desc, eq, isNotNull, ne, or, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";

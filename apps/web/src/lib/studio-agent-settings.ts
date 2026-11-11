@@ -5,7 +5,7 @@ import {
   studioAgentPreference,
   type StudioAgentPreference,
   type StudioAgentPreferenceKey,
-} from "@gnosia/schema/shared";
+} from "@hermes/schema/shared";
 
 import type { FilterOption } from "@/components/ui/filter-menu";
 import { modelName } from "@/lib/model-name";

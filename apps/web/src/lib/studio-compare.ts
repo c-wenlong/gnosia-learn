@@ -13,7 +13,7 @@
  * number beside them comes from the tool.
  */
 
-import { formatBytes } from "@gnosia/tutor/asset-meta";
+import { formatBytes } from "@hermes/tutor/asset-meta";
 
 /** Mirrors `services/studio/src/diagram/compare.ts`. Structural, not imported. */
 export interface LintRef {

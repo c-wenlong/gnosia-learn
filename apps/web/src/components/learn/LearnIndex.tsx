@@ -18,13 +18,13 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SearchField } from "@/components/ui/SearchField";
 import { Callout } from "@/components/ui/Callout";
 import { SegmentedControl, type SegmentItem } from "@/components/ui/SegmentedControl";
-import { courseScope, neighbourhood, type GraphEdge, type GraphNode } from "@gnosia/tutor/concept-graph";
+import { courseScope, neighbourhood, type GraphEdge, type GraphNode } from "@hermes/tutor/concept-graph";
 import type { DomainMapData } from "@/lib/domain-map";
 import { domainOfConcepts, matchCounts } from "@/lib/domain-view";
 import { firstMatch } from "@/lib/map-reading";
 import { useHydrated } from "@/lib/use-hydrated";
-import { MASTERY_BUCKET_LABEL } from "@gnosia/tutor/mastery-bucket";
-import { LEECH_LABEL } from "@gnosia/tutor/review-core";
+import { MASTERY_BUCKET_LABEL } from "@hermes/tutor/mastery-bucket";
+import { LEECH_LABEL } from "@hermes/tutor/review-core";
 import {
   bucketCounts,
   indexSearch,

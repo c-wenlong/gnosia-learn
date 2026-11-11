@@ -1,4 +1,4 @@
-import { STUDIO_OWNER_HEADER } from "@gnosia/schema/shared";
+import { STUDIO_OWNER_HEADER } from "@hermes/schema/shared";
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -84,7 +84,7 @@ describe("/studio/api/*", () => {
         "last-event-id": "7",
         "if-none-match": '"abc"',
         authorization: "Bearer stolen",
-        cookie: "gnosia_session=x",
+        cookie: "hermes_session=x",
         "x-forwarded-for": "10.0.0.1",
         "x-forwarded-host": "evil.example",
         "proxy-authorization": "x",

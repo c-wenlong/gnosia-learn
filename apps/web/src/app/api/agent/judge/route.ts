@@ -4,7 +4,7 @@ import { tutorDeps, turnResponse } from "@/lib/agent/env";
 import { CHAT_RATE_LIMIT, enforceRateLimit, enforceSameOrigin } from "@/lib/agent/guard";
 import { AGENT_BODY_LIMITS, readAgentBody } from "@/lib/agent/body";
 import { requestOwner } from "@/lib/learner-api";
-import { judgeTurn, validateJudgeBody } from "@gnosia/tutor/server/turns";
+import { judgeTurn, validateJudgeBody } from "@hermes/tutor/server/turns";
 
 export const runtime = "nodejs";
 
@@ -21,7 +21,7 @@ export const runtime = "nodejs";
  * nothing: only the learner's tap writes, through `POST /api/learner/observe`.
  *
  * The turn itself — the workspace read, the judge prompt, the model chain and
- * the reply shape — is `judgeTurn` in `@gnosia/tutor/server`. This file
+ * the reply shape — is `judgeTurn` in `@hermes/tutor/server`. This file
  * keeps the request-side guards, and answers the turn's own validation
  * (`validateJudgeBody`) before the limiter is touched.
  */

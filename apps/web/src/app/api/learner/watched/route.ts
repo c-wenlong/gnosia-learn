@@ -1,4 +1,4 @@
-import { watchedTurn } from "@gnosia/tutor/server/learner-writes";
+import { watchedTurn } from "@hermes/tutor/server/learner-writes";
 
 import { turnRoute } from "@/lib/learner-api";
 
@@ -16,6 +16,6 @@ import { turnRoute } from "@/lib/learner-api";
  * `StateError`, which the shared handler turns into a 400.
  *
  * The parse and the write are `watchedTurn` in
- * `@gnosia/tutor/server/learner-writes`.
+ * `@hermes/tutor/server/learner-writes`.
  */
 export const POST = turnRoute("watched", watchedTurn);

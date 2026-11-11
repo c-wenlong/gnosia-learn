@@ -60,14 +60,14 @@ const { draftTranscriptPath } = await import("../src/paths");
 type DraftsT = InstanceType<typeof Drafts>;
 const ok = (json: unknown = {}) => ({ ok: true, json, error: null, offline: false });
 
-/** gnosia-audio's answer, with a pronunciation table that spells out CPU and nothing this suite flags. */
+/** hermes-audio's answer, with a pronunciation table that spells out CPU and nothing this suite flags. */
 const FACTS = {
   version: "0.1.0",
   charsPerSecond: 15.2,
   leadIn: 0.2,
   tail: 0.4,
   spoken: ["CPU", "API"],
-  data: { spoken: "/venv/gnosia_audio/data/spoken.json", timing: "/venv/gnosia_audio/data/timing.json" },
+  data: { spoken: "/venv/hermes_audio/data/spoken.json", timing: "/venv/hermes_audio/data/timing.json" },
 };
 
 /** The fixture's narrated brief with `first` and `second` as the two lines' openings. */
@@ -244,7 +244,7 @@ describe("the abbreviation note, end to end", () => {
     expect(drafts.get(record.id)?.slots?.video?.abbreviationsTold).toEqual(["ACL", "TCP"]);
   });
 
-  it("says nothing before gnosia-audio answers, and tells the next turn once it has", async () => {
+  it("says nothing before hermes-audio answers, and tells the next turn once it has", async () => {
     keepNarrationFacts(null);
     await fake.script([{ text: proposing(ACL_TCP) }, { text: "Fine." }, { text: "Fine again." }]);
     const { record } = await drafts.create({});

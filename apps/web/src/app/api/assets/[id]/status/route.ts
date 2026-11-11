@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { posterSource, resolveAsset, type AssetSourceResult } from "@/lib/asset-files";
 import { logLookupFailure } from "@/lib/asset-response";
-import type { RouteProblemCode } from "@gnosia/tutor/asset-problems";
+import type { RouteProblemCode } from "@hermes/tutor/asset-problems";
 import { unauthenticated } from "@/lib/learner-api";
 import { withLearnerStore } from "@/lib/learner-store";
 import { NoOwnerError } from "@/lib/owner";

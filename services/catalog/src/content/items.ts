@@ -7,7 +7,7 @@ import {
   LOCAL_LEARNER_ID,
   progress,
   recap,
-} from "@gnosia/schema";
+} from "@hermes/schema";
 import { and, eq, getTableColumns, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import type { SQLiteTable } from "drizzle-orm/sqlite-core";
 

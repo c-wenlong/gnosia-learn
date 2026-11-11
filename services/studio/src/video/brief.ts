@@ -1,4 +1,4 @@
-import { isNarratedVoice, narrationSeconds, silentSeconds, SILENT_VOICE, VIDEO_OVER_SPEECH } from "@gnosia/schema/shared";
+import { isNarratedVoice, narrationSeconds, silentSeconds, SILENT_VOICE, VIDEO_OVER_SPEECH } from "@hermes/schema/shared";
 
 import { agentModelName, BriefError, SLUG_PATTERN, type Vocabulary } from "../diagram/brief";
 import { charsPerSecond } from "./narration";
@@ -88,7 +88,7 @@ export function predictedSeconds(brief: Pick<VideoBrief, "voice" | "scenes">): n
 
 /** Seconds of video the given narration lines predict. */
 export function secondsForLines(lines: readonly string[]): number {
-  // The speech rate is gnosia-audio's (its data/timing.json, read through
+  // The speech rate is hermes-audio's (its data/timing.json, read through
   // `home --json` in narration.ts): the median of manimkc's kokoro builds.
   return narrationSeconds(lines, charsPerSecond());
 }

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { checkBlockText, choiceAnswerText, readCheckBlock, recallAnswerText } from "@gnosia/tutor/check-block";
+import { checkBlockText, choiceAnswerText, readCheckBlock, recallAnswerText } from "@hermes/tutor/check-block";
 
 /**
  * The concept tutor's chat checks, as worked cases (S9-01): each `check`

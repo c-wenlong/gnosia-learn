@@ -19,7 +19,7 @@ import {
   type LearnerState,
   type ThemeMode,
   type UserResource,
-} from "@gnosia/schema/shared";
+} from "@hermes/schema/shared";
 
 import {
   addUserResource,
@@ -34,7 +34,7 @@ import {
   setTopicCompleted,
 } from "@/lib/storage";
 import { randomToken } from "@/lib/random-token";
-import { ownValue } from "@gnosia/tutor/own-key";
+import { ownValue } from "@hermes/tutor/own-key";
 import { announceVisitStored } from "@/lib/recent-client";
 import { withDeadline } from "@/lib/send-json";
 import { applyThemeToDocument, followTheme, writeThemeCookie } from "@/lib/theme-cookie";
@@ -201,7 +201,7 @@ interface Kept extends Keep {
  * box when it loads, the old shared `OUTBOX_KEY` included, under a lock
  * (`takeOutboxesLocked`).
  */
-export const OUTBOX_KEY = "gnosia:learner-outbox";
+export const OUTBOX_KEY = "hermes:learner-outbox";
 const OUTBOX_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 /** A page's own box: a fresh id per page, so a duplicated tab does not share one. */

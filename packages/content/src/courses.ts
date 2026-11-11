@@ -128,7 +128,7 @@ export interface LoadCoursesOptions extends LoadOptions {
 
 /**
  * The image types a cover file may be, by extension: the same closed list as
- * `COURSE_COVER_TYPES` in `@gnosia/schema`, which this package does not
+ * `COURSE_COVER_TYPES` in `@hermes/schema`, which this package does not
  * import; the catalog's export-import suite holds the two equal. `catalog course cover` decides the type from the bytes; the export
  * names the file by it.
  */

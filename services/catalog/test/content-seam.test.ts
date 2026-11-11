@@ -13,7 +13,7 @@ import {
   progress,
   recap,
   topic,
-} from "@gnosia/schema";
+} from "@hermes/schema";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -223,7 +223,7 @@ describe.skipIf(!reachable.ok)("the expand migration", () => {
     }
   }, 60_000);
 
-  it("applies to a copy of the local gnosia database", async (ctx) => {
+  it("applies to a copy of the local hermes database", async (ctx) => {
     // The owner's real data, read only as a file to copy. Absent (CI), empty,
     // or just never migrated: each skips with the reason. Nothing here writes
     // the owner's file; every check and write is on the copy.
@@ -234,14 +234,14 @@ describe.skipIf(!reachable.ok)("the expand migration", () => {
       copyFileSync(source, scratch.url);
       const copy = connect({ url: scratch.url, copyOk: true });
       try {
-        // A file with no catalog in it is not a local gnosia to migrate a
+        // A file with no catalog in it is not a local hermes to migrate a
         // copy of: there is nothing for the migration to carry over, and the
         // counts below would have no table to read.
         const catalog = await copy.db.execute<{ name: string | null }>(
           sql`select name from sqlite_master where type = 'table' and name = 'topic'`,
         );
         if (catalog.rows[0]?.name == null) {
-          ctx.skip("gnosia holds no catalog (no topic table): it was never migrated, as on CI");
+          ctx.skip("hermes holds no catalog (no topic table): it was never migrated, as on CI");
         }
         const before = await copy.db.execute<{ n: number }>(sql`select count(*) as n from topic`);
         // The SQLite journal is consolidated: a copy whose `__drizzle_migrations`

@@ -8,7 +8,7 @@ import {
   asThemeMode,
   type ThemeMode,
   type UserResource,
-} from "@gnosia/schema";
+} from "@hermes/schema";
 
 import type { CatalogDatabase } from "../db";
 import { readAvatar, readDisplayName } from "./learner";

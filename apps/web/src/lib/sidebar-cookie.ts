@@ -9,7 +9,7 @@
 
 import { writeCookie } from "@/lib/client-cookie";
 
-export const SIDEBAR_COOKIE = "gnosia-sidebar";
+export const SIDEBAR_COOKIE = "hermes-sidebar";
 
 /** A year, as the theme cookie. */
 const MAX_AGE = 60 * 60 * 24 * 365;

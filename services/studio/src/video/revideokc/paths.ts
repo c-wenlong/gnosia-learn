@@ -8,7 +8,7 @@ import { moduleOf, STUDIO_DOMAIN, type VideoPaths } from "../paths";
  *
  * The workspace is a manimkc job's, field for field (`../paths.ts`), so the
  * runner, the gate and Accept read it unchanged: `render/` is the data root
- * (`REVIDEOKC_HOME`, and `MANIMKC_HOME` for gnosia-audio, whose clip cache is
+ * (`REVIDEOKC_HOME`, and `MANIMKC_HOME` for hermes-audio, whose clip cache is
  * then `render/cache/audio`, the same `audio` a manimkc job has), and
  * revideokc's `out/<topic>/<name>.mp4` with its three sidecars lands exactly
  * where a manimkc deliverable does, since both name the file after the slug

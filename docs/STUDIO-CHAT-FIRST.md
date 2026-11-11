@@ -786,7 +786,7 @@ own, a tile's panel, the settings, an Extend press and a video's preview
 full-screen conversation once its draft exists.
 
 From 768px up the sidebar folds to a 60px rail of icons, as ChatGPT's does,
-and remembers that in a cookie (`gnosia-sidebar`, D84), so the first paint
+and remembers that in a cookie (`hermes-sidebar`, D84), so the first paint
 has the right width. Resting the mouse on the rail for a moment slides the
 whole sidebar out over the page, without moving it, and moving off slides it
 back; the fold button pressed while it is out keeps it open. (D83 built this

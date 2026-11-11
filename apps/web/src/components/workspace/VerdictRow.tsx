@@ -4,8 +4,8 @@ import { Button } from "@/components/ui/Button";
 import { cx, linkClasses } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
 import { ErrorText } from "@/components/ui/ErrorText";
-import { formatInterval } from "@gnosia/tutor/review-core";
-import { recordedCard, recordedLine, type RecordedResult, type Verdict } from "@gnosia/tutor/tutor-check";
+import { formatInterval } from "@hermes/tutor/review-core";
+import { recordedCard, recordedLine, type RecordedResult, type Verdict } from "@hermes/tutor/tutor-check";
 
 /**
  * The row under a check the learner answered in the tutor chat (R2 of

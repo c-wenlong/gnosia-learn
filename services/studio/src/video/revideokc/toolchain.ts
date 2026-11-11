@@ -16,7 +16,7 @@ import { discoverToolchain, foreignLibs, programAt, toolchainProblems, type Prog
  * cache it seeds from, ffmpeg and ffprobe, the narration facts the brief's
  * length is predicted with. Its own half is the revideokc checkout: Node
  * modules (Revideo, Vite, puppeteer, TypeScript, Revideo's own ffmpeg and
- * ffprobe), the `.venv` gnosia-audio is installed in, and a Chrome.
+ * ffprobe), the `.venv` hermes-audio is installed in, and a Chrome.
  *
  * Nothing here reads a file an agent wrote.
  */
@@ -26,11 +26,11 @@ export interface RevideokcTools {
   root: string;
   /** `<root>/node_modules`, resolved, or null. Linked into each job read-only. */
   nodeModules: string | null;
-  /** `<root>/.venv`, resolved, or null: where gnosia-audio is installed (`npm run narration-deps`). */
+  /** `<root>/.venv`, resolved, or null: where hermes-audio is installed (`npm run narration-deps`). */
   venv: string | null;
-  /** `<root>/.venv/bin/python`: the interpreter gnosia-audio runs on, for `narrate`, `sidecars` and the clip keys. */
-  gnosiaPython: Program | null;
-  /** The shells gnosia-audio's console script needs, resolved: none unless uv wrote it in its `#!/bin/sh` form (`../script-shells.ts`). */
+  /** `<root>/.venv/bin/python`: the interpreter hermes-audio runs on, for `narrate`, `sidecars` and the clip keys. */
+  hermesPython: Program | null;
+  /** The shells hermes-audio's console script needs, resolved: none unless uv wrote it in its `#!/bin/sh` form (`../script-shells.ts`). */
   scriptShells: string[];
   /** The Chrome binary puppeteer drives, resolved, and the app bundle (or install directory) it runs its helpers from. */
   chrome: { binary: string; bundle: string } | null;
@@ -148,11 +148,11 @@ function packageVersion(nodeModules: string | null, name: string): string | null
   }
 }
 
-/** Whether gnosia-audio is installed in the venv: its package directory in some site-packages. */
-function gnosiaInstalled(venv: string | null): boolean {
+/** Whether hermes-audio is installed in the venv: its package directory in some site-packages. */
+function hermesInstalled(venv: string | null): boolean {
   if (venv === null) return false;
   try {
-    return readdirSync(path.join(venv, "lib")).some((python) => existsSync(path.join(venv, "lib", python, "site-packages", "gnosia_audio", "cli.py")));
+    return readdirSync(path.join(venv, "lib")).some((python) => existsSync(path.join(venv, "lib", python, "site-packages", "hermes_audio", "cli.py")));
   } catch {
     return false;
   }
@@ -189,8 +189,8 @@ export function discoverRevideokc(): Omit<RevideokcTools, "libs"> {
     root,
     nodeModules,
     venv,
-    gnosiaPython: venv !== null && gnosiaInstalled(venv) ? programAt(path.join(root, ".venv", "bin", "python")) : null,
-    scriptShells: venv === null ? [] : scriptShells(path.join(venv, "bin", "gnosia-audio")),
+    hermesPython: venv !== null && hermesInstalled(venv) ? programAt(path.join(root, ".venv", "bin", "python")) : null,
+    scriptShells: venv === null ? [] : scriptShells(path.join(venv, "bin", "hermes-audio")),
     chrome: findChrome(),
     ffmpegInstaller: pkg("@ffmpeg-installer"),
     ffprobeInstaller: pkg("@ffprobe-installer"),
@@ -224,7 +224,7 @@ export async function discoverRevideokcToolchain(): Promise<RevideokcToolchain> 
   const own = discoverRevideokc();
   const libs =
     process.platform === "linux"
-      ? await foreignLibs([own.gnosiaPython?.real ?? null, own.chrome?.binary ?? null, ...executablesIn(own.ffmpegInstaller), ...executablesIn(own.ffprobeInstaller)])
+      ? await foreignLibs([own.hermesPython?.real ?? null, own.chrome?.binary ?? null, ...executablesIn(own.ffmpegInstaller), ...executablesIn(own.ffprobeInstaller)])
       : [];
   return { ...(await discoverToolchain()), revideokc: { ...own, libs } };
 }
@@ -250,7 +250,7 @@ function atLeast(version: string, major: number, minor: number): boolean {
  */
 export function revideokcProblems(tools: Toolchain): string[] {
   const shared = toolchainProblems(tools).filter(
-    (problem) => !/\.venv is missing|python3 is not on PATH|gnosia-audio, the narration package, does not answer/.test(problem),
+    (problem) => !/\.venv is missing|python3 is not on PATH|hermes-audio, the narration package, does not answer/.test(problem),
   );
   const own = (tools as Partial<RevideokcToolchain>).revideokc;
   if (own === undefined) return [...shared, "revideokc's half of the toolchain was never discovered"];
@@ -269,7 +269,7 @@ export function revideokcProblems(tools: Toolchain): string[] {
     if (own.typescript === null) problems.push("typescript is missing from node_modules, so a scene cannot be checked");
   }
   if (own.chrome === null) problems.push("no Chrome or Chromium was found (REVIDEOKC_CHROME names one), and Revideo renders in one");
-  if (own.gnosiaPython === null) problems.push(`gnosia-audio is not installed in ${own.root}/.venv: run npm run narration-deps there`);
+  if (own.hermesPython === null) problems.push(`hermes-audio is not installed in ${own.root}/.venv: run npm run narration-deps there`);
   if (own.chrome !== null && /["\\\n\r]/.test(own.chrome.binary)) problems.push("the Chrome binary's path holds a character a sandbox profile cannot carry");
   return problems;
 }

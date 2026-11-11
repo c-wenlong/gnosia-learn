@@ -2,8 +2,8 @@ import { constants as fsConstants, readFileSync, realpathSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import type { BlobStore } from "@gnosia/blob";
-import { sessionLogEntry } from "@gnosia/schema";
+import type { BlobStore } from "@hermes/blob";
+import { sessionLogEntry } from "@hermes/schema";
 import { sql } from "drizzle-orm";
 
 import { openBlobStore, readBlob } from "../content/blob";
@@ -123,7 +123,7 @@ const KEPT = /\.kept-\d+(?:-\d+)?\.md$/;
 
 const README_TEXT = `# Notes vault
 
-This folder is a copy of the notes and session logs in the gnosia database, made by \`npm run learn -- vault pull\`, for reading and editing in Obsidian.
+This folder is a copy of the notes and session logs in the hermes database, made by \`npm run learn -- vault pull\`, for reading and editing in Obsidian.
 \`vault pull\` brings it up to date and never overwrites a file you edited: when the database moved on, its version lands beside yours as \`<name>.incoming.md\`.
 \`vault push\` writes your edited notes back, one revision each; a note that changed in the database since your pull is refused, with its current version left as \`<name>.conflict.md\`.
 To settle an \`.incoming\` or \`.conflict\` copy, merge what you want of it into your note, delete the copy, and push.
@@ -136,7 +136,7 @@ const LOG_REFUSAL =
   "a correction belongs in the note it touched. Delete this copy and run learn vault pull to put the database's back.";
 
 /**
- * `$GNOSIA_HOME/vault`, else `~/.gnosia/vault`: the same data root
+ * `$HERMES_HOME/vault`, else `~/.hermes/vault`: the same data root
  * the blob store reads, resolved by the same rules (a leading `~`, and a
  * relative value refused), so one variable moves both.
  */
@@ -180,7 +180,7 @@ export function resolveVaultDir(given: string | undefined): string {
 }
 
 /** The root `package.json`'s name, which every checkout of this repository carries, now and before the rename. */
-const REPOSITORY_NAMES = new Set(["gnosia", "self-learn"]);
+const REPOSITORY_NAMES = new Set(["hermes", "self-learn"]);
 
 /** The nearest folder at or above `dir` whose `package.json` names this repository, or null. */
 function checkoutAbove(dir: string): string | null {

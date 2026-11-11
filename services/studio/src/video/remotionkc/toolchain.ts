@@ -19,7 +19,7 @@ export { scriptShells };
  * half is the remotionkc checkout: Node modules (Remotion, its compositor
  * with its own ffmpeg, webpack's esbuild, TypeScript 7's native `tsc`), the
  * Chrome Headless Shell Remotion downloads into `node_modules/.remotion`
- * (`npx remotion browser ensure`), and the `.venv` gnosia-audio is
+ * (`npx remotion browser ensure`), and the `.venv` hermes-audio is
  * installed in.
  *
  * Which Chrome: the Headless Shell, never the system Chrome. It is the build
@@ -39,12 +39,12 @@ export interface RemotionkcTools {
   root: string;
   /** `<root>/node_modules`, resolved, or null. Linked into each job read-only. */
   nodeModules: string | null;
-  /** `<root>/.venv`, resolved, or null: where gnosia-audio is installed (`npm run narration-deps`). */
+  /** `<root>/.venv`, resolved, or null: where hermes-audio is installed (`npm run narration-deps`). */
   venv: string | null;
-  /** `<root>/.venv/bin/python`: the interpreter gnosia-audio runs on, for `narrate`, `sidecars` and the clip keys. */
-  gnosiaPython: Program | null;
+  /** `<root>/.venv/bin/python`: the interpreter hermes-audio runs on, for `narrate`, `sidecars` and the clip keys. */
+  hermesPython: Program | null;
   /**
-   * The shells gnosia-audio's console script needs, resolved: none when its
+   * The shells hermes-audio's console script needs, resolved: none when its
    * first line names the venv's python, `/bin/sh` and the shell macOS runs
    * as `sh` (`/private/var/select/sh`, bash) when uv wrote the `#!/bin/sh`
    * form it uses for an interpreter path too long for a shebang (measured: a
@@ -137,11 +137,11 @@ function packageVersion(nodeModules: string | null, name: string): string | null
   }
 }
 
-/** Whether gnosia-audio is installed in the venv: its package directory in some site-packages. */
-function gnosiaInstalled(venv: string | null): boolean {
+/** Whether hermes-audio is installed in the venv: its package directory in some site-packages. */
+function hermesInstalled(venv: string | null): boolean {
   if (venv === null) return false;
   try {
-    return readdirSync(path.join(venv, "lib")).some((python) => existsSync(path.join(venv, "lib", python, "site-packages", "gnosia_audio", "cli.py")));
+    return readdirSync(path.join(venv, "lib")).some((python) => existsSync(path.join(venv, "lib", python, "site-packages", "hermes_audio", "cli.py")));
   } catch {
     return false;
   }
@@ -196,8 +196,8 @@ export function discoverRemotionkc(): Omit<RemotionkcTools, "libs"> {
     root,
     nodeModules,
     venv,
-    gnosiaPython: venv !== null && gnosiaInstalled(venv) ? programAt(path.join(root, ".venv", "bin", "python")) : null,
-    scriptShells: venv === null ? [] : scriptShells(path.join(venv, "bin", "gnosia-audio")),
+    hermesPython: venv !== null && hermesInstalled(venv) ? programAt(path.join(root, ".venv", "bin", "python")) : null,
+    scriptShells: venv === null ? [] : scriptShells(path.join(venv, "bin", "hermes-audio")),
     headlessShell: findHeadlessShell(nodeModules),
     compositor,
     esbuild: inModules("@esbuild", target, "bin", "esbuild"),
@@ -232,7 +232,7 @@ export async function discoverRemotionkcToolchain(): Promise<RemotionkcToolchain
   const own = discoverRemotionkc();
   const libs =
     process.platform === "linux"
-      ? await foreignLibs([own.gnosiaPython?.real ?? null, own.headlessShell?.binary ?? null, own.esbuild, own.tsc, ...executablesIn(own.compositor)])
+      ? await foreignLibs([own.hermesPython?.real ?? null, own.headlessShell?.binary ?? null, own.esbuild, own.tsc, ...executablesIn(own.compositor)])
       : [];
   return { ...(await discoverToolchain()), remotionkc: { ...own, libs } };
 }
@@ -257,7 +257,7 @@ function atLeast(version: string, major: number, minor: number): boolean {
  */
 export function remotionkcProblems(tools: Toolchain): string[] {
   const shared = toolchainProblems(tools).filter(
-    (problem) => !/\.venv is missing|python3 is not on PATH|gnosia-audio, the narration package, does not answer/.test(problem),
+    (problem) => !/\.venv is missing|python3 is not on PATH|hermes-audio, the narration package, does not answer/.test(problem),
   );
   const own = (tools as Partial<RemotionkcToolchain>).remotionkc;
   if (own === undefined) return [...shared, "remotionkc's half of the toolchain was never discovered"];
@@ -278,6 +278,6 @@ export function remotionkcProblems(tools: Toolchain): string[] {
     if (own.tsc === null) problems.push("TypeScript's native compiler for this platform is missing from node_modules, so a composition cannot be checked");
   }
   if (own.parser === null) problems.push("the studio's own typescript package is missing, so the gate cannot parse a composition: run npm ci in this repository");
-  if (own.gnosiaPython === null) problems.push(`gnosia-audio is not installed in ${own.root}/.venv: run npm run narration-deps there`);
+  if (own.hermesPython === null) problems.push(`hermes-audio is not installed in ${own.root}/.venv: run npm run narration-deps there`);
   return problems;
 }

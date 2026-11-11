@@ -21,7 +21,7 @@ import {
 
 const line = (characters: number) => "x".repeat(characters);
 
-/** The rate health's `video.narration` reports, gnosia-audio's timing.json figure. */
+/** The rate health's `video.narration` reports, hermes-audio's timing.json figure. */
 const RATE = 15.2;
 
 const BRIEF: VideoBrief = {

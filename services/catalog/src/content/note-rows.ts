@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { concept, conceptPrerequisite, LOCAL_LEARNER_ID } from "@gnosia/schema";
+import { concept, conceptPrerequisite, LOCAL_LEARNER_ID } from "@hermes/schema";
 import { and, asc, eq, inArray, isNull, max } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
@@ -242,7 +242,7 @@ export async function writeNoteRow(db: CatalogDatabase, input: NoteWrite): Promi
           contentHash: hash,
           bytes: rendered.length,
           title: fields.title,
-          sourceRepo: "gnosia",
+          sourceRepo: "hermes",
         },
         links: { asset_concept: [{ conceptSlug: slug }], asset_topic: [{ topicSlug }] },
       },

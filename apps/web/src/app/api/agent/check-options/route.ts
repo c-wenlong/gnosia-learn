@@ -4,7 +4,7 @@ import { tutorDeps, turnResponse } from "@/lib/agent/env";
 import { CHAT_RATE_LIMIT, enforceRateLimit, enforceSameOrigin } from "@/lib/agent/guard";
 import { AGENT_BODY_LIMITS, readAgentBody } from "@/lib/agent/body";
 import { requestOwner } from "@/lib/learner-api";
-import { checkOptionsTurn, validateCheckOptionsBody } from "@gnosia/tutor/server/turns";
+import { checkOptionsTurn, validateCheckOptionsBody } from "@hermes/tutor/server/turns";
 
 export const runtime = "nodejs";
 
@@ -17,7 +17,7 @@ export const runtime = "nodejs";
  *
  * The turn itself (the stored row, the prompt, the model chain, the parser,
  * the one generation per check at a time) is `checkOptionsTurn` in
- * `@gnosia/tutor/server`. This file keeps the request-side guards, as the
+ * `@hermes/tutor/server`. This file keeps the request-side guards, as the
  * session question's route does, and answers the turn's own validation
  * before the limiter is touched.
  */

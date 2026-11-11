@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 
-import { type BlobStore, BlobIntegrityError, fsStore, key as blobKey } from "@gnosia/blob";
-import { blobObject } from "@gnosia/schema";
+import { type BlobStore, BlobIntegrityError, fsStore, key as blobKey } from "@hermes/blob";
+import { blobObject } from "@hermes/schema";
 import { eq, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
@@ -39,8 +39,8 @@ import { inTransaction } from "../db";
  * in a rolling 24 hours. Both unset by default, which is no cap, and that is
  * today: one owner, uploading from their own laptop.
  */
-export const OWNER_BYTES_CAP_ENV = "GNOSIA_OWNER_BYTES_CAP";
-export const OWNER_UPLOADS_PER_DAY_ENV = "GNOSIA_OWNER_UPLOADS_PER_DAY";
+export const OWNER_BYTES_CAP_ENV = "HERMES_OWNER_BYTES_CAP";
+export const OWNER_UPLOADS_PER_DAY_ENV = "HERMES_OWNER_UPLOADS_PER_DAY";
 
 /** The window the uploads cap counts over. Rolling, never a calendar day, as the studio's spend cap. */
 export const UPLOAD_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -96,7 +96,7 @@ export function ownerCapsOrError(env?: Record<string, string | undefined>): Owne
 
 /**
  * The caps in force, from the environment, `services/catalog/.env` included,
- * where `GNOSIA_HOME` is set too. Zero is a real cap: nothing more for
+ * where `HERMES_HOME` is set too. Zero is a real cap: nothing more for
  * that owner.
  */
 export function ownerCaps(env?: Record<string, string | undefined>): OwnerCaps {
@@ -235,10 +235,10 @@ export type CatalogBlobStore = BlobStore & { readonly root: string };
 
 /**
  * The one place the catalog chooses a store: the `fs` adapter under
- * `blobRoot()` (`$GNOSIA_HOME/blobs`), until 0.1's cloud adapter. Every
+ * `blobRoot()` (`$HERMES_HOME/blobs`), until 0.1's cloud adapter. Every
  * command that writes or audits blobs opens it here, so the store a command
  * writes is the one the web app serves; a scratch run points
- * `GNOSIA_HOME` somewhere else, and both follow.
+ * `HERMES_HOME` somewhere else, and both follow.
  */
 export function openBlobStore(): CatalogBlobStore {
   const root = blobRoot();

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { CHAT_RATE_LIMIT, enforceRateLimit, enforceSameOrigin } from "@/lib/agent/guard";
 import { tutorDeps, turnResponse } from "@/lib/agent/env";
-import { chatTurn, payloadTooLarge, type ChatBody } from "@gnosia/tutor/server/turns";
+import { chatTurn, payloadTooLarge, type ChatBody } from "@hermes/tutor/server/turns";
 import { AGENT_BODY_LIMITS, readAgentBody } from "@/lib/agent/body";
 import { requestOwner } from "@/lib/learner-api";
 
@@ -12,7 +12,7 @@ export const runtime = "nodejs";
  * topic tutor sends `courseSlug`, `moduleSlug` and `topicId`; the concept
  * tutor sends `conceptSlug`; the open tutor sends `subject`; Ask on a library
  * asset sends `assetId`. The turn itself (validation, prompt, the model
- * chain, the response shape) is `chatTurn` in `@gnosia/tutor/server`.
+ * chain, the response shape) is `chatTurn` in `@hermes/tutor/server`.
  * This file keeps the
  * request-side guards (origin, rate limit, the owner the session resolves)
  * and maps the plain reply onto `NextResponse`.

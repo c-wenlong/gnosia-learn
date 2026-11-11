@@ -63,7 +63,7 @@ export type TranscriptBrief =
       brief: VideoBrief;
       requestSeq: number | null;
       pendingTopic?: PendingTopic | null;
-      /** V11's words the voice would read as words, from gnosia-audio's pronunciation table; absent from a runner that has not read it. */
+      /** V11's words the voice would read as words, from hermes-audio's pronunciation table; absent from a runner that has not read it. */
       abbreviations?: string[];
     };
 

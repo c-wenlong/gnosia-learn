@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ASSET_NAME_MAX, cleanAssetName } from "@gnosia/schema/shared";
+import { ASSET_NAME_MAX, cleanAssetName } from "@hermes/schema/shared";
 
 import { checkAssetName, markWatched, renameAsset, setFavorite } from "./asset-actions";
 

@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { ChainEntry } from "@gnosia/tutor/providers";
+import type { ChainEntry } from "@hermes/tutor/providers";
 import { failureCode } from "@/lib/provider-keys/store";
 import { readChain } from "@/lib/tutor-models/store";
 

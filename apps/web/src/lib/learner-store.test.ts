@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { LOCAL_LEARNER_ID } from "@gnosia/schema/shared";
+import { LOCAL_LEARNER_ID } from "@hermes/schema/shared";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 /**

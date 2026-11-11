@@ -35,8 +35,8 @@ acceptable to leave visible, or scrub all of them in one pass.
 The scrub, run on a fresh mirror clone, never the working copy:
 
 ```bash
-git clone --mirror https://github.com/promethevs-labs/hermes-studio gnosia-scrub.git
-cd gnosia-scrub.git
+git clone --mirror https://github.com/promethevs-labs/hermes-studio hermes-scrub.git
+cd hermes-scrub.git
 
 git filter-repo --invert-paths --path roadmap/
 
@@ -83,7 +83,7 @@ are commits in *other* repositories and are untouched by this.
 ## What stays private after the flip
 
 - `tools/manimkc`, `tools/remotionkc`, `tools/revideokc` and the
-  `gnosia-audio` dependency remain private repositories at the time of
+  `hermes-audio` dependency remain private repositories at the time of
   writing; outsiders see those `tools/` directories empty, and this is
   documented in the README. `tools/tldrawkc` and `tools/blenderkc` are
   already public.

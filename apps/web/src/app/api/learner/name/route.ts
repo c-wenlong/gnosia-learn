@@ -1,4 +1,4 @@
-import { nameTurn } from "@gnosia/tutor/server/learner-writes";
+import { nameTurn } from "@hermes/tutor/server/learner-writes";
 
 import { turnRoute } from "@/lib/learner-api";
 
@@ -10,6 +10,6 @@ import { turnRoute } from "@/lib/learner-api";
  * typed. Answers with the stored value.
  *
  * The parse and the write are `nameTurn` in
- * `@gnosia/tutor/server/learner-writes`.
+ * `@hermes/tutor/server/learner-writes`.
  */
 export const POST = turnRoute("name", nameTurn);

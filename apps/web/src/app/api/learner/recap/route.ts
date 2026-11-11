@@ -1,6 +1,6 @@
-import { RECAP_SOURCES, type KnowledgeSource } from "@gnosia/schema/shared";
-import { upsertRecap } from "@gnosia/catalog/state";
-import { isSessionToken } from "@gnosia/tutor/session-core";
+import { RECAP_SOURCES, type KnowledgeSource } from "@hermes/schema/shared";
+import { upsertRecap } from "@hermes/catalog/state";
+import { isSessionToken } from "@hermes/tutor/session-core";
 
 import {
   BadRequest,

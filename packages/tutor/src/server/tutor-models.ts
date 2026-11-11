@@ -7,8 +7,8 @@ import {
   removeTutorModel,
   setTutorModel,
   type CatalogDatabase,
-} from "@gnosia/catalog/state";
-import { groupByProvider } from "@gnosia/schema/shared";
+} from "@hermes/catalog/state";
+import { groupByProvider } from "@hermes/schema/shared";
 
 import type { ChainEntry } from "../providers";
 

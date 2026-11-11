@@ -33,7 +33,7 @@ import type { RemotionkcToolchain } from "./toolchain";
  *   `global-name`; with only the second the GPU process died and WebGL
  *   failed). No Python and no shell.
  * - **narrate** (`narrate`, `sidecars`, the clip keys): revideokc's, for the
- *   same gnosia-audio: node, gnosia-audio's interpreter in remotionkc's
+ *   same hermes-audio: node, hermes-audio's interpreter in remotionkc's
  *   `.venv` and its console script (with `/bin/sh` and the shell it runs
  *   only when uv wrote the script in its `#!/bin/sh` form), kokoro's
  *   interpreter in manimkc's `.venv-tts`, the model; writes the clip cache, the staged clips, the
@@ -99,10 +99,10 @@ function execRules(kind: ProfileKind, { tools }: RemotionkcProfileInput): Rule[]
   const media = [tools.ffmpeg, tools.ffprobe].flatMap(program);
   if (kind === "gate") return [...nodeRules(tools), ...media];
   if (kind === "narrate") {
-    // gnosia-audio's console script, which remotionkc runs by path: a script is
+    // hermes-audio's console script, which remotionkc runs by path: a script is
     // checked at exec as well as the interpreter its first line names.
-    const script = own.venv === null ? [] : [file(path.join(own.venv, "bin", "gnosia-audio"))];
-    return [...nodeRules(tools), ...script, ...own.scriptShells.map(file), ...program(own.gnosiaPython), ...program(tools.ttsPython), ...media, ...NARRATE_SYSTEM.map(file)];
+    const script = own.venv === null ? [] : [file(path.join(own.venv, "bin", "hermes-audio"))];
+    return [...nodeRules(tools), ...script, ...own.scriptShells.map(file), ...program(own.hermesPython), ...program(tools.ttsPython), ...media, ...NARRATE_SYSTEM.map(file)];
   }
   return [
     ...nodeRules(tools),
@@ -224,7 +224,7 @@ export interface RemotionkcEnvInput {
  * webpack's persistent cache off (`REMOTIONKC_BUNDLE_CACHE=off`: storing it
  * stats every directory above `node_modules` up to the root, and the profile
  * refuses the first, measured), and points Chrome's temporary directory into
- * the job. Narration is revideokc's: gnosia-audio's own environment with no
+ * the job. Narration is revideokc's: hermes-audio's own environment with no
  * manimkc checkout named, so the clip keys are a manimkc job's.
  */
 export function remotionkcEnv(kind: ProfileKind, { tools, paths, home, voice, base }: RemotionkcEnvInput): Record<string, string> {

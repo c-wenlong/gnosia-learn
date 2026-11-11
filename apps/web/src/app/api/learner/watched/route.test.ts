@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { asset, learner } from "@gnosia/schema";
+import { asset, learner } from "@hermes/schema";
 
 import {
   clearTables,
@@ -47,7 +47,7 @@ function request(body: unknown, origin: string | null = ORIGIN): Request {
 describe.skipIf(!reachable.ok)("POST /api/learner/watched", () => {
   let scratch: Scratch;
   let POST: (req: Request) => Promise<Response>;
-  let readEvents: typeof import("@gnosia/catalog/state").readEvents;
+  let readEvents: typeof import("@hermes/catalog/state").readEvents;
 
   let previousDatabaseUrl: string | undefined;
 
@@ -71,7 +71,7 @@ describe.skipIf(!reachable.ok)("POST /api/learner/watched", () => {
       .onConflictDoNothing();
     previousDatabaseUrl = process.env.DATABASE_URL;
     process.env.DATABASE_URL = scratch.url;
-    const [route, state] = await Promise.all([import("./route"), import("@gnosia/catalog/state")]);
+    const [route, state] = await Promise.all([import("./route"), import("@hermes/catalog/state")]);
     POST = route.POST;
     readEvents = state.readEvents;
   }, 60_000);

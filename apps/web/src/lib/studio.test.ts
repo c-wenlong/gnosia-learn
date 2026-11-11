@@ -5,7 +5,7 @@ import { STUDIO_ENV, studioEnabled, studioOrigin } from "./studio";
 /**
  * D11's gate: production, where `STUDIO_ENABLED` is unset, serves 404 for
  * every studio surface. Every entry point calls `requireStudio()` first, which
- * the lint rule `gnosia/studio-gate` holds each one to and
+ * the lint rule `hermes/studio-gate` holds each one to and
  * app/(app)/studio/gate.test.ts proves by calling each with the studio off.
  */
 

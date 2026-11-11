@@ -19,7 +19,7 @@ import { makeFixture, topicsYaml, type Fixture } from "./fixture-tree";
  * import`. This runs `tools/revideokc/tools/cli/revideokc.mjs` at whatever
  * commit the pointer names, against a scratch checkout and data root, with
  * nothing installed but node: since revideokc#5 its narration needs
- * gnosia-audio in its own `.venv`, and the catalog must still read the report
+ * hermes-audio in its own `.venv`, and the catalog must still read the report
  * on a machine that never ran `npm run narration-deps`. The title holds
  * quotes, which its YAML reader keeps whole.
  *

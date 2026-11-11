@@ -10,7 +10,7 @@ import {
   canTransition,
   type DraftErrorKind,
   type DraftState,
-} from "@gnosia/schema/shared";
+} from "@hermes/schema/shared";
 
 import { BriefError, loadVocabulary, SLUG_PATTERN, validateBrief, type ValidBrief, type Vocabulary } from "../diagram/brief";
 import { byokEnv, byokStatus, resolveByok } from "../agent/byok";
@@ -383,7 +383,7 @@ export interface EntryBrief {
   requestSeq: number | null;
   /**
    * A video brief's words the voice would read as words (V11), from
-   * gnosia-audio's pronunciation table; absent until gnosia-audio has
+   * hermes-audio's pronunciation table; absent until hermes-audio has
    * answered, when the card makes its own rougher check.
    */
   abbreviations?: string[];
@@ -4054,7 +4054,7 @@ export const ABBREVIATION_NOTE_CAP = 30;
  * a later note rather than counted as told unnamed. Null altogether, and
  * nothing counted, when there is nothing to weigh: no video brief in force,
  * one already pressed (the video agent may still respell a line while
- * voicing, D47), or gnosia-audio has not answered, when the runner cannot tell.
+ * voicing, D47), or hermes-audio has not answered, when the runner cannot tell.
  */
 export function abbreviationCheck(slot: KindSlot): { told: string[]; listed: string[]; note: string | null } | null {
   const brief = slot.brief;

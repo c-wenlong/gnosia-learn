@@ -9,7 +9,7 @@ import {
   conceptPrerequisite,
   curriculumItem,
   topic,
-} from "@gnosia/schema";
+} from "@hermes/schema";
 
 import type { CatalogDatabase } from "../src/db";
 import { storedBlob } from "./stored-blob";
@@ -183,7 +183,7 @@ export async function seedAssets(db: CatalogDatabase): Promise<void> {
         kind: "link",
         url: "https://example.invalid/alpha",
         title: "Somebody else's alpha",
-        sourceRepo: "gnosia",
+        sourceRepo: "hermes",
       },
       // Named by a collection directly, and by nothing else. The only way it
       // comes back is the `asset_id` branch.
@@ -191,7 +191,7 @@ export async function seedAssets(db: CatalogDatabase): Promise<void> {
         id: ASSETS.pinned,
         kind: "note",
         path: "learn/concepts/fixtures/pinned.md",
-        sourceRepo: "gnosia",
+        sourceRepo: "hermes",
       },
       // About nothing: no topic, no concept, in no collection. The queries must
       // not reach it, which is the only thing it is here to prove.
@@ -199,19 +199,19 @@ export async function seedAssets(db: CatalogDatabase): Promise<void> {
         id: ASSETS.orphan,
         kind: "note",
         path: "learn/concepts/fixtures/unfiled.md",
-        sourceRepo: "gnosia",
+        sourceRepo: "hermes",
       },
       {
         id: ASSETS.upperCase,
         kind: "note",
         path: "learn/concepts/fixtures/Beta.md",
-        sourceRepo: "gnosia",
+        sourceRepo: "hermes",
       },
       {
         id: ASSETS.lowerCase,
         kind: "note",
         path: "learn/concepts/fixtures/alpha.md",
-        sourceRepo: "gnosia",
+        sourceRepo: "hermes",
       },
     ])
     .onConflictDoNothing();

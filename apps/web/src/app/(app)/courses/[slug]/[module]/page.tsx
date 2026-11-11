@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 
 import { CourseHome } from "@/components/course-home/CourseHome";
 import { getCourse, getModule } from "@/data/courses";
-import { moduleNumber } from "@gnosia/content/module-number";
+import { moduleNumber } from "@hermes/content/module-number";
 import { loadCourseHome } from "@/lib/course-home";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string; module: string }> }) {

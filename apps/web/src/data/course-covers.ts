@@ -1,7 +1,7 @@
 import "server-only";
 
-import { courseCovers } from "@gnosia/catalog/state";
-import type { OwnerScope } from "@gnosia/schema/shared";
+import { courseCovers } from "@hermes/catalog/state";
+import type { OwnerScope } from "@hermes/schema/shared";
 import { connection } from "next/server";
 import { cache } from "react";
 

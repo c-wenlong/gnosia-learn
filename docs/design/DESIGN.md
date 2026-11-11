@@ -5,7 +5,7 @@ Status: lo-fi agreed in an interview on 2026-09-23; hi-fi v1 drawn on
 Implementation is phased; the plan, the shipped token and component contract
 and the status of each phase are in [IMPLEMENTATION.md](IMPLEMENTATION.md).
 This document is the written half of the design. The drawn half is
-[gnosia-lofi.fig](gnosia-lofi.fig), an OpenPencil document with a
+[hermes-lofi.fig](hermes-lofi.fig), an OpenPencil document with a
 lo-fi page and a hi-fi page, and the SVG exports of every screen under
 [lofi/](lofi/) and [hifi/](hifi/). The research the design draws on is under
 [research/](research/); the three captured design systems it takes real
@@ -315,7 +315,7 @@ the habit layer.
 ### Hi-fi tokens
 
 `TOKENS` in [kit/hifi.py](kit/hifi.py) is the source; the same values are in
-the `.fig` as two variable collections, "gnosia light" and "gnosia
+the `.fig` as two variable collections, "hermes light" and "hermes
 dark". "derived" means a value we made from a reference one.
 
 | Token | Light | Dark | From |
@@ -385,7 +385,7 @@ record of what was designed; this is what changed on top of it.
   teaching" to the same page.
 
 The list of every label removed or restyled is in the pull request that made
-the change. The lint rule `gnosia/sentence-case` fails an `uppercase` class,
+the change. The lint rule `hermes/sentence-case` fails an `uppercase` class,
 wide tracking, or JSX text typed in capitals.
 
 ### What the references could not give us

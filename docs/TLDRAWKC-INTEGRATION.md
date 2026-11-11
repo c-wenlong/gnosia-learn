@@ -370,7 +370,7 @@ serves `STUDIO_OWNER`, `local` unless set, and passes it as `--owner` to every
 lists, shows, checks out and writes only what that owner may (their diagrams
 and topics and the commons'), files a topic the planner proposed as theirs,
 and enqueues, claims and finishes only that owner's jobs. The app's server names
-the signed-in owner in `x-gnosia-owner` on every call, the proxy dropping
+the signed-in owner in `x-hermes-owner` on every call, the proxy dropping
 any value a page sent first, and the runner answers 403 to a request naming
 anyone else. It refuses rather than scopes because nothing the runner holds is
 per owner: one queue, one checkout directory, one cached list, one agent
@@ -1605,7 +1605,7 @@ docs is satisfied by the gate rather than by a separate app: production serves
 and no headless browser reaches that build. The cost is that the gate has to
 actually be there, so it is one helper called at the top of each route and a
 test that every route under `src/app/studio/` calls it. (That test is now the
-lint rule `gnosia/studio-gate` in `eslint-rules/gnosia.mjs`, over
+lint rule `hermes/studio-gate` in `eslint-rules/hermes.mjs`, over
 `src/app/(app)/studio/`, with `gate.test.ts` there calling each entry point
 with `STUDIO_ENABLED` unset.) Note that
 `npm run dev` fails in the desktop preview harness with `EPERM: uv_cwd`, so

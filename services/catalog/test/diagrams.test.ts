@@ -4,9 +4,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 
-import { fsStore, type BlobStore } from "@gnosia/blob";
-import { fileSource } from "@gnosia/content";
-import { assetJob, blobObject, diagram, job } from "@gnosia/schema";
+import { fsStore, type BlobStore } from "@hermes/blob";
+import { fileSource } from "@hermes/content";
+import { assetJob, blobObject, diagram, job } from "@hermes/schema";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -33,7 +33,7 @@ import { lockEntity } from "../src/content/revisions";
 import { cliScope } from "../src/content/scope";
 import { makeFixture, note, tagsYaml, topicsYaml, type Fixture } from "./fixture-tree";
 import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
-import { LOCAL_LEARNER_ID, ownerScope } from "@gnosia/schema";
+import { LOCAL_LEARNER_ID, ownerScope } from "@hermes/schema";
 
 /** Who these reads are for: the one owner there is today (phase 4 scoping). */
 const LOCAL = ownerScope(LOCAL_LEARNER_ID);
@@ -91,11 +91,11 @@ const svgOf = (label: string) =>
 
 /** Point the command runners, which connect through DATABASE_URL, at a scratch database. */
 function pointAt(name: string, blobHome: string): () => void {
-  const keys = ["DATABASE_URL", "MANIMKC_ROOT", "GNOSIA_HOME"] as const;
+  const keys = ["DATABASE_URL", "MANIMKC_ROOT", "HERMES_HOME"] as const;
   const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
   process.env["DATABASE_URL"] = name;
   process.env["MANIMKC_ROOT"] = path.join(tmpdir(), "catalog-test-no-manimkc");
-  process.env["GNOSIA_HOME"] = blobHome;
+  process.env["HERMES_HOME"] = blobHome;
   return () => {
     for (const key of keys) {
       const value = saved[key];

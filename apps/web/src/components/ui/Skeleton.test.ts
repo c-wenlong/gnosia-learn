@@ -61,7 +61,7 @@ describe("Skeleton", () => {
   });
 
   it("reads its colours from tokens every palette defines, and rests flat", () => {
-    for (const block of [":root {", ".dark {", ".gnosia {", ".gnosia.dark {"]) {
+    for (const block of [":root {", ".dark {", ".hermes {", ".hermes.dark {"]) {
       const at = css.indexOf(`\n${block}`);
       const body = css.slice(at, css.indexOf("\n}", at));
       expect(body, block).toMatch(/--skeleton: #[0-9a-f]{6};/);

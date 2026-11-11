@@ -1,5 +1,5 @@
-import type { SessionLogSource } from "@gnosia/content";
-import { session } from "@gnosia/schema";
+import type { SessionLogSource } from "@hermes/content";
+import { session } from "@hermes/schema";
 import { and, eq } from "drizzle-orm";
 
 import { ownedBy } from "../scope";

@@ -5,16 +5,16 @@ import {
   THEME_MODES,
   USER_RESOURCE_LIMITS,
   type ThemeMode,
-} from "@gnosia/schema/shared";
-import { writePreference } from "@gnosia/catalog/state";
-import { lastVisitedValue, rememberVisit } from "@gnosia/tutor/server/learner-writes";
+} from "@hermes/schema/shared";
+import { writePreference } from "@hermes/catalog/state";
+import { lastVisitedValue, rememberVisit } from "@hermes/tutor/server/learner-writes";
 
 import { BadRequest, handler, MAX_ID_CHARS } from "@/lib/learner-api";
 import {
   InvalidPreference,
   validateMotionMode,
   validateTutorStyle,
-} from "@gnosia/tutor/preferences";
+} from "@hermes/tutor/preferences";
 
 /**
  * The key/value corner of the learner state: theme, where they were last,

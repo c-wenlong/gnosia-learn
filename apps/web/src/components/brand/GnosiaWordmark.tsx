@@ -13,14 +13,14 @@ import wordmarkInk from "../../../public/brand/wordmark-ink.png";
  * letters to 96px tall).
  *
  * The original letter art is an alpha mask: CSS changes its colour without
- * redrawing the owner's letterforms. A screen reader hears "Gnosia" once.
+ * redrawing the owner's letterforms. A screen reader hears "Hermes" once.
  * The mark is decorative beside it.
  */
 function Letters({ className }: { className?: string }) {
   return (
     <span
       role="img"
-      aria-label="Gnosia"
+      aria-label="Hermes"
       className={cx("inline-block shrink-0 bg-current text-brand-terracotta dark:text-brand-cream", className)}
       style={{
         aspectRatio: `${wordmarkInk.width} / ${wordmarkInk.height}`,
@@ -39,7 +39,7 @@ function Letters({ className }: { className?: string }) {
  * the mark follows at 1.9em, the letters at 0.8em tall, about the cap height
  * the old live-text wordmark had.
  */
-export function GnosiaWordmark({ className }: { className?: string }) {
+export function HermesWordmark({ className }: { className?: string }) {
   return (
     <span className={cx("inline-flex items-center gap-[0.55em] leading-none", className)}>
       <Image src={mark} alt="" draggable={false} className="size-[1.9em] shrink-0" />
@@ -53,7 +53,7 @@ export function GnosiaWordmark({ className }: { className?: string }) {
  * splash (the sign-in card). `size` is the mark in px; the letters are a
  * fixed fraction of it so the two stay in proportion.
  */
-export function GnosiaLockup({ size = 56, className }: { size?: number; className?: string }) {
+export function HermesLockup({ size = 56, className }: { size?: number; className?: string }) {
   return (
     <span className={cx("inline-flex flex-col items-center leading-none", className)}>
       <Image src={mark} alt="" draggable={false} style={{ width: size, height: size }} />

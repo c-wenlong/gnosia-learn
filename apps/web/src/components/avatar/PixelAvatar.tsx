@@ -1,4 +1,4 @@
-import type { AvatarId } from "@gnosia/schema/shared";
+import type { AvatarId } from "@hermes/schema/shared";
 
 import { cx } from "@/components/ui/classes";
 

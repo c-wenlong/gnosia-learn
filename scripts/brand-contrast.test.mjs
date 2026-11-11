@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { audits, contrast } from './brand-contrast.mjs';
 
 function checkChangedCss(change) {
-  const scratch = mkdtempSync(join(tmpdir(), 'gnosia-brand-contrast-'));
+  const scratch = mkdtempSync(join(tmpdir(), 'hermes-brand-contrast-'));
   try {
     mkdirSync(join(scratch, 'scripts'));
     mkdirSync(join(scratch, 'apps/web/src/app'), { recursive: true });

@@ -1,5 +1,5 @@
-import { asset, assetName, contentRevision, learner, LOCAL_LEARNER_ID, ownerScope } from "@gnosia/schema";
-import type { AuthorKind } from "@gnosia/schema";
+import { asset, assetName, contentRevision, learner, LOCAL_LEARNER_ID, ownerScope } from "@hermes/schema";
+import type { AuthorKind } from "@hermes/schema";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
@@ -36,7 +36,7 @@ function note(title: string, blobKey: string | null = null) {
     path: NOTE.slice("note:".length),
     url: null,
     title,
-    sourceRepo: "gnosia",
+    sourceRepo: "hermes",
     blobKey,
     ownerId: LOCAL_LEARNER_ID,
   };
@@ -131,7 +131,7 @@ describe.skipIf(!reachable.ok)("listAssets editedAt", () => {
       path: null,
       url: null,
       title,
-      sourceRepo: "gnosia",
+      sourceRepo: "hermes",
       blobKey,
       ownerId: LOCAL_LEARNER_ID,
     });

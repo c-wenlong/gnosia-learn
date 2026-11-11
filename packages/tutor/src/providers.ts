@@ -7,7 +7,7 @@ import {
   TUTOR_MODEL_LIMITS,
   type ProviderId,
   type ProviderName,
-} from "@gnosia/schema/shared";
+} from "@hermes/schema/shared";
 
 import { redactSecrets } from "./redact";
 import { resolveSiteUrl } from "./site-url";
@@ -152,7 +152,7 @@ function baseUrl(env: EnvMap, id: ProviderId, variable: string): string {
  * an explicit answer to exactly this question, and a header is all it becomes.
  *
  * Below it, `resolveSiteUrl` answers, in place of the literal
- * `https://gnosia-one.vercel.app` that used to sit here. That was this
+ * `https://hermes-one.vercel.app` that used to sit here. That was this
  * deployment's own domain, so a fork that set `NEXT_PUBLIC_SITE_URL` and
  * nothing else was crediting its requests to us.
  *
@@ -285,7 +285,7 @@ export function providerConfigs(
       keyUrl: "https://openrouter.ai/keys",
       extraHeaders: {
         "HTTP-Referer": openRouterReferer(env),
-        "X-Title": env.OPENROUTER_APP_TITLE?.trim() || "Gnosia",
+        "X-Title": env.OPENROUTER_APP_TITLE?.trim() || "Hermes",
       },
     },
     ...added,

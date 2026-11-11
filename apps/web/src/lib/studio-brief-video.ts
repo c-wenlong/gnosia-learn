@@ -6,14 +6,14 @@
  * `services/studio/src/video/brief.ts` (#201), and the length arithmetic is
  * the runner's: the speech rate is not a constant here but the one health's
  * `video.narration.charsPerSecond` reports, which the runner takes from
- * gnosia-audio, so the card predicts the minutes the runner's validator
+ * hermes-audio, so the card predicts the minutes the runner's validator
  * judged. This is the one definition of the brief's shape and its pure
  * helpers: the video job view (`studio-video-job.ts`) imports them. The
- * timing itself is `narrationSeconds` in `@gnosia/schema/shared`, the one the
+ * timing itself is `narrationSeconds` in `@hermes/schema/shared`, the one the
  * runner computes with.
  */
 
-import { isNarratedVoice, narrationSeconds, silentSeconds } from "@gnosia/schema/shared";
+import { isNarratedVoice, narrationSeconds, silentSeconds } from "@hermes/schema/shared";
 
 export type VideoAudience = "new" | "familiar" | "expert";
 
@@ -184,7 +184,7 @@ export function beatCount(count: number): string {
 /**
  * Capitalised words in the lines a voice will read as a word ("ACL" as
  * "ackle"), the warning V11 of the video doc asks the card to show. The
- * runner's own check reads gnosia-audio's pronunciation table (its
+ * runner's own check reads hermes-audio's pronunciation table (its
  * `data/spoken.json`), which knows the words the voice already spells out
  * (CPU, API); this side has no copy of it, so a brief entry that carries the
  * runner's list (`abbreviations`) wins, and this is the fallback for a runner

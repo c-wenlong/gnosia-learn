@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from "node:crypto";
-import { MIN_SECRET_LENGTH, PROVIDER_KEY_LIMITS, type ProviderName } from "@gnosia/schema/shared";
+import { MIN_SECRET_LENGTH, PROVIDER_KEY_LIMITS, type ProviderName } from "@hermes/schema/shared";
 
 /**
  * Sealing and opening an owner's provider key (docs/BYOK.md, decision 2).
@@ -21,7 +21,7 @@ import { MIN_SECRET_LENGTH, PROVIDER_KEY_LIMITS, type ProviderName } from "@gnos
 /** The version `sealKey` writes. */
 export const CURRENT_KEY_VERSION = 1;
 
-const SALT = "gnosia/provider-key";
+const SALT = "hermes/provider-key";
 const IV_BYTES = 12;
 const KEY_BYTES = 32;
 /**
@@ -39,12 +39,12 @@ function deriveKey(secret: string, version: number): Buffer | null {
   // The floor sign-in enforces (`readAuthConfig`), held here too so a short
   // secret can never seal or open a key, whoever calls this.
   if (version !== 1 || secret.length < MIN_SECRET_LENGTH) return null;
-  return Buffer.from(hkdfSync("sha256", secret, SALT, `gnosia/provider-key/v${version}`, KEY_BYTES));
+  return Buffer.from(hkdfSync("sha256", secret, SALT, `hermes/provider-key/v${version}`, KEY_BYTES));
 }
 
 /** What the tag vouches for besides the ciphertext. JSON, so no owner id can forge a separator. */
 function additionalData(owner: string, provider: ProviderName, version: number): Buffer {
-  return Buffer.from(JSON.stringify(["gnosia/provider-key", version, owner, provider]), "utf8");
+  return Buffer.from(JSON.stringify(["hermes/provider-key", version, owner, provider]), "utf8");
 }
 
 export interface Sealed {

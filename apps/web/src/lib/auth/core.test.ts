@@ -77,7 +77,7 @@ describe("signSession / verifySession", () => {
 
   it("refuses a token signed the old way, with AUTH_SECRET alone (sessions end once at deploy)", async () => {
     const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-    const mac = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`gnosia-session:${NOW}`)));
+    const mac = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`hermes-session:${NOW}`)));
     const legacy = `${NOW}.${btoa(String.fromCharCode(...mac)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")}`;
     await expect(verifySession(CONFIG, legacy, NOW)).resolves.toBe(false);
   });
@@ -113,17 +113,17 @@ describe("passwordMatches / secretsEqual / constantTimeEqual", () => {
 
 describe("requestIsSameOrigin", () => {
   const at = (headers: Record<string, string>) =>
-    new Request("http://localhost:3000/api/x", { method: "POST", headers: { host: "gnosia.example", ...headers } });
+    new Request("http://localhost:3000/api/x", { method: "POST", headers: { host: "hermes.example", ...headers } });
 
   it("takes this site, by Sec-Fetch-Site or by an Origin naming the host the browser addressed", () => {
     expect(requestIsSameOrigin(at({ "sec-fetch-site": "same-origin" }))).toBe(true);
-    expect(requestIsSameOrigin(at({ origin: "https://gnosia.example" }))).toBe(true);
-    expect(requestIsSameOrigin(at({ origin: "http://gnosia.example", "sec-fetch-site": "same-origin" }))).toBe(true);
+    expect(requestIsSameOrigin(at({ origin: "https://hermes.example" }))).toBe(true);
+    expect(requestIsSameOrigin(at({ origin: "http://hermes.example", "sec-fetch-site": "same-origin" }))).toBe(true);
   });
 
   it("refuses another site, a sibling subdomain, null, nonsense, and a forwarded host the client chose", () => {
     expect(requestIsSameOrigin(at({ "sec-fetch-site": "cross-site" }))).toBe(false);
-    expect(requestIsSameOrigin(at({ "sec-fetch-site": "same-site", origin: "https://gnosia.example" }))).toBe(false);
+    expect(requestIsSameOrigin(at({ "sec-fetch-site": "same-site", origin: "https://hermes.example" }))).toBe(false);
     expect(requestIsSameOrigin(at({ origin: "https://evil.example" }))).toBe(false);
     expect(requestIsSameOrigin(at({ origin: "https://evil.example", "x-forwarded-host": "evil.example" }))).toBe(false);
     expect(requestIsSameOrigin(at({ origin: "null" }), { allowMissing: true })).toBe(false);
@@ -197,13 +197,13 @@ describe("originFromHeaders", () => {
 
   it("names the host the browser addressed, with the request's own scheme", () => {
     expect(of({ host: "192.168.1.20:3000" })).toBe("http://192.168.1.20:3000");
-    expect(of({ host: "gnosia.example" })).toBe("http://gnosia.example");
+    expect(of({ host: "hermes.example" })).toBe("http://hermes.example");
   });
 
   it("takes the scheme from a TLS-terminating proxy, and ignores X-Forwarded-Host", () => {
-    expect(of({ host: "gnosia.example", "x-forwarded-proto": "https" })).toBe("https://gnosia.example");
-    expect(of({ host: "gnosia.example", "x-forwarded-host": "evil.example", "x-forwarded-proto": "https" })).toBe("https://gnosia.example");
-    expect(of({ host: "gnosia.example", "x-forwarded-proto": "javascript" })).toBe("http://gnosia.example");
+    expect(of({ host: "hermes.example", "x-forwarded-proto": "https" })).toBe("https://hermes.example");
+    expect(of({ host: "hermes.example", "x-forwarded-host": "evil.example", "x-forwarded-proto": "https" })).toBe("https://hermes.example");
+    expect(of({ host: "hermes.example", "x-forwarded-proto": "javascript" })).toBe("http://hermes.example");
   });
 
   it("uses only the first value of a forwarding chain", () => {

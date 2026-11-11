@@ -256,12 +256,12 @@ describe("the blenderkc CLI", () => {
 
   it("resolves the checkout from BLENDERKC_ROOT, else the submodule", () => {
     delete process.env[BLENDERKC_ROOT_ENV];
-    expect(resolveBlenderkcRoot("/srv/gnosia")).toBe(path.join("/srv/gnosia", "tools", "blenderkc"));
-    expect(toolCliPath(BLENDERKC, "/srv/gnosia")).toBe(
-      path.join("/srv/gnosia", "tools", "blenderkc", "tools", "cli", "blenderkc"),
+    expect(resolveBlenderkcRoot("/srv/hermes")).toBe(path.join("/srv/hermes", "tools", "blenderkc"));
+    expect(toolCliPath(BLENDERKC, "/srv/hermes")).toBe(
+      path.join("/srv/hermes", "tools", "blenderkc", "tools", "cli", "blenderkc"),
     );
     process.env[BLENDERKC_ROOT_ENV] = "../elsewhere/blenderkc";
-    expect(resolveBlenderkcRoot("/srv/gnosia")).toBe(path.resolve("/srv/gnosia", "../elsewhere/blenderkc"));
+    expect(resolveBlenderkcRoot("/srv/hermes")).toBe(path.resolve("/srv/hermes", "../elsewhere/blenderkc"));
   });
 });
 

@@ -1,4 +1,4 @@
-import type { ContentType } from "@gnosia/schema";
+import type { ContentType } from "@hermes/schema";
 import { sql, type SQL } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";

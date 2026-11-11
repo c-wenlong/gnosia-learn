@@ -1,4 +1,4 @@
-import { clientIp } from "@gnosia/tutor/guards";
+import { clientIp } from "@hermes/tutor/guards";
 import { NextResponse } from "next/server";
 
 import { passwordMatches, readAuthConfig, safeNextPath, SESSION_COOKIE, SESSION_TTL_SECONDS, signSession } from "@/lib/auth/core";
