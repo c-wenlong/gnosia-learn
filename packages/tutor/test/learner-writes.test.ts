@@ -1,5 +1,5 @@
-import { COMMONS_OWNER, learner, LOCAL_LEARNER_ID, ownerScope } from "@gnosia/schema";
-import { readPreference } from "@gnosia/catalog/state";
+import { COMMONS_OWNER, learner, LOCAL_LEARNER_ID, ownerScope } from "@hermes/schema";
+import { readPreference } from "@hermes/catalog/state";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { playbackKey } from "../src/playback";

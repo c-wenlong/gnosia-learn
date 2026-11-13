@@ -1,14 +1,14 @@
 import "server-only";
 
-import { conceptSummaries, type AssetRef, type ConceptSummary } from "@gnosia/catalog/state";
+import { conceptSummaries, type AssetRef, type ConceptSummary } from "@hermes/catalog/state";
 
 import type { EmbedResolution } from "@/components/NoteProse";
 import { tutorCredentials } from "@/lib/agent/credentials";
-import { isCallable } from "@gnosia/tutor/providers";
-import { readWrittenOptions, type WrittenOptions } from "@gnosia/tutor/server/check-options";
+import { isCallable } from "@hermes/tutor/providers";
+import { readWrittenOptions, type WrittenOptions } from "@hermes/tutor/server/check-options";
 import { readAssetAccess, readFileProblems } from "@/lib/asset-library";
-import type { RouteProblemCode } from "@gnosia/tutor/asset-problems";
-import type { ConceptWorkspace } from "@gnosia/tutor/concept-workspace-core";
+import type { RouteProblemCode } from "@hermes/tutor/asset-problems";
+import type { ConceptWorkspace } from "@hermes/tutor/concept-workspace-core";
 import { catalogDatabase, readKb } from "@/lib/learner-store";
 import { assetFileHref, assetPosterHref, assetStatusHref } from "@/lib/library";
 import { embedTargets } from "@/lib/note-embeds";
@@ -22,7 +22,7 @@ import {
   withoutEmptySteps,
   type ConceptSessionMode,
   type SessionStep,
-} from "@gnosia/tutor/session-core";
+} from "@hermes/tutor/session-core";
 
 /**
  * Everything a session page needs beyond the workspace object, read on the

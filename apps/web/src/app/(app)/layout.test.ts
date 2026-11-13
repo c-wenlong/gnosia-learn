@@ -129,13 +129,13 @@ describe("the (app) layout's motion seed", () => {
 
   it("brings a cookie that disagrees in line with the row, on every page", async () => {
     env.stored = "system";
-    env.cookies.set("gnosia-motion", "always");
+    env.cookies.set("hermes-motion", "always");
     let html = await render();
     expect(html).not.toContain("<script");
     expect(html).toContain('data-seed="system"');
 
     env.stored = "always";
-    env.cookies.set("gnosia-motion", "always");
+    env.cookies.set("hermes-motion", "always");
     html = await render();
     // The root layout has already marked <html> from the cookie.
     expect(html).not.toContain("<script");
@@ -159,14 +159,14 @@ describe("the (app) layout's motion seed", () => {
 
 describe("the (app) layout's theme", () => {
   it("takes the stored theme over the cookie when the database answered", async () => {
-    env.theme = "gnosia-dark";
-    env.cookies.set("gnosia-theme", "light");
-    expect(await render()).toContain('data-theme="gnosia-dark"');
+    env.theme = "hermes-dark";
+    env.cookies.set("hermes-theme", "light");
+    expect(await render()).toContain('data-theme="hermes-dark"');
   });
 
   it("keeps the cookie's theme when the database did not answer", async () => {
     env.reachable = false;
-    env.cookies.set("gnosia-theme", "dark");
+    env.cookies.set("hermes-theme", "dark");
     expect(await render()).toContain('data-theme="dark"');
   });
 });

@@ -24,7 +24,7 @@ import { seedContent } from "./state-fixture";
  * temp directory to get a temp `learn/` for free — a trick that stops working
  * when the state is a database rather than files beside the code. The CLI takes
  * `LEARN_ROOT` for the files and `DATABASE_URL` for the rest, so a run here can
- * touch neither the real `learn/` nor the real `gnosia`.
+ * touch neither the real `learn/` nor the real `hermes`.
  */
 
 export const execFileAsync = promisify(execFile);

@@ -2,7 +2,7 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "gnosia-dev",
+      "name": "hermes-dev",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
         "run",

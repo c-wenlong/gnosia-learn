@@ -1,6 +1,6 @@
 import path from "node:path";
 
-import { fileSource, selectSource, type SelectedSource } from "@gnosia/content";
+import { fileSource, selectSource, type SelectedSource } from "@hermes/content";
 
 /**
  * Course data for the tests of pure logic that want real courses: the

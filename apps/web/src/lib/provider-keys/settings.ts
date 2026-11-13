@@ -1,8 +1,8 @@
 import "server-only";
 
-import type { ProviderName } from "@gnosia/schema/shared";
+import type { ProviderName } from "@hermes/schema/shared";
 
-import { customProviderConfig, providerConfigs, type KeySource } from "@gnosia/tutor/providers";
+import { customProviderConfig, providerConfigs, type KeySource } from "@hermes/tutor/providers";
 import { type CustomProvider, readOwnerCustomProviders } from "@/lib/custom-providers/store";
 import { failureCode, savedKeyStatuses, type SavedKeyStatus } from "@/lib/provider-keys/store";
 

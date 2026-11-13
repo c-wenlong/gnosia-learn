@@ -1,4 +1,4 @@
-import type { ConceptNoteSource } from "@gnosia/content";
+import type { ConceptNoteSource } from "@hermes/content";
 
 import { readNoteRows } from "../note-rows";
 import { renderNote } from "../notes";

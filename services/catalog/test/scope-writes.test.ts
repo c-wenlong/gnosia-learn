@@ -17,7 +17,7 @@ import {
   session,
   topic,
   topicRelation,
-} from "@gnosia/schema";
+} from "@hermes/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -267,7 +267,7 @@ describe.skipIf(!reachable.ok)("write verbs and owners", () => {
       url: "https://example.com/t",
       title: "Their link",
       resourceType: "docs",
-      sourceRepo: "gnosia",
+      sourceRepo: "hermes",
       ownerId: OTHER,
     });
     await expect(

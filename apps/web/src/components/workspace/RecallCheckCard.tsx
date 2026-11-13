@@ -7,9 +7,9 @@ import { Button } from "@/components/ui/Button";
 import { LABEL } from "@/components/ui/classes";
 import { Textarea } from "@/components/ui/Textarea";
 import { ErrorText } from "@/components/ui/ErrorText";
-import { DEFAULT_CONFIDENCE, type RecallCheck, type RecallPick } from "@gnosia/tutor/check-block";
-import { SESSION_TEXT_LIMIT } from "@gnosia/tutor/session-core";
-import type { Verdict } from "@gnosia/tutor/tutor-check";
+import { DEFAULT_CONFIDENCE, type RecallCheck, type RecallPick } from "@hermes/tutor/check-block";
+import { SESSION_TEXT_LIMIT } from "@hermes/tutor/session-core";
+import type { Verdict } from "@hermes/tutor/tutor-check";
 
 import { AnswerRecap } from "./AnswerRecap";
 import { ConfidenceField, ReasoningField } from "./SurenessFields";

@@ -24,7 +24,7 @@ import { VerbSubmit } from "@/components/studio/VerbSubmit";
 import { openShot, requireStudio, studioApi } from "@/lib/studio";
 import { videoAvailability } from "@/lib/studio-health";
 import { vocabularyBanner, type VocabularyState } from "@/lib/studio-vocabulary";
-import { appTimeZone } from "@gnosia/tutor/server/time-zone";
+import { appTimeZone } from "@hermes/tutor/server/time-zone";
 import { canvasHref, extendHref, parsePanel, readOutcome, type RawParams } from "@/lib/studio-url";
 import { dayAndTime, displayTitle, freshness, type Diagram, type DiagramListing } from "@/lib/studio-grid";
 

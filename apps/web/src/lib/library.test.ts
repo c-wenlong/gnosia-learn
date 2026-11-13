@@ -1,4 +1,4 @@
-import { kindRank } from "@gnosia/tutor/kind-order";
+import { kindRank } from "@hermes/tutor/kind-order";
 import { describe, expect, it } from "vitest";
 import {
   assetBackLink,

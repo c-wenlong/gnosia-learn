@@ -1,6 +1,6 @@
 //
 //  WebServerTests.swift
-//  GnosiaWebTests
+//  HermesWebTests
 //
 //  The web server's launch: Next runs in the app's own directory, as
 //  `npm run dev` runs it, or `next.config.ts` cannot load its imports.
@@ -11,7 +11,7 @@
 
 import Foundation
 import XCTest
-@testable import GnosiaWeb
+@testable import HermesWeb
 
 final class WebServerTests: XCTestCase {
     func testNextRunsInTheWebAppsDirectory() {

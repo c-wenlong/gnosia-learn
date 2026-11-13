@@ -8,7 +8,7 @@ import {
   type NewAssetTopic,
   session,
   sessionLogEntry,
-} from "@gnosia/schema";
+} from "@hermes/schema";
 import { asc, eq, inArray, max, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
@@ -170,7 +170,7 @@ export function logAsset(
       contentHash: createHash("sha256").update(bytes).digest("hex"),
       bytes: bytes.length,
       title: readText(data, "title") ?? where.replace(/^.*\//, "").replace(/\.md$/, ""),
-      sourceRepo: "gnosia",
+      sourceRepo: "hermes",
     },
     assetConcepts,
     assetTopics: [...topics].map((topicSlug) => ({ assetId: id, topicSlug })),

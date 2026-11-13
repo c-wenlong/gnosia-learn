@@ -1,4 +1,4 @@
-import { isNarratedVoice, narrationSeconds, silentSeconds, SILENT_VOICE, VIDEO_OVER_SPEECH } from "@gnosia/schema/shared";
+import { isNarratedVoice, narrationSeconds, silentSeconds, SILENT_VOICE, VIDEO_OVER_SPEECH } from "@hermes/schema/shared";
 
 import { agentModelName, BriefError, SLUG_PATTERN, type Vocabulary } from "../diagram/brief";
 import { charsPerSecond } from "./narration";

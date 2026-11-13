@@ -6,7 +6,7 @@ import {
   REVISION_OPS,
   type RevisionEntityType,
   type RevisionOp,
-} from "@gnosia/schema";
+} from "@hermes/schema";
 import { eq, getTableColumns, inArray } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
@@ -36,7 +36,7 @@ import { inTransaction } from "../db";
  * 1. refuses an empty reason, and refuses when `base` is not the entity's
  *    latest revision (edge case 16: no merge is attempted, the writer re-reads
  *    and reapplies);
- * 2. sets `gnosia.revision_id`, which the per-table guard triggers check
+ * 2. sets `hermes.revision_id`, which the per-table guard triggers check
  *    once a type flips (D4);
  * 3. upserts the entity, stamped with `owner_id = owner`, and replaces any
  *    owned links the caller supplied;

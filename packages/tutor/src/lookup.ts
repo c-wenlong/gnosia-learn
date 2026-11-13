@@ -1,4 +1,4 @@
-import type { Course, Module, Topic } from "@gnosia/content";
+import type { Course, Module, Topic } from "@hermes/content";
 
 /**
  * Finding a curriculum item across courses.

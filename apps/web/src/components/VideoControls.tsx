@@ -1,6 +1,6 @@
 "use client";
 
-import { formatTimecode, type VideoChapter } from "@gnosia/tutor/media";
+import { formatTimecode, type VideoChapter } from "@hermes/tutor/media";
 import { cx } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
 import { ControlButton, Icon } from "@/components/VideoIcons";

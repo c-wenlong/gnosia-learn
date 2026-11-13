@@ -84,11 +84,11 @@ describe("the problem table", () => {
   });
 
   it("reads a studio video, its sidecars and its poster as the studio's, and anything else by its row", () => {
-    expect(problemSource("video:attention", "gnosia")).toBe(STUDIO_SOURCE);
-    expect(problemSource("video:attention.vtt", "gnosia")).toBe(STUDIO_SOURCE);
-    expect(problemSource("poster:video:attention", "gnosia")).toBe(STUDIO_SOURCE);
+    expect(problemSource("video:attention", "hermes")).toBe(STUDIO_SOURCE);
+    expect(problemSource("video:attention.vtt", "hermes")).toBe(STUDIO_SOURCE);
+    expect(problemSource("poster:video:attention", "hermes")).toBe(STUDIO_SOURCE);
     expect(problemSource("manimkc:out/a/b.mp4", "manimkc")).toBe("manimkc");
-    expect(problemSource("diagram:learn/assets/x.svg", "gnosia")).toBe("gnosia");
+    expect(problemSource("diagram:learn/assets/x.svg", "hermes")).toBe("hermes");
     expect(problemSource("note:x", null)).toBeNull();
   });
 

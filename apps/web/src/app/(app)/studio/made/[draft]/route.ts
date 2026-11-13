@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { conversationMade } from "@gnosia/catalog/state";
-import { failureCode } from "@gnosia/tutor/server/provider-keys";
+import { conversationMade } from "@hermes/catalog/state";
+import { failureCode } from "@hermes/tutor/server/provider-keys";
 
 import { enforceRateLimit } from "@/lib/agent/guard";
 import { isDraftId } from "@/lib/conversation-made";

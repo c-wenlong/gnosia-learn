@@ -11,7 +11,7 @@ import { CARD_TITLE, cx, FOCUS, LABEL } from "@/components/ui/classes";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SegmentedControl, type SegmentItem } from "@/components/ui/SegmentedControl";
-import type { GraphEdge, GraphNode } from "@gnosia/tutor/concept-graph";
+import type { GraphEdge, GraphNode } from "@hermes/tutor/concept-graph";
 import type { DomainLayout, DomainSummary } from "@/lib/domain-map";
 import { domainTitle, movedKey, readMoved } from "@/lib/domain-view";
 import {
@@ -23,9 +23,9 @@ import {
   type MapLayout,
 } from "@/lib/learn-index";
 import { relatedTo, standingLine } from "@/lib/map-reading";
-import { MASTERY_BUCKET_LABEL } from "@gnosia/tutor/mastery-bucket";
+import { MASTERY_BUCKET_LABEL } from "@hermes/tutor/mastery-bucket";
 import { prefersReducedMotion, scrollBehavior } from "@/lib/motion";
-import { LEECH_LABEL } from "@gnosia/tutor/review-core";
+import { LEECH_LABEL } from "@hermes/tutor/review-core";
 
 /**
  * The Learn map's two levels (phase 2 of docs/proposals/domain-map.md, D2):

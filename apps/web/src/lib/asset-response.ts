@@ -14,7 +14,7 @@ import {
 import { assetBlobStore, SIGNED_URL_TTL_SECONDS } from "@/lib/blob-store";
 import { unauthenticated } from "@/lib/learner-api";
 import { NoOwnerError } from "@/lib/owner";
-import { failureCode } from "@gnosia/tutor/server/provider-keys";
+import { failureCode } from "@hermes/tutor/server/provider-keys";
 
 /*
  * What the asset routes share (S6-09 of the library audit): the answer for a

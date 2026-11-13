@@ -1,6 +1,6 @@
 //
 //  FindBar.swift
-//  GnosiaWeb
+//  HermesWeb
 //
 //  Cmd+F, as a browser's: a bar under the title bar that finds the typed
 //  text in the page. The search itself is the page's own `window.find`,

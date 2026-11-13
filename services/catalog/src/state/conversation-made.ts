@@ -1,4 +1,4 @@
-import type { OwnerScope } from "@gnosia/schema";
+import type { OwnerScope } from "@hermes/schema";
 import { sql, type SQL } from "drizzle-orm";
 
 import { andOwnedBy, type Owners, scopedRead } from "../content/scope";

@@ -5,7 +5,7 @@ import { Notice } from "@/components/ui/Notice";
 import { getCourses } from "@/data/courses";
 import { unlessUnreachable } from "@/data/source";
 import { getTopics } from "@/data/topics";
-import { defaultSelection } from "@gnosia/tutor/concept-graph";
+import { defaultSelection } from "@hermes/tutor/concept-graph";
 import {
   cachedDomainLayouts,
   domainTree,
@@ -17,9 +17,9 @@ import { readyConcepts } from "@/lib/map-reading";
 import { currentOwner } from "@/lib/owner";
 import { readRecentCourses } from "@/lib/recent-courses";
 import { courseSlugsOf, placeOf } from "@/lib/concept-workspace";
-import { appTimeZone } from "@gnosia/tutor/server/time-zone";
+import { appTimeZone } from "@hermes/tutor/server/time-zone";
 import { loadKnowledgeBase } from "@/lib/learner-store";
-import type { KbConcept } from "@gnosia/catalog/state";
+import type { KbConcept } from "@hermes/catalog/state";
 import {
   dueLabel,
   seenAgo,
@@ -29,8 +29,8 @@ import {
   parseView,
   type IndexRow,
 } from "@/lib/learn-index";
-import { bucketOf } from "@gnosia/tutor/mastery-bucket";
-import type { Course } from "@gnosia/content";
+import { bucketOf } from "@hermes/tutor/mastery-bucket";
+import type { Course } from "@hermes/content";
 
 export const metadata: Metadata = { title: "Learn" };
 

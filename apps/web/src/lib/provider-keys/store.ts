@@ -1,19 +1,19 @@
 import "server-only";
 
-import type { ProviderName } from "@gnosia/schema/shared";
+import type { ProviderName } from "@hermes/schema/shared";
 import {
   failureCode,
   openSavedKeys as openSavedKeysCore,
   savedKeyStatuses as savedKeyStatusesCore,
   saveProviderKey as saveProviderKeyCore,
   type SavedKeyStatus,
-} from "@gnosia/tutor/server/provider-keys";
+} from "@hermes/tutor/server/provider-keys";
 
 import { catalogDatabase } from "@/lib/learner-store";
 
 /**
  * The owner's saved provider keys (docs/BYOK.md). The reads and writes live
- * in `@gnosia/tutor/server/provider-keys`; this file hands them this app's
+ * in `@hermes/tutor/server/provider-keys`; this file hands them this app's
  * pool and its `process.env`.
  */
 

@@ -1,4 +1,4 @@
-import { CHECK_DISTRACTOR_LIMITS } from "@gnosia/schema/shared";
+import { CHECK_DISTRACTOR_LIMITS } from "@hermes/schema/shared";
 
 import { NOTE_DATA_LINE, noteAsData, type ConceptPromptInput, unfence } from "./prompt";
 import { firstObject } from "./session-question";
@@ -39,7 +39,7 @@ export function buildCheckOptionsPrompt(input: ConceptPromptInput, check: { ques
   const { max } = optionLengthBounds(check.answer);
   const length = check.answer.trim().length;
 
-  return `# Gnosia session · wrong options · ${input.title}
+  return `# Hermes session · wrong options · ${input.title}
 
 You write the three wrong options for one multiple-choice question about one concept from the learner's notebook. The question and its right answer are the learner's own and are fixed: do not change them, and do not repeat the right answer.
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { providerLabel, type KnowledgeInput, type TopicKnowledge } from "@gnosia/schema/shared";
+import { providerLabel, type KnowledgeInput, type TopicKnowledge } from "@hermes/schema/shared";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { Card } from "@/components/ui/Card";
@@ -17,10 +17,10 @@ import type {
   Course,
   Module,
   Topic,
-} from "@gnosia/content";
-import { moduleNumber } from "@gnosia/content/module-number";
+} from "@hermes/content";
+import { moduleNumber } from "@hermes/content/module-number";
 import { useLearner } from "@/lib/learner-context";
-import { buildAgentSessionContext } from "@gnosia/tutor/prompt";
+import { buildAgentSessionContext } from "@hermes/tutor/prompt";
 import { RecapCard, RecapEditor } from "@/components/TopicRecap";
 import {
   CheckCard,
@@ -35,12 +35,12 @@ import {
   restoreCardCheck,
   type ChoiceAnswer,
   type RecallPick,
-} from "@gnosia/tutor/check-block";
-import type { TurnCheck, Verdict } from "@gnosia/tutor/tutor-check";
+} from "@hermes/tutor/check-block";
+import type { TurnCheck, Verdict } from "@hermes/tutor/tutor-check";
 import { scrollBehavior } from "@/lib/motion";
 import { tutorProblem } from "@/lib/tutor-errors";
 import { recapTurns, topicRequestTurns } from "@/lib/tutor-thread";
-import { ownValue } from "@gnosia/tutor/own-key";
+import { ownValue } from "@hermes/tutor/own-key";
 import { randomToken } from "@/lib/random-token";
 import { FADE_IN } from "@/components/ui/motion";
 import { TurnError } from "@/components/workspace/TurnError";

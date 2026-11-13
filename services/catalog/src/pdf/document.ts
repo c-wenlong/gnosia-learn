@@ -140,7 +140,7 @@ export interface PdfPageInput {
  * history required — a memory a write that changes nothing cannot move,
  * since it appends no revision.
  */
-const INPUTS_PREFIX = "gnosia inputs: ";
+const INPUTS_PREFIX = "hermes inputs: ";
 
 /** The inputs fingerprint a stored PDF was assembled with, or null when it does not carry one. */
 export async function pdfInputsOf(body: Buffer): Promise<string | null> {
@@ -166,7 +166,7 @@ export async function assemblePdf(title: string, pages: readonly PdfPageInput[],
   const regular = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
   doc.setTitle(title);
-  doc.setProducer("gnosia catalog");
+  doc.setProducer("hermes catalog");
   doc.setSubject(`${INPUTS_PREFIX}${inputs}`);
 
   // The header never wraps: a long title is clipped on the right, not

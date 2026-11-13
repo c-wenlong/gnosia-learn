@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-import { checkQuestion, withWrittenOptions, type DistractorPool } from "@gnosia/tutor/session-core";
-import type { ConceptCheck } from "@gnosia/tutor/concept-note-core";
+import { checkQuestion, withWrittenOptions, type DistractorPool } from "@hermes/tutor/session-core";
+import type { ConceptCheck } from "@hermes/tutor/concept-note-core";
 
 /**
  * A note check's wrong options, as worked cases (docs/LEARN.md, "Wrong

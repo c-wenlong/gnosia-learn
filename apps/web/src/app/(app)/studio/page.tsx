@@ -26,7 +26,7 @@ import { runnerSettings } from "@/lib/studio-agent-settings";
 import { makeVideoTitle } from "@/lib/studio-extend";
 import { readVideos } from "@/lib/studio-video-grid";
 import { vocabularyBanner, vocabularyTopics, type VocabularyState } from "@/lib/studio-vocabulary";
-import { appTimeZone } from "@gnosia/tutor/server/time-zone";
+import { appTimeZone } from "@hermes/tutor/server/time-zone";
 import {
   CLOSED,
   panelHref,

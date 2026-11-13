@@ -1,5 +1,5 @@
-import type { ProviderName } from "@gnosia/schema/shared";
-import { tutorProviderMoveTurn, tutorProviderRemoveTurn } from "@gnosia/tutor/server/turns";
+import type { ProviderName } from "@hermes/schema/shared";
+import { tutorProviderMoveTurn, tutorProviderRemoveTurn } from "@hermes/tutor/server/turns";
 
 import { dropByokProvider } from "@/lib/byok-sync";
 import { byokField, settingsRoute } from "@/lib/provider-keys/requests";

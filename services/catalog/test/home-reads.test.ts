@@ -1,4 +1,4 @@
-import { draft, learner, LOCAL_LEARNER_ID, session } from "@gnosia/schema";
+import { draft, learner, LOCAL_LEARNER_ID, session } from "@hermes/schema";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { asRecentModules, appendEvent, readEvents, recentDrafts, recentTutorSessions, withRecentModule } from "../src/state";

@@ -8,7 +8,7 @@ import {
   formatTimecode,
   SKIP_STEP,
   type VideoChapter,
-} from "@gnosia/tutor/media";
+} from "@hermes/tutor/media";
 import { cx } from "@/components/ui/classes";
 
 /**

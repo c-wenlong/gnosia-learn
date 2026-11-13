@@ -3,7 +3,7 @@ import { lstat, mkdir, mkdtemp, readdir, readFile, rename, rm, writeFile } from 
 import os from "node:os";
 import path from "node:path";
 
-import { BlobIntegrityError, key as blobKey, type BlobStore } from "@gnosia/blob";
+import { BlobIntegrityError, key as blobKey, type BlobStore } from "@hermes/blob";
 import {
   assetJob,
   canonicalJson,
@@ -15,7 +15,7 @@ import {
   type AuthorKind,
   type Job,
   type OwnerScope,
-} from "@gnosia/schema";
+} from "@hermes/schema";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { acceptJobIn, JobError, VIDEOS_DIR, VIDEO_SLUG } from "../commands/job";
@@ -587,7 +587,7 @@ export async function putVideo(db: CatalogDatabase, store: BlobStore, input: Put
     if (!made.ok) {
       notes.push(`no PDF: ${made.reason}`);
     } else {
-      pdfDir = await mkdtemp(path.join(os.tmpdir(), "gnosia-video-pdf-"));
+      pdfDir = await mkdtemp(path.join(os.tmpdir(), "hermes-video-pdf-"));
       const file = path.join(pdfDir, `video${PDF_EXTENSION}`);
       try {
         await writeFile(file, made.body);
@@ -816,7 +816,7 @@ export async function putVideo(db: CatalogDatabase, store: BlobStore, input: Put
                 bytes: p.bytes,
                 title: p.title,
                 inputsHash: p.inputsHash ?? null,
-                sourceRepo: "gnosia",
+                sourceRepo: "hermes",
                 blobKey: keyOf(p),
                 resourceType: null,
               },

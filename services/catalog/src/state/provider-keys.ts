@@ -1,4 +1,4 @@
-import { customProvider, isProviderName, type ProviderName, providerKey } from "@gnosia/schema";
+import { customProvider, isProviderName, type ProviderName, providerKey } from "@hermes/schema";
 import { and, asc, eq, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";

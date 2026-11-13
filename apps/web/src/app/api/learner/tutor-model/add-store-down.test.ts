@@ -11,12 +11,12 @@ const openSavedKeys = vi.hoisted(() => vi.fn());
 const addChainEntry = vi.hoisted(() => vi.fn());
 // The route is the tutor's `tutorModelAddTurn`, which reads the keys and
 // writes the chain through these two modules.
-vi.mock("@gnosia/tutor/server/provider-keys", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@gnosia/tutor/server/provider-keys")>()),
+vi.mock("@hermes/tutor/server/provider-keys", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@hermes/tutor/server/provider-keys")>()),
   openSavedKeys,
 }));
-vi.mock("@gnosia/tutor/server/tutor-models", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@gnosia/tutor/server/tutor-models")>()),
+vi.mock("@hermes/tutor/server/tutor-models", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@hermes/tutor/server/tutor-models")>()),
   addChainEntry,
 }));
 vi.mock("@/lib/learner-store", () => ({ catalogDatabase: async () => ({}) }));

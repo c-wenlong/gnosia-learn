@@ -1,10 +1,10 @@
-import type { MasteryLabel } from "@gnosia/catalog/state";
+import type { MasteryLabel } from "@hermes/catalog/state";
 
-import { assetDisplayTitle, assetKindLabel, type AssetCardRef } from "@gnosia/tutor/asset-meta";
+import { assetDisplayTitle, assetKindLabel, type AssetCardRef } from "@hermes/tutor/asset-meta";
 import { safeNextPath } from "@/lib/auth/core";
-import { bucketOf, type MasteryBucket } from "@gnosia/tutor/mastery-bucket";
-import { parseTranscript } from "@gnosia/tutor/transcript";
-import { compareByKindThenId, isCompanionKind, kindRank } from "@gnosia/tutor/kind-order";
+import { bucketOf, type MasteryBucket } from "@hermes/tutor/mastery-bucket";
+import { parseTranscript } from "@hermes/tutor/transcript";
+import { compareByKindThenId, isCompanionKind, kindRank } from "@hermes/tutor/kind-order";
 export { compareByKindThenId, isCompanionKind };
 
 /**
@@ -48,7 +48,7 @@ export { compareByKindThenId, isCompanionKind };
  * "which video is this transcript for", which is a different question and the
  * one it is used for on the detail page.
  *
- * Pure: no database, no React, no filesystem. `@gnosia/tutor/asset-meta`
+ * Pure: no database, no React, no filesystem. `@hermes/tutor/asset-meta`
  * supplies the label vocabulary so a chip and a card cannot call the same kind
  * two different things — and it is that module rather than `AssetCard.tsx`
  * because a `"use client"` module's exports are client references, so a server
@@ -633,8 +633,8 @@ export function assetBackLink(from: string | string[] | undefined): { href: stri
   const raw = Array.isArray(from) ? from[0] : from;
   if (typeof raw === "string" && safeNextPath(raw) === raw) {
     // Resolved the way the browser will, so a `..` cannot leave the studio.
-    const target = new URL(raw, "http://gnosia.invalid");
-    if (target.origin === "http://gnosia.invalid" && (target.pathname === "/studio" || target.pathname.startsWith("/studio/"))) {
+    const target = new URL(raw, "http://hermes.invalid");
+    if (target.origin === "http://hermes.invalid" && (target.pathname === "/studio" || target.pathname.startsWith("/studio/"))) {
       return { href: `${target.pathname}${target.search}`, label: "Studio" };
     }
   }

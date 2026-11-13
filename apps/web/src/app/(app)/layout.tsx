@@ -6,13 +6,13 @@ import { NONCE_HEADER } from "@/lib/auth/csp";
 import { requireSignedIn } from "@/lib/auth/session";
 import { LearnerProvider } from "@/lib/learner-context";
 import { loadLearnerSnapshot } from "@/lib/learner-store";
-import { asMotionMode, LEGACY_MOTION_COOKIE, MOTION_COOKIE, MOTION_REDUCE_SCRIPT } from "@/lib/motion";
+import { asMotionMode, GNOSIA_MOTION_COOKIE, LEGACY_MOTION_COOKIE, MOTION_COOKIE, MOTION_REDUCE_SCRIPT } from "@/lib/motion";
 import { readStoredMotion } from "@/lib/motion-preference";
-import { SIDEBAR_COOKIE, sidebarCollapsed } from "@/lib/sidebar-cookie";
+import { LEGACY_SIDEBAR_COOKIE, SIDEBAR_COOKIE, sidebarCollapsed } from "@/lib/sidebar-cookie";
 import { studioEnabled } from "@/lib/studio";
 import { runnerListening } from "@/lib/studio-runner";
-import { appTimeZone } from "@gnosia/tutor/server/time-zone";
-import { asThemeMode, LEGACY_THEME_COOKIE, THEME_COOKIE } from "@/lib/theme-cookie";
+import { appTimeZone } from "@hermes/tutor/server/time-zone";
+import { asThemeMode, GNOSIA_THEME_COOKIE, LEGACY_THEME_COOKIE, THEME_COOKIE } from "@/lib/theme-cookie";
 
 /**
  * The owner's half of the app: every page except the landing and sign-in.
@@ -64,7 +64,7 @@ export default async function AppLayout({
   const [cookieStore, requestHeaders] = await Promise.all([cookies(), headers()]);
   // The motion script needs the request's CSP nonce to run (`@/lib/auth/csp`).
   const nonce = requestHeaders.get(NONCE_HEADER) ?? undefined;
-  const cookieMotion = asMotionMode(cookieStore.get(MOTION_COOKIE)?.value ?? cookieStore.get(LEGACY_MOTION_COOKIE)?.value);
+  const cookieMotion = asMotionMode(cookieStore.get(MOTION_COOKIE)?.value ?? cookieStore.get(GNOSIA_MOTION_COOKIE)?.value ?? cookieStore.get(LEGACY_MOTION_COOKIE)?.value);
   const studio = studioEnabled();
   const [{ state, reachable }, storedMotion, runner] = await Promise.all([
     loadLearnerSnapshot(),
@@ -72,7 +72,7 @@ export default async function AppLayout({
     studio ? runnerListening() : Promise.resolve(false),
   ]);
 
-  const cookieTheme = asThemeMode(cookieStore.get(THEME_COOKIE)?.value ?? cookieStore.get(LEGACY_THEME_COOKIE)?.value);
+  const cookieTheme = asThemeMode(cookieStore.get(THEME_COOKIE)?.value ?? cookieStore.get(GNOSIA_THEME_COOKIE)?.value ?? cookieStore.get(LEGACY_THEME_COOKIE)?.value);
   const theme = reachable ? state.theme : (cookieTheme ?? state.theme);
   const initialState = theme === state.theme ? state : { ...state, theme };
 
@@ -88,7 +88,7 @@ export default async function AppLayout({
           runner={runner}
           // Resolved here, so the browser counts days in the server's zone, as Home does.
           timeZone={appTimeZone() ?? Intl.DateTimeFormat().resolvedOptions().timeZone}
-          collapsed={sidebarCollapsed(cookieStore.get(SIDEBAR_COOKIE)?.value)}
+          collapsed={sidebarCollapsed(cookieStore.get(SIDEBAR_COOKIE)?.value ?? cookieStore.get(LEGACY_SIDEBAR_COOKIE)?.value)}
         >
           <noscript>
             <p className="mb-6 rounded-xl border border-border bg-surface px-4 py-3 text-[14px] leading-5 text-text2">

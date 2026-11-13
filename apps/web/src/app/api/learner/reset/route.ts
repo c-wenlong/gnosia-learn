@@ -1,4 +1,4 @@
-import { resetCourse } from "@gnosia/catalog/state";
+import { resetCourse } from "@hermes/catalog/state";
 
 import { handler, requireIdList } from "@/lib/learner-api";
 

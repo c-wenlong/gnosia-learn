@@ -6,14 +6,14 @@ import {
   indexRun,
   mirror,
   topic,
-} from "@gnosia/schema";
+} from "@hermes/schema";
 import { eq, isNull, sql } from "drizzle-orm";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { loadCourses } from "@gnosia/content";
+import { loadCourses } from "@hermes/content";
 
 import { runDoctor } from "../src/commands/doctor";
 import { runExport } from "../src/commands/export";
@@ -684,7 +684,7 @@ describe.skipIf(!reachable.ok)("mirror coverage", () => {
       id: "note:learn/concepts/x/a.md",
       kind: "note",
       path: "learn/concepts/x/a.md",
-      sourceRepo: "gnosia",
+      sourceRepo: "hermes",
     });
     const result = (await runShow("note:learn/concepts/x/a.md")) as ShowAsset;
     expect(result.mirrors).toEqual([]);

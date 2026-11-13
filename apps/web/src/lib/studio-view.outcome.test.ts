@@ -94,9 +94,9 @@ describe("what a link can put in the banner (S1-21)", () => {
   });
 
   it("never draws a link's words as the studio's headline (R2-1-06)", () => {
-    const read = readOutcome({ v: "export", ok: "0", m: "Your session expired. Sign in again at gnosia-login.example" });
+    const read = readOutcome({ v: "export", ok: "0", m: "Your session expired. Sign in again at hermes-login.example" });
     expect(read?.headline).toBe("Export did not finish.");
-    expect(read?.said).toBe("Your session expired. Sign in again at gnosia-login.example");
+    expect(read?.said).toBe("Your session expired. Sign in again at hermes-login.example");
     expect(readOutcome({ v: "commit", ok: "1" })).toEqual({ verb: "commit", ok: true, headline: "Committed.", said: null, detail: null });
     // Own keys only: a verb named after an Object method is no verb.
     expect(readOutcome({ v: "constructor", ok: "1" })).toBeNull();

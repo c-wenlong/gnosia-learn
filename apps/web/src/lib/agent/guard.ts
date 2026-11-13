@@ -4,15 +4,15 @@ import {
   checkRateLimit,
   storeFor,
   type RateLimitRule,
-} from "@gnosia/tutor/guards";
+} from "@hermes/tutor/guards";
 
 import { requestIsSameOrigin } from "@/lib/auth/core";
 
-export { CHAT_RATE_LIMIT, SUMMARIZE_RATE_LIMIT, type RateLimitRule } from "@gnosia/tutor/guards";
+export { CHAT_RATE_LIMIT, SUMMARIZE_RATE_LIMIT, type RateLimitRule } from "@hermes/tutor/guards";
 
 /**
  * Abuse prevention for the `/api/agent/*` routes. Payload measurement and
- * the fixed-window limiter live in `@gnosia/tutor/guards`; the same-origin rule is `requestIsSameOrigin` in
+ * the fixed-window limiter live in `@hermes/tutor/guards`; the same-origin rule is `requestIsSameOrigin` in
  * `@/lib/auth/core`. This file keeps only the `NextResponse` wrappers.
  */
 

@@ -37,7 +37,7 @@ on:
       - "docs/design/lofi/**"
       - "docs/design/reference/**"
       - "docs/design/research/**"
-      - "docs/design/gnosia-lofi.fig"
+      - "docs/design/hermes-lofi.fig"
       - "services/catalog/*.md"
       - "tools/**"
       - ".claude/**"

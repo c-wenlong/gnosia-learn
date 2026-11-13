@@ -13,7 +13,7 @@ and the repository holds no `learn/` folder; how to read and edit the notes and
 logs is under [Where the notes and logs live](#where-the-notes-and-logs-live).
 
 ```
-catalog.db  (CATALOG_DB, else DATABASE_URL, else $GNOSIA_HOME/catalog.db, default ~/.gnosia/catalog.db)
+catalog.db  (CATALOG_DB, else DATABASE_URL, else $HERMES_HOME/catalog.db, default ~/.hermes/catalog.db)
   concept            atomic concept notes: frontmatter as columns, markdown as body
   session_log_entry  one row per append to a session's log, written live
   diagram, asset     diagrams drawn during teaching; the SVG in the blob store
@@ -75,7 +75,7 @@ the checkout; check it out again and reapply. `concept edit <id> --body-file F
 To read and edit every note at once, in Obsidian, pull the vault:
 
 ```bash
-npm run learn -- vault pull                 # ~/.gnosia/vault, or --out <dir>
+npm run learn -- vault pull                 # ~/.hermes/vault, or --out <dir>
 # edit notes in Obsidian
 npm run learn -- vault push --reason "tidied the proofs"
 ```
@@ -87,7 +87,7 @@ how many entries the log had) and the sha256 of what was written. The SVGs come
 from the blob store, so the `![[<slug>.svg]]` embeds in notes and logs
 resolve in Obsidian with no `learn/assets/` anywhere; they are read-only there,
 push never looks at them, and a diagram is changed in the studio or with
-`catalog diagram put`. The folder defaults to `$GNOSIA_HOME/vault`,
+`catalog diagram put`. The folder defaults to `$HERMES_HOME/vault`,
 outside the repository, and one inside this checkout or any other checkout of
 the repository is refused. Neither command overwrites an edit nobody pushed:
 
@@ -755,8 +755,8 @@ npm run learn -- init                  # check the store
 ```
 
 There is no server to start. The catalog is one SQLite file: `CATALOG_DB`,
-else `DATABASE_URL` (a path or a `sqlite:` URL), else `$GNOSIA_HOME/catalog.db`, else
-`~/.gnosia/catalog.db` (`databaseUrl()` in
+else `DATABASE_URL` (a path or a `sqlite:` URL), else `$HERMES_HOME/catalog.db`, else
+`~/.hermes/catalog.db` (`databaseUrl()` in
 [env.ts](../services/catalog/src/env.ts)), created on first connect. A
 `postgres://` URL is refused (`databasePath()` in the same file), so a `.env`
 carried over from Postgres needs `CATALOG_DB` set, or its `DATABASE_URL`
@@ -826,7 +826,7 @@ diagrams. This is a real constraint of the harness, not a style choice.
 ### Using it with Obsidian
 
 There is no live folder to point Obsidian at: the notes and logs are rows.
-`learn vault pull` writes them to `~/.gnosia/vault/` (the folder to open in
+`learn vault pull` writes them to `~/.hermes/vault/` (the folder to open in
 Obsidian), with every diagram's SVG under `assets/` so the `![[<slug>.svg]]`
 embeds keep resolving, and `learn vault push` writes edited notes back, as
 described under "Where the notes and logs live" above. Wikilinks, embeds and

@@ -1,3 +1,4 @@
+import { reclaimCgroupFileCache } from "../cgroup";
 import { run, type RunResult } from "../proc";
 
 /**
@@ -81,6 +82,7 @@ export async function doctor(force = false): Promise<RunResult> {
       if (generation === doctorGeneration) {
         doctorInFlight = null;
       }
+      void reclaimCgroupFileCache();
     }
   })();
   doctorInFlight = running;

@@ -4,8 +4,8 @@ import { mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from "node:f
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { fsStore, key as blobKey, type BlobStore } from "@gnosia/blob";
-import { asset, assetDerivation, blobObject, type NewAsset } from "@gnosia/schema";
+import { fsStore, key as blobKey, type BlobStore } from "@hermes/blob";
+import { asset, assetDerivation, blobObject, type NewAsset } from "@hermes/schema";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
@@ -170,8 +170,8 @@ describe.skipIf(!reachable.ok)("the blob store against a second writer", () => {
   });
 
   it("lets --fix act only on a root that names this database, which the first writer claims", async () => {
-    const saved = process.env["GNOSIA_HOME"];
-    process.env["GNOSIA_HOME"] = path.dirname(root);
+    const saved = process.env["HERMES_HOME"];
+    process.env["HERMES_HOME"] = path.dirname(root);
     await rm(root, { recursive: true, force: true });
     await mkdir(path.join(path.dirname(root), "blobs"), { recursive: true });
     try {
@@ -211,8 +211,8 @@ describe.skipIf(!reachable.ok)("the blob store against a second writer", () => {
       expect(own.objects).toBe(1);
       expect(JSON.parse(await readFile(path.join(shared.root, OWNER_FILE), "utf8"))).toMatchObject({ database: b.url });
     } finally {
-      if (saved === undefined) delete process.env["GNOSIA_HOME"];
-      else process.env["GNOSIA_HOME"] = saved;
+      if (saved === undefined) delete process.env["HERMES_HOME"];
+      else process.env["HERMES_HOME"] = saved;
     }
   });
 

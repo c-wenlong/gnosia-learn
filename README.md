@@ -43,7 +43,7 @@ A third part, the `tools/manimkc/` submodule, renders narrated animations for co
 
 <p align="center">
   <img src="apps/web/public/screenshot.png" alt="The Hermes Today page: a top bar with Today, Courses, Learn, Library and Review, the next concept on the path with Continue teaching, a list of reviews due with Start review, recent study activity, and a right column with today's target, a seven-day streak strip and courses in progress" width="900"><br>
-  <em>Today, the home page.</em>
+  <em>Today, the home page, live at <a href="https://hermes-one.vercel.app">hermes-one.vercel.app</a>.</em>
 </p>
 
 ## Hosting, now and next
@@ -67,7 +67,7 @@ Knowing what is worth learning and actually learning it are two different proble
 | Asset generation | `tools/revideokc/` (submodule) | Narrated Revideo explainer videos, indexed like manimkc's and labelled "revideo" |
 | Asset generation | `tools/blenderkc/` (submodule) | Narrated photoreal 3D explainer videos rendered by Blender's Cycles, indexed like manimkc's and labelled "blender" |
 | Diagrams | [`tools/tldrawkc/`](tools/tldrawkc/README.md) (submodule) | Teaching diagrams drawn on a real tldraw canvas, exported as self-contained SVG with the editable `.tldr` committed beside it |
-| Catalog | `packages/schema/`, `services/catalog/` | The SQLite database (one file, `~/.gnosia/catalog.db` by default) that owns the content and the learner state, and the `catalog` CLI that writes and reads it |
+| Catalog | `packages/schema/`, `services/catalog/` | The SQLite database (one file, `~/.hermes/catalog.db` by default) that owns the content and the learner state, and the `catalog` CLI that writes and reads it |
 
 Ten courses are covered (CS2111, CS4263, CP4281 through CP4285, CS3216, CS3227, CS3249). Three have inferred syllabi and say so in a banner until official NUSMods data lands. Learner state — ticks, notes, recaps, preferences — lives in the same database as the catalog; there are no accounts yet, just one learner row behind one owner password (`/sign-in`). A browser that used the old `localStorage` document imports it once, automatically, on first load.
 
@@ -83,7 +83,7 @@ Ten courses are covered (CS2111, CS4263, CP4281 through CP4285, CS3216, CS3227, 
 | `/learn/[concept]/session` | Focus-mode session: probe, teach, check, close, each graded answer recorded as evidence |
 | `/review` | Spaced-repetition review of what is due |
 | `/library`, `/library/[id]` | Every indexed asset (videos, diagrams, notes), searchable, with the concepts each explains |
-| `/settings` | Theme (palette Classic or Gnosia, appearance Light, Dark or System), tutor style; export and reset |
+| `/settings` | Theme (palette Classic or Hermes, appearance Light, Dark or System), tutor style; export and reset |
 | `/courses/[slug]/[module]/session?topic=…` | The older Socratic micro-session for one topic |
 | `POST /api/agent/chat`, `POST /api/agent/summarize` | Server proxy to the free provider cascade (system prompt injected server-side), and transcript to structured topic recap |
 
@@ -152,7 +152,7 @@ Open [http://localhost:3000](http://localhost:3000). Node 22 or newer is require
 
 The diagram studio at `/studio` needs its runner beside the app. `npm run dev:up` starts both in one tmux session, a pane each, after checking Node, `node_modules`, your sign-in variables and the tldrawkc build; `npm run dev:down` stops them, the runner first so it can finish what it is writing. Without tmux it runs both in the one terminal, as `npm run dev:all` does. `scripts/dev.sh --help` lists the options. It also checks that the catalog file below exists and opens, and stops the start, naming the step to run, when it does not; `--no-checks` skips every check.
 
-The app reads its courses, topics, notes and diagrams from the catalog, and nothing else. The catalog is one SQLite file, `$GNOSIA_HOME/catalog.db`, else `~/.gnosia/catalog.db`, so there is no database server to install or start ([SQLITE-MIGRATION.md](docs/SQLITE-MIGRATION.md)). The repository holds no content of its own beyond [`seed/`](seed/README.md), a small real slice in the export format, so a fresh clone builds its database from that. The first time:
+The app reads its courses, topics, notes and diagrams from the catalog, and nothing else. The catalog is one SQLite file, `$HERMES_HOME/catalog.db`, else `~/.hermes/catalog.db`, so there is no database server to install or start ([SQLITE-MIGRATION.md](docs/SQLITE-MIGRATION.md)). The repository holds no content of its own beyond [`seed/`](seed/README.md), a small real slice in the export format, so a fresh clone builds its database from that. The first time:
 
 ```bash
 npm run catalog -- migrate                                  # creates the file, or brings its tables up to date
@@ -294,7 +294,7 @@ flowchart LR
 | --- | --- | --- |
 | `concept`, `session_log_entry`, `diagram` (the catalog) | Atomic concept notes (Obsidian-compatible and wikilinked once pulled), one log per session written live, and the diagrams drawn while teaching. `catalog export` or the nightly export is the copy | not in git |
 | `seed/` | A small slice of the content in the export format, for a fresh clone and the tests | tracked |
-| `~/.gnosia/` (`GNOSIA_HOME`) | The blob store (`blobs/`), the Obsidian vault (`vault/`) and the nightly export (`archive/`, `npm run export:nightly`) | outside the repo |
+| `~/.hermes/` (`HERMES_HOME`) | The blob store (`blobs/`), the Obsidian vault (`vault/`) and the nightly export (`archive/`, `npm run export:nightly`) | outside the repo |
 | `event`, `mastery`, `review` (the catalog) | The trajectory and its projections. `event` is the only copy | not in git |
 | `progress`, `recap`, `preference` (the catalog) | The web hub's ticks, notes and recaps. Also the only copy | not in git |
 | `apps/web/.env.local` | `OWNER_PASSWORD`, `AUTH_SECRET`, provider keys; read from `apps/web/`, never the root. The catalog's file is set in `services/catalog/.env`, if anywhere | gitignored |

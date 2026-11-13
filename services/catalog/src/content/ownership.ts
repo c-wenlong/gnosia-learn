@@ -1,5 +1,5 @@
-import { CONTENT_TYPES as READER_TYPES, type Ownership } from "@gnosia/content";
-import { catalogInstance, contentSource, type ContentType } from "@gnosia/schema";
+import { CONTENT_TYPES as READER_TYPES, type Ownership } from "@hermes/content";
+import { catalogInstance, contentSource, type ContentType } from "@hermes/schema";
 import { eq, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";

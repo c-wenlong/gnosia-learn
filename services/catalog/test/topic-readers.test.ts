@@ -1,7 +1,7 @@
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { fileSource, selectSource } from "@gnosia/content";
+import { fileSource, selectSource } from "@hermes/content";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { runFlip } from "../src/commands/flip";
@@ -12,7 +12,7 @@ import { contentOwnership } from "../src/content/ownership";
 import { dbSource } from "../src/content/source";
 import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { SEED } from "./seed";
-import { LOCAL_LEARNER_ID, ownerScope } from "@gnosia/schema";
+import { LOCAL_LEARNER_ID, ownerScope } from "@hermes/schema";
 
 /** Who these reads are for: the one owner there is today (phase 4 scoping). */
 const LOCAL = ownerScope(LOCAL_LEARNER_ID);

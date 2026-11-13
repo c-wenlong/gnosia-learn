@@ -1,14 +1,14 @@
 import "server-only";
 
-import type { AssetRef } from "@gnosia/catalog/state";
+import type { AssetRef } from "@hermes/catalog/state";
 
-import type { VideoChapter } from "@gnosia/tutor/media";
+import type { VideoChapter } from "@hermes/tutor/media";
 import { readAssetText, readFileProblems, withCatalog } from "@/lib/asset-library";
 import { storedPdfs, storedPosters } from "@/lib/asset-files";
-import { problemSource, type RouteProblemCode } from "@gnosia/tutor/asset-problems";
+import { problemSource, type RouteProblemCode } from "@hermes/tutor/asset-problems";
 import { assetDownloadHref, assetFileHref, assetPdfHref, assetPosterHref, assetStatusHref } from "@/lib/library";
 import { embedTargets } from "@/lib/note-embeds";
-import { parseChapters, parseTranscript, type ParsedTranscript } from "@gnosia/tutor/transcript";
+import { parseChapters, parseTranscript, type ParsedTranscript } from "@hermes/tutor/transcript";
 
 /**
  * Everything `AssetBody` draws an asset from, read once on the server: the

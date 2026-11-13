@@ -1,13 +1,13 @@
 # Architecture
 
-Gnosia (renamed from self-learn) is
+Hermes (renamed from self-learn) is
 a learning environment sharing one catalog. A
 Next.js app renders course roadmaps and progress; a CLI runs a Probe → Plan →
 Teach → Close tutoring loop over concept notes, which are rows in the catalog;
-a desktop shell (Gnosia Web, a window around the web app) launches the web
+a desktop shell (Hermes Web, a window around the web app) launches the web
 server and the studio runner; and the studio runner, a loopback service, draws
 diagrams and makes videos. The catalog database,
-one SQLite file (`~/.gnosia/catalog.db` by default,
+one SQLite file (`~/.hermes/catalog.db` by default,
 [docs/SQLITE-MIGRATION.md](docs/SQLITE-MIGRATION.md)), remains the one
 authority for content and learner state: the web app, the CLI and
 the services all reach it through the same store, which is the only module
@@ -50,7 +50,7 @@ instructions are not in this repo at all.
 | --- | --- | --- |
 | Instructions | `learning` plugin, `learning` marketplace | The `/learn` and `/review` skills, plus the `concept-mapper`, `fact-checker` and `diagram-maker` subagents |
 | Code | `scripts/learn/`, `apps/web/`, `apps/desktop/` | The pipeline CLI, the web app and the desktop shell around it |
-| Data | SQLite, through `services/catalog/`; `~/.gnosia/` for the local half | Courses, topics, tags, concept notes, session logs and diagrams, the event log and its projections in the catalog; the blob store under the data root. The repository holds only `seed/`, a small slice in the export format |
+| Data | SQLite, through `services/catalog/`; `~/.hermes/` for the local half | Courses, topics, tags, concept notes, session logs and diagrams, the event log and its projections in the catalog; the blob store under the data root. The repository holds only `seed/`, a small slice in the export format |
 | Assets | `tools/manimkc/` | A separate repo, wired in as a submodule, that renders narrated animation videos |
 | Assets | `tools/remotionkc/` | A separate repo, wired in as a submodule, that renders narrated explainer videos with Remotion; its `topics --json` is manimkc's report shape |
 | Assets | `tools/revideokc/` | A separate repo, wired in as a submodule, that renders narrated explainer videos with Revideo; its `topics --json` is manimkc's report shape too |
@@ -73,8 +73,8 @@ another repo.
 
 | Directory | What lives there | npm workspace |
 | --- | --- | --- |
-| `apps/web/` | The Next.js app, its `public/`, `next.config.ts`, `vercel.json` | `@gnosia/web` |
-| `apps/desktop/` | Gnosia Web, the desktop shell: a SwiftPM package (a WKWebView around the web app) that spawns the web server and the studio runner, plus the `.app` bundler and installer in `scripts/` | no (SwiftPM) |
+| `apps/web/` | The Next.js app, its `public/`, `next.config.ts`, `vercel.json` | `@hermes/web` |
+| `apps/desktop/` | Hermes Web, the desktop shell: a SwiftPM package (a WKWebView around the web app) that spawns the web server and the studio runner, plus the `.app` bundler and installer in `scripts/` | no (SwiftPM) |
 | `packages/content/`, `packages/schema/`, `packages/blob/`, `packages/tutor/` | The content reader, the table shapes, the blob store and the tutor core | yes |
 | `services/catalog/` | The connection, the migrations, the indexers, the `catalog` and `learn` CLIs | yes |
 | `services/studio/` | The diagram and video runner: its jobs, drafts, canvas verbs and loopback API on `127.0.0.1:7250` | yes |
@@ -104,7 +104,7 @@ another repo.
 `apps/desktop/` is the desktop shell: a SwiftPM package, not a Next anything.
 It opens a window onto the web app and spawns `next dev` and the studio
 runner from the checkout, giving both the environment `services/launch-env`
-prints. `scripts/bundle-app.sh` turns the package into `Gnosia Web.app` and
+prints. `scripts/bundle-app.sh` turns the package into `Hermes Web.app` and
 `scripts/install-app.sh` installs it.
 
 `packages/` and `services/` are npm workspaces, Node-only, with their own
@@ -118,7 +118,7 @@ tsconfigs.
 | `packages/tutor/` | The tutor's core: prompts, providers, BYOK credentials, the model chain, and the `*Turn` functions: the four agent turns, the provider-key and model-chain turns, and the learner writes in `src/server/learner-writes.ts` (progress, note, observe, review grade, session close and the rest), which the web routes call. Returns `TurnReply`s (status plus a JSON body), so nothing in it knows Next.js |
 | `services/catalog/` | The connection, the migrations, the indexers and the `catalog` CLI |
 | `services/studio/` | The studio's job runner and loopback API, on `127.0.0.1:7250`. Diagrams first, then video jobs through `src/video/` on the same surface (`POST /api/jobs` dispatches on the body's `kind`), and planner conversations (`src/drafts/`). It reads the topic vocabulary only through `catalog topic ls`, with the last good read cached under `$STUDIO_HOME/cache/topics.json` (D13), and opens no database connection of its own. Each job draws in its own workspace, `$STUDIO_HOME/jobs/<id>/candidate/`, never in the working tree, and Accept lands the candidate with `catalog diagram put --job`. Its repo root is where its code sits, not a walk up to `content/` ([docs/TLDRAWKC-INTEGRATION.md](docs/TLDRAWKC-INTEGRATION.md)) |
-| `services/launch-env/` | The environment the desktop shell hands every service it spawns. `src/env.ts` fills `process.env` as the web's own is filled (the exports, then `$GNOSIA_HOME/.env`, then `apps/web`'s `.env` files through `@next/env`) and pins `CATALOG_DB` at the file the catalog's own resolver names; `src/child-env.ts` prints that environment as one JSON object, which `apps/desktop`'s `Checkout.swift` reads once per launch so the web server and the studio runner open the same catalog file |
+| `services/launch-env/` | The environment the desktop shell hands every service it spawns. `src/env.ts` fills `process.env` as the web's own is filled (the exports, then `$HERMES_HOME/.env`, then `apps/web`'s `.env` files through `@next/env`) and pins `CATALOG_DB` at the file the catalog's own resolver names; `src/child-env.ts` prints that environment as one JSON object, which `apps/desktop`'s `Checkout.swift` reads once per launch so the web server and the studio runner open the same catalog file |
 
 `scripts/learn/` is what is left of the pipeline once its state moved into
 the catalog database: the maths, and the published entry point.
@@ -162,7 +162,7 @@ the seam and state through the store, never the database directly.
 | --- | --- |
 | `packages/content/` | `loadCourses`, `loadTopics`, `loadTags`, and the content types; `ContentSource`, the async interface every reader holds, with `fileSource(root)` over those parsers and `selectSource` choosing files or the database per type. Reads files, connects to nothing: the database implementation, `dbSource`, is the catalog's. |
 | `packages/schema/` | The Drizzle table definitions and the row types inferred from them. Connects to nothing. |
-| `packages/blob/` | `BlobStore`, `key()` and `fsStore()`: bytes under `$GNOSIA_HOME/blobs`, outside the repo. Imports nothing but Node. `catalog asset upload` writes it; the web's asset routes and the catalog commands read through it. |
+| `packages/blob/` | `BlobStore`, `key()` and `fsStore()`: bytes under `$HERMES_HOME/blobs`, outside the repo. Imports nothing but Node. `catalog asset upload` writes it; the web's asset routes and the catalog commands read through it. |
 | `services/catalog/` | [`db.ts`](services/catalog/src/db.ts) (the connection: one `better-sqlite3` handle per connect, whose `pool` field is a shim kept from the Postgres pool), `migrations.ts`, `drizzle-sqlite/` (generated SQL; the old `drizzle/` is the Postgres journal, kept for reference while databases cross with `services/catalog/scripts/pg-to-sqlite.mjs`, and nothing applies it), `cli.ts`, `src/state/` (the learner store) and `src/learn/` (the `learn` CLI) |
 | `packages/tutor/` | Everything the tutor endpoints share, grown out of `apps/web/src/lib/` so the routes import it from one place: `src/` is the pure half (`providers.ts` with the provider configs, `keyFor`, `completeWithFallback`; `prompt.ts` and the per-shape builders; `session-core`, `judge`, `review-core`, `concept-graph`, the markdown and media helpers), `src/server/` is the half that touches things: `deps.ts` (`TutorDeps`/`TurnSeams`), `turns.ts` (the `*Turn` functions: four agent turns, then provider-key save/remove/test, the model-chain add/set/remove/move/provider moves/test and `modelList`), `credentials.ts`, `provider-keys.ts`, `tutor-models.ts`, `model-list.ts`, `asset-detail.ts`, `learner-writes.ts` (the learner writes, each a `*Turn` over the catalog's state functions) and friends. The pure half imports no I/O; the server half takes the database as a promise so a catalog that cannot be opened degrades per read |
 | `services/launch-env/` | `src/env.ts` (`loadWebEnv`, `pinCatalogFile`, `childEnvironment`) and `src/child-env.ts` (the entry the desktop shell runs) |
@@ -429,7 +429,7 @@ through `reviewQueue` in the same module, which also returns the interval each
 button would give, computed by the scheduler a grade runs.
 
 Recaps are clamped by `KNOWLEDGE_LIMITS`, twice and from one definition in
-`@gnosia/schema/shared`: as CHECK constraints, so nothing can put an
+`@hermes/schema/shared`: as CHECK constraints, so nothing can put an
 unbounded summary in the column whatever wrote it, and in application code, so
 a long recap is trimmed and saved rather than refused with a 23514 the learner
 reads as "save failed".
@@ -451,7 +451,7 @@ a note should not watch them vanish, and the text is still there to copy.
 reads while composing the document, because it has to be known before the first
 byte or a dark-mode reload flashes white; the `preference` row is the durable
 copy and the fallback when the cookie is missing. And on first mount the
-provider checks for the old `gnosia:v1` localStorage key, posts it to
+provider checks for the old `hermes:v1` localStorage key, posts it to
 `/api/learner/import`, and removes it on success. The merge rules are in the
 store rather than the route: the database wins, and a curriculum item id the
 catalog no longer has is skipped and counted rather than costing the learner
@@ -696,7 +696,7 @@ One direction for content, one door for state.
                                                         event · mastery · review
                                                         progress · recap · preference
                                                                       ▲
-   apps/web/src/app  ──► apps/web/src/lib/learner-store.ts ──► @gnosia/catalog/state ┘
+   apps/web/src/app  ──► apps/web/src/lib/learner-store.ts ──► @hermes/catalog/state ┘
        │              (the connection, the degradation)
        └──► /api/learner/* ──► apps/web/src/lib/learner-api.ts ──► the same store
 
@@ -770,7 +770,7 @@ workspace, so `npm test` from the repo root is the whole suite.
 | `services/catalog/test/learn-cli.test.ts` | The five `--json` shapes pinned; the `learn-cli-*.test.ts` suites beside it run the CLI end to end by subject (the loop, refusals, files, diagrams, confidence, rows) |
 | `services/catalog/test/backfill.test.ts` | The backfill's assertion, its idempotency, and the synthesis it does and does not do |
 | `services/catalog/test/after-cutover.test.ts` | The repository after the cut-over: a database owning every type, no `LEARN_ROOT`, a learn session, `concept add --item`, a topic write and a bare import, none of which recreates `content/` or `learn/` |
-| `services/catalog/test/nightly-export.test.ts` | `scripts/nightly-export.mjs`: an export into a dated folder, the `latest` link, pruning to `--keep`, and its refusals (a relative `GNOSIA_HOME`, an archive inside the checkout) |
+| `services/catalog/test/nightly-export.test.ts` | `scripts/nightly-export.mjs`: an export into a dated folder, the `latest` link, pruning to `--keep`, and its refusals (a relative `HERMES_HOME`, an archive inside the checkout) |
 | `services/catalog/test/*.test.ts` | The schema's constraints, the indexers, the writer, the read commands |
 | `scripts/learn/lib/*.test.mjs` | BKT, the concept DAG, SM-2 conformance, frontmatter round-trips |
 
@@ -819,7 +819,7 @@ tables are the truth, written only through the write seam with an author and a
 reason, and `catalog history` shows every revision. `catalog export --out
 <dir>` writes them out as files, and the nightly export
 (`npm run export:nightly`) keeps a dated copy under
-`$GNOSIA_HOME/archive/`; importing one into an empty database restores it.
+`$HERMES_HOME/archive/`; importing one into an empty database restores it.
 The rows an indexer still owns are the ones read from outside, manimkc's,
 remotionkc's, revideokc's and blenderkc's renders and the mirror ledger, and there the indexer may delete: a row the
 source no longer produces is a stale row, and the whole point of the catalog is
@@ -827,7 +827,7 @@ that a rendered video cannot outlive its source without anything saying so.
 
 **Bytes live in the blob store, never in a row.** An `asset` row holds a key, a
 size and a hash; a 13 MB video and a 450 kB SVG are objects under
-`$GNOSIA_HOME/blobs`, and a note's words are its `concept.body`. What the
+`$HERMES_HOME/blobs`, and a note's words are its `concept.body`. What the
 catalog adds is the joins those files cannot carry: which topic an asset is
 about, which `.tldr` an SVG came out of, and, through `mirror`, whether the copy on Google Drive or Seafile is the same
 file as the one here. A `.tldr` says which topic it is about in its own
@@ -913,8 +913,8 @@ anywhere; `--manimkc-root`, `--remotionkc-root`, `--revideokc-root` and
 All six are in
 [services/catalog/.env.example](services/catalog/.env.example). The data
 root is a second family of variables: the desktop shell and the
-blob store's resolver both read `GNOSIA_HOME` then default to `~/.gnosia`.
-`GNOSIA_REPO` names the repository path the desktop shell serves.
+blob store's resolver both read `HERMES_HOME` then default to `~/.hermes`.
+`HERMES_REPO` names the repository path the desktop shell serves.
 
 ### How agents read it
 
@@ -927,7 +927,7 @@ with the command made for it (`learn concept show`, `catalog course export`).
 ## Layering rules
 
 1. **`apps/web/` imports the pipeline's *store*, and nothing else of it.** The web
-   app reaches learner state through `@gnosia/catalog/state`, the single
+   app reaches learner state through `@hermes/catalog/state`, the single
    export that workspace publishes. It does not import the `learn` CLI, the
    indexers or the migrations, and it never imports from `scripts/`. Before
    bundle 5 the two halves met at one JSON file; they now meet at one module,
@@ -976,7 +976,7 @@ with the command made for it (`learn concept show`, `catalog course export`).
    learner-state types safe in a `"use client"` module without dragging a
    database driver into the browser bundle.
 10. **The schema is the source of the SQL, never the other way round.** Change
-    `packages/schema/src/`, then `npm run generate -w @gnosia/catalog`. A
+    `packages/schema/src/`, then `npm run generate -w @hermes/catalog`. A
     migration that has been applied is never edited: drizzle applies by the
     journal's timestamp and would skip the edited file on every run, while the
     catalog's own status compares each file's sha256 and reports it pending,

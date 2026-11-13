@@ -1,9 +1,9 @@
-import type { ReviewQueueItem } from "@gnosia/catalog/state";
+import type { ReviewQueueItem } from "@hermes/catalog/state";
 import { describe, expect, it } from "vitest";
 
-import type { ConceptCheck } from "@gnosia/tutor/concept-note-core";
-import { withTutorOptions } from "@gnosia/tutor/review-core";
-import { CHECK_DISTRACTOR_LIMITS } from "@gnosia/schema/shared";
+import type { ConceptCheck } from "@hermes/tutor/concept-note-core";
+import { withTutorOptions } from "@hermes/tutor/review-core";
+import { CHECK_DISTRACTOR_LIMITS } from "@hermes/schema/shared";
 import { toReviewItem } from "./review-queue";
 
 /**

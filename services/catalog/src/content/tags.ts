@@ -1,5 +1,5 @@
-import type { TagMeta } from "@gnosia/content";
-import { tag } from "@gnosia/schema";
+import type { TagMeta } from "@hermes/content";
+import { tag } from "@hermes/schema";
 import { asc, desc, eq } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";

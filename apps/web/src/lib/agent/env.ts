@@ -1,20 +1,20 @@
 import "server-only";
 
-import { ownerScope } from "@gnosia/schema/shared";
-import type { TutorDeps } from "@gnosia/tutor/server/deps";
-import type { TurnReply } from "@gnosia/tutor/server/turns";
+import { ownerScope } from "@hermes/schema/shared";
+import type { TutorDeps } from "@hermes/tutor/server/deps";
+import type { TurnReply } from "@hermes/tutor/server/turns";
 import { NextResponse } from "next/server";
 
 import { assetBlobStore } from "@/lib/blob-store";
 import { getCourses } from "@/data/courses";
 import { contentSource } from "@/data/source";
 import { entryCredential, keyTestCredential, tutorCredentials } from "@/lib/agent/credentials";
-import { completeWithFallback, testProviderKey } from "@gnosia/tutor/providers";
+import { completeWithFallback, testProviderKey } from "@hermes/tutor/providers";
 import { readAssetDetail, readAssetText } from "@/lib/asset-library";
 import { readConceptWorkspace } from "@/lib/concept-workspace";
 import { catalogDatabase } from "@/lib/learner-store";
 import { readTutorStyle } from "@/lib/settings";
-import { cachedModelList } from "@gnosia/tutor/server/model-list";
+import { cachedModelList } from "@hermes/tutor/server/model-list";
 import { readChain } from "@/lib/tutor-models/store";
 
 /**

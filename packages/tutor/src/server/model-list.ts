@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import type { ProviderName } from "@gnosia/schema/shared";
+import type { ProviderName } from "@hermes/schema/shared";
 
 import { listProviderModels, type ModelListResult, type ProviderCredential } from "../providers";
 

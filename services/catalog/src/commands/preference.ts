@@ -8,7 +8,7 @@ import {
   studioAgentPreference,
   type StudioAgentPreference,
   type StudioAgentPreferenceKey,
-} from "@gnosia/schema";
+} from "@hermes/schema";
 import { and, eq, sql } from "drizzle-orm";
 
 import { CLI_OWNER } from "../content/scope";

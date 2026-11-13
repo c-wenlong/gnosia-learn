@@ -1,4 +1,4 @@
-import { COMMONS_OWNER, type RevisionEntityType } from "@gnosia/schema";
+import { COMMONS_OWNER, type RevisionEntityType } from "@hermes/schema";
 import { getTableColumns, getTableName, sql, type SQL } from "drizzle-orm";
 import type { SQLiteTable } from "drizzle-orm/sqlite-core";
 

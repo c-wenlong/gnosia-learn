@@ -8,8 +8,8 @@ import {
   measurePayload,
   PAYLOAD_LIMITS,
   type RateLimitStore,
-} from "@gnosia/tutor/guards";
-import { payloadTooLarge } from "@gnosia/tutor/server/turns";
+} from "@hermes/tutor/guards";
+import { payloadTooLarge } from "@hermes/tutor/server/turns";
 
 const post = (headers: Record<string, string> = {}) =>
   new Request("http://study.test/api/agent/chat", { method: "POST", headers });

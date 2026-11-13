@@ -1,4 +1,4 @@
-import type { AssetWithTopics } from "@gnosia/catalog/state";
+import type { AssetWithTopics } from "@hermes/catalog/state";
 
 import { assetFileHref, assetPosterHref, assetStatusHref } from "@/lib/library";
 

@@ -4,14 +4,14 @@ import {
   addChainEntry as addChainEntryCore,
   readChain as readChainCore,
   removeChainEntry as removeChainEntryCore,
-} from "@gnosia/tutor/server/tutor-models";
-import type { ChainEntry } from "@gnosia/tutor/providers";
+} from "@hermes/tutor/server/tutor-models";
+import type { ChainEntry } from "@hermes/tutor/providers";
 
 import { catalogDatabase } from "@/lib/learner-store";
 
 /**
  * The owner's model chain (docs/TUTOR-MODELS.md). The reads and writes live
- * in `@gnosia/tutor/server/tutor-models`; this file hands them this
+ * in `@hermes/tutor/server/tutor-models`; this file hands them this
  * app's pool.
  */
 

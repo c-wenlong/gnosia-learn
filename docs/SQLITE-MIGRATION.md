@@ -8,10 +8,10 @@ role: the file lives next to the blob store under the data root.
 
 | What | Resolves to |
 |---|---|
-| Default database | `$GNOSIA_HOME/catalog.db`, else `~/.gnosia/catalog.db` |
+| Default database | `$HERMES_HOME/catalog.db`, else `~/.hermes/catalog.db` |
 | `CATALOG_DB` | an explicit file path, wins over `DATABASE_URL` |
 | `DATABASE_URL` | still read, but only path-like values mean anything now |
-| `GNOSIA_HOME` | the data root the database and `blobs/` share |
+| `HERMES_HOME` | the data root the database and `blobs/` share |
 
 `DATABASE_URL`/`CATALOG_DB` accept a plain path (`/abs`, `./rel`, `~/…`), a
 `sqlite:` or `file:` URL, and the literal `:memory:` (tests). A
@@ -21,7 +21,7 @@ read as a filename — unset it or point it at the file the port wrote.
 ## Coming from a Postgres database
 
 ```sh
-node services/catalog/scripts/pg-to-sqlite.mjs --from postgres://localhost:5432/gnosia
+node services/catalog/scripts/pg-to-sqlite.mjs --from postgres://localhost:5432/hermes
 # or: DATABASE_URL=postgres://… node services/catalog/scripts/pg-to-sqlite.mjs
 ```
 
@@ -40,8 +40,8 @@ backfilled from each id's `tool:` prefix when it names a tool (`manimkc:…`
 
 A database that never ran a Postgres migration which renamed a value in
 place still ports: `RENAMES` in the script maps the old value on the way.
-Today that is `asset.source_repo = 'self-learn'`, from before the gnosia
-rename (`drizzle/0032_gnosia.sql`), which ports as `gnosia`.
+Today that is `asset.source_repo = 'self-learn'`, from before the hermes
+rename (`drizzle/0032_gnosia.sql`), which ports as `hermes`.
 
 The blob store is not in the database, and the port leaves it alone,
 `.owner` marker included. That marker names the Postgres database, while the
@@ -60,7 +60,7 @@ file (step 9 of [HOMESERVER.md](HOMESERVER.md) is the same claim).
   `foreign_keys=ON`, and a 5-second busy timeout.
 - Transactions are `begin immediate` with savepoints for nesting. Postgres
   advisory locks are gone — the write transaction serialises the whole file.
-- `gnosia.revision_id` / `copy_ok` settings are per-connection flags
+- `hermes.revision_id` / `copy_ok` settings are per-connection flags
   exposed to triggers as `catalog_revision_id()` / `catalog_copy_ok()`.
 - Postgres's `INITIALLY DEFERRED` constraint triggers have no SQLite
   spelling: an armed completeness rule is a row in `catalog_armed_rule`

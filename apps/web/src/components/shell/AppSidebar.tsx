@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 
-import { GnosiaWordmark } from "@/components/brand/GnosiaWordmark";
+import { HermesWordmark } from "@/components/brand/HermesWordmark";
 import { useHistorySearch } from "@/components/studio/history-search";
 import { cx } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
@@ -324,7 +324,7 @@ export function AppSidebar() {
               href={studio ? STUDIO_DESTINATION.href : "/home"}
               onClick={pick}
               inert={rail}
-              aria-label={studio ? "Gnosia, Studio" : "Gnosia, Home"}
+              aria-label={studio ? "Hermes, Studio" : "Hermes, Home"}
               className={cx(
                 "absolute top-1/2 left-3.5 -translate-y-1/2 rounded-sm text-[15px] whitespace-nowrap text-text",
                 "focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent",
@@ -332,7 +332,7 @@ export function AppSidebar() {
                 rail ? "opacity-0" : LABEL_SHOWN,
               )}
             >
-              <GnosiaWordmark />
+              <HermesWordmark />
             </Link>
             <div className="absolute top-1/2 right-3 -translate-y-1/2">
               {drawer ? (

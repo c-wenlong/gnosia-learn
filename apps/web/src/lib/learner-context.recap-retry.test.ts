@@ -3,7 +3,7 @@ import { act, createElement, useEffect, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { emptyLearnerState, type LearnerState } from "@gnosia/schema/shared";
+import { emptyLearnerState, type LearnerState } from "@hermes/schema/shared";
 
 import {
   clearTables,
@@ -48,7 +48,7 @@ const INPUT = {
 describe.skipIf(!reachable.ok)("a recap whose answer was lost after it was stored", () => {
   let scratch: Scratch;
   let POST: (req: Request) => Promise<Response>;
-  let state: typeof import("@gnosia/catalog/state");
+  let state: typeof import("@hermes/catalog/state");
   let provider: typeof import("./learner-context");
   let root: Root | null = null;
   const held: { learner: ReturnType<typeof import("./learner-context").useLearner> | null } = { learner: null };
@@ -61,7 +61,7 @@ describe.skipIf(!reachable.ok)("a recap whose answer was lost after it was store
     process.env.DATABASE_URL = scratch.url;
     const [route, loaded, context] = await Promise.all([
       import("@/app/api/learner/recap/route"),
-      import("@gnosia/catalog/state"),
+      import("@hermes/catalog/state"),
       import("./learner-context"),
     ]);
     POST = route.POST;

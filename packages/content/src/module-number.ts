@@ -12,7 +12,7 @@
  * through here; `test/fixtures/module-numbers.json` holds the worked cases.
  *
  * Pure and import-free, so client components can take it from
- * `@gnosia/content/module-number` without reaching the file reader.
+ * `@hermes/content/module-number` without reaching the file reader.
  */
 
 interface Listed {

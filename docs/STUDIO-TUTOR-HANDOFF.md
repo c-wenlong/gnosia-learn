@@ -405,7 +405,7 @@ Run on `main` at `779cb47`, from a worktree, against a scratch database built
 from `seed/` the way `scripts/e2e.mjs` builds one, a runner of its own on port
 7263 (`STUDIO_DAILY_USD=5`, its own `STUDIO_HOME`) and `next start` on the
 production build. Every message was typed into the concept page's tutor in a
-real browser and sent from there. Nothing here touched `gnosia` or the
+real browser and sent from there. Nothing here touched `hermes` or the
 owner's runner.
 
 **The tutor's answers came from a local stand-in, not a free provider.** No

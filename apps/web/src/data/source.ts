@@ -1,20 +1,20 @@
 import "server-only";
 
-import { classifyConnectionFailure } from "@gnosia/catalog/state";
+import { classifyConnectionFailure } from "@hermes/catalog/state";
 import { unstable_rethrow } from "next/navigation";
 import { connection } from "next/server";
 import { cache } from "react";
 
-import { ContentUnavailableError, selectContentSource, type SelectedSource } from "@gnosia/tutor/server/content-source";
+import { ContentUnavailableError, selectContentSource, type SelectedSource } from "@hermes/tutor/server/content-source";
 
 import { catalogDatabase } from "@/lib/learner-store";
 import { currentScope } from "@/lib/owner";
 
-export { ContentUnavailableError } from "@gnosia/tutor/server/content-source";
+export { ContentUnavailableError } from "@hermes/tutor/server/content-source";
 
 /**
  * The content seam's composition root, for this app: `selectContentSource`
- * in `@gnosia/tutor/server` holds the shared logic — every type
+ * in `@hermes/tutor/server` holds the shared logic — every type
  * resolved to files is refused by name — and the hooks below give it the
  * app's own pool, the request's owner scope, Next's `connection()` request
  * marker and `unstable_rethrow` for Next's control-flow errors.

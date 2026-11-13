@@ -12,7 +12,7 @@ import { WrongSourceNote } from "@/components/WrongSourceNote";
 import { FeedbackBar } from "@/components/ui/FeedbackBar";
 import { Placeholder } from "@/components/ui/Placeholder";
 import { cx } from "@/components/ui/classes";
-import { DEFAULT_CONFIDENCE } from "@gnosia/tutor/check-block";
+import { DEFAULT_CONFIDENCE } from "@hermes/tutor/check-block";
 import { ConfidenceField, ReasoningField } from "@/components/workspace/SurenessFields";
 import { FocusFrame } from "./FocusFrame";
 import { useWrittenOptions } from "./use-written-options";
@@ -32,7 +32,7 @@ import {
   withWrittenOptions,
   canAskAgain,
   sameCheck,
-} from "@gnosia/tutor/session-core";
+} from "@hermes/tutor/session-core";
 import {
   outcomeOf,
   weekCheckLabel,

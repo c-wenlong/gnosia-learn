@@ -19,7 +19,7 @@ function library(reachable = true) {
             url: null,
             bytes: 100,
             title: "Vectors",
-            sourceRepo: "gnosia",
+            sourceRepo: "hermes",
             topics: [],
             createdAt: "2026-10-04T20:00:00Z",
             updatedAt: "2026-10-04T20:00:00Z",

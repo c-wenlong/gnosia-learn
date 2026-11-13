@@ -319,7 +319,7 @@ describe("inputClasses and cardClasses", () => {
 
 /**
  * The type roles (IMPLEMENTATION.md, "Type roles"). The lint rules
- * `gnosia/h1-role` and `gnosia/type-size` hold the pages to them; this holds
+ * `hermes/h1-role` and `hermes/type-size` hold the pages to them; this holds
  * each role to one whole class string.
  */
 describe("the type roles", () => {
@@ -338,7 +338,7 @@ describe("the type roles", () => {
  * A form field's text is 16px on anything touched: iOS Safari zooms the page
  * when it focuses a field under 16px and leaves it zoomed. A phone held in
  * landscape is wider than 768px, so the pointer, not the width, says
- * "desktop". The lint rule `gnosia/field-text` keeps a field from setting a
+ * "desktop". The lint rule `hermes/field-text` keeps a field from setting a
  * smaller size of its own.
  */
 describe("FIELD_TEXT", () => {

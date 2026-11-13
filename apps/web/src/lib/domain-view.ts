@@ -6,7 +6,7 @@
  * `domain-map.ts`, which only the server runs.
  */
 
-import { ownValue } from "@gnosia/tutor/own-key";
+import { ownValue } from "@hermes/tutor/own-key";
 
 /** Half the width a concept takes: its dot and up to two lines of label centred under it. */
 export const NODE_HALF_WIDTH = 56;

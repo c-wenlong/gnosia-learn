@@ -1,6 +1,6 @@
 //
-//  GnosiaWebApp.swift
-//  GnosiaWeb
+//  HermesWebApp.swift
+//  HermesWeb
 //
 //  The desktop shell for the web app: one window hosting a WKWebView on a
 //  locally spawned Next server, so the app people use is the app itself —
@@ -13,7 +13,7 @@ import AppKit
 import SwiftUI
 
 @main
-struct GnosiaWebApp: App {
+struct HermesWebApp: App {
     @State private var server = WebServer()
     @State private var studio = StudioRunner()
 
@@ -23,7 +23,7 @@ struct GnosiaWebApp: App {
     }
 
     var body: some Scene {
-        WindowGroup("Gnosia") {
+        WindowGroup("Hermes") {
             ContentView()
                 .environment(server)
                 .frame(minWidth: shellWindowMinimumSize.width, minHeight: shellWindowMinimumSize.height)
@@ -93,22 +93,22 @@ private struct AppCommands: Commands {
         }
         CommandGroup(after: .pasteboard) {
             Divider()
-            Button("Find…") { post(.gnosiaWebFind) }.keyboardShortcut("f")
-            Button("Find Next") { post(.gnosiaWebFindNext) }.keyboardShortcut("g")
-            Button("Find Previous") { post(.gnosiaWebFindPrevious) }
+            Button("Find…") { post(.hermesWebFind) }.keyboardShortcut("f")
+            Button("Find Next") { post(.hermesWebFindNext) }.keyboardShortcut("g")
+            Button("Find Previous") { post(.hermesWebFindPrevious) }
                 .keyboardShortcut("g", modifiers: [.command, .shift])
         }
         CommandGroup(replacing: .printItem) {
-            Button("Print…") { post(.gnosiaWebPrint) }.keyboardShortcut("p")
+            Button("Print…") { post(.hermesWebPrint) }.keyboardShortcut("p")
         }
         CommandMenu("View") {
-            Button("Reload") { post(.gnosiaWebReload) }.keyboardShortcut("r")
-            Button("Back") { post(.gnosiaWebBack) }.keyboardShortcut("[")
-            Button("Forward") { post(.gnosiaWebForward) }.keyboardShortcut("]")
+            Button("Reload") { post(.hermesWebReload) }.keyboardShortcut("r")
+            Button("Back") { post(.hermesWebBack) }.keyboardShortcut("[")
+            Button("Forward") { post(.hermesWebForward) }.keyboardShortcut("]")
             Divider()
-            Button("Actual Size") { post(.gnosiaWebActualSize) }.keyboardShortcut("0")
-            Button("Zoom In") { post(.gnosiaWebZoomIn) }.keyboardShortcut("=")
-            Button("Zoom Out") { post(.gnosiaWebZoomOut) }.keyboardShortcut("-")
+            Button("Actual Size") { post(.hermesWebActualSize) }.keyboardShortcut("0")
+            Button("Zoom In") { post(.hermesWebZoomIn) }.keyboardShortcut("=")
+            Button("Zoom Out") { post(.hermesWebZoomOut) }.keyboardShortcut("-")
         }
     }
 

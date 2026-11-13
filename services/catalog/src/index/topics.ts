@@ -1,4 +1,4 @@
-import type { NewManimkcTopic, NewTopic, NewTopicRelation } from "@gnosia/schema";
+import type { NewManimkcTopic, NewTopic, NewTopicRelation } from "@hermes/schema";
 
 import type { Indexer } from "./source";
 import { VOCABULARY_FILE } from "./vocabulary";

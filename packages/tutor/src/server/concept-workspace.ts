@@ -6,10 +6,10 @@ import {
   readConceptObservations,
   readKnowledgeBase,
   readCards,
-} from "@gnosia/catalog/state";
-import type { ContentSource, Course } from "@gnosia/content";
-import { moduleNumber } from "@gnosia/content/module-number";
-import type { OwnerScope } from "@gnosia/schema/shared";
+} from "@hermes/catalog/state";
+import type { ContentSource, Course } from "@hermes/content";
+import { moduleNumber } from "@hermes/content/module-number";
+import type { OwnerScope } from "@hermes/schema/shared";
 
 import { findTopicAcrossCourses } from "../lookup";
 import {

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { NeighbourRef } from "@gnosia/tutor/concept-workspace-core";
+import type { NeighbourRef } from "@hermes/tutor/concept-workspace-core";
 
 import { noteResolvers } from "./session-page";
 

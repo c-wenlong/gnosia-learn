@@ -7,7 +7,7 @@ import {
   type Scratch,
 } from "../../../../../../../services/catalog/test/scratch-database";
 import { seedContent, TOPIC_SLUG } from "../../../../../../../services/catalog/test/state-fixture";
-import { collection, concept, learner, session } from "@gnosia/schema";
+import { collection, concept, learner, session } from "@hermes/schema";
 
 /**
  * Beside the fixture's live module `fx-m1`: one the course file stopped
@@ -75,7 +75,7 @@ describe.skipIf(!reachable.ok)("the session's learner routes", () => {
   let scratch: Scratch;
   let observe: (req: Request) => Promise<Response>;
   let close: (req: Request) => Promise<Response>;
-  let state: typeof import("@gnosia/catalog/state");
+  let state: typeof import("@hermes/catalog/state");
 
   let previousDatabaseUrl: string | undefined;
 
@@ -88,7 +88,7 @@ describe.skipIf(!reachable.ok)("the session's learner routes", () => {
     const [observeRoute, closeRoute, store] = await Promise.all([
       import("./route"),
       import("../session/close/route"),
-      import("@gnosia/catalog/state"),
+      import("@hermes/catalog/state"),
     ]);
     observe = observeRoute.POST;
     close = closeRoute.POST;

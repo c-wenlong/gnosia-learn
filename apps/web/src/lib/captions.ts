@@ -1,4 +1,4 @@
-import type { TranscriptCue, VideoChapter } from "@gnosia/tutor/media";
+import type { TranscriptCue, VideoChapter } from "@hermes/tutor/media";
 
 /**
  * A video's captions and chapters as the player's transcript takes them:

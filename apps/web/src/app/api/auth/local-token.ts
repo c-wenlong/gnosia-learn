@@ -5,7 +5,7 @@
  */
 
 /** The header the desktop shell sends its launch token in, never the URL. */
-export const LOCAL_TOKEN_HEADER = "x-gnosia-local-token";
+export const LOCAL_TOKEN_HEADER = "x-hermes-local-token";
 
 let redeemed = false;
 

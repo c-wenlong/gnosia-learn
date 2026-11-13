@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { Fragment, useId, useRef, useState, type ReactNode } from "react";
 
-import { formatTimecode, type TranscriptCue, type VideoChapter } from "@gnosia/tutor/media";
+import { formatTimecode, type TranscriptCue, type VideoChapter } from "@hermes/tutor/media";
 import { JobLog } from "@/components/studio/job-log";
 import { CancelJobButton, Duration, JobDot } from "@/components/studio/job-bits";
 import { JobCost } from "@/components/studio/JobCost";
@@ -60,7 +60,7 @@ import {
   type VideoJob,
 } from "@/lib/studio-video-job";
 import { shortLength, type VideoBrief } from "@/lib/studio-brief-video";
-import { formatBytes } from "@gnosia/tutor/asset-meta";
+import { formatBytes } from "@hermes/tutor/asset-meta";
 import { conversationHref, panelHref } from "@/lib/studio-url";
 import { scrollBehavior } from "@/lib/motion";
 

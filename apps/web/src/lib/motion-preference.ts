@@ -1,15 +1,15 @@
 import "server-only";
 
-import { PREFERENCE_KEYS } from "@gnosia/schema/shared";
-import { readPreferences } from "@gnosia/catalog/state";
+import { PREFERENCE_KEYS } from "@hermes/schema/shared";
+import { readPreferences } from "@hermes/catalog/state";
 
 import { catalogDatabase } from "@/lib/learner-store";
 import { currentOwner } from "@/lib/owner";
-import { parseMotionMode, type MotionMode } from "@gnosia/tutor/preferences";
+import { parseMotionMode, type MotionMode } from "@hermes/tutor/preferences";
 
 /**
  * The stored motion mode, which the `(app)` layout reads beside the learner
- * snapshot on every render and `MotionSeed` brings the `gnosia-motion`
+ * snapshot on every render and `MotionSeed` brings the `hermes-motion`
  * cookie (`@/lib/motion`) in line with.
  *
  * Null when the row could not be read: a cookie written from a guess would

@@ -12,7 +12,7 @@ import { SEED } from "./seed";
 
 /**
  * `scripts/nightly-export.mjs`: the database written out into
- * `$GNOSIA_HOME/archive/<time>/`, `latest` pointed at it, the oldest
+ * `$HERMES_HOME/archive/<time>/`, `latest` pointed at it, the oldest
  * pruned. Run against a scratch database holding the seed, so the export can
  * be compared with the seed byte for byte.
  */
@@ -43,16 +43,16 @@ async function filesUnder(root: string, prefix = ""): Promise<string[]> {
 }
 
 describe("scripts/nightly-export.mjs refuses", () => {
-  it("a relative GNOSIA_HOME", async () => {
-    const ran = await run([], { GNOSIA_HOME: "relative/home" });
+  it("a relative HERMES_HOME", async () => {
+    const ran = await run([], { HERMES_HOME: "relative/home" });
     expect(ran.code).toBe(2);
-    expect(ran.stderr).toContain("GNOSIA_HOME must be absolute");
+    expect(ran.stderr).toContain("HERMES_HOME must be absolute");
   });
 
   it("an archive inside the checkout", async () => {
-    const ran = await run([], { GNOSIA_HOME: path.join(REPO_ROOT, "no-such-home") });
+    const ran = await run([], { HERMES_HOME: path.join(REPO_ROOT, "no-such-home") });
     expect(ran.code).toBe(2);
-    expect(ran.stderr).toContain("inside the gnosia checkout");
+    expect(ran.stderr).toContain("inside the hermes checkout");
   });
 
   it("a --keep that is not a whole number", async () => {
@@ -72,9 +72,9 @@ describe.skipIf(!reachable.ok)("scripts/nightly-export.mjs", () => {
     scratch = await migratedScratchDatabase();
     home = await mkdtemp(path.join(tmpdir(), "catalog-nightly-home-"));
     noManimkc = await mkdtemp(path.join(tmpdir(), "catalog-nightly-no-manimkc-"));
-    for (const key of ["DATABASE_URL", "GNOSIA_HOME", "MANIMKC_ROOT"]) saved[key] = process.env[key];
+    for (const key of ["DATABASE_URL", "HERMES_HOME", "MANIMKC_ROOT"]) saved[key] = process.env[key];
     process.env["DATABASE_URL"] = scratch.url;
-    process.env["GNOSIA_HOME"] = home;
+    process.env["HERMES_HOME"] = home;
     process.env["MANIMKC_ROOT"] = noManimkc;
     // The seed's diagram SVG goes into this home's blob store, which is
     // where the export reads it back from.
@@ -102,7 +102,7 @@ describe.skipIf(!reachable.ok)("scripts/nightly-export.mjs", () => {
     const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
     await utimes(stale, twoDaysAgo, twoDaysAgo);
 
-    const ran = await run(["--keep", "2", "--json"], { DATABASE_URL: scratch.url, GNOSIA_HOME: home });
+    const ran = await run(["--keep", "2", "--json"], { DATABASE_URL: scratch.url, HERMES_HOME: home });
     expect(ran.stderr).toBe("");
     expect(ran.code).toBe(0);
     const report = JSON.parse(ran.stdout) as {

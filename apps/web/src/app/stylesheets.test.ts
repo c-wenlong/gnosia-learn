@@ -3,10 +3,10 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { RETIRED_TOKENS } from "../../../../eslint-rules/gnosia.mjs";
+import { RETIRED_TOKENS } from "../../../../eslint-rules/hermes.mjs";
 
 /**
- * The house rules the lint rules in eslint-rules/gnosia.mjs cannot see,
+ * The house rules the lint rules in eslint-rules/hermes.mjs cannot see,
  * because ESLint reads no stylesheet: no capitals or wide tracking (the
  * owner's call on 2026-09-29), no text under 12px (IMPLEMENTATION.md, "Type
  * roles"), none of the retired palette aliases declared again, and every
@@ -39,8 +39,8 @@ const TRACKED_OUT = /letter-spacing:\s*\+?(?:0*[1-9]|0*\.\d*[1-9])/;
 
 const tracksOut = (line: string) => /text-transform:\s*uppercase|small-caps/.test(line) || TRACKED_OUT.test(line);
 
-/** The four palette blocks: Classic light and dark, Gnosia light and dark. */
-const PALETTE = [":root", ".dark", ".gnosia", ".gnosia.dark"] as const;
+/** The four palette blocks: Classic light and dark, Hermes light and dark. */
+const PALETTE = [":root", ".dark", ".hermes", ".hermes.dark"] as const;
 
 /**
  * Tokens that do not change with the palette, declared on `:root` alone: the
@@ -85,7 +85,7 @@ function paletteBlocks(css: string): Map<string, Set<string>> {
  * Each token a palette block is missing, as `<block> lacks <token>`. The
  * palette is every token any of the four blocks declares, the shared ones
  * left out, so a token dropped from `:root` is a gap as well as one a dark
- * block forgot, and `.gnosia.dark` holds everything `.dark` or `.gnosia` does.
+ * block forgot, and `.hermes.dark` holds everything `.dark` or `.hermes` does.
  */
 function tokenGaps(css: string): string[] {
   const blocks = paletteBlocks(css);
@@ -135,29 +135,29 @@ describe("the stylesheets", () => {
 });
 
 describe("the palette check", () => {
-  it("names a token a dark block left out, and one only Gnosia dark is missing", () => {
+  it("names a token a dark block left out, and one only Hermes dark is missing", () => {
     const css = `
       :root { --page: #fff; --ink: #000; --font-display: serif; --shell-row: 2rem; }
       .dark { --page: #111; }
-      .gnosia { --page: #faf6ec; --ink: #15283a; }
-      .gnosia.dark { --page: #0d1c2b; }
+      .hermes { --page: #faf6ec; --ink: #15283a; }
+      .hermes.dark { --page: #0d1c2b; }
       @media (min-width: 1px) { .dark { --ink: #fff; } }
       .dark { --ink: #fff; }
     `;
-    expect(tokenGaps(css)).toEqual([".dark lacks --ink", ".gnosia.dark lacks --ink"]);
+    expect(tokenGaps(css)).toEqual([".dark lacks --ink", ".hermes.dark lacks --ink"]);
   });
 
   it("names a token dropped from :root that the other blocks still declare", () => {
     const css = `
       :root { --page: #fff; }
       .dark { --page: #111; --violet: #a78bfa; }
-      .gnosia { --page: #faf6ec; --violet: #7c3aed; }
-      .gnosia.dark { --page: #0d1c2b; --violet: #c4b5fd; }
+      .hermes { --page: #faf6ec; --violet: #7c3aed; }
+      .hermes.dark { --page: #0d1c2b; --violet: #c4b5fd; }
     `;
     expect(tokenGaps(css)).toEqual([":root lacks --violet"]);
   });
 
   it("says so when a palette block is missing, rather than passing on nothing", () => {
-    expect(tokenGaps(":root { --page: #fff; } .dark { --page: #111; }")).toEqual([".gnosia is not there", ".gnosia.dark is not there"]);
+    expect(tokenGaps(":root { --page: #fff; } .dark { --page: #111; }")).toEqual([".hermes is not there", ".hermes.dark is not there"]);
   });
 });

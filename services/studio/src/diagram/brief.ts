@@ -1,6 +1,6 @@
-import type { TopicEntry } from "@gnosia/content";
+import type { TopicEntry } from "@hermes/content";
 
-import { isAgentModel } from "@gnosia/schema/shared";
+import { isAgentModel } from "@hermes/schema/shared";
 
 import { topicList } from "../data/catalog";
 import { onCatalogWrite } from "../data/catalog-events";

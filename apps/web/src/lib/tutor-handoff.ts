@@ -1,5 +1,5 @@
 import type { MentionOption, MentionValue } from "@/lib/mentions";
-import { isConceptSlug } from "@gnosia/tutor/concept-workspace-core";
+import { isConceptSlug } from "@hermes/tutor/concept-workspace-core";
 import { mentionOptions } from "@/lib/studio-cards";
 import { capFrom } from "@/lib/studio-chat";
 import { TAG_KINDS, type TagKind } from "@/lib/studio-drafts";

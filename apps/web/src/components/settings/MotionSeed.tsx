@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 
 import { applyMotionToDocument, readMotionCookie, writeMotionCookie } from "@/lib/motion";
-import type { MotionMode } from "@gnosia/tutor/preferences";
+import type { MotionMode } from "@hermes/tutor/preferences";
 
 /**
  * Brings the motion cookie in line with the stored preference the `(app)`

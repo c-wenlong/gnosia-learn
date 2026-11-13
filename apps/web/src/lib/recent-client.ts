@@ -32,7 +32,7 @@ export async function changeRecent(change: RecentChange): Promise<boolean> {
  * Said on `window` once a module visit is stored (`markVisited`), so the
  * sidebar reads Recent again with the module just opened in it.
  */
-export const VISIT_STORED_EVENT = "gnosia:visit-stored";
+export const VISIT_STORED_EVENT = "hermes:visit-stored";
 
 export function announceVisitStored(): void {
   window.dispatchEvent(new Event(VISIT_STORED_EVENT));

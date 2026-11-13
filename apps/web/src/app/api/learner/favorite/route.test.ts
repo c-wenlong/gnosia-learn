@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { asset, learner } from "@gnosia/schema";
+import { asset, learner } from "@hermes/schema";
 
 import {
   clearTables,
@@ -44,8 +44,8 @@ function request(body: unknown, origin: string | null = ORIGIN): Request {
 describe.skipIf(!reachable.ok)("POST /api/learner/favorite", () => {
   let scratch: Scratch;
   let POST: (req: Request) => Promise<Response>;
-  let state: typeof import("@gnosia/catalog/state");
-  let favorite: typeof import("@gnosia/tutor/favorite");
+  let state: typeof import("@hermes/catalog/state");
+  let favorite: typeof import("@hermes/tutor/favorite");
 
   let previousDatabaseUrl: string | undefined;
 
@@ -71,8 +71,8 @@ describe.skipIf(!reachable.ok)("POST /api/learner/favorite", () => {
     process.env.DATABASE_URL = scratch.url;
     const [route, loaded, lib] = await Promise.all([
       import("./route"),
-      import("@gnosia/catalog/state"),
-      import("@gnosia/tutor/favorite"),
+      import("@hermes/catalog/state"),
+      import("@hermes/tutor/favorite"),
     ]);
     POST = route.POST;
     state = loaded;
