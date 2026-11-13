@@ -147,7 +147,7 @@ describe("the (app) layout's motion seed", () => {
     env.stored = "always";
     const html = await render();
     expect(html).toContain("<noscript>");
-    expect(html).toContain("Gnosia needs JavaScript");
+    expect(html).toContain("Hermes needs JavaScript");
   });
 
   it("writes nothing when the row could not be read", async () => {

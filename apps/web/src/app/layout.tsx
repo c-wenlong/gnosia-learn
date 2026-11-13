@@ -25,8 +25,8 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   metadataBase: resolveSiteUrl(),
   title: {
-    default: "Gnosia",
-    template: "%s · Gnosia",
+    default: "Hermes",
+    template: "%s · Hermes",
   },
   description:
     "A book that grows as you do. A living personal knowledge system that learns what you know and teaches what comes next.",
@@ -37,9 +37,9 @@ export const metadata: Metadata = {
     images: [
       {
         url: "/opengraph-image.png",
-        width: 1200,
-        height: 630,
-        alt: "Gnosia: a terracotta tree-ring mark above the wordmark on cream",
+        width: 1280,
+        height: 640,
+        alt: "Hermes Studio: the hat mark and the name on charcoal",
       },
     ],
   },

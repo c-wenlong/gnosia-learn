@@ -92,7 +92,7 @@ export default async function AppLayout({
         >
           <noscript>
             <p className="mb-6 rounded-xl border border-border bg-surface px-4 py-3 text-[14px] leading-5 text-text2">
-              Gnosia needs JavaScript. Turn it on for this site and reload the page.
+              Hermes needs JavaScript. Turn it on for this site and reload the page.
             </p>
           </noscript>
           {children}

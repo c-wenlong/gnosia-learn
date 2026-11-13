@@ -1,5 +1,9 @@
+<p align="center">
+  <img src="brand/banners/banner-readme-1280x320.png" alt="Hermes Studio" width="640">
+</p>
+
 <h1 align="center">
-Gnosia
+Hermes
 </h1>
 
 <p align="center">
@@ -26,7 +30,7 @@ Gnosia
 
 ---
 
-**Gnosia** is a personal study workspace built around the NUS School of Computing AY2026/27 course shortlist. A Next.js hub renders each course as a docs-style roadmap: topic checklists, notes, curated resources, and short Socratic tutoring sessions whose conclusions are saved back against the topic.
+**Hermes** is a personal study workspace built around the NUS School of Computing AY2026/27 course shortlist. A Next.js hub renders each course as a docs-style roadmap: topic checklists, notes, curated resources, and short Socratic tutoring sessions whose conclusions are saved back against the topic.
 
 Behind the hub sits a tutoring loop that runs inside Claude Code. It measures what you already know, plans a path from there to a goal, teaches one reasoning step at a time, and schedules what you will forget. Everything it writes lands in the catalog, a SQLite file, each change a revision with an author and a reason that `catalog history` shows, and `learn vault pull` hands the notes back as plain Markdown you can read and edit.
 
@@ -38,13 +42,13 @@ A third part, the `tools/manimkc/` submodule, renders narrated animations for co
 ```
 
 <p align="center">
-  <img src="apps/web/public/screenshot.png" alt="The Gnosia Today page: a top bar with Today, Courses, Learn, Library and Review, the next concept on the path with Continue teaching, a list of reviews due with Start review, recent study activity, and a right column with today's target, a seven-day streak strip and courses in progress" width="900"><br>
-  <em>Today, the home page, live at <a href="https://gnosia-one.vercel.app">gnosia-one.vercel.app</a>.</em>
+  <img src="apps/web/public/screenshot.png" alt="The Hermes Today page: a top bar with Today, Courses, Learn, Library and Review, the next concept on the path with Continue teaching, a list of reviews due with Start review, recent study activity, and a right column with today's target, a seven-day streak strip and courses in progress" width="900"><br>
+  <em>Today, the home page.</em>
 </p>
 
 ## Hosting, now and next
 
-Today Gnosia is self-hosted. You host the service, it serves a web page, you prompt it, and it uses the local Claude CLI to run the video process.
+Today Hermes is self-hosted. You host the service, it serves a web page, you prompt it, and it uses the local Claude CLI to run the video process.
 
 In future, the same flow can run completely in the cloud, in sandboxes, so prompting does not depend on your local machine.
 
