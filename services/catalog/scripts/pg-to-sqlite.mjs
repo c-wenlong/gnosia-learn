@@ -22,7 +22,8 @@
  *
  * Values a later Postgres migration renamed are renamed on the way (RENAMES),
  * so a database that never ran that migration still ports: an `asset` from
- * before 0032 says `source_repo = 'self-learn'`, which is `hermes` now.
+ * before 0032 says `source_repo = 'self-learn'`, and one that ran 0032 says
+ * `gnosia`. Both are `hermes` now.
  *
  * `asset.generated_by` is new with the port and backfilled from the `id`'s
  * `tool:` prefix (`manimkc:…` names manimkc, `video` names a studio video,
@@ -46,8 +47,10 @@ const SKIP_TABLES = new Set(["__drizzle_migrations", "catalog_armed_rule"]);
  * what that migration would have done.
  */
 export const RENAMES = [
-  // drizzle/0032_hermes.sql: the self-learn -> hermes rename.
+  // drizzle/0032_gnosia.sql renamed self-learn to gnosia. The SQLite catalog
+  // now names that repo hermes (drizzle-sqlite/0004_hermes_source.sql).
   { table: "asset", column: "source_repo", from: "self-learn", to: "hermes" },
+  { table: "asset", column: "source_repo", from: "gnosia", to: "hermes" },
 ];
 
 /** A value as the target should hold it: a renamed value's new name, anything else unchanged. */
