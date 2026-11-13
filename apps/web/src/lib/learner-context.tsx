@@ -202,6 +202,8 @@ interface Kept extends Keep {
  * (`takeOutboxesLocked`).
  */
 export const OUTBOX_KEY = "hermes:learner-outbox";
+/** Boxes a tab closed on before the rename. Taken with the current boxes, then removed. */
+const LEGACY_OUTBOX_KEY = "gnosia:learner-outbox";
 const OUTBOX_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 /** A page's own box: a fresh id per page, so a duplicated tab does not share one. */
@@ -244,7 +246,7 @@ function takeOutboxes(): Outbound[] {
     const keys: string[] = [];
     for (let i = 0; i < window.localStorage.length; i++) {
       const key = window.localStorage.key(i);
-      if (key !== null && (key === OUTBOX_KEY || key.startsWith(`${OUTBOX_KEY}:`))) keys.push(key);
+      if (key !== null && (key === OUTBOX_KEY || key.startsWith(`${OUTBOX_KEY}:`) || key === LEGACY_OUTBOX_KEY || key.startsWith(`${LEGACY_OUTBOX_KEY}:`))) keys.push(key);
     }
     for (const key of keys) {
       const raw = window.localStorage.getItem(key);

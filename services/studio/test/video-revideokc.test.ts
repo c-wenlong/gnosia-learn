@@ -80,7 +80,7 @@ function fixedTools(): RevideokcToolchain {
       root: REVIDEOKC,
       nodeModules: `${REVIDEOKC}/node_modules`,
       venv: `${REVIDEOKC}/.venv`,
-      hermesPython: { link: `${REVIDEOKC}/.venv/bin/python`, real: "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3.12", home: "/Library/Frameworks/Python.framework" },
+      gnosiaPython: { link: `${REVIDEOKC}/.venv/bin/python`, real: "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3.12", home: "/Library/Frameworks/Python.framework" },
       scriptShells: [] as string[],
       chrome: { binary: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", bundle: "/Applications/Google Chrome.app" },
       ffmpegInstaller: `${REVIDEOKC}/node_modules/@ffmpeg-installer`,
@@ -206,7 +206,7 @@ describe("the revideokc profiles", () => {
     const own = revideokcPaths(paths);
     const text = profileFor("narrate", paths);
     const exec = block(text, "allow process-exec").join(" ");
-    expect(exec).toContain(`(literal "${REVIDEOKC}/.venv/bin/hermes-audio")`);
+    expect(exec).toContain(`(literal "${REVIDEOKC}/.venv/bin/gnosia-audio")`);
     expect(exec).toContain(`(literal "${REVIDEOKC}/.venv/bin/python")`);
     expect(exec).toContain('(literal "/Users/me/hermes/tools/manimkc/.venv-tts/bin/python")');
     expect(exec).not.toContain("Google Chrome");
@@ -440,13 +440,13 @@ describe("the backend's own parts", () => {
     expect(backend.sourcePattern.test("two_boxes.py")).toBe(false);
   });
 
-  it("says why a toolchain without the split build, Chrome or hermes-audio cannot run a job", async () => {
+  it("says why a toolchain without the split build, Chrome or gnosia-audio cannot run a job", async () => {
     const tools = fixedTools();
     const checkout = path.join(root, "revideokc");
     await mkdir(path.join(checkout, "tools", "cli"), { recursive: true });
     await writeFile(path.join(checkout, "tools", "cli", "revideokc.mjs"), "");
     expect(revideokcProblems(tools).join("\n")).toMatch(/is not a revideokc checkout/);
-    const broken: RevideokcToolchain = { ...tools, revideokc: { ...tools.revideokc, root: checkout, splitBuild: false, chrome: null, hermesPython: null, nodeVersion: "22.10.0" } };
+    const broken: RevideokcToolchain = { ...tools, revideokc: { ...tools.revideokc, root: checkout, splitBuild: false, chrome: null, gnosiaPython: null, nodeVersion: "22.10.0" } };
     expect(revideokcProblems(broken).join("\n")).toMatch(
       /no build --no-narrate[\s\S]*22\.18[\s\S]*Chrome[\s\S]*narration-deps/,
     );

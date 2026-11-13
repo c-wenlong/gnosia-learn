@@ -26,9 +26,9 @@ import { discoverToolchain, manimkcRoot, toolchainProblems, type Toolchain } fro
 import { testVocabulary } from "./vocabulary";
 
 /**
- * What the studio takes from hermes-audio (src/video/narration.ts): the speech
+ * What the studio takes from gnosia-audio (src/video/narration.ts): the speech
  * rate, the pronunciation table's written forms, and the abbreviation warning
- * built from them. The parts that run hermes-audio inside a job's sandbox
+ * built from them. The parts that run gnosia-audio inside a job's sandbox
  * (the clip keys, the narration step) are in `video-sandbox.test.ts`.
  */
 
@@ -38,12 +38,12 @@ const FACTS: NarrationFacts = {
   leadIn: 0.2,
   tail: 0.4,
   spoken: ["RAW", "CPU", "CS4223", "API"],
-  data: { spoken: "/venv/hermes_audio/data/spoken.json", timing: "/venv/hermes_audio/data/timing.json" },
+  data: { spoken: "/venv/gnosia_audio/data/spoken.json", timing: "/venv/gnosia_audio/data/timing.json" },
 };
 
 afterEach(() => keepNarrationFacts(null));
 
-describe("hermes-audio's home reply and data files", () => {
+describe("gnosia-audio's home reply and data files", () => {
   it("reads the rate, the timing and where the data files are, and refuses anything else", () => {
     const home = {
       schema: 1,
@@ -61,7 +61,7 @@ describe("hermes-audio's home reply and data files", () => {
     expect(() => parseHome(null)).toThrow(/JSON object/);
   });
 
-  it("flattens spoken.json's groups in file order, as hermes-audio's own reader does", () => {
+  it("flattens spoken.json's groups in file order, as gnosia-audio's own reader does", () => {
     const file = {
       schema: 1,
       spoken: [
@@ -77,13 +77,13 @@ describe("hermes-audio's home reply and data files", () => {
 });
 
 describe("the speech rate", () => {
-  it("is hermes-audio's once it has answered, and the fallback before", () => {
+  it("is gnosia-audio's once it has answered, and the fallback before", () => {
     expect(narrationFacts()).toBeNull();
     expect(charsPerSecond()).toBe(FALLBACK_CHARS_PER_SECOND);
     expect(narrationHealth()).toEqual({ source: "fallback", version: null, charsPerSecond: FALLBACK_CHARS_PER_SECOND, spokenWords: 0 });
     keepNarrationFacts({ ...FACTS, charsPerSecond: 30.4 });
     expect(charsPerSecond()).toBe(30.4);
-    expect(narrationHealth()).toEqual({ source: "hermes-audio", version: "0.1.0", charsPerSecond: 30.4, spokenWords: 4 });
+    expect(narrationHealth()).toEqual({ source: "gnosia-audio", version: "0.1.0", charsPerSecond: 30.4, spokenWords: 4 });
   });
 
   it("is what the brief's validator measures a script with", () => {
@@ -112,15 +112,15 @@ describe("the speech rate", () => {
     expect(() => validateVideoBrief(brief, testVocabulary())).toThrow(/add about \d+ characters/);
   });
 
-  it("falls back to the figure this machine's hermes-audio holds, when one is installed", async (context) => {
+  it("falls back to the figure this machine's gnosia-audio holds, when one is installed", async (context) => {
     const root = manimkcRoot();
     const python = path.join(root, ".venv", "bin", "python");
     if (!existsSync(python)) return context.skip(`no manimkc .venv at ${root}`);
     const facts = await readNarrationFacts(root, python);
-    if (facts === null) return context.skip("hermes-audio is not installed in that .venv (make narration-deps)");
+    if (facts === null) return context.skip("gnosia-audio is not installed in that .venv (make narration-deps)");
     const timing = JSON.parse(await readFile(facts.data.timing, "utf8")) as { charsPerSecond: number };
     expect(facts.charsPerSecond).toBe(timing.charsPerSecond);
-    // The fallback is only for before hermes-audio answers; if the package's
+    // The fallback is only for before gnosia-audio answers; if the package's
     // figure moves, this is where the fallback is found stale.
     expect(FALLBACK_CHARS_PER_SECOND).toBe(timing.charsPerSecond);
     expect(facts.spoken).toContain("CPU");
@@ -135,7 +135,7 @@ describe("the abbreviation warning (V11)", () => {
     expect(abbreviationsIn(lines, [])).toEqual(["CPU", "RAW", "ACL", "TCP", "NixOS", "CS4223"]);
   });
 
-  it("is null before hermes-audio answers, empty for a silent video, and the list otherwise", () => {
+  it("is null before gnosia-audio answers, empty for a silent video, and the list otherwise", () => {
     const brief = { voice: "af_heart", scenes: [{ name: "one", beats: [{ say: "The CPU asks the ACL." }] }] };
     expect(videoAbbreviations(brief)).toBeNull();
     keepNarrationFacts(FACTS);
@@ -164,7 +164,7 @@ describe("the abbreviation warning (V11)", () => {
   });
 });
 
-describe("the toolchain without hermes-audio", () => {
+describe("the toolchain without gnosia-audio", () => {
   it("names make narration-deps, so the doctor turns videos off rather than failing a job", () => {
     const tools = {
       platform: "darwin",
@@ -179,7 +179,7 @@ describe("the toolchain without hermes-audio", () => {
       node: "/usr/local/bin/node",
       narration: null,
     } as unknown as Toolchain;
-    expect(toolchainProblems(tools)).toEqual(["hermes-audio, the narration package, does not answer in /opt/manimkc/.venv: run make narration-deps there"]);
+    expect(toolchainProblems(tools)).toEqual(["gnosia-audio, the narration package, does not answer in /opt/manimkc/.venv: run make narration-deps there"]);
     expect(toolchainProblems({ ...tools, narration: FACTS })).toEqual([]);
   });
 });
@@ -197,7 +197,7 @@ describe("discovering the toolchain", () => {
     expect(narrationFacts()).toBeNull();
   });
 
-  it("forgets hermes-audio's last answer when it stops answering, so health says fallback", async () => {
+  it("forgets gnosia-audio's last answer when it stops answering, so health says fallback", async () => {
     keepNarrationFacts(FACTS);
     const saved = process.env.MANIMKC_ROOT;
     process.env.MANIMKC_ROOT = "/nonexistent/manimkc";

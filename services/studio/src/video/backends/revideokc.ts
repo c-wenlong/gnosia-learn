@@ -23,7 +23,7 @@ import { keepClips as keepClipFiles, seedClips } from "../seed";
 
 /**
  * The revideokc backend (D75 to D79 of docs/STUDIO-VIDEO-TOOLS.md, phase 2c):
- * Revideo scenes in a synthetic revideokc checkout, voiced by hermes-audio
+ * Revideo scenes in a synthetic revideokc checkout, voiced by gnosia-audio
  * with kokoro, rendered by headless Chrome inside the job's Seatbelt
  * profile with Chrome's own sandbox off (D76). Each part is a module under
  * `../revideokc/`, as manimkc's backend is a facade over the modules that do

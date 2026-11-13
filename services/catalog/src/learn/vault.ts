@@ -180,7 +180,7 @@ export function resolveVaultDir(given: string | undefined): string {
 }
 
 /** The root `package.json`'s name, which every checkout of this repository carries, now and before the rename. */
-const REPOSITORY_NAMES = new Set(["hermes", "self-learn"]);
+const REPOSITORY_NAMES = new Set(["hermes", "gnosia", "self-learn"]);
 
 /** The nearest folder at or above `dir` whose `package.json` names this repository, or null. */
 function checkoutAbove(dir: string): string | null {

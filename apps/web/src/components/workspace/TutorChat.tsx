@@ -143,7 +143,19 @@ function subscribe(listener: () => void): () => void {
 function readRaw(key: string): string | null {
   if (memory.has(key)) return memory.get(key) ?? null;
   try {
-    return window.sessionStorage.getItem(key);
+    const stored = window.sessionStorage.getItem(key);
+    if (stored !== null) return stored;
+    // A tab opened before the rename stored the thread under the old name.
+    // Move it once, so a reload after the upgrade keeps the conversation.
+    if (key.startsWith("hermes:")) {
+      const previous = window.sessionStorage.getItem(`gnosia:${key.slice("hermes:".length)}`);
+      if (previous !== null) {
+        window.sessionStorage.setItem(key, previous);
+        window.sessionStorage.removeItem(`gnosia:${key.slice("hermes:".length)}`);
+        return previous;
+      }
+    }
+    return null;
   } catch {
     return null;
   }

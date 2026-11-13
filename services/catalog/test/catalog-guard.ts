@@ -3,7 +3,7 @@ import { homedir, userInfo } from "node:os";
 import path from "node:path";
 import { parseEnv } from "node:util";
 
-import { CATALOG_DB_ENV, databasePath, HERMES_HOME_ENV } from "../src/env";
+import { CATALOG_DB_ENV, databasePath, HERMES_HOME_ENV, LEGACY_GNOSIA_HOME_ENV } from "../src/env";
 import { ENV_FILE_ENV } from "./catalog-isolation";
 
 /**
@@ -99,9 +99,11 @@ export function forbiddenCatalogs(before: NodeJS.ProcessEnv, repoRoot: string): 
   // os.homedir() reads $HOME, which a suite may point elsewhere; the account's
   // own home comes from the password database.
   const homes = [...new Set([homedir(), accountHome(), before.HOME].filter((h): h is string => !!h))];
-  const dataHomes = homes.map((home) => path.join(home, ".hermes"));
-  const fromShell = before[HERMES_HOME_ENV]?.trim();
-  if (fromShell) dataHomes.push(fromShell === "~" || fromShell.startsWith("~/") ? path.join(homedir(), fromShell.slice(1)) : fromShell);
+  const dataHomes = homes.flatMap((home) => [path.join(home, ".hermes"), path.join(home, ".gnosia")]);
+  for (const variable of [HERMES_HOME_ENV, LEGACY_GNOSIA_HOME_ENV]) {
+    const fromShell = before[variable]?.trim();
+    if (fromShell) dataHomes.push(fromShell === "~" || fromShell.startsWith("~/") ? path.join(homedir(), fromShell.slice(1)) : fromShell);
+  }
 
   const sources: Array<Record<string, string | undefined>> = [before];
   const envFiles = [
@@ -121,7 +123,10 @@ export function forbiddenCatalogs(before: NodeJS.ProcessEnv, repoRoot: string): 
   for (const source of sources) {
     add(namedFile(source[CATALOG_DB_ENV]));
     add(namedFile(source.DATABASE_URL));
-    for (const home of homes) add(homeCatalog(source[HERMES_HOME_ENV], home));
+    for (const home of homes) {
+      add(homeCatalog(source[HERMES_HOME_ENV], home));
+      add(homeCatalog(source[LEGACY_GNOSIA_HOME_ENV], home));
+    }
   }
   return forbidden;
 }

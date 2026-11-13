@@ -176,7 +176,7 @@ pane_command() { # pane_command <process command...>
 
   {
     printf 'export PATH=%q\n' "$PATH"
-    for name in CATALOG_DB DATABASE_URL PORT HERMES_HOME ${held[@]+"${held[@]}"}; do
+    for name in CATALOG_DB DATABASE_URL PORT HERMES_HOME GNOSIA_HOME ${held[@]+"${held[@]}"}; do
       case "$name" in STUDIO_ENABLED) continue ;; esac
       if [ -n "${!name+x}" ]; then printf 'export %s=%q\n' "$name" "${!name}"; else printf 'unset %s\n' "$name"; fi
     done

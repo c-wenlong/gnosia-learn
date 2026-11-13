@@ -41,6 +41,9 @@ import { inTransaction } from "../db";
  */
 export const OWNER_BYTES_CAP_ENV = "HERMES_OWNER_BYTES_CAP";
 export const OWNER_UPLOADS_PER_DAY_ENV = "HERMES_OWNER_UPLOADS_PER_DAY";
+/** The same caps as installations named them before the rename. Read only when the new name is unset, including when the old value is zero. */
+const LEGACY_OWNER_BYTES_CAP_ENV = "GNOSIA_OWNER_BYTES_CAP";
+const LEGACY_OWNER_UPLOADS_PER_DAY_ENV = "GNOSIA_OWNER_UPLOADS_PER_DAY";
 
 /** The window the uploads cap counts over. Rolling, never a calendar day, as the studio's spend cap. */
 export const UPLOAD_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -71,8 +74,9 @@ export class OwnerCapConfigError extends Error {
   }
 }
 
-function capFrom(env: Record<string, string | undefined>, variable: string): number | null {
-  const raw = env[variable]?.trim();
+function capFrom(env: Record<string, string | undefined>, variable: string, legacy?: string): number | null {
+  const named = env[variable]?.trim();
+  const raw = named === undefined || named === "" ? legacy === undefined ? undefined : env[legacy]?.trim() : named;
   if (raw === undefined || raw === "") return null;
   // Refused rather than read as unset, unlike STUDIO_DAILY_USD: an upload is a
   // command a person runs and watches, so a typo is a sentence they can fix at
@@ -102,7 +106,10 @@ export function ownerCapsOrError(env?: Record<string, string | undefined>): Owne
 export function ownerCaps(env?: Record<string, string | undefined>): OwnerCaps {
   if (env === undefined) loadEnv();
   const from = env ?? process.env;
-  return { bytes: capFrom(from, OWNER_BYTES_CAP_ENV), uploadsPerDay: capFrom(from, OWNER_UPLOADS_PER_DAY_ENV) };
+  return {
+    bytes: capFrom(from, OWNER_BYTES_CAP_ENV, LEGACY_OWNER_BYTES_CAP_ENV),
+    uploadsPerDay: capFrom(from, OWNER_UPLOADS_PER_DAY_ENV, LEGACY_OWNER_UPLOADS_PER_DAY_ENV),
+  };
 }
 
 /** An upload an owner's cap refuses. Nothing was stored and no row was written. */

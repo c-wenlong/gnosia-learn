@@ -13,7 +13,7 @@ import {
  *
  * The fourth video tool, and revideokc's rules exactly (`./revideokc.ts`):
  * blenderkc renders photoreal 3D with Blender's Cycles through `bpy` and
- * narrates through hermes-audio, its CLI answers `topics --json` with
+ * narrates through gnosia-audio, its CLI answers `topics --json` with
  * manimkc's report shape, and there is no `maps.blenderkc`, so each
  * topic.yml's required `topic:` is the topic its video is filed under, one
  * the importing owner can read; a missing or unknown one refuses the run by

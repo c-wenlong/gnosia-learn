@@ -4,8 +4,8 @@ import path from "node:path";
 import { run } from "../proc";
 
 /**
- * What the studio takes from hermes-audio, manimkc's narration layer as a
- * package of its own (github.com/promethevs-labs/hermes-audio, installed into
+ * What the studio takes from gnosia-audio, manimkc's narration layer as a
+ * package of its own (github.com/promethevs-labs/gnosia-audio, installed into
  * manimkc's `.venv` by `make narration-deps`).
  *
  * Three things, all through its JSON contract (schema 1, its docs/CLI.md)
@@ -14,11 +14,11 @@ import { run } from "../proc";
  * - **The speech rate** (`charsPerSecond`, from its `data/timing.json`), which
  *   predicts a script's length before anything is voiced. The brief's
  *   validator reads it here, and `/api/health` hands it to the web app's card,
- *   so there is one figure and hermes-audio owns it.
+ *   so there is one figure and gnosia-audio owns it.
  * - **The pronunciation table's written forms** (the keys of its
  *   `data/spoken.json`), which say which capitalised words the voice already
  *   spells out. The card's abbreviation warning (V11) is built from them.
- * - **The clip keys** (`seed.ts`, `hermes-audio keys --json`), which run in a
+ * - **The clip keys** (`seed.ts`, `gnosia-audio keys --json`), which run in a
  *   job's render profile and not here.
  *
  * `home --json` is asked once per toolchain discovery, outside any sandbox:
@@ -27,11 +27,11 @@ import { run } from "../proc";
  * this module so the synchronous validator can read it.
  */
 
-/** The speech rate before hermes-audio has answered, or on a machine without it (where videos are off anyway). */
+/** The speech rate before gnosia-audio has answered, or on a machine without it (where videos are off anyway). */
 export const FALLBACK_CHARS_PER_SECOND = 15.2;
 
 export interface NarrationFacts {
-  /** hermes-audio's package version, for health and logs. */
+  /** gnosia-audio's package version, for health and logs. */
   version: string;
   /** Characters of written narration per second of speech: the planning figure. */
   charsPerSecond: number;
@@ -46,7 +46,7 @@ export interface NarrationFacts {
 
 let current: NarrationFacts | null = null;
 
-/** The facts in force: hermes-audio's latest answer, or null before one or after a discovery it did not answer. */
+/** The facts in force: gnosia-audio's latest answer, or null before one or after a discovery it did not answer. */
 export function narrationFacts(): NarrationFacts | null {
   return current;
 }
@@ -60,7 +60,7 @@ let reads = 0;
 let settled = 0;
 
 /**
- * Number a read of hermes-audio as it starts. Discoveries overlap (the
+ * Number a read of gnosia-audio as it starts. Discoveries overlap (the
  * doctor's periodic check and a job's start), and an older one can finish
  * after a newer one, a timeout after a success; so what a read found is kept
  * only when no read that started after it has already been kept (Greptile on
@@ -85,9 +85,9 @@ export function charsPerSecond(): number {
 }
 
 /** What `/api/health` says about narration: the figure in force and where it came from. */
-export function narrationHealth(): { source: "hermes-audio" | "fallback"; version: string | null; charsPerSecond: number; spokenWords: number } {
+export function narrationHealth(): { source: "gnosia-audio" | "fallback"; version: string | null; charsPerSecond: number; spokenWords: number } {
   return {
-    source: current === null ? "fallback" : "hermes-audio",
+    source: current === null ? "fallback" : "gnosia-audio",
     version: current?.version ?? null,
     charsPerSecond: charsPerSecond(),
     spokenWords: current?.spoken.length ?? 0,
@@ -96,7 +96,7 @@ export function narrationHealth(): { source: "hermes-audio" | "fallback"; versio
 
 const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 
-/** The written forms in spoken.json: its `spoken` groups flattened in file order, as hermes-audio's own reader does. */
+/** The written forms in spoken.json: its `spoken` groups flattened in file order, as gnosia-audio's own reader does. */
 export function spokenForms(file: unknown): string[] {
   const groups = (file as { spoken?: unknown } | null)?.spoken;
   if (!Array.isArray(groups)) throw new Error("spoken.json has no `spoken` list of groups");
@@ -112,14 +112,14 @@ export function spokenForms(file: unknown): string[] {
 /** `home --json`'s reply, checked: the fields this module reads, or an error naming what is wrong. */
 export function parseHome(reply: unknown): { version: string; charsPerSecond: number; leadIn: number; tail: number; data: { spoken: string; timing: string } } {
   const home = reply as Record<string, unknown> | null;
-  if (home === null || typeof home !== "object") throw new Error("hermes-audio home did not answer with a JSON object");
-  if (home.error !== undefined) throw new Error(`hermes-audio home failed: ${String((home.error as { message?: unknown })?.message ?? home.error)}`);
-  if (home.schema !== 1) throw new Error(`hermes-audio speaks schema ${String(home.schema)}, and this runner reads schema 1`);
+  if (home === null || typeof home !== "object") throw new Error("gnosia-audio home did not answer with a JSON object");
+  if (home.error !== undefined) throw new Error(`gnosia-audio home failed: ${String((home.error as { message?: unknown })?.message ?? home.error)}`);
+  if (home.schema !== 1) throw new Error(`gnosia-audio speaks schema ${String(home.schema)}, and this runner reads schema 1`);
   const data = home.data as { spoken?: unknown; timing?: unknown } | undefined;
-  if (!finite(home.charsPerSecond) || home.charsPerSecond <= 0) throw new Error("hermes-audio home named no speech rate");
-  if (!finite(home.leadIn) || !finite(home.tail)) throw new Error("hermes-audio home named no lead-in or tail");
+  if (!finite(home.charsPerSecond) || home.charsPerSecond <= 0) throw new Error("gnosia-audio home named no speech rate");
+  if (!finite(home.leadIn) || !finite(home.tail)) throw new Error("gnosia-audio home named no lead-in or tail");
   if (typeof data?.spoken !== "string" || !path.isAbsolute(data.spoken) || typeof data.timing !== "string" || !path.isAbsolute(data.timing)) {
-    throw new Error("hermes-audio home did not say where its data files are");
+    throw new Error("gnosia-audio home did not say where its data files are");
   }
   return {
     version: typeof home.version === "string" ? home.version : "unknown",
@@ -131,7 +131,7 @@ export function parseHome(reply: unknown): { version: string; charsPerSecond: nu
 }
 
 /**
- * Ask the manimkc checkout's hermes-audio where it stands, and read its
+ * Ask the manimkc checkout's gnosia-audio where it stands, and read its
  * pronunciation table. Null when it is not installed or does not answer in a
  * shape this runner knows, which `toolchainProblems` reports.
  */
@@ -143,7 +143,7 @@ export async function readNarrationFacts(root: string, python: string | null): P
     LANG: "en_US.UTF-8",
     ...(process.env.MANIMKC_HOME === undefined ? {} : { MANIMKC_HOME: process.env.MANIMKC_HOME }),
   };
-  const result = await run(python, ["-I", "-m", "hermes_audio", "home", "--json", "--manimkc-root", root], { cwd: root, env, timeoutMs: 30_000 }).catch(() => null);
+  const result = await run(python, ["-I", "-m", "gnosia_audio", "home", "--json", "--manimkc-root", root], { cwd: root, env, timeoutMs: 30_000 }).catch(() => null);
   if (result === null || result.code !== 0) return null;
   try {
     const home = parseHome(JSON.parse(result.stdout));
@@ -180,7 +180,7 @@ export function abbreviationsIn(lines: readonly string[], spoken: readonly strin
 
 /**
  * V11 for a video brief: the words its lines hold that the voice would read
- * as words. Null when hermes-audio has not answered, so the card falls back to
+ * as words. Null when gnosia-audio has not answered, so the card falls back to
  * its own rough check rather than being told "none" by a runner that does not
  * know; empty for a silent video, which no voice reads.
  */

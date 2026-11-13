@@ -231,6 +231,11 @@ export function sessionKey(slug: string): string {
   return `hermes:tutor-session:${slug}`;
 }
 
+/** The session id a tab stored before the rename. */
+export function legacySessionKey(slug: string): string {
+  return `gnosia:tutor-session:${slug}`;
+}
+
 /**
  * Where a concept's thread lives in `sessionStorage`. Per tab and gone when
  * the tab closes, on purpose for now: the thread is a scratchpad. What counts
@@ -240,6 +245,11 @@ export function sessionKey(slug: string): string {
  */
 export function threadKey(slug: string): string {
   return `hermes:tutor:${slug}`;
+}
+
+/** The thread a tab stored before the rename. */
+export function legacyThreadKey(slug: string): string {
+  return `gnosia:tutor:${slug}`;
 }
 
 /**

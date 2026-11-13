@@ -46,6 +46,26 @@ DROP TABLE `asset_job`;
 --> statement-breakpoint
 CREATE TABLE `session__copy` AS SELECT * FROM `session`;
 --> statement-breakpoint
+-- `event`, `job`, `session_log_entry` and `content_revision` reference
+-- `session` with ON DELETE restrict. A drop while those rows exist is refused
+-- and the upgrade rolls back. Copy them aside, as the asset children above,
+-- and put them back after `session` exists again.
+CREATE TABLE `event__copy` AS SELECT * FROM `event`;
+--> statement-breakpoint
+DROP TABLE `event`;
+--> statement-breakpoint
+CREATE TABLE `job__copy` AS SELECT * FROM `job`;
+--> statement-breakpoint
+DROP TABLE `job`;
+--> statement-breakpoint
+CREATE TABLE `session_log_entry__copy` AS SELECT * FROM `session_log_entry`;
+--> statement-breakpoint
+DROP TABLE `session_log_entry`;
+--> statement-breakpoint
+CREATE TABLE `content_revision__copy` AS SELECT * FROM `content_revision`;
+--> statement-breakpoint
+DROP TABLE `content_revision`;
+--> statement-breakpoint
 DROP TABLE `session`;
 --> statement-breakpoint
 DROP TRIGGER `asset_copy_guard_ins`;
@@ -355,48 +375,6 @@ BEGIN
 	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
 END;
 --> statement-breakpoint
-CREATE TABLE `asset_job` (
-	`asset_id` text NOT NULL,
-	`job_id` text NOT NULL,
-	`content_hash` text NOT NULL,
-	`bytes` integer NOT NULL,
-	`written_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
-	`owner_id` text DEFAULT 'local' NOT NULL,
-	`created_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
-	`updated_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
-	PRIMARY KEY(`asset_id`, `job_id`),
-	FOREIGN KEY (`asset_id`) REFERENCES `asset`(`id`) ON UPDATE cascade ON DELETE cascade,
-	FOREIGN KEY (`job_id`) REFERENCES `job`(`id`) ON UPDATE cascade ON DELETE restrict,
-	FOREIGN KEY (`owner_id`) REFERENCES `learner`(`id`) ON UPDATE cascade ON DELETE restrict,
-	CONSTRAINT "asset_job_bytes_check" CHECK(bytes >= 0)
-);
---> statement-breakpoint
-INSERT INTO `asset_job` SELECT * FROM `asset_job__copy`;
---> statement-breakpoint
-DROP TABLE `asset_job__copy`;
---> statement-breakpoint
-CREATE INDEX `asset_job_job_id_idx` ON `asset_job` (`job_id`);
---> statement-breakpoint
-CREATE INDEX `asset_job_owner_id_idx` ON `asset_job` (`owner_id`);
---> statement-breakpoint
-CREATE TRIGGER `asset_job_copy_guard_ins` BEFORE INSERT ON `asset_job` FOR EACH ROW
-	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
-BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
-END;
---> statement-breakpoint
-CREATE TRIGGER `asset_job_copy_guard_upd` BEFORE UPDATE ON `asset_job` FOR EACH ROW
-	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
-BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
-END;
---> statement-breakpoint
-CREATE TRIGGER `asset_job_copy_guard_del` BEFORE DELETE ON `asset_job` FOR EACH ROW
-	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
-BEGIN
-	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
-END;
---> statement-breakpoint
 CREATE TABLE `session` (
 	`id` text PRIMARY KEY NOT NULL,
 	`kind` text NOT NULL,
@@ -448,6 +426,317 @@ BEGIN
 END;
 --> statement-breakpoint
 CREATE TRIGGER `session_copy_guard_del` BEFORE DELETE ON `session` FOR EACH ROW
+	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
+BEGIN
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
+END;
+--> statement-breakpoint
+CREATE TABLE `event` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	`learner_id` text NOT NULL,
+	`type` text NOT NULL,
+	`concept_slug` text,
+	`session_id` text,
+	`payload` text DEFAULT '{}' NOT NULL,
+	`created_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	FOREIGN KEY (`learner_id`) REFERENCES `learner`(`id`) ON UPDATE cascade ON DELETE restrict,
+	FOREIGN KEY (`concept_slug`) REFERENCES `concept`(`slug`) ON UPDATE cascade ON DELETE restrict,
+	FOREIGN KEY (`session_id`) REFERENCES `session`(`id`) ON UPDATE cascade ON DELETE restrict,
+	CONSTRAINT "event_type_check" CHECK(type in ('session-start', 'observation', 'review', 'session-close', 'void', 'watched', 'visit')),
+	CONSTRAINT "event_payload_object_check" CHECK(json_type(payload) = 'object')
+);
+--> statement-breakpoint
+INSERT INTO `event` SELECT * FROM `event__copy`;
+--> statement-breakpoint
+DROP TABLE `event__copy`;
+--> statement-breakpoint
+CREATE INDEX `event_at_idx` ON `event` (`at`);
+--> statement-breakpoint
+CREATE INDEX `event_learner_id_idx` ON `event` (`learner_id`);
+--> statement-breakpoint
+CREATE INDEX `event_concept_slug_idx` ON `event` (`concept_slug`);
+--> statement-breakpoint
+CREATE INDEX `event_session_id_idx` ON `event` (`session_id`);
+--> statement-breakpoint
+CREATE TRIGGER `event_no_update` BEFORE UPDATE ON `event` FOR EACH ROW
+BEGIN
+	SELECT RAISE(ABORT, '23001: event is append-only: UPDATE is not allowed');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `event_no_delete` BEFORE DELETE ON `event` FOR EACH ROW
+BEGIN
+	SELECT RAISE(ABORT, '23001: event is append-only: DELETE is not allowed');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `event_copy_guard_ins` BEFORE INSERT ON `event` FOR EACH ROW
+	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
+BEGIN
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `event_copy_guard_upd` BEFORE UPDATE ON `event` FOR EACH ROW
+	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
+BEGIN
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `event_copy_guard_del` BEFORE DELETE ON `event` FOR EACH ROW
+	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
+BEGIN
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
+END;
+--> statement-breakpoint
+CREATE TABLE `job` (
+	`id` text PRIMARY KEY NOT NULL,
+	`kind` text NOT NULL,
+	`session_id` text,
+	`parent_job_id` text,
+	`state` text DEFAULT 'queued' NOT NULL,
+	`phase` text,
+	`topic_slug` text NOT NULL,
+	`target_path` text NOT NULL,
+	`candidate_path` text,
+	`target_hash_before` text,
+	`brief` text DEFAULT '{}' NOT NULL,
+	`gate` text,
+	`idempotency_key` text NOT NULL,
+	`attempt` integer DEFAULT 0 NOT NULL,
+	`requested_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	`started_at` integer,
+	`finished_at` integer,
+	`reviewed_at` integer,
+	`heartbeat_at` integer,
+	`cancel_requested_at` integer,
+	`runner` text,
+	`runner_job_id` text,
+	`exit_code` integer,
+	`turns` integer,
+	`cost_usd` real,
+	`cost_source` text,
+	`error_kind` text,
+	`error` text,
+	`error_detail` text,
+	`draft_id` text,
+	`owner_id` text DEFAULT 'local' NOT NULL,
+	`created_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	`updated_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	FOREIGN KEY (`session_id`) REFERENCES `session`(`id`) ON UPDATE cascade ON DELETE restrict,
+	FOREIGN KEY (`parent_job_id`) REFERENCES `job`(`id`) ON UPDATE cascade ON DELETE restrict,
+	FOREIGN KEY (`topic_slug`) REFERENCES `topic`(`slug`) ON UPDATE cascade ON DELETE restrict,
+	FOREIGN KEY (`draft_id`) REFERENCES `draft`(`id`) ON UPDATE cascade ON DELETE set null,
+	FOREIGN KEY (`owner_id`) REFERENCES `learner`(`id`) ON UPDATE cascade ON DELETE restrict,
+	CONSTRAINT "job_kind_check" CHECK(kind in ('diagram', 'video')),
+	CONSTRAINT "job_state_check" CHECK(state in ('queued', 'running', 'awaiting_review', 'accepted', 'discarded', 'failed', 'cancelled', 'interrupted')),
+	CONSTRAINT "job_brief_object_check" CHECK(json_type(brief) = 'object'),
+	CONSTRAINT "job_gate_object_check" CHECK(gate is null or json_type(gate) = 'object'),
+	CONSTRAINT "job_error_detail_object_check" CHECK(error_detail is null or json_type(error_detail) = 'object'),
+	CONSTRAINT "job_attempt_check" CHECK(attempt >= 0),
+	CONSTRAINT "job_turns_check" CHECK(turns is null or turns >= 0),
+	CONSTRAINT "job_cost_usd_check" CHECK(cost_usd is null or cost_usd >= 0),
+	CONSTRAINT "job_cost_source_check" CHECK(cost_source is null or cost_source in ('result', 'stream')),
+	CONSTRAINT "job_cost_source_paired_check" CHECK(cost_source is null or cost_usd is not null),
+	CONSTRAINT "job_not_own_parent_check" CHECK(parent_job_id is not id),
+	CONSTRAINT "job_started_at_check" CHECK(started_at is null or started_at >= requested_at),
+	CONSTRAINT "job_finished_at_check" CHECK(finished_at is null or started_at is null or finished_at >= started_at),
+	CONSTRAINT "job_queued_check" CHECK(state <> 'queued' or (started_at is null and runner is null))
+);
+--> statement-breakpoint
+INSERT INTO `job` (`id`, `kind`, `session_id`, `parent_job_id`, `state`, `phase`, `topic_slug`, `target_path`, `candidate_path`, `target_hash_before`, `brief`, `gate`, `idempotency_key`, `attempt`, `requested_at`, `started_at`, `finished_at`, `reviewed_at`, `heartbeat_at`, `cancel_requested_at`, `runner`, `runner_job_id`, `exit_code`, `turns`, `cost_usd`, `cost_source`, `error_kind`, `error`, `error_detail`, `draft_id`, `owner_id`, `created_at`, `updated_at`) SELECT `id`, `kind`, `session_id`, `parent_job_id`, `state`, `phase`, `topic_slug`, `target_path`, `candidate_path`, `target_hash_before`, `brief`, `gate`, `idempotency_key`, `attempt`, `requested_at`, `started_at`, `finished_at`, `reviewed_at`, `heartbeat_at`, `cancel_requested_at`, `runner`, `runner_job_id`, `exit_code`, `turns`, `cost_usd`, `cost_source`, `error_kind`, `error`, `error_detail`, `draft_id`, `owner_id`, `created_at`, `updated_at` FROM `job__copy`;
+--> statement-breakpoint
+DROP TABLE `job__copy`;
+--> statement-breakpoint
+CREATE UNIQUE INDEX `job_idempotency_key_key` ON `job` (`idempotency_key`);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `job_active_target_key` ON `job` (`target_path`) WHERE state in ('queued', 'running', 'awaiting_review');
+--> statement-breakpoint
+CREATE INDEX `job_session_id_idx` ON `job` (`session_id`);
+--> statement-breakpoint
+CREATE INDEX `job_state_idx` ON `job` (`state`);
+--> statement-breakpoint
+CREATE INDEX `job_topic_slug_idx` ON `job` (`topic_slug`);
+--> statement-breakpoint
+CREATE INDEX `job_parent_job_id_idx` ON `job` (`parent_job_id`);
+--> statement-breakpoint
+CREATE INDEX `job_requested_at_idx` ON `job` (`requested_at`);
+--> statement-breakpoint
+CREATE INDEX `job_owner_id_idx` ON `job` (`owner_id`);
+--> statement-breakpoint
+CREATE INDEX `job_draft_id_idx` ON `job` (`draft_id`);
+--> statement-breakpoint
+CREATE TRIGGER `job_copy_guard_ins` BEFORE INSERT ON `job` FOR EACH ROW
+	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
+BEGIN
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `job_copy_guard_upd` BEFORE UPDATE ON `job` FOR EACH ROW
+	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
+BEGIN
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `job_copy_guard_del` BEFORE DELETE ON `job` FOR EACH ROW
+	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
+BEGIN
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
+END;
+--> statement-breakpoint
+CREATE TABLE `asset_job` (
+	`asset_id` text NOT NULL,
+	`job_id` text NOT NULL,
+	`content_hash` text NOT NULL,
+	`bytes` integer NOT NULL,
+	`written_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	`owner_id` text DEFAULT 'local' NOT NULL,
+	`created_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	`updated_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	PRIMARY KEY(`asset_id`, `job_id`),
+	FOREIGN KEY (`asset_id`) REFERENCES `asset`(`id`) ON UPDATE cascade ON DELETE cascade,
+	FOREIGN KEY (`job_id`) REFERENCES `job`(`id`) ON UPDATE cascade ON DELETE restrict,
+	FOREIGN KEY (`owner_id`) REFERENCES `learner`(`id`) ON UPDATE cascade ON DELETE restrict,
+	CONSTRAINT "asset_job_bytes_check" CHECK(bytes >= 0)
+);
+--> statement-breakpoint
+INSERT INTO `asset_job` SELECT * FROM `asset_job__copy`;
+--> statement-breakpoint
+DROP TABLE `asset_job__copy`;
+--> statement-breakpoint
+CREATE INDEX `asset_job_job_id_idx` ON `asset_job` (`job_id`);
+--> statement-breakpoint
+CREATE INDEX `asset_job_owner_id_idx` ON `asset_job` (`owner_id`);
+--> statement-breakpoint
+CREATE TRIGGER `asset_job_copy_guard_ins` BEFORE INSERT ON `asset_job` FOR EACH ROW
+	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
+BEGIN
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `asset_job_copy_guard_upd` BEFORE UPDATE ON `asset_job` FOR EACH ROW
+	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
+BEGIN
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `asset_job_copy_guard_del` BEFORE DELETE ON `asset_job` FOR EACH ROW
+	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
+BEGIN
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
+END;
+--> statement-breakpoint
+CREATE TABLE `session_log_entry` (
+	`session_id` text NOT NULL,
+	`seq` integer NOT NULL,
+	`markdown` text NOT NULL,
+	`created_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	PRIMARY KEY(`session_id`, `seq`),
+	FOREIGN KEY (`session_id`) REFERENCES `session`(`id`) ON UPDATE cascade ON DELETE restrict,
+	CONSTRAINT "session_log_entry_seq_check" CHECK(seq >= 1)
+);
+--> statement-breakpoint
+INSERT INTO `session_log_entry` SELECT * FROM `session_log_entry__copy`;
+--> statement-breakpoint
+DROP TABLE `session_log_entry__copy`;
+--> statement-breakpoint
+CREATE TRIGGER `session_log_entry_no_update` BEFORE UPDATE ON `session_log_entry` FOR EACH ROW
+BEGIN
+	SELECT RAISE(ABORT, '23001: session_log_entry is append-only: UPDATE is not allowed. A session log records what happened. Append a correcting entry, or fix the note it touched.');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `session_log_entry_no_delete` BEFORE DELETE ON `session_log_entry` FOR EACH ROW
+BEGIN
+	SELECT RAISE(ABORT, '23001: session_log_entry is append-only: DELETE is not allowed. A session log records what happened. Append a correcting entry, or fix the note it touched.');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `session_log_entry_copy_guard_ins` BEFORE INSERT ON `session_log_entry` FOR EACH ROW
+	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
+BEGIN
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `session_log_entry_copy_guard_upd` BEFORE UPDATE ON `session_log_entry` FOR EACH ROW
+	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
+BEGIN
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `session_log_entry_copy_guard_del` BEFORE DELETE ON `session_log_entry` FOR EACH ROW
+	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
+BEGIN
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
+END;
+--> statement-breakpoint
+CREATE TABLE `content_revision` (
+	`id` integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+	`owner_id` text DEFAULT 'local' NOT NULL,
+	`entity_type` text NOT NULL,
+	`entity_id` text NOT NULL,
+	`seq` integer NOT NULL,
+	`previous_id` integer,
+	`op` text NOT NULL,
+	`snapshot` text NOT NULL,
+	`snapshot_hash` text NOT NULL,
+	`author_kind` text NOT NULL,
+	`author` text NOT NULL,
+	`reason` text NOT NULL,
+	`job_id` text,
+	`session_id` text,
+	`created_at` integer DEFAULT (cast(unixepoch('subsec') * 1000 as integer)) NOT NULL,
+	FOREIGN KEY (`owner_id`) REFERENCES `learner`(`id`) ON UPDATE cascade ON DELETE restrict,
+	FOREIGN KEY (`previous_id`) REFERENCES `content_revision`(`id`) ON UPDATE cascade ON DELETE restrict,
+	FOREIGN KEY (`job_id`) REFERENCES `job`(`id`) ON UPDATE cascade ON DELETE restrict,
+	FOREIGN KEY (`session_id`) REFERENCES `session`(`id`) ON UPDATE cascade ON DELETE restrict,
+	CONSTRAINT "content_revision_entity_type_check" CHECK(entity_type in ('topic', 'tag', 'collection', 'curriculum_item', 'concept', 'diagram', 'asset', 'video')),
+	CONSTRAINT "content_revision_op_check" CHECK(op in ('create', 'update', 'archive', 'restore', 'rename', 'import', 'delete')),
+	CONSTRAINT "content_revision_author_kind_check" CHECK(author_kind in ('person', 'agent', 'import')),
+	CONSTRAINT "content_revision_seq_check" CHECK(seq >= 1),
+	CONSTRAINT "content_revision_previous_check" CHECK(seq = 1 or previous_id is not null),
+	CONSTRAINT "content_revision_not_own_previous_check" CHECK(previous_id is not id),
+	CONSTRAINT "content_revision_snapshot_object_check" CHECK(json_type(snapshot) = 'object'),
+	CONSTRAINT "content_revision_snapshot_hash_check" CHECK(snapshot_hash regexp '^[0-9a-f]{64}$'),
+	CONSTRAINT "content_revision_author_check" CHECK(trim(author) <> ''),
+	CONSTRAINT "content_revision_reason_check" CHECK(trim(reason) <> '')
+);
+--> statement-breakpoint
+INSERT INTO `content_revision` SELECT * FROM `content_revision__copy`;
+--> statement-breakpoint
+DROP TABLE `content_revision__copy`;
+--> statement-breakpoint
+CREATE UNIQUE INDEX `content_revision_entity_seq_key` ON `content_revision` (`entity_type`,`entity_id`,`seq`);
+--> statement-breakpoint
+CREATE INDEX `content_revision_owner_id_idx` ON `content_revision` (`owner_id`);
+--> statement-breakpoint
+CREATE INDEX `content_revision_previous_id_idx` ON `content_revision` (`previous_id`);
+--> statement-breakpoint
+CREATE INDEX `content_revision_job_id_idx` ON `content_revision` (`job_id`);
+--> statement-breakpoint
+CREATE INDEX `content_revision_session_id_idx` ON `content_revision` (`session_id`);
+--> statement-breakpoint
+CREATE INDEX `content_revision_created_at_idx` ON `content_revision` (`created_at`);
+--> statement-breakpoint
+CREATE TRIGGER `content_revision_no_update` BEFORE UPDATE ON `content_revision` FOR EACH ROW
+BEGIN
+	SELECT RAISE(ABORT, '23001: content_revision is append-only: UPDATE is not allowed. A revision is history. Write a new revision instead.');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `content_revision_no_delete` BEFORE DELETE ON `content_revision` FOR EACH ROW
+BEGIN
+	SELECT RAISE(ABORT, '23001: content_revision is append-only: DELETE is not allowed. A revision is history. Write a new revision instead.');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `content_revision_copy_guard_ins` BEFORE INSERT ON `content_revision` FOR EACH ROW
+	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
+BEGIN
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `content_revision_copy_guard_upd` BEFORE UPDATE ON `content_revision` FOR EACH ROW
+	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
+BEGIN
+	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');
+END;
+--> statement-breakpoint
+CREATE TRIGGER `content_revision_copy_guard_del` BEFORE DELETE ON `content_revision` FOR EACH ROW
 	WHEN catalog_copy_ok() = 0 AND (SELECT `role` FROM `catalog_instance` WHERE `id`) = 'copy'
 BEGIN
 	SELECT RAISE(ABORT, '25006: this database is a copy, so writes are refused. Writes go to the primary (' || (select primary_host from catalog_instance where id) || ').');

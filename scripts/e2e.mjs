@@ -92,7 +92,7 @@ const PASSWORD = TEST_PASSWORD;
 // content page.
 const TEMPLATE_DB =
   process.env.E2E_TEMPLATE_DB ||
-  join(process.env.HERMES_HOME ?? join(homedir(), '.hermes'), 'catalog.db');
+  join(process.env.HERMES_HOME ?? process.env.GNOSIA_HOME ?? (existsSync(join(homedir(), '.hermes')) || !existsSync(join(homedir(), '.gnosia')) ? join(homedir(), '.hermes') : join(homedir(), '.gnosia')), 'catalog.db');
 // The pid and the start time, so a later run that happens to get the same pid
 // can never collide with (or remove) a copy an earlier run kept with
 // --keep-db.

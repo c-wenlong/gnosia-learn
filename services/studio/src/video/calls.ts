@@ -12,7 +12,7 @@ import { readFile, appendFile } from "node:fs/promises";
  */
 
 export interface CallStep {
-  /** The profile the step ran in, or, for revideokc's build, `sidecars`: hermes-audio's transcript writer, in the narration profile. */
+  /** The profile the step ran in, or, for revideokc's build, `sidecars`: gnosia-audio's transcript writer, in the narration profile. */
   step: "render" | "narrate" | "sidecars";
   exitCode: number | null;
   signal?: string | null;

@@ -251,7 +251,7 @@ const tryPort = (port) => new Promise((resolve) => {
     expect(gate.ok).toBe(true);
     expect(existsSync(paths.poster)).toBe(true);
 
-    // After a verdict the final lines' clips are kept, by their hermes-audio keys.
+    // After a verdict the final lines' clips are kept, by their gnosia-audio keys.
     await backendFor("revideokc").keepClips(job);
     expect((await readdir(paths.clips)).filter((name) => name.endsWith(".wav"))).toHaveLength(2);
   }, 900_000);

@@ -160,9 +160,9 @@ Rules of engagement:
 - Its venvs (`.venv`, `.venv-ce`) are local artifacts. A fresh clone needs
   `git submodule update --init --recursive` (manim is a nested submodule)
   plus the venv setup in its AGENTS.md before anything renders.
-- **Narration is the hermes-audio package, and each machine installs it.**
+- **Narration is the gnosia-audio package, and each machine installs it.**
   Since manimkc#40, `lib/narration.py` is a shim over
-  [hermes-audio](https://github.com/promethevs-labs/hermes-audio), pinned to one
+  [gnosia-audio](https://github.com/promethevs-labs/gnosia-audio), pinned to one
   commit in `tools/manimkc/requirements-narration.txt`. Run
   `make narration-deps` in `tools/manimkc` on a fresh clone after the venv
   setup, and again on every machine after a pointer bump that moves that pin,
@@ -258,13 +258,13 @@ Rules of engagement:
   it from the report's `outRoot` and records it on
   `index_run.metadata.outRoot`. **Never join a remotionkc path onto the
   submodule root**; a deliverable is `outRoot + path`.
-- **remotionkc narrates through hermes-audio in its own `.venv`, not
-  manimkc's.** It pins hermes-audio in `requirements-narration.txt`, and
+- **remotionkc narrates through gnosia-audio in its own `.venv`, not
+  manimkc's.** It pins gnosia-audio in `requirements-narration.txt`, and
   `npm run narration-deps` in `tools/remotionkc` installs it (non-editable,
   with uv). Run that after a fresh clone and after any pointer move that
   changes the pin, or `narrate` and `build` refuse and `doctor` fails. Only
   `topics --json`, which the catalog runs, works without it. It still hands
-  hermes-audio a manimkc checkout (`MANIMKC_ROOT`, or a sibling `../manimkc`),
+  gnosia-audio a manimkc checkout (`MANIMKC_ROOT`, or a sibling `../manimkc`),
   because that is where the voice settings live, and so the clip keys.
 - The end-to-end process is the `remotionkc-video` skill, which lives in the
   submodule and is symlinked into `.claude/skills/remotionkc-video`.
@@ -306,16 +306,16 @@ Rules of engagement:
   the submodule root.**
 - **Rendering needs a Chrome**: the system Chrome, or `REVIDEOKC_CHROME`.
   Install with `PUPPETEER_SKIP_DOWNLOAD=1 npm ci` in the submodule.
-- **revideokc narrates through hermes-audio in its own `.venv`**, as
+- **revideokc narrates through gnosia-audio in its own `.venv`**, as
   remotionkc does (revideokc#5). `npm run narration-deps` in
-  `tools/revideokc` installs the pinned hermes-audio (non-editable, with uv);
+  `tools/revideokc` installs the pinned gnosia-audio (non-editable, with uv);
   run it after a fresh clone and after any pointer move that changes the pin,
   or `narrate`, `still` and `build` refuse and `doctor` fails. Only
   `topics --json`, which the catalog runs, works without it
   (`services/catalog/test/revideokc-pinned.test.ts` holds that). It hands
-  hermes-audio a manimkc checkout (`MANIMKC_ROOT`, or a sibling
+  gnosia-audio a manimkc checkout (`MANIMKC_ROOT`, or a sibling
   `../manimkc`) for the voice settings and so the clip keys; without one,
-  hermes-audio falls back to its own voice, which is not the series'.
+  gnosia-audio falls back to its own voice, which is not the series'.
 - The end-to-end process is the `revideokc-video` skill, which lives in the
   submodule and is symlinked into `.claude/skills/revideokc-video`.
 
@@ -325,7 +325,7 @@ Rules of engagement:
 github.com/promethevs-labs/blenderkc-public): narrated explainer videos whose pictures are
 photoreal 3D, rendered by Blender's Cycles through `bpy` 5.2.2 from PyPI, the
 fourth video tool. It is shaped like revideokc: the same CLI verbs, the same
-`topics --json` report, the same narration through hermes-audio and the same
+`topics --json` report, the same narration through gnosia-audio and the same
 sidecars, so the catalog indexes it through the same descriptor in
 `services/catalog/src/index/video-tool.ts`, labelled "blender" in the web app.
 It is for videos whose subject is a physical object (a chip package, a die
@@ -363,12 +363,12 @@ Rules of engagement:
   root's). A worktree's submodule has no `.env`, so set the variable in the
   environment there. **Never join a blenderkc path onto the submodule root.**
 - **`make deps` then `make narration-deps` in `tools/blenderkc`** make its one
-  `.venv`: Python 3.13 with bpy and Pillow, and the pinned hermes-audio
+  `.venv`: Python 3.13 with bpy and Pillow, and the pinned gnosia-audio
   beside them (non-editable, with uv). Run them after a fresh clone and after
   any pointer move that changes either pin. Only `topics --json`, which the
   catalog runs, works without them
   (`services/catalog/test/blenderkc-pinned.test.ts` holds that). Like the
-  others it hands hermes-audio a manimkc checkout (`MANIMKC_ROOT`, or a
+  others it hands gnosia-audio a manimkc checkout (`MANIMKC_ROOT`, or a
   sibling `../manimkc`) for the series' voice.
 - **The 3D renders on the homeserver**: `build <topic> --host home` copies a
   snapshot of the checkout to the host (Ubuntu, a GTX 1070), renders each
@@ -650,9 +650,9 @@ Rules of engagement:
   running clean, makes `/api/health` report `manual: stale`, and
   `services/studio/test/manual-snippets.test.ts` fails on either. Editing a
   snippet means running that test with tldrawkc built.
-- **The video kind's narration is hermes-audio, asked through its JSON
+- **The video kind's narration is gnosia-audio, asked through its JSON
   contract, never through manimkc's `lib/`.** `services/studio/src/video/narration.ts`
-  runs `hermes-audio home --json` in manimkc's `.venv` at each toolchain
+  runs `gnosia-audio home --json` in manimkc's `.venv` at each toolchain
   discovery for the speech rate (`charsPerSecond` in its `timing.json`, the
   one figure the brief's validator and the card use; the card gets it from
   `/api/health`'s `video.narration`, never from a copy in `apps/web`) and the
@@ -660,8 +660,8 @@ Rules of engagement:
   video brief in the transcript carries `abbreviations`, and the planner is
   told of them in a STUDIO note on the next turn, once per new word
   (`abbreviationCheck` in `drafts.ts`; a note, never a refusal). `seed.ts` names clips
-  with `hermes-audio keys --json` inside the job's render profile and seeds
-  each clip's `.words.json` with it. Without hermes-audio in `.venv`,
+  with `gnosia-audio keys --json` inside the job's render profile and seeds
+  each clip's `.words.json` with it. Without gnosia-audio in `.venv`,
   `toolchainProblems` names `make narration-deps` and the doctor turns videos
   off. It must stay a non-editable install: the sandbox reads the venvs and
   nothing beside them, which `services/studio/test/video-sandbox.test.ts`

@@ -62,13 +62,24 @@ function fileStamp(date = new Date()) {
   return date.toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
 }
 
-/** $HERMES_HOME as the blob store reads it: `~` expanded, relative refused. */
+/**
+ * The data home, resolved before any directory is created.
+ *
+ * `$HERMES_HOME`, else `$GNOSIA_HOME`, else `~/.hermes` when it exists, else
+ * `~/.gnosia` (`dataHome` in packages/blob/src/home.ts). Creating
+ * `~/.hermes/archive` first would make a later launch treat that empty
+ * directory as the home and stop finding the old catalog. Inlined because
+ * this script runs under plain node, which cannot import that TypeScript module.
+ */
 function hermesHome(env = process.env) {
-  const raw = env.HERMES_HOME?.trim();
-  if (!raw) return join(homedir(), '.hermes');
-  const expanded = raw === '~' || raw.startsWith('~/') ? join(homedir(), raw.slice(1)) : raw;
-  if (!isAbsolute(expanded)) throw new Refusal(`HERMES_HOME must be absolute or start with ~/, not ${JSON.stringify(raw)}`);
-  return expanded;
+  const raw = env.HERMES_HOME?.trim() || env.GNOSIA_HOME?.trim();
+  const home = raw
+    ? (raw === '~' || raw.startsWith('~/') ? join(homedir(), raw.slice(1)) : raw)
+    : (existsSync(join(homedir(), '.hermes')) || !existsSync(join(homedir(), '.gnosia'))
+      ? join(homedir(), '.hermes')
+      : join(homedir(), '.gnosia'));
+  if (!isAbsolute(home)) throw new Refusal(`${raw === env.GNOSIA_HOME?.trim() && !env.HERMES_HOME?.trim() ? 'GNOSIA_HOME' : 'HERMES_HOME'} must be absolute or start with ~/, not ${JSON.stringify(raw)}`);
+  return home;
 }
 
 function inside(child, parent) {

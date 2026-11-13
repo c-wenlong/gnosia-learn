@@ -41,7 +41,7 @@ backfilled from each id's `tool:` prefix when it names a tool (`manimkc:…`
 A database that never ran a Postgres migration which renamed a value in
 place still ports: `RENAMES` in the script maps the old value on the way.
 Today that is `asset.source_repo = 'self-learn'`, from before the hermes
-rename (`drizzle/0032_hermes.sql`), which ports as `hermes`.
+rename (`drizzle/0032_gnosia.sql`), which ports as `hermes`.
 
 The blob store is not in the database, and the port leaves it alone,
 `.owner` marker included. That marker names the Postgres database, while the

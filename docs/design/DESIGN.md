@@ -5,7 +5,7 @@ Status: lo-fi agreed in an interview on 2026-09-23; hi-fi v1 drawn on
 Implementation is phased; the plan, the shipped token and component contract
 and the status of each phase are in [IMPLEMENTATION.md](IMPLEMENTATION.md).
 This document is the written half of the design. The drawn half is
-[hermes-lofi.fig](hermes-lofi.fig), an OpenPencil document with a
+[gnosia-lofi.fig](gnosia-lofi.fig), an OpenPencil document with a
 lo-fi page and a hi-fi page, and the SVG exports of every screen under
 [lofi/](lofi/) and [hifi/](hifi/). The research the design draws on is under
 [research/](research/); the three captured design systems it takes real

@@ -25,7 +25,7 @@ import { sourceFilePaths } from "../source-set";
 /**
  * The remotionkc backend (phase 3 of docs/STUDIO-VIDEO-TOOLS.md, D80):
  * Remotion compositions in a synthetic remotionkc checkout, voiced by
- * hermes-audio with kokoro, bundled by webpack and rendered by Remotion's
+ * gnosia-audio with kokoro, bundled by webpack and rendered by Remotion's
  * Chrome Headless Shell inside the job's Seatbelt profile. Each part is a
  * module under `../remotionkc/`, as revideokc's backend is a facade over
  * `../revideokc/`; what the two TypeScript tools share (the job's port

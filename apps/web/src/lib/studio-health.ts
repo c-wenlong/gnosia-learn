@@ -49,7 +49,7 @@ export interface Availability {
   reason: string | null;
   /** Each video tool and whether the studio can make it (D73); absent from a runner before the field. */
   tools?: VideoToolOption[];
-  /** The runner's speech rate, characters a second, from hermes-audio (`video.narration`); absent from a runner before the field. */
+  /** The runner's speech rate, characters a second, from gnosia-audio (`video.narration`); absent from a runner before the field. */
   charsPerSecond?: number;
 }
 

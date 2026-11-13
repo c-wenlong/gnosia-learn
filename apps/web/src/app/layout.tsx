@@ -3,9 +3,9 @@ import { cookies, headers } from "next/headers";
 import { Figtree, Geist_Mono } from "next/font/google";
 import { cx } from "@/components/ui/classes";
 import { NONCE_HEADER } from "@/lib/auth/csp";
-import { asMotionMode, LEGACY_MOTION_COOKIE, MOTION_COOKIE, motionAttribute } from "@/lib/motion";
+import { asMotionMode, GNOSIA_MOTION_COOKIE, LEGACY_MOTION_COOKIE, MOTION_COOKIE, motionAttribute } from "@/lib/motion";
 import { resolveSiteUrl } from "@hermes/tutor/site-url";
-import { asThemeMode, LEGACY_THEME_COOKIE, SYSTEM_THEME_SCRIPT, THEME_COOKIE, themeClass } from "@/lib/theme-cookie";
+import { asThemeMode, GNOSIA_THEME_COOKIE, LEGACY_THEME_COOKIE, SYSTEM_THEME_SCRIPT, THEME_COOKIE, themeClass } from "@/lib/theme-cookie";
 import "./globals.css";
 
 // The interface face. Brilliant's own is CoFo Brilliant, and Figtree is the
@@ -83,10 +83,10 @@ export default async function RootLayout({
 }>) {
   const [cookieStore, requestHeaders] = await Promise.all([cookies(), headers()]);
   const nonce = requestHeaders.get(NONCE_HEADER) ?? undefined;
-  const theme = asThemeMode(cookieStore.get(THEME_COOKIE)?.value ?? cookieStore.get(LEGACY_THEME_COOKIE)?.value) ?? "light";
+  const theme = asThemeMode(cookieStore.get(THEME_COOKIE)?.value ?? cookieStore.get(GNOSIA_THEME_COOKIE)?.value ?? cookieStore.get(LEGACY_THEME_COOKIE)?.value) ?? "light";
   const classes = themeClass(theme, false);
   const motion = motionAttribute(
-    asMotionMode(cookieStore.get(MOTION_COOKIE)?.value ?? cookieStore.get(LEGACY_MOTION_COOKIE)?.value),
+    asMotionMode(cookieStore.get(MOTION_COOKIE)?.value ?? cookieStore.get(GNOSIA_MOTION_COOKIE)?.value ?? cookieStore.get(LEGACY_MOTION_COOKIE)?.value),
   );
 
   return (

@@ -570,8 +570,9 @@ export type ThemeAppearance = (typeof THEME_APPEARANCES)[number];
 export function asThemeMode(value: unknown): ThemeMode | null {
   // The palette predates the rename: cookies and preference rows written
   // before it still say `self-learn*`, which are the hermes modes renamed.
-  if (typeof value === "string" && value.startsWith("self-learn")) {
-    value = `hermes${value.slice("self-learn".length)}`;
+  if (typeof value === "string" && (value.startsWith("self-learn") || value.startsWith("gnosia"))) {
+    const prefix = value.startsWith("self-learn") ? "self-learn" : "gnosia";
+    value = `hermes${value.slice(prefix.length)}`;
   }
   return typeof value === "string" && (THEME_MODES as readonly string[]).includes(value) ? (value as ThemeMode) : null;
 }
@@ -997,7 +998,7 @@ export function canonicalJson(value: unknown): string {
 /**
  * A studio video's narration timing, shared by the web app's brief card and
  * the studio runner's validator and gate so the two cannot predict different
- * lengths for the same script. The speech rate itself is hermes-audio's,
+ * lengths for the same script. The speech rate itself is gnosia-audio's,
  * which each side reads at run time (the runner from `home --json`, the card
  * from the runner's `/api/health`), so it is a parameter here.
  */

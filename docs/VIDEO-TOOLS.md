@@ -80,7 +80,7 @@ missing or poor.
 
 ## Shared ground, and what it allows
 
-- **One voice.** All four narrate through hermes-audio, each pinned in its
+- **One voice.** All four narrate through gnosia-audio, each pinned in its
   own `.venv`, with manimkc's voice settings, so all four sound the same and
   share the kokoro clip cache. None of them has a narration layer of its own,
   on purpose.

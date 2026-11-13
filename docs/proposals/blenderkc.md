@@ -3,7 +3,7 @@
 Status: proposed 2026-10-09, and decided the same day: the owner chose a
 full fourth video tool over plates (D96, amended below). blenderkc is built
 as its own repository (github.com/promethevs-labs/blenderkc-public, private): it narrates
-through hermes-audio, writes its own sidecars and answers `topics --json`
+through gnosia-audio, writes its own sidecars and answers `topics --json`
 with manimkc's report shape, and the catalog imports its renders as
 `blenderkc:` rows (`tools/blenderkc` here, its section in
 [AGENTS.md](../../AGENTS.md)). The studio does not offer it. Its first video,
@@ -115,7 +115,7 @@ slower, which is why `doctor --host` checks the GPU before a build.
 
 **Amended 2026-10-09: the owner chose the fourth video tool.** blenderkc
 makes the whole narrated video: its narration, its sidecars and its entry in
-the catalog are its own, through the same hermes-audio, the same sidecar
+the catalog are its own, through the same gnosia-audio, the same sidecar
 format and the same `topics --json` report as the other three, so the
 catalog registers it as one more video tool (`blenderkc:` rows, `source_repo`
 `blenderkc`, migration 0029, labelled "blender" in the web app). Labels and
@@ -190,8 +190,8 @@ Not the desktop app. The wheel matched the app's frame to 0.001 of 255
 (measured), runs as `python script.py`, needs no install outside the venv,
 and has a Linux wheel for the homeserver or a rented GPU box later. It gets
 its own `.venv`, created by `make deps` with uv and pinned to `bpy==5.2.2`,
-because hermes-audio's venv in the other tools is Python 3.12 and bpy needs
-3.13. blenderkc never narrates, so it never needs hermes-audio at all.
+because gnosia-audio's venv in the other tools is Python 3.12 and bpy needs
+3.13. blenderkc never narrates, so it never needs gnosia-audio at all.
 
 The desktop app stays optional, for a person who wants to open a shot:
 `blenderkc open <plate>` saves the plate's scene as a `.blend` and opens it.

@@ -10,6 +10,8 @@
 import { writeCookie } from "@/lib/client-cookie";
 
 export const SIDEBAR_COOKIE = "hermes-sidebar";
+/** The cookie written between the self-learn and hermes names. Read as a fallback only. */
+export const LEGACY_SIDEBAR_COOKIE = "gnosia-sidebar";
 
 /** A year, as the theme cookie. */
 const MAX_AGE = 60 * 60 * 24 * 365;

@@ -18,7 +18,7 @@ import { makeFixture, topicsYaml, type Fixture } from "./fixture-tree";
  * before it will start, would pass there and fail at the next `catalog
  * import`. This runs `tools/blenderkc/tools/cli/blenderkc` at whatever commit
  * the pointer names, with `python3` and nothing installed: no `.venv`, no
- * bpy, no hermes-audio, which `topics` never imports.
+ * bpy, no gnosia-audio, which `topics` never imports.
  *
  * Two runs. The pinned checkout itself, with an empty data root: every topic
  * it holds today names a topic the owner has, nothing is rendered, and the

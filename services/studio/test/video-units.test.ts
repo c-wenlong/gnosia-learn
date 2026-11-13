@@ -223,7 +223,7 @@ describe("seeding the job's TTS cache", () => {
     await writeFile(path.join(shared, "cccccccccccccccc.wav"), wav);
     await writeFile(path.join(shared, "cccccccccccccccc.words.json"), '{"source": "kokoro", "words": "not a list"}');
     await writeFile(path.join(shared, "bbbbbbbbbbbbbbbb.words.json"), times);
-    // A hard-linked shared clip is still seeded, as hermes-audio lets a caller link one.
+    // A hard-linked shared clip is still seeded, as gnosia-audio lets a caller link one.
     await link(path.join(shared, "aaaaaaaaaaaaaaaa.words.json"), path.join(root, "a-link"));
     // A parent's kept clip, with its times, and a parent clip whose times are someone else's link.
     await writeFile(path.join(parent, "eeeeeeeeeeeeeeee.wav"), wav);
@@ -258,7 +258,7 @@ describe("seeding the job's TTS cache", () => {
   });
 });
 
-describe("naming the clips through hermes-audio's keys reply", () => {
+describe("naming the clips through gnosia-audio's keys reply", () => {
   const audio = "/private/tmp/job/render/cache/audio";
   const reply = (body: unknown, code = 0) => ({ code, stdout: JSON.stringify(body), stderr: "" });
 
@@ -277,7 +277,7 @@ describe("naming the clips through hermes-audio's keys reply", () => {
     expect(() => keysFromReply(reply({ schema: 1, lines: one }), 2, audio)).toThrow(/shape/);
     expect(() => keysFromReply(reply({ schema: 1, lines: [{ clip: `${audio}/../x.wav` }] }), 1, audio)).toThrow(/shape/);
     expect(() => keysFromReply(reply({ schema: 1, lines: [{ clip: "/Users/me/.hermes/manimkc/cache/audio/0123456789abcdef.wav" }] }), 1, audio)).toThrow(/not this job's audio cache/);
-    expect(() => keysFromReply({ code: 1, stdout: "Traceback", stderr: "ModuleNotFoundError: No module named 'hermes_audio'" }, 1, audio)).toThrow(/hermes_audio/);
+    expect(() => keysFromReply({ code: 1, stdout: "Traceback", stderr: "ModuleNotFoundError: No module named 'gnosia_audio'" }, 1, audio)).toThrow(/gnosia_audio/);
   });
 });
 

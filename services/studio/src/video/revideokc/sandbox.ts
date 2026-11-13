@@ -28,7 +28,7 @@ import type { RevideokcToolchain } from "./toolchain";
  *   Mach lookups are thirteen named services. No Python: the build that runs
  *   here starts none (`--no-narrate`), and the sidecars are written in the
  *   narration profile after it.
- * - **narrate** (`narrate`, `sidecars`, the clip keys): node, hermes-audio's
+ * - **narrate** (`narrate`, `sidecars`, the clip keys): node, gnosia-audio's
  *   interpreter in revideokc's `.venv`, and kokoro's in manimkc's `.venv-tts`.
  *   Reads kokoro's model; writes the clip cache, the staged clips, the build's
  *   work folder and the deliverable's folder (where `sidecars` puts its three
@@ -37,7 +37,7 @@ import type { RevideokcToolchain } from "./toolchain";
  *   ffmpeg and ffprobe; reads `candidate/` and the TypeScript package; writes
  *   the poster and nothing else.
  *
- * Every profile refuses a hard link (`file-link`): hermes-audio's clips are
+ * Every profile refuses a hard link (`file-link`): gnosia-audio's clips are
  * staged with a link when one can be made, and a file with two links is one
  * the runner's careful copy refuses to keep (`../copy.ts`), so the staging
  * copies instead.
@@ -111,10 +111,10 @@ function execRules(kind: ProfileKind, { tools }: RevideokcProfileInput): Rule[] 
   const media = [tools.ffmpeg, tools.ffprobe].flatMap(program);
   if (kind === "gate") return [...nodeRules(tools), ...media];
   if (kind === "narrate") {
-    // hermes-audio's console script, which revideokc runs by path: a script is
+    // gnosia-audio's console script, which revideokc runs by path: a script is
     // checked at exec as well as the interpreter its first line names.
-    const script = own.venv === null ? [] : [file(path.join(own.venv, "bin", "hermes-audio"))];
-    return [...nodeRules(tools), ...script, ...own.scriptShells.map(file), ...program(own.hermesPython), ...program(tools.ttsPython), ...media, ...NARRATE_SYSTEM.map(file)];
+    const script = own.venv === null ? [] : [file(path.join(own.venv, "bin", "gnosia-audio"))];
+    return [...nodeRules(tools), ...script, ...own.scriptShells.map(file), ...program(own.gnosiaPython), ...program(tools.ttsPython), ...media, ...NARRATE_SYSTEM.map(file)];
   }
   return [
     ...nodeRules(tools),
@@ -227,7 +227,7 @@ export interface RevideokcEnvInput {
  * A step's environment, built from nothing as manimkc's is (`sandboxEnv`):
  * never the runner's own with things taken out.
  *
- * Narration is hermes-audio's own environment, with no manimkc checkout
+ * Narration is gnosia-audio's own environment, with no manimkc checkout
  * named (revideokc passes `--manimkc-root` only for a checkout that exists,
  * and the job has none beside it): `MANIMKC_HOME` makes the clip cache the
  * job's `render/cache/audio`, and the backend, voice and kokoro interpreter

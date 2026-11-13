@@ -83,7 +83,7 @@ are commits in *other* repositories and are untouched by this.
 ## What stays private after the flip
 
 - `tools/manimkc`, `tools/remotionkc`, `tools/revideokc` and the
-  `hermes-audio` dependency remain private repositories at the time of
+  `gnosia-audio` dependency remain private repositories at the time of
   writing; outsiders see those `tools/` directories empty, and this is
   documented in the README. `tools/tldrawkc` and `tools/blenderkc` are
   already public.

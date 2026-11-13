@@ -504,23 +504,23 @@ the planner can act on: "the lines total 1,500 characters, about 107 seconds;
 the target is 180, so add about 1,100 characters or set `targetSeconds` to
 110".
 
-*Since hermes-audio:* the 15.2 is no longer a constant in this repository.
-It is `charsPerSecond` in hermes-audio's `data/timing.json`, the narration
+*Since gnosia-audio:* the 15.2 is no longer a constant in this repository.
+It is `charsPerSecond` in gnosia-audio's `data/timing.json`, the narration
 package manimkc#40 moved manimkc's narration layer into. The runner asks
-`hermes-audio home --json` in manimkc's `.venv` at every toolchain discovery
+`gnosia-audio home --json` in manimkc's `.venv` at every toolchain discovery
 (`services/studio/src/video/narration.ts`), the validator reads the answer,
 and `/api/health` reports it as `video.narration` (`charsPerSecond`, `source`,
 `version`), where the confirm card takes it from. Before the first answer, or
-on a machine without hermes-audio, where the doctor turns videos off, the
+on a machine without gnosia-audio, where the doctor turns videos off, the
 runner uses a fallback of the same value, which a test holds to the installed
 `timing.json`; the card shows "Length unknown" rather than guess when health
 carries no rate.
 
 **Acronyms.** manimkc's lint warns when a narration line holds a capitalised
-word missing from the pronunciation table (hermes-audio's `data/spoken.json`,
+word missing from the pronunciation table (gnosia-audio's `data/spoken.json`,
 formerly `narration.SPOKEN`), because the voice reads it as a word (`ACL` as
 "ackle"). The runner runs the same check on the brief's lines: it reads the
-table's written forms from the path `hermes-audio home --json` names, and
+table's written forms from the path `gnosia-audio home --json` names, and
 attaches the words it finds to each video brief in the transcript as
 `abbreviations`, which the card shows as its warning. So `CPU` or `API`, which
 the table already spells out, is not flagged, where the card's own fallback
@@ -538,7 +538,7 @@ and against the words the planner was told at the last turn that answered
 twice and a new word in a later brief is. A note names at most 30 words, new
 ones first, and only the words it named count as told, so one past the cap is
 named at a later turn. A brief already pressed is not
-weighed, nor is anything before hermes-audio has answered. In the transcript
+weighed, nor is anything before gnosia-audio has answered. In the transcript
 the note is an `internal` studio entry, which the person's thread leaves out,
 since the card already carries the warning. The agent may also respell a word
 while voicing it (D47), which the job view shows as a changed line; it cannot
@@ -910,7 +910,7 @@ failed until it moved.
 `render/cache/audio/`. Before the agent starts, the runner copies in the
 clips the owner's shared cache already holds for the brief's lines: it
 computes each clip's key (backend, voice, speed and text) itself, from the
-brief, with `hermes-audio keys --json` (schema 1) run in the job's render
+brief, with `gnosia-audio keys --json` (schema 1) run in the job's render
 profile, and copies only files that exist, so no agent input is involved.
 The reply's `clip` is a whole path, and the runner refuses one outside the
 job's own `render/cache/audio/`, since a key computed against another cache

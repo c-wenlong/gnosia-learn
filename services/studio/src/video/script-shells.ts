@@ -2,7 +2,7 @@ import { readFileSync, realpathSync } from "node:fs";
 
 /**
  * The shells a console script's first line needs, resolved; none for a script
- * that names its interpreter. uv writes hermes-audio's console script in a
+ * that names its interpreter. uv writes gnosia-audio's console script in a
  * `#!/bin/sh` form when the venv's python path is too long for a shebang (a
  * checkout at a long path), and macOS's `/bin/sh` then execs the shell
  * `/private/var/select/sh` names (bash): a narrate profile that allows the

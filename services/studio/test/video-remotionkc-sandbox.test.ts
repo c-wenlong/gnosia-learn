@@ -289,7 +289,7 @@ const tryPort = (port) => new Promise((resolve) => {
     expect(gate.sync?.heldTail[classes.at(-1)!]).toBeCloseTo(0.4 + HELD_FRAMES / 30, 1);
     expect(gate.sync?.heldTail[classes[0]!]).toBeCloseTo(0.4, 1);
 
-    // After a verdict the final lines' clips are kept, by their hermes-audio keys.
+    // After a verdict the final lines' clips are kept, by their gnosia-audio keys.
     await backendFor("remotionkc").keepClips(job);
     expect((await readdir(paths.clips)).filter((name) => name.endsWith(".wav"))).toHaveLength(2);
   }, 900_000);

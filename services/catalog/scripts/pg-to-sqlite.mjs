@@ -397,7 +397,10 @@ function fail(message, details = []) {
 async function main() {
   const source = arg("from") ?? process.env.DATABASE_URL;
   if (!source?.startsWith("postgres")) fail("no Postgres URL: pass --from postgres://… or set DATABASE_URL");
-  const home = process.env.HERMES_HOME?.trim() || process.env.GNOSIA_HOME?.trim() || path.join(homedir(), ".hermes");
+  const set = process.env.HERMES_HOME?.trim() || process.env.GNOSIA_HOME?.trim();
+  const next = path.join(homedir(), ".hermes");
+  const legacy = path.join(homedir(), ".gnosia");
+  const home = set || (existsSync(next) || !existsSync(legacy) ? next : legacy);
   const target = path.resolve(arg("to") ?? process.env.CATALOG_DB ?? path.join(home, "catalog.db"));
   if (existsSync(target)) fail(`${target} already exists; the port writes a fresh file, it does not merge`);
 

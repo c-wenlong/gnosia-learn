@@ -22,15 +22,15 @@ import type { Toolchain } from "./toolchain";
  * from agent-chosen text does not go there under a key whose sound nobody
  * verified.
  *
- * A clip's name is hermes-audio's key (backend, voice, speed, rate and the
- * spoken form of the line), computed by hermes-audio itself through its JSON
+ * A clip's name is gnosia-audio's key (backend, voice, speed, rate and the
+ * spoken form of the line), computed by gnosia-audio itself through its JSON
  * contract, `keys --json` (schema 1), the same code the narration step voices
  * with. It runs in the render profile, with the lines on stdin and nothing
  * written: hashing text is not running it, but the lines of a final source
  * were typed by the agent, so the same rule holds for every call.
  */
 
-/** A clip's file name: hermes-audio's 16-hex key and `.wav`. */
+/** A clip's file name: gnosia-audio's 16-hex key and `.wav`. */
 const CLIP_NAME = /^[0-9a-f]{16}\.wav$/;
 
 /** The word times written beside a clip: `<key>.wav` to `<key>.words.json`. */
@@ -47,7 +47,7 @@ export interface KeyInput {
 
 /**
  * The clip file names these lines are voiced into, in order, as
- * `hermes-audio keys --json` names them for this job. Its `clip` is the whole
+ * `gnosia-audio keys --json` names them for this job. Its `clip` is the whole
  * path, and it must be in this job's audio cache: a key computed against any
  * other cache (a data root the job's environment did not set) would seed files
  * the narration step never looks at.
@@ -62,7 +62,7 @@ export async function clipKeys(input: KeyInput, allLines: readonly string[]): Pr
     ...input,
     kind: "render",
     profile: input.paths.renderProfile,
-    argv: [path.join(input.paths.checkout, ".venv", "bin", "python"), "-I", "-m", "hermes_audio", "keys", "--json", "--manimkc-root", input.paths.checkout],
+    argv: [path.join(input.paths.checkout, ".venv", "bin", "python"), "-I", "-m", "gnosia_audio", "keys", "--json", "--manimkc-root", input.paths.checkout],
     cwd: input.paths.checkout,
     stdin: JSON.stringify({ lines }),
     timeoutMs: 180_000,
@@ -76,17 +76,17 @@ export function keysFromReply(result: { code: number | null; stdout: string; std
   try {
     reply = JSON.parse(result.stdout) as typeof reply;
   } catch {
-    throw new Error(`hermes-audio would not name the clips (exit ${result.code}): ${result.stderr.trim().split("\n").slice(-2).join(" ")}`);
+    throw new Error(`gnosia-audio would not name the clips (exit ${result.code}): ${result.stderr.trim().split("\n").slice(-2).join(" ")}`);
   }
-  if (reply.error !== undefined) throw new Error(`hermes-audio would not name the clips: ${String(reply.error.message ?? "no message")}`);
-  if (reply.schema !== 1) throw new Error(`hermes-audio speaks schema ${String(reply.schema)}, and this runner reads schema 1`);
+  if (reply.error !== undefined) throw new Error(`gnosia-audio would not name the clips: ${String(reply.error.message ?? "no message")}`);
+  if (reply.schema !== 1) throw new Error(`gnosia-audio speaks schema ${String(reply.schema)}, and this runner reads schema 1`);
   const clips = Array.isArray(reply.lines) ? reply.lines.map((line) => line?.clip) : [];
   if (clips.length !== count || !clips.every((clip): clip is string => typeof clip === "string" && CLIP_NAME.test(path.basename(clip)))) {
-    throw new Error("hermes-audio named the clips in a shape this runner does not recognise");
+    throw new Error("gnosia-audio named the clips in a shape this runner does not recognise");
   }
   const elsewhere = clips.find((clip) => path.dirname(clip) !== audio);
   if (elsewhere !== undefined) {
-    throw new Error(`hermes-audio puts the clips in ${path.dirname(elsewhere)}, not this job's audio cache ${audio}`);
+    throw new Error(`gnosia-audio puts the clips in ${path.dirname(elsewhere)}, not this job's audio cache ${audio}`);
   }
   return clips.map((clip) => path.basename(clip));
 }
@@ -104,7 +104,7 @@ async function isWav(file: string): Promise<boolean> {
 /** The most a word-times file may be: a line of a few hundred words is a few kilobytes. */
 const WORDS_MAX_BYTES = 2 ** 20;
 
-/** Whether these bytes are hermes-audio's word times: `{"source", "duration", "words": [{"word", "start", "end"}]}`. */
+/** Whether these bytes are gnosia-audio's word times: `{"source", "duration", "words": [{"word", "start", "end"}]}`. */
 export function isWordTimes(body: Buffer): boolean {
   let parsed: unknown;
   try {
@@ -122,7 +122,7 @@ export function isWordTimes(body: Buffer): boolean {
   );
 }
 
-/** A shared-cache file's bytes: a regular file under the size cap, read without following a link. Its clips may be hard links (hermes-audio allows it), so the link count is not checked. */
+/** A shared-cache file's bytes: a regular file under the size cap, read without following a link. Its clips may be hard links (gnosia-audio allows it), so the link count is not checked. */
 async function sharedBytes(file: string): Promise<Buffer | null> {
   const facts = await lstat(file).catch(() => null);
   if (facts === null || !facts.isFile() || facts.size > WORDS_MAX_BYTES) return null;

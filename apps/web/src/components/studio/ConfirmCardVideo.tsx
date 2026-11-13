@@ -108,7 +108,7 @@ export function ConfirmCardVideo({
   tools?: readonly VideoToolOption[];
   /** Save this brief with another tool (D73). Resolves with an error sentence, or null. */
   onSwitchTool?: (tool: VideoToolName) => Promise<string | null>;
-  /** Health's `video.narration.charsPerSecond`: the runner's speech rate, from hermes-audio. Absent shows the length as unknown. */
+  /** Health's `video.narration.charsPerSecond`: the runner's speech rate, from gnosia-audio. Absent shows the length as unknown. */
   charsPerSecond?: number;
   /** What past makes of this kind cost here (D107), under the press. */
   costNote?: string | null;

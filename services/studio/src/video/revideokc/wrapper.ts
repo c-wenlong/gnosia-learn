@@ -31,10 +31,10 @@ import type { RevideokcToolchain } from "./toolchain";
  *
  * What differs: the source is several files, so the recorded hash is the
  * combined one (`source.ts`); revideokc's narration is a step of its own
- * that hermes-audio runs in the narration profile, so `still` and `build`
+ * that gnosia-audio runs in the narration profile, so `still` and `build`
  * run `narrate` first there and render with `--no-narrate` here, which reads
  * what narrate left and refuses a stale one; and a build's sidecars are
- * hermes-audio's too, so `build` runs `sidecars` in the narration profile
+ * gnosia-audio's too, so `build` runs `sidecars` in the narration profile
  * after the render. Before a render the two ports are checked, so a render
  * left running by an earlier call is named rather than failing inside Vite.
  */

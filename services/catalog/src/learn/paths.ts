@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { realpathSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -88,7 +88,12 @@ export function workDir(): string {
   // One folder per checkout and database, so two worktrees, or one checkout
   // pointed at a scratch copy, never share a copy named only by concept id.
   const key = createHash("sha256").update(`${repoRoot()}\n${databaseUrl()}`).digest("hex").slice(0, 12);
-  return path.join(tmpdir(), "hermes", "work", key);
+  // A checkout made before the rename lives under gnosia/work with the same
+  // key. Prefer that folder while it still holds the notes, so commit finds
+  // the copy and its sidecar instead of asking for another checkout.
+  const next = path.join(tmpdir(), "hermes", "work", key);
+  const previous = path.join(tmpdir(), "gnosia", "work", key);
+  return existsSync(previous) && !existsSync(next) ? previous : next;
 }
 
 /** The path with links resolved, or as given when it does not exist yet. */

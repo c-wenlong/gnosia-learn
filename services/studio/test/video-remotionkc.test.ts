@@ -84,7 +84,7 @@ function fixedTools(): RemotionkcToolchain {
       root: REMOTIONKC,
       nodeModules: `${REMOTIONKC}/node_modules`,
       venv: `${REMOTIONKC}/.venv`,
-      hermesPython: { link: `${REMOTIONKC}/.venv/bin/python`, real: "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3.12", home: "/Library/Frameworks/Python.framework" },
+      gnosiaPython: { link: `${REMOTIONKC}/.venv/bin/python`, real: "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3.12", home: "/Library/Frameworks/Python.framework" },
       scriptShells: [],
       headlessShell: { binary: `${SHELL}/chrome-headless-shell`, dir: SHELL },
       compositor: `${REMOTIONKC}/node_modules/@remotion/compositor-darwin-arm64`,
@@ -179,7 +179,7 @@ describe("the remotionkc profiles", () => {
     const own = remotionkcPaths(paths);
     const text = profileFor("narrate", paths);
     const exec = block(text, "allow process-exec").join(" ");
-    expect(exec).toContain(`(literal "${REMOTIONKC}/.venv/bin/hermes-audio")`);
+    expect(exec).toContain(`(literal "${REMOTIONKC}/.venv/bin/gnosia-audio")`);
     expect(exec).toContain(`(literal "${REMOTIONKC}/.venv/bin/python")`);
     expect(exec).toContain('(literal "/Users/me/hermes/tools/manimkc/.venv-tts/bin/python")');
     expect(exec).not.toMatch(/chrome-headless-shell|compositor|esbuild|\/bin\/sh"|\/bin\/bash/);
@@ -311,7 +311,7 @@ describe("the checkout and the scaffold", () => {
       ["package.json", "{}\n"],
       ["tsconfig.json", "{}\n"],
       ["remotion.config.ts", "// config\n"],
-      ["requirements-narration.txt", "hermes-audio\n"],
+      ["requirements-narration.txt", "gnosia-audio\n"],
       [".claude/skills/remotion-best-practices/remotion-markup/timing.md", "# timing\n"],
       [".claude/skills/remotion-best-practices/remotion-markup/assets/icon.svg", "<svg/>\n"],
       ["topics/cs/a/composition.tsx", "// another topic\n"],
@@ -433,7 +433,7 @@ describe("the backend's own parts", () => {
     expect(backend.sourcePattern.test("two_boxes.py")).toBe(false);
   });
 
-  it("says why a toolchain without the sandbox-ready CLI, the Headless Shell, tsc or hermes-audio cannot run a job", async () => {
+  it("says why a toolchain without the sandbox-ready CLI, the Headless Shell, tsc or gnosia-audio cannot run a job", async () => {
     const tools = fixedTools();
     expect(remotionkcProblems(tools).join("\n")).toMatch(/is not a remotionkc checkout/);
     const checkout = path.join(root, "remotionkc");
@@ -441,7 +441,7 @@ describe("the backend's own parts", () => {
     await writeFile(path.join(checkout, "tools", "cli", "remotionkc.mjs"), "");
     const broken: RemotionkcToolchain = {
       ...tools,
-      remotionkc: { ...tools.remotionkc, root: checkout, sandboxReady: false, headlessShell: null, tsc: null, parser: null, hermesPython: null, nodeVersion: "22.10.0" },
+      remotionkc: { ...tools.remotionkc, root: checkout, sandboxReady: false, headlessShell: null, tsc: null, parser: null, gnosiaPython: null, nodeVersion: "22.10.0" },
     };
     expect(remotionkcProblems(broken).join("\n")).toMatch(/no build --no-narrate[\s\S]*22\.18[\s\S]*npx remotion browser ensure[\s\S]*native compiler[\s\S]*typescript package[\s\S]*narration-deps/);
   });

@@ -17,7 +17,7 @@ Set up a fresh clone or git worktree. Run it once, from anywhere.
                     remotionkc's node_modules and narration deps, revideokc's
                     node_modules (PUPPETEER_SKIP_DOWNLOAD=1) and narration
                     deps, blenderkc's .venv (make deps) and narration deps.
-                    Heavy (manim, bpy, the pinned hermes-audio) and only
+                    Heavy (manim, bpy, the pinned gnosia-audio) and only
                     needed for video work. Needs uv on PATH and, for the three
                     private submodules, access to them.
   --skip-tldraw     leave tools/tldrawkc alone: `npm run canvas` then has no

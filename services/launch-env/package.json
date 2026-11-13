@@ -10,6 +10,7 @@
     "test": "vitest run test"
   },
   "dependencies": {
+    "@hermes/blob": "*",
     "@hermes/catalog": "*",
     "@next/env": "16.4.3"
   },

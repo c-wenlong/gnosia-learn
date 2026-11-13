@@ -527,7 +527,11 @@ function defaultDatabase() {
   if (fromCatalogDb) return tilde(fromCatalogDb);
   const raw = process.env.DATABASE_URL?.trim();
   if (raw && !raw.startsWith('postgres')) return tilde(raw);
-  return join(process.env.HERMES_HOME?.trim() || join(homedir(), '.hermes'), 'catalog.db');
+  const set = process.env.HERMES_HOME?.trim() || process.env.GNOSIA_HOME?.trim();
+  if (set) return join(tilde(set), 'catalog.db');
+  const next = join(homedir(), '.hermes');
+  const legacy = join(homedir(), '.gnosia');
+  return join(existsSync(next) || !existsSync(legacy) ? next : legacy, 'catalog.db');
 }
 
 /** One argument for a POSIX shell, quoted only when it has to be. */
