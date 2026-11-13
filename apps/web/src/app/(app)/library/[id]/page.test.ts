@@ -48,7 +48,7 @@ describe("the asset page's title", () => {
     loadAssetDetail.mockResolvedValue({ asset: { id: "note:x", kind: "note", title: "The TLB" }, reachable: true });
     await expect(generateMetadata({ params: Promise.resolve({ id: encodeURIComponent("note:x") }) })).resolves.toEqual({
       title: "The TLB",
-      description: "Note in the Gnosia library.",
+      description: "Note in the Hermes library.",
     });
   });
 

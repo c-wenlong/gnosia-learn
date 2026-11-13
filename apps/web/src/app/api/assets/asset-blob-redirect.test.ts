@@ -161,7 +161,7 @@ describe.skipIf(!reachable.ok)("asset routes redirecting to a signed URL", () =>
         kind: "pdf",
         contentHash: sha256(PDF_BYTES),
         bytes: PDF_BYTES.length,
-        sourceRepo: "gnosia",
+        sourceRepo: "hermes",
         blobKey: pdfKey,
       },
     ]);
