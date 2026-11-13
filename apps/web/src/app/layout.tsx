@@ -37,9 +37,9 @@ export const metadata: Metadata = {
     images: [
       {
         url: "/opengraph-image.png",
-        width: 1200,
-        height: 630,
-        alt: "Hermes: a terracotta tree-ring mark above the wordmark on cream",
+        width: 1280,
+        height: 640,
+        alt: "Hermes Studio: the hat mark and the name on charcoal",
       },
     ],
   },

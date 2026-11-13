@@ -718,7 +718,8 @@ graph library, and server-safe, so the whole graph ships as static markup.
 ## Metadata and assets
 
 `apps/web/src/app/icon.png` and `apps/web/src/app/apple-icon.png` use the Next
-file conventions, so the favicon and the touch icon need no markup.
+file conventions, so the favicon and the touch icon need no markup. Both are
+copies of the files in [brand/](brand/brand.md).
 
 The social card does not. `apps/web/public/opengraph-image.png` is declared by
 hand in `apps/web/src/app/layout.tsx` because under Turbopack the

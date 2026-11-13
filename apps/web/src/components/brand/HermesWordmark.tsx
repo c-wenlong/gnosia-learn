@@ -6,11 +6,9 @@ import mark from "../../../public/brand/mark.png";
 import wordmarkInk from "../../../public/brand/wordmark-ink.png";
 
 /**
- * The owner's logo art: the mark, and the Hermes letters in two colourways,
- * terracotta for light grounds and cream for dark ones. Sources are in
- * docs/design/brand/logo/; the copies under `public/brand/` are trimmed of
- * the faint haze round the art and scaled down (the mark to 256px, the
- * letters to 96px tall).
+ * The hat mark beside the Hermes letters. The letters are terracotta on
+ * light grounds and cream on dark ones. The mark copy under `public/brand/`
+ * is the charcoal hat at 1024px, so it reads on cream and white.
  *
  * The original letter art is an alpha mask: CSS changes its colour without
  * redrawing the owner's letterforms. A screen reader hears "Hermes" once.

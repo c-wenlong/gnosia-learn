@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="brand/banners/banner-readme-1280x320.png" alt="Hermes Studio" width="640">
+</p>
+
 <h1 align="center">
 Hermes
 </h1>
