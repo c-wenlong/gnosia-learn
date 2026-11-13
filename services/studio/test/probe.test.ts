@@ -76,6 +76,22 @@ describe("a read", () => {
     expect(await probe.read()).toMatchObject({ value: "new", stale: false, refreshing: false, ageMs: 0 });
   });
 
+  it("does not start a refresh on an old answer when read with refresh: false", async () => {
+    const gate = gated<string>();
+    const time = clock();
+    const probe = new Probe(gate.check, 1_000, { now: time.now });
+    const first = probe.read({ refresh: false });
+    await tick();
+    gate.answer("first");
+    await first;
+
+    time.advance(5_000);
+    const passive = await probe.read({ refresh: false });
+    expect(passive).toMatchObject({ value: "first", stale: true, refreshing: false, ageMs: 5_000 });
+    await tick();
+    expect(gate.started).toBe(1);
+  });
+
   it("does not refresh an answer younger than its lifetime", async () => {
     const gate = gated<number>();
     const time = clock();
@@ -209,5 +225,43 @@ describe("forget", () => {
     gate.answer("after the write", 2);
     expect((await after).value).toBe("after the write");
     expect((await probe.read()).value).toBe("after the write");
+  });
+
+  it("shares an in-flight check when forget({ keepInFlight: true }) drops the cached answer", async () => {
+    const gate = gated<string>();
+    const probe = new Probe(gate.check, 60_000);
+    const first = probe.read();
+    await tick();
+    gate.answer("initial", 0);
+    await first;
+
+    const running = probe.refresh();
+    await tick();
+    probe.forget({ keepInFlight: true });
+    const forced = probe.read();
+    await tick();
+    expect(gate.started).toBe(2);
+    gate.answer("shared-fresh", 1);
+    await running;
+    expect((await forced).value).toBe("shared-fresh");
+  });
+
+  it("expires failed answers after failureTtlMs rather than waiting for ttlMs", async () => {
+    const time = clock();
+    let calls = 0;
+    const probe = new Probe(
+      async () => {
+        calls += 1;
+        return calls === 1 ? "fail" : "ok";
+      },
+      60_000,
+      { now: time.now, failureTtlMs: 1_000, isFailure: (v) => v === "fail" },
+    );
+    expect((await probe.read()).value).toBe("fail");
+    time.advance(1_000);
+    // Past failureTtlMs (1 s), even though ttlMs is 60 s: triggers a refresh.
+    expect((await probe.read()).stale).toBe(true);
+    await tick();
+    expect((await probe.read()).value).toBe("ok");
   });
 });

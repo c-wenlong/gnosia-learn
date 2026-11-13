@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { cp, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -15,7 +16,7 @@ import { buildProfile, resolvedStudioHome, type ProfileKind } from "../sandbox";
 import { scanSource, voicedLines } from "../scan";
 import { clipKeys, keepClips as keepClipFiles, seedClips } from "../seed";
 import { buildVideoSettings } from "../settings";
-import { discoverToolchain, toolchainProblems } from "../toolchain";
+import { discoverToolchain, manimkcRoot, toolchainProblems } from "../toolchain";
 import { wrapperConfig, writeWrapper } from "../wrapper";
 import { MANIMKC_GATE } from "./manimkc-gate";
 
@@ -132,6 +133,7 @@ export const manimkcBackend: VideoBackend = {
   sheets: (paths, classes) => classes.map((scene) => ({ id: scene, title: null, file: sheetPath(paths, scene), kept: `${scene}.sheet.png`, scenes: [scene] })),
   isSheet: (_paths, file) => file.endsWith(".sheet.png"),
   addDirs: (paths) => [paths.lib, paths.out],
+  hasCheckout: () => existsSync(path.join(manimkcRoot(), "tools", "cli", "manimkc")),
   doctor: () => runVideoDoctor(),
 
   ...MANIMKC_GATE,

@@ -173,9 +173,10 @@ export const MIRROR_START_MS = integer("STUDIO_MIRROR_START_MS", 30_000, 2_000, 
  * How long `/api/health` reuses the last vocabulary read instead of spawning
  * `catalog topic ls` again. Every studio page render asks health, and a
  * `topic ls` is a Node process and a database round trip; a brief is still
- * checked against a fresh read, so this only bounds how old the health line is.
+ * checked against a fresh read, and `onCatalogWrite` invalidates the cached
+ * status whenever this runner writes to the catalog.
  */
-export const VOCABULARY_STATUS_MS = integer("STUDIO_VOCABULARY_STATUS_MS", 30_000, 0, 600_000);
+export const VOCABULARY_STATUS_MS = integer("STUDIO_VOCABULARY_STATUS_MS", 30 * 60_000, 0, 24 * 3_600_000);
 
 /** The server-side poll of a mirror's own `/api/health`, which the page cannot do (D13). */
 export const MIRROR_HEALTH_MS = integer("STUDIO_MIRROR_HEALTH_MS", 2_000, 200, 30_000);

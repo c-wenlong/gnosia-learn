@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -15,7 +16,7 @@ import { remotionkcPaths, remotionkcVideoPaths } from "../remotionkc/paths";
 import { buildRemotionkcProfile } from "../remotionkc/sandbox";
 import { buildRemotionkcSettings } from "../remotionkc/settings";
 import { currentSourceHash, REMOTIONKC_SOURCE_PATTERN } from "../remotionkc/source";
-import { discoverRemotionkcToolchain, remotionkcProblems, type RemotionkcToolchain } from "../remotionkc/toolchain";
+import { discoverRemotionkcToolchain, remotionkcProblems, remotionkcRoot, type RemotionkcToolchain } from "../remotionkc/toolchain";
 import { remotionkcWrapperConfig, writeRemotionkcWrapper } from "../remotionkc/wrapper";
 import { resolvedStudioHome, type ProfileKind } from "../sandbox";
 import { keepClips as keepClipFiles, seedClips } from "../seed";
@@ -126,6 +127,7 @@ export const remotionkcBackend: VideoBackend = {
     return file === own.stillsSheet || file === own.buildSheet;
   },
   addDirs: (paths) => [paths.lib, remotionkcPaths(paths).docs, paths.out, remotionkcPaths(paths).stillsRoot],
+  hasCheckout: () => existsSync(path.join(remotionkcRoot(), "tools", "cli", "remotionkc.mjs")),
   doctor: () => runRemotionkcDoctor(),
 
   ...REMOTIONKC_GATE,

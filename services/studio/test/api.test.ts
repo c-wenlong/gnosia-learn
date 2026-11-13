@@ -859,6 +859,25 @@ describe("health, with a check that has become slow", () => {
     const after = (await health()).body.agent as { diagram: { model: { passed: string; source: string } } };
     expect(after.diagram.model).toMatchObject({ passed: "opus", source: "panel" });
   });
+
+  it("does not start background refreshes on a passive ?refresh=0 poll, and forces a fresh check on ?refresh=1", async () => {
+    canvasMock.doctor.mockResolvedValue(passing);
+    expect((await health()).body.tldrawkc).toBe(true);
+    const callsAfterFirst = canvasMock.doctor.mock.calls.length;
+
+    const passive = (await (await fetch(`${probedBase}/api/health?refresh=0`)).json()) as Record<string, unknown>;
+    expect(passive.tldrawkc).toBe(true);
+    expect(passive.freshness).toMatchObject({
+      tldrawkc: { stale: true, refreshing: false },
+      postgres: { stale: true, refreshing: false },
+    });
+    expect(canvasMock.doctor.mock.calls.length).toBe(callsAfterFirst);
+
+    canvasMock.doctor.mockResolvedValue(failing);
+    const forced = (await (await fetch(`${probedBase}/api/health?refresh=1`)).json()) as Record<string, unknown>;
+    expect(forced.tldrawkc).toBe(false);
+    expect(canvasMock.doctor.mock.calls.length).toBe(callsAfterFirst + 1);
+  });
 });
 
 describe("the route table", () => {

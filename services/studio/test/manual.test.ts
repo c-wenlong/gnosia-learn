@@ -481,6 +481,51 @@ describe("the background snippet check (M3)", () => {
     expect(checks).toBe(2);
     expect(source.status()).toMatchObject({ state: "ok", snippets: clean, snippetsPending: false });
   });
+
+  it("reuses the cached passing snippet check across a restart when the manual hash is unchanged", async () => {
+    await source.refresh();
+    await source.tick();
+    expect(checks).toBe(1);
+    expect(source.status()).toMatchObject({ state: "ok", snippets: clean, snippetsPending: false });
+
+    const output = await readFile(FIXTURE, "utf8");
+    let restartedChecks = 0;
+    const restarted = new ManualSource({
+      api: async () => result(output),
+      checkSnippets: true,
+      isIdle: () => true,
+      doctorOk: async () => true,
+      runCheck: async () => {
+        restartedChecks += 1;
+        return clean;
+      },
+    });
+    await restarted.refresh();
+    await restarted.tick();
+    expect(restartedChecks).toBe(0);
+    expect(restarted.status()).toMatchObject({ state: "ok", snippets: clean, snippetsPending: false });
+    await restarted.drain();
+
+    // When the installed tool build changes (even with the same api --json
+    // text), a restart re-runs the snippet checks against the new build.
+    let rebuiltChecks = 0;
+    const rebuilt = new ManualSource({
+      api: async () => result(output),
+      buildFingerprint: async () => "new-tldrawkc-build-fingerprint",
+      checkSnippets: true,
+      isIdle: () => true,
+      doctorOk: async () => true,
+      runCheck: async () => {
+        rebuiltChecks += 1;
+        return clean;
+      },
+    });
+    await rebuilt.refresh();
+    await rebuilt.tick();
+    expect(rebuiltChecks).toBe(1);
+    expect(rebuilt.status()).toMatchObject({ state: "ok", snippets: clean, snippetsPending: false });
+    await rebuilt.drain();
+  });
 });
 
 describe("checkSnippets", () => {

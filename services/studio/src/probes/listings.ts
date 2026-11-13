@@ -1,5 +1,6 @@
 import { loadVocabulary, type Vocabulary } from "../diagram/brief";
-import { onCatalogWrite, videoList, type CatalogResult } from "../data/catalog";
+import { videoList, type CatalogResult } from "../data/catalog";
+import { onCatalogWrite } from "../data/catalog-events";
 import { listDiagrams, type DiagramListing } from "../canvas/diagrams";
 import { Probe, type ProbeReading } from "./probe";
 
@@ -60,11 +61,11 @@ export class Listings {
     this.unsubscribe = onCatalogWrite(() => this.forget());
   }
 
-  /** Start all three reads now, not awaited: at start, so the first page finds answers. */
-  warm(): void {
-    this.diagrams.warm();
-    this.vocabulary.warm();
-    this.videos.warm();
+  /** Warm all three reads sequentially at start so the first page finds answers without three concurrent catalog CLIs. */
+  async warm(): Promise<void> {
+    await this.diagrams.refresh().catch(() => undefined);
+    await this.vocabulary.refresh().catch(() => undefined);
+    await this.videos.refresh().catch(() => undefined);
   }
 
   /** Drop all three, so the next read of each waits for the catalog. */

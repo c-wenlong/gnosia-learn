@@ -286,7 +286,8 @@ and points there.
     `canvas doctor` on a bare Ubuntu usually wants the shared libraries
     headless Chromium links against; it prints the `apt` line. Then a
     second unit, `hermes-studio.service`, shaped like step 10's with
-    `ExecStart=/usr/bin/npm run studio`; it binds `127.0.0.1:7250` and
+    `ExecStart=/usr/bin/node --import tsx services/studio/src/index.ts`;
+    it binds `127.0.0.1:7250` and
     the web app reaches it through its own route handler. Set
     `STUDIO_ENABLED=1` in `apps/web/.env.local` and restart `hermes`.
     `/studio/api/health` should report `video` off with the V4 reason (no
