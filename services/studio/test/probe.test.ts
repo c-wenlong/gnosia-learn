@@ -226,4 +226,42 @@ describe("forget", () => {
     expect((await after).value).toBe("after the write");
     expect((await probe.read()).value).toBe("after the write");
   });
+
+  it("shares an in-flight check when forget({ keepInFlight: true }) drops the cached answer", async () => {
+    const gate = gated<string>();
+    const probe = new Probe(gate.check, 60_000);
+    const first = probe.read();
+    await tick();
+    gate.answer("initial", 0);
+    await first;
+
+    const running = probe.refresh();
+    await tick();
+    probe.forget({ keepInFlight: true });
+    const forced = probe.read();
+    await tick();
+    expect(gate.started).toBe(2);
+    gate.answer("shared-fresh", 1);
+    await running;
+    expect((await forced).value).toBe("shared-fresh");
+  });
+
+  it("expires failed answers after failureTtlMs rather than waiting for ttlMs", async () => {
+    const time = clock();
+    let calls = 0;
+    const probe = new Probe(
+      async () => {
+        calls += 1;
+        return calls === 1 ? "fail" : "ok";
+      },
+      60_000,
+      { now: time.now, failureTtlMs: 1_000, isFailure: (v) => v === "fail" },
+    );
+    expect((await probe.read()).value).toBe("fail");
+    time.advance(1_000);
+    // Past failureTtlMs (1 s), even though ttlMs is 60 s: triggers a refresh.
+    expect((await probe.read()).stale).toBe(true);
+    await tick();
+    expect((await probe.read()).value).toBe("ok");
+  });
 });

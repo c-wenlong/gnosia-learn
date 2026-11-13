@@ -52,6 +52,7 @@ export function canvas(args: string[], timeoutMs = 120_000): Promise<RunResult> 
  */
 let doctorCache: { at: number; result: RunResult } | null = null;
 let doctorInFlight: Promise<RunResult> | null = null;
+let doctorGeneration = 0;
 export const DOCTOR_TTL_MS = 30_000;
 
 export async function doctor(force = false): Promise<RunResult> {
@@ -63,7 +64,8 @@ export async function doctor(force = false): Promise<RunResult> {
   // check too: it asks for a fresh answer, and one is already being fetched.
   if (doctorInFlight !== null) return doctorInFlight;
 
-  doctorInFlight = (async () => {
+  const generation = doctorGeneration;
+  const running = (async () => {
     try {
       // `--json` rather than the human table: the blocked screens in the UI
       // (U4, U5) name the failing checks individually and mark a `warn` as a
@@ -71,13 +73,18 @@ export async function doctor(force = false): Promise<RunResult> {
       // last eight lines of a padded listing.
       const result = await canvas(["doctor", "--json"], 120_000);
       // Stamped when the answer arrived, not when it was asked for.
-      doctorCache = { at: Date.now(), result };
+      if (generation === doctorGeneration) {
+        doctorCache = { at: Date.now(), result };
+      }
       return result;
     } finally {
-      doctorInFlight = null;
+      if (generation === doctorGeneration) {
+        doctorInFlight = null;
+      }
     }
   })();
-  return doctorInFlight;
+  doctorInFlight = running;
+  return running;
 }
 
 /**
@@ -89,10 +96,16 @@ export function doctorAnsweredAt(): number | null {
   return doctorCache?.at ?? null;
 }
 
-/** For the tests, and for a `?refresh=1` the UI may want in a later phase. */
+/** Drop the cached `doctor` answer while preserving any check already in flight. */
+export function invalidateDoctorCache(): void {
+  doctorCache = null;
+}
+
+/** For the tests: drop both the cached answer and any in-flight check. */
 export function forgetDoctor(): void {
   doctorCache = null;
   doctorInFlight = null;
+  doctorGeneration += 1;
 }
 
 /* -------------------------------------------------------------------------- */

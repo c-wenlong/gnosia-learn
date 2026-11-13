@@ -215,26 +215,39 @@ describe("the doctor, told", () => {
     await until(() => doctor.current()?.toolchainStop?.jobId === "j2", "the stop never reached the verdict");
   });
 
-  it("skips periodic timer refreshes after the initial check when the tool checkout is absent on disk", async () => {
+  it("skips periodic timer refreshes after a missing-checkout failure is recorded, and records one if a working checkout is removed", async () => {
     vi.useFakeTimers();
     try {
       let runs = 0;
-      let present = false;
+      let present = true;
       const doctor = new VideoDoctor(
         async () => {
           runs += 1;
-          return { ...passing, ok: false, checkedAt: new Date(0).toISOString() };
+          return present
+            ? { ...passing, ok: true, checks: [{ name: "checkout", ok: true, detail: "found" }], checkedAt: new Date(0).toISOString() }
+            : { ...passing, ok: false, checks: [{ name: "checkout", ok: false, detail: "missing" }], checkedAt: new Date(0).toISOString() };
         },
         () => present,
       );
       await doctor.report(true);
       expect(runs).toBe(1);
+      expect(doctor.current()?.ok).toBe(true);
       doctor.start();
-      await vi.advanceTimersByTimeAsync(VIDEO_DOCTOR_TTL_MS * 3);
-      expect(runs).toBe(1);
-      present = true;
+
+      // Checkout is removed while Studio is running: the next tick runs once
+      // to record the missing-checkout failure, then suppresses further ticks.
+      present = false;
       await vi.advanceTimersByTimeAsync(VIDEO_DOCTOR_TTL_MS);
       expect(runs).toBe(2);
+      expect(doctor.current()?.ok).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(VIDEO_DOCTOR_TTL_MS * 3);
+      expect(runs).toBe(2);
+
+      present = true;
+      await vi.advanceTimersByTimeAsync(VIDEO_DOCTOR_TTL_MS);
+      expect(runs).toBe(3);
+      expect(doctor.current()?.ok).toBe(true);
       await doctor.drain();
     } finally {
       vi.useRealTimers();

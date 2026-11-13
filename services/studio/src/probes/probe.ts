@@ -49,6 +49,8 @@ export class Probe<T> {
 
   private readonly now: () => number;
   private readonly answeredAt: (value: T) => number | null;
+  private readonly failureTtlMs: number;
+  private readonly isFailure: (value: T) => boolean;
 
   constructor(
     private readonly check: () => Promise<T>,
@@ -62,10 +64,20 @@ export class Probe<T> {
        * from then, not from when this probe received it. Null means now.
        */
       answeredAt?: (value: T) => number | null;
+      /** Shorter lifetime for a failed answer so a repair is noticed promptly without `?refresh=1`. */
+      failureTtlMs?: number;
+      /** Whether `value` is a failed check that should expire after `failureTtlMs`. */
+      isFailure?: (value: T) => boolean;
     } = {},
   ) {
     this.now = options.now ?? (() => Date.now());
     this.answeredAt = options.answeredAt ?? (() => null);
+    this.failureTtlMs = Math.min(this.ttlMs, options.failureTtlMs ?? this.ttlMs);
+    this.isFailure = options.isFailure ?? (() => false);
+  }
+
+  private ttlFor(value: T): number {
+    return this.isFailure(value) ? this.failureTtlMs : this.ttlMs;
   }
 
   /** Start a check unless one is running, and return it. */
@@ -91,7 +103,7 @@ export class Probe<T> {
 
   /** An answer younger than the TTL, waiting for a check when there is none. For a gate. */
   async fresh(): Promise<T> {
-    if (this.last !== null && this.now() - this.last.at < this.ttlMs) return this.last.value;
+    if (this.last !== null && this.now() - this.last.at < this.ttlFor(this.last.value)) return this.last.value;
     return this.refresh();
   }
 
@@ -107,7 +119,8 @@ export class Probe<T> {
       waited = true;
       await this.refresh();
     }
-    if (!waited && options.refresh !== false && this.now() - this.last.at >= this.ttlMs) {
+    const ttl = this.ttlFor(this.last.value);
+    if (!waited && options.refresh !== false && this.now() - this.last.at >= ttl) {
       // Nobody awaits this one; a failure leaves the last answer standing and
       // the next read tries again.
       this.refresh().catch(() => undefined);
@@ -118,7 +131,7 @@ export class Probe<T> {
       value: last.value,
       checkedAt: new Date(last.at).toISOString(),
       ageMs,
-      stale: ageMs >= this.ttlMs,
+      stale: ageMs >= ttl,
       refreshing: this.inFlight !== null,
     };
   }
@@ -128,9 +141,14 @@ export class Probe<T> {
     this.refresh().catch(() => undefined);
   }
 
-  /** Drop the answer, so the next read waits for a new one: after a write that changes it. */
-  forget(): void {
+  /**
+   * Drop the answer, so the next read waits for a new one: after a write that
+   * changes it, or on `?refresh=1` (which passes `keepInFlight: true` on slow
+   * browser checks so concurrent callers share the check already running).
+   */
+  forget(options: { keepInFlight?: boolean } = {}): void {
     this.last = null;
+    if (options.keepInFlight && this.inFlight !== null) return;
     this.inFlight = null;
     this.generation += 1;
   }

@@ -2005,6 +2005,8 @@ async function health(
 ): Promise<Record<string, unknown>> {
   if (refresh === true) {
     probes.forget();
+  } else {
+    await probes.waitWarm();
   }
   const readOptions = refresh === undefined ? {} : { refresh };
   // Every answer is the last one each probe has, returned at once; an old one

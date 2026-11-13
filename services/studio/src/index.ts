@@ -214,6 +214,11 @@ async function main(): Promise<void> {
   const probes = new HealthProbes();
   const settingsProbe = probes.settingsView(agentSettingsView);
   const listings = new Listings();
+  // Start warming health probes before the socket binds so any early
+  // `/api/health` poll shares the serialized warm-up schedule (`waitWarm()`)
+  // instead of launching cold checks in parallel.
+  const initialWarm = asked === null ? probes.warm() : Promise.resolve();
+
   const server = createApi({ store, runner, mirrors, drafts, video: { store: videoStore, runner: videoRunner, doctor: videoDoctor }, probes, listings });
   server.listen(PORT, HOST, () => {
     // The bind callback can fire after a replayed stop has already begun
@@ -238,7 +243,7 @@ async function main(): Promise<void> {
     videoDoctor.start();
     for (const doctor of Object.values(otherDoctors)) doctor?.start();
     void (async () => {
-      await probes.warm();
+      await initialWarm;
       if (asked !== null) return;
       await settingsProbe.refresh().catch(() => undefined);
       if (asked !== null) return;

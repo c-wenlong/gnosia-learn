@@ -239,14 +239,15 @@ function entryOf(value: unknown): TopicEntry | null {
  * `readAt: null`, and a brief cannot be checked until the catalog answers.
  */
 export async function loadVocabulary(): Promise<Vocabulary> {
+  const generation = statusGeneration;
   let read: CachedRead<TopicEntry[]>;
   try {
     read = await readThrough(`topics.${studioOwner()}`, readTopics, { isValue: isTopicList });
   } catch (error) {
-    remember({ readAt: null, stale: true, error: error instanceof Error ? error.message : String(error) });
+    remember({ readAt: null, stale: true, error: error instanceof Error ? error.message : String(error) }, generation);
     throw error;
   }
-  remember({ readAt: read.readAt, stale: read.stale, ...(read.error === undefined ? {} : { error: read.error }) });
+  remember({ readAt: read.readAt, stale: read.stale, ...(read.error === undefined ? {} : { error: read.error }) }, generation);
   const topics = new Map<string, { title: string; concepts: string[] }>();
   for (const entry of read.value) {
     topics.set(entry.slug, { title: entry.title, concepts: [...entry.maps.concepts] });
@@ -270,13 +271,21 @@ export interface VocabularyStatus {
 /** The outcome of the last `loadVocabulary`, from any route, and when it came. */
 let lastStatus: { at: number; status: VocabularyStatus } | null = null;
 let statusRead: Promise<VocabularyStatus> | null = null;
+let statusGeneration = 0;
 
-onCatalogWrite(() => {
+/** Drop the cached vocabulary status and any in-flight status read. */
+export function forgetVocabularyStatus(): void {
   lastStatus = null;
-});
+  statusRead = null;
+  statusGeneration += 1;
+}
 
-function remember(status: VocabularyStatus): void {
-  lastStatus = { at: Date.now(), status };
+onCatalogWrite(forgetVocabularyStatus);
+
+function remember(status: VocabularyStatus, generation: number): void {
+  if (generation === statusGeneration) {
+    lastStatus = { at: Date.now(), status };
+  }
 }
 
 /**
@@ -292,28 +301,40 @@ function remember(status: VocabularyStatus): void {
  */
 export async function vocabularyStatus(maxAgeMs: number = VOCABULARY_STATUS_MS): Promise<VocabularyStatus> {
   if (lastStatus !== null && Date.now() - lastStatus.at < maxAgeMs) return lastStatus.status;
-  statusRead ??= loadVocabulary()
+  if (statusRead !== null) return statusRead;
+  const generation = statusGeneration;
+  const running = loadVocabulary()
     .then(
-      (): VocabularyStatus => lastStatus?.status ?? { readAt: null, stale: true },
-      (): VocabularyStatus => lastStatus?.status ?? { readAt: null, stale: true },
+      (): Promise<VocabularyStatus> | VocabularyStatus =>
+        generation !== statusGeneration ? vocabularyStatus(maxAgeMs) : (lastStatus?.status ?? { readAt: null, stale: true }),
+      (): Promise<VocabularyStatus> | VocabularyStatus =>
+        generation !== statusGeneration ? vocabularyStatus(maxAgeMs) : (lastStatus?.status ?? { readAt: null, stale: true }),
     )
     .finally(() => {
-      statusRead = null;
+      if (generation === statusGeneration) {
+        statusRead = null;
+      }
     });
-  return statusRead;
+  statusRead = running;
+  return running;
 }
 
 /**
  * `vocabularyStatus` for `/api/health`, which never waits once there is an
  * answer: the last outcome, however old, and a read started behind it when it
  * is older than `STUDIO_VOCABULARY_STATUS_MS` (unless `options.refresh` is
- * `false`). Only with no outcome at all (the first call after a start) does it
- * wait for one.
+ * `false`). When `options.refresh` is `true`, drops the cached outcome and
+ * awaits a fresh read. Only with no outcome at all (the first call after a
+ * start) does an ordinary read wait for one.
  */
 export async function vocabularyStatusNow(
   maxAgeMs: number = VOCABULARY_STATUS_MS,
   options: { refresh?: boolean } = {},
 ): Promise<VocabularyStatus> {
+  if (options.refresh === true) {
+    forgetVocabularyStatus();
+    return vocabularyStatus(maxAgeMs);
+  }
   if (lastStatus === null) return vocabularyStatus(maxAgeMs);
   if (options.refresh !== false && Date.now() - lastStatus.at >= maxAgeMs) void vocabularyStatus(maxAgeMs);
   return lastStatus.status;

@@ -334,7 +334,13 @@ export class VideoDoctor {
 
   start(): void {
     this.timer = setInterval(() => {
-      if (this.last !== null && !this.hasCheckout()) return;
+      if (
+        !this.hasCheckout() &&
+        this.last !== null &&
+        this.last.checks.some((check) => check.name === "checkout" && !check.ok)
+      ) {
+        return;
+      }
       void this.report(true);
     }, VIDEO_DOCTOR_TTL_MS);
     this.timer.unref();
