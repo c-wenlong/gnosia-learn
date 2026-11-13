@@ -75,8 +75,10 @@ export class OwnerCapConfigError extends Error {
 }
 
 function capFrom(env: Record<string, string | undefined>, variable: string, legacy?: string): number | null {
-  const named = env[variable]?.trim();
-  const raw = named === undefined || named === "" ? legacy === undefined ? undefined : env[legacy]?.trim() : named;
+  const named = env[variable];
+  // An empty new name is "no cap", including when a shell still exports it
+  // as blank to turn the cap off. Only a missing new name reads the old one.
+  const raw = named === undefined ? (legacy === undefined ? undefined : env[legacy]?.trim()) : named.trim();
   if (raw === undefined || raw === "") return null;
   // Refused rather than read as unset, unlike STUDIO_DAILY_USD: an upload is a
   // command a person runs and watches, so a typo is a sentence they can fix at

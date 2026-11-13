@@ -47,6 +47,20 @@ describe("ownerCaps", () => {
       bytes: null,
       uploadsPerDay: null,
     });
+    // A blank new name turns the cap off. It does not fall through to a shell
+    // that still exports the name from before the rename.
+    expect(
+      ownerCaps({
+        [OWNER_BYTES_CAP_ENV]: "",
+        [OWNER_UPLOADS_PER_DAY_ENV]: "",
+        GNOSIA_OWNER_BYTES_CAP: "100",
+        GNOSIA_OWNER_UPLOADS_PER_DAY: "0",
+      }),
+    ).toEqual({ bytes: null, uploadsPerDay: null });
+    expect(ownerCaps({ GNOSIA_OWNER_BYTES_CAP: "0", GNOSIA_OWNER_UPLOADS_PER_DAY: "3" })).toEqual({
+      bytes: 0,
+      uploadsPerDay: 3,
+    });
   });
 
   it("reads whole numbers, zero included", () => {

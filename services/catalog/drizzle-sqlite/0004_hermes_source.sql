@@ -56,15 +56,32 @@ DROP TABLE `event`;
 --> statement-breakpoint
 CREATE TABLE `job__copy` AS SELECT * FROM `job`;
 --> statement-breakpoint
-DROP TABLE `job`;
---> statement-breakpoint
 CREATE TABLE `session_log_entry__copy` AS SELECT * FROM `session_log_entry`;
 --> statement-breakpoint
 DROP TABLE `session_log_entry`;
 --> statement-breakpoint
 CREATE TABLE `content_revision__copy` AS SELECT * FROM `content_revision`;
 --> statement-breakpoint
+-- `job.parent_job_id` points at `job`, and `content_revision.previous_id`
+-- points at another revision, both ON DELETE restrict. A copied table does
+-- not drop those links. Defer the check for the rest of this transaction,
+-- then delete the live rows. A chain of any length clears in one statement.
+-- The copies above still hold every row, and the inserts below put them
+-- back. The commit checks the restored links. `PRAGMA foreign_keys = OFF`
+-- cannot do this: it is a no-op inside drizzle's migration transaction.
+PRAGMA defer_foreign_keys = ON;
+--> statement-breakpoint
+DROP TRIGGER `content_revision_no_delete`;
+--> statement-breakpoint
+DELETE FROM `content_revision`;
+--> statement-breakpoint
+DELETE FROM `job`;
+--> statement-breakpoint
+DROP TABLE `job`;
+--> statement-breakpoint
 DROP TABLE `content_revision`;
+--> statement-breakpoint
+DROP TRIGGER IF EXISTS `content_revision_no_update`;
 --> statement-breakpoint
 DROP TABLE `session`;
 --> statement-breakpoint
