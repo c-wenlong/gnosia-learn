@@ -6,7 +6,7 @@ import mark from "../../../public/brand/mark.png";
 import wordmarkInk from "../../../public/brand/wordmark-ink.png";
 
 /**
- * The owner's logo art: the mark, and the GNOSIA letters in two colourways,
+ * The owner's logo art: the mark, and the Hermes letters in two colourways,
  * terracotta for light grounds and cream for dark ones. Sources are in
  * docs/design/brand/logo/; the copies under `public/brand/` are trimmed of
  * the faint haze round the art and scaled down (the mark to 256px, the
