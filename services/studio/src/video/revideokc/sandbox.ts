@@ -114,7 +114,7 @@ function execRules(kind: ProfileKind, { tools }: RevideokcProfileInput): Rule[] 
     // gnosia-audio's console script, which revideokc runs by path: a script is
     // checked at exec as well as the interpreter its first line names.
     const script = own.venv === null ? [] : [file(path.join(own.venv, "bin", "gnosia-audio"))];
-    return [...nodeRules(tools), ...script, ...own.scriptShells.map(file), ...program(own.gnosiaPython), ...program(tools.ttsPython), ...media, ...NARRATE_SYSTEM.map(file)];
+    return [...nodeRules(tools), ...script, ...own.scriptShells.map(file), ...program(own.narrationPython), ...program(tools.ttsPython), ...media, ...NARRATE_SYSTEM.map(file)];
   }
   return [
     ...nodeRules(tools),

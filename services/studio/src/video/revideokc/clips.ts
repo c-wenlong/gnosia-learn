@@ -20,7 +20,7 @@ export async function revideokcClipKeys(job: BackendJob, allLines: readonly stri
   const lines = allLines.filter((line) => line.trim() !== "");
   if (lines.length === 0) return [];
   const own = revideokcTools(job.tools);
-  if (own.gnosiaPython === null) throw new Error("gnosia-audio is not installed in revideokc's .venv");
+  if (own.narrationPython === null) throw new Error("gnosia-audio is not installed in revideokc's .venv");
   const tools = job.tools as RevideokcToolchain;
   const result = await runSandboxed({
     ...job,

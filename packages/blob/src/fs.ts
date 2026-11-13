@@ -277,12 +277,15 @@ export function fsStore(root: string = defaultBlobRoot()): BlobStore {
  * caught too.
  *
  * A checkout is a directory whose `package.json` is named `hermes` (or the
- * old name `gnosia`), which
+ * old name `gnosia`, kept so an older checkout still counts), which
  * holds for a clone, a worktree, an older checkout from before this package
  * existed, and a copy with no `.git` at all, any of which a `git clean` or a
  * move can empty. A directory with a `.git` and this package in it counts too.
  * Neither test is "any `.git`", so a home directory that happens to be a
  * dotfiles repository does not refuse the default root.
+ *
+ * `gnosiaCheckoutAbove` and `isGnosiaPackage` keep the old names. They exist
+ * only to find a checkout, including one made before the product was Hermes.
  */
 function gnosiaCheckoutAbove(dir: string): string | null {
   let current = resolveExisting(dir);
@@ -299,7 +302,7 @@ function gnosiaCheckoutAbove(dir: string): string | null {
   }
 }
 
-/** Whether `file` is a `package.json` naming this repository, old name included. */
+/** Whether `file` is a `package.json` naming this Hermes repository, old name `gnosia` included. */
 function isGnosiaPackage(file: string): boolean {
   try {
     const name = (JSON.parse(readFileSync(file, "utf8")) as { name?: unknown }).name;
