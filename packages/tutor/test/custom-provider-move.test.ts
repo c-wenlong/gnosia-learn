@@ -78,24 +78,39 @@ describe.skipIf(!reachable.ok)("a custom provider moved while its key is read", 
     };
   });
 
-  /** The (URL, key) pair a read produced must be one a single write stored together. */
-  const together = (pair: [string | undefined, string | undefined]) =>
-    expect([[OLD_URL, OLD_KEY], [NEW_URL, NEW_KEY], [undefined, undefined]]).toContainEqual(pair);
+  /**
+   * The (URL, key) pair each order must produce. The URL is read first. A move
+   * landing before the key read leaves the old URL beside a key saved for the
+   * new one, so `pinToUrls` drops the key and the provider has none for this
+   * request. A move landing after it leaves the old URL and the old key, which
+   * one write stored together.
+   */
+  const expected = {
+    before: [undefined, undefined],
+    after: [OLD_URL, OLD_KEY],
+  } as const;
+
+  /** The (URL, key) a tutor turn would call with, or none when its first step is skipped. */
+  const firstStep = async (): Promise<[string | undefined, string | undefined]> => {
+    const steps = await credentials.tutorCredentials(Promise.resolve(scratch.db), LOCAL_LEARNER_ID, {});
+    expect(steps).toHaveLength(1);
+    const step = steps[0];
+    return isCallable(step) ? [step.config.baseUrl, step.apiKey] : [undefined, undefined];
+  };
 
   for (const when of ["before", "after"] as const) {
     it(`sends a key only to the URL it was saved with, for a model list or a Test, when the move lands ${when} the key read`, async () => {
       move.when = when;
       const credential = await credentials.entryCredential(Promise.resolve(scratch.db), LOCAL_LEARNER_ID, "custom-gateway", undefined, {});
       expect(move.next).toBeNull();
-      together([credential?.config.baseUrl, credential?.apiKey]);
+      expect([credential?.config.baseUrl, credential?.apiKey]).toEqual(expected[when]);
     });
 
     it(`sends a key only to the URL it was saved with, for a tutor turn, when the move lands ${when} the key read`, async () => {
       move.when = when;
-      const steps = await credentials.tutorCredentials(Promise.resolve(scratch.db), LOCAL_LEARNER_ID, {});
+      const pair = await firstStep();
       expect(move.next).toBeNull();
-      const step = steps[0];
-      together(step !== undefined && isCallable(step) ? [step.config.baseUrl, step.apiKey] : [undefined, undefined]);
+      expect(pair).toEqual(expected[when]);
     });
   }
 
@@ -103,5 +118,6 @@ describe.skipIf(!reachable.ok)("a custom provider moved while its key is read", 
     move.next = null;
     const credential = await credentials.entryCredential(Promise.resolve(scratch.db), LOCAL_LEARNER_ID, "custom-gateway", undefined, {});
     expect([credential?.config.baseUrl, credential?.apiKey]).toEqual([OLD_URL, OLD_KEY]);
+    expect(await firstStep()).toEqual([OLD_URL, OLD_KEY]);
   });
 });

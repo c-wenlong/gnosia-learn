@@ -78,11 +78,14 @@ function toStringList(value: unknown): string[] {
       .map((v) => (typeof v === "string" ? v.trim() : ""))
       .filter(Boolean);
   }
-  // Some free models return a newline- or semicolon-joined string.
+  // Some free models return a newline- or semicolon-joined string. The marker
+  // strip is deliberately narrow: a bullet or a "1." / "2)" numbering, followed
+  // by a space. Anything else the item starts with, digits included, is content
+  // ("- 3 heads attend" is "3 heads attend", not "heads attend").
   if (typeof value === "string") {
     return value
       .split(/\n+|;\s*/)
-      .map((v) => v.replace(/^[-*\d.)\s]+/, "").trim())
+      .map((v) => v.replace(/^\s*(?:[-*•+]|\d+[.)])(?:\s+|$)/, "").trim())
       .filter(Boolean);
   }
   return [];

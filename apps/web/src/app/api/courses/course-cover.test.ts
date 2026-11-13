@@ -14,8 +14,8 @@ import {
   type Scratch,
 } from "../../../../../../services/catalog/test/scratch-database";
 
-/** Whether the request carries the owner's session, and whether the store signs URLs; each test sets what it needs. */
-const flags = { signedIn: true, signing: false };
+/** Whether the request carries the owner's session, whether the store signs URLs, and whether its reads throw; each test sets what it needs. */
+const flags = { signedIn: true, signing: false, statFails: false, signFails: false };
 
 vi.mock("@/lib/auth/session", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth/session")>()),
@@ -33,9 +33,15 @@ vi.mock("@/lib/blob-store", async () => {
       return {
         ...inner,
         provider: inner.provider,
-        stat: (key) => inner.stat(key),
+        stat: async (key) => {
+          if (flags.statFails) throw new Error("store read refused");
+          return inner.stat(key);
+        },
         get: (key, range) => inner.get(key, range),
-        signedUrl: async (key) => (flags.signing ? `https://store.example/signed/${encodeURIComponent(key)}` : null),
+        signedUrl: async (key) => {
+          if (flags.signFails) throw new Error("signing refused");
+          return flags.signing ? `https://store.example/signed/${encodeURIComponent(key)}` : null;
+        },
       };
     },
   };
@@ -64,6 +70,7 @@ const WEBP = Buffer.concat([
 const OTHER = Buffer.concat([WEBP, Buffer.from("another owner's photo")]);
 const PENDING = Buffer.concat([WEBP, Buffer.from("an upload that never finished")]);
 const LOST = Buffer.concat([WEBP, Buffer.from("bytes the store lost")]);
+const COMMONS = Buffer.concat([WEBP, Buffer.from("a cover every owner may read")]);
 const CREDIT = { photographer: "A Photographer", source: "https://example.com/photo", licence: "Unsplash License" };
 const ORIGIN = "http://localhost:3000";
 
@@ -125,13 +132,28 @@ describe.skipIf(!reachable.ok)("the course cover route", () => {
     process.env.DATABASE_URL = scratch.url;
     process.env.HERMES_HOME = home;
 
-    await scratch.db.insert(learner).values({ id: "other" }).onConflictDoNothing();
+    await scratch.db.insert(learner).values([{ id: "other" }, { id: "commons" }]).onConflictDoNothing();
+    // A cover the closed type list refuses: `.gif` is not in
+    // `COURSE_COVER_TYPES`, so the route never reaches for its bytes.
+    await scratch.db.insert(blobObject).values({
+      key: `local/${sha256(WEBP)}.gif`,
+      ownerId: "local",
+      sha256: sha256(WEBP),
+      bytes: WEBP.length,
+      mime: "image/gif",
+      provider: "fs",
+      state: "present",
+      confirmedAt: new Date(),
+    });
     await scratch.db.insert(collection).values([
       course("cs1000", 1, "local", await stored("local", WEBP)),
       course("cs2000", 2, "local", null),
       course("cs3000", 3, "other", await stored("other", OTHER)),
       course("cs4000", 4, "local", await stored("local", PENDING, "pending", false)),
       course("cs5000", 5, "local", await stored("local", LOST, "present", false)),
+      // A commons course (the seed's own are commons rows): every owner reads it.
+      course("cs6000", 6, "commons", await stored("commons", COMMONS)),
+      course("cs7000", 7, "local", `local/${sha256(WEBP)}.gif`),
     ]);
 
     ({ GET } = (await import("./[slug]/cover/route")) as { GET: Handler });
@@ -191,6 +213,12 @@ describe.skipIf(!reachable.ok)("the course cover route", () => {
   });
 
   it("serves only the owner's courses and the commons': another owner's cover is a 404 like no course at all", async () => {
+    // The commons' cover answers for this owner too, so a scope that dropped
+    // it would fail here rather than pass.
+    const shared = await call("cs6000");
+    expect(shared.status).toBe(200);
+    expect(Buffer.from(await shared.arrayBuffer()).equals(COMMONS)).toBe(true);
+
     const theirs = await call("cs3000");
     expect(theirs.status).toBe(404);
     expect(await codeOf(theirs)).toBe("not-in-catalog");
@@ -214,6 +242,13 @@ describe.skipIf(!reachable.ok)("the course cover route", () => {
     }
   });
 
+  it("refuses a cover stored under a type the route will not serve, with a 404 unsupported-type", async () => {
+    // cs7000's key ends `.gif`: present and confirmed, and still refused.
+    const response = await call("cs7000");
+    expect(response.status).toBe(404);
+    expect(await codeOf(response)).toBe("unsupported-type");
+  });
+
   it("redirects to the store's signed URL when it offers one, and streams nothing", async () => {
     flags.signing = true;
     try {
@@ -225,6 +260,26 @@ describe.skipIf(!reachable.ok)("the course cover route", () => {
       expect(response.headers.get("cache-control")).toBe("private, no-store");
     } finally {
       flags.signing = false;
+    }
+  });
+
+  it("answers 503 blob-store-unavailable, not a 500, when the store's read or its signing throws", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      flags.statFails = true;
+      const unread = await call("cs1000");
+      expect(unread.status).toBe(503);
+      expect(await codeOf(unread)).toBe("blob-store-unavailable");
+      flags.statFails = false;
+
+      flags.signFails = true;
+      const unsigned = await call("cs1000");
+      expect(unsigned.status).toBe(503);
+      expect(await codeOf(unsigned)).toBe("blob-store-unavailable");
+    } finally {
+      flags.statFails = false;
+      flags.signFails = false;
+      warn.mockRestore();
     }
   });
 
@@ -240,8 +295,9 @@ describe.skipIf(!reachable.ok)("the course cover route", () => {
 
   it("gives the course list the confirmed covers the owner may read, and the URL it links serves them for good", async () => {
     const found = await covers.readCourseCovers(ownerScope("local"));
-    // cs4000's upload is pending; cs3000 is another owner's; cs2000 has none.
-    expect([...found.keys()].sort()).toEqual(["cs1000", "cs5000"]);
+    // cs4000's upload is pending; cs3000 is another owner's; cs2000 has none;
+    // cs7000's is a type the route will not serve; cs6000 is the commons'.
+    expect([...found.keys()].sort()).toEqual(["cs1000", "cs5000", "cs6000", "cs7000"]);
     expect(found.get("cs1000")).toBe(sha256(WEBP));
 
     const url = new URL(summary.coverUrl("cs1000", found.get("cs1000") as string), ORIGIN);
@@ -249,7 +305,24 @@ describe.skipIf(!reachable.ok)("the course cover route", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("private, max-age=31536000, immutable");
 
-    // The other owner sees theirs and not these.
-    expect([...(await covers.readCourseCovers(ownerScope("other"))).keys()]).toEqual(["cs3000"]);
+    // The other owner sees theirs and the commons', and not these.
+    expect([...(await covers.readCourseCovers(ownerScope("other"))).keys()]).toEqual(["cs3000", "cs6000"]);
+  });
+
+  it("gives the course list no covers rather than a failure when the read cannot be answered", async () => {
+    // The read degrades to no covers: a card draws its placeholder and the log
+    // says why. `catalogDatabase` is the one open connection, so the read is
+    // failed where it runs, by a table it joins being gone.
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await scratch.pool.query("alter table blob_object rename to blob_object_away");
+    try {
+      expect((await covers.readCourseCovers(ownerScope("local"))).size).toBe(0);
+      expect(warn).toHaveBeenCalled();
+    } finally {
+      await scratch.pool.query("alter table blob_object_away rename to blob_object");
+      warn.mockRestore();
+    }
+    // Restored whole: the reads above answer again.
+    expect((await covers.readCourseCovers(ownerScope("local"))).get("cs1000")).toBe(sha256(WEBP));
   });
 });

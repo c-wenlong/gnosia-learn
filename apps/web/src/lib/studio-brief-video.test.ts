@@ -86,9 +86,39 @@ describe("the video card's arithmetic", () => {
     expect(abbreviationWarning([])).toBeNull();
   });
 
+  it("lists four words in the warning and counts the rest", () => {
+    expect(abbreviationWarning(["GPU", "ACL", "TCP", "UDP", "DNS", "TLS"])).toBe(
+      'The voice may read GPU, ACL, TCP, UDP and 2 more as words. Spell them out ("G P U") where they are said letter by letter.',
+    );
+  });
+
   it("tells a video brief from anything else", () => {
     expect(isVideoBrief(BRIEF)).toBe(true);
     expect(isVideoBrief({ title: "x" })).toBe(false);
+    // An old brief with no concepts, and a silent beat's finite hold, are both briefs.
+    const { concepts: _concepts, ...old } = BRIEF;
+    expect(isVideoBrief(old)).toBe(true);
+    expect(isVideoBrief({ ...BRIEF, scenes: [{ name: "one", beats: [{ say: "Hi", show: "x", labels: ["a"], seconds: 5 }] }] })).toBe(true);
+  });
+
+  const beat = { say: "Hi", show: "x", labels: [] as unknown[] };
+  const withBeat = (bad: Record<string, unknown>) => ({ ...BRIEF, scenes: [{ name: "one", beats: [{ ...beat, ...bad }] }] });
+
+  it.each([
+    ["a beat whose say is a number", withBeat({ say: 3 })],
+    ["a beat whose show is missing", withBeat({ show: undefined })],
+    ["a beat whose labels are not strings", withBeat({ labels: [1] })],
+    ["a beat whose labels are not a list", withBeat({ labels: "a" })],
+    ["a beat whose seconds is a string", withBeat({ seconds: "5" })],
+    ["a beat whose seconds is NaN", withBeat({ seconds: Number.NaN })],
+    ["a beat that is null", { ...BRIEF, scenes: [{ name: "one", beats: [null] }] }],
+    ["concepts that are not a list", { ...BRIEF, concepts: "a" }],
+    ["concepts that are not slugs", { ...BRIEF, concepts: [1] }],
+    ["a scene whose beats are null", { ...BRIEF, scenes: [{ name: "one", beats: null }] }],
+    ["a scene with no name", { ...BRIEF, scenes: [{ beats: [] }] }],
+    ["a scene that is null", { ...BRIEF, scenes: [null] }],
+  ])("refuses %s (R2-1-09)", (_label, value) => {
+    expect(isVideoBrief(value)).toBe(false);
   });
 });
 
@@ -99,6 +129,8 @@ describe("the card's tool row (docs/STUDIO-VIDEO-TOOLS.md, D73)", () => {
   it("reads a brief with no tool as manimkc", () => {
     expect(briefTool(BRIEF)).toBe("manimkc");
     expect(briefTool({ tool: "revideokc" })).toBe("revideokc");
+    // A tool the card does not know is manimkc too, not passed through.
+    expect(briefTool({ tool: "blender" as never })).toBe("manimkc");
   });
 
   it("shows the planner's reason, else what the tool is best at", () => {

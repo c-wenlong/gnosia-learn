@@ -364,3 +364,49 @@ describe("a visit", () => {
     }
   });
 });
+
+describe("each action's request", () => {
+  const RESOURCES = {
+    m1: [
+      { id: "r1", title: "Notes", url: "https://example.com/notes" },
+      { id: "r2", title: "Slides", url: "https://example.com/slides" },
+    ],
+  };
+  it.each<[string, (learner: Learner) => void, string, unknown]>([
+    [
+      "addResource",
+      (l) => l.addResource("m2", { title: "Paper", url: "https://example.com/paper" }),
+      "/api/learner/preference",
+      {
+        key: "userResources",
+        value: { ...RESOURCES, m2: [{ id: expect.stringMatching(/^user-\d+-[a-z0-9]+$/), title: "Paper", url: "https://example.com/paper" }] },
+      },
+    ],
+    [
+      "removeResource",
+      (l) => l.removeResource("m1", "r1"),
+      "/api/learner/preference",
+      { key: "userResources", value: { m1: [RESOURCES.m1[1]] } },
+    ],
+    [
+      "setCourseActive",
+      (l) => l.setCourseActive("cs1", false),
+      "/api/learner/preference",
+      { key: "inactiveCourses", value: ["cs1"] },
+    ],
+    [
+      "forgetKnowledge",
+      (l) => l.forgetKnowledge("t1"),
+      "/api/learner/recap",
+      { curriculumItemId: "t1", summary: "", keyPoints: [], misconceptions: [], openQuestions: [], source: "manual" },
+    ],
+    ["setAvatar", (l) => void l.setAvatar("owl"), "/api/learner/avatar", { avatar: "owl" }],
+    ["setThemeMode", (l) => l.setThemeMode("hermes-dark"), "/api/learner/preference", { key: "theme", value: "hermes-dark" }],
+  ])("%s posts to its route with the exact body", async (_name, act_, url, body) => {
+    const { calls } = mount(ok, { userResources: RESOURCES });
+    act(() => act_(held.learner!));
+    await vi.waitFor(() => expect(calls()).toHaveLength(1));
+    expect(calls()[0][0]).toBe(url);
+    expect(JSON.parse(calls()[0][1].body as string)).toEqual(body);
+  });
+});
