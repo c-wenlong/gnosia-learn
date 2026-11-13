@@ -440,6 +440,7 @@ export class ManualSource {
       for (const check of failed) {
         this.log(`manual stale: the worked snippet "${check.name}" no longer runs clean: ${check.detail}`);
       }
+      void reclaimCgroupFileCache({ isIdle: () => !this.stopped && this.isIdle() });
     } catch (error) {
       if (this.stopped) return;
       this.snippetError = (error as Error).message;
@@ -449,7 +450,6 @@ export class ManualSource {
       if (await this.doctorOk()) this.wanted = null;
     } finally {
       this.abort = null;
-      void reclaimCgroupFileCache();
     }
   }
 

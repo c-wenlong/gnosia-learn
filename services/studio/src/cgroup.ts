@@ -15,18 +15,27 @@ import path from "node:path";
  *
  * Writing `<file_bytes> swappiness=0` to `memory.reclaim` (Linux 6.2+) instructs
  * the kernel to evict only clean file-backed page cache from this cgroup
- * without swapping out any anonymous heap (`swap = 0`). On non-Linux hosts,
- * older kernels without `swappiness=0`, or unprivileged containers where
- * `memory.reclaim` is absent or read-only, this is a silent no-op.
+ * without swapping out any anonymous heap (`swap = 0`). Deferred whenever a
+ * job or planner turn is running or queued so active work never loses cached
+ * files, and skipped in unit tests unless an explicit fixture or idle
+ * predicate is configured.
  */
 
 export const MIN_RECLAIM_FILE_BYTES = 16 * 1024 * 1024;
+
+let idlePredicate: (() => boolean) | null = null;
+
+/** Configure the service-wide idle check consulted before reclaiming file cache. */
+export function setCgroupIdlePredicate(predicate: (() => boolean) | null): void {
+  idlePredicate = predicate;
+}
 
 export interface ReclaimCgroupOptions {
   platform?: NodeJS.Platform;
   procCgroupPath?: string;
   cgroupRoot?: string;
   minBytes?: number;
+  isIdle?: () => boolean;
 }
 
 export function parseCgroupV2Path(procCgroupText: string): string | null {
@@ -54,6 +63,10 @@ export function parseFileBytes(memoryStatText: string): number | null {
 export async function reclaimCgroupFileCache(options: ReclaimCgroupOptions = {}): Promise<boolean> {
   const platform = options.platform ?? process.platform;
   if (platform !== "linux") return false;
+  const isIdle = options.isIdle ?? idlePredicate;
+  if (isIdle === null && options.procCgroupPath === undefined) return false;
+  if (isIdle !== null && !isIdle()) return false;
+
   const procCgroupPath = options.procCgroupPath ?? "/proc/self/cgroup";
   const cgroupRoot = options.cgroupRoot ?? "/sys/fs/cgroup";
   const minBytes = options.minBytes ?? MIN_RECLAIM_FILE_BYTES;
@@ -67,6 +80,7 @@ export async function reclaimCgroupFileCache(options: ReclaimCgroupOptions = {})
     const statText = await readFile(path.join(cgroupDir, "memory.stat"), "utf8");
     const fileBytes = parseFileBytes(statText);
     if (fileBytes === null || fileBytes < minBytes) return false;
+    if (isIdle !== null && !isIdle()) return false;
 
     await writeFile(path.join(cgroupDir, "memory.reclaim"), `${fileBytes} swappiness=0\n`, "utf8");
     return true;

@@ -4,16 +4,18 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { parseCgroupV2Path, parseFileBytes, reclaimCgroupFileCache } from "../src/cgroup";
+import { parseCgroupV2Path, parseFileBytes, reclaimCgroupFileCache, setCgroupIdlePredicate } from "../src/cgroup";
 
 describe("reclaimCgroupFileCache", () => {
   let root = "";
 
   beforeEach(async () => {
     root = await mkdtemp(path.join(tmpdir(), "studio-cgroup-"));
+    setCgroupIdlePredicate(null);
   });
 
   afterEach(async () => {
+    setCgroupIdlePredicate(null);
     if (root !== "") await rm(root, { recursive: true, force: true });
     root = "";
   });
@@ -44,6 +46,27 @@ describe("reclaimCgroupFileCache", () => {
     });
     expect(reclaimed).toBe(true);
     expect(await readFile(path.join(cgroupDir, "memory.reclaim"), "utf8")).toBe("344940544 swappiness=0\n");
+  });
+
+  it("defers reclaiming when a job becomes active before memory.reclaim is written", async () => {
+    const procFile = path.join(root, "proc-cgroup");
+    const serviceRel = "/user.slice/user-1000.slice/app.slice/gnosia-learn-studio.service";
+    const cgroupDir = path.join(root, "sys-cgroup", serviceRel);
+    await mkdir(cgroupDir, { recursive: true });
+    await writeFile(procFile, `0::${serviceRel}\n`, "utf8");
+    await writeFile(path.join(cgroupDir, "memory.stat"), "anon 60178432\nfile 344940544\n", "utf8");
+    await writeFile(path.join(cgroupDir, "memory.reclaim"), "", "utf8");
+
+    let calls = 0;
+    const reclaimed = await reclaimCgroupFileCache({
+      platform: "linux",
+      procCgroupPath: procFile,
+      cgroupRoot: path.join(root, "sys-cgroup"),
+      // Idle on entry, busy by the time memory.stat has been read.
+      isIdle: () => ++calls === 1,
+    });
+    expect(reclaimed).toBe(false);
+    expect(await readFile(path.join(cgroupDir, "memory.reclaim"), "utf8")).toBe("");
   });
 
   it("skips reclaiming on non-Linux or when file cache is already small", async () => {

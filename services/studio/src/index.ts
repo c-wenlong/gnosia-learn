@@ -4,7 +4,7 @@ import path from "node:path";
 import { migrateLegacyByok } from "./agent/byok";
 import { closeKeys, fromWebEnv, hasKeySecret, setCatalogFile, setKeySecret, takeKeySecret } from "./agent/byok-keys";
 import { agentSettingsView, createApi } from "./api";
-import { reclaimCgroupFileCache } from "./cgroup";
+import { reclaimCgroupFileCache, setCgroupIdlePredicate } from "./cgroup";
 import type { SpendEntry } from "./cost";
 import { Drafts } from "./drafts/drafts";
 import { agentAuthReport, CONCURRENCY, HOST, PORT } from "./config";
@@ -203,6 +203,14 @@ async function main(): Promise<void> {
   // draft is brought up to its newest jobs here, an interrupted one included.
   await drafts.syncFromJobs();
   runner.extraSpend = () => drafts.spendEntries();
+  setCgroupIdlePredicate(
+    () =>
+      runner.busy === 0 &&
+      store.list({ state: "queued" }).length === 0 &&
+      videoRunner.busy === 0 &&
+      videoStore.list({ state: "queued" }).length === 0 &&
+      drafts.busy === 0,
+  );
 
   // D40: a draft untouched for seven days goes, row and workspace, unless a
   // job names it. After the job records are loaded and every draft follows
@@ -267,6 +275,7 @@ async function main(): Promise<void> {
   }
 
   const shutdown = (signal: string): void => {
+    setCgroupIdlePredicate(null);
     process.stdout.write(`\n${signal}: stopping the running job and closing the browser\n`);
     // Mirrors first and unconditionally: each one is a `serve` holding a port,
     // and a studio that exits leaving them behind makes the next start pick a
