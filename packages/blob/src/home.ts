@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 
 /**
- * The product was Gnosia. Data written before the rename lives in
+ * The product is Hermes. Data written before the rename lives in
  * `~/.gnosia`. A checkout with no home set still finds that directory, so a
  * rename does not orphan the catalog and the blob store.
  */
