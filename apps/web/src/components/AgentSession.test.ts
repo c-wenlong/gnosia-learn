@@ -13,15 +13,22 @@ import type { Course, Module, Topic } from "@hermes/content";
  * recorded against that concept under the topic's session.
  */
 
-const learner: { state: { notes: object; knowledge: Record<string, unknown> }; saveKnowledge: () => void; saveError: null } = {
-  state: { notes: {}, knowledge: {} },
-  saveKnowledge: vi.fn(),
+const learner = {
+  state: { notes: {}, knowledge: {} as Record<string, unknown> },
+  saveKnowledge: vi.fn<(topicId: string, input: unknown) => void>(),
   saveError: null,
 };
 vi.mock("@/lib/learner-context", () => ({ useLearner: () => learner }));
 const router = { push: vi.fn(), replace: vi.fn(), refresh: vi.fn() };
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
-vi.mock("@/components/TopicRecap", () => ({ RecapCard: () => null, RecapEditor: () => null }));
+vi.mock("@/components/TopicRecap", async () => {
+  const { createElement: h } = await import("react");
+  return {
+    RecapCard: () => null,
+    // The editor shows what it was seeded with, so a test can read the draft.
+    RecapEditor: ({ initial }: { initial: { summary?: string } }) => h("div", { "data-recap-editor": "" }, initial.summary ?? ""),
+  };
+});
 vi.mock("@/components/Math", async () => {
   const { createElement: h } = await import("react");
   return { MathText: ({ text }: { text: string }) => h("span", null, text) };
@@ -64,14 +71,24 @@ const recall = {
   answer: "They are orthogonal: neither has a component along the other.",
 };
 
-/** The tutor's next replies; one with a `status` is a failed turn. */
-let replies: Array<{ content: string; check?: unknown; status?: number }> = [];
+/** The tutor's next replies; one with a `status` is a failed turn, whose body also carries `extra`. */
+let replies: Array<{ content: string; check?: unknown; status?: number; extra?: Record<string, unknown> }> = [];
+/** What `/api/agent/summarize` answers. */
+const knowledge = { summary: "Scores are scaled dot products.", keyPoints: ["Scale by the root of d"], misconceptions: [], openQuestions: [] };
+let summary: { status: number; body: Record<string, unknown> } = { status: 200, body: { knowledge } };
 const fetched: Array<{ url: string; body: Record<string, unknown> }> = [];
 
 beforeEach(() => {
+  replies = [];
+  summary = { status: 200, body: { knowledge } };
   fetched.length = 0;
   router.refresh.mockClear();
   sessionStorage.clear();
+  // A save lands in the learner's state, as the provider's does, so the saved recap and its status draw.
+  learner.saveKnowledge.mockReset();
+  learner.saveKnowledge.mockImplementation((topicId, input) => {
+    learner.state.knowledge = { ...learner.state.knowledge, [topicId]: input };
+  });
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
@@ -83,11 +100,14 @@ beforeEach(() => {
           { status: 200 },
         );
       }
+      if (url === "/api/agent/summarize") return new Response(JSON.stringify(summary.body), { status: summary.status });
       if (url === "/api/agent/judge") {
         return new Response(JSON.stringify({ verdict: { correct: true, feedback: "Names orthogonality." } }), { status: 200 });
       }
       const next = replies.shift() ?? { content: "Carry on." };
-      if (next.status !== undefined) return new Response(JSON.stringify({ error: next.content }), { status: next.status });
+      if (next.status !== undefined) {
+        return new Response(JSON.stringify({ error: next.content, ...next.extra }), { status: next.status });
+      }
       return new Response(JSON.stringify({ message: { content: next.content }, check: next.check ?? null }), { status: 200 });
     }),
   );
@@ -97,6 +117,7 @@ const mounted: Array<() => void> = [];
 afterEach(() => {
   while (mounted.length) mounted.pop()?.();
   vi.unstubAllGlobals();
+  learner.state.knowledge = {};
 });
 
 async function settle() {
@@ -251,6 +272,53 @@ describe("a long topic session", () => {
     const recap = fetched.find((c) => c.url === "/api/agent/summarize")!.body.messages as Array<{ content: string }>;
     expect(recap.length).toBeLessThanOrEqual(40);
     expect(recap.reduce((n, m) => n + m.content.length, 0)).toBeLessThanOrEqual(24_000);
+    // The recap is saved, and the status says it covers only the later part.
+    expect(learner.saveKnowledge).toHaveBeenCalledTimes(1);
+    expect(learner.saveKnowledge).toHaveBeenCalledWith("t1", knowledge);
+    expect(host.textContent).toContain("The session was long, so the recap covers its later part.");
+  });
+});
+
+describe("saving a session recap", () => {
+  it("saves the summarised recap for the topic and says so, with no partial note for a short session", async () => {
+    replies = [{ content: "Where shall we start?" }];
+    const host = await mount();
+    await click(button(host, "Start Socratic dialogue"));
+    await click(button(host, "Save session recap"));
+
+    const asked = fetched.filter((c) => c.url === "/api/agent/summarize");
+    expect(asked).toHaveLength(1);
+    expect(asked[0].body).toMatchObject({ courseSlug: "cp4284", moduleSlug: "m1", topicId: "t1" });
+    expect(learner.saveKnowledge).toHaveBeenCalledTimes(1);
+    expect(learner.saveKnowledge).toHaveBeenCalledWith("t1", knowledge);
+    expect(host.textContent).toContain("Saved. This now appears on the module page.");
+    expect(host.textContent).not.toContain("covers its later part");
+    expect(host.querySelector("[data-recap-editor]")).toBeNull();
+  });
+
+  it("opens the editor seeded with the raw reply when the summary fails, and saves nothing", async () => {
+    summary = { status: 500, body: { error: "The recap was not JSON", raw: "  A rough draft.  " } };
+    replies = [{ content: "Where shall we start?" }];
+    const host = await mount();
+    await click(button(host, "Start Socratic dialogue"));
+    await click(button(host, "Save session recap"));
+
+    expect(learner.saveKnowledge).not.toHaveBeenCalled();
+    expect(host.querySelector("[data-recap-editor]")?.textContent).toBe("A rough draft.");
+    expect(host.textContent).toContain("The recap was not JSON. Write it by hand below; it saves to the same place.");
+    expect(host.textContent).not.toContain("Saved.");
+  });
+
+  it("falls back to the editor too when an ok reply carries no recap", async () => {
+    summary = { status: 200, body: { raw: "Half a recap" } };
+    replies = [{ content: "Where shall we start?" }];
+    const host = await mount();
+    await click(button(host, "Start Socratic dialogue"));
+    await click(button(host, "Save session recap"));
+
+    expect(learner.saveKnowledge).not.toHaveBeenCalled();
+    expect(host.querySelector("[data-recap-editor]")?.textContent).toBe("Half a recap");
+    expect(host.textContent).toContain("Could not generate a recap. Write it by hand below");
   });
 });
 
@@ -323,6 +391,38 @@ describe("a failed topic turn", () => {
     expect(chats()[1].body.messages).toEqual(chats()[0].body.messages);
     expect(host.querySelector('[role="alert"]')).toBeNull();
     expect(host.textContent).toContain("Where shall we start?");
+  });
+
+  it("names each provider the server tried, and the server's detail", async () => {
+    replies = [
+      {
+        content: "Every model failed",
+        status: 502,
+        extra: { detail: "no reply", attempts: [{ provider: "anthropic", model: "claude-x", message: "overloaded" }, { provider: "openai", message: "quota" }] },
+      },
+    ];
+    const host = await mount();
+    await click(button(host, "Start Socratic dialogue"));
+    const alert = host.querySelector('[role="alert"]');
+    expect(alert?.textContent).toContain("Every model failed: no reply Attempts: Anthropic claude-x: overloaded | OpenAI: quota");
+    expect(alert?.textContent).not.toContain("Copy system prompt or Terminal launch");
+  });
+
+  it("points at the copy buttons when there is no provider key", async () => {
+    replies = [{ content: "Add a key in Settings.", status: 400, extra: { code: "MISSING_API_KEY" } }];
+    const host = await mount();
+    await click(button(host, "Start Socratic dialogue"));
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain(
+      "Add a key in Settings. Or use Copy system prompt or Terminal launch below.",
+    );
+  });
+
+  it("says the reply was empty rather than drawing a blank turn", async () => {
+    replies = [{ content: "   " }];
+    const host = await mount();
+    await click(button(host, "Start Socratic dialogue"));
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain("Empty assistant reply");
+    expect(button(host, "Save session recap")?.disabled).toBe(true);
   });
 
   it("keeps an answer's verdict row through Try again, and records it once", async () => {

@@ -103,4 +103,32 @@ describe("a verb on the comparison", () => {
     expect(router.refresh).not.toHaveBeenCalled();
     expect(verb.refresh).not.toHaveBeenCalled();
   });
+
+  it("draws the page again after a confirmed discard, and not before the confirm", async () => {
+    const host = await mount(job({}));
+    await press(host, "Discard");
+    expect(verb.run).not.toHaveBeenCalled();
+    await press(host, "Discard it");
+    expect(verb.run).toHaveBeenCalledTimes(1);
+    expect(verb.run).toHaveBeenCalledWith("j1", "discard");
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+    expect(verb.refresh).not.toHaveBeenCalled();
+  });
+
+  it("says the sentence a refused accept comes back with, and a Compare after it draws the page no second time", async () => {
+    verb.run.mockResolvedValueOnce({
+      ok: false,
+      text: "The diagram moved since this job started.",
+      next: null,
+      data: { detail: { recompare: true } },
+    } as never);
+    const host = await mount(job({}));
+    await press(host, "Accept");
+    expect(host.textContent).toContain("The diagram moved since this job started.");
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+    await press(host, "Compare with the file as it is now");
+    expect(verb.run).toHaveBeenLastCalledWith("j1", "compare");
+    expect(router.refresh).toHaveBeenCalledTimes(1);
+    expect(verb.refresh).not.toHaveBeenCalled();
+  });
 });

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { useHoldAction } from "./brief-card-parts";
 
@@ -21,7 +21,7 @@ afterEach(() => {
 });
 
 function mount(action: () => Promise<string | null>) {
-  const seen: { using: boolean; useError: string | null; use: (a: typeof action) => Promise<void> } = {
+  const seen: { using: boolean; useError: string | null; use: (a: typeof action | undefined) => Promise<void> } = {
     using: false,
     useError: null,
     use: async () => {},
@@ -50,5 +50,29 @@ describe("useHoldAction", () => {
     });
     await press();
     expect(seen).toMatchObject({ using: false, useError: "It could not be put back. Try again." });
+  });
+
+  it("is busy while the action runs, and ignores a second press until it ends", async () => {
+    const pending: Array<(said: string | null) => void> = [];
+    const action = vi.fn(() => new Promise<string | null>((resolve) => pending.push(resolve)));
+    const { seen } = mount(action);
+    let first: Promise<void> = Promise.resolve();
+    await act(async () => {
+      first = seen.use(action);
+    });
+    expect(seen.using).toBe(true);
+    const second = seen.use(action);
+    expect(action).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      for (const settle of pending) settle(null);
+      await Promise.all([first, second]);
+    });
+    expect(seen).toMatchObject({ using: false, useError: null });
+  });
+
+  it("does nothing for a card with no action", async () => {
+    const { seen } = mount(async () => null);
+    await act(async () => seen.use(undefined));
+    expect(seen).toMatchObject({ using: false, useError: null });
   });
 });

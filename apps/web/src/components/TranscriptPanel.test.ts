@@ -173,6 +173,36 @@ describe("TranscriptPanel", () => {
     expect(onSeek).toHaveBeenCalledWith(12);
   });
 
+  it("seeks through the newest onSeek, not the one it was mounted with", () => {
+    const first = vi.fn();
+    const latest = vi.fn();
+    const { host, rerender } = mount(createElement(TranscriptPanel, { cues, currentTime: 0, onSeek: first }));
+    // The memoised lines keep one seek callback: it has to read the newest prop.
+    rerender(createElement(TranscriptPanel, { cues, currentTime: 0, onSeek: latest }));
+    act(() => (lines(host)[2].querySelector("button") as HTMLButtonElement).click());
+    expect(latest).toHaveBeenCalledWith(12);
+    expect(first).not.toHaveBeenCalled();
+  });
+
+  it("picks the follow back up when a line is clicked while stopped", () => {
+    const onSeek = vi.fn();
+    const { host } = mount(createElement(TranscriptPanel, { cues, currentTime: 0, onSeek }));
+    const scroller = layout(host);
+    scroller.scrollTop = 400;
+    act(() => scroller.dispatchEvent(new Event("scroll")));
+    expect(host.textContent).toContain("Follow along");
+
+    act(() => (lines(host)[2].querySelector("button") as HTMLButtonElement).click());
+    expect(onSeek).toHaveBeenCalledWith(12);
+    expect(host.textContent).not.toContain("Follow along");
+  });
+
+  it("draws no heading when bare, and still counts the lines", () => {
+    const { host } = mount(createElement(TranscriptPanel, { cues, currentTime: 0, bare: true }));
+    expect(host.querySelector("h3")).toBeNull();
+    expect(host.textContent).toContain("1 / 3");
+  });
+
   it("renders lines as plain text when there is nothing to seek", () => {
     const { host } = mount(createElement(TranscriptPanel, { cues, currentTime: 0 }));
     expect(host.querySelectorAll("button")).toHaveLength(0);

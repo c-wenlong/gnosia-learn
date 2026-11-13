@@ -226,3 +226,170 @@ describe("Previewer's right arrow past the last row", () => {
     expect(previewAsset).toHaveBeenCalledWith("b");
   });
 });
+
+describe("Previewer's NoBody", () => {
+  /** Mounted on `?open=a` with no body handed in: the panel asks for `a`. */
+  const mountFor = (id: string) => {
+    window.history.replaceState(null, "", `/library?open=${id}`);
+    mount(
+      createElement(
+        Previewer,
+        { initialOpen: id, initial: null } as ComponentProps<typeof Previewer>,
+        createElement(Rows, { ids: ["a", "b"] }),
+      ),
+    );
+  };
+
+  it("says the request did not come back, and Try again asks again", async () => {
+    previewAsset.mockRejectedValueOnce(new Error("catalog down"));
+    mountFor("a");
+    await settle();
+
+    expect(document.querySelector('[role="status"]')!.textContent).toContain("The preview did not load.");
+    const retry = [...document.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "Try again")!;
+    act(() => retry.click());
+    await settle();
+    expect(previewAsset).toHaveBeenCalledTimes(2);
+    expect(previewAsset).toHaveBeenLastCalledWith("a");
+    expect(document.querySelector("[data-body='a']")).not.toBeNull();
+  });
+
+  it("says the catalog is unreachable when it is the server that did not answer", async () => {
+    previewAsset.mockResolvedValue({ state: "unreachable", id: "a" });
+    mountFor("a");
+    await settle();
+
+    const status = document.querySelector('[role="status"]')!;
+    expect(status.textContent).toContain("The catalog is unreachable.");
+    expect(status.textContent).toContain("not the same as it not existing");
+    expect([...status.querySelectorAll("button")].some((b) => b.textContent === "Try again")).toBe(true);
+  });
+
+  it("names a missing asset, with no Try again: asking again cannot find it", async () => {
+    previewAsset.mockResolvedValue({ state: "missing", id: "a" });
+    mountFor("a");
+    await settle();
+
+    const status = document.querySelector('[role="status"]')!;
+    expect(status.textContent).toContain("This asset is not in the library.");
+    expect([...status.querySelectorAll("button, a")].some((b) => b.textContent === "Try again")).toBe(false);
+    // Only "Open page" is offered, to the asset's own URL.
+    expect(status.querySelector("a")?.getAttribute("href")).toBe("/library/a");
+  });
+});
+
+describe("Previewer's arrow inside the drawn rows", () => {
+  it("replaces the entry with ?open=b and draws its body, adding no entry", async () => {
+    window.history.replaceState(null, "", "/library?open=a");
+    mount(previewer(createElement(Rows, { ids: ["a", "b"] })));
+    await settle();
+    const entries = window.history.length;
+
+    act(() => {
+      document
+        .querySelector<HTMLElement>("[aria-busy]")!
+        .dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    });
+    expect(window.location.search).toBe("?open=b");
+    expect(window.history.length).toBe(entries);
+
+    await settle();
+    expect(previewAsset).toHaveBeenCalledWith("b");
+    expect(document.querySelector("[data-body='b']")).not.toBeNull();
+  });
+});
+
+describe("Previewer's press rules", () => {
+  /** A list whose `a` row also carries a control drawn inside the link. */
+  const rowWithControl = createElement(
+    "ul",
+    null,
+    createElement(
+      "li",
+      null,
+      createElement("a", { href: "/library/a" }, "a", createElement("button", { type: "button" }, "row menu")),
+    ),
+  );
+
+  it("leaves a modified click and a press on a control inside the row alone", () => {
+    window.history.replaceState(null, "", "/library");
+    mount(
+      createElement(Previewer, { initialOpen: null, initial: null } as ComponentProps<typeof Previewer>, rowWithControl),
+    );
+    const anchor = document.querySelector<HTMLAnchorElement>('a[href="/library/a"]')!;
+    // Both presses are declined, so neither is prevented and jsdom would try
+    // to follow the link: stop it at the document, as the browser's own new
+    // tab would keep this page.
+    const stay = (e: Event) => e.preventDefault();
+    document.addEventListener("click", stay);
+    try {
+      anchor.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, metaKey: true }));
+      anchor.querySelector("button")!.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 }));
+    } finally {
+      document.removeEventListener("click", stay);
+    }
+
+    expect(window.location.search).toBe("");
+    expect(document.querySelector("dialog")).toBeNull();
+    expect(previewAsset).not.toHaveBeenCalled();
+  });
+});
+
+describe("Previewer's popstate", () => {
+  it("closes the panel when the entry it lands on names no asset", async () => {
+    window.history.replaceState(null, "", "/library?open=a");
+    mount(previewer(createElement(Rows, { ids: ["a", "b"] })));
+    await settle();
+    expect(document.querySelector("dialog")).not.toBeNull();
+
+    // Back to an entry with no `?open=`: the URL is the truth, so the panel goes.
+    window.history.replaceState(null, "", "/library");
+    act(() => {
+      window.dispatchEvent(new Event("popstate"));
+    });
+    const dialog = document.querySelector("dialog")!;
+    expect(dialog.hasAttribute("data-closing")).toBe(true);
+  });
+});
+
+describe("Previewer's stale answer", () => {
+  it("drops the body that lands after the panel moved on to another visit", async () => {
+    let landA: (answer: PreviewAnswer) => void = () => undefined;
+    previewAsset.mockImplementation(async (id) => {
+      if (id === "a") {
+        return new Promise<PreviewAnswer>((resolve) => {
+          landA = resolve;
+        });
+      }
+      return answerFor(id);
+    });
+    // `initial` is another asset's, so `a`'s own body is asked of the server.
+    window.history.replaceState(null, "", "/library?open=a");
+    mount(
+      createElement(
+        Previewer,
+        { initialOpen: "a", initial: answerFor("z") } as ComponentProps<typeof Previewer>,
+        createElement(Rows, { ids: ["a", "b"] }),
+      ),
+    );
+
+    // Arrow on to `b` while `a`'s read is still in flight.
+    act(() => {
+      document
+        .querySelector<HTMLElement>("[aria-busy]")!
+        .dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    });
+    await settle();
+
+    // `a`'s answer lands a visit too late: it belongs to a visit that is over.
+    await act(async () => {
+      landA(answerFor("a"));
+      await Promise.resolve();
+    });
+    await settle();
+
+    expect(window.location.search).toBe("?open=b");
+    expect(document.querySelector("[data-body='b']")).not.toBeNull();
+    expect(document.querySelector("[data-body='a']")).toBeNull();
+  });
+});

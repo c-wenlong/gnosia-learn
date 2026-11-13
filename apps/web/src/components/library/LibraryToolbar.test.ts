@@ -21,6 +21,8 @@ import { LibraryToolbar, type LibraryMenu } from "./LibraryToolbar";
 
 beforeAll(() => {
   (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  // An open FilterMenu scrolls the highlighted row into view; jsdom has none.
+  Element.prototype.scrollIntoView ??= () => undefined;
 });
 
 const mounted: Array<() => void> = [];
@@ -52,7 +54,7 @@ const sort: LibraryMenu = {
   ],
 };
 
-function toolbar(kind: string | null, withOthers: boolean) {
+function toolbar(kind: string | null, withOthers: boolean, menus: LibraryMenu[] = []) {
   const counts = [{ kind: "video", count: 2 }, ...(withOthers ? [{ kind: "transcript", count: 1 }] : [])];
   return mount(
     createElement(LibraryToolbar, {
@@ -60,7 +62,7 @@ function toolbar(kind: string | null, withOthers: boolean) {
       filters: { kind, course: "cs3230", q: "graphs" },
       tabs: libraryTabs(counts),
       tab: kind ?? "",
-      menus: [],
+      menus,
       sort,
       search: null,
       layout: null,
@@ -156,5 +158,103 @@ describe("LibraryToolbar's type row", () => {
     expect(group.querySelector('a[aria-current="page"]')?.textContent).toContain("Notes");
     // The old strip drew its own bold-copy width trick.
     expect(c.querySelector(".invisible.col-start-1")).toBeNull();
+  });
+});
+
+const mouse = (init: MouseEventInit = {}) =>
+  new MouseEvent("click", { bubbles: true, cancelable: true, button: 0, ...init });
+
+/** The trigger chip of the menu whose button's words hold `label` ("Sort: Newest", "Course: …", "View options"). */
+function trigger(c: HTMLElement, label: string): HTMLButtonElement {
+  const hit = [...c.querySelectorAll<HTMLButtonElement>("button[aria-haspopup]")].find(
+    (b) => b.textContent!.includes(label) || b.getAttribute("aria-label") === label,
+  );
+  expect(hit, `a "${label}" trigger`).toBeDefined();
+  return hit!;
+}
+
+/** The open list's row with these words, wherever the popover put it. */
+const row = (c: HTMLElement, text: string) => {
+  const hit = [...c.querySelectorAll<HTMLElement>('[role="option"], [role="menuitemradio"], [role="menuitem"]')].find(
+    (el) => el.textContent === text,
+  );
+  expect(hit, `a "${text}" row in the open menu`).toBeDefined();
+  return hit!;
+};
+
+/** Opens a menu, then picks one of its rows; each a plain click. (The open renders at the act's end, so the two cannot share one.) */
+function pickMenuRow(c: HTMLElement, label: string, text: string) {
+  act(() => trigger(c, label).dispatchEvent(mouse()));
+  act(() => row(c, text).dispatchEvent(mouse()));
+}
+
+describe("LibraryToolbar's picks", () => {
+  it("pushes the pick's URL while data-pending marks the wait, then clears", async () => {
+    const c = toolbar(null, false);
+    const root = c.firstElementChild as HTMLElement;
+    expect(root.hasAttribute("data-pending")).toBe(false);
+
+    act(() => trigger(c, "Sort").dispatchEvent(mouse()));
+    // Yielding inside an async act lets the pending render land while the
+    // pick's transition is still in flight — what the toolbar shows the whole
+    // time a slow server takes to draw the new view.
+    await act(async () => {
+      row(c, "Title").dispatchEvent(mouse());
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(root.hasAttribute("data-pending")).toBe(true);
+      expect(trigger(c, "Sort").getAttribute("aria-busy")).toBe("true");
+      expect(trigger(c, "Sort").textContent).toBe("Sort: Title");
+    });
+    expect(push).toHaveBeenCalledWith("/library?course=cs3230&q=graphs&sort=title", { scroll: false });
+    expect(root.hasAttribute("data-pending")).toBe(false);
+    expect(trigger(c, "Sort").getAttribute("aria-busy")).toBeNull();
+    expect(trigger(c, "Sort").textContent).toBe("Sort: Newest");
+  });
+
+  it("builds a second pick on the first while its navigation is still in flight", async () => {
+    const c = toolbar(null, false);
+    const root = c.firstElementChild as HTMLElement;
+    const notes = links(c).find((a) => a.textContent === "Notes")!;
+    act(() => trigger(c, "Sort").dispatchEvent(mouse()));
+    await act(async () => {
+      notes.dispatchEvent(mouse());
+      // Yield so the first pick's pending render commits — its `pending` is
+      // true when the second pick runs, which is when a `latest` reset on any
+      // render would drop the kind before the second URL is built.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(root.hasAttribute("data-pending")).toBe(true);
+      row(c, "Title").dispatchEvent(mouse());
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(push.mock.calls.map((call) => call[0])).toEqual([
+      "/library?kind=note&course=cs3230&q=graphs",
+      "/library?kind=note&course=cs3230&q=graphs&sort=title",
+    ]);
+  });
+
+  it("pushes ?course= on a filter-menu pick and drops it on All", () => {
+    const course: LibraryMenu = {
+      label: "Course",
+      param: "course",
+      value: "cs3230",
+      options: [
+        { value: "", label: "All courses" },
+        { value: "cs3230", label: "CS3230" },
+        { value: "cs3216", label: "CS3216" },
+      ],
+    };
+    const c = toolbar(null, false, [course]);
+    pickMenuRow(c, "Course", "CS3216");
+    expect(push).toHaveBeenLastCalledWith("/library?course=cs3216&q=graphs", { scroll: false });
+    pickMenuRow(c, "Course", "All courses");
+    expect(push).toHaveBeenLastCalledWith("/library?q=graphs", { scroll: false });
+  });
+
+  it("pushes ?favorites=1 and ?group= from the view options", () => {
+    const c = toolbar(null, false);
+    pickMenuRow(c, "View options", "Favorites only");
+    expect(push).toHaveBeenLastCalledWith("/library?course=cs3230&favorites=1&q=graphs", { scroll: false });
+    pickMenuRow(c, "View options", "Course");
+    expect(push).toHaveBeenLastCalledWith("/library?course=cs3230&q=graphs&group=course", { scroll: false });
   });
 });
