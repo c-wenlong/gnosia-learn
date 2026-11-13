@@ -2,9 +2,9 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { canvas, doctor } from "../canvas/canvas";
+import { canvas, CANVAS_CLI_ARGS, doctor } from "../canvas/canvas";
 import { manualCheckDir, manualDir, manualPath } from "../paths";
-import { NPM, run, sweepByMarker, type RunResult } from "../proc";
+import { run, sweepByMarker, type RunResult } from "../proc";
 
 import { assembleManual, snippetPath, SNIPPETS, type OptionsSource } from "./assemble";
 import { parseApi, type LintComparison } from "./listing";
@@ -207,12 +207,58 @@ export class ManualSource {
     this.fileError = null;
     for (const reason of lintReasons(this.info)) this.log(`manual stale: ${reason}`);
     if (this.check) {
-      this.snippets = null;
-      this.snippetError = null;
-      this.wanted = apiHash;
-      void this.tick();
+      const cached = await this.readCachedSnippets(manual.hash);
+      if (cached !== null) {
+        this.snippets = cached;
+        this.snippetError = null;
+        this.wanted = null;
+      } else {
+        this.snippets = null;
+        this.snippetError = null;
+        this.wanted = apiHash;
+        void this.tick();
+      }
     }
     return this.info;
+  }
+
+  private snippetCachePath(hash: string): string {
+    return path.join(manualDir(), `${hash}.snippets.json`);
+  }
+
+  private async readCachedSnippets(hash: string): Promise<SnippetCheck[] | null> {
+    try {
+      const raw = JSON.parse(await readFile(this.snippetCachePath(hash), "utf8")) as unknown;
+      if (
+        !Array.isArray(raw) ||
+        raw.length !== SNIPPETS.length ||
+        !raw.every(
+          (entry): entry is SnippetCheck =>
+            typeof entry === "object" &&
+            entry !== null &&
+            typeof (entry as SnippetCheck).name === "string" &&
+            (entry as SnippetCheck).ok === true &&
+            typeof (entry as SnippetCheck).detail === "string",
+        )
+      ) {
+        return null;
+      }
+      return raw;
+    } catch {
+      return null;
+    }
+  }
+
+  private async writeCachedSnippets(hash: string, checks: SnippetCheck[]): Promise<void> {
+    await mkdir(manualDir(), { recursive: true });
+    const file = this.snippetCachePath(hash);
+    const temporary = `${file}.${process.pid}.${Date.now()}.tmp`;
+    try {
+      await writeFile(temporary, JSON.stringify(checks, null, 2), "utf8");
+      await rename(temporary, file);
+    } catch {
+      await rm(temporary, { force: true }).catch(() => undefined);
+    }
   }
 
   private failed(message: string): ManualInfo | null {
@@ -343,6 +389,9 @@ export class ManualSource {
       this.snippets = checks;
       this.snippetError = null;
       this.wanted = null;
+      if (failed.length === 0 && this.info !== null) {
+        await this.writeCachedSnippets(this.info.hash, checks);
+      }
       for (const check of failed) {
         this.log(`manual stale: the worked snippet "${check.name}" no longer runs clean: ${check.detail}`);
       }
@@ -417,7 +466,7 @@ export function groupCanvas(signal: AbortSignal): CanvasRunner {
   const tmp = path.join(manualCheckDir(), "tmp");
   return async (args, timeoutMs = 120_000) => {
     await mkdir(tmp, { recursive: true });
-    const result = await run(NPM, ["run", "--silent", "canvas", "--", ...args], {
+    const result = await run(process.execPath, [...CANVAS_CLI_ARGS, ...args], {
       timeoutMs,
       group: true,
       signal,

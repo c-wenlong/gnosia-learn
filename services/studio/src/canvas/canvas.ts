@@ -1,18 +1,18 @@
-import { NPM, run, type RunResult } from "../proc";
+import { run, type RunResult } from "../proc";
 
 /**
  * tldrawkc, through the one launcher the rest of the repo uses.
  *
- * `npm run --silent canvas -- <verb>` rather than `node <root>/dist/cli/index.js`,
- * because the launcher in `services/catalog/src/canvas.ts` resolves
- * `TLDRAWKC_ROOT` through the same function the diagram indexer uses. Spelling
- * the path here instead would let the runner and the indexer read different
- * builds on a machine where that variable is set.
- *
- * `--silent` is load-bearing, not cosmetic: npm prints two lines of banner on
- * stdout before the tool writes anything, and `--json | jq` then fails on the
- * first token. The root `AGENTS.md` records it as a trap that cost time once.
+ * `node --import tsx services/catalog/src/canvas.ts <verb>` rather than
+ * `node <root>/dist/cli/index.js`, because the launcher in
+ * `services/catalog/src/canvas.ts` resolves `TLDRAWKC_ROOT` through the same
+ * function the diagram indexer uses. Spelling the path here instead would let
+ * the runner and the indexer read different builds on a machine where that
+ * variable is set. Invoking `process.execPath` directly rather than `npm run`
+ * skips the intermediate npm CLI process on every call.
  */
+
+export const CANVAS_CLI_ARGS = ["--import", "tsx", "services/catalog/src/canvas.ts"] as const;
 
 /** The verbs the studio drives. Named so a typo is a type error. */
 export type CanvasVerb =
@@ -28,7 +28,7 @@ export type CanvasVerb =
   | "meta";
 
 export function canvas(args: string[], timeoutMs = 120_000): Promise<RunResult> {
-  return run(NPM, ["run", "--silent", "canvas", "--", ...args], { timeoutMs });
+  return run(process.execPath, [...CANVAS_CLI_ARGS, ...args], { timeoutMs });
 }
 
 /**

@@ -95,14 +95,19 @@ export class Probe<T> {
     return this.refresh();
   }
 
-  /** The last answer at once, refreshing it in the background when it is old. For a report. */
-  async read(): Promise<ProbeReading<T>> {
+  /**
+   * The last answer at once, refreshing it in the background when it is old
+   * unless `options.refresh` is `false` (a passive liveness poll). For a report.
+   */
+  async read(options: { refresh?: boolean } = {}): Promise<ProbeReading<T>> {
     // A `forget` while this waited leaves nothing stored, since the check it
     // waited on may have read what the write replaced: wait for the next one.
+    let waited = false;
     while (this.last === null) {
+      waited = true;
       await this.refresh();
     }
-    if (this.now() - this.last.at >= this.ttlMs) {
+    if (!waited && options.refresh !== false && this.now() - this.last.at >= this.ttlMs) {
       // Nobody awaits this one; a failure leaves the last answer standing and
       // the next read tries again.
       this.refresh().catch(() => undefined);

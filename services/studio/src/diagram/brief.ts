@@ -3,6 +3,7 @@ import type { TopicEntry } from "@gnosia/content";
 import { isAgentModel } from "@gnosia/schema/shared";
 
 import { topicList } from "../data/catalog";
+import { onCatalogWrite } from "../data/catalog-events";
 import { MERMAID_LIMIT, studioOwner, TEXT_LIMIT, VOCABULARY_STATUS_MS } from "../config";
 import { readThrough, type CachedRead } from "../data/content-cache";
 
@@ -270,6 +271,10 @@ export interface VocabularyStatus {
 let lastStatus: { at: number; status: VocabularyStatus } | null = null;
 let statusRead: Promise<VocabularyStatus> | null = null;
 
+onCatalogWrite(() => {
+  lastStatus = null;
+});
+
 function remember(status: VocabularyStatus): void {
   lastStatus = { at: Date.now(), status };
 }
@@ -301,12 +306,16 @@ export async function vocabularyStatus(maxAgeMs: number = VOCABULARY_STATUS_MS):
 /**
  * `vocabularyStatus` for `/api/health`, which never waits once there is an
  * answer: the last outcome, however old, and a read started behind it when it
- * is older than `STUDIO_VOCABULARY_STATUS_MS`. Only with no outcome at all
- * (the first call after a start) does it wait for one.
+ * is older than `STUDIO_VOCABULARY_STATUS_MS` (unless `options.refresh` is
+ * `false`). Only with no outcome at all (the first call after a start) does it
+ * wait for one.
  */
-export async function vocabularyStatusNow(maxAgeMs: number = VOCABULARY_STATUS_MS): Promise<VocabularyStatus> {
+export async function vocabularyStatusNow(
+  maxAgeMs: number = VOCABULARY_STATUS_MS,
+  options: { refresh?: boolean } = {},
+): Promise<VocabularyStatus> {
   if (lastStatus === null) return vocabularyStatus(maxAgeMs);
-  if (Date.now() - lastStatus.at >= maxAgeMs) void vocabularyStatus(maxAgeMs);
+  if (options.refresh !== false && Date.now() - lastStatus.at >= maxAgeMs) void vocabularyStatus(maxAgeMs);
   return lastStatus.status;
 }
 

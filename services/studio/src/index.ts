@@ -130,14 +130,17 @@ async function main(): Promise<void> {
   // start a job, and checked: its three worked snippets run after each new
   // build, whenever no job is running or queued (M3). A refresh never throws:
   // a tool that cannot answer, or a manual that cannot be written, leaves the
-  // studio running without one and says so in /api/health.
+  // studio running without one and says so in /api/health. The snippet check
+  // waits until the startup warm-up (`warmed`) has finished so its three
+  // Chromium launches do not compete with the initial health and doctor
+  // checks.
+  let warmed = false;
   const manual = new ManualSource({
     checkSnippets: true,
-    isIdle: () => runner.busy === 0 && store.list({ state: "queued" }).length === 0,
+    isIdle: () => warmed && runner.busy === 0 && store.list({ state: "queued" }).length === 0,
   });
   runner.manual = manual;
   const built = await manual.refresh().catch(() => null);
-  manual.start();
   process.stdout.write(
     built === null
       ? `no tldraw manual: ${manual.status().error ?? "canvas api did not answer"}\n`
@@ -164,11 +167,15 @@ async function main(): Promise<void> {
   await videoStore.load();
   // One doctor per backend (D75 of docs/STUDIO-VIDEO-TOOLS.md): a tool is
   // offered and pressed only on its own doctor's verdict.
-  const videoDoctor = new VideoDoctor(() => backendFor(DEFAULT_VIDEO_TOOL).doctor());
+  const defaultBackend = backendFor(DEFAULT_VIDEO_TOOL);
+  const videoDoctor = new VideoDoctor(() => defaultBackend.doctor(), defaultBackend.hasCheckout);
   const otherDoctors = Object.fromEntries(
     backendTools()
       .filter((tool) => tool !== DEFAULT_VIDEO_TOOL)
-      .map((tool) => [tool, new VideoDoctor(() => backendFor(tool).doctor())]),
+      .map((tool) => {
+        const backend = backendFor(tool);
+        return [tool, new VideoDoctor(() => backend.doctor(), backend.hasCheckout)];
+      }),
   ) as Partial<Record<VideoToolName, VideoDoctor>>;
   const videoRunner: VideoRunner = new VideoRunner(videoStore, {
     doctor: videoDoctor,
@@ -195,24 +202,6 @@ async function main(): Promise<void> {
   // draft is brought up to its newest jobs here, an interrupted one included.
   await drafts.syncFromJobs();
   runner.extraSpend = () => drafts.spendEntries();
-  // One after the other, so two fixture renders never compete for the cores.
-  // Skipped when a stop was already asked for: a doctor check spawns real
-  // renders, and one launched now would only race the drain it never sees.
-  if (asked === null) {
-    void (async () => {
-      for (const [tool, doctor] of [[DEFAULT_VIDEO_TOOL, videoDoctor] as const, ...(Object.entries(otherDoctors) as [VideoToolName, VideoDoctor][])]) {
-        // Rechecked per doctor: a stop that lands while one check runs must
-        // not let the loop open the next tool's check past the drain.
-        if (asked !== null) break;
-        const report = await doctor.report(true);
-        const name = tool === DEFAULT_VIDEO_TOOL ? "video doctor" : `${tool} video doctor`;
-        process.stdout.write(report.ok ? `${name}: every check passed\n` : `${name}: ${report.checks.filter((check) => !check.ok).map((check) => `${check.name}: ${check.detail}`).join("; ")}\n`);
-        void videoRunner.kick();
-      }
-    })();
-    videoDoctor.start();
-    for (const doctor of Object.values(otherDoctors)) doctor?.start();
-  }
 
   // D40: a draft untouched for seven days goes, row and workspace, unless a
   // job names it. After the job records are loaded and every draft follows
@@ -222,13 +211,9 @@ async function main(): Promise<void> {
 
   const mirrors = new Mirrors();
   runner.canvasOpen = (target) => mirrors.isOpen(target);
-  // What /api/health reports on, checked now and not awaited, so the first
-  // health call finds answers and no call after it waits on a subprocess.
   const probes = new HealthProbes();
-  probes.warm();
-  probes.settingsView(agentSettingsView).warm();
+  const settingsProbe = probes.settingsView(agentSettingsView);
   const listings = new Listings();
-  listings.warm();
   const server = createApi({ store, runner, mirrors, drafts, video: { store: videoStore, runner: videoRunner, doctor: videoDoctor }, probes, listings });
   server.listen(PORT, HOST, () => {
     // The bind callback can fire after a replayed stop has already begun
@@ -243,13 +228,35 @@ async function main(): Promise<void> {
     );
   });
 
-  // Pick up anything that was queued when the previous process stopped. A
-  // queued job survives a restart by design; it is only in-flight work that
-  // does not. Skipped when a stop was already asked for: a runner told to
-  // die during startup does not kick work it would only drain again.
+  // Warm health probes, listings, video doctors and the manual snippet check
+  // one after the other in the background, so startup never piles up 15+
+  // Node and Chromium subprocesses at the same time. Skipped when a stop was
+  // already asked for.
   if (asked === null) {
     void runner.kick();
     pruner.start();
+    videoDoctor.start();
+    for (const doctor of Object.values(otherDoctors)) doctor?.start();
+    void (async () => {
+      await probes.warm();
+      if (asked !== null) return;
+      await settingsProbe.refresh().catch(() => undefined);
+      if (asked !== null) return;
+      await listings.warm();
+      for (const [tool, doctor] of [[DEFAULT_VIDEO_TOOL, videoDoctor] as const, ...(Object.entries(otherDoctors) as [VideoToolName, VideoDoctor][])]) {
+        // Rechecked per doctor: a stop that lands while one check runs must
+        // not let the loop open the next tool's check past the drain.
+        if (asked !== null) break;
+        const report = await doctor.report(true);
+        const name = tool === DEFAULT_VIDEO_TOOL ? "video doctor" : `${tool} video doctor`;
+        process.stdout.write(report.ok ? `${name}: every check passed\n` : `${name}: ${report.checks.filter((check) => !check.ok).map((check) => `${check.name}: ${check.detail}`).join("; ")}\n`);
+        void videoRunner.kick();
+      }
+      if (asked !== null) return;
+      warmed = true;
+      manual.start();
+      void manual.tick();
+    })();
   }
 
   const shutdown = (signal: string): void => {
