@@ -401,7 +401,7 @@ describe("each action's request", () => {
       { curriculumItemId: "t1", summary: "", keyPoints: [], misconceptions: [], openQuestions: [], source: "manual" },
     ],
     ["setAvatar", (l) => void l.setAvatar("owl"), "/api/learner/avatar", { avatar: "owl" }],
-    ["setThemeMode", (l) => l.setThemeMode("gnosia-dark"), "/api/learner/preference", { key: "theme", value: "gnosia-dark" }],
+    ["setThemeMode", (l) => l.setThemeMode("hermes-dark"), "/api/learner/preference", { key: "theme", value: "hermes-dark" }],
   ])("%s posts to its route with the exact body", async (_name, act_, url, body) => {
     const { calls } = mount(ok, { userResources: RESOURCES });
     act(() => act_(held.learner!));
