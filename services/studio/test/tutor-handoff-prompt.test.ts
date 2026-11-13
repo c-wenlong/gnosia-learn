@@ -415,6 +415,6 @@ describe("the concept read", () => {
     const shown = await conceptShow("dot-product");
     expect(shown.ok).toBe(true);
     const [, argv] = proc.run.mock.calls[0]! as [string, string[]];
-    expect(argv).toEqual(["run", "--silent", "learn", "--", "concept", "show", "dot-product", "--owner", "alice", "--json"]);
+    expect(argv).toEqual(["scripts/learn/cli.mjs", "concept", "show", "dot-product", "--owner", "alice", "--json"]);
   });
 });

@@ -1,8 +1,9 @@
 import { offeredModels, resolveDiagramAgent, resolveVideoAgent } from "../agent/agent-settings";
 import { byokStatus } from "../agent/byok";
-import { vocabularyStatus } from "../diagram/brief";
-import { doctor, doctorAnsweredAt, DOCTOR_TTL_MS } from "../canvas/canvas";
+import { forgetVocabularyStatus, vocabularyStatus } from "../diagram/brief";
+import { doctor, doctorAnsweredAt, invalidateDoctorCache } from "../canvas/canvas";
 import { status as catalogStatus, type CatalogResult } from "../data/catalog";
+import { onCatalogWrite } from "../data/catalog-events";
 import { CLAUDE_BIN, CODEX_BIN, plannerModel, QWEN_BIN } from "../config";
 import { Probe } from "./probe";
 import { run, type RunResult } from "../proc";
@@ -30,12 +31,24 @@ import { run, type RunResult } from "../proc";
  * cache has none. What changed is only that reporting never waits.
  */
 
+/**
+ * `canvas doctor` launches a headless Chromium to check the page bundle and
+ * fonts, which only change when the submodule or browser binary on disk
+ * changes. Gates (`POST /api/jobs`, `POST /api/drafts/:id/draw`) still call
+ * `doctor()` with `DOCTOR_TTL_MS` (30 s); `/api/health` keeps the probe for 6
+ * hours so background health polls do not launch a browser every minute.
+ */
+export const DOCTOR_PROBE_TTL_MS = 6 * 60 * 60_000;
+export const DOCTOR_FAILURE_TTL_MS = 30_000;
 /** `claude --version` answers whether the CLI is on PATH; that changes when someone installs or removes it. */
-export const CLAUDE_PROBE_TTL_MS = 60_000;
-/** Whether Postgres answers: short, since the banner for "not connected" is the one a person acts on. */
-export const CATALOG_PROBE_TTL_MS = 15_000;
-/** The agent settings rows; this runner's own `PUT /api/settings/agent` forgets the answer at once. */
-export const AGENT_PROBE_TTL_MS = 15_000;
+export const CLAUDE_PROBE_TTL_MS = 6 * 60 * 60_000;
+export const CLAUDE_FAILURE_TTL_MS = 60_000;
+/** Whether the catalog answers: invalidated at once by `onCatalogWrite`, and re-checked every 30 minutes when idle. */
+export const CATALOG_PROBE_TTL_MS = 30 * 60_000;
+export const CATALOG_FAILURE_TTL_MS = 15_000;
+/** The agent settings rows; this runner's own `PUT /api/settings/*` forgets the answer at once. */
+export const AGENT_PROBE_TTL_MS = 30 * 60_000;
+export const AGENT_FAILURE_TTL_MS = 15_000;
 
 export interface DoctorAnswer {
   /** Null when the tool could not even be launched. */
@@ -63,34 +76,61 @@ export class HealthProbes {
   readonly codex: Probe<RunResult | null>;
   readonly catalog: Probe<CatalogResult | null>;
   readonly agent: Probe<Record<string, unknown> | null>;
+  private readonly unsubscribe: () => void;
+  private warming: Promise<void> | null = null;
 
   constructor(ttls: Partial<HealthProbeTtls> = {}) {
     // `doctor()` hands back its own cached answer when it has one younger than
     // its TTL, so this probe's age counts from when the doctor answered, not
     // from when the probe asked: the two clocks agree, and `checkedAt` is the
-    // doctor's.
+    // doctor's. A failed check expires after `DOCTOR_FAILURE_TTL_MS` (30 s) so
+    // rebuilding the submodule unblocks the UI on the next Recheck without
+    // waiting six hours.
     this.doctor = new Probe(
       async () => {
         const result = await doctor().catch(() => null);
         return { result, at: result === null ? null : doctorAnsweredAt() };
       },
-      ttls.doctor ?? DOCTOR_TTL_MS,
-      { answeredAt: (answer) => answer.at },
+      ttls.doctor ?? DOCTOR_PROBE_TTL_MS,
+      {
+        answeredAt: (answer) => answer.at,
+        failureTtlMs: DOCTOR_FAILURE_TTL_MS,
+        isFailure: (answer) => answer.result === null || answer.result.code !== 0,
+      },
     );
+    const cliFailed = (result: RunResult | null): boolean => result === null || result.code !== 0;
     this.claude = new Probe(
       () => run(CLAUDE_BIN, ["--version"], { timeoutMs: 30_000 }).catch(() => null),
       ttls.claude ?? CLAUDE_PROBE_TTL_MS,
+      { failureTtlMs: CLAUDE_FAILURE_TTL_MS, isFailure: cliFailed },
     );
     this.qwen = new Probe(
       () => run(QWEN_BIN, ["--version"], { timeoutMs: 30_000 }).catch(() => null),
       ttls.qwen ?? CLAUDE_PROBE_TTL_MS,
+      { failureTtlMs: CLAUDE_FAILURE_TTL_MS, isFailure: cliFailed },
     );
     this.codex = new Probe(
       () => run(CODEX_BIN, ["--version"], { timeoutMs: 30_000 }).catch(() => null),
       ttls.codex ?? CLAUDE_PROBE_TTL_MS,
+      { failureTtlMs: CLAUDE_FAILURE_TTL_MS, isFailure: cliFailed },
     );
-    this.catalog = new Probe(() => catalogStatus().catch(() => null), ttls.catalog ?? CATALOG_PROBE_TTL_MS);
-    this.agent = new Probe(() => agentSettings().catch(() => null), ttls.agent ?? AGENT_PROBE_TTL_MS);
+    this.catalog = new Probe(
+      () => catalogStatus().catch(() => null),
+      ttls.catalog ?? CATALOG_PROBE_TTL_MS,
+      {
+        failureTtlMs: CATALOG_FAILURE_TTL_MS,
+        isFailure: (result) => result === null || !result.ok,
+      },
+    );
+    this.agent = new Probe(
+      () => agentSettings().catch(() => null),
+      ttls.agent ?? AGENT_PROBE_TTL_MS,
+      {
+        failureTtlMs: AGENT_FAILURE_TTL_MS,
+        isFailure: (result) => result === null,
+      },
+    );
+    this.unsubscribe = onCatalogWrite(() => this.catalog.forget());
   }
 
   private settingsProbe: Probe<Record<string, unknown>> | null = null;
@@ -106,17 +146,60 @@ export class HealthProbes {
     return this.settingsProbe;
   }
 
-  /** Start every check now, not awaited, so the first health call after a start finds answers. */
-  warm(): void {
-    // The vocabulary keeps its own last outcome (`vocabularyStatusNow`), which
-    // health waits for only when there is none.
-    void vocabularyStatus();
-    this.doctor.warm();
-    this.claude.warm();
-    this.qwen.warm();
-    this.codex.warm();
-    this.catalog.warm();
-    this.agent.warm();
+  /**
+   * Warm every check sequentially at startup so the first health call finds
+   * answers without piling up subprocesses and a headless Chromium launch all
+   * at once. Shared with any early `/api/health` caller via `waitWarm()`.
+   */
+  warm(): Promise<void> {
+    if (this.warming !== null) return this.warming;
+    const runWarm = (async () => {
+      await vocabularyStatus().catch(() => undefined);
+      await Promise.all([
+        this.claude.refresh().catch(() => undefined),
+        this.qwen.refresh().catch(() => undefined),
+        this.codex.refresh().catch(() => undefined),
+      ]);
+      await this.catalog.refresh().catch(() => undefined);
+      await this.agent.refresh().catch(() => undefined);
+      await this.doctor.refresh().catch(() => undefined);
+    })().finally(() => {
+      if (this.warming === runWarm) {
+        this.warming = null;
+      }
+    });
+    this.warming = runWarm;
+    return runWarm;
+  }
+
+  /** Wait for an in-flight `warm()` pass so early health polls share its schedule. */
+  async waitWarm(): Promise<void> {
+    if (this.warming !== null) {
+      await this.warming;
+    }
+  }
+
+  /**
+   * Drop every cached probe answer so the next read checks afresh. Any
+   * in-flight `doctor` check is preserved so repeated `?refresh=1` calls share
+   * the running Chromium check instead of launching duplicates.
+   */
+  forget(): void {
+    this.warming = null;
+    invalidateDoctorCache();
+    forgetVocabularyStatus();
+    this.doctor.forget({ keepInFlight: true });
+    this.claude.forget();
+    this.qwen.forget();
+    this.codex.forget();
+    this.catalog.forget();
+    this.agent.forget();
+    this.settingsProbe?.forget();
+  }
+
+  /** Stop listening for catalog writes. */
+  close(): void {
+    this.unsubscribe();
   }
 }
 

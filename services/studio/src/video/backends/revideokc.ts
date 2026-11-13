@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -15,7 +16,7 @@ import { jobPorts } from "../revideokc/ports";
 import { buildRevideokcProfile, readPorts, writePorts } from "../revideokc/sandbox";
 import { buildRevideokcSettings } from "../revideokc/settings";
 import { currentSourceHash, REVIDEOKC_SOURCE_PATTERN, sourceFilePaths } from "../revideokc/source";
-import { discoverRevideokcToolchain, revideokcProblems, type RevideokcToolchain } from "../revideokc/toolchain";
+import { discoverRevideokcToolchain, revideokcProblems, revideokcRoot, type RevideokcToolchain } from "../revideokc/toolchain";
 import { revideokcWrapperConfig, writeRevideokcWrapper } from "../revideokc/wrapper";
 import { resolvedStudioHome, type ProfileKind } from "../sandbox";
 import { keepClips as keepClipFiles, seedClips } from "../seed";
@@ -122,6 +123,7 @@ export const revideokcBackend: VideoBackend = {
     return file === own.stillsSheet || file === own.buildSheet;
   },
   addDirs: (paths) => [paths.lib, revideokcPaths(paths).docs, paths.out, revideokcPaths(paths).stillsRoot],
+  hasCheckout: () => existsSync(path.join(revideokcRoot(), "tools", "cli", "revideokc.mjs")),
   doctor: () => runRevideokcDoctor(),
 
   ...REVIDEOKC_GATE,
