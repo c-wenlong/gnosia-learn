@@ -1,6 +1,6 @@
 import { JobsProvider } from "@/components/studio/JobsProvider";
 import { StudioZone } from "@/components/studio/StudioZone";
-import { appTimeZone } from "@gnosia/tutor/server/time-zone";
+import { appTimeZone } from "@hermes/tutor/server/time-zone";
 import { requireStudio, studioApi } from "@/lib/studio";
 import type { Job } from "@/lib/studio-jobs";
 
@@ -21,7 +21,7 @@ import type { Job } from "@/lib/studio-jobs";
  * the blocked screens; a layout that threw would take those screens with it.
  *
  * `requireStudio()` is here as well as in every page, because this is an entry
- * point Next invokes on its own, and the `gnosia/studio-gate` lint rule holds
+ * point Next invokes on its own, and the `hermes/studio-gate` lint rule holds
  * every such file to it.
  */
 

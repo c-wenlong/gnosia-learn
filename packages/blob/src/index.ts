@@ -15,3 +15,4 @@ export {
 } from "./store";
 export { isKey, key, parseKey, type ParsedKey } from "./key";
 export { defaultBlobRoot, fsStore } from "./fs";
+export { dataHome, HOME_ENV, LEGACY_HOME_ENV } from "./home";

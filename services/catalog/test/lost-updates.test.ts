@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { concept, contentRevision, curriculumItem, learner, recap } from "@gnosia/schema";
+import { concept, contentRevision, curriculumItem, learner, recap } from "@hermes/schema";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -431,7 +431,7 @@ describe.skipIf(!reachable.ok)("course files, item purges and topic renames agai
     const svg = await storedBlob(scratch.db, "gamma-map", "svg");
     await scratch.db.execute(sql`
       insert into asset (id, kind, path, content_hash, bytes, title, source_repo, blob_key)
-      values ('diagram:learn/assets/gamma-map.svg', 'diagram_svg', 'learn/assets/gamma-map.svg', 'x', 1, 'A map', 'gnosia', ${svg})`);
+      values ('diagram:learn/assets/gamma-map.svg', 'diagram_svg', 'learn/assets/gamma-map.svg', 'x', 1, 'A map', 'hermes', ${svg})`);
     await scratch.db.execute(sql`insert into asset_topic (asset_id, topic_slug) values ('diagram:learn/assets/gamma-map.svg', 'gamma')`);
 
     // The course import that moves module two under gamma, holding its export

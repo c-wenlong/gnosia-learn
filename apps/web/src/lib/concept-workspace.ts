@@ -2,13 +2,13 @@ import "server-only";
 
 import { cache } from "react";
 import { connection } from "next/server";
-import { ownerScope } from "@gnosia/schema/shared";
+import { ownerScope } from "@hermes/schema/shared";
 import {
   courseSlugsOf,
   placeOf,
   readConceptWorkspace as readConceptWorkspaceCore,
   type ConceptWorkspaceRead,
-} from "@gnosia/tutor/server/concept-workspace";
+} from "@hermes/tutor/server/concept-workspace";
 
 import { contentSource } from "@/data/source";
 import { catalogDatabase } from "@/lib/learner-store";
@@ -16,7 +16,7 @@ import { currentOwner } from "@/lib/owner";
 
 /**
  * The concept workspace's read. The assembly lives in
- * `@gnosia/tutor/server/concept-workspace`; this file hands it this app's
+ * `@hermes/tutor/server/concept-workspace`; this file hands it this app's
  * seams.
  */
 

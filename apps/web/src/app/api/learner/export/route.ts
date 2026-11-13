@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { readCustomProviders, readEvents, readLearnerSnapshot, readPreferences, readTutorModels } from "@gnosia/catalog/state";
-import { failureCode } from "@gnosia/tutor/server/provider-keys";
+import { readCustomProviders, readEvents, readLearnerSnapshot, readPreferences, readTutorModels } from "@hermes/catalog/state";
+import { failureCode } from "@hermes/tutor/server/provider-keys";
 
 import { enforceRateLimit } from "@/lib/agent/guard";
 import { LEARNER_RATE_LIMIT, requestOwner } from "@/lib/learner-api";
@@ -69,11 +69,11 @@ export async function GET(_req: Request): Promise<NextResponse> {
 
   const stamp = exportedAt.toISOString().slice(0, 10);
   return NextResponse.json(
-    { format: "gnosia-export", version: 1, exportedAt: exportedAt.toISOString(), ...body },
+    { format: "hermes-export", version: 1, exportedAt: exportedAt.toISOString(), ...body },
     {
       headers: {
         "Cache-Control": "no-store",
-        "Content-Disposition": `attachment; filename="gnosia-${stamp}.json"`,
+        "Content-Disposition": `attachment; filename="hermes-${stamp}.json"`,
       },
     },
   );

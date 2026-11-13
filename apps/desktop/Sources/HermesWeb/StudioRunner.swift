@@ -1,6 +1,6 @@
 //
 //  StudioRunner.swift
-//  GnosiaWeb
+//  HermesWeb
 //
 //  Owns the studio runner's lifecycle for the window, the way WebServer owns
 //  the Next server's. The web app inside the webview reaches the runner on
@@ -115,7 +115,7 @@ final class StudioRunner {
     /// entry point, no tsx, no log); status says why.
     private func spawn() -> Bool {
         guard let root = Checkout.repoRoot() else {
-            status = .failed("No checkout found — set GNOSIA_REPO to the repository root.")
+            status = .failed("No checkout found — set HERMES_REPO to the repository root.")
             return false
         }
         guard FileManager.default.fileExists(atPath: root.appending(path: "services/studio/src/index.ts").path) else {

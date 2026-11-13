@@ -1,12 +1,12 @@
-import type { AssetConversation, AssetPlace } from "@gnosia/catalog/state";
+import type { AssetConversation, AssetPlace } from "@hermes/catalog/state";
 
-import type { GraphEdge } from "@gnosia/tutor/concept-graph";
+import type { GraphEdge } from "@hermes/tutor/concept-graph";
 import { dayLabel } from "@/lib/day-groups";
-import { dayKey } from "@gnosia/tutor/days";
+import { dayKey } from "@hermes/tutor/days";
 import { topicOrder } from "@/lib/domain-map";
 import { domainTitle } from "@/lib/domain-view";
 import { conversationLabel, courseCode, orderedConcepts, pickPlace } from "@/lib/library-source";
-import type { MasteryBucket } from "@gnosia/tutor/mastery-bucket";
+import type { MasteryBucket } from "@hermes/tutor/mastery-bucket";
 
 /**
  * The Library's other three groupings (L4 of

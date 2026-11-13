@@ -11,8 +11,8 @@ import {
   SESSIONS_DIR,
   TAGS_FILE,
   TOPICS_FILE,
-} from "@gnosia/content";
-import type { ContentType } from "@gnosia/schema";
+} from "@hermes/content";
+import type { ContentType } from "@hermes/schema";
 
 /**
  * The export format's layout: which files under a root belong to which

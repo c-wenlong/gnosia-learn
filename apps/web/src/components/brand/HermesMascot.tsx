@@ -32,7 +32,7 @@ const MASCOT_POSES = { neutral, happy, reading, curious, excited, sleepy } as co
 
 export type MascotPose = keyof typeof MASCOT_POSES;
 
-export function GnosiaMascot({
+export function HermesMascot({
   pose = "neutral",
   className,
   float = false,
@@ -46,7 +46,7 @@ export function GnosiaMascot({
   preload?: boolean;
 }) {
   return (
-    <span aria-hidden className={cx("inline-block", float && "gnosia-float")}>
+    <span aria-hidden className={cx("inline-block", float && "hermes-float")}>
       <Image
         src={MASCOT_POSES[pose]}
         alt=""

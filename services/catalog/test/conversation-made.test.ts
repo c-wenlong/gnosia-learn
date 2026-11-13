@@ -7,7 +7,7 @@ import {
   job,
   LOCAL_LEARNER_ID,
   ownerScope,
-} from "@gnosia/schema";
+} from "@hermes/schema";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { assetParents, conversationMade, ensureLearner, madeName } from "../src/state";
@@ -152,7 +152,7 @@ describe.skipIf(!reachable.ok)("conversation made", () => {
           id,
           kind: "diagram_svg",
           path: id.slice("diagram:".length),
-          sourceRepo: "gnosia",
+          sourceRepo: "hermes",
           blobKey: await storedBlob(db, id, "svg"),
         })),
       ),
@@ -209,7 +209,7 @@ describe.skipIf(!reachable.ok)("conversation made", () => {
 /** A present blob in the other owner's store, for their video. */
 async function theirBlob(db: Scratch["db"]): Promise<string> {
   const { createHash } = await import("node:crypto");
-  const { blobObject } = await import("@gnosia/schema");
+  const { blobObject } = await import("@hermes/schema");
   const sha256 = createHash("sha256").update("their-video").digest("hex");
   const key = `${OTHER}/${sha256}.mp4`;
   await db.insert(blobObject).values({

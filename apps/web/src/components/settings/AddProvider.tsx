@@ -1,6 +1,6 @@
 "use client";
 
-import { PROVIDER_KEY_LIMITS } from "@gnosia/schema/shared";
+import { PROVIDER_KEY_LIMITS } from "@hermes/schema/shared";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/Button";

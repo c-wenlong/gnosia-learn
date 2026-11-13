@@ -1,4 +1,4 @@
-import { PDF_CONTENT_TYPE } from "@gnosia/catalog/state";
+import { PDF_CONTENT_TYPE } from "@hermes/catalog/state";
 
 import { pdfSource } from "@/lib/asset-files";
 import { lookupFailed, problemResponse, serveStoredWhole } from "@/lib/asset-response";

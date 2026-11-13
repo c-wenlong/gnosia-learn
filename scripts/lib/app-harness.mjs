@@ -41,7 +41,7 @@ export function findChromium() {
 /**
  * The environment every catalog and learn command against a seed database
  * runs with. `home` is the blob store the import puts the seed's diagram SVG
- * in, never `~/.gnosia`. `emptyRoot` is an empty directory standing in for
+ * in, never `~/.hermes`. `emptyRoot` is an empty directory standing in for
  * every video tool's checkout, so the import runs none of them: the seed maps
  * no topic folder (it has no videos), and a real checkout's renders would be
  * refused as folders no topic maps.
@@ -51,7 +51,7 @@ export function seedEnv({ root, db, home, emptyRoot }) {
     ...process.env,
     CATALOG_DB: db,
     DATABASE_URL: db,
-    GNOSIA_HOME: home,
+    HERMES_HOME: home,
     MANIMKC_ROOT: emptyRoot,
     REMOTIONKC_ROOT: emptyRoot,
     REVIDEOKC_ROOT: emptyRoot,
@@ -133,7 +133,7 @@ export async function startServer({ root, port, db, home = null, logFile, onSpaw
     DATABASE_URL: db,
     OWNER_PASSWORD: TEST_PASSWORD,
     AUTH_SECRET: TEST_SECRET,
-    ...(home === null ? {} : { GNOSIA_HOME: home }),
+    ...(home === null ? {} : { HERMES_HOME: home }),
     // The database is throwaway, and may have been made from one marked
     // `copy`; this is the flag that says writing to it is intended.
     CATALOG_COPY_OK: '1',

@@ -9,8 +9,8 @@ pull request gets no preview and a merge to `main` changes nothing that is
 live. Every PR and every merge used to build a deployment, and on the free
 plan's 100 deployments a day the busy days ran out (2026-10-04).
 
-- **Production alias:** https://gnosia-one.vercel.app
-- **Project:** `kaichen/gnosia`, linked to `https://github.com/promethevs-labs/hermes-studio`
+- **Production alias:** https://hermes-one.vercel.app
+- **Project:** `kaichen/hermes`, linked to `https://github.com/promethevs-labs/hermes-studio`
 - **Root Directory:** `apps/web`, with **Include source files outside of the
   Root Directory in the Build Step** on
 
@@ -81,7 +81,7 @@ works and builds nothing.
 To see what is live and what produced it:
 
 ```bash
-vercel ls gnosia --prod            # recent production deployments
+vercel ls hermes --prod            # recent production deployments
 vercel inspect <deployment-url>        # target, aliases, build output
 ```
 
@@ -110,7 +110,7 @@ roughly N times. `--duration` needs Pro or Enterprise.
 
 ## Signing in
 
-Gnosia has one reader, so authentication is a password and a signed cookie
+Hermes has one reader, so authentication is a password and a signed cookie
 rather than accounts. `/` is the public landing page and `/sign-in` the door;
 everything else, `/api/*` included, needs the session. The check runs in
 `apps/web/src/proxy.ts` before any page renders, and again in the `(app)`
@@ -141,7 +141,7 @@ stored server-side, so ending sessions means changing one of the three:
 vercel env add SESSION_EPOCH production       # any new value ends every session
 ```
 
-The desktop shell's launch token (`GNOSIA_LOCAL_TOKEN`, `/api/auth/local`)
+The desktop shell's launch token (`HERMES_LOCAL_TOKEN`, `/api/auth/local`)
 mints the same cookie under the same key, so it follows the epoch and the
 password like a sign-in does. Since 2026-10-30 the password and the epoch are
 part of the key; every session from before that ended once, at the deploy
@@ -182,7 +182,7 @@ turning the policy off.
 
 | Name | Purpose | Where it is needed |
 | --- | --- | --- |
-| `CATALOG_DB`, `DATABASE_URL` | The path of the SQLite file holding the learner state and the catalog; `CATALOG_DB` wins, and with neither set it is `$GNOSIA_HOME/catalog.db` ([env.ts](../services/catalog/src/env.ts)) | Locally, only for a file away from the default, set in `services/catalog/.env` so the CLI and the app both read it; Vercel: not set, see [The database](#the-database) |
+| `CATALOG_DB`, `DATABASE_URL` | The path of the SQLite file holding the learner state and the catalog; `CATALOG_DB` wins, and with neither set it is `$HERMES_HOME/catalog.db` ([env.ts](../services/catalog/src/env.ts)) | Locally, only for a file away from the default, set in `services/catalog/.env` so the CLI and the app both read it; Vercel: not set, see [The database](#the-database) |
 | `OWNER_PASSWORD` | The one password that opens the app (see [Signing in](#signing-in)) | Vercel, locally |
 | `AUTH_SECRET` | Signs the session cookie, and seals the provider keys saved in Settings; 32+ characters from `openssl rand -base64 32` | Vercel, locally |
 | `SESSION_EPOCH` | Optional; change it to sign every browser out without touching the saved keys (see [Signing in](#signing-in)) | Vercel, locally (optional) |
@@ -244,8 +244,8 @@ Badges & Graphs.
 The catalog is one SQLite file, and there is no database server
 ([SQLITE-MIGRATION.md](SQLITE-MIGRATION.md)). `databaseUrl()` in
 [services/catalog/src/env.ts](../services/catalog/src/env.ts) takes
-`CATALOG_DB`, else `DATABASE_URL`, else `$GNOSIA_HOME/catalog.db`
-(`~/.gnosia/catalog.db` when `GNOSIA_HOME` is unset), so a laptop needs no
+`CATALOG_DB`, else `DATABASE_URL`, else `$HERMES_HOME/catalog.db`
+(`~/.hermes/catalog.db` when `HERMES_HOME` is unset), so a laptop needs no
 configuration. A `postgres://` value is refused rather than read as a file
 name (`databasePath()` in the same file), and `connect` in
 [services/catalog/src/db.ts](../services/catalog/src/db.ts) creates the file
@@ -256,7 +256,7 @@ already set, so a `CATALOG_DB` there reaches the CLI and the app alike
 
 **Production has no database, and the code gives it no way to reach one.**
 A Vercel function runs the same `databaseUrl()`: with neither variable set it
-resolves `$GNOSIA_HOME/catalog.db` on the function's own filesystem, which is
+resolves `$HERMES_HOME/catalog.db` on the function's own filesystem, which is
 not the owner's file and does not outlive the instance. The plan this section
 used to give (a hosted Postgres from Neon or Supabase, or Postgres on the
 homeserver, filled from a `pg_dump`) no longer fits the code, since a Postgres
@@ -343,17 +343,17 @@ Videos, their posters and sidecars, diagram SVGs and course cover photos have
 moved out of the repository and the manimkc data root into a content-addressed
 blob store
 (docs/CONTENT-MIGRATION.md 0.4, D5). Until go-live it is local only: the `fs`
-adapter in `packages/blob`, keeping objects under `$GNOSIA_HOME/blobs`, or
-`~/.gnosia/blobs` when the variable is unset.
+adapter in `packages/blob`, keeping objects under `$HERMES_HOME/blobs`, or
+`~/.hermes/blobs` when the variable is unset.
 
-- **Set `GNOSIA_HOME` in `services/catalog/.env`**, if at all, not in
+- **Set `HERMES_HOME` in `services/catalog/.env`**, if at all, not in
   `apps/web/.env.local`. Both the catalog CLI (which uploads) and the web app
   (which serves) resolve the root through `blobRoot()` in
   `services/catalog/src/env.ts`, which reads that file the way `DATABASE_URL`
   is read, so one setting reaches both. A value only the app can see would
   have it serve from one store while the CLI uploads to another.
 - **Absolute, or starting with `~/`.** A relative value is refused rather than
-  resolved against wherever a command runs, and a root inside a gnosia
+  resolved against wherever a command runs, and a root inside a hermes
   checkout is refused outright, since a git operation can delete it. Moving the
   manimkc submodule once deleted 25 rendered videos that way.
 - **Vercel reads no blob store today.** The `fs` store is on the laptop and a
@@ -410,7 +410,7 @@ database: 36 videos, 87 sidecars and 36 posters, 433.6 MB, in about ten
 seconds. A rerun skips everything already `present` without reading a file,
 so an interrupted run is finished by running it again. With no ffmpeg on the
 machine the posters are skipped and the output says so; `FFMPEG_PATH` points
-at one elsewhere. A scratch run sets `GNOSIA_HOME` to a temporary folder
+at one elsewhere. A scratch run sets `HERMES_HOME` to a temporary folder
 for the whole run; there is no flag for another root, because the web app
 reads its root from that variable alone and a flag would write rows pointing
 at bytes it never serves.
@@ -420,7 +420,7 @@ the first upload or the first `catalog blob audit --fix`. `--fix` deletes
 objects no row names, so it refuses a root whose marker names another
 database, which is another file path (`databaseIdentity` in
 [import-root.ts](../services/catalog/src/content/import-root.ts)): a copy of
-the catalog's file sharing `~/.gnosia/blobs` would otherwise delete the
+the catalog's file sharing `~/.hermes/blobs` would otherwise delete the
 primary's objects as orphans. An upload refuses such a root too,
 since the owner's `--fix` would delete what it wrote. `--fix` also sweeps `.tmp/*.part`
 files a crashed upload left, once they are a day old.
@@ -471,10 +471,10 @@ prefix) and the per-owner caps in force.
 ### Per-owner caps
 
 Two variables set them, both unset by default, which is no cap:
-`GNOSIA_OWNER_BYTES_CAP` (bytes one owner may store) and
-`GNOSIA_OWNER_UPLOADS_PER_DAY` (new objects one owner may upload in a
+`HERMES_OWNER_BYTES_CAP` (bytes one owner may store) and
+`HERMES_OWNER_UPLOADS_PER_DAY` (new objects one owner may upload in a
 rolling 24 hours, measured on the database's clock). Set them in
-`services/catalog/.env` beside `GNOSIA_HOME`, since the catalog CLI is
+`services/catalog/.env` beside `HERMES_HOME`, since the catalog CLI is
 what uploads.
 
 - **What is measured.** Only a new object: one whose key has no
@@ -522,15 +522,15 @@ npm run export:nightly                     # node scripts/nightly-export.mjs
 node scripts/nightly-export.mjs --keep 60 --json
 ```
 
-It runs `catalog export --out` into `$GNOSIA_HOME/archive/<UTC time>/`
-(`~/.gnosia/archive/` when the variable is unset), a whole tree in the
+It runs `catalog export --out` into `$HERMES_HOME/archive/<UTC time>/`
+(`~/.hermes/archive/` when the variable is unset), a whole tree in the
 export layout that `catalog import <dir>` reads back and anyone can read
 without a database. It writes into a hidden `.<UTC time>.partial` first and
 renames it into place only when the export finished, so every dated folder is
 a whole export. It then points `archive/latest` at the new one by renaming a
 fresh link over the old, so the link is never missing, deletes all but the
 newest 30 exports (`--keep N`), and removes a failed run's partial once it is
-more than a day old. It refuses an archive inside the gnosia checkout, for
+more than a day old. It refuses an archive inside the hermes checkout, for
 the reason the blob store does: a `git clean` or a relayout can delete it. It
 records nothing on the database, since an export records its hash only into a
 tree a type was imported from. Exit 0 is exported, 1 is an export or a prune
@@ -542,11 +542,11 @@ so it does not replace a backup of the database file
 (see [The database](#the-database)).
 
 **Scheduling it on the laptop** is a launchd agent. Save this as
-`~/Library/LaunchAgents/com.gnosia.nightly-export.plist`, with every
+`~/Library/LaunchAgents/com.hermes.nightly-export.plist`, with every
 path made absolute for your machine (launchd expands neither `~` nor
 `$HOME`), and `which node` for the first argument. It sets no database
-variable: with `GNOSIA_HOME` set, the catalog finds its file at
-`$GNOSIA_HOME/catalog.db` ([env.ts](../services/catalog/src/env.ts)), so add a
+variable: with `HERMES_HOME` set, the catalog finds its file at
+`$HERMES_HOME/catalog.db` ([env.ts](../services/catalog/src/env.ts)), so add a
 `CATALOG_DB` entry only for a file kept elsewhere. A
 `DATABASE_URL=postgres://...` line left in `services/catalog/.env` from the
 old example is still read there and refused, so delete it:
@@ -557,14 +557,14 @@ old example is still read there and refused, so delete it:
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.gnosia.nightly-export</string>
+  <string>com.hermes.nightly-export</string>
   <key>ProgramArguments</key>
   <array>
     <string>/opt/homebrew/bin/node</string>
-    <string>/Users/YOU/path/to/gnosia/scripts/nightly-export.mjs</string>
+    <string>/Users/YOU/path/to/hermes/scripts/nightly-export.mjs</string>
   </array>
   <key>WorkingDirectory</key>
-  <string>/Users/YOU/path/to/gnosia</string>
+  <string>/Users/YOU/path/to/hermes</string>
   <key>StartCalendarInterval</key>
   <dict>
     <key>Hour</key>
@@ -574,22 +574,22 @@ old example is still read there and refused, so delete it:
   </dict>
   <key>EnvironmentVariables</key>
   <dict>
-    <key>GNOSIA_HOME</key>
-    <string>/Users/YOU/.gnosia</string>
+    <key>HERMES_HOME</key>
+    <string>/Users/YOU/.hermes</string>
   </dict>
   <key>StandardOutPath</key>
-  <string>/Users/YOU/Library/Logs/gnosia-nightly-export.log</string>
+  <string>/Users/YOU/Library/Logs/hermes-nightly-export.log</string>
   <key>StandardErrorPath</key>
-  <string>/Users/YOU/Library/Logs/gnosia-nightly-export.log</string>
+  <string>/Users/YOU/Library/Logs/hermes-nightly-export.log</string>
 </dict>
 </plist>
 ```
 
 ```bash
-plutil -lint ~/Library/LaunchAgents/com.gnosia.nightly-export.plist
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.gnosia.nightly-export.plist
-launchctl kickstart gui/$(id -u)/com.gnosia.nightly-export    # one run now, to check
-launchctl bootout gui/$(id -u)/com.gnosia.nightly-export      # to stop it
+plutil -lint ~/Library/LaunchAgents/com.hermes.nightly-export.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.hermes.nightly-export.plist
+launchctl kickstart gui/$(id -u)/com.hermes.nightly-export    # one run now, to check
+launchctl bootout gui/$(id -u)/com.hermes.nightly-export      # to stop it
 ```
 
 **A checkout under `~/Desktop`, `~/Documents` or `~/Downloads` cannot be
@@ -601,16 +601,16 @@ it. The first run from such a checkout fails before the script loads, with
 the log and `last exit code = 1` in `launchctl print`. Granting the node
 binary Full Disk Access would work, and is a security setting only the owner
 should change. The route that needs no grant is a second clone outside those
-folders, made for this job alone (`mkdir -p ~/.gnosia && git clone <repo>
-~/.gnosia/checkout && cd ~/.gnosia/checkout && npm ci`, no submodules
+folders, made for this job alone (`mkdir -p ~/.hermes && git clone <repo>
+~/.hermes/checkout && cd ~/.hermes/checkout && npm ci`, no submodules
 needed), with both paths in the plist pointing at it. That clone reads the
 same database and the same blob store, so the export is the same. It does
 drift: `catalog migrate`'s status walks the migration files in the clone it
 runs from, so a database the main checkout has since migrated is not
 refused, and an old clone keeps exporting with old code and says nothing.
 So the job should refresh the clone first. A wrapper the plist runs in place
-of node: `mkdir -p ~/.gnosia/bin`, save this as
-`~/.gnosia/bin/nightly-export.sh`, `chmod +x` it, and put the `node`
+of node: `mkdir -p ~/.hermes/bin`, save this as
+`~/.hermes/bin/nightly-export.sh`, `chmod +x` it, and put the `node`
 from `which node` on its `NODE=` line, since launchd hands the script no
 `PATH` worth trusting (npm is taken from the same directory):
 
@@ -619,7 +619,7 @@ from `which node` on its `NODE=` line, since launchd hands the script no
 set -u
 NODE=/opt/homebrew/bin/node
 NPM="$(dirname "$NODE")/npm"
-cd "$HOME/.gnosia/checkout" || exit 2
+cd "$HOME/.hermes/checkout" || exit 2
 before=$(git rev-parse HEAD)
 if git pull -q --ff-only; then
   if [ "$before" != "$(git rev-parse HEAD)" ]; then
@@ -638,7 +638,7 @@ puts the clone back on the commit it was installed at, so the code and its
 `node_modules` stay a pair and the next run pulls and retries, instead of
 exporting from a half-installed tree every night until someone looks.
 
-Set `GNOSIA_HOME` in the plist even when `services/catalog/.env` names
+Set `HERMES_HOME` in the plist even when `services/catalog/.env` names
 it: the catalog reads that file, so the export would find the diagram SVGs in
 the right blob store, but the script itself takes the archive's location from
 its own environment only. A run the laptop sleeps through starts when it
@@ -646,7 +646,7 @@ wakes, since that is how launchd treats a missed `StartCalendarInterval`.
 
 **The archive is local, and pushing it anywhere is the owner's decision.**
 Nothing here creates a remote copy. One shape that would work later: make
-`$GNOSIA_HOME/archive` a private git repository and add a second job
+`$HERMES_HOME/archive` a private git repository and add a second job
 after this one that commits and pushes it, which would also keep the exports
 the 30-deep prune has deleted. Until someone decides that, the archive lives
 on one disk beside the database it copies.

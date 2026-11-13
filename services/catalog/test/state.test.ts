@@ -1,4 +1,4 @@
-import { KNOWLEDGE_LIMITS, PREFERENCE_KEYS } from "@gnosia/schema";
+import { KNOWLEDGE_LIMITS, PREFERENCE_KEYS } from "@hermes/schema";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
@@ -54,7 +54,7 @@ import {
   seedContent,
   TOPIC_SLUG,
 } from "./state-fixture";
-import { LOCAL_LEARNER_ID, ownerScope } from "@gnosia/schema";
+import { LOCAL_LEARNER_ID, ownerScope } from "@hermes/schema";
 
 /** Who these reads are for: the one owner there is today (phase 4 scoping). */
 const LOCAL = ownerScope(LOCAL_LEARNER_ID);
@@ -274,13 +274,13 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
     });
 
     it("reads every theme mode back, and falls back to light for one it does not know", async () => {
-      for (const mode of ["gnosia-dark", "gnosia-system", "gnosia", "system"] as const) {
+      for (const mode of ["hermes-dark", "hermes-system", "hermes", "system"] as const) {
         await writePreference(scratch.db, PREFERENCE_KEYS.theme, mode);
         expect((await readLearnerSnapshot(scratch.db)).theme).toBe(mode);
       }
       // A row written by some later build, or by hand, renders light rather
       // than handing the root layout a class it has no palette for.
-      await writePreference(scratch.db, PREFERENCE_KEYS.theme, "gnosia-sepia");
+      await writePreference(scratch.db, PREFERENCE_KEYS.theme, "hermes-sepia");
       expect((await readLearnerSnapshot(scratch.db)).theme).toBe("light");
     });
 
@@ -1012,8 +1012,8 @@ describe.skipIf(!reachable.ok)("learner state store", () => {
     });
 
     it("carries a theme mode newer than the localStorage document", async () => {
-      await importLegacyState(scratch.db, { theme: "gnosia-dark" });
-      expect((await readLearnerSnapshot(scratch.db)).theme).toBe("gnosia-dark");
+      await importLegacyState(scratch.db, { theme: "hermes-dark" });
+      expect((await readLearnerSnapshot(scratch.db)).theme).toBe("hermes-dark");
     });
 
     it("is safe to run twice", async () => {

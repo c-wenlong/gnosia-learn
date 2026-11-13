@@ -1,7 +1,7 @@
 # Bring your own key
 
 Accepted and built, 2026-09-30. The owner stores their model provider API keys
-for the Gnosia tutor in the database, through Settings, instead of in `.env`.
+for the Hermes tutor in the database, through Settings, instead of in `.env`.
 The keys in the server's environment still work, as the fallback, so the
 Vercel deployment runs unchanged.
 
@@ -41,14 +41,14 @@ building it, and D12 after the 2026-10 security audit.
 to `learner`), `provider` (`nvidia`, `gemini` or `openrouter`), `ciphertext`,
 `iv`, `auth_tag`, `key_version`, `last4`, `created_at`, `updated_at`, with the
 primary key `(owner_id, provider)`. Added through `packages/schema/src/` and
-`npm run generate -w @gnosia/catalog`, with the copy guard of 0010
+`npm run generate -w @hermes/catalog`, with the copy guard of 0010
 appended like every table since. `owner_id` has no default, unlike the content
 tables, so a key is never filed under `local` by omission, and it cascades on
 delete, so deleting an owner deletes their keys.
 
 **D2. Encrypted at rest with AES-256-GCM.** The encryption key is HKDF-SHA256
 over `AUTH_SECRET`, with a fixed salt and an info string naming the version
-(`gnosia/provider-key/v1`). No new variable is needed. `key_version` names the
+(`hermes/provider-key/v1`). No new variable is needed. `key_version` names the
 derivation, so a dedicated secret can come later as version 2 without a
 migration. Every save draws a fresh 96-bit nonce. A key that does not decrypt
 is treated as missing: the tutor skips it (falling back to the server's key
@@ -104,7 +104,7 @@ first row held only while the studio was off (audit finding S7-01). D12
 replaced that.
 
 **D7. The additional data binds each row to its owner, provider and
-version.** The GCM tag covers `["gnosia/provider-key", version, owner,
+version.** The GCM tag covers `["hermes/provider-key", version, owner,
 provider]` as well as the ciphertext. Someone who can write to the database
 but does not hold `AUTH_SECRET` cannot move owner A's row onto owner B and
 have B's tutor spend A's key, or relabel a Gemini key as NVIDIA. The cost:
@@ -170,7 +170,7 @@ runs, and each one's Lite, Default and Max models, none of it a secret.
   unreadable after a rotation, it is marked "no key saved" with its tiers
   kept, and cannot run until the key is back.
 - **The runner's secrets never reach a child.** At start the runner takes
-  `AUTH_SECRET`, `OWNER_PASSWORD`, `SESSION_EPOCH` and `GNOSIA_LOCAL_TOKEN`
+  `AUTH_SECRET`, `OWNER_PASSWORD`, `SESSION_EPOCH` and `HERMES_LOCAL_TOKEN`
   out of its own environment (`takeKeySecret`), before anything is spawned,
   so no agent, render or catalog CLI inherits them, whichever env builder
   that spawn uses.
@@ -228,7 +228,7 @@ Things that could leak a key, and what stops each:
 - **The exports.** D11.
 - **The client bundle.** `store.ts`, `settings.ts` and `credentials.ts`
   import `server-only`, so a client component reaching them fails the build.
-  The seal itself is `@gnosia/tutor/server/seal`, which only those modules and
+  The seal itself is `@hermes/tutor/server/seal`, which only those modules and
   the two key routes import. The Settings card is handed `ProviderKeyView` rows: a
   provider, the last four characters, a date and two booleans.
 - **Responses.** Every answer from the two routes is `Cache-Control:
@@ -264,7 +264,7 @@ restart to pick up a new value.
 
 **The desktop shell** starts the web server and the studio runner with one
 environment (`services/launch-env`), read in the web's order: what the process
-exports, then `$GNOSIA_HOME/.env`, then `apps/web/.env.local` and its siblings
+exports, then `$HERMES_HOME/.env`, then `apps/web/.env.local` and its siblings
 through Next's own loader (`services/launch-env/src/env.ts`). Both children
 therefore hold the same `AUTH_SECRET` and open the same catalog file.
 

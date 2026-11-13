@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 
-import { assetDisplayTitle, assetKindLabel } from "@gnosia/tutor/asset-meta";
+import { assetDisplayTitle, assetKindLabel } from "@hermes/tutor/asset-meta";
 import { PAGE_ENTER } from "@/components/PageLoading";
 import { AssetBody } from "@/components/library/AssetBody";
 import { loadAssetBody } from "@/components/library/asset-body-data";
@@ -15,8 +15,8 @@ import { Notice } from "@/components/ui/Notice";
 import { Button } from "@/components/ui/Button";
 import { cx } from "@/components/ui/classes";
 import { loadAssetDetail, loadFavorite, loadLastWatched, loadPlayback } from "@/lib/asset-library";
-import { appTimeZone } from "@gnosia/tutor/server/time-zone";
-import { dayKey } from "@gnosia/tutor/days";
+import { appTimeZone } from "@hermes/tutor/server/time-zone";
+import { dayKey } from "@hermes/tutor/days";
 import { loadKnowledgeBase } from "@/lib/learner-store";
 import { assetBackLink, conceptHref, decodeAssetId, explainedConcepts, isCompanionKind } from "@/lib/library";
 
@@ -66,7 +66,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   if (asset === null) return { title: reachable ? "Asset not found" : "Library" };
   return {
     title: assetDisplayTitle(asset).text,
-    description: `${assetKindLabel(asset.kind)} in the Gnosia library.`,
+    description: `${assetKindLabel(asset.kind)} in the Hermes library.`,
   };
 }
 

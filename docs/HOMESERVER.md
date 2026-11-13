@@ -1,4 +1,4 @@
-# Running Gnosia on a homeserver
+# Running Hermes on a homeserver
 
 A working document, started 2026-10-04. It says how to stand the app up on
 an Ubuntu machine behind Tailscale with a copy of the laptop's data, what
@@ -23,14 +23,14 @@ and points there.
 
 | On the laptop | On the homeserver | How |
 | --- | --- | --- |
-| The catalog, `~/.gnosia/catalog.db`, both halves | `~/.gnosia/catalog.db` | `sqlite3 .backup`, `scp` (S2) |
-| `~/.gnosia/blobs` | `~/.gnosia/blobs` | `rsync`, delete `.owner`, `blob audit` (S3) |
+| The catalog, `~/.hermes/catalog.db`, both halves | `~/.hermes/catalog.db` | `sqlite3 .backup`, `scp` (S2) |
+| `~/.hermes/blobs` | `~/.hermes/blobs` | `rsync`, delete `.owner`, `blob audit` (S3) |
 | `apps/web/.env.local` and `services/catalog/.env` | The same two files | Written by hand; same `AUTH_SECRET` (S4) |
 | `npm run dev` | `next build` then `next start` under systemd | A production build; the dev server is not for serving |
 | The studio on `127.0.0.1:7250`, diagrams and videos | The studio, diagrams only | S5 |
 | launchd nightly export | systemd timer | S7 |
-| `~/.gnosia/manimkc`, the renders and TTS cache | Nothing | The videos the app serves are in the blob store; the data root is only for rendering, which stays on the Mac |
-| `~/.gnosia/vault`, Obsidian's copy of the notes | Nothing, unless Obsidian runs there | `learn vault pull` rebuilds it from the database |
+| `~/.hermes/manimkc`, the renders and TTS cache | Nothing | The videos the app serves are in the blob store; the data root is only for rendering, which stays on the Mac |
+| `~/.hermes/vault`, Obsidian's copy of the notes | Nothing, unless Obsidian runs there | `learn vault pull` rebuilds it from the database |
 | `$STUDIO_HOME` (`.studio/` in the checkout by default): job workspaces, draft transcripts, diagram checkouts | Nothing; the server's studio starts empty | The runner lists jobs and drafts from its own files, and the `job`, `session` and `draft` rows the copied file carries are a mirror of them, so a laptop job or draft cannot be resumed or reviewed on the server. Its permission files name the laptop's home directory, so copying them would not help. `catalog diagram checkout` writes a fresh checkout from the row |
 
 ## The steps
@@ -50,21 +50,21 @@ and points there.
    [env.ts](../services/catalog/src/env.ts)):
 
    ```bash
-   sqlite3 ~/.gnosia/catalog.db ".backup $HOME/gnosia.db"
+   sqlite3 ~/.hermes/catalog.db ".backup $HOME/hermes.db"
    ```
 
 2. Copy the database and the blob store over the tailnet. The store was
    1.3 GB on 2026-10-04:
 
    ```bash
-   ssh homeserver 'mkdir -p ~/.gnosia'
-   scp ~/gnosia.db homeserver:~/.gnosia/catalog.db
-   rsync -a --exclude .owner ~/.gnosia/blobs/ homeserver:~/.gnosia/blobs/
+   ssh homeserver 'mkdir -p ~/.hermes'
+   scp ~/hermes.db homeserver:~/.hermes/catalog.db
+   rsync -a --exclude .owner ~/.hermes/blobs/ homeserver:~/.hermes/blobs/
    ```
 
    The `mkdir` first: neither `scp` nor `rsync` creates a missing parent,
    so on a fresh machine the copy fails without it. The file lands where
-   the catalog looks by default, `~/.gnosia/catalog.db`, so nothing on the
+   the catalog looks by default, `~/.hermes/catalog.db`, so nothing on the
    server restores it: there is no database server to load it into. The
    `--exclude .owner` leaves the laptop's marker behind (S3): copied, it
    would name a database the server does not have, and the server's
@@ -103,8 +103,8 @@ and points there.
    tools); serving needs none of them, so a plain clone is enough to start:
 
    ```bash
-   git clone https://github.com/promethevs-labs/hermes-studio ~/gnosia
-   cd ~/gnosia && npm ci
+   git clone https://github.com/promethevs-labs/hermes-studio ~/hermes
+   cd ~/hermes && npm ci
    ```
 
 6. Check that the copied file arrived whole. Nothing listens on a port and
@@ -113,7 +113,7 @@ and points there.
    else. `integrity_check` prints `ok` for a sound file:
 
    ```bash
-   sqlite3 ~/.gnosia/catalog.db 'pragma ignore_check_constraints = on; pragma integrity_check'
+   sqlite3 ~/.hermes/catalog.db 'pragma ignore_check_constraints = on; pragma integrity_check'
    ```
 
    The first pragma is needed. The schema's checks call a `regexp` the
@@ -135,8 +135,8 @@ and points there.
    Postgres days needs its `DATABASE_URL` line deleted:
 
    ```
-   CATALOG_DB=~/.gnosia/catalog.db
-   GNOSIA_HOME=~/.gnosia
+   CATALOG_DB=~/.hermes/catalog.db
+   HERMES_HOME=~/.hermes
    ```
 
 8. Write `apps/web/.env.local`. Next reads `.env*` from `apps/web/`, never
@@ -178,17 +178,17 @@ and points there.
 
 10. Build and serve. `npm run start` is `next start` on port 3000, and the
     unit below keeps it up. Save it as
-    `/etc/systemd/system/gnosia.service`, with your user and paths:
+    `/etc/systemd/system/hermes.service`, with your user and paths:
 
     ```ini
     [Unit]
-    Description=Gnosia web app
+    Description=Hermes web app
     After=network-online.target
     Wants=network-online.target
 
     [Service]
     User=YOU
-    WorkingDirectory=/home/YOU/gnosia
+    WorkingDirectory=/home/YOU/hermes
     Environment=NODE_ENV=production
     ExecStart=/usr/bin/npm run start
     Restart=always
@@ -200,7 +200,7 @@ and points there.
 
     ```bash
     npm run build
-    sudo systemctl daemon-reload && sudo systemctl enable --now gnosia
+    sudo systemctl daemon-reload && sudo systemctl enable --now hermes
     ```
 
     Then put serve in front of it, from any shell on the machine:
@@ -234,22 +234,22 @@ and points there.
     on purpose. So the unit runs the script directly:
 
     ```ini
-    # /etc/systemd/system/gnosia-export.service
+    # /etc/systemd/system/hermes-export.service
     [Unit]
-    Description=Gnosia nightly export
+    Description=Hermes nightly export
 
     [Service]
     Type=oneshot
     User=YOU
-    WorkingDirectory=/home/YOU/gnosia
-    Environment=GNOSIA_HOME=/home/YOU/.gnosia
+    WorkingDirectory=/home/YOU/hermes
+    Environment=HERMES_HOME=/home/YOU/.hermes
     ExecStart=/usr/bin/node scripts/nightly-export.mjs
     ```
 
     ```ini
-    # /etc/systemd/system/gnosia-export.timer
+    # /etc/systemd/system/hermes-export.timer
     [Unit]
-    Description=Gnosia nightly export at 03:00
+    Description=Hermes nightly export at 03:00
 
     [Timer]
     OnCalendar=*-*-* 03:00:00
@@ -260,13 +260,13 @@ and points there.
     ```
 
     ```bash
-    sudo systemctl daemon-reload && sudo systemctl enable --now gnosia-export.timer
-    sudo systemctl start gnosia-export.service    # one run now, to check
-    ls ~/.gnosia/archive/
+    sudo systemctl daemon-reload && sudo systemctl enable --now hermes-export.timer
+    sudo systemctl start hermes-export.service    # one run now, to check
+    ls ~/.hermes/archive/
     ```
 
     `Persistent=true` is launchd's missed-run behaviour: a night the machine
-    was off runs at the next boot. Set `GNOSIA_HOME` in the unit even
+    was off runs at the next boot. Set `HERMES_HOME` in the unit even
     though `services/catalog/.env` names it, because the script takes the
     archive's location from its own environment only.
 
@@ -285,11 +285,11 @@ and points there.
 
     `canvas doctor` on a bare Ubuntu usually wants the shared libraries
     headless Chromium links against; it prints the `apt` line. Then a
-    second unit, `gnosia-studio.service`, shaped like step 10's with
+    second unit, `hermes-studio.service`, shaped like step 10's with
     `ExecStart=/usr/bin/node --import tsx services/studio/src/index.ts`;
     it binds `127.0.0.1:7250` and
     the web app reaches it through its own route handler. Set
-    `STUDIO_ENABLED=1` in `apps/web/.env.local` and restart `gnosia`.
+    `STUDIO_ENABLED=1` in `apps/web/.env.local` and restart `hermes`.
     `/studio/api/health` should report `video` off with the V4 reason (no
     `bwrap`, or the kernel refusing its user namespaces) and `manual`
     fresh. Set `STUDIO_DAILY_USD` in the unit's `Environment=` if the
@@ -306,28 +306,28 @@ and points there.
 
 13. The `/learn` and `/review` skills. They open with `npm run learn --
     status` against the database `services/catalog/.env` names, so a
-    Claude Code session in `~/gnosia` on the homeserver writes to the
+    Claude Code session in `~/hermes` on the homeserver writes to the
     homeserver's database, and one on the laptop to the laptop's (S1). The
     `learning` plugin is installed per machine
     (`~/.quiver/plugins/learning/learning`), as on the Mac.
 
 14. Updating, by hand and in this order, since nothing else on the machine
-    touches the checkout: stop the services, `git pull` in `~/gnosia`,
+    touches the checkout: stop the services, `git pull` in `~/hermes`,
     `npm ci` when the lockfile moved, `npm run catalog -- migrate` when
     `services/catalog/drizzle-sqlite/` did (`MIGRATIONS_FOLDER` in
     [migrations.ts](../services/catalog/src/migrations.ts)), `npm run build`, then start them
     again:
 
     ```bash
-    sudo systemctl stop gnosia gnosia-studio gnosia-export.timer \
-      && while systemctl show -p ActiveState --value gnosia-export.service | grep -Eqx 'active|activating'; do sleep 10; done \
+    sudo systemctl stop hermes hermes-studio hermes-export.timer \
+      && while systemctl show -p ActiveState --value hermes-export.service | grep -Eqx 'active|activating'; do sleep 10; done \
       && git pull --ff-only && npm ci && npm run catalog -- migrate && npm run build \
-      && sudo systemctl start gnosia gnosia-studio gnosia-export.timer
+      && sudo systemctl start hermes hermes-studio hermes-export.timer
     ```
 
     One chain, so a pull, install, migration or build that fails leaves
     everything stopped for you to fix, rather than starting the app on
-    new dependencies with an old `.next/`. Leave `gnosia-studio` out of
+    new dependencies with an old `.next/`. Leave `hermes-studio` out of
     both lists until step 12 has created it: `systemctl` refuses a unit it
     does not know, and the chain would stop at the first command with
     nothing updated. The export timer is stopped so an export cannot fire
@@ -349,10 +349,10 @@ and points there.
   file of the side with the history you want to keep (`sqlite3 ... .backup`,
   step 1) and put it in place of the other's: stop everything on the
   receiving side that opens the file first (on the server, `sudo systemctl
-  stop gnosia gnosia-studio gnosia-export.timer` and then step 14's `while`
-  until no `gnosia-export.service` is still running, since stopping the
+  stop hermes hermes-studio hermes-export.timer` and then step 14's `while`
+  until no `hermes-export.service` is still running, since stopping the
   timer does not stop an export already under way; on the Mac,
-  `npm run dev:down` or quitting Gnosia Web.app,
+  `npm run dev:down` or quitting Hermes Web.app,
   away from the nightly export's 03:00), since each holds the file open and
   keeps its `-wal` and `-shm` beside it; take a `.backup` of the receiving side's own
   file too, since its history is what the sync gives up; then delete its

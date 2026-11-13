@@ -1,8 +1,8 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import type { AssetDerivations, AssetRef, AssetWithTopics } from "@gnosia/catalog/state";
+import type { AssetDerivations, AssetRef, AssetWithTopics } from "@hermes/catalog/state";
 
-import { assetDisplayTitle, assetKindLabel, formatBytes } from "@gnosia/tutor/asset-meta";
+import { assetDisplayTitle, assetKindLabel, formatBytes } from "@hermes/tutor/asset-meta";
 import { Button } from "@/components/ui/Button";
 import { CardAction } from "@/components/ui/Card";
 import { Chip } from "@/components/ui/Chip";
@@ -12,7 +12,7 @@ import { Placeholder } from "@/components/ui/Placeholder";
 import { Tabs, type TabItem } from "@/components/ui/Tabs";
 import { cx, FOCUS, LABEL } from "@/components/ui/classes";
 import { assetHref, conceptHref, libraryHref, type ExplainedConcept } from "@/lib/library";
-import { ownValue } from "@gnosia/tutor/own-key";
+import { ownValue } from "@hermes/tutor/own-key";
 
 /**
  * The tabbed card under every asset in the library: Explains, Related, Files

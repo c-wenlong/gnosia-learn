@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { useId } from "react";
 
-import { assetDisplayTitle, assetKindLabel } from "@gnosia/tutor/asset-meta";
+import { assetDisplayTitle, assetKindLabel } from "@hermes/tutor/asset-meta";
 import { ConceptGraph } from "@/components/ConceptGraph";
 import { MathText } from "@/components/Math";
 import { Button } from "@/components/ui/Button";
@@ -9,8 +9,8 @@ import { Card } from "@/components/ui/Card";
 import { cx, FOCUS } from "@/components/ui/classes";
 import { AssetThumb } from "@/components/workspace/AssetThumb";
 import { WorkspaceHeading } from "@/components/workspace/WorkspaceHeading";
-import type { CheckStatus, ConceptWorkspace } from "@gnosia/tutor/concept-workspace-core";
-import { historyBars } from "@gnosia/tutor/concept-workspace-core";
+import type { CheckStatus, ConceptWorkspace } from "@hermes/tutor/concept-workspace-core";
+import { historyBars } from "@hermes/tutor/concept-workspace-core";
 import { conceptMapHref } from "@/lib/learn-index";
 import { assetHref } from "@/lib/library";
 

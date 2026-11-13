@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { AVATARS, avatarLabel, DISPLAY_NAME_MAX, PREFERENCE_KEYS, type AvatarId } from "@gnosia/schema/shared";
+import { AVATARS, avatarLabel, DISPLAY_NAME_MAX, PREFERENCE_KEYS, type AvatarId } from "@hermes/schema/shared";
 
 import { ThemeSwitch } from "@/components/ThemeSwitch";
 import { PixelAvatar } from "@/components/avatar/PixelAvatar";
@@ -18,7 +18,7 @@ import { statusProps, useSaveStatus, type SaveStatus } from "@/components/ui/sav
 import { useLearner } from "@/lib/learner-context";
 import { applyMotionToDocument, readMotionCookie, writeMotionCookie } from "@/lib/motion";
 import { sendJson } from "@/lib/send-json";
-import { MOTION_MODES, type MotionMode } from "@gnosia/tutor/preferences";
+import { MOTION_MODES, type MotionMode } from "@hermes/tutor/preferences";
 import type { SettingsSnapshot } from "@/lib/settings";
 
 /**
@@ -29,7 +29,7 @@ import type { SettingsSnapshot } from "@/lib/settings";
  * what happened beside it. The theme is `ThemeSwitch`, which goes through the
  * provider's `setThemeMode` and so also writes the cookie the layout reads.
  * Motion is applied the same way, at once and before the save lands: the
- * `gnosia-motion` cookie and `data-motion` on <html> (`@/lib/motion`).
+ * `hermes-motion` cookie and `data-motion` on <html> (`@/lib/motion`).
  */
 
 async function savePreference(key: string, value: unknown): Promise<string | null> {
@@ -77,7 +77,7 @@ export function GeneralSettings({ settings }: { settings: SettingsSnapshot }) {
   }, [storedMotion]);
   return (
     <Card title="Appearance">
-      <Field label="Theme" note="Classic is the original palette and Gnosia the brand's; each has a light and a dark. System follows your device.">
+      <Field label="Theme" note="Classic is the original palette and Hermes the brand's; each has a light and a dark. System follows your device.">
         {({ id, labelId }) => <ThemeSwitch id={id} labelledBy={labelId} />}
       </Field>
       <Field

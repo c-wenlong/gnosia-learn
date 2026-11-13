@@ -1,4 +1,4 @@
-import { tutorModelAddTurn, tutorModelMoveTurn, tutorModelRemoveTurn, tutorModelSetTurn } from "@gnosia/tutor/server/turns";
+import { tutorModelAddTurn, tutorModelMoveTurn, tutorModelRemoveTurn, tutorModelSetTurn } from "@hermes/tutor/server/turns";
 
 import { settingsRoute } from "@/lib/provider-keys/requests";
 import { CHAIN_WRITE_RATE_LIMIT } from "@/lib/tutor-models/requests";
@@ -23,7 +23,7 @@ export const runtime = "nodejs";
  * `STORE_UNAVAILABLE` (the chain, or on an add the saved keys, could not be
  * read). The same guards as the provider-key routes, under
  * their own rate-limit buckets. Each method is a turn in
- * `@gnosia/tutor/server/turns` (`tutorModelAddTurn` and the rest), key gate
+ * `@hermes/tutor/server/turns` (`tutorModelAddTurn` and the rest), key gate
  * included.
  */
 

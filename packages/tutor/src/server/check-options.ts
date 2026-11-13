@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { readCheckDistractors, writeCheckDistractor, type CatalogDatabase } from "@gnosia/catalog/state";
+import { readCheckDistractors, writeCheckDistractor, type CatalogDatabase } from "@hermes/catalog/state";
 
 import { CHECK_OPTIONS_VERSION } from "../check-options";
 import type { ConceptCheck } from "../concept-note-core";

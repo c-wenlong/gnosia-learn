@@ -947,7 +947,7 @@ describe("two health reads answering out of order (R2-1-18)", () => {
     mocks.readStudioHealth.mockImplementationOnce(() => new Promise((resolve) => (releaseOld = resolve)));
     mocks.readStudioHealth.mockImplementationOnce(async () => free);
     await mount(draft());
-    await act(async () => window.dispatchEvent(new Event("gnosia:byok-settings")));
+    await act(async () => window.dispatchEvent(new Event("hermes:byok-settings")));
     await settle();
     expect(mocks.composer!.sendDisabled).not.toBe(true);
     await act(async () => releaseOld(spent));
@@ -1129,7 +1129,7 @@ describe("a BYOK conversation's tiers (R2-1-02)", () => {
     await settle();
     expect(lite()).toMatchObject({ disabled: true });
     // A BYOK write elsewhere reads health again, and the settings after it.
-    await act(async () => window.dispatchEvent(new Event("gnosia:byok-settings")));
+    await act(async () => window.dispatchEvent(new Event("hermes:byok-settings")));
     await settle();
     expect(mocks.readStudioHealth.mock.calls.length).toBeGreaterThanOrEqual(2);
     expect(mocks.getByokSettings.mock.calls.length).toBeGreaterThanOrEqual(2);

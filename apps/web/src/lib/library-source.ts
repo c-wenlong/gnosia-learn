@@ -1,8 +1,8 @@
-import type { AssetConversation, AssetParents, AssetPlace } from "@gnosia/catalog/state";
+import type { AssetConversation, AssetParents, AssetPlace } from "@hermes/catalog/state";
 
-import { assignLayers, type GraphEdge } from "@gnosia/tutor/concept-graph";
+import { assignLayers, type GraphEdge } from "@hermes/tutor/concept-graph";
 import { conversationTitle } from "@/lib/conversation-title";
-import type { MasteryBucket } from "@gnosia/tutor/mastery-bucket";
+import type { MasteryBucket } from "@hermes/tutor/mastery-bucket";
 
 /**
  * The second line of a Library row: where the asset came from (L3 of

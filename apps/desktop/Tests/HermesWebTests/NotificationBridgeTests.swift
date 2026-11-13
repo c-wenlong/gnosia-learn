@@ -1,6 +1,6 @@
 //
 //  NotificationBridgeTests.swift
-//  GnosiaWebTests
+//  HermesWebTests
 //
 //  The page's `Notification` in the shell: what the shim posts, what the
 //  handler reads from it, and whose messages it answers.
@@ -9,7 +9,7 @@
 import JavaScriptCore
 import UserNotifications
 import XCTest
-@testable import GnosiaWeb
+@testable import HermesWeb
 
 final class NotificationBridgeTests: XCTestCase {
     func testTheHandlerReadsOnlyTheThreeKinds() {
@@ -100,7 +100,7 @@ final class NotificationBridgeTests: XCTestCase {
         context.setObject(post, forKeyedSubscript: "post" as NSString)
         context.evaluateScript("""
             var window = globalThis;
-            window.webkit = { messageHandlers: { gnosiaNotification: { postMessage: post } } };
+            window.webkit = { messageHandlers: { hermesNotification: { postMessage: post } } };
             """)
         context.evaluateScript(notificationShimSource)
         XCTAssertNil(context.exception)
@@ -146,7 +146,7 @@ final class NotificationBridgeTests: XCTestCase {
         context.setObject(post, forKeyedSubscript: "post" as NSString)
         context.evaluateScript("""
             var window = globalThis;
-            window.webkit = { messageHandlers: { gnosiaNotification: { postMessage: post } } };
+            window.webkit = { messageHandlers: { hermesNotification: { postMessage: post } } };
             window.Notification = { native: true };
             """)
         context.evaluateScript(notificationShimSource)

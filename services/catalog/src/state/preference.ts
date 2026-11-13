@@ -1,4 +1,4 @@
-import { LOCAL_LEARNER_ID, preference } from "@gnosia/schema";
+import { LOCAL_LEARNER_ID, preference } from "@hermes/schema";
 import { and, eq, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";

@@ -5,7 +5,7 @@ import { mkdirSync } from "node:fs";
 import { AsyncLocalStorage } from "node:async_hooks";
 import path from "node:path";
 
-import { tables } from "@gnosia/schema";
+import { tables } from "@hermes/schema";
 
 import { copyOk, databasePath } from "./env";
 
@@ -91,7 +91,7 @@ export interface ConnectOptions {
 /**
  * The connection flags the guard functions read, one bundle per connect.
  *
- * Postgres carried them as GUCs (`gnosia.copy_ok`, `gnosia.revision_id`)
+ * Postgres carried them as GUCs (`hermes.copy_ok`, `hermes.revision_id`)
  * set per session and per transaction; a SQLite connection has no settings of
  * its own, so each connect registers scalar functions reading a JS closure
  * instead. The triggers calling them (`catalog_copy_ok()` in the copy guards,
@@ -362,7 +362,7 @@ export function databaseFile(db: CatalogDatabase): string {
 
 /**
  * What the write seam records before it touches a content table, as
- * `set_config('gnosia.revision_id', …)` recorded it on Postgres: the
+ * `set_config('hermes.revision_id', …)` recorded it on Postgres: the
  * revision this write is part of, which the armed `*_write_guard` triggers
  * demand be set. Per connection; `inTransaction` clears it when the
  * outermost transaction ends, the way a transaction-local setting vanished.

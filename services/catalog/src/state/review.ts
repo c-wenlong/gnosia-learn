@@ -6,7 +6,7 @@ import {
   readableOwners,
   review,
   SCHEDULE_LIMITS,
-} from "@gnosia/schema";
+} from "@hermes/schema";
 import { and, asc, eq, gt, inArray, lte, notInArray, sql } from "drizzle-orm";
 
 import { ownedBy, readableFor, scopedRead } from "../content/scope";

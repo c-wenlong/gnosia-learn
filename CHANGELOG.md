@@ -88,6 +88,13 @@ This project is continuously deployed and not versioned; entries are grouped by 
 
 ### Changed
 
+- **The catalog's `asset.source_repo` check names `hermes`.** `0000` still
+  creates the table with `gnosia`, because that file is already applied.
+  [`0004_hermes_source.sql`](services/catalog/drizzle-sqlite/0004_hermes_source.sql)
+  rebuilds the table (SQLite will not drop a CHECK) and renames a `gnosia`
+  or `self-learn` row to `hermes`. The Postgres-to-SQLite port does the same
+  rename on the way in.
+
 - **The database is the only home of the content; `content/` and `learn/`
   are gone from the repository.** Phase 3 of
   [docs/CONTENT-MIGRATION.md](docs/CONTENT-MIGRATION.md) is the cut-over. The

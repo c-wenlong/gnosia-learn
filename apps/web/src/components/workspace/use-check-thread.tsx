@@ -16,7 +16,7 @@ import {
   type ChoiceAnswer,
   type ChoicePick,
   type RecallPick,
-} from "@gnosia/tutor/check-block";
+} from "@hermes/tutor/check-block";
 import {
   checkSource,
   newVerdict,
@@ -24,7 +24,7 @@ import {
   settleInterrupted,
   type TurnCheck,
   type Verdict,
-} from "@gnosia/tutor/tutor-check";
+} from "@hermes/tutor/tutor-check";
 
 import { ChoiceCheckCard } from "./ChoiceCheckCard";
 import { RecallCheckCard } from "./RecallCheckCard";

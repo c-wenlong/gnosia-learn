@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { MIN_SECRET_LENGTH } from "@gnosia/schema/shared";
+import { MIN_SECRET_LENGTH } from "@hermes/schema/shared";
 
 import { checkKeyShape, CURRENT_KEY_VERSION, openKey, sealKey, type Sealed } from "../src/server/seal";
 

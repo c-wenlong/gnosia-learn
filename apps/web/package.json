@@ -1,5 +1,5 @@
 {
-  "name": "@gnosia/web",
+  "name": "@hermes/web",
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
@@ -10,14 +10,14 @@
     "start": "next start",
     "typecheck": "next typegen && tsc --noEmit -p tsconfig.typecheck.json"
   },
-  "//dependencies": "@gnosia/catalog and @gnosia/schema were resolved through workspace hoisting before this file existed. They are declared now, because a workspace that imports a package without depending on it breaks the moment the hoist changes.",
+  "//dependencies": "@hermes/catalog and @hermes/schema were resolved through workspace hoisting before this file existed. They are declared now, because a workspace that imports a package without depending on it breaks the moment the hoist changes.",
   "dependencies": {
     "@dagrejs/dagre": "^3.1.3",
-    "@gnosia/blob": "*",
-    "@gnosia/catalog": "*",
-    "@gnosia/content": "*",
-    "@gnosia/schema": "*",
-    "@gnosia/tutor": "*",
+    "@hermes/blob": "*",
+    "@hermes/catalog": "*",
+    "@hermes/content": "*",
+    "@hermes/schema": "*",
+    "@hermes/tutor": "*",
     "@lexical/react": "0.52.0",
     "@lexical/utils": "0.52.0",
     "@tailwindcss/typography": "^0.5.20",

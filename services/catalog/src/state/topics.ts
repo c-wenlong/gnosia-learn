@@ -1,4 +1,4 @@
-import { type OwnerScope, topic } from "@gnosia/schema";
+import { type OwnerScope, topic } from "@hermes/schema";
 import { and, asc, inArray } from "drizzle-orm";
 
 import { ownedBy, scopedRead } from "../content/scope";

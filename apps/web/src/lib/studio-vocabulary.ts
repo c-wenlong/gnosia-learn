@@ -1,4 +1,4 @@
-import type { TopicEntry } from "@gnosia/content";
+import type { TopicEntry } from "@hermes/content";
 
 import type { FormatTime } from "@/lib/studio-chat";
 

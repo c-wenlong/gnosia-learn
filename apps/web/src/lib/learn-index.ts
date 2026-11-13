@@ -1,6 +1,6 @@
 import { dayDiff, weekdayName } from "@/lib/day-groups";
-import { dayKey } from "@gnosia/tutor/days";
-import { MASTERY_BUCKET_LABEL, type MasteryBucket } from "@gnosia/tutor/mastery-bucket";
+import { dayKey } from "@hermes/tutor/days";
+import { MASTERY_BUCKET_LABEL, type MasteryBucket } from "@hermes/tutor/mastery-bucket";
 
 /**
  * The Learn index's rows and the rules for filtering them, pure so they can be

@@ -10,7 +10,7 @@ in [DESIGN.md](../design/DESIGN.md), "Information architecture".
 
 ## The problem
 
-Gnosia is a chat that makes things, a view over the concepts you hold, and
+Hermes is a chat that makes things, a view over the concepts you hold, and
 courses that give them structure. The review queue at `/review` sat beside
 those as a fifth destination, and did not fit: it is Anki's loop (decision
 11 of [DESIGN.md](../design/DESIGN.md)), and Anki's loop is fed by cards,

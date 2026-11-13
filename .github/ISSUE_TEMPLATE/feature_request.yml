@@ -1,5 +1,5 @@
 name: Feature request
-description: Suggest an idea for gnosia
+description: Suggest an idea for hermes
 title: "[Feature]: "
 labels: ["enhancement"]
 body:
@@ -20,7 +20,7 @@ body:
     id: solution
     attributes:
       label: Proposed solution
-      description: How would you like gnosia to behave?
+      description: How would you like hermes to behave?
     validations:
       required: true
 

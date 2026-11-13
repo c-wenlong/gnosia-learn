@@ -1,4 +1,4 @@
-import { BLOB_KEY_PATTERN, BLOB_STORED_KINDS } from "@gnosia/schema";
+import { BLOB_KEY_PATTERN, BLOB_STORED_KINDS } from "@hermes/schema";
 import { sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
@@ -6,7 +6,7 @@ import type { CatalogDatabase } from "../db";
 /**
  * Phase 2's contract (docs/CONTENT-MIGRATION.md, "Contract migration";
  * migration 0013): every asset of a stored kind names its blob, and every
- * blob key is one `@gnosia/blob` makes. One pair of queries, read by three
+ * blob key is one `@hermes/blob` makes. One pair of queries, read by three
  * places so they cannot disagree about the distance: the migration's own
  * guard (the same predicates, in SQL), `catalog doctor`, and `catalog
  * migrate`, which holds the migration back while either list is not empty.
@@ -65,7 +65,7 @@ export function describeDistance(distance: BlobContractDistance): string | null 
     );
   }
   if (distance.unkeyed.length > 0) {
-    parts.push(`${distance.unkeyed.length} blob key(s) are not keys @gnosia/blob makes`);
+    parts.push(`${distance.unkeyed.length} blob key(s) are not keys @hermes/blob makes`);
   }
   return parts.length === 0 ? null : `${parts.join("; ")}. \`catalog doctor\` lists them.`;
 }

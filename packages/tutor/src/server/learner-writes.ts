@@ -20,7 +20,7 @@ import {
   writeDisplayName,
   writePreference,
   type CatalogDatabase,
-} from "@gnosia/catalog/state";
+} from "@hermes/catalog/state";
 import {
   ASSET_NAME_MAX,
   cleanAssetName,
@@ -28,7 +28,7 @@ import {
   DISPLAY_NAME_MAX,
   PREFERENCE_KEYS,
   type LastVisited,
-} from "@gnosia/schema/shared";
+} from "@hermes/schema/shared";
 
 import { isConfidence } from "../check-block";
 import { isConceptSlug } from "../concept-workspace-core";

@@ -1,6 +1,6 @@
 import type { FilterOption } from "@/components/ui/filter-menu";
 import { EMPTY_STANDING, itemDoneWith, percentOf, type ItemStanding } from "@/lib/course-path";
-import type { Course, TagMeta } from "@gnosia/content";
+import type { Course, TagMeta } from "@hermes/content";
 
 /**
  * What the Courses page needs of a course: the status each card prints, the

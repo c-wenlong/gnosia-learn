@@ -7,7 +7,7 @@
  * past, and each reporting at test time instead of at the line in the editor.
  * Here they read the syntax tree ESLint has already parsed, so a comment that
  * names a rule is never a hit and a string split over a `cx(...)` is read as
- * one. Every rule's cases are in gnosia.test.mjs.
+ * one. Every rule's cases are in hermes.test.mjs.
  *
  * Where a rule allows a file (the kit that draws the element, the module that
  * owns the question), eslint.config.mjs says so with a reason beside it, so the
@@ -1122,7 +1122,7 @@ const fieldText = {
 // ---------------------------------------------------------------------------
 
 const plugin = {
-  meta: { name: "gnosia" },
+  meta: { name: "hermes" },
   rules: {
     "kit-select": kitSelect,
     "kit-dialog": kitDialog,

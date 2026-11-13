@@ -38,11 +38,11 @@ import {
 } from "@/lib/library-groups";
 import { pageOf, type LibraryPage, type PageCursor, type StalePage } from "@/lib/library-pages";
 import { conceptOrder, latestConversation, orderedConcepts, rowSource } from "@/lib/library-source";
-import { bucketOf, type MasteryBucket } from "@gnosia/tutor/mastery-bucket";
+import { bucketOf, type MasteryBucket } from "@hermes/tutor/mastery-bucket";
 import { currentOwner } from "@/lib/owner";
-import { ownValue } from "@gnosia/tutor/own-key";
+import { ownValue } from "@hermes/tutor/own-key";
 import { rowMenuItems } from "@/lib/row-menu";
-import { appTimeZone } from "@gnosia/tutor/server/time-zone";
+import { appTimeZone } from "@hermes/tutor/server/time-zone";
 
 /** The Library's URL parameters, as a page or `URLSearchParams` hands them over. */
 export type LibraryParams = { [key: string]: string | string[] | undefined };

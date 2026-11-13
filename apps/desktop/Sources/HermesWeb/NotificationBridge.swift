@@ -1,6 +1,6 @@
 //
 //  NotificationBridge.swift
-//  GnosiaWeb
+//  HermesWeb
 //
 //  WKWebView has no `Notification`, so the studio's "your diagram is ready"
 //  never showed in the window (JobsProvider checks for one and skips). This
@@ -108,9 +108,9 @@ func originURL(protocol scheme: String, host: String, port: Int) -> URL? {
 
 @MainActor
 final class NotificationBridge: NSObject, WKScriptMessageHandlerWithReply, UNUserNotificationCenterDelegate {
-    nonisolated static let handlerName = "gnosiaNotification"
+    nonisolated static let handlerName = "hermesNotification"
     /// The page-side function the shim defines for a permission pushed at it.
-    nonisolated static let syncFunctionName = "__gnosiaNotificationSync"
+    nonisolated static let syncFunctionName = "__hermesNotificationSync"
     static let shared = NotificationBridge()
 
     /// The windows holding a page the shim may be in, so a permission
@@ -199,14 +199,14 @@ final class NotificationBridge: NSObject, WKScriptMessageHandlerWithReply, UNUse
             content.sound = .default
             // A second show on one tag replaces the first, as a browser's
             // `tag` does: two windows announcing one job stay one banner.
-            let identifier = tag.isEmpty ? UUID().uuidString : "gnosia.\(tag)"
+            let identifier = tag.isEmpty ? UUID().uuidString : "hermes.\(tag)"
             try? await center.add(UNNotificationRequest(identifier: identifier, content: content, trigger: nil))
             return (nil, nil)
         }
     }
 
     /// Shown while the app is active too: the page asks only when its window
-    /// is hidden or unfocused, which can be with another Gnosia window in
+    /// is hidden or unfocused, which can be with another Hermes window in
     /// front.
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter, willPresent notification: UNNotification
@@ -219,7 +219,7 @@ final class NotificationBridge: NSObject, WKScriptMessageHandlerWithReply, UNUse
 /// the shell). It keeps the permission it last heard, so `permission`
 /// reads synchronously as the web API's does, posts only `kind`, `title`,
 /// `body` and `tag`, and hears a pushed permission through
-/// `__gnosiaNotificationSync`.
+/// `__hermesNotificationSync`.
 let notificationShimSource = """
 (() => {
   if (typeof window.Notification !== "undefined") return;

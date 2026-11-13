@@ -15,9 +15,9 @@ import { redirectTo, sessionCookie, WRONG_PASSWORD_DELAY_MS } from "../shared";
 /**
  * `GET /api/auth/local`: how the desktop shell signs itself in.
  *
- * The shell mints a random `GNOSIA_LOCAL_TOKEN` for every server it spawns
+ * The shell mints a random `HERMES_LOCAL_TOKEN` for every server it spawns
  * and loads this route as the window's first request, with the token in the
- * `x-gnosia-local-token` header (never the URL, which `next dev` can log); a
+ * `x-hermes-local-token` header (never the URL, which `next dev` can log); a
  * matching token redeems the same session cookie the password earns. A
  * secret, not a flag: an environment where the variable was never set
  * refuses everyone. Next also loads `apps/web/.env.local` into the

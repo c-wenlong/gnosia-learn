@@ -1,6 +1,6 @@
 //
 //  FindBarTests.swift
-//  GnosiaWebTests
+//  HermesWebTests
 //
 //  Cmd+F: the JavaScript the bar runs in the page, and what `window.find`
 //  does with it in a real web view.
@@ -8,7 +8,7 @@
 
 import WebKit
 import XCTest
-@testable import GnosiaWeb
+@testable import HermesWeb
 
 final class FindBarTests: XCTestCase {
     /// The term lands in the script as a JavaScript string literal: a quote

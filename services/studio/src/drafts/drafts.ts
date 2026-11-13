@@ -10,7 +10,7 @@ import {
   canTransition,
   type DraftErrorKind,
   type DraftState,
-} from "@gnosia/schema/shared";
+} from "@hermes/schema/shared";
 
 import { BriefError, loadVocabulary, SLUG_PATTERN, validateBrief, type ValidBrief, type Vocabulary } from "../diagram/brief";
 import { byokEnv, byokStatus, resolveByok } from "../agent/byok";

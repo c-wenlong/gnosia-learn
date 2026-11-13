@@ -1,11 +1,11 @@
 //
 //  WebServer.swift
-//  GnosiaWeb
+//  HermesWeb
 //
 //  Owns the local Next server the window loads. `next dev` is the default
 //  so the app always serves the checkout's current code; `next start` is
 //  faster but silently serves whatever build happens to exist, so it is
-//  opt-in through GNOSIA_WEB_MODE=start. The process is exec'd inside a
+//  opt-in through HERMES_WEB_MODE=start. The process is exec'd inside a
 //  login shell so the owner's nvm/volta PATH reaches node and the PID we
 //  hold *is* the server (terminate() hits node, not a wrapper). Readiness
 //  is polled on the socket itself rather than parsed from stdout, so
@@ -38,12 +38,12 @@ final class WebServer {
     private(set) var status: Status = .off
 
     /// The token the window's first request carries in the
-    /// `x-gnosia-local-token` header, when the server is ours; nil for an
+    /// `x-hermes-local-token` header, when the server is ours; nil for an
     /// adopted dev server, where the owner signs in as usual.
     private(set) var launchToken: String?
 
     /// Minted per launch and handed to the spawned server as
-    /// GNOSIA_LOCAL_TOKEN; the window's first URL redeems it at
+    /// HERMES_LOCAL_TOKEN; the window's first URL redeems it at
     /// /api/auth/local for a real session cookie. Never written to disk —
     /// only the child process's environment carries it.
     private let localToken = UUID().uuidString + UUID().uuidString
@@ -76,7 +76,7 @@ final class WebServer {
         }
         status = .starting
         guard let root = Checkout.repoRoot() else {
-            status = .failed("No checkout found — set GNOSIA_REPO to the repository root.")
+            status = .failed("No checkout found — set HERMES_REPO to the repository root.")
             return
         }
         // Before any child: the read that lets macOS ask for the folder,
@@ -134,7 +134,7 @@ final class WebServer {
     nonisolated static let portRange = 49200 ... 59800
 
     /// Where the last spawned server's port is kept, for the next launch.
-    nonisolated static let lastPortKey = "GnosiaWebLastPort"
+    nonisolated static let lastPortKey = "HermesWebLastPort"
 
     /// The port an attempt asks Next for, as a pure rule: the first attempt
     /// takes the remembered port when it is in range and nothing holds it,
@@ -187,7 +187,7 @@ final class WebServer {
     ) -> AttemptVerdict {
         // The dev-singleton case: Next refused the port because the app
         // dir already has a server, and named where it lives. That
-        // server has no GNOSIA_LOCAL_TOKEN of ours, so the window opens
+        // server has no HERMES_LOCAL_TOKEN of ours, so the window opens
         // on the bare URL and the owner signs in once as usual.
         if let existing = existingServer(in: tail) { return .adopt(existing) }
         // Alive and silent for the whole wait: another port changes
@@ -208,7 +208,7 @@ final class WebServer {
     /// The failure text for a child that ran the whole wait and printed nothing.
     nonisolated static func silentMessage(root: URL, seconds: Int) -> String {
         "The web server is still running but silent after \(seconds) s; "
-            + "macOS may be blocking access to \(root.path). Allow Gnosia Web in "
+            + "macOS may be blocking access to \(root.path). Allow Hermes Web in "
             + "System Settings > Privacy & Security > Files and Folders, or move the checkout."
     }
 
@@ -237,10 +237,10 @@ final class WebServer {
         proc.arguments = shell.arguments
         proc.currentDirectoryURL = launch.directory
         // The shared child environment (Checkout.childEnv: the launchers'
-        // one resolver, with the catalog's file pinned). GNOSIA_LOCAL_TOKEN is the per-launch secret
+        // one resolver, with the catalog's file pinned). HERMES_LOCAL_TOKEN is the per-launch secret
         // /api/auth/local redeems for a session cookie.
         var env = Checkout.childEnv()
-        env["GNOSIA_LOCAL_TOKEN"] = localToken
+        env["HERMES_LOCAL_TOKEN"] = localToken
         proc.environment = env
         let err = Pipe()
         proc.standardError = err
@@ -280,9 +280,9 @@ final class WebServer {
     /// always serves the checkout's current code — `start` would silently
     /// run whatever `.next` build happens to be lying around, which is how
     /// a day-old build ships to the window with no hint anything is off.
-    /// GNOSIA_WEB_MODE=start opts into the fast path deliberately.
+    /// HERMES_WEB_MODE=start opts into the fast path deliberately.
     private static func mode() -> String {
-        let env = ProcessInfo.processInfo.environment["GNOSIA_WEB_MODE"]?
+        let env = ProcessInfo.processInfo.environment["HERMES_WEB_MODE"]?
             .trimmingCharacters(in: .whitespaces)
         if env == "dev" || env == "start" { return env! }
         return "dev"

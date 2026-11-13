@@ -3,7 +3,7 @@ import { homedir, userInfo } from "node:os";
 import path from "node:path";
 import { parseEnv } from "node:util";
 
-import { CATALOG_DB_ENV, databasePath, GNOSIA_HOME_ENV } from "../src/env";
+import { CATALOG_DB_ENV, databasePath, HERMES_HOME_ENV, LEGACY_GNOSIA_HOME_ENV } from "../src/env";
 import { ENV_FILE_ENV } from "./catalog-isolation";
 
 /**
@@ -48,7 +48,7 @@ function namedFile(value: string | undefined): string | null {
   }
 }
 
-/** `$GNOSIA_HOME/catalog.db` for a `GNOSIA_HOME` value, expanded as `gnosiaHome()` in src/env.ts expands it. */
+/** `$HERMES_HOME/catalog.db` for a `HERMES_HOME` value, expanded as `hermesHome()` in src/env.ts expands it. */
 function homeCatalog(value: string | undefined, home: string): string | null {
   const raw = value?.trim();
   if (!raw) return null;
@@ -90,7 +90,7 @@ function accountHome(): string | null {
  * Every catalog file this machine could mean, read from `before` (the
  * environment as the shell handed it over, taken before `isolateCatalog`):
  * the default under each home directory, and whatever `CATALOG_DB`,
- * `DATABASE_URL` and `GNOSIA_HOME` name in that environment, in
+ * `DATABASE_URL` and `HERMES_HOME` name in that environment, in
  * services/catalog/.env (or the file `CATALOG_ENV_FILE` named), in the data
  * home's `.env`, and in the web app's dotenv files. None of them is a file a
  * test made, so a test whose catalog resolves to one of them is stopped.
@@ -99,9 +99,11 @@ export function forbiddenCatalogs(before: NodeJS.ProcessEnv, repoRoot: string): 
   // os.homedir() reads $HOME, which a suite may point elsewhere; the account's
   // own home comes from the password database.
   const homes = [...new Set([homedir(), accountHome(), before.HOME].filter((h): h is string => !!h))];
-  const dataHomes = homes.map((home) => path.join(home, ".gnosia"));
-  const fromShell = before[GNOSIA_HOME_ENV]?.trim();
-  if (fromShell) dataHomes.push(fromShell === "~" || fromShell.startsWith("~/") ? path.join(homedir(), fromShell.slice(1)) : fromShell);
+  const dataHomes = homes.flatMap((home) => [path.join(home, ".hermes"), path.join(home, ".gnosia")]);
+  for (const variable of [HERMES_HOME_ENV, LEGACY_GNOSIA_HOME_ENV]) {
+    const fromShell = before[variable]?.trim();
+    if (fromShell) dataHomes.push(fromShell === "~" || fromShell.startsWith("~/") ? path.join(homedir(), fromShell.slice(1)) : fromShell);
+  }
 
   const sources: Array<Record<string, string | undefined>> = [before];
   const envFiles = [
@@ -121,7 +123,10 @@ export function forbiddenCatalogs(before: NodeJS.ProcessEnv, repoRoot: string): 
   for (const source of sources) {
     add(namedFile(source[CATALOG_DB_ENV]));
     add(namedFile(source.DATABASE_URL));
-    for (const home of homes) add(homeCatalog(source[GNOSIA_HOME_ENV], home));
+    for (const home of homes) {
+      add(homeCatalog(source[HERMES_HOME_ENV], home));
+      add(homeCatalog(source[LEGACY_GNOSIA_HOME_ENV], home));
+    }
   }
   return forbidden;
 }

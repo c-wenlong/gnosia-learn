@@ -8,7 +8,7 @@ import type {
   NewAssetTopic,
   NewConcept,
   NewConceptPrerequisite,
-} from "@gnosia/schema";
+} from "@hermes/schema";
 
 import { IndexError, IndexErrors } from "./errors";
 import { directoriesIn, filesIn, relativeTo } from "./files";
@@ -161,7 +161,7 @@ export const conceptsIndexer: Indexer = {
         contentHash,
         bytes,
         title: note.title,
-        sourceRepo: "gnosia",
+        sourceRepo: "hermes",
       });
       assetConcepts.push({ assetId: id, conceptSlug: slug });
       assetTopics.push({ assetId: id, topicSlug });
