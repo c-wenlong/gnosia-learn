@@ -8,7 +8,7 @@ import {
   type MirrorComparison,
   type MirrorStatus,
   type NewMirror,
-} from "@gnosia/schema";
+} from "@hermes/schema";
 
 import { IndexError } from "./errors";
 import { manimkcCliPath, missingCli } from "./manimkc";

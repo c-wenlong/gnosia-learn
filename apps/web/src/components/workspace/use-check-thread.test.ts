@@ -9,7 +9,7 @@ vi.mock("@/components/Math", async () => {
   return { MathText: ({ text }: { text: string }) => h("span", null, text) };
 });
 
-import { newVerdict, type Verdict } from "@gnosia/tutor/tutor-check";
+import { newVerdict, type Verdict } from "@hermes/tutor/tutor-check";
 
 import { CheckCard, CheckRow, slotPlan, useCheckThread, type CheckItem, type SlotOptions } from "./use-check-thread";
 

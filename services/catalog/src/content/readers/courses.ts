@@ -7,7 +7,7 @@ import {
   type Resource,
   type ResourceType,
   type Topic,
-} from "@gnosia/content";
+} from "@hermes/content";
 import { sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../../db";

@@ -3,7 +3,10 @@ import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const cgroupMock = vi.hoisted(() => ({ reclaimCgroupFileCache: vi.fn(async () => false) }));
+vi.mock("../src/cgroup", () => cgroupMock);
 
 import { assembleManual } from "../src/manual/assemble";
 import { STATIC_LINT_NAMES } from "../src/manual/lints";
@@ -379,6 +382,7 @@ describe("the background snippet check (M3)", () => {
     checks = 0;
     behaviour = "clean";
     logged = [];
+    cgroupMock.reclaimCgroupFileCache.mockClear();
     source = new ManualSource({
       api: async () => result(output),
       checkSnippets: true,
@@ -471,6 +475,7 @@ describe("the background snippet check (M3)", () => {
     expect(checks).toBe(1);
     expect(source.status()).toMatchObject({ state: "ok", snippets: null, snippetsPending: true });
     expect(source.status().reasons).toEqual([]);
+    expect(cgroupMock.reclaimCgroupFileCache).not.toHaveBeenCalled();
     // Still busy: nothing runs.
     await source.tick();
     expect(checks).toBe(1);
@@ -480,6 +485,52 @@ describe("the background snippet check (M3)", () => {
     await source.tick();
     expect(checks).toBe(2);
     expect(source.status()).toMatchObject({ state: "ok", snippets: clean, snippetsPending: false });
+    expect(cgroupMock.reclaimCgroupFileCache).toHaveBeenCalledTimes(1);
+  });
+
+  it("reuses the cached passing snippet check across a restart when the manual hash is unchanged", async () => {
+    await source.refresh();
+    await source.tick();
+    expect(checks).toBe(1);
+    expect(source.status()).toMatchObject({ state: "ok", snippets: clean, snippetsPending: false });
+
+    const output = await readFile(FIXTURE, "utf8");
+    let restartedChecks = 0;
+    const restarted = new ManualSource({
+      api: async () => result(output),
+      checkSnippets: true,
+      isIdle: () => true,
+      doctorOk: async () => true,
+      runCheck: async () => {
+        restartedChecks += 1;
+        return clean;
+      },
+    });
+    await restarted.refresh();
+    await restarted.tick();
+    expect(restartedChecks).toBe(0);
+    expect(restarted.status()).toMatchObject({ state: "ok", snippets: clean, snippetsPending: false });
+    await restarted.drain();
+
+    // When the installed tool build changes (even with the same api --json
+    // text), a restart re-runs the snippet checks against the new build.
+    let rebuiltChecks = 0;
+    const rebuilt = new ManualSource({
+      api: async () => result(output),
+      buildFingerprint: async () => "new-tldrawkc-build-fingerprint",
+      checkSnippets: true,
+      isIdle: () => true,
+      doctorOk: async () => true,
+      runCheck: async () => {
+        rebuiltChecks += 1;
+        return clean;
+      },
+    });
+    await rebuilt.refresh();
+    await rebuilt.tick();
+    expect(rebuiltChecks).toBe(1);
+    expect(rebuilt.status()).toMatchObject({ state: "ok", snippets: clean, snippetsPending: false });
+    await rebuilt.drain();
   });
 });
 

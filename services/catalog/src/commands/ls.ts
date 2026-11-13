@@ -8,7 +8,7 @@ import {
   curriculumItem,
   curriculumItemTopic,
   topic,
-} from "@gnosia/schema";
+} from "@hermes/schema";
 import { and, asc, count, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 
 import { withDatabase } from "../db";

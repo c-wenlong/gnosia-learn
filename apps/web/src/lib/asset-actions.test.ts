@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ASSET_NAME_MAX } from "@gnosia/schema/shared";
+import { ASSET_NAME_MAX, cleanAssetName } from "@hermes/schema/shared";
 
 import { checkAssetName, markWatched, renameAsset, setFavorite } from "./asset-actions";
 
@@ -66,12 +66,33 @@ describe("renameAsset", () => {
   });
 });
 
+describe("cleanAssetName", () => {
+  it("trims the ends, folds inner whitespace runs to one space, and answers null when nothing is left", () => {
+    expect(cleanAssetName("  TLB \t notes\n")).toBe("TLB notes");
+    expect(cleanAssetName("a\n\nb")).toBe("a b");
+    expect(cleanAssetName("   ")).toBeNull();
+    expect(cleanAssetName("")).toBeNull();
+    expect(cleanAssetName(null)).toBeNull();
+    expect(cleanAssetName(7)).toBeNull();
+  });
+});
+
 describe("checkAssetName", () => {
   it("cleans a name, takes an empty one as none, and refuses one past the limit before sending", () => {
-    expect(checkAssetName("  TLB  notes ")).toEqual({ ok: true, value: expect.any(String) });
+    expect(checkAssetName("  TLB  notes ")).toEqual({ ok: true, value: "TLB notes" });
     expect(checkAssetName("   ")).toEqual({ ok: true, value: null });
     expect(checkAssetName(null)).toEqual({ ok: true, value: null });
     expect(checkAssetName("x".repeat(ASSET_NAME_MAX + 1))).toEqual({ ok: false, message: `At most ${ASSET_NAME_MAX} characters.` });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("takes a name of exactly the limit, and one only over it before cleaning", () => {
+    expect(checkAssetName("x".repeat(ASSET_NAME_MAX))).toEqual({ ok: true, value: "x".repeat(ASSET_NAME_MAX) });
+    expect(checkAssetName(`  ${"x".repeat(ASSET_NAME_MAX)}\n\n`)).toEqual({ ok: true, value: "x".repeat(ASSET_NAME_MAX) });
+    // Cleaning folds the run first: still over once it is one space.
+    expect(checkAssetName(`${"x".repeat(ASSET_NAME_MAX - 1)}   y`)).toEqual({
+      ok: false,
+      message: `At most ${ASSET_NAME_MAX} characters.`,
+    });
   });
 });

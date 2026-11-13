@@ -1,4 +1,4 @@
-import type { IndexSource } from "@gnosia/schema";
+import type { IndexSource } from "@hermes/schema";
 
 import path from "node:path";
 

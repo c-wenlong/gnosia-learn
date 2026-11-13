@@ -13,17 +13,17 @@ import {
   type RecentDraft,
   type RecentSession,
   type KbConcept,
-} from "@gnosia/catalog/state";
+} from "@hermes/catalog/state";
 
 import { getCourses } from "@/data/courses";
 import { getTopics } from "@/data/topics";
 import { ContentUnavailableError } from "@/data/source";
-import { findTopicAcrossCourses } from "@gnosia/tutor/lookup";
-import type { Course } from "@gnosia/content";
-import { moduleNumber } from "@gnosia/content/module-number";
+import { findTopicAcrossCourses } from "@hermes/tutor/lookup";
+import type { Course } from "@hermes/content";
+import { moduleNumber } from "@hermes/content/module-number";
 import { conceptsByItem, continueHref, conceptsForTopic, itemDoneWith, itemStanding, resolveTopicMastery } from "@/lib/course-path";
 import { activeOnly } from "@/lib/course-summary";
-import { dayKey } from "@gnosia/tutor/days";
+import { dayKey } from "@hermes/tutor/days";
 import {
   coursesInProgress,
   homeThreads,
@@ -39,7 +39,7 @@ import { catalogDatabase } from "@/lib/learner-store";
 import { currentOwner, ownerScope } from "@/lib/owner";
 import { recentSources } from "@/lib/recent";
 import { studioEnabled } from "@/lib/studio";
-import { appTimeZone } from "@gnosia/tutor/server/time-zone";
+import { appTimeZone } from "@hermes/tutor/server/time-zone";
 
 /**
  * Everything Home shows, read in one pass (docs/proposals/home-page.md).

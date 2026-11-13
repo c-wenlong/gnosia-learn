@@ -1,12 +1,12 @@
 import "server-only";
 
-import type { ProviderName } from "@gnosia/schema/shared";
+import type { ProviderName } from "@hermes/schema/shared";
 import {
   entryCredential as entryCredentialCore,
   keyTestCredential as keyTestCredentialCore,
   tutorCredentials as tutorCredentialsCore,
-} from "@gnosia/tutor/server/credentials";
-import type { ChainStep, ProviderCredential } from "@gnosia/tutor/providers";
+} from "@hermes/tutor/server/credentials";
+import type { ChainStep, ProviderCredential } from "@hermes/tutor/providers";
 
 import { catalogDatabase } from "@/lib/learner-store";
 
@@ -14,7 +14,7 @@ type Env = Record<string, string | undefined>;
 
 /**
  * The owner's provider credentials (docs/BYOK.md, docs/TUTOR-MODELS.md). The
- * resolution itself lives in `@gnosia/tutor/server/credentials`; this file
+ * resolution itself lives in `@hermes/tutor/server/credentials`; this file
  * hands it this app's pool.
  */
 

@@ -21,7 +21,7 @@ describe("scripts/flip-rehearsal.mjs --real refuses", () => {
   });
 
   it("without --checkout", async () => {
-    const ran = await rehearse(["--real", "--database", "gnosia_no_such_database"]);
+    const ran = await rehearse(["--real", "--database", "hermes_no_such_database"]);
     expect(ran.code).toBe(2);
     expect(ran.stderr).toContain("--real needs --checkout <dir>");
   });
@@ -31,7 +31,7 @@ describe("scripts/flip-rehearsal.mjs --real refuses", () => {
     // owner's untracked files and prune their rows.
     const elsewhere = await mkdtemp(path.join(tmpdir(), "flip-rehearsal-elsewhere-"));
     try {
-      const ran = await rehearse(["--real", "--database", "gnosia_no_such_database", "--checkout", elsewhere]);
+      const ran = await rehearse(["--real", "--database", "hermes_no_such_database", "--checkout", elsewhere]);
       expect(ran.code).toBe(2);
       expect(ran.stderr).toContain("is not the checkout this script is in");
       expect(ran.stdout).toBe("");
@@ -41,21 +41,21 @@ describe("scripts/flip-rehearsal.mjs --real refuses", () => {
   });
 
   it("with a rehearsal's own options", async () => {
-    const ran = await rehearse(["--real", "--database", "gnosia", "--keep"]);
+    const ran = await rehearse(["--real", "--database", "hermes", "--keep"]);
     expect(ran.code).toBe(2);
     expect(ran.stderr).toContain("--keep belong to a rehearsal");
   });
 
   it("without a terminal to type the name on, before it touches anything", async () => {
     // stdin is not a TTY here, as for any agent or script: there is no --yes.
-    const ran = await rehearse(["--real", "--database", "gnosia_no_such_database", "--checkout", REPO_ROOT]);
+    const ran = await rehearse(["--real", "--database", "hermes_no_such_database", "--checkout", REPO_ROOT]);
     expect(ran.code).toBe(2);
     expect(ran.stderr).toContain("typed on a terminal");
     expect(ran.stdout).toBe("");
   });
 
   it("--database without --real", async () => {
-    const ran = await rehearse(["--database", "gnosia"]);
+    const ran = await rehearse(["--database", "hermes"]);
     expect(ran.code).toBe(2);
     expect(ran.stderr).toContain("--database goes with --real");
   });
@@ -77,7 +77,7 @@ describe("scripts/flip-rehearsal.mjs --real refuses", () => {
     try {
       for (const args of [
         ["--cutover", "--checkout", elsewhere, "--waive-reason", "because"],
-        ["--real", "--cutover", "--database", "gnosia_no_such_database", "--checkout", elsewhere],
+        ["--real", "--cutover", "--database", "hermes_no_such_database", "--checkout", elsewhere],
       ]) {
         const ran = await rehearse(args);
         expect(ran.code).toBe(2);
@@ -95,20 +95,20 @@ describe("scripts/flip-rehearsal.mjs --real refuses", () => {
     const store = await rehearse(["--cutover", "--blob-store", "/nowhere"]);
     expect(store.code).toBe(2);
     expect(store.stderr).toContain("--blob-store goes with --cutover --checkout");
-    const real = await rehearse(["--real", "--cutover", "--database", "gnosia_no_such_database", "--checkout", REPO_ROOT, "--blob-store", "/nowhere"]);
+    const real = await rehearse(["--real", "--cutover", "--database", "hermes_no_such_database", "--checkout", REPO_ROOT, "--blob-store", "/nowhere"]);
     expect(real.code).toBe(2);
     expect(real.stderr).toContain("--blob-store belong to a rehearsal");
   });
 
   it("--cutover without a terminal, before it touches anything", async () => {
-    const ran = await rehearse(["--real", "--cutover", "--database", "gnosia_no_such_database", "--checkout", REPO_ROOT]);
+    const ran = await rehearse(["--real", "--cutover", "--database", "hermes_no_such_database", "--checkout", REPO_ROOT]);
     expect(ran.code).toBe(2);
     expect(ran.stderr).toContain("typed on a terminal");
     expect(ran.stdout).toBe("");
   });
 
   it("--cutover with --waive-reason: a real waiver's reason is typed, not passed", async () => {
-    const ran = await rehearse(["--real", "--cutover", "--database", "gnosia", "--waive-reason", "because"]);
+    const ran = await rehearse(["--real", "--cutover", "--database", "hermes", "--waive-reason", "because"]);
     expect(ran.code).toBe(2);
     expect(ran.stderr).toContain("asks for the waiver's reason on the terminal");
   });

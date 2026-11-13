@@ -1,4 +1,4 @@
-import type { JobState } from "@gnosia/schema/shared";
+import type { JobState } from "@hermes/schema/shared";
 
 import { failureReport, isActive, jobKindOf, jobShotHref, PHASES, type Job } from "@/lib/studio-jobs";
 import { isVideoJob, videoFailureLine, videoHeadline, type VideoJob } from "@/lib/studio-video-job";

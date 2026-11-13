@@ -1,5 +1,5 @@
+import { dataHome } from "@hermes/blob";
 import { existsSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseEnv } from "node:util";
@@ -11,14 +11,14 @@ import { parseEnv } from "node:util";
  * Saved provider keys are sealed under `AUTH_SECRET` (docs/BYOK.md), and
  * every process that opens them must use the secret the web sealed them
  * with. The web gets its environment from two files no other process reads
- * on its own: `$GNOSIA_HOME/.env`, and `apps/web/.env.local` and its
+ * on its own: `$HERMES_HOME/.env`, and `apps/web/.env.local` and its
  * siblings, which Next loads itself. A studio runner started without them
  * reads every saved key as unreadable, or opens a different catalog file.
  *
  * The order is the web's in the desktop shell, highest first:
  *
  * 1. the process's own environment (what the shell exported);
- * 2. `$GNOSIA_HOME/.env` (default `~/.gnosia/.env`);
+ * 2. `$HERMES_HOME/.env` (default `~/.hermes/.env`);
  * 3. the app's `.env` files, read by Next's own loader (`@next/env`) in
  *    development mode, as `scripts/lib/dev-env.mjs` reads them for
  *    `npm run dev:up`, so a quoted value, a comment or a `$VAR` reads as it
@@ -59,10 +59,9 @@ export function catalogPathFrom(appDir: string, raw: string): string {
   return resolve(appDir, value);
 }
 
-/** The data home's `.env`: `$GNOSIA_HOME/.env`, or `~/.gnosia/.env`. */
+/** The data home's `.env`: `$HERMES_HOME/.env` (`$HERMES_HOME` still works). */
 export function dataHomeEnvFile(env: Record<string, string | undefined>): string {
-  const home = env.GNOSIA_HOME?.trim();
-  return join(home ? home : join(homedir(), ".gnosia"), ".env");
+  return join(dataHome(env), ".env");
 }
 
 /** KEY=VALUE pairs of a dotenv file, or none when it cannot be read. */
@@ -76,14 +75,14 @@ export function readEnvFile(file: string): Record<string, string> {
 }
 
 /**
- * How the desktop shell runs the web: `GNOSIA_WEB_MODE`, `dev` unless it
+ * How the desktop shell runs the web: `HERMES_WEB_MODE`, `dev` unless it
  * says `start` (WebServer.mode in apps/desktop). Next reads
  * `.env.production*` under `next start` and `.env.development*` under
  * `next dev`, and a value this environment hands the server wins over its
  * files, so the files read here must be the ones that mode reads.
  */
 export function webMode(env: Record<string, string | undefined>): "dev" | "start" {
-  return env.GNOSIA_WEB_MODE?.trim() === "start" ? "start" : "dev";
+  return env.HERMES_WEB_MODE?.trim() === "start" ? "start" : "dev";
 }
 
 interface NextEnv {
@@ -140,7 +139,7 @@ export async function loadWebEnv({
  * home's `.env` or the web app's `.env.local` count.
  */
 export async function pinCatalogFile(): Promise<string | null> {
-  const { databasePath } = await import("@gnosia/catalog/state");
+  const { databasePath } = await import("@hermes/catalog/state");
   let file: string | null = null;
   try {
     file = databasePath();
@@ -149,7 +148,7 @@ export async function pinCatalogFile(): Promise<string | null> {
   }
   // The catalog's own dotenv read has filled process.env by now, and it
   // stays: the catalog reads that file once per process, so a later
-  // `blobRoot()` here needs its `GNOSIA_HOME` still in place.
+  // `blobRoot()` here needs its `HERMES_HOME` still in place.
   if (file !== null) process.env.CATALOG_DB = file;
   return file;
 }

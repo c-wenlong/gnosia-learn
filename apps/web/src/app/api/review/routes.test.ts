@@ -1,18 +1,31 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { concept, learner } from "@hermes/schema";
+
 import {
   clearTables,
   migratedScratchDatabase,
   probe,
   type Scratch,
 } from "../../../../../../services/catalog/test/scratch-database";
-import { seedContent } from "../../../../../../services/catalog/test/state-fixture";
+import { seedContent, TOPIC_SLUG } from "../../../../../../services/catalog/test/state-fixture";
 
-// A signed-in request, so the owner seam (`@/lib/owner`) resolves `local`.
+// A signed-in request, so the owner seam (`@/lib/owner`) resolves `local`;
+// a test that wants a signed-out one says so once.
+const signedIn = vi.hoisted(() => ({ value: true }));
 vi.mock("@/lib/auth/session", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth/session")>()),
-  isSignedIn: async () => true,
+  isSignedIn: async () => signedIn.value,
 }));
+// The database seam, real unless a test breaks it, for the unreachable answer.
+const store = vi.hoisted(() => ({ broken: false }));
+vi.mock("@/lib/learner-store", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/learner-store")>();
+  return {
+    ...real,
+    catalogDatabase: async () => (store.broken ? Promise.reject(new Error("database unavailable")) : real.catalogDatabase()),
+  };
+});
 
 /**
  * `GET /api/review/due` and `POST /api/review/grade`, against a scratch
@@ -41,16 +54,32 @@ describe.skipIf(!reachable.ok)("review API routes", () => {
   let scratch: Scratch;
   let grade: (req: Request) => Promise<Response>;
   let due: (req: Request) => Promise<Response>;
-  let state: typeof import("@gnosia/catalog/state");
+  let state: typeof import("@hermes/catalog/state");
+
+  let previousDatabaseUrl: string | undefined;
 
   beforeAll(async () => {
     scratch = await migratedScratchDatabase();
     await seedContent(scratch.db);
+    // Another owner's concept under the fixture's own topic, so only its
+    // `owner_id` keeps it out of `local`'s graph.
+    await scratch.db.insert(learner).values({ id: "someone-else" }).onConflictDoNothing();
+    await scratch.db
+      .insert(concept)
+      .values({
+        slug: "their-concept",
+        title: "Their concept",
+        topicSlug: TOPIC_SLUG,
+        path: "learn/concepts/fixtures/their-concept.md",
+        ownerId: "someone-else",
+      })
+      .onConflictDoNothing();
+    previousDatabaseUrl = process.env.DATABASE_URL;
     process.env.DATABASE_URL = scratch.url;
     const [gradeRoute, dueRoute, store] = await Promise.all([
       import("./grade/route"),
       import("./due/route"),
-      import("@gnosia/catalog/state"),
+      import("@hermes/catalog/state"),
     ]);
     grade = gradeRoute.POST;
     due = dueRoute.GET;
@@ -58,10 +87,14 @@ describe.skipIf(!reachable.ok)("review API routes", () => {
   }, 60_000);
 
   afterAll(async () => {
+    if (previousDatabaseUrl === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = previousDatabaseUrl;
     await scratch?.drop();
   });
 
   beforeEach(async () => {
+    signedIn.value = true;
+    store.broken = false;
     await clearTables(scratch.db, ["event", "mastery", "review"]);
   });
 
@@ -69,6 +102,24 @@ describe.skipIf(!reachable.ok)("review API routes", () => {
     const response = await grade(post(body, origin));
     return { status: response.status, body: (await response.json()) as Record<string, unknown> };
   };
+
+  it("answers a request with no session with a 401, and writes nothing", async () => {
+    signedIn.value = false;
+    const list = await due(new Request(`${ORIGIN}/api/review/due`));
+    expect(list.status).toBe(401);
+    const { status, body } = await send({ conceptId: "alpha", grade: 2 });
+    expect(status).toBe(401);
+    expect(body.error).toBe("UNAUTHENTICATED");
+    expect(await state.readEvents(scratch.db)).toEqual([]);
+  });
+
+  it("refuses a grade on another owner's concept as though it were not there", async () => {
+    // `assertReadableConcepts` reads under the grader's owner: a grade that
+    // dropped the scope would find `their-concept` and write `local`'s card.
+    const { status } = await send({ conceptId: "their-concept", grade: 2 });
+    expect(status).toBe(400);
+    expect(await state.readEvents(scratch.db)).toEqual([]);
+  });
 
   it("refuses a grade from another origin, or with no origin at all", async () => {
     expect((await send({ conceptId: "alpha", grade: 2 }, "https://evil.example")).status).toBe(403);
@@ -150,6 +201,18 @@ describe.skipIf(!reachable.ok)("review API routes", () => {
     // then schedule.mjs's deterministic fuzz of up to a day either way. The
     // fuzz can put Hard past Good, and the buttons show it as it will be.
     expect(body.items[1]?.intervals).toEqual([1, 15, 14, 16]);
+  });
+
+  it("answers the due list the page renders when the catalog cannot be read", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    store.broken = true;
+    try {
+      const response = await due(new Request(`${ORIGIN}/api/review/due`));
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ ok: true, reachable: false, items: [], nextDue: null });
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it("cuts a long queue at the session's limit and says more are due", async () => {

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 
-import { asset, assetDerivation, blobObject } from "@gnosia/schema";
+import { asset, assetDerivation, blobObject } from "@hermes/schema";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -37,7 +37,7 @@ import { storedBlob } from "./stored-blob";
 /**
  * Phase 2's contract migration, 0013 (docs/CONTENT-MIGRATION.md, "Contract
  * migration"): a video, sidecar, poster or diagram SVG names its blob, and a
- * blob key is one `@gnosia/blob` makes.
+ * blob key is one `@hermes/blob` makes.
  *
  * The migration raises with every offending id rather than failing on the
  * constraint; `catalog doctor` lists the same rows; `catalog migrate` holds
@@ -183,7 +183,7 @@ describe.skip("the blob contract, 0013" /* SQLite ships one foundation migration
       () => null,
       (error: unknown) => error,
     );
-    expect(sqlMessage(refused)).toMatch(new RegExp(`these keys are not keys @gnosia/blob makes: ${badKey}\\.`));
+    expect(sqlMessage(refused)).toMatch(new RegExp(`these keys are not keys @hermes/blob makes: ${badKey}\\.`));
   });
 
   it("applies once nothing stands in its way, and the constraints then hold", async () => {
@@ -201,7 +201,7 @@ describe.skip("the blob contract, 0013" /* SQLite ships one foundation migration
       );
     expect(sqlstate(unstored)).toBe(SQLSTATE.checkViolation);
     // A note, a log, a .tldr and a link are not stored kinds: a path, or a URL, still does.
-    await scratch.db.insert(asset).values({ id: "note:learn/concepts/x/a.md", kind: "note", path: "learn/concepts/x/a.md", sourceRepo: "gnosia" });
+    await scratch.db.insert(asset).values({ id: "note:learn/concepts/x/a.md", kind: "note", path: "learn/concepts/x/a.md", sourceRepo: "hermes" });
 
     for (const key of [badKey, `Local/${sha("case")}.mp4`, `local/${sha("long")}.${"x".repeat(17)}`]) {
       const refused = await scratch.db.execute(sql`

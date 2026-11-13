@@ -8,7 +8,7 @@ import {
   type ThemeAppearance,
   type ThemeMode,
   type ThemePalette,
-} from "@gnosia/schema/shared";
+} from "@hermes/schema/shared";
 
 import { writeCookie } from "@/lib/client-cookie";
 import { prefersReducedMotion } from "@/lib/motion";
@@ -36,10 +36,10 @@ export { appearanceOf, asThemeMode, paletteOf, THEME_APPEARANCES, THEME_PALETTES
  * cross-site should be setting it.
  *
  * **Six modes, two axes, two classes.** A mode is a palette (classic or
- * gnosia) and an appearance (light, dark or system); `paletteOf`,
+ * hermes) and an appearance (light, dark or system); `paletteOf`,
  * `appearanceOf` and `themeModeFor` in the schema convert. `<html>` carries
- * `gnosia` for the brand palette and `dark` for a dark appearance, both
- * together for Gnosia dark; classic light is the absence of both. A system
+ * `hermes` for the brand palette and `dark` for a dark appearance, both
+ * together for Hermes dark; classic light is the absence of both. A system
  * appearance is the one the server cannot resolve, since only the browser
  * knows `prefers-color-scheme`: the server renders it as light with
  * `data-theme` naming the mode, and `SYSTEM_THEME_SCRIPT`, inlined at the top
@@ -48,17 +48,19 @@ export { appearanceOf, asThemeMode, paletteOf, THEME_APPEARANCES, THEME_PALETTES
  * whenever the mode or the device setting changes.
  */
 
-export const THEME_COOKIE = "gnosia-theme";
+export const THEME_COOKIE = "hermes-theme";
 
 /** The same cookie as browsers named it before the rename; read as a fallback only. */
 export const LEGACY_THEME_COOKIE = "self-learn-theme";
+/** The cookie written between the self-learn and hermes names. Read as a fallback only. */
+export const GNOSIA_THEME_COOKIE = "gnosia-theme";
 
 /** A year. Long enough that it outlives the browser sessions that matter. */
 const THEME_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
 export const PALETTE_LABELS: Record<ThemePalette, string> = {
   classic: "Classic",
-  gnosia: "Gnosia",
+  hermes: "Hermes",
 };
 
 export const APPEARANCE_LABELS: Record<ThemeAppearance, string> = {
@@ -67,15 +69,15 @@ export const APPEARANCE_LABELS: Record<ThemeAppearance, string> = {
   system: "System",
 };
 
-export type ThemeClass = "gnosia" | "dark";
+export type ThemeClass = "hermes" | "dark";
 
 /**
  * The classes a mode puts on `<html>`, given what the device prefers:
- * `gnosia` for the brand palette, `dark` for a dark appearance, in that order.
+ * `hermes` for the brand palette, `dark` for a dark appearance, in that order.
  */
 export function themeClass(theme: ThemeMode, prefersDark: boolean): ThemeClass[] {
   const classes: ThemeClass[] = [];
-  if (paletteOf(theme) === "gnosia") classes.push("gnosia");
+  if (paletteOf(theme) === "hermes") classes.push("hermes");
   const appearance = appearanceOf(theme);
   if (appearance === "dark" || (appearance === "system" && prefersDark)) classes.push("dark");
   return classes;
@@ -84,12 +86,12 @@ export function themeClass(theme: ThemeMode, prefersDark: boolean): ThemeClass[]
 /**
  * Runs before the body paints. Reads the mode the server stamped on `<html>`
  * and adds `dark` when the mode is one of the two system modes and the device
- * is dark; `gnosia` and every fixed appearance were already resolved on the
+ * is dark; `hermes` and every fixed appearance were already resolved on the
  * server. Kept tiny and dependency free because it is a string, not a module,
  * so it names the two modes rather than importing `appearanceOf`.
  */
 export const SYSTEM_THEME_SCRIPT =
-  '(function(){try{var d=document.documentElement,t=d.dataset.theme;if((t==="system"||t==="gnosia-system")&&window.matchMedia("(prefers-color-scheme: dark)").matches)d.classList.add("dark")}catch(e){}})()';
+  '(function(){try{var d=document.documentElement,t=d.dataset.theme;if((t==="system"||t==="hermes-system")&&window.matchMedia("(prefers-color-scheme: dark)").matches)d.classList.add("dark")}catch(e){}})()';
 
 /** Set the classes on `<html>` for a mode, from the browser. */
 export function applyThemeToDocument(theme: ThemeMode): void {
@@ -99,7 +101,7 @@ export function applyThemeToDocument(theme: ThemeMode): void {
   const classes = themeClass(theme, prefersDark);
   const root = document.documentElement;
   root.classList.toggle("dark", classes.includes("dark"));
-  root.classList.toggle("gnosia", classes.includes("gnosia"));
+  root.classList.toggle("hermes", classes.includes("hermes"));
   root.dataset.theme = theme;
 }
 

@@ -10,14 +10,14 @@ import { FormRow } from "@/components/ui/FormRow";
 import { Input } from "@/components/ui/Input";
 import { useLearner } from "@/lib/learner-context";
 import { prefersReducedMotion } from "@/lib/motion";
-import type { Resource } from "@gnosia/content";
+import type { Resource } from "@hermes/content";
 
 import { Glyph } from "@/components/ui/Glyph";
 
 import { RESOURCE_GLYPH } from "./icons";
 import { resourceLink } from "./resource-link";
 import { ROW, ROW_HOVER, ROW_LIST, ROW_META, ROW_TITLE, STRETCHED } from "./rows";
-import { ownValue } from "@gnosia/tutor/own-key";
+import { ownValue } from "@hermes/tutor/own-key";
 import { ENTER } from "@/components/ui/motion";
 
 const TYPE_LABEL: Record<Resource["type"], string> = {

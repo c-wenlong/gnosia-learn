@@ -1,6 +1,6 @@
 import { formatCaps } from "./blob-audit";
 import { ownerCapsOrError, type OwnerCaps } from "../content/blob";
-import { catalogInstance, COMMONS_OWNER, contentSource } from "@gnosia/schema";
+import { catalogInstance, COMMONS_OWNER, contentSource } from "@hermes/schema";
 import { sql } from "drizzle-orm";
 
 import {

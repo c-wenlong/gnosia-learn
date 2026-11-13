@@ -1,7 +1,7 @@
 import path from "node:path";
 import type { Readable } from "node:stream";
 
-import { BlobError, BlobNotFoundError, BlobRangeError, type BlobRead } from "@gnosia/blob";
+import { BlobError, BlobNotFoundError, BlobRangeError, type BlobRead } from "@hermes/blob";
 import {
   assetBlobs,
   assetsByIds,
@@ -14,8 +14,8 @@ import {
   type AssetBlob,
   type AssetRef,
   type CatalogDatabase,
-} from "@gnosia/catalog/state";
-import type { ContentType } from "@gnosia/content";
+} from "@hermes/catalog/state";
+import type { ContentType } from "@hermes/content";
 
 import { isRenderSource, uploadCommand, type RouteProblemCode } from "../asset-problems";
 import { ContentUnavailableError } from "./content-source";

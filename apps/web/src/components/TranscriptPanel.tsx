@@ -5,7 +5,7 @@ import {
   activeCueIndex,
   transcriptCounter,
   type TranscriptCue,
-} from "@gnosia/tutor/media";
+} from "@hermes/tutor/media";
 import { cardClasses, cx } from "@/components/ui/classes";
 import { TextLink } from "@/components/ui/TextLink";
 import { TranscriptLine } from "@/components/TranscriptLine";

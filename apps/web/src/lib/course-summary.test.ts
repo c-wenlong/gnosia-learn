@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { itemDoneWith, pathStatus } from "@/lib/course-path";
-import type { Course, TagMeta } from "@gnosia/content";
+import type { Course, TagMeta } from "@hermes/content";
 
 import {
   activeOnly,

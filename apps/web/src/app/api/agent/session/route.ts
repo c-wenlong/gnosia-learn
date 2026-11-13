@@ -4,7 +4,7 @@ import { tutorDeps, turnResponse } from "@/lib/agent/env";
 import { CHAT_RATE_LIMIT, enforceRateLimit, enforceSameOrigin } from "@/lib/agent/guard";
 import { AGENT_BODY_LIMITS, readAgentBody } from "@/lib/agent/body";
 import { requestOwner } from "@/lib/learner-api";
-import { sessionQuestionTurn, validateSessionBody } from "@gnosia/tutor/server/turns";
+import { sessionQuestionTurn, validateSessionBody } from "@hermes/tutor/server/turns";
 
 export const runtime = "nodejs";
 
@@ -15,7 +15,7 @@ export const runtime = "nodejs";
  * workspace's own notes and checks shape it.
  *
  * The turn itself — the workspace read, the prompt, the model chain and the
- * parsed question — is `sessionQuestionTurn` in `@gnosia/tutor/server`.
+ * parsed question — is `sessionQuestionTurn` in `@hermes/tutor/server`.
  * This file keeps the request-side guards, and answers the turn's own
  * validation (`validateSessionBody`) before the limiter is touched.
  */

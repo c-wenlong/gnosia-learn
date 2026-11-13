@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { asset, learner } from "@hermes/schema";
+
 import {
   clearTables,
   migratedScratchDatabase,
@@ -11,6 +13,7 @@ import {
   seedAssets,
   seedContent,
 } from "../../../../../../../services/catalog/test/state-fixture";
+import { storedBlob } from "../../../../../../../services/catalog/test/stored-blob";
 
 // A signed-in request, so the owner seam (`@/lib/owner`) resolves `local`.
 vi.mock("@/lib/auth/session", async (importOriginal) => ({
@@ -41,18 +44,35 @@ function request(body: unknown, origin: string | null = ORIGIN): Request {
 describe.skipIf(!reachable.ok)("POST /api/learner/favorite", () => {
   let scratch: Scratch;
   let POST: (req: Request) => Promise<Response>;
-  let state: typeof import("@gnosia/catalog/state");
-  let favorite: typeof import("@gnosia/tutor/favorite");
+  let state: typeof import("@hermes/catalog/state");
+  let favorite: typeof import("@hermes/tutor/favorite");
+
+  let previousDatabaseUrl: string | undefined;
 
   beforeAll(async () => {
     scratch = await migratedScratchDatabase();
     await seedContent(scratch.db);
     await seedAssets(scratch.db);
+    // An asset of another owner's: the scope the turn looks it up under must
+    // not reach it.
+    await scratch.db.insert(learner).values({ id: "someone-else" }).onConflictDoNothing();
+    await scratch.db
+      .insert(asset)
+      .values({
+        id: "fx:theirs",
+        kind: "video",
+        path: "out/theirs/theirs.mp4",
+        sourceRepo: "manimkc",
+        ownerId: "someone-else",
+        blobKey: await storedBlob(scratch.db, "fx:theirs", "mp4"),
+      })
+      .onConflictDoNothing();
+    previousDatabaseUrl = process.env.DATABASE_URL;
     process.env.DATABASE_URL = scratch.url;
     const [route, loaded, lib] = await Promise.all([
       import("./route"),
-      import("@gnosia/catalog/state"),
-      import("@gnosia/tutor/favorite"),
+      import("@hermes/catalog/state"),
+      import("@hermes/tutor/favorite"),
     ]);
     POST = route.POST;
     state = loaded;
@@ -60,6 +80,8 @@ describe.skipIf(!reachable.ok)("POST /api/learner/favorite", () => {
   }, 60_000);
 
   afterAll(async () => {
+    if (previousDatabaseUrl === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = previousDatabaseUrl;
     await scratch?.drop();
   });
 
@@ -90,6 +112,15 @@ describe.skipIf(!reachable.ok)("POST /api/learner/favorite", () => {
   it("stars any kind of asset, not only a video", async () => {
     expect((await call({ assetId: ASSETS.diagram, favorite: true })).status).toBe(200);
     expect(await stored(ASSETS.diagram)).not.toBeNull();
+  });
+
+  it("refuses another owner's asset as though it were not there, storing nothing", async () => {
+    // `assetsByIds` reads under the request's owner scope: a star that
+    // dropped the scope would find `fx:theirs` and write it under `local`.
+    const answer = await call({ assetId: "fx:theirs", favorite: true });
+    expect(answer.status).toBe(400);
+    expect(answer.body.error).toMatch(/no asset/);
+    expect(await stored("fx:theirs")).toBeNull();
   });
 
   it("refuses an asset the catalog does not have, and a malformed body, storing nothing", async () => {

@@ -7,7 +7,7 @@ import {
   type KnowledgeInput,
   type KnowledgeSource,
   type TopicKnowledge,
-} from "@gnosia/schema";
+} from "@hermes/schema";
 import { and, eq, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
@@ -23,7 +23,7 @@ import { assertReadableItems, type WriteOptions } from "./progress";
  * column whatever wrote it, and as `clampSummary`/`clampKnowledgeList` on the
  * way in, so a long recap is trimmed and saved rather than refused with a
  * 23514 the learner reads as "save failed". Both come from the same constants
- * in `@gnosia/schema/shared`, so they cannot disagree.
+ * in `@hermes/schema/shared`, so they cannot disagree.
  */
 
 function asSource(value: unknown): KnowledgeSource {

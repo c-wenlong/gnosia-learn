@@ -17,7 +17,7 @@ import {
 } from "@/lib/theme-cookie";
 
 /**
- * The theme control: two segmented radio groups, Palette (Classic, Gnosia)
+ * The theme control: two segmented radio groups, Palette (Classic, Hermes)
  * and Appearance (Light, Dark, System), stacked under one label. It lives in
  * the avatar menu (small) and on the Settings page (regular); both write
  * through the provider's `setThemeMode`, which sets the classes on `<html>`,

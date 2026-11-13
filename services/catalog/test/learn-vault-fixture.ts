@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
-import { concept, contentRevision } from "@gnosia/schema";
+import { concept, contentRevision } from "@hermes/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, expect } from "vitest";
 
@@ -114,7 +114,7 @@ export function learnVault(): LearnVault {
   let scratch: Scratch;
   let fixture: Fixture;
   const vaults: string[] = [];
-  const savedHome = process.env["GNOSIA_HOME"];
+  const savedHome = process.env["HERMES_HOME"];
 
   function learn(...args: string[]): Promise<{ stdout: string; stderr: string; code: number }> {
     return execFileAsync(process.execPath, ["--import", "tsx", ENTRY, ...args], {
@@ -138,7 +138,7 @@ export function learnVault(): LearnVault {
     return { ...(JSON.parse(result.stdout) as PushReport), code: result.code };
   }
   async function newVault(): Promise<string> {
-    const dir = await mkdtemp(path.join(tmpdir(), "gnosia-vault-"));
+    const dir = await mkdtemp(path.join(tmpdir(), "hermes-vault-"));
     vaults.push(dir);
     return dir;
   }
@@ -160,7 +160,7 @@ export function learnVault(): LearnVault {
 
   beforeAll(async () => {
     // The blob store the SVGs are pulled from, for this process and the CLI it runs.
-    process.env["GNOSIA_HOME"] = await newVault();
+    process.env["HERMES_HOME"] = await newVault();
     scratch = await migratedScratchDatabase();
     fixture = await makeFixture();
     await fixture.write("content/topics.yaml", topicsYaml([{ slug: "alpha", concepts: ["alpha", "beta", "gamma", "delta"] }]));
@@ -191,8 +191,8 @@ export function learnVault(): LearnVault {
     await scratch?.drop();
     await fixture?.cleanup();
     for (const vault of vaults) await rm(vault, { recursive: true, force: true });
-    if (savedHome === undefined) delete process.env["GNOSIA_HOME"];
-    else process.env["GNOSIA_HOME"] = savedHome;
+    if (savedHome === undefined) delete process.env["HERMES_HOME"];
+    else process.env["HERMES_HOME"] = savedHome;
   });
 
   return {

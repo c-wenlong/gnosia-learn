@@ -1,9 +1,9 @@
 import "server-only";
 
 import { NextResponse } from "next/server";
-import { isProviderName, PROVIDER_IDS, type ProviderName } from "@gnosia/schema/shared";
-import type { TutorDeps } from "@gnosia/tutor/server/deps";
-import type { TurnReply } from "@gnosia/tutor/server/turns";
+import { isProviderName, PROVIDER_IDS, type ProviderName } from "@hermes/schema/shared";
+import type { TutorDeps } from "@hermes/tutor/server/deps";
+import type { TurnReply } from "@hermes/tutor/server/turns";
 
 import { enforceRateLimit, enforceSameOrigin, type RateLimitRule } from "@/lib/agent/guard";
 import { BodyTooLarge, learnerDeps, readBodyText, requestOwner } from "@/lib/learner-api";
@@ -78,7 +78,7 @@ export function readProvider(body: Record<string, unknown>): ProviderName | Next
 }
 
 /**
- * A Settings write answered by its turn in `@gnosia/tutor/server/turns`,
+ * A Settings write answered by its turn in `@hermes/tutor/server/turns`,
  * behind this file's guards: same origin,
  * the owner, the owner's rate limit under `scope`, then the body, read
  * within the 4 KB this file allows. So a fix to a write's rules lands once,

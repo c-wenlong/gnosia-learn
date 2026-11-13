@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { asset, assetDerivation, blobObject, LOCAL_LEARNER_ID, ownerScope } from "@gnosia/schema";
+import { asset, assetDerivation, blobObject, LOCAL_LEARNER_ID, ownerScope } from "@hermes/schema";
 
 import { runImportCommand } from "../../../../../../services/catalog/src/commands/index-command";
 import { documentBytes } from "../../../../../../services/catalog/src/content/diagram-document";
@@ -117,7 +117,7 @@ describe.skipIf(!reachable.ok)("asset routes on a flipped database", () => {
     });
 
   beforeAll(async () => {
-    for (const key of ["DATABASE_URL", "GNOSIA_HOME", "MANIMKC_ROOT", "CONTENT_SOURCE"]) {
+    for (const key of ["DATABASE_URL", "HERMES_HOME", "MANIMKC_ROOT", "CONTENT_SOURCE"]) {
       saved[key] = process.env[key];
     }
     scratch = await createScratchDatabase();
@@ -127,7 +127,7 @@ describe.skipIf(!reachable.ok)("asset routes on a flipped database", () => {
     await applyMigrations(scratch.db, { folder: await withoutBlobContract() });
     home = await mkdtemp(path.join(tmpdir(), "asset-rows-"));
     process.env.DATABASE_URL = scratch.url;
-    process.env.GNOSIA_HOME = home;
+    process.env.HERMES_HOME = home;
     process.env.MANIMKC_ROOT = path.join(tmpdir(), "asset-rows-no-manimkc");
     delete process.env.CONTENT_SOURCE;
 
@@ -188,7 +188,7 @@ describe.skipIf(!reachable.ok)("asset routes on a flipped database", () => {
       contentHash: "0".repeat(64),
       bytes: 10,
       title: id,
-      sourceRepo: kind === "poster" ? "gnosia" : "manimkc",
+      sourceRepo: kind === "poster" ? "hermes" : "manimkc",
       blobKey,
     });
     await scratch.db.insert(asset).values([
@@ -205,6 +205,16 @@ describe.skipIf(!reachable.ok)("asset routes on a flipped database", () => {
     ]);
     await scratch.db.insert(assetDerivation).values({ assetId: `poster:${STORED_ID}`, sourceAssetId: STORED_ID });
     for (const type of ["concepts", "sessions", "diagrams"] as const) await flip(scratch.db, { type });
+
+    // A line committed to the note's row after the flip: the file, the search
+    // read and the page read all have to answer with it, and each test below
+    // runs on its own.
+    const base = await noteRevision(scratch.db, "base");
+    const current = (await dbSource(scratch.db, ownerScope(LOCAL_LEARNER_ID)).concept("base"))?.markdown ?? "";
+    await commitNoteText(scratch.db, "base", current.replace(/\n$/, "\n\nA line only the row has.\n"), {
+      base,
+      reason: "a test commit after the flip",
+    });
 
     ({ GET: FILE } = (await import("./[id]/file/route")) as { GET: Handler });
     ({ GET: STATUS } = (await import("./[id]/status/route")) as { GET: Handler });
@@ -223,13 +233,6 @@ describe.skipIf(!reachable.ok)("asset routes on a flipped database", () => {
   });
 
   it("serves a note as its row renders it, with a line committed after the flip", async () => {
-    const base = await noteRevision(scratch.db, "base");
-    const current = (await dbSource(scratch.db, ownerScope(LOCAL_LEARNER_ID)).concept("base"))?.markdown ?? "";
-    await commitNoteText(scratch.db, "base", current.replace(/\n$/, "\n\nA line only the row has.\n"), {
-      base,
-      reason: "a test commit after the flip",
-    });
-
     const response = await call(FILE, "file", NOTE_ID);
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("text/markdown; charset=utf-8");
@@ -384,7 +387,7 @@ describe.skipIf(!reachable.ok)("asset routes on a flipped database", () => {
       url: null,
       bytes: 1,
       title: null,
-      sourceRepo: kind === "note" ? "gnosia" : "manimkc",
+      sourceRepo: kind === "note" ? "hermes" : "manimkc",
       topics: [],
       createdAt: "",
       updatedAt: "",

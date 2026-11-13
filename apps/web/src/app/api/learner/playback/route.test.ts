@@ -1,5 +1,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { asset, learner } from "@hermes/schema";
+import { MAX_DURATION_SECONDS, MAX_RANGES, WATCHED_FRACTION } from "@hermes/tutor/playback";
+
 import {
   clearTables,
   migratedScratchDatabase,
@@ -11,6 +14,7 @@ import {
   seedAssets,
   seedContent,
 } from "../../../../../../../services/catalog/test/state-fixture";
+import { storedBlob } from "../../../../../../../services/catalog/test/stored-blob";
 
 // A signed-in request, so the owner seam (`@/lib/owner`) resolves `local`.
 vi.mock("@/lib/auth/session", async (importOriginal) => ({
@@ -41,19 +45,38 @@ function request(body: unknown, origin: string | null = ORIGIN): Request {
 describe.skipIf(!reachable.ok)("POST /api/learner/playback", () => {
   let scratch: Scratch;
   let POST: (req: Request) => Promise<Response>;
-  let state: typeof import("@gnosia/catalog/state");
+  let state: typeof import("@hermes/catalog/state");
+
+  let previousDatabaseUrl: string | undefined;
 
   beforeAll(async () => {
     scratch = await migratedScratchDatabase();
     await seedContent(scratch.db);
     await seedAssets(scratch.db);
+    // Another owner's video: the scope the turn looks it up under must not
+    // reach it.
+    await scratch.db.insert(learner).values({ id: "someone-else" }).onConflictDoNothing();
+    await scratch.db
+      .insert(asset)
+      .values({
+        id: "fx:theirs",
+        kind: "video",
+        path: "out/theirs/theirs.mp4",
+        sourceRepo: "manimkc",
+        ownerId: "someone-else",
+        blobKey: await storedBlob(scratch.db, "fx:theirs", "mp4"),
+      })
+      .onConflictDoNothing();
+    previousDatabaseUrl = process.env.DATABASE_URL;
     process.env.DATABASE_URL = scratch.url;
-    const [route, loaded] = await Promise.all([import("./route"), import("@gnosia/catalog/state")]);
+    const [route, loaded] = await Promise.all([import("./route"), import("@hermes/catalog/state")]);
     POST = route.POST;
     state = loaded;
   }, 60_000);
 
   afterAll(async () => {
+    if (previousDatabaseUrl === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = previousDatabaseUrl;
     await scratch?.drop();
   });
 
@@ -103,6 +126,38 @@ describe.skipIf(!reachable.ok)("POST /api/learner/playback", () => {
   it("does not count a scrub to the end as watching", async () => {
     await call({ assetId: ASSETS.video, position: 99, duration: 100, ranges: [[0, 3], [97, 99]] });
     expect(await state.readEvents(scratch.db)).toEqual([]);
+  });
+
+  it("counts a save whose coverage lands exactly on the threshold as watched", async () => {
+    const duration = 100;
+    const seen = WATCHED_FRACTION * duration;
+    const { status, body } = await call({ assetId: ASSETS.video, position: seen, duration, ranges: [[0, seen]] });
+    expect(status).toBe(200);
+    expect(body.result).toMatchObject({ coverage: WATCHED_FRACTION, crossed: true });
+    const events = await state.readEvents(scratch.db);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ type: "watched", asset: ASSETS.video });
+  });
+
+  it("refuses another owner's video as though it were not there, storing nothing", async () => {
+    // `assetsByIds` reads under the request's owner scope: a save that dropped
+    // the scope would find `fx:theirs` and write `local`'s progress onto it.
+    const { status, body } = await call({ assetId: "fx:theirs", position: 10, duration: 100, ranges: [[0, 10]] });
+    expect(status).toBe(400);
+    expect(body.error).toMatch(/no asset/);
+    expect(await state.readPreference(scratch.db, "playback:fx:theirs")).toBeUndefined();
+    expect(await state.readEvents(scratch.db)).toEqual([]);
+  });
+
+  it("refuses more ranges than a save may carry, and a position past the longest video", async () => {
+    const base = { assetId: ASSETS.video, position: 1, duration: 10 };
+    const many = Array.from({ length: MAX_RANGES + 1 }, (_, i) => [i, i + 1]);
+    expect((await call({ ...base, ranges: many })).status).toBe(400);
+    expect((await call({ ...base, ranges: many.slice(0, MAX_RANGES) })).status).toBe(200);
+    expect((await call({ ...base, position: MAX_DURATION_SECONDS + 1 })).status).toBe(400);
+    expect((await call({ ...base, position: MAX_DURATION_SECONDS })).status).toBe(200);
+    // Only the accepted saves wrote, under this owner's key.
+    expect(await state.readPreference(scratch.db, `playback:${ASSETS.video}`)).not.toBeUndefined();
   });
 
   it("refuses an asset that is not a video, and one no row has", async () => {

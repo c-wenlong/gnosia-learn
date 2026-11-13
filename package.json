@@ -1,10 +1,11 @@
 {
-  "name": "gnosia",
+  "name": "hermes",
   "version": "0.1.0",
   "private": true,
   "license": "MIT",
   "engines": {
-    "node": ">=22.22.2"
+    "node": ">=22.22.2",
+    "npm": ">=10"
   },
   "//workspaces": "apps/ is the deployable surfaces (today: the Next app), packages/ the libraries they share, services/ the long-lived processes and CLIs. tools/ is deliberately absent: manimkc, remotionkc, revideokc, blenderkc and tldrawkc are git submodules with their own repos, lockfiles and toolchains, and listing them here would make npm try to install them as part of this tree.",
   "workspaces": [
@@ -14,13 +15,15 @@
   ],
   "//scripts": "The web app's own scripts live in apps/web/package.json; the four below delegate to them so `npm run dev` from the repo root still does the obvious thing. lint, typecheck and test stay here because they span every workspace: one ESLint config and one vitest config cover the whole tree, and typecheck fans out through --workspaces.",
   "//canvas": "A launcher rather than `node tools/tldrawkc/dist/cli/index.js`, so this script and the diagram indexer resolve TLDRAWKC_ROOT through one function in services/catalog/src/env.ts. Shell expansion cannot: it reads only the process environment, so a root set in services/catalog/.env would reach the indexer and not this, and it leaves a leading ~ literal. The launcher forwards every argument and exits with the child's code, so exit 3 for `inspect` still means lints remain.",
+  "//worktree-setup": "The one command for a fresh clone or worktree: npm ci, a starter apps/web/.env.local, the submodule fetches it can reach, the tools/tldrawkc build, and a scratch catalog migrate as the sanity check. --with-video-env adds the video tools' environments, --skip-tldraw leaves the diagram tool out; --help has the rest.",
   "scripts": {
-    "dev": "npm run dev --workspace @gnosia/web",
+    "worktree-setup": "scripts/worktree-setup.sh",
+    "dev": "npm run dev --workspace @hermes/web",
     "dev:all": "npm run dev & DEV=$!; npm run studio & STUDIO=$!; while [ \"$(jobs -rp | wc -l)\" -ge 2 ]; do sleep 1; done; kill $(jobs -rp) 2>/dev/null; wait $DEV; DEV=$?; wait $STUDIO; STUDIO=$?; [ $DEV -eq 0 ] || exit $DEV; exit $STUDIO",
     "dev:up": "scripts/dev.sh start",
     "dev:down": "scripts/dev.sh stop",
-    "build": "npm run build --workspace @gnosia/web",
-    "start": "npm run start --workspace @gnosia/web",
+    "build": "npm run build --workspace @hermes/web",
+    "start": "npm run start --workspace @hermes/web",
     "lint": "eslint",
     "typecheck": "tsc --noEmit && npm run typecheck --workspaces --if-present",
     "test": "vitest run",
@@ -29,8 +32,8 @@
     "learn": "node scripts/learn/cli.mjs",
     "canvas": "node --import tsx services/catalog/src/canvas.ts",
     "gitmodules": "scripts/update-gitmodules.sh",
-    "catalog": "tsx services/catalog/src/cli.ts",
-    "studio": "tsx services/studio/src/index.ts",
+    "catalog": "node --import tsx services/catalog/src/cli.ts",
+    "studio": "node --import tsx services/studio/src/index.ts",
     "e2e": "node scripts/e2e.mjs",
     "demo:record": "node scripts/demo-record.mjs",
     "export:nightly": "node scripts/nightly-export.mjs"

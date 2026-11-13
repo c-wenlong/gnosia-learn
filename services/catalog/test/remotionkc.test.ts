@@ -256,12 +256,12 @@ describe("the remotionkc CLI", () => {
 
   it("resolves the checkout from REMOTIONKC_ROOT, else the submodule", () => {
     delete process.env[REMOTIONKC_ROOT_ENV];
-    expect(resolveRemotionkcRoot("/srv/gnosia")).toBe(path.join("/srv/gnosia", "tools", "remotionkc"));
-    expect(toolCliPath(REMOTIONKC, "/srv/gnosia")).toBe(
-      path.join("/srv/gnosia", "tools", "remotionkc", "tools", "cli", "remotionkc.mjs"),
+    expect(resolveRemotionkcRoot("/srv/hermes")).toBe(path.join("/srv/hermes", "tools", "remotionkc"));
+    expect(toolCliPath(REMOTIONKC, "/srv/hermes")).toBe(
+      path.join("/srv/hermes", "tools", "remotionkc", "tools", "cli", "remotionkc.mjs"),
     );
     process.env[REMOTIONKC_ROOT_ENV] = "../elsewhere/remotionkc";
-    expect(resolveRemotionkcRoot("/srv/gnosia")).toBe(path.resolve("/srv/gnosia", "../elsewhere/remotionkc"));
+    expect(resolveRemotionkcRoot("/srv/hermes")).toBe(path.resolve("/srv/hermes", "../elsewhere/remotionkc"));
   });
 });
 

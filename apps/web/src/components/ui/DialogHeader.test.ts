@@ -9,8 +9,8 @@ import { DialogHeader } from "./DialogHeader";
 /**
  * The kit dialog's header: a 48px bar with a rule under it, the title in the
  * panel role, the caller's actions, and the one Close the studio's focus
- * logic recognises (`data-dialog-close`). The lint rules `gnosia/dialog-header`
- * and `gnosia/dialog-close-mark` fail a dialog header built by hand.
+ * logic recognises (`data-dialog-close`). The lint rules `hermes/dialog-header`
+ * and `hermes/dialog-close-mark` fail a dialog header built by hand.
  */
 
 /** The header, parsed: its row element. */

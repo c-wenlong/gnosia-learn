@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
-import { ASSET_NAME_MAX } from "@gnosia/schema/shared";
+import { ASSET_NAME_MAX } from "@hermes/schema/shared";
 
 import { Button } from "@/components/ui/Button";
 import { Collapse } from "@/components/ui/Collapse";

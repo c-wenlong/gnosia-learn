@@ -11,9 +11,9 @@ import { Panel } from "@/components/ui/Panel";
 import { TextLink } from "@/components/ui/TextLink";
 import { Callout } from "@/components/ui/Callout";
 import { courseTopicIds, moduleHref, topicMeta, type PathStatus, type TopicMastery } from "@/lib/course-path";
-import type { Course, Module, Topic } from "@gnosia/content";
-import { moduleNumber } from "@gnosia/content/module-number";
-import { ownValue } from "@gnosia/tutor/own-key";
+import type { Course, Module, Topic } from "@hermes/content";
+import { moduleNumber } from "@hermes/content/module-number";
+import { ownValue } from "@hermes/tutor/own-key";
 
 import type { RelatedCourse } from "./types";
 

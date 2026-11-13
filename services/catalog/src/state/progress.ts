@@ -1,7 +1,7 @@
-import { curriculumItem, LOCAL_LEARNER_ID, progress } from "@gnosia/schema";
+import { curriculumItem, LOCAL_LEARNER_ID, progress } from "@hermes/schema";
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 
-import { PREFERENCE_KEYS } from "@gnosia/schema";
+import { PREFERENCE_KEYS } from "@hermes/schema";
 
 import { ownedBy, type Owners, readableFor } from "../content/scope";
 import type { CatalogDatabase } from "../db";

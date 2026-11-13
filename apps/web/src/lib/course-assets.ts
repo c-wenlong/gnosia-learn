@@ -6,16 +6,16 @@ import {
   assetsForTopic,
   conceptCheckCounts,
   type AssetRef,
-} from "@gnosia/catalog/state";
+} from "@hermes/catalog/state";
 import { connection } from "next/server";
 
-import { assetDisplayTitle, assetKindLabel, familyOf } from "@gnosia/tutor/asset-meta";
-import { parseChecks } from "@gnosia/tutor/concept-note-core";
+import { assetDisplayTitle, assetKindLabel, familyOf } from "@hermes/tutor/asset-meta";
+import { parseChecks } from "@hermes/tutor/concept-note-core";
 import { withCatalog } from "@/lib/asset-library";
 import { assetHref, isCompanionKind, libraryHref } from "@/lib/library";
 import type { ModulePathAssets, PathAsset } from "@/lib/module-path";
 import { currentScope } from "@/lib/owner";
-import type { Course } from "@gnosia/content";
+import type { Course } from "@hermes/content";
 
 /**
  * What a course page reads from the catalog per module, for its meta row and

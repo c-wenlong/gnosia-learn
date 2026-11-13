@@ -12,10 +12,10 @@ plus one-off jobs. `docs/` is what you are reading, `seed/` is the content a
 fresh clone starts from, and `.studio/` is generated state, never source.
 
 ```
-gnosia/                           the checkout
+hermes/                           the checkout
 ├── apps/
-│   ├── web/                      the Next.js app, @gnosia/web
-│   └── desktop/                  Gnosia Web, the desktop shell, a SwiftPM package
+│   ├── web/                      the Next.js app, @hermes/web
+│   └── desktop/                  Hermes Web, the desktop shell, a SwiftPM package
 ├── packages/                     schema · content · blob · tutor
 ├── services/                     catalog · studio · launch-env
 ├── tools/                        five git submodules (another repo each)
@@ -27,10 +27,10 @@ gnosia/                           the checkout
 
 ## The rename
 
-The product is Gnosia, renamed from self-learn: the workspace names are
-`@gnosia/web`, `@gnosia/catalog`, `@gnosia/schema`, `@gnosia/content`,
-`@gnosia/blob`, `@gnosia/tutor`, `@gnosia/studio` and
-`@gnosia/launch-env`. `GNOSIA_HOME` is the data-root variable everywhere, and
+The product is Hermes, renamed from self-learn: the workspace names are
+`@hermes/web`, `@hermes/catalog`, `@hermes/schema`, `@hermes/content`,
+`@hermes/blob`, `@hermes/tutor`, `@hermes/studio` and
+`@hermes/launch-env`. `HERMES_HOME` is the data-root variable everywhere, and
 the web keeps the legacy storage key and cookies readable
 (`self-learn:v1`, `self-learn-theme`, `self-learn-motion`).
 
@@ -38,7 +38,7 @@ the web keeps the legacy storage key and cookies readable
 
 Next.js, the app router, server components with client islands opted into
 one at a time. Nothing under it knows the CLI exists; it reaches the catalog
-through `@gnosia/catalog/state` and content through the reader seam in
+through `@hermes/catalog/state` and content through the reader seam in
 `src/data/`, never the database directly.
 
 ```
@@ -128,18 +128,18 @@ content source (the database, or a refusal naming `catalog flip <type>`),
 
 ## apps/desktop: the desktop shell
 
-A SwiftPM executable package, `Package.swift` at its root: Gnosia Web, one
+A SwiftPM executable package, `Package.swift` at its root: Hermes Web, one
 window with a WKWebView on the web app. It adds no second interface. It spawns
 `next dev` and the studio runner from the checkout, so the window always
 serves the checkout's current code. `scripts/bundle-app.sh` builds
-`Gnosia Web.app` and `scripts/install-app.sh` installs it.
+`Hermes Web.app` and `scripts/install-app.sh` installs it.
 
 ```
 apps/desktop/
 ├── Package.swift                 the executable target and its tests
-├── Sources/GnosiaWeb/            the app, one file per job
+├── Sources/HermesWeb/            the app, one file per job
 ├── Resources/AppIcon.png         the icon `bundle-app.sh` turns into the bundle's
-├── Tests/GnosiaWebTests/         the launchers' pure rules
+├── Tests/HermesWebTests/         the launchers' pure rules
 └── scripts/
     ├── bundle-app.sh             the .app bundle
     └── install-app.sh            quit, rebuild and replace the installed copy
@@ -147,8 +147,10 @@ apps/desktop/
 
 | File | Owns |
 | --- | --- |
-| `GnosiaWebApp.swift` | The entry point and the window |
-| `WebView.swift` | The WKWebView: it shows only the app server's origin, other web pages go to the real browser and other schemes are dropped; cookies persist across launches |
+| `HermesWebApp.swift` | The entry point and the window |
+| `WebView.swift` | The WKWebView: it shows only the app server's origin, other web pages go to the real browser and other schemes are dropped; cookies persist across launches. Also the extra windows a new-window request opens |
+| `FindBar.swift` | The window's find bar: Cmd+F finds in the page through `window.find` |
+| `NotificationBridge.swift` | The page's `Notification`: a script-message bridge to `UNUserNotificationCenter`, in the bundled app only |
 | `WebServer.swift` | The lifecycle of the Next server the window loads |
 | `StudioRunner.swift` | The lifecycle of the studio runner, adopted when one already answers on its port |
 | `Checkout.swift` | Where the repository and the data home are, and the environment each child starts with, read once per launch from `services/launch-env` |
@@ -172,7 +174,7 @@ set the port came from). `src/` divides by who a file serves:
 ## services/launch-env: the launchers' environment
 
 Two files. `src/env.ts` gives a spawned service the environment the web app
-sees: the process's own exports, then `$GNOSIA_HOME/.env`, then `apps/web`'s
+sees: the process's own exports, then `$HERMES_HOME/.env`, then `apps/web`'s
 `.env` files through `@next/env`, with a relative `CATALOG_DB` or
 `DATABASE_URL` made absolute and `CATALOG_DB` pinned at the file the catalog's
 own resolver names (`loadWebEnv`, `pinCatalogFile`, `childEnvironment`).
@@ -251,11 +253,11 @@ picks and tier models (never a key: BYOK.md, D12). It
 is created by `npm run studio` — a fresh clone has no `.studio/` — and
 deleted at will: nothing in it is the only copy of anything.
 
-## The data root — `~/.gnosia`
+## The data root — `~/.hermes`
 
 Not in the repository at all, and deliberately so: the data a generator
 produces should not be pinned inside a checkout it can be moved out of.
-Resolved as `GNOSIA_HOME`, then `~/.gnosia`.
+Resolved as `HERMES_HOME`, then `~/.hermes`.
 
 | Path | What it is |
 | --- | --- |
@@ -271,4 +273,4 @@ Resolved as `GNOSIA_HOME`, then `~/.gnosia`.
 Which of these a given machine has is convention, not code: the catalog reads
 each tool's checkout from its `*_ROOT` variable and its output location from
 the report's `outRoot`, so nothing in `services/` goes looking under
-`~/.gnosia`.
+`~/.hermes`.

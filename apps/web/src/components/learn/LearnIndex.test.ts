@@ -9,7 +9,7 @@ import type { IndexRow } from "@/lib/learn-index";
 
 import { LearnIndex, SERVER_ROWS } from "./LearnIndex";
 import { MapPanel } from "@/components/learn/DomainBrowser";
-import type { GraphEdge, GraphNode } from "@gnosia/tutor/concept-graph";
+import type { GraphEdge, GraphNode } from "@hermes/tutor/concept-graph";
 
 /**
  * The Learn index's graph card fades a new concept's graph in by mounting it

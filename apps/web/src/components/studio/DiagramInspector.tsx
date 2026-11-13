@@ -13,7 +13,7 @@ import { Callout } from "@/components/ui/Callout";
 import { FactList } from "@/components/ui/FactList";
 import { jobStateLabel } from "@/lib/studio-job-state";
 import { canvasHref, panelHref, thumbnailHref } from "@/lib/studio-url";
-import { formatBytes } from "@gnosia/tutor/asset-meta";
+import { formatBytes } from "@hermes/tutor/asset-meta";
 import { displayTitle, freshness, type Diagram, type DiagramListing } from "@/lib/studio-grid";
 
 /**

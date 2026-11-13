@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { AssetDerivations, AssetRef, AssetWithTopics } from "@gnosia/catalog/state";
+import type { AssetDerivations, AssetRef, AssetWithTopics } from "@hermes/catalog/state";
 
 import { libraryHref, type ExplainedConcept } from "@/lib/library";
 import { assetTabItems, type AssetTabsInput } from "./AssetTabs";
@@ -13,7 +13,7 @@ const asset = {
   url: null,
   title: "X",
   bytes: 10,
-  sourceRepo: "gnosia",
+  sourceRepo: "hermes",
   topics: ["t"],
 } as unknown as AssetWithTopics;
 
@@ -88,7 +88,7 @@ describe("the Related tab", () => {
 describe("the Files tab", () => {
   const companion = {
     sources: [],
-    derived: [{ id: "t:x", kind: "transcript", path: "out/x.transcript.json", url: null, title: "X", bytes: 10, sourceRepo: "gnosia" } as unknown as AssetRef],
+    derived: [{ id: "t:x", kind: "transcript", path: "out/x.transcript.json", url: null, title: "X", bytes: 10, sourceRepo: "hermes" } as unknown as AssetRef],
   } as unknown as AssetDerivations;
 
   it("calls a video's produced files its companions", () => {

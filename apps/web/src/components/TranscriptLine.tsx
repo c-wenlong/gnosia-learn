@@ -1,5 +1,5 @@
 import { cx } from "@/components/ui/classes";
-import { formatTimecode } from "@gnosia/tutor/media";
+import { formatTimecode } from "@hermes/tutor/media";
 
 /**
  * One timecoded line of a transcript or a chapter list: the start time in a

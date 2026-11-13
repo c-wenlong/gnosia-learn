@@ -2,7 +2,7 @@ import { copyFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { indexRun } from "@gnosia/schema";
+import { indexRun } from "@hermes/schema";
 import { sql } from "drizzle-orm";
 import { inject } from "vitest";
 
@@ -137,7 +137,7 @@ export interface Scratch extends Connection {
 }
 
 function scratchDir(kind = "test"): string {
-  return mkdtempSync(path.join(tmpdir(), `gnosia_${kind}_${process.pid}_`));
+  return mkdtempSync(path.join(tmpdir(), `hermes_${kind}_${process.pid}_`));
 }
 
 /**

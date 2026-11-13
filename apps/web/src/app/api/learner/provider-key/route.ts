@@ -1,5 +1,5 @@
-import type { ProviderName } from "@gnosia/schema/shared";
-import { providerKeyRemoveTurn, providerKeySaveTurn } from "@gnosia/tutor/server/turns";
+import type { ProviderName } from "@hermes/schema/shared";
+import { providerKeyRemoveTurn, providerKeySaveTurn } from "@hermes/tutor/server/turns";
 
 import { connectByokProvider, dropByokProvider } from "@/lib/byok-sync";
 import { byokField, KEY_WRITE_RATE_LIMIT, settingsRoute } from "@/lib/provider-keys/requests";
@@ -21,7 +21,7 @@ export const runtime = "nodejs";
  * logged but a code: a refused key is refused without repeating it, and a
  * failed write is reported without the driver's message, which would quote
  * the sealed bytes. The save and the removal are turns in
- * `@gnosia/tutor/server/turns` (`providerKeySaveTurn`,
+ * `@hermes/tutor/server/turns` (`providerKeySaveTurn`,
  * `providerKeyRemoveTurn`); telling Studio's list
  * is this app's own step after them.
  */

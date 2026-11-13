@@ -1,4 +1,4 @@
-import { dayKey } from "@gnosia/tutor/days";
+import { dayKey } from "@hermes/tutor/days";
 
 /**
  * Rows under a heading per calendar day, newest day first: the Library's

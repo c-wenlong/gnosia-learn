@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import type { AssetRef } from "@gnosia/catalog/state";
+import type { AssetRef } from "@hermes/catalog/state";
 
 import type { AssetBodyData } from "./asset-body-data";
 import { AssetBody, type AssetBodyVideo } from "./AssetBody";
@@ -34,12 +34,12 @@ vi.mock("@/components/library/LibraryVideo", async () => {
  */
 
 function data(asset: Partial<AssetRef> & Pick<AssetRef, "id" | "kind">, over: Partial<AssetBodyData> = {}): AssetBodyData {
-  const row: AssetRef = { path: null, url: null, bytes: 10, title: null, sourceRepo: "gnosia", ...asset };
+  const row: AssetRef = { path: null, url: null, bytes: 10, title: null, sourceRepo: "hermes", ...asset };
   return {
     asset: row,
     fileHref: `/api/assets/${encodeURIComponent(row.id)}/file`,
     statusHref: `/api/assets/${encodeURIComponent(row.id)}/status`,
-    failureSource: "gnosia",
+    failureSource: "hermes",
     downloadHref: `/api/assets/${encodeURIComponent(row.id)}/file?download=1`,
     fileProblem: null,
     servable: true,

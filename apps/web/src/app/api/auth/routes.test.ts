@@ -71,7 +71,7 @@ describe("POST /api/auth/sign-in", () => {
   });
 
   it("marks the cookie Secure over https", async () => {
-    const request = new Request("https://gnosia.example/api/auth/sign-in", {
+    const request = new Request("https://hermes.example/api/auth/sign-in", {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded", "sec-fetch-site": "same-origin" },
       body: new URLSearchParams({ password: "correct horse battery staple" }),
@@ -122,10 +122,32 @@ describe("POST /api/auth/sign-in", () => {
     expect(cookieOf(response)).toBe("");
   });
 
+  it("says unconfigured too when only the secret is missing", async () => {
+    delete process.env.AUTH_SECRET;
+    const response = await signIn(post("/api/auth/sign-in", { password: "anything" }));
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/sign-in?error=unconfigured");
+    expect(cookieOf(response)).toBe("");
+  });
+
+  it("answers a body that is not a form post like a wrong password, never a 500", async () => {
+    // The right password in a JSON body still cannot sign in: only the form
+    // post the page sends is read, and anything else is a guess that missed.
+    const request = new Request(`${ORIGIN}/api/auth/sign-in`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "sec-fetch-site": "same-origin" },
+      body: JSON.stringify({ password: "correct horse battery staple" }),
+    });
+    const response = await signIn(request);
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/sign-in?error=password");
+    expect(cookieOf(response)).toBe("");
+  });
+
   it("accepts a proxied post whose Origin is https while the hop to Node is http", async () => {
     const request = new Request(`${ORIGIN}/api/auth/sign-out`, {
       method: "POST",
-      headers: { host: "gnosia.example", "x-forwarded-proto": "https", origin: "https://gnosia.example" },
+      headers: { host: "hermes.example", "x-forwarded-proto": "https", origin: "https://hermes.example" },
     });
     expect((await signOut(request)).status).toBe(303);
   });
@@ -197,16 +219,17 @@ describe("POST /api/auth/sign-in", () => {
   });
 
   it("refuses a cross-site post before reading the body", async () => {
-    const response = await signIn(post("/api/auth/sign-in", { password: "correct horse battery staple" }, { "sec-fetch-site": "cross-site" }));
-    expect(response.status).toBe(403);
-    const byOrigin = await signIn(
-      new Request(`${ORIGIN}/api/auth/sign-in`, {
-        method: "POST",
-        headers: { "content-type": "application/x-www-form-urlencoded", host: "localhost:3000", origin: "https://evil.example" },
-        body: new URLSearchParams({ password: "correct horse battery staple" }),
-      }),
-    );
-    expect(byOrigin.status).toBe(403);
+    const byFetchSite = post("/api/auth/sign-in", { password: "correct horse battery staple" }, { "sec-fetch-site": "cross-site" });
+    expect((await signIn(byFetchSite)).status).toBe(403);
+    // The right password sat unread in the body: the origin check ran first.
+    expect(byFetchSite.bodyUsed).toBe(false);
+    const byOrigin = new Request(`${ORIGIN}/api/auth/sign-in`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded", host: "localhost:3000", origin: "https://evil.example" },
+      body: new URLSearchParams({ password: "correct horse battery staple" }),
+    });
+    expect((await signIn(byOrigin)).status).toBe(403);
+    expect(byOrigin.bodyUsed).toBe(false);
   });
 });
 
@@ -215,18 +238,18 @@ describe("GET /api/auth/local", () => {
   const saved = {
     secret: process.env.AUTH_SECRET,
     password: process.env.OWNER_PASSWORD,
-    local: process.env.GNOSIA_LOCAL_TOKEN,
+    local: process.env.HERMES_LOCAL_TOKEN,
   };
   beforeEach(() => {
     process.env.AUTH_SECRET = SECRET;
     process.env.OWNER_PASSWORD = "correct horse battery staple";
-    process.env.GNOSIA_LOCAL_TOKEN = TOKEN;
+    process.env.HERMES_LOCAL_TOKEN = TOKEN;
     resetLocalTokenForTests();
   });
   afterEach(() => {
     restoreEnv("AUTH_SECRET", saved.secret);
     restoreEnv("OWNER_PASSWORD", saved.password);
-    restoreEnv("GNOSIA_LOCAL_TOKEN", saved.local);
+    restoreEnv("HERMES_LOCAL_TOKEN", saved.local);
   });
 
   function get(token?: string, path = "/api/auth/local"): Request {
@@ -258,7 +281,7 @@ describe("GET /api/auth/local", () => {
   });
 
   it("treats a token shorter than the secret floor as unset (S7-09)", async () => {
-    process.env.GNOSIA_LOCAL_TOKEN = "dev";
+    process.env.HERMES_LOCAL_TOKEN = "dev";
     const response = await localAuth(get("dev"));
     expect(response.status).toBe(403);
     expect(cookieOf(response)).toBe("");
@@ -273,7 +296,7 @@ describe("GET /api/auth/local", () => {
   });
 
   it("refuses everyone when the variable was never set: the deployed case", async () => {
-    delete process.env.GNOSIA_LOCAL_TOKEN;
+    delete process.env.HERMES_LOCAL_TOKEN;
     const response = await localAuth(get(TOKEN));
     expect(response.status).toBe(403);
   });
@@ -308,7 +331,7 @@ describe("ending every session (S7-03)", () => {
   }
 
   it("a SESSION_EPOCH bump ends a session and leaves the saved provider keys readable", async () => {
-    const { sealKey, openKey } = await import("@gnosia/tutor/server/seal");
+    const { sealKey, openKey } = await import("@hermes/tutor/server/seal");
     const sealed = sealKey("sk-or-v1-a-saved-provider-key-0001", { secret: SECRET, owner: "local", provider: "openrouter" });
     const token = await sessionToken();
     const now = Math.floor(Date.now() / 1000);
@@ -332,8 +355,9 @@ describe("ending every session (S7-03)", () => {
   });
 
   it("the desktop shell's launch token signs under the current epoch", async () => {
+    const local = process.env.HERMES_LOCAL_TOKEN;
     process.env.SESSION_EPOCH = "7";
-    process.env.GNOSIA_LOCAL_TOKEN = "launch-secret-0123456789abcdef-0123456789";
+    process.env.HERMES_LOCAL_TOKEN = "launch-secret-0123456789abcdef-0123456789";
     resetLocalTokenForTests();
     try {
       const response = await localAuth(new Request(`${ORIGIN}/api/auth/local`, { headers: { [LOCAL_TOKEN_HEADER]: "launch-secret-0123456789abcdef-0123456789" } }));
@@ -342,7 +366,7 @@ describe("ending every session (S7-03)", () => {
       await expect(verifySession({ ...CONFIG, epoch: "7" }, token, now)).resolves.toBe(true);
       await expect(verifySession(CONFIG, token, now)).resolves.toBe(false);
     } finally {
-      delete process.env.GNOSIA_LOCAL_TOKEN;
+      restoreEnv("HERMES_LOCAL_TOKEN", local);
     }
   });
 });

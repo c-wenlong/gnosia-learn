@@ -19,7 +19,7 @@ import { siteLink } from "./site";
  * control (Settings and the avatar menu) saves it.
  *
  * Only two states here: it flips the appearance and keeps the palette, so a
- * Gnosia reader goes between Gnosia light and Gnosia dark and a Classic one
+ * Hermes reader goes between Hermes light and Hermes dark and a Classic one
  * between Light and Dark. The palette makes no difference on these pages (the
  * brand tokens follow `dark` alone) but it does in the app, which reads the
  * same cookie. A system mode resolves to one of the two, so the switch reads
@@ -55,7 +55,7 @@ export function ThemeToggle() {
       aria-label="Dark theme"
       aria-pressed={dark}
       className={siteLink(
-        "grid size-10 place-items-center rounded-full text-brand-ink hover:bg-brand-ink/5 hover:text-brand-teal",
+        "grid size-10 place-items-center rounded-full text-brand-ink hover:bg-brand-ink/5 hover:text-brand-terracotta",
       )}
     >
       {/* A moon in light (switch to dark), a sun in dark (switch back). */}

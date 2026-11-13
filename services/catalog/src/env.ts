@@ -1,4 +1,4 @@
-import { defaultBlobRoot } from "@gnosia/blob";
+import { dataHome, defaultBlobRoot, HOME_ENV, LEGACY_HOME_ENV } from "@hermes/blob";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -15,12 +15,13 @@ export const REPO_ROOT = path.resolve(SERVICE_ROOT, "..", "..");
 
 /**
  * The catalog's database is a SQLite file (docs/SQLITE-MIGRATION.md): one
- * file next to the blob store, at `$GNOSIA_HOME/catalog.db`, or
- * `~/.gnosia/catalog.db` when `GNOSIA_HOME` is unset. Daily
+ * file next to the blob store, at `$HERMES_HOME/catalog.db`
+ * (`$GNOSIA_HOME` still works), or `~/.hermes/catalog.db` when neither is
+ * set and no old home exists. Daily
  * development needs no configuration at all; tests and scripts point
  * `CATALOG_DB` (or `DATABASE_URL`, below) at a scratch file.
  */
-export const DEFAULT_DATABASE_PATH = path.join(homedir(), ".gnosia", "catalog.db");
+export const DEFAULT_DATABASE_PATH = path.join(dataHome(), "catalog.db");
 
 /**
  * The variable that names the file. `CATALOG_DB` rather than reusing
@@ -104,14 +105,13 @@ export function loadEnv(file: string = ENV_FILE): void {
 }
 
 /**
- * The data root the catalog shares with the blob store: `$GNOSIA_HOME`,
- * or `~/.gnosia`. Read after `services/catalog/.env` like the other
- * resolvers, so one file configures the CLI and the web app together.
+ * The data root the catalog shares with the blob store: `$HERMES_HOME`,
+ * else `$GNOSIA_HOME`, else `~/.hermes` or an existing `~/.gnosia`. Read
+ * after `services/catalog/.env` like the other resolvers, so one file
+ * configures the CLI and the web app together.
  */
-function gnosiaHome(): string {
-  const raw = process.env[GNOSIA_HOME_ENV]?.trim();
-  if (!raw) return path.join(homedir(), ".gnosia");
-  return raw === "~" || raw.startsWith("~/") ? path.join(homedir(), raw.slice(1)) : raw;
+function hermesHome(): string {
+  return dataHome();
 }
 
 /**
@@ -162,7 +162,7 @@ export function databaseUrl(): string {
   if (fromCatalogDb) return fromCatalogDb;
   const raw = process.env.DATABASE_URL?.trim();
   if (raw) return raw;
-  return path.join(gnosiaHome(), "catalog.db");
+  return path.join(hermesHome(), "catalog.db");
 }
 
 /**
@@ -206,7 +206,7 @@ function checkoutRoot(variable: string, fallback: string, repoRoot: string): str
  * a walk up from the working directory
  * (`tools/manimkc/tools/cli/manimkc_cli/repo.py`). Reusing the name is
  * deliberate: one variable that means "the manimkc checkout" everywhere is the
- * only version of this that stays true, and a `GNOSIA_MANIMKC_ROOT` beside
+ * only version of this that stays true, and a `HERMES_MANIMKC_ROOT` beside
  * it would be a second answer to a question that already has one. Note that it
  * is *not* `$MANIMKC_HOME`, which is where manimkc's generated data lands; the
  * indexers get that from each report's `outRoot` and never from a path here.
@@ -261,11 +261,12 @@ export function resolveTldrawkcRoot(repoRoot: string = REPO_ROOT): string {
 }
 
 /** Where the laptop's blob store lives: its data root, with `blobs` under it. */
-export const GNOSIA_HOME_ENV = "GNOSIA_HOME";
+export const HERMES_HOME_ENV = HOME_ENV;
+export const LEGACY_GNOSIA_HOME_ENV = LEGACY_HOME_ENV;
 
 /**
- * The `fs` blob store's root: `$GNOSIA_HOME/blobs`, else
- * `~/.gnosia/blobs` (`defaultBlobRoot` in `@gnosia/blob` has the rules).
+ * The `fs` blob store's root: `$HERMES_HOME/blobs`, else
+ * `~/.hermes/blobs` (`defaultBlobRoot` in `@hermes/blob` has the rules).
  *
  * One function for every process that opens the store, so the catalog CLI
  * that uploads and the web app that serves cannot resolve two roots: the

@@ -6,8 +6,8 @@ import {
   COURSE_COVER_EXTENSIONS,
   RESOURCE_TYPES as READER_RESOURCE_TYPES,
   TOPIC_RELATION_KINDS as READER_KINDS,
-} from "@gnosia/content";
-import { contentRevision, COURSE_COVER_TYPES, RESOURCE_TYPES, tag, TOPIC_RELATION_KINDS } from "@gnosia/schema";
+} from "@hermes/content";
+import { contentRevision, COURSE_COVER_TYPES, RESOURCE_TYPES, tag, TOPIC_RELATION_KINDS } from "@hermes/schema";
 import { parse, stringify } from "yaml";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -54,16 +54,16 @@ function pointAt(name: string): () => void {
   const saved = {
     url: process.env["DATABASE_URL"],
     manimkc: process.env["MANIMKC_ROOT"],
-    home: process.env["GNOSIA_HOME"],
+    home: process.env["HERMES_HOME"],
   };
   process.env["DATABASE_URL"] = name;
   process.env["MANIMKC_ROOT"] = path.join(tmpdir(), "catalog-test-no-manimkc");
-  process.env["GNOSIA_HOME"] = path.join(tmpdir(), `gnosia-home-${name}`);
+  process.env["HERMES_HOME"] = path.join(tmpdir(), `hermes-home-${name}`);
   return () => {
     for (const [key, value] of [
       ["DATABASE_URL", saved.url],
       ["MANIMKC_ROOT", saved.manimkc],
-      ["GNOSIA_HOME", saved.home],
+      ["HERMES_HOME", saved.home],
     ] as const) {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;

@@ -195,7 +195,7 @@ A region table rather than a drawing:
 | Suggestion under a reply | One small button per suggested kind: glyph and name | The kit `Chip`'s outline look at `sm`, glyph in `--accent-text`; pressed, it puts the chip in the composer |
 
 Every token here is defined in all four theme blocks of `globals.css`
-(`:root`, `.dark`, `.gnosia`, `.gnosia.dark`), so the six modes need nothing
+(`:root`, `.dark`, `.hermes`, `.hermes.dark`), so the six modes need nothing
 new.
 
 ## The studio's composer (D56)

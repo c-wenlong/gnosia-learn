@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { canvas, doctor } from "../canvas/canvas";
-import { manualCheckDir, manualDir, manualPath } from "../paths";
-import { NPM, run, sweepByMarker, type RunResult } from "../proc";
+import { canvas, CANVAS_CLI_ARGS, doctor } from "../canvas/canvas";
+import { reclaimCgroupFileCache } from "../cgroup";
+import { manualCheckDir, manualDir, manualPath, REPO_ROOT } from "../paths";
+import { run, sweepByMarker, type RunResult } from "../proc";
 
 import { assembleManual, snippetPath, SNIPPETS, type OptionsSource } from "./assemble";
 import { parseApi, type LintComparison } from "./listing";
@@ -97,9 +98,49 @@ export interface ManualSourceOptions {
   tickMs?: number;
   /** Where a mismatch or a failure is said. */
   log?: (line: string) => void;
+  /** Fingerprint of the installed tldrawkc build, injectable for tests. */
+  buildFingerprint?: () => Promise<string>;
 }
 
 const sha256 = (text: string | Buffer): string => createHash("sha256").update(text).digest("hex");
+
+function tldrawkcRoot(): string {
+  const raw = process.env.TLDRAWKC_ROOT?.trim();
+  if (!raw) return path.join(REPO_ROOT, "tools", "tldrawkc");
+  const expanded = raw === "~" || raw.startsWith("~/") ? path.join(process.env.HOME ?? "", raw.slice(1)) : raw;
+  return path.resolve(REPO_ROOT, expanded);
+}
+
+/**
+ * Fingerprint of the installed `tldrawkc` runtime (`dist/page/index.html`,
+ * which names the Vite content-hashed page bundle, plus `dist/cli/*.js` and
+ * `dist/lib/*.js`). Included alongside `api --json` in `apiHash` and the
+ * snippet cache key so a helper or lint implementation change triggers a new
+ * snippet check even when documented signatures stay the same.
+ */
+async function defaultBuildFingerprint(): Promise<string> {
+  const root = tldrawkcRoot();
+  const hash = createHash("sha256");
+  const indexHtml = await readFile(path.join(root, "dist", "page", "index.html")).catch(() => null);
+  if (indexHtml !== null) {
+    hash.update("dist/page/index.html\0");
+    hash.update(indexHtml);
+    hash.update("\0");
+  }
+  for (const subdir of ["cli", "lib"] as const) {
+    const dir = path.join(root, "dist", subdir);
+    const entries = await readdir(dir).catch(() => [] as string[]);
+    for (const name of entries.filter((entry) => entry.endsWith(".js")).sort()) {
+      const content = await readFile(path.join(dir, name)).catch(() => null);
+      if (content !== null) {
+        hash.update(`dist/${subdir}/${name}\0`);
+        hash.update(content);
+        hash.update("\0");
+      }
+    }
+  }
+  return hash.digest("hex");
+}
 
 export class ManualSource {
   private info: ManualInfo | null = null;
@@ -130,6 +171,7 @@ export class ManualSource {
   private readonly doctorOk: () => Promise<boolean>;
   private readonly tickMs: number;
   private readonly log: (line: string) => void;
+  private readonly buildFingerprint: () => Promise<string>;
 
   constructor(options: ManualSourceOptions = {}) {
     this.api = options.api ?? (() => canvas(["api", "--json"], 60_000));
@@ -140,6 +182,7 @@ export class ManualSource {
     this.doctorOk = options.doctorOk ?? (async () => (await doctor().catch(() => null))?.code === 0);
     this.tickMs = options.tickMs ?? 15_000;
     this.log = options.log ?? ((line) => process.stderr.write(`${line}\n`));
+    this.buildFingerprint = options.buildFingerprint ?? defaultBuildFingerprint;
   }
 
   /** The manual a job starting now would get, or null when there is none. */
@@ -173,7 +216,8 @@ export class ManualSource {
       const said = (result.stderr || result.stdout).trim().split("\n").slice(-1)[0] ?? "";
       return this.failed(`canvas api --json exited ${result.code ?? "on a signal"}${said === "" ? "" : `: ${said}`}`);
     }
-    const apiHash = sha256(result.stdout);
+    const buildFp = await this.buildFingerprint().catch(() => "");
+    const apiHash = sha256(`${result.stdout}\n${buildFp}`);
     if (this.info !== null && this.info.apiHash === apiHash) {
       // Same build. The file is checked before every spawn anyway; this puts
       // right a manual whose file was lost or changed in the meantime, and a
@@ -207,12 +251,59 @@ export class ManualSource {
     this.fileError = null;
     for (const reason of lintReasons(this.info)) this.log(`manual stale: ${reason}`);
     if (this.check) {
-      this.snippets = null;
-      this.snippetError = null;
-      this.wanted = apiHash;
-      void this.tick();
+      const cached = await this.readCachedSnippets(manual.hash, apiHash);
+      if (cached !== null) {
+        this.snippets = cached;
+        this.snippetError = null;
+        this.wanted = null;
+      } else {
+        this.snippets = null;
+        this.snippetError = null;
+        this.wanted = apiHash;
+        void this.tick();
+      }
     }
     return this.info;
+  }
+
+  private snippetCachePath(manualHash: string, apiHash: string): string {
+    const key = sha256(`${manualHash}\n${apiHash}`);
+    return path.join(manualDir(), `${key}.snippets.json`);
+  }
+
+  private async readCachedSnippets(manualHash: string, apiHash: string): Promise<SnippetCheck[] | null> {
+    try {
+      const raw = JSON.parse(await readFile(this.snippetCachePath(manualHash, apiHash), "utf8")) as unknown;
+      if (
+        !Array.isArray(raw) ||
+        raw.length !== SNIPPETS.length ||
+        !raw.every(
+          (entry): entry is SnippetCheck =>
+            typeof entry === "object" &&
+            entry !== null &&
+            typeof (entry as SnippetCheck).name === "string" &&
+            (entry as SnippetCheck).ok === true &&
+            typeof (entry as SnippetCheck).detail === "string",
+        )
+      ) {
+        return null;
+      }
+      return raw;
+    } catch {
+      return null;
+    }
+  }
+
+  private async writeCachedSnippets(manualHash: string, apiHash: string, checks: SnippetCheck[]): Promise<void> {
+    await mkdir(manualDir(), { recursive: true });
+    const file = this.snippetCachePath(manualHash, apiHash);
+    const temporary = `${file}.${process.pid}.${Date.now()}.tmp`;
+    try {
+      await writeFile(temporary, JSON.stringify(checks, null, 2), "utf8");
+      await rename(temporary, file);
+    } catch {
+      await rm(temporary, { force: true }).catch(() => undefined);
+    }
   }
 
   private failed(message: string): ManualInfo | null {
@@ -343,9 +434,13 @@ export class ManualSource {
       this.snippets = checks;
       this.snippetError = null;
       this.wanted = null;
+      if (failed.length === 0 && this.info !== null) {
+        await this.writeCachedSnippets(this.info.hash, this.info.apiHash, checks);
+      }
       for (const check of failed) {
         this.log(`manual stale: the worked snippet "${check.name}" no longer runs clean: ${check.detail}`);
       }
+      void reclaimCgroupFileCache({ isIdle: () => !this.stopped && this.isIdle() });
     } catch (error) {
       if (this.stopped) return;
       this.snippetError = (error as Error).message;
@@ -417,7 +512,7 @@ export function groupCanvas(signal: AbortSignal): CanvasRunner {
   const tmp = path.join(manualCheckDir(), "tmp");
   return async (args, timeoutMs = 120_000) => {
     await mkdir(tmp, { recursive: true });
-    const result = await run(NPM, ["run", "--silent", "canvas", "--", ...args], {
+    const result = await run(process.execPath, [...CANVAS_CLI_ARGS, ...args], {
       timeoutMs,
       group: true,
       signal,

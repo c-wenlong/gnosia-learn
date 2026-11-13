@@ -1,4 +1,4 @@
-import { WRONG_SOURCE_NOTE, type WrongSource } from "@gnosia/tutor/session-core";
+import { WRONG_SOURCE_NOTE, type WrongSource } from "@hermes/tutor/session-core";
 
 /**
  * The line under a multiple-choice question whose wrong options the tutor did

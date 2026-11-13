@@ -11,7 +11,7 @@ import {
   type ChoiceAnswer,
   type ChoiceCheck,
   type ChoicePick,
-} from "@gnosia/tutor/check-block";
+} from "@hermes/tutor/check-block";
 
 import { AnswerRecap } from "./AnswerRecap";
 import { ConfidenceField, ReasoningField } from "./SurenessFields";

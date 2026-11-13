@@ -1,4 +1,4 @@
-import { JOB_KINDS, JOB_STATES } from "@gnosia/schema/shared";
+import { JOB_KINDS, JOB_STATES } from "@hermes/schema/shared";
 import { describe, expect, it } from "vitest";
 
 import { checkWord, JOB_STATE_LABEL, jobCardSentence, jobPredicate, jobStateInline, jobStateLabel, progressWord } from "@/lib/studio-job-state";

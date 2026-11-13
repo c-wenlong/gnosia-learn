@@ -40,7 +40,7 @@ const makeCatalog = (file) => {
  * A repository root, a bin directory of stubs and a call log. `envFile` is the
  * text of apps/web/.env.local; the stubs report success unless a test says so.
  * HOME is the sandbox, so the catalog the app would open by default is
- * `<sandbox>/.gnosia/catalog.db`, made unless `catalog` is false.
+ * `<sandbox>/.hermes/catalog.db`, made unless `catalog` is false.
  */
 function sandbox({ nodeModules = true, catalog = true, envFile = "OWNER_PASSWORD=pw\nAUTH_SECRET=secret\n" } = {}) {
   const dir = mkdtempSync(join(tmpdir(), "dev-sh-"));
@@ -54,7 +54,7 @@ function sandbox({ nodeModules = true, catalog = true, envFile = "OWNER_PASSWORD
   writeFileSync(join(root, "apps", "web", ".env.local"), envFile);
   const log = join(dir, "calls.log");
   writeFileSync(log, "");
-  const defaultCatalog = join(dir, ".gnosia", "catalog.db");
+  const defaultCatalog = join(dir, ".hermes", "catalog.db");
   if (catalog) makeCatalog(defaultCatalog);
 
   stub(bin, "tmux", `echo "tmux $*" >> "$CALLS_LOG"
@@ -108,11 +108,11 @@ case "$*" in *":$BUSY_PORT "*|*":$BUSY_PORT") echo "node 1 you 20u IPv4 TCP *:$B
   const flag = (name, content = "") => writeFileSync(join(state, name), content);
   /** The environment file a tmux call hands its pane, which a real pane would read and delete. */
   const paneEnv = (call) => {
-    const file = /(\S*gnosia-dev\.\w+)/.exec(call)?.[1];
+    const file = /(\S*hermes-dev\.\w+)/.exec(call)?.[1];
     expect(file, `no pane file in: ${call}`).toBeTruthy();
     return { file, text: readFileSync(file, "utf8") };
   };
-  const leftovers = () => readdirSync(tmp).filter((name) => name.startsWith("gnosia-dev."));
+  const leftovers = () => readdirSync(tmp).filter((name) => name.startsWith("hermes-dev."));
   return { dir, root, bin, run, flag, calls, paneEnv, leftovers, defaultCatalog };
 }
 
@@ -145,7 +145,7 @@ describe("scripts/dev.sh start", () => {
     const ran = run(["start", "--detach", "--no-checks"]);
     expect(ran.code).toBe(0);
     const [created] = tmuxCall(ran.calls, "new-session");
-    expect(created).toContain("-d -P -F #{pane_id} -s gnosia");
+    expect(created).toContain("-d -P -F #{pane_id} -s hermes");
     expect(created).toContain("npm run dev");
     expect(paneEnv(created).text).toContain("export STUDIO_ENABLED=1");
     expect(paneEnv(created).text).toContain("export PATH=");
@@ -163,7 +163,7 @@ describe("scripts/dev.sh start", () => {
     expect(ran.calls).toContain("tmux select-pane -t %0 -T web :19001");
     expect(tmuxCall(ran.calls, "split-window")[0]).toContain("-h -P -F #{pane_id} -t %0");
     expect(ran.calls).toContain("tmux select-pane -t %1 -T studio :19002");
-    // No `session:window.index` target anywhere (the pane files are named gnosia-dev.XXXXXX).
+    // No `session:window.index` target anywhere (the pane files are named hermes-dev.XXXXXX).
     expect(ran.calls.filter((c) => /:dev\.\d/.test(c))).toEqual([]);
   });
 
@@ -175,7 +175,7 @@ describe("scripts/dev.sh start", () => {
 
   it("attaches unless told not to, and switches client when already inside tmux", () => {
     const attached = sandbox().run(["--no-checks"]);
-    expect(tmuxCall(attached.calls, "attach-session")[0]).toContain("-t =gnosia");
+    expect(tmuxCall(attached.calls, "attach-session")[0]).toContain("-t =hermes");
     const detached = sandbox().run(["--no-checks", "--detach"]);
     expect(tmuxCall(detached.calls, "attach-session")).toEqual([]);
     const inside = sandbox().run(["--no-checks"], { env: { TMUX: "/tmp/tmux-1/default,1,0" } });
@@ -239,7 +239,7 @@ describe("scripts/dev.sh start", () => {
     const { run, flag } = sandbox();
     flag("session");
     const ran = run(["--no-checks"]);
-    expect(ran.out).toContain("already running in tmux session 'gnosia'");
+    expect(ran.out).toContain("already running in tmux session 'hermes'");
     expect(tmuxCall(ran.calls, "new-session")).toEqual([]);
     expect(tmuxCall(ran.calls, "attach-session")).toHaveLength(1);
   });
@@ -307,7 +307,7 @@ describe("scripts/dev.sh checks", () => {
     expect(run(["--detach"]).code).toBe(0);
   });
 
-  it("takes CATALOG_DB before DATABASE_URL, the environment before the file, and $GNOSIA_HOME last", () => {
+  it("takes CATALOG_DB before DATABASE_URL, the environment before the file, and $HERMES_HOME last", () => {
     const { dir, run } = sandbox({ envFile: "CATALOG_DB=/from/file.db\nOWNER_PASSWORD=pw\nAUTH_SECRET=s\n" });
     expect(run(["--detach"]).err).toContain("there is no catalog at /from/file.db");
     expect(run(["--detach"], { env: { CATALOG_DB: "/from/env.db" } }).err).toContain("there is no catalog at /from/env.db");
@@ -316,7 +316,7 @@ describe("scripts/dev.sh checks", () => {
     expect(bare.run(["--detach"], { env: { DATABASE_URL: "/from/url.db", CATALOG_DB: "/from/env.db" } }).err).toContain(
       "at /from/env.db",
     );
-    expect(bare.run(["--detach"], { env: { GNOSIA_HOME: join(dir, "home") } }).err).toContain(
+    expect(bare.run(["--detach"], { env: { HERMES_HOME: join(dir, "home") } }).err).toContain(
       `at ${join(dir, "home", "catalog.db")}`,
     );
   });

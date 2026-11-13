@@ -14,12 +14,12 @@
  * every row.
  */
 
-import type { MasteryLabel } from "@gnosia/catalog/state";
+import type { MasteryLabel } from "@hermes/catalog/state";
 
 import { conceptHref, EMPTY_STANDING, itemDoneWith, percentOf, type ItemStanding } from "@/lib/course-path";
 import { dayDiff, dayLabel, weekdayName } from "@/lib/day-groups";
-import { dayKey } from "@gnosia/tutor/days";
-import { bucketOf, type MasteryBucket } from "@gnosia/tutor/mastery-bucket";
+import { dayKey } from "@hermes/tutor/days";
+import { bucketOf, type MasteryBucket } from "@hermes/tutor/mastery-bucket";
 import { recentItems, type RecentItem, type RecentSources } from "@/lib/recent-core";
 
 /* -------------------------------------------------------------------------- */

@@ -66,7 +66,7 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a tree that would 
     // Both copies are removed, without --keep.
     expect(report.copy).toMatchObject({ name, kept: false, dropped: true });
     expect(filesLike(name)).toEqual([]);
-    expect(report.preflight).toMatch(/^gnosia_preflight_\d+_[0-9a-z]+$/);
+    expect(report.preflight).toMatch(/^hermes_preflight_\d+_[0-9a-z]+$/);
     expect(preflightExists(report)).toBe(false);
   }, 120_000);
 });

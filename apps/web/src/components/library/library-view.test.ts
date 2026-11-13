@@ -11,22 +11,24 @@ const mocks = vi.hoisted(() => ({
 }));
 
 const library = (reachable = true) => ({
-  rows: [
-    {
-      id: "note:vectors",
-      kind: "note",
-      path: null,
-      url: null,
-      bytes: 100,
-      title: "Vectors",
-      sourceRepo: "gnosia",
-      topics: [],
-      createdAt: "2026-10-04T20:00:00Z",
-      updatedAt: "2026-10-04T20:00:00Z",
-      editedAt: null,
-    },
-  ],
-  counts: [{ kind: "note", count: 1 }],
+  rows: reachable
+    ? [
+        {
+          id: "note:vectors",
+          kind: "note",
+          path: null,
+          url: null,
+          bytes: 100,
+          title: "Vectors",
+          sourceRepo: "hermes",
+          topics: [],
+          createdAt: "2026-10-04T20:00:00Z",
+          updatedAt: "2026-10-04T20:00:00Z",
+          editedAt: null,
+        },
+      ]
+    : [],
+  counts: reachable ? [{ kind: "note", count: 1 }] : [],
   reachable,
   truncated: false,
   titles: {},
@@ -101,13 +103,17 @@ describe("the kept Library view", () => {
     expect(mocks.loadLibrary).toHaveBeenCalledTimes(1);
   });
 
-  it("is never served to another owner", async () => {
+  it("is never served to another owner, and each owner keeps their own", async () => {
     const loadLibraryView = await freshView();
     mocks.currentOwner.mockResolvedValueOnce("a").mockResolvedValueOnce("b");
     const forA = await loadLibraryView({}, { reuse: true });
     const forB = await loadLibraryView({}, { reuse: true });
     expect(mocks.loadLibrary).toHaveBeenCalledTimes(2);
     expect(forB).not.toBe(forA);
+    // Owner a's own copy is still theirs.
+    mocks.currentOwner.mockResolvedValue("a");
+    expect(await loadLibraryView({}, { reuse: true })).toBe(forA);
+    expect(mocks.loadLibrary).toHaveBeenCalledTimes(2);
   });
 
   it("is keyed by its filters too", async () => {

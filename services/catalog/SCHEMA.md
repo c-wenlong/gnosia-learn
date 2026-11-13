@@ -1,7 +1,7 @@
 # The catalog schema
 
 The authored content, the learner state and the rows that run them, in one
-SQLite file, `$GNOSIA_HOME/catalog.db` by default
+SQLite file, `$HERMES_HOME/catalog.db` by default
 ([docs/SQLITE-MIGRATION.md](../../docs/SQLITE-MIGRATION.md), `databaseUrl()` in
 [`src/env.ts`](src/env.ts)). This document is the reasoning; [`packages/schema/src/`](../../packages/schema/src/) is the
 definition, and [`drizzle-sqlite/`](drizzle-sqlite/) is the SQL that definition
@@ -25,8 +25,8 @@ a rule arrived. A Postgres error code such as `23503` still names
 the failure: `sqlstate` in [`src/state/errors.ts`](src/state/errors.ts) reads
 SQLite's errors onto the codes the same failures carried on Postgres.
 
-The plan is [#27](https://github.com/c-wenlong/gnosia-learn/issues/27); this is
-the first half of bundle 3, [#21](https://github.com/c-wenlong/gnosia-learn/issues/21).
+The plan is [#27](https://github.com/promethevs-labs/hermes-studio/issues/27); this is
+the first half of bundle 3, [#21](https://github.com/promethevs-labs/hermes-studio/issues/21).
 
 [docs/CONTENT-MIGRATION.md](../../docs/CONTENT-MIGRATION.md) is the plan
 that made the database (Postgres at the time) the source of truth for content, and it is built through
@@ -43,7 +43,7 @@ directory being imported: an export, `seed/`, or `content-files-final`.
 
 | Half | Tables | Source of truth |
 | --- | --- | --- |
-| Content | `topic`, `concept`, `collection`, `curriculum_item`, `asset` and seven link tables; since 0010 also `tag`, `topic_relation`, `manimkc_topic`, `collection_tag`, `diagram`, `blob_object`, `session_log_entry` and `content_revision`; since 0015 `video` | The database, since the phase 3 cut-over: every type is authored here through the write seam, and files are an export (`catalog export --out`, and the nightly export under `$GNOSIA_HOME/archive/`). The manimkc rows and the mirror ledger are still rebuilt by `catalog import` from manimkc's own CLI. `content_revision` is the only record of who wrote what, and why. |
+| Content | `topic`, `concept`, `collection`, `curriculum_item`, `asset` and seven link tables; since 0010 also `tag`, `topic_relation`, `manimkc_topic`, `collection_tag`, `diagram`, `blob_object`, `session_log_entry` and `content_revision`; since 0015 `video` | The database, since the phase 3 cut-over: every type is authored here through the write seam, and files are an export (`catalog export --out`, and the nightly export under `$HERMES_HOME/archive/`). The manimkc rows and the mirror ledger are still rebuilt by `catalog import` from manimkc's own CLI. `content_revision` is the only record of who wrote what, and why. |
 | State | `learner`, `event`, `mastery`, `review`, `progress`, `recap`, `preference`, `provider_key`, `custom_provider`, `tutor_model`, `asset_name`, `check_distractor` | The database. `event` is the only copy; `mastery` and `review` are replayable from it. Filled by bundle 5's backfill: see [LEARN.md](LEARN.md). |
 | Operational | `index_run`, `mirror`, `content_source`, `catalog_instance` | Neither. What the indexers did, which content types the database owns, and whether this database is the primary. |
 | Studio | `session`, `draft`, `job`, `asset_job` | The database, and the only copy. Who asked for a file to be made, and what came out. |
@@ -78,7 +78,7 @@ reason.
 
 Losing the content half used to cost an index run. Since the cut-over it
 loses what was authored after the last export (the nightly one keeps thirty
-under `$GNOSIA_HOME/archive/`) and the revision history, which only a
+under `$HERMES_HOME/archive/`) and the revision history, which only a
 database backup holds; the manimkc, remotionkc, revideokc and blenderkc rows
 alone come back from an import.
 Losing the state half loses the study record, which is why `event` is
@@ -97,7 +97,7 @@ which brief produced them.
 | `concept` | One authored note (`learn/concepts/<domain>/<slug>.md` in the export layout). Carries prerequisites and mastery. Optional enrichment under a topic. Since Track C the row holds the whole note: its frontmatter as columns (`title`, `summary`, `tags`, `sources`, `authored_at` for `created:`, `requires:` and `assumes:` as `concept_prerequisite`), its folder as `domain`, and the markdown after the frontmatter as `body`, byte for byte. The file it renders writes the keys in one order and leaves out an empty `assumes`, since a row keeps values, not layout; `services/catalog/src/content/notes.ts` is the one rule. |
 | `collection` | Courses and modules today, decks next. A self-referencing tree with `kind`, `position` and a `metadata` JSON column. A course may name its cover photo's blob in `cover_blob_key` (0016), with its credit in `metadata.coverCredit`. |
 | `curriculum_item` | The checklist row a learner ticks: `cs4263-m1-t1`, its title and its subtopics. |
-| `asset` | A file or a link: video, transcript, chapters, captions, diagram source, diagram SVG, note, session, link. `source_repo` says which repository or tool made it: `gnosia`, `manimkc`, `tldrawkc`, `remotionkc` (0017, the second video tool), `revideokc` (0019, the third), or `blenderkc` (0029, the fourth). |
+| `asset` | A file or a link: video, transcript, chapters, captions, diagram source, diagram SVG, note, session, link. `source_repo` says which repository or tool made it: `hermes`, `manimkc`, `tldrawkc`, `remotionkc` (0017, the second video tool), `revideokc` (0019, the third), or `blenderkc` (0029, the fourth). `0000` still creates the check with `gnosia`; [`0004_hermes_source.sql`](drizzle-sqlite/0004_hermes_source.sql) rebuilds the table so the check names `hermes` and renames the old rows. |
 | `asset_topic` | This asset is about this topic. |
 | `asset_concept` | This asset is about this concept. Written for a note (its own concept), for a session log (the notes its wikilinks name), for a diagram's SVG and source (its `meta.tldrawkc` concepts), for a studio video (its brief's concepts, `catalog video put`), and for a manimkc, remotionkc, revideokc or blenderkc render and each of its sidecars (its topic.yml's `concepts:`). |
 | `concept_prerequisite` | This concept `requires` or `assumes` that one. |
@@ -901,7 +901,7 @@ which destinations it audited, the writer clears only those, and
 An unresolved reference stops the run and names the file and the slug. A skipped
 row is an asset that is silently absent from the catalog, with nothing anywhere
 saying so — which is the failure the audit in
-[#27](https://github.com/c-wenlong/gnosia-learn/issues/27) already recorded once,
+[#27](https://github.com/promethevs-labs/hermes-studio/issues/27) already recorded once,
 when a rendered video outlived its source and nothing flagged it. Errors are
 collected per source and reported together, so one run fixes one edit rather
 than thirty runs fixing thirty.
@@ -1035,7 +1035,7 @@ would have failed on it.
 
 **Who reads what** (phase 4 of the plan). An owner is a learner id, and one
 owner may read its own rows and the commons', `readableOwners(owner)` in
-`@gnosia/schema`, which is `[owner, 'commons']`. `commons` is a reserved
+`@hermes/schema`, which is `[owner, 'commons']`. `commons` is a reserved
 learner that owns shared content and never signs in; its `learner` row is
 created by the write seam on its first write, as `local`'s is by
 `ensureLearner`, and no read needs it. The filter is in the application, not in
@@ -1049,7 +1049,7 @@ service read the database, and SQLite has none:
 | `readNoteRows(db, slugs, owners)` (`src/content/note-rows.ts`) | Scoped, keeps a `requires:` or `assumes:` edge only when the concept it names is readable, as `readableEdges` does for the graph; the export's unscoped read keeps every edge |
 | A learner's write naming a curriculum item or a concept (`src/state/progress.ts`, `recap.ts`, `import.ts`, `mastery.ts`) | `assertReadableItems` and `assertReadableConcepts`: another owner's item or concept is refused with the sentence a missing one gets, so a tick is neither a foreign row nor a way to ask whether an id exists. A reset clears only rows on readable items; the legacy import reports another owner's item as unknown |
 | `catalog diagram list`, `show`, `checkout`, `commit`, `put` (`src/content/diagrams.ts`) | Take `--owner` (default `CLI_OWNER`): list and show only what that owner may read, check out another owner's slug as a slug with no diagram (no file, no revision number, and a checkout already on disk left untouched), and write as that owner. The studio passes the owner its runner serves |
-| The studio runner (`services/studio/src/api.ts`) | Serves one owner, `STUDIO_OWNER` (default `local`), and refuses a request the web app names as another's (`x-gnosia-owner`, set by the app's server from the session, never taken from a page), because its queue, checkouts, cache and agent account are that owner's |
+| The studio runner (`services/studio/src/api.ts`) | Serves one owner, `STUDIO_OWNER` (default `local`), and refuses a request the web app names as another's (`x-hermes-owner`, set by the app's server from the session, never taken from a page), because its queue, checkouts, cache and agent account are that owner's |
 | The `learn` CLI's learner view (`src/learn/files.ts`, `vault.ts`) | Reads as `cliScope()`: `status`, `frontier`, `plan`, the note reads and checkouts, and `vault pull` see the CLI owner's notes and the commons', with edges to anything else dropped, and only the CLI owner's own session logs. The five pinned `--json` shapes did not change |
 | The write seam (`src/content/write.ts`) | Stamps `owner_id = owner` (required on every write) and refuses a write naming an id another owner holds, `foreign-owner`, since ids are global. Stamps its link rows the same way (D24: a link belongs to its parent's owner) and refuses a new far end, or a row's own reference, naming a row neither the writer's nor the commons' (`ROW_FAR_ENDS`, `LINK_FAR_ENDS` in `src/content/entities.ts`); one already there is carried over. `deleteContent` deletes through the same two checks. The CLIs write as `CLI_OWNER` (`src/content/scope.ts`), which is `local` |
 | The verbs that write around the seam | `topic rename` refuses another owner's topic; `item purge` refuses another owner's item and deletes only the purging learner's rows; `course import` deletes only its own orphaned links, through `deleteContent` |
@@ -1060,7 +1060,7 @@ service read the database, and SQLite has none:
 | `catalog export`, parity, `topic ls` without `--owner` | Read every owner, through an `owners` argument that is optional only on those internal functions |
 | `catalog import` (`src/index/writer.ts`, `src/index/run.ts`) | Writes as the importing owner (`CLI_OWNER`) and stamps every row it writes with it. Prunes, archives and clears links only among that owner's rows: a link is its parent's (D24), and one whose far end the owner cannot read is left for `catalog doctor`. Refuses, by id and before the source writes anything, a tree row on an id another owner holds, a link under another owner's entity or to one the owner cannot read, and a prune whose cascade would take another owner's rows (their links, their diagram under a topic, their `asset_job` record of an asset, another learner's mastery or review). Another learner's session log is neither called gone nor appended to. The cross-source lookups (`knownConcepts` and the rest) answer only for readable rows: once a source has run, what it produced plus the commons' |
 | `catalog asset upload` (`src/content/asset-upload.ts`) | Uploads the rows the CLI's owner or the commons holds, and writes each one as its own owner, so its bytes land under that owner's prefix and the seam's owner check passes. Another owner's row, and a poster whose owner is not its video's, are refused by name before a byte is read or cut |
-| `uploadBlob` (`src/content/blob.ts`) | With `GNOSIA_OWNER_BYTES_CAP` or `GNOSIA_OWNER_UPLOADS_PER_DAY` set, refuses a new object that would take its owner past either, measured from `blob_object` by `owner_id` (which the table's check ties to the key's prefix) inside the write transaction, whose `begin immediate` holds the file's write lock (a per-owner advisory lock on Postgres). A key that has a row is never measured or refused, a malformed cap included. `catalog blob audit` prints each owner's totals, and its stale-pending delete runs under the same write lock |
+| `uploadBlob` (`src/content/blob.ts`) | With `HERMES_OWNER_BYTES_CAP` or `HERMES_OWNER_UPLOADS_PER_DAY` set, refuses a new object that would take its owner past either, measured from `blob_object` by `owner_id` (which the table's check ties to the key's prefix) inside the write transaction, whose `begin immediate` holds the file's write lock (a per-owner advisory lock on Postgres). A key that has a row is never measured or refused, a malformed cap included. `catalog blob audit` prints each owner's totals, and its stale-pending delete runs under the same write lock |
 | Blob keys and their rows (`src/content/write.ts`, `src/state/blobs.ts`) | A row may name only a blob under its own owner's prefix: the seam refuses a new key under another owner's (a key the row already had passes, for D23's move), and the asset routes' blob reads serve a blob only to a reader who may read its owner (`blob_object.owner_id` in the reader's scope), so a row naming another owner's bytes serves them to nobody who cannot read that owner, while a row D23 moved to the commons keeps serving its `local/` bytes to `local` until the upload re-keys it |
 
 **A database from before 0010** has no `owner_id`, and holds one owner's
@@ -1131,7 +1131,7 @@ revision that mentions the column is the one that set it.
 transaction that takes the revision locks, refuses when the writer's `base` is
 not the latest revision, names the revision on the connection (`markSeam`,
 through `setRevisionId`, which `catalog_revision_id()` answers; on Postgres
-the setting `gnosia.revision_id`), upserts the row and any
+the setting `hermes.revision_id`), upserts the row and any
 links given in a savepoint, reads the snapshot back and appends the revision.
 A write whose snapshot equals the latest revision's rolls the savepoint back,
 so it appends nothing and changes nothing, `updated_at` included. The id is
@@ -1300,7 +1300,7 @@ and session logs are rendered from their rows too: a note from its columns
 and `body`, a log from its `session_log_entry` rows concatenated. Once every
 type is flipped nothing writes these files as a side effect of a write
 (D17 ended), so an export is something a person runs, or the nightly export
-(`scripts/nightly-export.mjs`, into `$GNOSIA_HOME/archive/<UTC time>/`).
+(`scripts/nightly-export.mjs`, into `$HERMES_HOME/archive/<UTC time>/`).
 
 `catalog parity <dir>` renders the export in memory and compares it with
 `<dir>` entity by entity: a topic, a tag, a course file, a note, a log, a
@@ -1318,7 +1318,7 @@ DELETE` is three here, named `<guard>_ins`, `_upd` and `_del`. The functions
 the triggers call, `catalog_copy_ok()` and `catalog_revision_id()`, are
 registered by `connect` on each connection and read that connection's flags
 ([`src/db.ts`](src/db.ts)); on Postgres they were the settings
-`gnosia.copy_ok` and `gnosia.revision_id`.
+`hermes.copy_ok` and `hermes.revision_id`.
 
 | Guard | Table | Kind | State | What it does |
 | --- | --- | --- | --- | --- |
@@ -1441,7 +1441,7 @@ and refuses it on 1 (D16 in `docs/TLDRAWKC-INTEGRATION.md`).
 After changing anything in `packages/schema/src/`:
 
 ```bash
-npm run generate -w @gnosia/catalog   # writes services/catalog/drizzle-sqlite/
+npm run generate -w @hermes/catalog   # writes services/catalog/drizzle-sqlite/
 npm run catalog -- migrate
 npm test
 ```
@@ -1463,7 +1463,7 @@ forever everywhere it has already run, and one drizzle will not apply again.
   location check: a `video`, `transcript`, `chapters`, `captions`, `poster`,
   `pdf` or `diagram_svg` row must name a `blob_key` (a note, a log, a `.tldr`
   and a link are rows or URLs, and keep their path). `blob_object_key_check`
-  holds the key `@gnosia/blob` makes: a lowercase owner of 1 to 64, a
+  holds the key `@hermes/blob` makes: a lowercase owner of 1 to 64, a
   required extension of 1 to 16 (`BLOB_KEY_PATTERN` in
   `packages/schema/src/content.ts`). On SQLite both checks are in
   [`0000_majestic_ronan.sql`](drizzle-sqlite/0000_majestic_ronan.sql), so a

@@ -11,14 +11,14 @@ import {
   readableOwners,
   type IndexSource,
   type SourceRepo,
-} from "@gnosia/schema";
-import { loadCourses } from "@gnosia/content";
+} from "@hermes/schema";
+import { loadCourses } from "@hermes/content";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { execFileSync } from "node:child_process";
 import { homedir } from "node:os";
 import path from "node:path";
 
-import type { BlobStore } from "@gnosia/blob";
+import type { BlobStore } from "@hermes/blob";
 
 import { openBlobStore, uploadBlob } from "../content/blob";
 import { PDF_PREFIX, POSTER_PREFIX, unhookDerivations, uploadAssets } from "../content/asset-upload";

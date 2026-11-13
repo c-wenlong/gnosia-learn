@@ -1,8 +1,9 @@
 import { studioOwner } from "../config";
-import { NPM, run } from "../proc";
+import { run } from "../proc";
+import { notifyCatalogWrite } from "./catalog-events";
 
 /**
- * Postgres, reached only through `npm run --silent catalog --`.
+ * The catalog, reached only through `services/catalog/src/cli.ts`.
  *
  * The studio opens no connection of its own, and that is a deliberate choice
  * with three consequences worth stating.
@@ -87,14 +88,20 @@ function catalog(args: string[], timeoutMs = 120_000): Promise<CatalogResult> {
   return npmCli("catalog", args, timeoutMs);
 }
 
+const CLI_ARGS: Record<"catalog" | "learn", readonly string[]> = {
+  catalog: ["--import", "tsx", "services/catalog/src/cli.ts"],
+  learn: ["scripts/learn/cli.mjs"],
+};
+
 /**
  * One of the repository's two CLIs, with `--json`: `catalog`, or `learn`
  * for what only it answers (a concept note's text). The same exit codes, so
- * the same reading of "offline".
+ * the same reading of "offline". Invoked directly through `process.execPath`
+ * to skip the `npm run` wrapper process on every call.
  */
 async function npmCli(script: "catalog" | "learn", args: string[], timeoutMs: number): Promise<CatalogResult> {
   try {
-    const result = await run(NPM, ["run", "--silent", script, "--", ...args, "--json"], {
+    const result = await run(process.execPath, [...CLI_ARGS[script], ...args, "--json"], {
       timeoutMs,
     });
     if (result.code === 0) return { ok: true, json: result.json, error: null, offline: false };
@@ -121,23 +128,9 @@ async function npmCli(script: "catalog" | "learn", args: string[], timeoutMs: nu
   }
 }
 
-/**
- * Told after every write that changes what the grid lists: a diagram, a
- * video or a topic landing. The runner keeps its lists (`listings.ts`) and
- * drops them here, so the next page after a write this studio made reads the
- * catalog again rather than the list from before it. A listener is told
- * whether the write took or not: a refused write costs one fresh read.
- */
-const writeListeners = new Set<() => void>();
-
-export function onCatalogWrite(listener: () => void): () => void {
-  writeListeners.add(listener);
-  return () => writeListeners.delete(listener);
-}
-
 function wrote(result: Promise<CatalogResult>): Promise<CatalogResult> {
   return result.finally(() => {
-    for (const listener of writeListeners) listener();
+    notifyCatalogWrite();
   });
 }
 

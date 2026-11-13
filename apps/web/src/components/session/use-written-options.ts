@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { OPTIONS_WAIT_MS } from "@gnosia/tutor/session-core";
+import { OPTIONS_WAIT_MS } from "@hermes/tutor/session-core";
 
 /** The check whose wrong options the tutor is asked to write: a note's own, by id. */
 export interface OptionsAsk {

@@ -11,8 +11,8 @@ import { databaseIdentity } from "./import-root";
  *
  * `catalog blob audit --fix` deletes an object no `blob_object` row names,
  * which is only safe when the table it reads is the one that wrote the store.
- * Two databases sharing `~/.gnosia/blobs` (the primary and a
- * `createdb -T` copy with no `GNOSIA_HOME` of its own) each see the
+ * Two databases sharing `~/.hermes/blobs` (the primary and a
+ * `createdb -T` copy with no `HERMES_HOME` of its own) each see the
  * other's objects as orphans, and each `--fix` would delete the other's
  * bytes. So the root names its database, written the first time the catalog
  * writes to it or audits it, and `--fix` refuses a root that names another.
@@ -124,13 +124,13 @@ export async function assertWritable(db: CatalogDatabase, root: string): Promise
     throw new BlobOwnerError(
       `${resolved} belongs to ${describeOwner(owner)} (its ${OWNER_FILE}), and this is ${describeOwner(self)}. ` +
         `An object written here would have no row in that database, whose \`blob audit --fix\` would delete it ` +
-        `as an orphan. Give this database its own store with GNOSIA_HOME; nothing was uploaded.`,
+        `as an orphan. Give this database its own store with HERMES_HOME; nothing was uploaded.`,
     );
   }
   known.set(cacheKey, owner);
 }
 
-/** Where the `fs` store stages a write before its rename (`TEMP_DIR` in `@gnosia/blob`). */
+/** Where the `fs` store stages a write before its rename (`TEMP_DIR` in `@hermes/blob`). */
 const TEMP_DIR = ".tmp";
 
 export interface StagedWrite {

@@ -1,4 +1,4 @@
-import { masteryCaption, MASTERY_BUCKET_LABEL, type MasteryBucket } from "@gnosia/tutor/mastery-bucket";
+import { masteryCaption, MASTERY_BUCKET_LABEL, type MasteryBucket } from "@hermes/tutor/mastery-bucket";
 
 import { cx } from "./classes";
 
@@ -6,7 +6,7 @@ import { cx } from "./classes";
  * Kit `Mastery`: the one mark for "how well do I know this". Mastered is a
  * filled accent disc, learning a light-accent disc ringed in the accent,
  * untouched an empty ring. Get the bucket from `bucketOf` in
- * `@gnosia/tutor/mastery-bucket`, never from the raw probability.
+ * `@hermes/tutor/mastery-bucket`, never from the raw probability.
  *
  * With `showLabel` it adds the caption the hi-fi prints beside it
  * ("Learning · p(L) 0.42").

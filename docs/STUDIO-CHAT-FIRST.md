@@ -786,7 +786,7 @@ own, a tile's panel, the settings, an Extend press and a video's preview
 full-screen conversation once its draft exists.
 
 From 768px up the sidebar folds to a 60px rail of icons, as ChatGPT's does,
-and remembers that in a cookie (`gnosia-sidebar`, D84), so the first paint
+and remembers that in a cookie (`hermes-sidebar`, D84), so the first paint
 has the right width. Resting the mouse on the rail for a moment slides the
 whole sidebar out over the page, without moving it, and moving off slides it
 back; the fold button pressed while it is out keeps it open. (D83 built this
@@ -2127,7 +2127,7 @@ What the runs show:
   snippet's comment names: "2017: The Transformer" wraps, its box grows, and
   the dashed leader to its tick runs through the label, which no lint
   caught because `line` mutes the arrow rules. tldrawkc's
-  `line-crosses-label` (c-wenlong/tldrawkc#21) now fails it as an error. The timeline with the manual
+  `line-crosses-label` (promethevs-labs/tldrawkc#21) now fails it as an error. The timeline with the manual
   avoided that, but set the upper row 190 units above the axis with no
   leaders, so which tick is whose is read by position alone. The two
   comparisons read about equally: one has a title, the other's rows line up

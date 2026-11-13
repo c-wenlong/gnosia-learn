@@ -4,7 +4,7 @@ import path from "node:path";
  * No test may open a catalog file it did not make.
  *
  * The catalog's resolver (`databaseUrl()` in src/env.ts) takes `CATALOG_DB`
- * first, then `DATABASE_URL`, then `$GNOSIA_HOME/catalog.db`, and fills any
+ * first, then `DATABASE_URL`, then `$HERMES_HOME/catalog.db`, and fills any
  * of them that is unset from services/catalog/.env, which docs/DEPLOYMENT.md
  * and docs/HOMESERVER.md tell a machine to put `CATALOG_DB` in. A suite that
  * points the catalog at its scratch file through `DATABASE_URL` alone lost to
@@ -39,7 +39,7 @@ export const ENV_FILE_ENV = "CATALOG_ENV_FILE";
  * - `CATALOG_ENV_FILE` names a file that does not exist, so neither this
  *   process nor any child it spawns reads services/catalog/.env.
  * - `DATABASE_URL` is the tripwire above, whatever the shell exported.
- * - `GNOSIA_HOME` is the caller's temp directory, whatever the shell
+ * - `HERMES_HOME` is the caller's temp directory, whatever the shell
  *   exported, so the default catalog and the blob store sit there.
  *
  * Children inherit all four, which is what keeps a spawned CLI off the real
@@ -49,5 +49,5 @@ export function isolateCatalog(env: NodeJS.ProcessEnv, home: string): void {
   env.CATALOG_DB = "";
   env[ENV_FILE_ENV] = path.join(home, "no-catalog.env");
   env.DATABASE_URL = NO_DEFAULT_CATALOG;
-  env.GNOSIA_HOME = home;
+  env.HERMES_HOME = home;
 }

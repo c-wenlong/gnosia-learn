@@ -75,7 +75,7 @@ describe("nothing openable", () => {
 
 describe("a Postgres URL", () => {
   it("refuses it with the migration pointer, not a connection error", async () => {
-    const ran = await catalog("postgres://no-such-host.invalid:5432/gnosia", "status");
+    const ran = await catalog("postgres://no-such-host.invalid:5432/hermes", "status");
     expect(ran.code).toBe(1);
     expect(ran.stderr).toMatch(/Postgres URL/);
     expect(ran.stderr).toContain("SQLITE-MIGRATION.md");

@@ -1,4 +1,4 @@
-import type { ContentSource, SelectedSource, SelectSourceOptions } from "@gnosia/content";
+import type { ContentSource, SelectedSource, SelectSourceOptions } from "@hermes/content";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -36,8 +36,8 @@ vi.mock("react", async (importOriginal) => {
 
 const reads = vi.hoisted(() => ({ select: 0, topics: 0, tags: 0, courses: 0 }));
 
-vi.mock("@gnosia/content", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@gnosia/content")>();
+vi.mock("@hermes/content", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@hermes/content")>();
   return {
     ...actual,
     selectSource: (options: SelectSourceOptions): SelectedSource => {
@@ -81,8 +81,8 @@ vi.mock("@/lib/auth/session", async (importOriginal) => ({
   isSignedIn: async () => true,
 }));
 vi.mock("@/lib/learner-store", () => ({ catalogDatabase: async () => ({}) }));
-vi.mock("@gnosia/catalog/state", async (importOriginal) => ({
-  classifyConnectionFailure: (await importOriginal<typeof import("@gnosia/catalog/state")>()).classifyConnectionFailure,
+vi.mock("@hermes/catalog/state", async (importOriginal) => ({
+  classifyConnectionFailure: (await importOriginal<typeof import("@hermes/catalog/state")>()).classifyConnectionFailure,
   contentOwnership: () => catalog.ownership(),
   dbSource: () => rowsSource,
 }));
