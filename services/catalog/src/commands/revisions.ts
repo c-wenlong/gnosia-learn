@@ -1,4 +1,4 @@
-import { REVISION_ENTITY_TYPES, type RevisionEntityType } from "@gnosia/schema";
+import { REVISION_ENTITY_TYPES, type RevisionEntityType } from "@hermes/schema";
 
 import { isEntityType } from "../content/entities";
 import {

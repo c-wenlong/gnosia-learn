@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * D11's gate, by behaviour: with `STUDIO_ENABLED` unset, which is what
  * production looks like, every entry point under app/(app)/studio answers 404
  * before it asks the runner, the owner or the network anything. The lint rule
- * `gnosia/studio-gate` holds each exported function to calling
+ * `hermes/studio-gate` holds each exported function to calling
  * `requireStudio()` first; this calls each one and watches what it reaches.
  */
 

@@ -13,7 +13,7 @@ import type { MentionComposerHandle } from "@/components/ui/MentionComposer";
 import type { MentionValue } from "@/lib/mentions";
 import { TutorMessage, UserMessage } from "@/components/ui/Message";
 import { TextLink } from "@/components/ui/TextLink";
-import type { CitationSource } from "@gnosia/tutor/prompt";
+import type { CitationSource } from "@hermes/tutor/prompt";
 import { prefersReducedMotion, scrollBehavior } from "@/lib/motion";
 import type { TagKind } from "@/lib/studio-drafts";
 import { useHydrated } from "@/lib/use-hydrated";
@@ -32,8 +32,8 @@ import {
   type TutorTurn,
 } from "@/lib/tutor-thread";
 import { closeChatSession } from "@/lib/chat-recall";
-import { restoreCardCheck } from "@gnosia/tutor/check-block";
-import { CHAT_ANSWER_LIMIT, pendingCheck, recallOpening, type TurnCheck } from "@gnosia/tutor/tutor-check";
+import { restoreCardCheck } from "@hermes/tutor/check-block";
+import { CHAT_ANSWER_LIMIT, pendingCheck, recallOpening, type TurnCheck } from "@hermes/tutor/tutor-check";
 
 import { CheckCard, CheckRow, slotPlan, useCheckThread, type SlotOptions } from "./use-check-thread";
 import { ChatTurn, TutorThinking } from "./ChatTurn";
@@ -143,7 +143,19 @@ function subscribe(listener: () => void): () => void {
 function readRaw(key: string): string | null {
   if (memory.has(key)) return memory.get(key) ?? null;
   try {
-    return window.sessionStorage.getItem(key);
+    const stored = window.sessionStorage.getItem(key);
+    if (stored !== null) return stored;
+    // A tab opened before the rename stored the thread under the old name.
+    // Move it once, so a reload after the upgrade keeps the conversation.
+    if (key.startsWith("hermes:")) {
+      const previous = window.sessionStorage.getItem(`gnosia:${key.slice("hermes:".length)}`);
+      if (previous !== null) {
+        window.sessionStorage.setItem(key, previous);
+        window.sessionStorage.removeItem(`gnosia:${key.slice("hermes:".length)}`);
+        return previous;
+      }
+    }
+    return null;
   } catch {
     return null;
   }

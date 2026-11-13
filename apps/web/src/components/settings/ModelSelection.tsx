@@ -1,6 +1,6 @@
 "use client";
 
-import { PREFERENCE_KEYS } from "@gnosia/schema/shared";
+import { PREFERENCE_KEYS } from "@hermes/schema/shared";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 
@@ -13,8 +13,8 @@ import { FormRow } from "@/components/ui/FormRow";
 import { LiveStatus } from "@/components/ui/LiveStatus";
 import { Select } from "@/components/ui/Select";
 import { statusProps, type SaveStatus } from "@/components/ui/save-status";
-import type { ChainEntry } from "@gnosia/tutor/providers";
-import { TUTOR_STYLES, type TutorStyle } from "@gnosia/tutor/preferences";
+import type { ChainEntry } from "@hermes/tutor/providers";
+import { TUTOR_STYLES, type TutorStyle } from "@hermes/tutor/preferences";
 import type { ProvidersView } from "@/lib/providers/view";
 import type { ByokInitial } from "@/lib/studio-byok";
 import { sendJson } from "@/lib/send-json";

@@ -39,8 +39,8 @@ import {
   type Rating,
   type ReviewItem,
   type ReviewSessionData,
-} from "@gnosia/tutor/review-core";
-import { sameCheck } from "@gnosia/tutor/session-core";
+} from "@hermes/tutor/review-core";
+import { sameCheck } from "@hermes/tutor/session-core";
 
 
 /**

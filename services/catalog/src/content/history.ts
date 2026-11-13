@@ -1,4 +1,4 @@
-import { contentRevision, type RevisionEntityType } from "@gnosia/schema";
+import { contentRevision, type RevisionEntityType } from "@hermes/schema";
 import { and, asc, eq, inArray } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";

@@ -60,7 +60,7 @@ let dir: string;
 
 beforeAll(async () => {
   template = await migratedScratchDatabase();
-  dir = mkdtempSync(path.join(tmpdir(), "gnosia_pg_port_"));
+  dir = mkdtempSync(path.join(tmpdir(), "hermes_pg_port_"));
 });
 
 afterAll(async () => {
@@ -84,7 +84,7 @@ async function runPort(fixture: Fixture, target: string) {
 }
 
 describe("pg-to-sqlite", () => {
-  it("ports a catalog from before the gnosia rename, with self-learn read as gnosia", async () => {
+  it("ports a catalog from before the hermes rename, with self-learn read as hermes", async () => {
     const target = targetFile("renamed");
     const lines = await runPort(
       { asset: { columns: ASSET_COLUMNS, rows: [asset("a-note", "self-learn"), asset("manimkc:video", "manimkc", "note")] } },
@@ -95,7 +95,7 @@ describe("pg-to-sqlite", () => {
     try {
       const rows = db.prepare("select id, source_repo, generated_by from asset order by id").all();
       expect(rows).toEqual([
-        { id: "a-note", source_repo: "gnosia", generated_by: "manual" },
+        { id: "a-note", source_repo: "hermes", generated_by: "manual" },
         { id: "manimkc:video", source_repo: "manimkc", generated_by: "manimkc" },
       ]);
     } finally {
@@ -113,7 +113,7 @@ describe("pg-to-sqlite", () => {
           asset("one", "elsewhere"),
           asset("two", "elsewhere"),
           asset("three", "somewhere"),
-          asset("four", "gnosia", "gif"),
+          asset("four", "hermes", "gif"),
         ],
       },
     };
@@ -127,7 +127,7 @@ describe("pg-to-sqlite", () => {
     const { message, details } = refused as PortRefused;
     expect(message).toContain("2 CHECK constraint(s)");
     expect(details).toContain(
-      "asset: 3 row(s) fail asset_source_repo_check, CHECK (source_repo in ('gnosia', 'manimkc', 'tldrawkc', 'remotionkc', 'revideokc', 'blenderkc'))",
+      "asset: 3 row(s) fail asset_source_repo_check, CHECK (source_repo in ('hermes', 'manimkc', 'tldrawkc', 'remotionkc', 'revideokc', 'blenderkc'))",
     );
     expect(details).toContain("  source_repo = 'elsewhere'  (2 row(s))");
     expect(details).toContain("  source_repo = 'somewhere'  (1 row(s))");
@@ -139,7 +139,7 @@ describe("pg-to-sqlite", () => {
 
   it("lets one of two ports aimed at one file have it, so the loser's cleanup cannot delete the winner's", async () => {
     const target = targetFile("raced");
-    const good: Fixture = { asset: { columns: ASSET_COLUMNS, rows: [asset("kept", "gnosia")] } };
+    const good: Fixture = { asset: { columns: ASSET_COLUMNS, rows: [asset("kept", "hermes")] } };
     const bad: Fixture = { asset: { columns: ASSET_COLUMNS, rows: [asset("refused", "elsewhere")] } };
 
     const [first, second] = await Promise.allSettled([runPort(good, target), runPort(bad, target)]);
@@ -191,7 +191,7 @@ describe("the CHECK parser", () => {
   });
 
   it("renames only the value a migration renamed, in its own column", () => {
-    expect(renamed("asset", "source_repo", "self-learn")).toBe("gnosia");
+    expect(renamed("asset", "source_repo", "self-learn")).toBe("hermes");
     expect(renamed("asset", "source_repo", "manimkc")).toBe("manimkc");
     expect(renamed("asset", "title", "self-learn")).toBe("self-learn");
   });

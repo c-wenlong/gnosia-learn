@@ -2,7 +2,7 @@ import { Literata } from "next/font/google";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-import { GnosiaWordmark } from "@/components/brand/GnosiaWordmark";
+import { HermesWordmark } from "@/components/brand/HermesWordmark";
 import { cx } from "@/components/ui/classes";
 
 import { GITHUB_URL, siteLink } from "./site";
@@ -25,7 +25,7 @@ const literata = Literata({
  * No top bar, no learner state, no database. A signed-in visitor never gets
  * here for `/` (proxy.ts sends them to `/home`), so nothing in this layout
  * asks who is looking. The ground is cream in light and deep navy in dark
- * (`.gnosia-ground` in globals.css); the theme class on <html> still comes
+ * (`.hermes-ground` in globals.css); the theme class on <html> still comes
  * from the root layout's cookie, so a reader's choice carries over.
  *
  * The page content sits in the one `<main>`: a page under this layout starts
@@ -34,19 +34,19 @@ const literata = Literata({
 export default function SiteLayout({ children }: { children: ReactNode }) {
   return (
     <div
-      className={cx(literata.variable, "group/site gnosia-ground flex min-h-dvh flex-col overflow-x-clip font-sans")}
+      className={cx(literata.variable, "group/site hermes-ground flex min-h-dvh flex-col overflow-x-clip font-sans")}
     >
       <a
         href="#main"
-        className="sr-only rounded-full bg-brand-teal px-4 py-2 text-[14px] font-semibold text-brand-cream focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 dark:text-brand-navy"
+        className="sr-only rounded-full bg-brand-terracotta px-4 py-2 text-[14px] font-semibold text-brand-cream focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 dark:text-brand-earth"
       >
         Skip to content
       </a>
 
       <header className="pt-[env(safe-area-inset-top)]">
         <div className="mx-auto flex h-16 w-full max-w-[1200px] items-center justify-between px-5 md:h-20 md:px-8">
-          <Link href="/" aria-label="Gnosia home" className={siteLink("rounded-md text-[14px] text-brand-ink md:text-[15px]")}>
-            <GnosiaWordmark />
+          <Link href="/" aria-label="Hermes home" className={siteLink("rounded-md text-[14px] text-brand-ink md:text-[15px]")}>
+            <HermesWordmark />
           </Link>
           <div className="flex items-center gap-3 md:gap-5">
             {/* The sign-in page marks its root `data-page="sign-in"`, and
@@ -58,7 +58,7 @@ export default function SiteLayout({ children }: { children: ReactNode }) {
               <Link
                 href="/sign-in"
                 className={siteLink(
-                  "rounded-md px-1 py-2 text-[15px] font-semibold text-brand-ink underline-offset-[6px] hover:text-brand-teal hover:underline",
+                  "rounded-md px-1 py-2 text-[15px] font-semibold text-brand-ink underline-offset-[6px] hover:text-brand-terracotta hover:underline",
                 )}
               >
                 Sign in
@@ -77,7 +77,7 @@ export default function SiteLayout({ children }: { children: ReactNode }) {
       <footer className="border-t border-brand-ink/10 pb-[env(safe-area-inset-bottom)]">
         <div className="mx-auto flex w-full max-w-[1200px] flex-col gap-5 px-5 py-10 md:flex-row md:items-center md:justify-between md:px-8">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-6">
-            <GnosiaWordmark className="text-[13px] text-brand-ink" />
+            <HermesWordmark className="text-[13px] text-brand-ink" />
             <p className="text-[14px] text-brand-mist">A book that grows as you do.</p>
           </div>
           <a

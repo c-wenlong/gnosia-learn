@@ -3,7 +3,7 @@ import { act, createElement, useEffect, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { emptyLearnerState, LEGACY_STORAGE_KEY } from "@gnosia/schema/shared";
+import { emptyLearnerState, LEGACY_STORAGE_KEY } from "@hermes/schema/shared";
 
 /**
  * The one-time import of a browser's old localStorage document. A database

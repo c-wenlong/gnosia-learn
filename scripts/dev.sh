@@ -20,7 +20,7 @@ Options for start:
   --no-checks   skip the checks
   -h, --help    show this help
 
-The panes get PATH, CATALOG_DB, DATABASE_URL, PORT, GNOSIA_HOME and STUDIO_*
+The panes get PATH, CATALOG_DB, DATABASE_URL, PORT, HERMES_HOME and STUDIO_*
 from the shell that ran this (a variable it does not have is unset for them),
 because a tmux server that was already running would otherwise hand them its
 own environment. They are passed in a private file the pane reads and
@@ -30,7 +30,7 @@ read themselves. STUDIO_ENABLED is set for the web pane here, to 1 or (with
 --no-studio) 0, whatever that file says: a runner with nothing proxying to it
 is no use, and Studio with no runner behind it only errors.
 
-Environment: DEV_SESSION (tmux session name, default gnosia). Detach with
+Environment: DEV_SESSION (tmux session name, default hermes). Detach with
 Ctrl-b d; the session keeps running until `stop`.
 EOF
 }
@@ -46,7 +46,7 @@ root="${DEV_ROOT:-$script_root}"
 cd "$root"
 DEV_ENV="$script_root/scripts/lib/dev-env.mjs"
 
-SESSION="${DEV_SESSION:-gnosia}"
+SESSION="${DEV_SESSION:-hermes}"
 WEB_PORT="${PORT:-3000}"
 STUDIO_PORT="${STUDIO_PORT:-7250}"
 
@@ -166,7 +166,7 @@ trap cleanup_failed_start EXIT
 pane_command() { # pane_command <process command...>
   local file name line
   local -a held=()
-  file="$(mktemp "${TMPDIR:-/tmp}/gnosia-dev.XXXXXX")" || die "could not create a temporary file"
+  file="$(mktemp "${TMPDIR:-/tmp}/hermes-dev.XXXXXX")" || die "could not create a temporary file"
   PANE_FILES+=("$file")
 
   # Names a running tmux server holds that this shell may have since dropped.
@@ -176,7 +176,7 @@ pane_command() { # pane_command <process command...>
 
   {
     printf 'export PATH=%q\n' "$PATH"
-    for name in CATALOG_DB DATABASE_URL PORT GNOSIA_HOME ${held[@]+"${held[@]}"}; do
+    for name in CATALOG_DB DATABASE_URL PORT HERMES_HOME GNOSIA_HOME ${held[@]+"${held[@]}"}; do
       case "$name" in STUDIO_ENABLED) continue ;; esac
       if [ -n "${!name+x}" ]; then printf 'export %s=%q\n' "$name" "${!name}"; else printf 'unset %s\n' "$name"; fi
     done

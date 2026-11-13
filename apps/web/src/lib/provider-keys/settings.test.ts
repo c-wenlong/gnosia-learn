@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { providerConfigs } from "@gnosia/tutor/providers";
+import { providerConfigs } from "@hermes/tutor/providers";
 import type { CustomProvider } from "@/lib/custom-providers/store";
 import type { SavedKeyStatus } from "@/lib/provider-keys/store";
 

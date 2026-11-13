@@ -2,11 +2,11 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { asset, collection, collectionItem, contentRevision, curriculumItem, curriculumItemAsset, learner } from "@gnosia/schema";
+import { asset, collection, collectionItem, contentRevision, curriculumItem, curriculumItemAsset, learner } from "@hermes/schema";
 import { and, eq, gt, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { parseCourse, VIDEO_ASSET_PREFIXES } from "@gnosia/content";
+import { parseCourse, VIDEO_ASSET_PREFIXES } from "@hermes/content";
 
 import { doctor, formatDoctor } from "../src/commands/doctor";
 import { runExport } from "../src/commands/export";

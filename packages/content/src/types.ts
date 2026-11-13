@@ -11,7 +11,7 @@
 /**
  * What a module resource may be, the one list the reader checks against and
  * the type is drawn from. The same list as `RESOURCE_TYPES` in
- * `@gnosia/schema`, which this package does not import, and which the
+ * `@hermes/schema`, which this package does not import, and which the
  * database's `asset_resource_type_check` is built from; the catalog's
  * export-import suite holds the two equal.
  */

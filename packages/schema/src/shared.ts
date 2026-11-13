@@ -4,7 +4,7 @@
  *
  * This file deliberately pulls in nothing — not drizzle, not node. That is
  * what makes it importable from a `"use client"` component in `src/` through
- * the `@gnosia/schema/shared` subpath without dragging drizzle and a
+ * the `@hermes/schema/shared` subpath without dragging drizzle and a
  * database driver into the browser bundle (layering rule 8 in ARCHITECTURE.md), while
  * `state.ts` re-exports the same values for the service and the migrations.
  *
@@ -69,7 +69,7 @@ export const AUTH_SECRET_VAR = "AUTH_SECRET";
  * `.env` file, so a deployment that never runs the shell simply has it
  * unset, and the route refuses everyone.
  */
-export const LOCAL_TOKEN_VAR = "GNOSIA_LOCAL_TOKEN";
+export const LOCAL_TOKEN_VAR = "HERMES_LOCAL_TOKEN";
 
 /** Shortest secret accepted: 32 characters is what `openssl rand -base64 32` yields. */
 export const MIN_SECRET_LENGTH = 32;
@@ -113,7 +113,7 @@ export function ownerScope(owner: string): OwnerScope {
  * own. The runner serves the one owner it was started for (`STUDIO_OWNER`)
  * and refuses a request naming another.
  */
-export const STUDIO_OWNER_HEADER = "x-gnosia-owner";
+export const STUDIO_OWNER_HEADER = "x-hermes-owner";
 
 /**
  * Event types in the log. The `learn` CLI writes the first five; the web app
@@ -535,7 +535,7 @@ export function clampSummary(value: unknown): string {
  *
  * These are declared here because both sides need them:
  * `services/catalog/src/state/` builds the snapshot and the web app's
- * provider consumes it, importing them from `@gnosia/schema/shared`.
+ * provider consumes it, importing them from `@hermes/schema/shared`.
  *
  * The keys deliberately match the old localStorage document, minus `version`.
  * They are the argument to `/api/learner/import`, and a component reading
@@ -545,22 +545,22 @@ export function clampSummary(value: unknown): string {
 
 /**
  * The theme is two choices stored as one string. The **palette** is `classic`
- * (the original kit colours) or `gnosia` (the brand's); the **appearance** is
+ * (the original kit colours) or `hermes` (the brand's); the **appearance** is
  * `light`, `dark`, or `system`, which follows the device's
  * `prefers-color-scheme`. One string, not two keys, so the cookie the root
  * layout reads, the `preference` row and the import each keep a single value.
  *
  * The first four names predate the palette axis and keep their meaning, so
  * nothing already stored changes: `light`, `dark` and `system` are the classic
- * palette, and `gnosia` is Gnosia light. The two Gnosia modes that came later
+ * palette, and `hermes` is Hermes light. The two Hermes modes that came later
  * say both halves. Adding a mode here is the whole schema change;
  * `themeModeFor` must still name every pair.
  */
-export const THEME_MODES = ["light", "gnosia", "dark", "system", "gnosia-dark", "gnosia-system"] as const;
+export const THEME_MODES = ["light", "hermes", "dark", "system", "hermes-dark", "hermes-system"] as const;
 
 export type ThemeMode = (typeof THEME_MODES)[number];
 
-export const THEME_PALETTES = ["classic", "gnosia"] as const;
+export const THEME_PALETTES = ["classic", "hermes"] as const;
 export type ThemePalette = (typeof THEME_PALETTES)[number];
 
 export const THEME_APPEARANCES = ["light", "dark", "system"] as const;
@@ -569,16 +569,17 @@ export type ThemeAppearance = (typeof THEME_APPEARANCES)[number];
 /** The mode a stored or posted value names, or null for anything else. */
 export function asThemeMode(value: unknown): ThemeMode | null {
   // The palette predates the rename: cookies and preference rows written
-  // before it still say `self-learn*`, which are the gnosia modes renamed.
-  if (typeof value === "string" && value.startsWith("self-learn")) {
-    value = `gnosia${value.slice("self-learn".length)}`;
+  // before it still say `self-learn*`, which are the hermes modes renamed.
+  if (typeof value === "string" && (value.startsWith("self-learn") || value.startsWith("gnosia"))) {
+    const prefix = value.startsWith("self-learn") ? "self-learn" : "gnosia";
+    value = `hermes${value.slice(prefix.length)}`;
   }
   return typeof value === "string" && (THEME_MODES as readonly string[]).includes(value) ? (value as ThemeMode) : null;
 }
 
 const MODE_FOR: Record<ThemePalette, Record<ThemeAppearance, ThemeMode>> = {
   classic: { light: "light", dark: "dark", system: "system" },
-  gnosia: { light: "gnosia", dark: "gnosia-dark", system: "gnosia-system" },
+  hermes: { light: "hermes", dark: "hermes-dark", system: "hermes-system" },
 };
 
 /** The one mode that stores a palette and an appearance together. */
@@ -588,13 +589,13 @@ export function themeModeFor(palette: ThemePalette, appearance: ThemeAppearance)
 
 /** Which palette a mode draws with. */
 export function paletteOf(mode: ThemeMode): ThemePalette {
-  return mode === "gnosia" || mode.startsWith("gnosia-") ? "gnosia" : "classic";
+  return mode === "hermes" || mode.startsWith("hermes-") ? "hermes" : "classic";
 }
 
 /** Whether a mode is light, dark, or follows the device. */
 export function appearanceOf(mode: ThemeMode): ThemeAppearance {
-  if (mode === "dark" || mode === "gnosia-dark") return "dark";
-  if (mode === "system" || mode === "gnosia-system") return "system";
+  if (mode === "dark" || mode === "hermes-dark") return "dark";
+  if (mode === "system" || mode === "hermes-system") return "system";
   return "light";
 }
 

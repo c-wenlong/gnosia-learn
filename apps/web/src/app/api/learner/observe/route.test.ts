@@ -6,13 +6,15 @@ import {
   probe,
   type Scratch,
 } from "../../../../../../../services/catalog/test/scratch-database";
-import { seedContent } from "../../../../../../../services/catalog/test/state-fixture";
-import { collection, learner } from "@gnosia/schema";
+import { seedContent, TOPIC_SLUG } from "../../../../../../../services/catalog/test/state-fixture";
+import { collection, concept, learner, session } from "@hermes/schema";
 
 /**
  * Beside the fixture's live module `fx-m1`: one the course file stopped
  * listing (archived), and one another owner wrote, so a week check's
- * `module` can be refused for each reason.
+ * `module` can be refused for each reason. Their concept sits under the
+ * fixture's own topic, so only its `owner_id` keeps it out of `local`'s
+ * graph.
  */
 async function seedModules(db: Scratch["db"]) {
   await db.insert(learner).values({ id: "someone-else" }).onConflictDoNothing();
@@ -23,6 +25,16 @@ async function seedModules(db: Scratch["db"]) {
       { id: "theirs", kind: "course", slug: "theirs", title: "Their course", ownerId: "someone-else" },
       { id: "theirs-m1", kind: "module", slug: "m1", title: "Their module", parentId: "theirs", ownerId: "someone-else" },
     ])
+    .onConflictDoNothing();
+  await db
+    .insert(concept)
+    .values({
+      slug: "their-concept",
+      title: "Their concept",
+      topicSlug: TOPIC_SLUG,
+      path: "learn/concepts/fixtures/their-concept.md",
+      ownerId: "someone-else",
+    })
     .onConflictDoNothing();
 }
 
@@ -63,17 +75,20 @@ describe.skipIf(!reachable.ok)("the session's learner routes", () => {
   let scratch: Scratch;
   let observe: (req: Request) => Promise<Response>;
   let close: (req: Request) => Promise<Response>;
-  let state: typeof import("@gnosia/catalog/state");
+  let state: typeof import("@hermes/catalog/state");
+
+  let previousDatabaseUrl: string | undefined;
 
   beforeAll(async () => {
     scratch = await migratedScratchDatabase();
     await seedContent(scratch.db);
     await seedModules(scratch.db);
+    previousDatabaseUrl = process.env.DATABASE_URL;
     process.env.DATABASE_URL = scratch.url;
     const [observeRoute, closeRoute, store] = await Promise.all([
       import("./route"),
       import("../session/close/route"),
-      import("@gnosia/catalog/state"),
+      import("@hermes/catalog/state"),
     ]);
     observe = observeRoute.POST;
     close = closeRoute.POST;
@@ -81,6 +96,8 @@ describe.skipIf(!reachable.ok)("the session's learner routes", () => {
   }, 60_000);
 
   afterAll(async () => {
+    if (previousDatabaseUrl === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = previousDatabaseUrl;
     await scratch?.drop();
   });
 
@@ -130,6 +147,24 @@ describe.skipIf(!reachable.ok)("the session's learner routes", () => {
 
   it("refuses a concept the catalog lacks as a 400, not a 503", async () => {
     const { status } = await send({ ...answer, conceptSlug: "delta", sessionId: undefined });
+    expect(status).toBe(400);
+    expect(await state.readEvents(scratch.db)).toEqual([]);
+  });
+
+  it("refuses another owner's concept as though it were not there, writing nothing", async () => {
+    // The graph is read under the request's owner scope (`readConceptGraph`),
+    // so evidence cannot be recorded against a concept `local` may not read.
+    const { status } = await send({ ...answer, conceptSlug: "their-concept" });
+    expect(status).toBe(400);
+    expect(await state.readEvents(scratch.db)).toEqual([]);
+    expect(await state.readSession(scratch.db, answer.sessionId)).toBeUndefined();
+  });
+
+  it("refuses an answer into a session another learner owns, writing nothing", async () => {
+    await scratch.db
+      .insert(session)
+      .values({ id: "their-session", kind: "tutor", learnerId: "someone-else", state: "running" });
+    const { status } = await send({ ...answer, sessionId: "their-session" });
     expect(status).toBe(400);
     expect(await state.readEvents(scratch.db)).toEqual([]);
   });

@@ -18,7 +18,7 @@ import {
   type SkipFlash,
   type TranscriptCue,
   type VideoChapter,
-} from "@gnosia/tutor/media";
+} from "@hermes/tutor/media";
 import { TranscriptPanel } from "@/components/TranscriptPanel";
 import { cx } from "@/components/ui/classes";
 import { Tabs, type TabItem } from "@/components/ui/Tabs";
@@ -146,6 +146,10 @@ export function VideoPlayer({
   const subtitles = useSyncExternalStore(subscribeSubtitles, readSubtitles, () => false);
   // Off on the server, so the first client render matches it.
   const canPip = useSyncExternalStore(noSubscription, pipSupported, () => false);
+  // The same for fullscreen: a view that refuses it (a WKWebView with element
+  // fullscreen off, an iframe without `allowfullscreen`) gets no button that
+  // does nothing.
+  const canFullscreen = useSyncExternalStore(noSubscription, fullscreenSupported, () => false);
   const idle = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { failure, fail, retry, attempt, observe } = useAssetFailure(src, statusHref);
   // A seek the element refused, held until it can be honoured. See `seek`.
@@ -370,7 +374,7 @@ export function VideoPlayer({
 
   function toggleFullscreen() {
     const frame = frameRef.current;
-    if (!frame) return;
+    if (!frame || !canFullscreen) return;
     if (document.fullscreenElement) void document.exitFullscreen?.();
     else void frame.requestFullscreen?.();
   }
@@ -415,6 +419,7 @@ export function VideoPlayer({
         toggleSubtitles();
         break;
       case "f":
+        if (!canFullscreen) return;
         toggleFullscreen();
         break;
       case "i":
@@ -552,6 +557,7 @@ export function VideoPlayer({
           rate={rate}
           fullscreen={fullscreen}
           canPip={canPip}
+          canFullscreen={canFullscreen}
           hasSubtitles={hasSubtitles}
           subtitles={subtitles}
           chapterTitle={chapterTitle}
@@ -614,6 +620,10 @@ function noSubscription(): () => void {
 
 function pipSupported(): boolean {
   return typeof document !== "undefined" && document.pictureInPictureEnabled === true;
+}
+
+function fullscreenSupported(): boolean {
+  return typeof document !== "undefined" && document.fullscreenEnabled === true;
 }
 
 /** `HTMLMediaElement.HAVE_METADATA`: the length and the size are known. */

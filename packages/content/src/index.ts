@@ -6,7 +6,7 @@
  * Two layers. The synchronous parsers (`loadCourses`, `loadTopics`,
  * `loadTags`) are what `catalog import` turns into rows, and they are the only
  * place a course file's meaning is decided. `ContentSource` is what a reader
- * holds: `dbSource` in `@gnosia/catalog` answers it from rows, which is the
+ * holds: `dbSource` in `@hermes/catalog` answers it from rows, which is the
  * default and, since the phase 3 cut-over, the only copy of the content;
  * `fileSource(root)` answers it from the parsers, for an import and for a
  * test that hands the seam a tree of its own. `selectSource` picks one per

@@ -1,5 +1,5 @@
-import { addCustomProvider, updateCustomProvider } from "@gnosia/catalog/state";
-import { learner, LOCAL_LEARNER_ID } from "@gnosia/schema";
+import { addCustomProvider, updateCustomProvider } from "@hermes/catalog/state";
+import { learner, LOCAL_LEARNER_ID } from "@hermes/schema";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { isCallable } from "../src/providers";

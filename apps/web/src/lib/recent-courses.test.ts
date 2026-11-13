@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PREFERENCE_KEYS } from "@gnosia/schema/shared";
+import { PREFERENCE_KEYS } from "@hermes/schema/shared";
 
 import { recentCourseSlugs } from "@/lib/recent-courses";
 

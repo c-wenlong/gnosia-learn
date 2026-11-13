@@ -4,7 +4,7 @@ import { cache } from "react";
 
 import { contentSource } from "@/data/source";
 import { courseTopicIds } from "@/lib/course-path";
-import type { Course, Module } from "@gnosia/content";
+import type { Course, Module } from "@hermes/content";
 
 /**
  * The app's view of the courses.

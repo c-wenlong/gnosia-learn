@@ -109,10 +109,10 @@ describe("proxy", () => {
     expect(lan.headers.get("location")).toBe("http://192.168.1.20:3000/sign-in?next=%2Fhome");
     const proxied = await proxy(
       new NextRequest(`${ORIGIN}/`, {
-        headers: new Headers({ host: "gnosia.example", "x-forwarded-proto": "https", cookie: `${SESSION_COOKIE}=${token}` }),
+        headers: new Headers({ host: "hermes.example", "x-forwarded-proto": "https", cookie: `${SESSION_COOKIE}=${token}` }),
       }),
     );
-    expect(proxied.headers.get("location")).toBe("https://gnosia.example/home");
+    expect(proxied.headers.get("location")).toBe("https://hermes.example/home");
   });
 
   it("never lets a client-supplied X-Forwarded-Host choose the redirect host, and survives a malformed Host", async () => {

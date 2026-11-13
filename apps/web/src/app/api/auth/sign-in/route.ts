@@ -1,4 +1,4 @@
-import { clientIp } from "@gnosia/tutor/guards";
+import { clientIp } from "@hermes/tutor/guards";
 import { NextResponse } from "next/server";
 
 import { passwordMatches, readAuthConfig, safeNextPath, SESSION_COOKIE, SESSION_TTL_SECONDS, signSession } from "@/lib/auth/core";
@@ -40,8 +40,11 @@ export async function POST(request: Request) {
     return response;
   }
 
-  const form = await request.formData();
-  const next = typeof form.get("next") === "string" ? safeNextPath(form.get("next") as string) : queryNext;
+  // A body that is not a form post cannot carry a right password: `form`
+  // stays null and the request waits and answers like a wrong one, keeping
+  // the limiter slot it took rather than erroring the request out.
+  const form = await request.formData().catch(() => null);
+  const next = typeof form?.get("next") === "string" ? safeNextPath(form.get("next") as string) : queryNext;
   const back = (error: string) => {
     const params = new URLSearchParams({ error });
     if (next !== safeNextPath(null)) params.set("next", next);
@@ -54,7 +57,7 @@ export async function POST(request: Request) {
     return back("unconfigured");
   }
 
-  const password = form.get("password");
+  const password = form?.get("password");
   if (typeof password !== "string" || !(await passwordMatches(password, config.config.password))) {
     await new Promise((resolve) => setTimeout(resolve, WRONG_PASSWORD_DELAY_MS));
     return back("password");

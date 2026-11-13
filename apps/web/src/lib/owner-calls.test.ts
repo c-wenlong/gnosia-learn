@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
  * Nothing in the web app reads or writes on the `'local'` default (phase 4 of
  * docs/CONTENT-MIGRATION.md).
  *
- * Every state function in `@gnosia/catalog/state` takes the learner as
+ * Every state function in `@hermes/catalog/state` takes the learner as
  * `learnerId`, defaulted to `'local'` so the `learn` CLI, which runs on the
  * owner's machine with no session, reads naturally. The web app has a
  * session, and a call there that leaves `learnerId` out would read the owner's
@@ -25,7 +25,7 @@ import { describe, expect, it } from "vitest";
  * day it lands. The content reads take a required `OwnerScope`, which the
  * compiler already enforces; they are checked here too, which costs nothing.
  *
- * `@gnosia/tutor/server/<name>` is a second door: its modules call the
+ * `@hermes/tutor/server/<name>` is a second door: its modules call the
  * catalog themselves, so a web call into one is held to the same rule, and
  * the package's own catalog calls are checked against the catalog's door.
  * Its turn functions take the owner inside a required `deps.owner`, which
@@ -36,24 +36,24 @@ import { describe, expect, it } from "vitest";
  * `LOCAL_LEARNER_ID` outside `owner.ts`, a scope built by hand (an object with
  * `owner` and `readable`, or `ownerScope`/`readableOwners` given a literal), a
  * namespace or unbound dynamic import of the catalog, a re-export of it, any
- * other `@gnosia/catalog` entry point, and a query of the app's own
+ * other `@hermes/catalog` entry point, and a query of the app's own
  * (`drizzle-orm`, or `.execute(`), which would bypass every scoped reader.
  */
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const WEB_SRC = path.resolve(HERE, "..");
 const REPO = path.resolve(WEB_SRC, "..", "..", "..");
-const DOOR = "@gnosia/catalog/state";
+const DOOR = "@hermes/catalog/state";
 const DOOR_INDEX = path.join(REPO, "services", "catalog", "src", "state", "index.ts");
 
 /**
- * The tutor package's server half, `@gnosia/tutor/server/<name>`: the second
+ * The tutor package's server half, `@hermes/tutor/server/<name>`: the second
  * door. Its modules call the catalog themselves (provider keys, turns, learner
  * writes, the concept workspace), so a web call into one that leaves the owner
  * out reads the default learner just as a direct catalog call would.
  */
 const TUTOR_SERVER = path.join(REPO, "packages", "tutor", "src", "server");
-const TUTOR_DOOR = "@gnosia/tutor/server/";
+const TUTOR_DOOR = "@hermes/tutor/server/";
 
 const OWNER_PARAMS = new Set(["learnerId", "owner", "scope"]);
 
@@ -158,7 +158,7 @@ function moduleTable(file: string, read: Reader = disk): Map<string, OwnerSlot> 
   return table;
 }
 
-/** Every `@gnosia/tutor/server/<name>` module with an owner-taking export, by specifier. */
+/** Every `@hermes/tutor/server/<name>` module with an owner-taking export, by specifier. */
 function tutorTables(): Map<string, Map<string, OwnerSlot>> {
   const out = new Map<string, Map<string, OwnerSlot>>();
   for (const file of tutorServerFiles()) {
@@ -209,12 +209,37 @@ interface Violation {
   why: string;
 }
 
+/**
+ * An expression that is no owner at all: `null`, `undefined` or `void x`,
+ * seen through parentheses and type assertions (`null as unknown as string`).
+ * Passing one is the same as leaving the owner out: the catalog's default
+ * takes over.
+ */
+function isNoOwner(node: ts.Expression): boolean {
+  let expr = node;
+  while (
+    ts.isParenthesizedExpression(expr) ||
+    ts.isAsExpression(expr) ||
+    ts.isTypeAssertionExpression(expr) ||
+    ts.isNonNullExpression(expr) ||
+    ts.isSatisfiesExpression(expr)
+  ) {
+    expr = expr.expression;
+  }
+  return (
+    expr.kind === ts.SyntaxKind.NullKeyword ||
+    (ts.isIdentifier(expr) && expr.text === "undefined") ||
+    ts.isVoidExpression(expr)
+  );
+}
+
+/** An object literal naming `learnerId` with a value that is an owner. */
 function hasLearnerKey(node: ts.Expression): boolean {
   return (
     ts.isObjectLiteralExpression(node) &&
     node.properties.some(
       (p) =>
-        (ts.isPropertyAssignment(p) || ts.isShorthandPropertyAssignment(p)) &&
+        ((ts.isPropertyAssignment(p) && !isNoOwner(p.initializer)) || ts.isShorthandPropertyAssignment(p)) &&
         p.name !== undefined &&
         p.name.getText() === "learnerId",
     )
@@ -245,7 +270,7 @@ function violationsIn(
         bindFrom((node.moduleSpecifier as ts.StringLiteral).text, element.name.text, (element.propertyName ?? element.name).text);
       }
     }
-    // const { a, b: c } = await import("@gnosia/catalog/state")
+    // const { a, b: c } = await import("@hermes/catalog/state")
     if (ts.isVariableDeclaration(node) && ts.isObjectBindingPattern(node.name) && node.initializer !== undefined) {
       const init = ts.isAwaitExpression(node.initializer) ? node.initializer.expression : node.initializer;
       if (ts.isCallExpression(init) && init.expression.kind === ts.SyntaxKind.ImportKeyword) {
@@ -266,7 +291,7 @@ function violationsIn(
     out.push({ file, line: source.getLineAndCharacterOfPosition(node.getStart()).line + 1, name, why });
   };
   const isOwnerModule = path.resolve(file) === OWNER_MODULE;
-  const catalogSpecifier = (text: string) => text === "@gnosia/catalog" || text.startsWith("@gnosia/catalog/");
+  const catalogSpecifier = (text: string) => text === "@hermes/catalog" || text.startsWith("@hermes/catalog/");
   const bypasses = (node: ts.Node): void => {
     if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
       const specifier = node.moduleSpecifier;
@@ -365,7 +390,7 @@ function violationsIn(
         } else {
           const arg = parent.arguments[slot.index];
           if (slot.kind === "positional") {
-            if (arg === undefined || (ts.isIdentifier(arg) && arg.text === "undefined")) {
+            if (arg === undefined || isNoOwner(arg)) {
               report(node, name, `argument ${slot.index + 1} (the owner) is missing`);
             }
           } else if (arg === undefined || !hasLearnerKey(arg)) {
@@ -444,17 +469,31 @@ describe("owner-bearing catalog calls in the web app", () => {
       `await withLearnerStore(readEvents);`,
       `const { dbSource } = await import("${DOOR}");`,
       `dbSource(db);`,
+      // An owner that is no owner leaves the catalog's default in charge just the same.
+      `await readEvents(db, null);`,
+      `await readEvents(db, undefined);`,
+      `await readEvents(db, (null as unknown as string));`,
+      `await readEvents(db, void 0);`,
+      `await recordObservation(db, { conceptId, learnerId: undefined });`,
+      `await recordObservation(db, { conceptId, learnerId: null });`,
     ].join("\n");
     expect(violationsIn("bad.ts", bad, table).map((v) => `${v.line} ${v.name}`)).toEqual([
       "2 readEvents",
       "3 recordObservation",
       "4 readEvents",
       "6 dbSource",
+      "7 readEvents",
+      "8 readEvents",
+      "9 readEvents",
+      "10 readEvents",
+      "11 recordObservation",
+      "12 recordObservation",
     ]);
     const good = [
       `import { readEvents, recordObservation } from "${DOOR}";`,
       `await readEvents(db, owner);`,
       `await recordObservation(db, { conceptId, correct, learnerId: owner });`,
+      `await recordObservation(db, { conceptId, learnerId });`,
       `const { dbSource } = await import("${DOOR}");`,
       `dbSource(db, ownerScope(owner));`,
       `export type { KnowledgeBase } from "${DOOR}";`,
@@ -465,8 +504,8 @@ describe("owner-bearing catalog calls in the web app", () => {
   it("finds the owner in the tutor server's own declarations, and holds a web call into one to it", () => {
     // A few the web app calls, so a change that empties the second table
     // fails here rather than passing every file below.
-    expect(tutor.get("@gnosia/tutor/server/provider-keys")?.size ?? 0).toBeGreaterThan(0);
-    expect(tutor.get("@gnosia/tutor/server/tutor-models")?.size ?? 0).toBeGreaterThan(0);
+    expect(tutor.get("@hermes/tutor/server/provider-keys")?.size ?? 0).toBeGreaterThan(0);
+    expect(tutor.get("@hermes/tutor/server/tutor-models")?.size ?? 0).toBeGreaterThan(0);
     const [specifier, functions] = [...tutor.entries()].find(([, t]) => [...t.values()].some((slot) => slot.kind === "positional")) as [
       string,
       Map<string, OwnerSlot>,
@@ -494,8 +533,8 @@ describe("owner-bearing catalog calls in the web app", () => {
       `export { readEvents } from "${DOOR}";`,
       `export * from "${DOOR}";`,
       `import { sql } from "drizzle-orm";`,
-      `import { writeContent } from "@gnosia/catalog/src/content/write";`,
-      `import { LOCAL_LEARNER_ID } from "@gnosia/schema/shared";`,
+      `import { writeContent } from "@hermes/catalog/src/content/write";`,
+      `import { LOCAL_LEARNER_ID } from "@hermes/schema/shared";`,
       `const mod = await import("${DOOR}");`,
       `await db.execute(sql\`select 1\`);`,
       `await readEvents(db, "local");`,
@@ -511,7 +550,7 @@ describe("owner-bearing catalog calls in the web app", () => {
         `2 ${DOOR}`,
         `3 ${DOOR}`,
         "4 drizzle-orm",
-        "5 @gnosia/catalog/src/content/write",
+        "5 @hermes/catalog/src/content/write",
         "6 LOCAL_LEARNER_ID",
         `7 ${DOOR}`,
         "8 execute",
@@ -524,7 +563,7 @@ describe("owner-bearing catalog calls in the web app", () => {
     );
     // owner.ts is the one place allowed to name the default learner.
     expect(
-      violationsIn(OWNER_MODULE, `import { LOCAL_LEARNER_ID } from "@gnosia/schema/shared";\nreturn LOCAL_LEARNER_ID;`, ownerTable()),
+      violationsIn(OWNER_MODULE, `import { LOCAL_LEARNER_ID } from "@hermes/schema/shared";\nreturn LOCAL_LEARNER_ID;`, ownerTable()),
     ).toEqual([]);
   });
 

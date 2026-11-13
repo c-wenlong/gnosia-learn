@@ -5,8 +5,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { fsStore, key as blobKey, type BlobStore } from "@gnosia/blob";
-import { blobObject, collection, learner, ownerScope } from "@gnosia/schema";
+import { fsStore, key as blobKey, type BlobStore } from "@hermes/blob";
+import { blobObject, collection, learner, ownerScope } from "@hermes/schema";
 
 import {
   migratedScratchDatabase,
@@ -25,11 +25,11 @@ vi.mock("@/lib/auth/session", async (importOriginal) => ({
 // The `fs` store the catalog opens, with `signedUrl` answering a URL when a
 // test asks for the cloud store's path (a redirect, never a stream).
 vi.mock("@/lib/blob-store", async () => {
-  const { fsStore: open } = await import("@gnosia/blob");
+  const { fsStore: open } = await import("@hermes/blob");
   return {
     SIGNED_URL_TTL_SECONDS: 3600,
     assetBlobStore: (): BlobStore => {
-      const inner = open(path.join(process.env.GNOSIA_HOME ?? "", "blobs"));
+      const inner = open(path.join(process.env.HERMES_HOME ?? "", "blobs"));
       return {
         ...inner,
         provider: inner.provider,
@@ -126,11 +126,11 @@ describe.skipIf(!reachable.ok)("the course cover route", () => {
   });
 
   beforeAll(async () => {
-    for (const key of ["DATABASE_URL", "GNOSIA_HOME"]) saved[key] = process.env[key];
+    for (const key of ["DATABASE_URL", "HERMES_HOME"]) saved[key] = process.env[key];
     scratch = await migratedScratchDatabase();
     home = await mkdtemp(path.join(tmpdir(), "course-cover-route-"));
     process.env.DATABASE_URL = scratch.url;
-    process.env.GNOSIA_HOME = home;
+    process.env.HERMES_HOME = home;
 
     await scratch.db.insert(learner).values([{ id: "other" }, { id: "commons" }]).onConflictDoNothing();
     // A cover the closed type list refuses: `.gif` is not in

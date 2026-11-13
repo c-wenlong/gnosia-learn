@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { asset, learner } from "@hermes/schema";
+
 import {
   clearTables,
   migratedScratchDatabase,
@@ -11,6 +13,7 @@ import {
   seedAssets,
   seedContent,
 } from "../../../../../../../services/catalog/test/state-fixture";
+import { storedBlob } from "../../../../../../../services/catalog/test/stored-blob";
 
 // A signed-in request, so the owner seam (`@/lib/owner`) resolves `local`.
 vi.mock("@/lib/auth/session", async (importOriginal) => ({
@@ -44,19 +47,38 @@ function request(body: unknown, origin: string | null = ORIGIN): Request {
 describe.skipIf(!reachable.ok)("POST /api/learner/watched", () => {
   let scratch: Scratch;
   let POST: (req: Request) => Promise<Response>;
-  let readEvents: typeof import("@gnosia/catalog/state").readEvents;
+  let readEvents: typeof import("@hermes/catalog/state").readEvents;
+
+  let previousDatabaseUrl: string | undefined;
 
   beforeAll(async () => {
     scratch = await migratedScratchDatabase();
     await seedContent(scratch.db);
     await seedAssets(scratch.db);
+    // Another owner's asset: the scope the turn looks it up under must not
+    // reach it.
+    await scratch.db.insert(learner).values({ id: "someone-else" }).onConflictDoNothing();
+    await scratch.db
+      .insert(asset)
+      .values({
+        id: "fx:theirs",
+        kind: "video",
+        path: "out/theirs/theirs.mp4",
+        sourceRepo: "manimkc",
+        ownerId: "someone-else",
+        blobKey: await storedBlob(scratch.db, "fx:theirs", "mp4"),
+      })
+      .onConflictDoNothing();
+    previousDatabaseUrl = process.env.DATABASE_URL;
     process.env.DATABASE_URL = scratch.url;
-    const [route, state] = await Promise.all([import("./route"), import("@gnosia/catalog/state")]);
+    const [route, state] = await Promise.all([import("./route"), import("@hermes/catalog/state")]);
     POST = route.POST;
     readEvents = state.readEvents;
   }, 60_000);
 
   afterAll(async () => {
+    if (previousDatabaseUrl === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = previousDatabaseUrl;
     await scratch?.drop();
   });
 
@@ -85,6 +107,15 @@ describe.skipIf(!reachable.ok)("POST /api/learner/watched", () => {
     await call({ assetId: ASSETS.diagram });
     await call({ assetId: ASSETS.diagram });
     expect((await readEvents(scratch.db)).map((e) => e.type)).toEqual(["watched", "watched"]);
+  });
+
+  it("refuses another owner's asset as though it were not there, appending nothing", async () => {
+    // `assetsByIds` reads under the request's owner scope: a press that
+    // dropped the scope would find `fx:theirs` and log `local`'s watch on it.
+    const { status, body } = await call({ assetId: "fx:theirs" });
+    expect(status).toBe(400);
+    expect(body.error).toMatch(/no asset/);
+    expect(await readEvents(scratch.db)).toEqual([]);
   });
 
   it("refuses an id no row has, as the caller's mistake and not the database's", async () => {

@@ -1,5 +1,5 @@
-import type { CatalogDatabase } from "@gnosia/catalog/state";
-import type { ProviderName } from "@gnosia/schema/shared";
+import type { CatalogDatabase } from "@hermes/catalog/state";
+import type { ProviderName } from "@hermes/schema/shared";
 
 import {
   type ChainEntry,

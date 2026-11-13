@@ -41,7 +41,7 @@ export interface RevideokcTools {
   typescript: string | null;
   /** `@revideo/core`'s version, for health and the doctor. */
   revideo: string | null;
-  /** Whether the CLI has `build --no-narrate` and `sidecars` (c-wenlong/revideokc#8), which a sandboxed build needs. */
+  /** Whether the CLI has `build --no-narrate` and `sidecars` (promethevs-labs/revideokc#8), which a sandboxed build needs. */
   splitBuild: boolean;
   /** The version of the node every job runs, which must strip types (22.18 or later). */
   nodeVersion: string;
@@ -260,7 +260,7 @@ export function revideokcProblems(tools: Toolchain): string[] {
     return problems;
   }
   if (!own.splitBuild) {
-    problems.push(`the revideokc checkout at ${own.root} has no build --no-narrate or sidecars verb (c-wenlong/revideokc#8), which a sandboxed build needs: move the submodule forward`);
+    problems.push(`the revideokc checkout at ${own.root} has no build --no-narrate or sidecars verb (promethevs-labs/revideokc#8), which a sandboxed build needs: move the submodule forward`);
   }
   if (!atLeast(own.nodeVersion, 22, 18)) problems.push(`node ${own.nodeVersion} cannot run revideokc, which needs 22.18 or later to strip types`);
   if (own.nodeModules === null || own.revideo === null) problems.push(`${own.root}/node_modules is missing: run PUPPETEER_SKIP_DOWNLOAD=1 npm ci there`);

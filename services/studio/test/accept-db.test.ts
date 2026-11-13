@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { assetJob, blobObject, diagram, job } from "@gnosia/schema";
+import { assetJob, blobObject, diagram, job } from "@hermes/schema";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -37,7 +37,7 @@ import type { JobRecord } from "../src/data/store";
  *
  * The CLI subprocesses inherit `DATABASE_URL`, which is set to the scratch
  * database before anything runs and checked, so nothing here can reach the
- * owner's `gnosia`.
+ * owner's `hermes`.
  */
 
 const canvasMock = vi.hoisted(() => ({ canvas: vi.fn() }));
@@ -89,14 +89,14 @@ describe.skipIf(!reachable.ok)("Accept through the real catalog on a database th
   const saved: Record<string, string | undefined> = {};
 
   beforeAll(async () => {
-    for (const key of ["DATABASE_URL", "GNOSIA_HOME", "STUDIO_HOME", "MANIMKC_ROOT"]) saved[key] = process.env[key];
+    for (const key of ["DATABASE_URL", "HERMES_HOME", "STUDIO_HOME", "MANIMKC_ROOT"]) saved[key] = process.env[key];
     scratch = await migratedScratchDatabase();
     process.env.DATABASE_URL = scratch.url;
     expect(path.resolve(scratch.url)).not.toBe(DEFAULT_DATABASE_PATH);
     home = await mkdtemp(path.join(tmpdir(), "studio-accept-db-"));
     blobs = await mkdtemp(path.join(tmpdir(), "studio-accept-db-blobs-"));
     process.env.STUDIO_HOME = home;
-    process.env.GNOSIA_HOME = blobs;
+    process.env.HERMES_HOME = blobs;
     process.env.MANIMKC_ROOT = path.join(tmpdir(), "studio-accept-db-no-manimkc");
 
     fixture = await makeFixture();

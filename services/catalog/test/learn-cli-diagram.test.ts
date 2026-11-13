@@ -22,8 +22,8 @@ describe.skipIf(!reachable.ok)("learn CLI", () => {
   describe("diagram", () => {
     // `learn diagram` is `catalog diagram` under the plugin's name, attributed
     // to the agent that runs it. The checkouts go under a temp STUDIO_HOME and
-    // the blobs under the temp GNOSIA_HOME vitest.setup.ts points at, so
-    // neither the real studio's work directory nor ~/.gnosia is touched.
+    // the blobs under the temp HERMES_HOME vitest.setup.ts points at, so
+    // neither the real studio's work directory nor ~/.hermes is touched.
     let studioHome: string;
 
     beforeAll(async () => {

@@ -1,6 +1,6 @@
 import { createElement, Fragment, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { LibraryPage } from "@/lib/library-pages";
 
@@ -16,6 +16,7 @@ import type { LibraryPage } from "@/lib/library-pages";
  * under it.
  */
 const loadLibrary = vi.hoisted(() => vi.fn());
+const currentOwner = vi.hoisted(() => vi.fn(async () => "a"));
 vi.mock("@/lib/asset-library", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/asset-library")>()),
   loadLibrary,
@@ -29,6 +30,11 @@ vi.mock("@/lib/auth/session", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth/session")>()),
   isSignedIn: async () => true,
 }));
+// Whose request it is: the kept view is keyed on it.
+vi.mock("@/lib/owner", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/owner")>()),
+  currentOwner,
+}));
 vi.mock("@/data/courses", () => ({ getCourses: async () => [] }));
 vi.mock("@/data/topics", () => ({ getTopics: async () => [] }));
 vi.mock("@/components/library/RowMenu", () => ({ RowMenu: () => null }));
@@ -41,7 +47,7 @@ function note(day: string, i: number, title = `Note ${String(i).padStart(3, "0")
     url: null,
     bytes: 100,
     title,
-    sourceRepo: "gnosia",
+    sourceRepo: "hermes",
     topics: [],
     createdAt: new Date(Date.parse(`${day}T20:00:00Z`) - i * 60_000).toISOString(),
     updatedAt: `${day}T20:00:00Z`,
@@ -91,7 +97,23 @@ describe("libraryPage", () => {
     vi.stubEnv("HABIT_TIME_ZONE", "UTC");
     loadLibrary.mockReset();
     loadLibrary.mockResolvedValue(library());
+    currentOwner.mockReset();
+    currentOwner.mockResolvedValue("a");
+  });
+
+  afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllEnvs();
+  });
+
+  it("never hands one owner's kept view to another owner's scroll", async () => {
+    const { libraryPage } = await import("./page-action");
+    const one = await first("/library?view=list");
+    expect(loadLibrary).toHaveBeenCalledTimes(1);
+    currentOwner.mockResolvedValue("b");
+    await libraryPage("/library?view=list", one.next ?? "");
+    // Owner b's page is read for b, not taken from a's view a moment old.
+    expect(loadLibrary).toHaveBeenCalledTimes(2);
   });
 
   it("draws the page after the cursor, under the day it goes on with, with the day's whole count", async () => {
@@ -181,6 +203,20 @@ describe("libraryPage", () => {
     loadLibrary.mockResolvedValue(library([], false));
     later(61_000);
     expect(await libraryPage("/library", one.next ?? "")).toEqual({ state: "unreachable" });
+  });
+
+  it("does not keep a view the catalog did not answer for", async () => {
+    // A real cursor from a first page, then a fresh module with nothing kept.
+    const cursor = (await first("/library")).next ?? "";
+    vi.resetModules();
+    loadLibrary.mockClear();
+    const { libraryPage } = await import("./page-action");
+    loadLibrary.mockResolvedValue(library([], false));
+    expect(await libraryPage("/library", cursor)).toEqual({ state: "unreachable" });
+    loadLibrary.mockResolvedValue(library());
+    // No clock move: the unreachable view was not kept, so the catalog is asked again.
+    expect((await libraryPage("/library", cursor)).state).not.toBe("unreachable");
+    expect(loadLibrary).toHaveBeenCalledTimes(2);
   });
 
   it("walks more rows than the old read limit to the end, each once, every heading's count the rows under it", async () => {

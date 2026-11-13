@@ -9,11 +9,11 @@
  * gnosia-audio, so the card predicts the minutes the runner's validator
  * judged. This is the one definition of the brief's shape and its pure
  * helpers: the video job view (`studio-video-job.ts`) imports them. The
- * timing itself is `narrationSeconds` in `@gnosia/schema/shared`, the one the
+ * timing itself is `narrationSeconds` in `@hermes/schema/shared`, the one the
  * runner computes with.
  */
 
-import { isNarratedVoice, narrationSeconds, silentSeconds } from "@gnosia/schema/shared";
+import { isNarratedVoice, narrationSeconds, silentSeconds } from "@hermes/schema/shared";
 
 export type VideoAudience = "new" | "familiar" | "expert";
 

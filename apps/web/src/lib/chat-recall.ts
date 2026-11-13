@@ -1,5 +1,5 @@
-import { newSessionId, SESSION_TEXT_LIMIT } from "@gnosia/tutor/session-core";
-import { CHAT_ANSWER_LIMIT, type RecordedResult } from "@gnosia/tutor/tutor-check";
+import { newSessionId, SESSION_TEXT_LIMIT } from "@hermes/tutor/session-core";
+import { CHAT_ANSWER_LIMIT, type RecordedResult } from "@hermes/tutor/tutor-check";
 import { randomToken } from "@/lib/random-token";
 import { sessionKey } from "@/lib/tutor-thread";
 

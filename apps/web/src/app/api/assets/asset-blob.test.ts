@@ -5,8 +5,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { fsStore, key as blobKey } from "@gnosia/blob";
-import { asset, assetDerivation, blobObject } from "@gnosia/schema";
+import { fsStore, key as blobKey } from "@hermes/blob";
+import { asset, assetDerivation, blobObject } from "@hermes/schema";
 import { eq } from "drizzle-orm";
 
 import { applyMigrations } from "../../../../../../services/catalog/src/migrations";
@@ -109,7 +109,7 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
     await withoutConstraint(scratch.db, "asset", "asset_stored_blob_check");
     home = await mkdtemp(path.join(tmpdir(), "asset-blob-"));
     process.env.DATABASE_URL = scratch.url;
-    process.env.GNOSIA_HOME = home;
+    process.env.HERMES_HOME = home;
     ({ GET: FILE } = (await import("./[id]/file/route")) as { GET: Handler });
     ({ GET: POSTER } = (await import("./[id]/poster/route")) as { GET: Handler });
     ({ GET: PDF_ROUTE } = (await import("./[id]/pdf/route")) as { GET: Handler });
@@ -146,7 +146,7 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
         contentHash: sha256(Buffer.from("<svg/>")),
         bytes: 6,
         title: "Demo diagram",
-        sourceRepo: "gnosia",
+        sourceRepo: "hermes",
         blobKey: null,
       },
       {
@@ -157,7 +157,7 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
         contentHash: sha256(JPEG),
         bytes: JPEG.length,
         title: "Demo (poster)",
-        sourceRepo: "gnosia",
+        sourceRepo: "hermes",
         blobKey: posterKey,
       },
       {
@@ -168,7 +168,7 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
         contentHash: sha256(PDF),
         bytes: PDF.length,
         title: "Demo (PDF)",
-        sourceRepo: "gnosia",
+        sourceRepo: "hermes",
         blobKey: pdfKey,
       },
     ]);
@@ -181,7 +181,7 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
   afterAll(async () => {
     await scratch?.drop();
     if (home !== undefined) await rm(home, { recursive: true, force: true });
-    delete process.env.GNOSIA_HOME;
+    delete process.env.HERMES_HOME;
   });
 
   it("streams a stored video whole, with the player's headers", async () => {
@@ -397,15 +397,15 @@ describe.skipIf(!reachable.ok)("asset routes from the blob store", () => {
     expect(await codeOf(none)).toBe("not-in-catalog");
   });
 
-  it("answers blob-store-unavailable when GNOSIA_HOME cannot be a store", async () => {
-    const previous = process.env.GNOSIA_HOME;
-    process.env.GNOSIA_HOME = "relative/path";
+  it("answers blob-store-unavailable when HERMES_HOME cannot be a store", async () => {
+    const previous = process.env.HERMES_HOME;
+    process.env.HERMES_HOME = "relative/path";
     try {
       const response = await call(FILE, "file", VIDEO_ID);
       expect(response.status).toBe(503);
       expect(await codeOf(response)).toBe("blob-store-unavailable");
     } finally {
-      process.env.GNOSIA_HOME = previous;
+      process.env.HERMES_HOME = previous;
     }
   });
 

@@ -1,7 +1,7 @@
 import { readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { ContentError, COURSES_DIR, courseFileName, parseCourse, type Course } from "@gnosia/content";
+import { ContentError, COURSES_DIR, courseFileName, parseCourse, type Course } from "@hermes/content";
 import {
   asset,
   collection,
@@ -12,7 +12,7 @@ import {
   type RevisionEntityType,
   tag,
   topic,
-} from "@gnosia/schema";
+} from "@hermes/schema";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
@@ -39,7 +39,7 @@ import { inTransaction } from "../db";
  * course through the write seam (docs/CONTENT-MIGRATION.md, Track B).
  *
  * **Import** reads one course file with the same parser the web app and the
- * indexer use (`parseCourse` in `@gnosia/content`, every rule that is a
+ * indexer use (`parseCourse` in `@hermes/content`, every rule that is a
  * fact about the file), then checks what the file points at against rows
  * rather than against other files: the module topics, the tags and the
  * concepts must exist, each item's concepts must be filed under its module's
@@ -592,7 +592,7 @@ async function plan(
             contentHash: null,
             bytes: null,
             title: resource.title,
-            sourceRepo: "gnosia",
+            sourceRepo: "hermes",
             resourceType: resource.type,
           }),
           links: { asset_topic: [{ topicSlug: mod.topic }], asset_concept: [], asset_derivation: [] },

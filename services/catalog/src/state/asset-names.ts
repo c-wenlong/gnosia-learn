@@ -1,5 +1,5 @@
-import { asset, assetName, ownerScope } from "@gnosia/schema";
-import { ASSET_NAME_MAX, cleanAssetName } from "@gnosia/schema/shared";
+import { asset, assetName, ownerScope } from "@hermes/schema";
+import { ASSET_NAME_MAX, cleanAssetName } from "@hermes/schema/shared";
 import { and, eq, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";

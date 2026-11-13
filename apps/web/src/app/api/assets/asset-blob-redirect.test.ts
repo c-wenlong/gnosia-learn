@@ -7,8 +7,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { fsStore, key as blobKey, type BlobStore } from "@gnosia/blob";
-import { asset, assetDerivation, blobObject } from "@gnosia/schema";
+import { fsStore, key as blobKey, type BlobStore } from "@hermes/blob";
+import { asset, assetDerivation, blobObject } from "@hermes/schema";
 
 import {
   migratedScratchDatabase,
@@ -85,7 +85,7 @@ describe.skipIf(!reachable.ok)("asset routes redirecting to a signed URL", () =>
     });
 
   beforeAll(async () => {
-    for (const key of ["DATABASE_URL", "GNOSIA_HOME"]) saved[key] = process.env[key];
+    for (const key of ["DATABASE_URL", "HERMES_HOME", "GNOSIA_HOME"]) saved[key] = process.env[key];
     scratch = await migratedScratchDatabase();
     home = await mkdtemp(path.join(tmpdir(), "asset-redirect-"));
     const store = fsStore(path.join(home, "blobs"));
@@ -114,7 +114,7 @@ describe.skipIf(!reachable.ok)("asset routes redirecting to a signed URL", () =>
     signing.origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 
     process.env.DATABASE_URL = scratch.url;
-    process.env.GNOSIA_HOME = home;
+    process.env.HERMES_HOME = home;
     ({ GET: FILE } = (await import("./[id]/file/route")) as { GET: Handler });
     ({ GET: POSTER } = (await import("./[id]/poster/route")) as { GET: Handler });
     ({ GET: PDF } = (await import("./[id]/pdf/route")) as { GET: Handler });
@@ -153,7 +153,7 @@ describe.skipIf(!reachable.ok)("asset routes redirecting to a signed URL", () =>
         kind: "poster",
         contentHash: sha256(JPEG),
         bytes: JPEG.length,
-        sourceRepo: "gnosia",
+        sourceRepo: "hermes",
         blobKey: posterKey,
       },
       {

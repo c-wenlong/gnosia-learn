@@ -1,7 +1,7 @@
 import { cx } from "@/components/ui/classes";
 
 /** The repository, for "See the source" and the footer. */
-export const GITHUB_URL = "https://github.com/c-wenlong/gnosia-learn";
+export const GITHUB_URL = "https://github.com/promethevs-labs/hermes-studio";
 
 /**
  * A link on the public pages: a focus ring in the brand teal. Pass the
@@ -11,7 +11,7 @@ export const GITHUB_URL = "https://github.com/c-wenlong/gnosia-learn";
 export function siteLink(className?: string): string {
   return cx(
     "transition-colors duration-150",
-    "focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-teal",
+    "focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-terracotta",
     className,
   );
 }

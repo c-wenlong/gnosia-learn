@@ -1,6 +1,6 @@
 import { readCookie, writeCookie } from "@/lib/client-cookie";
-import type { MotionMode } from "@gnosia/tutor/preferences";
-import { parseMotionMode } from "@gnosia/tutor/preferences";
+import type { MotionMode } from "@hermes/tutor/preferences";
+import { parseMotionMode } from "@hermes/tutor/preferences";
 
 /**
  * Settings' motion choice, applied the way the theme is (lib/theme-cookie.ts):
@@ -22,10 +22,12 @@ import { parseMotionMode } from "@gnosia/tutor/preferences";
  * preference, not anything that authenticates.
  */
 
-export const MOTION_COOKIE = "gnosia-motion";
+export const MOTION_COOKIE = "hermes-motion";
 
 /** The same cookie as browsers named it before the rename; read as a fallback only. */
 export const LEGACY_MOTION_COOKIE = "self-learn-motion";
+/** The cookie written between the self-learn and hermes names. Read as a fallback only. */
+export const GNOSIA_MOTION_COOKIE = "gnosia-motion";
 
 /** A year, as the theme cookie. */
 const MOTION_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;

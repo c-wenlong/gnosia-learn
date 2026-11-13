@@ -1,7 +1,7 @@
-import type { BlobStore } from "@gnosia/blob";
-import type { CatalogDatabase } from "@gnosia/catalog/state";
-import type { SelectedSource } from "@gnosia/content";
-import type { OwnerScope } from "@gnosia/schema/shared";
+import type { BlobStore } from "@hermes/blob";
+import type { CatalogDatabase } from "@hermes/catalog/state";
+import type { SelectedSource } from "@hermes/content";
+import type { OwnerScope } from "@hermes/schema/shared";
 
 /** The process environment, or whatever map a test hands in. */
 export type Env = Record<string, string | undefined>;
@@ -60,7 +60,7 @@ export interface TutorDeps extends AssetSeams {
  * identity and scope off the same object.
  */
 export interface TurnSeams {
-  courses?: () => Promise<import("@gnosia/content").Course[]>;
+  courses?: () => Promise<import("@hermes/content").Course[]>;
   readWorkspace?: (deps: TutorDeps, slug: string) => Promise<import("./concept-workspace").ConceptWorkspaceRead>;
   tutorStyle?: (deps: TutorDeps) => Promise<import("../preferences").TutorStyle>;
   credentials?: (deps: TutorDeps) => Promise<import("../providers").ChainStep[]>;
@@ -71,10 +71,10 @@ export interface TurnSeams {
   ) => Promise<import("../providers").CompleteOutcome>;
   assetDetail?: (deps: TutorDeps, id: string) => Promise<import("./asset-detail").AssetDetail>;
   assetText?: (deps: TutorDeps, db: CatalogDatabase, id: string, limit?: number) => Promise<string | null>;
-  keyCredential?: (deps: TutorDeps, provider: import("@gnosia/schema/shared").ProviderName) => Promise<import("../providers").ProviderCredential | null>;
+  keyCredential?: (deps: TutorDeps, provider: import("@hermes/schema/shared").ProviderName) => Promise<import("../providers").ProviderCredential | null>;
   entryCredential?: (
     deps: TutorDeps,
-    provider: import("@gnosia/schema/shared").ProviderName,
+    provider: import("@hermes/schema/shared").ProviderName,
     model?: string,
   ) => Promise<import("../providers").ProviderCredential | null>;
   chain?: (deps: TutorDeps) => Promise<import("../providers").ChainEntry[]>;

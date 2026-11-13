@@ -1,4 +1,4 @@
-import { playbackTurn } from "@gnosia/tutor/server/learner-writes";
+import { playbackTurn } from "@hermes/tutor/server/learner-writes";
 
 import { turnRoute } from "@/lib/learner-api";
 
@@ -21,6 +21,6 @@ import { turnRoute } from "@/lib/learner-api";
  * save that crosses the threshold.
  *
  * The parse and the write are `playbackTurn` in
- * `@gnosia/tutor/server/learner-writes`.
+ * `@hermes/tutor/server/learner-writes`.
  */
 export const POST = turnRoute("playback", playbackTurn);

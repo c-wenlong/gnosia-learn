@@ -4,7 +4,7 @@ import type { Course, TagMeta, TopicEntry } from "./types";
  * Where a reader gets authored content from, without knowing where it lives.
  *
  * Every type is rows in the catalog since the phase 3 cut-over
- * (docs/CONTENT-MIGRATION.md), and `dbSource` in `@gnosia/catalog` reads
+ * (docs/CONTENT-MIGRATION.md), and `dbSource` in `@hermes/catalog` reads
  * them; it is the default. `fileSource` reads a tree in the export format,
  * which is what an import and a test that brings its own tree use, and
  * `selectSource` picks one per type. A caller holds a `ContentSource` and

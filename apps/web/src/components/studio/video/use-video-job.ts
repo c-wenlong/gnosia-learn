@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useStudioJobs } from "@/components/studio/JobsProvider";
 import { useJobEventStream } from "@/components/studio/use-job-events";
-import type { TranscriptCue, VideoChapter } from "@gnosia/tutor/media";
+import type { TranscriptCue, VideoChapter } from "@hermes/tutor/media";
 import { getJob } from "@/lib/studio-job-read";
 import { isActive, type StudioEvent } from "@/lib/studio-jobs";
 import { usePageVisible } from "@/lib/use-page-visible";

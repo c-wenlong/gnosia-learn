@@ -84,7 +84,7 @@ describe("a test that opens a forbidden catalog itself", () => {
       "services/catalog/test/catalog-guard-fixture.test.ts",
     );
     expect(existsSync(sentinel), run.output).toBe(false);
-    expect(existsSync(path.join(home, ".gnosia", "catalog.db")), run.output).toBe(false);
+    expect(existsSync(path.join(home, ".hermes", "catalog.db")), run.output).toBe(false);
     expect(run.passed, run.output).toBe(true);
     expect(run.output).toMatch(/2 passed/);
   }, 160_000);
@@ -103,9 +103,9 @@ describe("the catalog settings every test file starts with", () => {
   });
 
   it("put the data home in a temp directory, whatever the shell exported", () => {
-    const home = process.env.GNOSIA_HOME ?? "";
+    const home = process.env.HERMES_HOME ?? "";
     expect(path.isAbsolute(home)).toBe(true);
-    expect(home.startsWith(path.join(homedir(), ".gnosia"))).toBe(false);
+    expect(home.startsWith(path.join(homedir(), ".hermes"))).toBe(false);
   });
 });
 
@@ -118,22 +118,22 @@ describe("forbiddenCatalogs", () => {
     writeFileSync(path.join(repo, "apps", "web", ".env.local"), "CATALOG_DB=/srv/from-env-local.db\n");
     writeFileSync(path.join(repo, "apps", "web", ".env.example"), "CATALOG_DB=/srv/from-example.db\n");
     const named = path.join(scratch, "named.env");
-    writeFileSync(named, "DATABASE_URL=sqlite:///srv/from-named.db\nGNOSIA_HOME=/srv/named-home\n");
+    writeFileSync(named, "DATABASE_URL=sqlite:///srv/from-named.db\nHERMES_HOME=/srv/named-home\n");
 
     const forbidden = forbiddenCatalogs(
       {
         HOME: "/home/someone",
         CATALOG_DB: "/srv/from-shell.db",
         DATABASE_URL: "postgres://elsewhere/",
-        GNOSIA_HOME: "/srv/home",
+        HERMES_HOME: "/srv/home",
         CATALOG_ENV_FILE: named,
       },
       repo,
     );
 
     for (const file of [
-      path.join(homedir(), ".gnosia", "catalog.db"),
-      "/home/someone/.gnosia/catalog.db",
+      path.join(homedir(), ".hermes", "catalog.db"),
+      "/home/someone/.hermes/catalog.db",
       "/srv/from-shell.db",
       "/srv/home/catalog.db",
       "/srv/from-catalog-env.db",

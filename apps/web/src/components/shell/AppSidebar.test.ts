@@ -23,9 +23,9 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("next/navigation", () => ({ usePathname: () => mocks.pathname }));
 vi.mock("@/lib/studio-drafts", () => ({ listDrafts: mocks.listDrafts, renameDraft: mocks.renameDraft }));
-vi.mock("@/lib/recent-client", () => ({ fetchRecent: mocks.fetchRecent, changeRecent: mocks.changeRecent, VISIT_STORED_EVENT: "gnosia:visit-stored" }));
+vi.mock("@/lib/recent-client", () => ({ fetchRecent: mocks.fetchRecent, changeRecent: mocks.changeRecent, VISIT_STORED_EVENT: "hermes:visit-stored" }));
 vi.mock("next/image", () => ({ default: () => null }));
-vi.mock("@/components/brand/GnosiaWordmark", () => ({ GnosiaWordmark: () => createElement("span", null, "Gnosia") }));
+vi.mock("@/components/brand/HermesWordmark", () => ({ HermesWordmark: () => createElement("span", null, "Hermes") }));
 vi.mock("@/components/ThemeSwitch", () => ({ ThemeSwitch: () => null }));
 vi.mock("@/lib/learner-context", () => ({ useLearner: () => ({ state: { displayName: mocks.displayName } }) }));
 
@@ -103,7 +103,7 @@ describe("the sidebar", () => {
     const labels = [...nav(container).querySelectorAll("a")]
       .filter((a) => a.closest("[inert]") === null && a.closest("section") === null)
       .map((a) => a.textContent);
-    expect(labels).toEqual(["Gnosia", "Home", "Courses", "Learn", "Library"]);
+    expect(labels).toEqual(["Hermes", "Home", "Courses", "Learn", "Library"]);
     expect(mocks.listDrafts).not.toHaveBeenCalled();
     expect(nav(container).textContent).not.toContain("Chats");
   });
@@ -242,7 +242,7 @@ describe("the fold", () => {
 
   afterEach(() => {
     vi.useRealTimers();
-    document.cookie = "gnosia-sidebar=; Max-Age=0; Path=/";
+    document.cookie = "hermes-sidebar=; Max-Age=0; Path=/";
   });
 
   it("pops the account menu in as a kit Popover, and keeps it inert for its way out so it can fade", () => {
@@ -268,7 +268,7 @@ describe("the fold", () => {
     localStorage.setItem("studio:sidebar-collapsed", "1");
     const { room } = mountFolded(false);
     expect(room().className).toContain("w-[60px]");
-    expect(document.cookie).toContain("gnosia-sidebar=collapsed");
+    expect(document.cookie).toContain("hermes-sidebar=collapsed");
     expect(localStorage.getItem("studio:sidebar-collapsed")).toBeNull();
   });
 
@@ -276,13 +276,13 @@ describe("the fold", () => {
     const { container, button, room } = mountFolded(false);
     expect(room().className).toContain("w-[260px]");
     act(() => button("Collapse the sidebar")!.click());
-    expect(document.cookie).toContain("gnosia-sidebar=collapsed");
+    expect(document.cookie).toContain("hermes-sidebar=collapsed");
     expect(room().className).toContain("w-[60px]");
     // The labels are for a screen reader only on the rail.
     expect(nav(container).querySelector('a[aria-label="Courses"]')).not.toBeNull();
 
     act(() => button("Expand the sidebar")!.click());
-    expect(document.cookie).toContain("gnosia-sidebar=open");
+    expect(document.cookie).toContain("hermes-sidebar=open");
     expect(room().className).toContain("w-[260px]");
   });
 
@@ -310,7 +310,7 @@ describe("the fold", () => {
     over();
     act(() => vi.advanceTimersByTime(150));
     act(() => button("Keep the sidebar open")!.click());
-    expect(document.cookie).toContain("gnosia-sidebar=open");
+    expect(document.cookie).toContain("hermes-sidebar=open");
     expect(room().className).toContain("w-[260px]");
     expect(nav(container).dataset.state).not.toBe("peek");
   });
@@ -449,7 +449,7 @@ describe("the sections", () => {
   it("reads Recent again once a module visit is stored, the module just opened in it", async () => {
     await mount(false);
     const reads = mocks.fetchRecent.mock.calls.length;
-    await act(async () => void window.dispatchEvent(new Event("gnosia:visit-stored")));
+    await act(async () => void window.dispatchEvent(new Event("hermes:visit-stored")));
     expect(mocks.fetchRecent.mock.calls.length).toBe(reads + 1);
   });
 
@@ -893,7 +893,7 @@ describe("the shortcuts", () => {
   });
 
   afterEach(() => {
-    document.cookie = "gnosia-sidebar=; Max-Age=0; Path=/";
+    document.cookie = "hermes-sidebar=; Max-Age=0; Path=/";
   });
 
   it("folds and unfolds the sidebar on Ctrl+., and keeps the browser's own press from running", async () => {
@@ -903,7 +903,7 @@ describe("the shortcuts", () => {
     const event = key({ key: ".", ctrlKey: true });
     expect(event.defaultPrevented).toBe(true);
     expect(room().className).toContain("w-[60px]");
-    expect(document.cookie).toContain("gnosia-sidebar=collapsed");
+    expect(document.cookie).toContain("hermes-sidebar=collapsed");
     key({ key: ".", ctrlKey: true });
     expect(room().className).toContain("w-[260px]");
   });

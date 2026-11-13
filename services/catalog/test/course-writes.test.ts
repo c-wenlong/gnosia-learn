@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { asset, collection, contentRevision, curriculumItem, learner, progress, recap } from "@gnosia/schema";
+import { asset, collection, contentRevision, curriculumItem, learner, progress, recap } from "@hermes/schema";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 

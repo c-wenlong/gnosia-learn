@@ -3,7 +3,7 @@ import {
   EVENT_TYPES,
   LOCAL_LEARNER_ID,
   type EventType,
-} from "@gnosia/schema";
+} from "@hermes/schema";
 import { and, asc, eq, inArray, or } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";

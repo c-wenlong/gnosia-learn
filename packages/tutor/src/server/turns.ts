@@ -1,10 +1,10 @@
-import { CustomProviderError, TutorModelError } from "@gnosia/catalog/state";
+import { CustomProviderError, TutorModelError } from "@hermes/catalog/state";
 import {
   isCustomProviderId,
   isProviderName,
   PROVIDER_IDS,
   type ProviderName,
-} from "@gnosia/schema/shared";
+} from "@hermes/schema/shared";
 
 import { assetDisplayTitle } from "../asset-meta";
 import {
@@ -100,7 +100,7 @@ import { svgText } from "../svg-text";
 import { parseTranscript } from "../transcript";
 import { measurePayload, PAYLOAD_LIMITS } from "../guards";
 import { pointsAtThisApp, SELF_ADDRESS_REASON } from "./self-address";
-import { checkModelId, KNOWLEDGE_LIMITS, providerLabel, type TopicKnowledge } from "@gnosia/schema/shared";
+import { checkModelId, KNOWLEDGE_LIMITS, providerLabel, type TopicKnowledge } from "@hermes/schema/shared";
 
 /**
  * The request-independent core of the `/api/agent/*` and the `/api/learner/*`

@@ -1,8 +1,8 @@
 import "server-only";
 
-import type { AssetRef, CatalogDatabase } from "@gnosia/catalog/state";
-import type { BlobRead, BlobStore } from "@gnosia/blob";
-import type { AssetSeams } from "@gnosia/tutor/server/deps";
+import type { AssetRef, CatalogDatabase } from "@hermes/catalog/state";
+import type { BlobRead, BlobStore } from "@hermes/blob";
+import type { AssetSeams } from "@hermes/tutor/server/deps";
 import {
   openBlob as openBlobCore,
   posterSource as posterSourceCore,
@@ -14,30 +14,30 @@ import {
   type AssetFileProblem,
   type AssetSourceResult,
   type AssetStored,
-} from "@gnosia/tutor/server/asset-files";
+} from "@hermes/tutor/server/asset-files";
 
 import { contentSource } from "@/data/source";
 import { assetBlobStore } from "@/lib/blob-store";
 import { currentScope } from "@/lib/owner";
 
-export { blobStoreProblem, isRangeRefusal, parseRange, webStreamFrom } from "@gnosia/tutor/server/asset-files";
+export { blobStoreProblem, isRangeRefusal, parseRange, webStreamFrom } from "@hermes/tutor/server/asset-files";
 export type {
   AssetFileProblem,
   AssetRowText,
   AssetSource,
   AssetSourceResult,
   AssetStored,
-} from "@gnosia/tutor/server/asset-files";
+} from "@hermes/tutor/server/asset-files";
 
 /**
  * Turning an `asset` row into bytes a browser can play. The resolution itself
- * lives in `@gnosia/tutor/server/asset-files`; this file hands it this app's
+ * lives in `@hermes/tutor/server/asset-files`; this file hands it this app's
  * three seams:
  * the request's owner scope, the selected content source and the blob store.
  */
 /**
  * The store resolved on first use, not at seams() time: `assetBlobStore()`
- * refuses a bad `GNOSIA_HOME` by throwing, and a throw here would turn
+ * refuses a bad `HERMES_HOME` by throwing, and a throw here would turn
  * every catalog-only read (`resolveRowText`, `servedAssets`, …) into a
  * blob-store failure. Deferred, the refusal surfaces inside the core that
  * touched the store, where `blobStoreProblem` classifies it.
@@ -62,7 +62,7 @@ function lazyBlobStore(): BlobStore {
  * This app's seams for the shared asset reads: the request's owner scope,
  * the selected content source and the deferred blob store. The one builder
  * every asset read uses, the file routes' and the library's text reads alike
- * (S6-12 of the library audit), so a bad `GNOSIA_HOME` reads as
+ * (S6-12 of the library audit), so a bad `HERMES_HOME` reads as
  * `blob-store-unavailable` everywhere.
  */
 export async function seams(): Promise<AssetSeams> {

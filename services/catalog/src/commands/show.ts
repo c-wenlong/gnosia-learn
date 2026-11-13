@@ -14,7 +14,7 @@ import {
   mastery,
   mirror,
   topic,
-} from "@gnosia/schema";
+} from "@hermes/schema";
 import { and, asc, eq, isNotNull, isNull } from "drizzle-orm";
 
 import { cliScope } from "../content/scope";

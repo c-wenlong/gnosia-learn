@@ -4,8 +4,8 @@ import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ReviewItem } from "@gnosia/tutor/review-core";
-import { OPTIONS_WAIT_MS } from "@gnosia/tutor/session-core";
+import type { ReviewItem } from "@hermes/tutor/review-core";
+import { OPTIONS_WAIT_MS } from "@hermes/tutor/session-core";
 
 /**
  * How the review moves from card to card (docs/design/IMPLEMENTATION.md,

@@ -1,6 +1,6 @@
 "use client";
 
-import { skipLabel, type SkipFlash } from "@gnosia/tutor/media";
+import { skipLabel, type SkipFlash } from "@hermes/tutor/media";
 import { cx } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
 import { Icon } from "@/components/VideoIcons";

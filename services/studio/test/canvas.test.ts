@@ -12,6 +12,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const procMock = vi.hoisted(() => ({ run: vi.fn(), NPM: "npm", parseJson: vi.fn() }));
 vi.mock("../src/proc", () => procMock);
+const cgroupMock = vi.hoisted(() => ({ reclaimCgroupFileCache: vi.fn(async () => false) }));
+vi.mock("../src/cgroup", () => cgroupMock);
 
 const { doctor, forgetDoctor, DOCTOR_TTL_MS } = await import("../src/canvas/canvas");
 
@@ -20,6 +22,7 @@ const result = { code: 0, signal: null, stdout: "ok", stderr: "", json: null, ti
 beforeEach(() => {
   forgetDoctor();
   procMock.run.mockReset();
+  cgroupMock.reclaimCgroupFileCache.mockClear();
   vi.useFakeTimers();
 });
 
@@ -45,6 +48,7 @@ describe("two callers arriving on a cold cache", () => {
     settle(result);
     expect(await both).toEqual([result, result]);
     expect(procMock.run).toHaveBeenCalledTimes(1);
+    expect(cgroupMock.reclaimCgroupFileCache).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -2,9 +2,9 @@ import type {
   Course,
   Module,
   Topic,
-} from "@gnosia/content";
-import { moduleNumber } from "@gnosia/content/module-number";
-import type { KnowledgeInput, TopicKnowledge } from "@gnosia/schema/shared";
+} from "@hermes/content";
+import { moduleNumber } from "@hermes/content/module-number";
+import type { KnowledgeInput, TopicKnowledge } from "@hermes/schema/shared";
 import { buildLearningObjectives } from "./objectives";
 
 export interface TranscriptTurn {

@@ -1,6 +1,6 @@
 import { Graph, layout as dagreLayout } from "@dagrejs/dagre";
 
-import { reduceEdges, type GraphEdge, type GraphNode } from "@gnosia/tutor/concept-graph";
+import { reduceEdges, type GraphEdge, type GraphNode } from "@hermes/tutor/concept-graph";
 import {
   AXES_TOP,
   axesGeometry,

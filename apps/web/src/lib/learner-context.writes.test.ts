@@ -3,7 +3,7 @@ import { act, createElement, useEffect, type ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { emptyLearnerState, type LearnerState } from "@gnosia/schema/shared";
+import { emptyLearnerState, type LearnerState } from "@hermes/schema/shared";
 
 /**
  * How a learner write travels: in time-bounded requests, with `keepalive`
@@ -151,12 +151,12 @@ describe("leaving the page", () => {
     const at = Date.now();
     window.localStorage.setItem(`${OUTBOX_KEY}:later`, JSON.stringify({ at: at - 1_000, writes: [{ kind: "note", topicId: "t1", note: "newer" }] }));
     window.localStorage.setItem(OUTBOX_KEY, JSON.stringify({ at: at - 60_000, writes: [{ kind: "note", topicId: "t1", note: "older" }] }));
-    window.localStorage.setItem("gnosia:something-else", "{}");
+    window.localStorage.setItem("hermes:something-else", "{}");
     const { calls } = mount(ok);
     await vi.waitFor(() => expect(calls()).toHaveLength(2));
     expect(calls().map(([, init]) => (JSON.parse(init.body as string) as { note: string }).note)).toEqual(["older", "newer"]);
     expect(outboxes()).toEqual([]);
-    expect(window.localStorage.getItem("gnosia:something-else")).toBe("{}");
+    expect(window.localStorage.getItem("hermes:something-else")).toBe("{}");
   });
 });
 

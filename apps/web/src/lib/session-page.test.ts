@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ConceptWorkspace, NeighbourRef } from "@gnosia/tutor/concept-workspace-core";
+import type { ConceptWorkspace, NeighbourRef } from "@hermes/tutor/concept-workspace-core";
 
 import { loadSessionPage, noteResolvers, sessionWillAsk } from "./session-page";
 
@@ -25,12 +25,12 @@ vi.mock("@/lib/asset-library", async (importOriginal) => ({
   readAssetAccess,
 }));
 vi.mock("@/lib/agent/credentials", () => ({ tutorCredentials }));
-vi.mock("@gnosia/catalog/state", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@gnosia/catalog/state")>()),
+vi.mock("@hermes/catalog/state", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@hermes/catalog/state")>()),
   conceptSummaries,
 }));
-vi.mock("@gnosia/tutor/server/check-options", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@gnosia/tutor/server/check-options")>()),
+vi.mock("@hermes/tutor/server/check-options", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@hermes/tutor/server/check-options")>()),
   readWrittenOptions,
 }));
 vi.mock("@/lib/learner-store", () => ({ catalogDatabase, readKb }));

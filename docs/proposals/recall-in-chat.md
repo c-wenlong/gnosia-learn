@@ -5,12 +5,12 @@ Status: accepted, 2026-10-04, and all three phases are built. R2 is the owner's 
 questions 2 and 3 take theirs until the owner says otherwise. Step 1 of the
 same conversation, taking
 Review out of the sidebar, shipped on its own
-([#343](https://github.com/c-wenlong/gnosia-learn/pull/343)) and is recorded
+([#343](https://github.com/promethevs-labs/hermes-studio/pull/343)) and is recorded
 in [DESIGN.md](../design/DESIGN.md), "Information architecture".
 
 ## The problem
 
-Gnosia is a chat that makes things, a view over the concepts you hold, and
+Hermes is a chat that makes things, a view over the concepts you hold, and
 courses that give them structure. The review queue at `/review` sat beside
 those as a fifth destination, and did not fit: it is Anki's loop (decision
 11 of [DESIGN.md](../design/DESIGN.md)), and Anki's loop is fed by cards,

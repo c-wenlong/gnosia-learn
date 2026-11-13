@@ -48,7 +48,7 @@ describe("dev-env.mjs db", () => {
     const ok = cli(["db", appDir({ ".env.local": `CATALOG_DB=${file}\n` })], { HOME: home });
     expect(ok.code).toBe(0);
     expect(ok.out).toBe(`FILE=${file}\n`);
-    const fallback = catalogAt(join(home, ".gnosia", "catalog.db"));
+    const fallback = catalogAt(join(home, ".hermes", "catalog.db"));
     expect(cli(["db", appDir({})], { HOME: home }).out).toBe(`FILE=${fallback}\n`);
   });
 
@@ -85,7 +85,7 @@ describe("dev-env.mjs db", () => {
     expect(missing.code).toBe(3);
     expect(missing.out).toBe("");
     expect(missing.err).toBe(
-      `dev-env.mjs: there is no catalog at ${join(home, ".gnosia", "catalog.db")}: npm run catalog -- migrate, then import the seed (README, Install)\n`,
+      `dev-env.mjs: there is no catalog at ${join(home, ".hermes", "catalog.db")}: npm run catalog -- migrate, then import the seed (README, Install)\n`,
     );
     const pg = cli(["db", appDir({ ".env.local": "DATABASE_URL=postgres://u:secret@h/db\n" })], { HOME: home });
     expect(pg.code).toBe(3);
@@ -103,11 +103,11 @@ describe("dev-env.mjs db", () => {
 
 describe("dev-env.mjs get", () => {
   it("reads a quoted value with a trailing comment as Next does", () => {
-    const dir = appDir({ ".env.local": 'CATALOG_DB="~/.gnosia/catalog.db" # local database\nOWNER_PASSWORD=pw\n' });
+    const dir = appDir({ ".env.local": 'CATALOG_DB="~/.hermes/catalog.db" # local database\nOWNER_PASSWORD=pw\n' });
     const ran = cli(["get", dir, "CATALOG_DB", "OWNER_PASSWORD", "AUTH_SECRET"]);
     expect(ran.code).toBe(0);
     // A key that is not set is left out, not printed empty.
-    expect(ran.out).toBe("CATALOG_DB=~/.gnosia/catalog.db\nOWNER_PASSWORD=pw\n");
+    expect(ran.out).toBe("CATALOG_DB=~/.hermes/catalog.db\nOWNER_PASSWORD=pw\n");
   });
 
   it("lets the environment win over the files, and .env.local over .env", () => {

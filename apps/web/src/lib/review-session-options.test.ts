@@ -11,7 +11,7 @@ const tutorModelConfigured = vi.hoisted(() => vi.fn());
 const readWrittenOptions = vi.hoisted(() => vi.fn());
 const readConceptNote = vi.hoisted(() => vi.fn());
 
-vi.mock("@gnosia/catalog/state", () => ({
+vi.mock("@hermes/catalog/state", () => ({
   reviewQueue,
   conceptSummaries: vi.fn(async () => [
     { conceptId: "x", summary: "Softmax makes a distribution.", domain: null },
@@ -22,7 +22,7 @@ vi.mock("@gnosia/catalog/state", () => ({
 vi.mock("@/lib/learner-store", () => ({ catalogDatabase: vi.fn(async () => ({})) }));
 vi.mock("@/lib/concept-note", () => ({ readConceptNote }));
 vi.mock("@/lib/session-page", () => ({ tutorModelConfigured }));
-vi.mock("@gnosia/tutor/server/check-options", () => ({ readWrittenOptions }));
+vi.mock("@hermes/tutor/server/check-options", () => ({ readWrittenOptions }));
 vi.mock("@/lib/auth/session", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth/session")>()),
   isSignedIn: async () => true,

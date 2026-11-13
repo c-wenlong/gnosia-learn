@@ -20,7 +20,7 @@
 /*
  * Reduced motion has two sources: the device's `prefers-reduced-motion`, and
  * Settings' "Always reduce motion", which the root layout writes as
- * `data-motion="reduce"` on <html> from the `gnosia-motion` cookie
+ * `data-motion="reduce"` on <html> from the `hermes-motion` cookie
  * (lib/motion.ts). Tailwind's own `motion-reduce:` and `motion-safe:` read
  * only the first, so both are redefined here to read both, the way `dark:`
  * above reads the class rather than the OS.
@@ -116,7 +116,7 @@
   --warn-lip: #b78900;
   /* Amber as text: the lip's #b78900 was 2.93:1 on its own tint and 3.19 on
      white, so a "not quite" verdict or a warning chip was unreadable. This is
-     the amber Gnosia light already used, which clears 4.5:1 on every light
+     the amber Hermes light already used, which clears 4.5:1 on every light
      ground here (4.62 on --surface2 to 5.13 on white). */
   --warn-text: #8c6800;
   --warn-tint: #fff5d6;
@@ -124,7 +124,7 @@
   --streak: #ff9600;
   /* The mark drawn on a bright fill: the dot on a mastered path node. White
      wherever that fill is mid-tone or darker, which is both light palettes.
-     The two dark palettes lighten it, so `.dark` and `.gnosia.dark` turn the
+     The two dark palettes lighten it, so `.dark` and `.hermes.dark` turn the
      mark to their page colour. */
   --m-hi-on: #ffffff;
   --btn-face: #111111;
@@ -152,7 +152,7 @@
   --violet: #8b5cf6;
   /* Small text on a saturated fill (the stat tiles' strips). Black in every
      palette: at least 4.5:1 on the ok, accent, violet and streak tones (the
-     accent is the lowest, 4.59 in Classic and 4.56 in Gnosia). */
+     accent is the lowest, 4.59 in Classic and 4.56 in Hermes). */
   --on-tone: #000000;
 
   /* Also a Tailwind font (`font-display`, below); declared here as well so
@@ -173,10 +173,10 @@
   /*
    * A panel raised above the page (the studio canvas page's right panel):
    * the card in the light palettes, the step lighter in the dark ones, where
-   * `.dark` and `.gnosia.dark` point it at `--surface2`. The one name left of
+   * `.dark` and `.hermes.dark` point it at `--surface2`. The one name left of
    * the pre-redesign palette, kept because it is a different token per
    * palette and so has no single token to be replaced by; the others went on
-   * 2026-10-05 (#359); `stylesheets.test.ts` and the `gnosia/theme-tokens` lint
+   * 2026-10-05 (#359); `stylesheets.test.ts` and the `hermes/theme-tokens` lint
    * rule fail one coming back.
    */
   --surface-raised: var(--surface);
@@ -251,67 +251,43 @@
 }
 
 /*
- * The Gnosia palette, light: the brand palette (docs/design/BRAND.md) applied
- * to the whole app. Selected by the class `gnosia` on <html> without `.dark`,
- * so it is a light theme and Tailwind's `dark:` variant stays off; Gnosia dark
- * is both classes, the `.gnosia.dark` block below.
+ * The Hermes palette, light: the brand palette (docs/design/BRAND.md) applied
+ * to the whole app. Selected by the class `hermes` on <html> without `.dark`,
+ * so it is a light theme and Tailwind's `dark:` variant stays off; Hermes dark
+ * is both classes, the `.hermes.dark` block below.
  * Every palette token is declared here, the ones that keep :root's value
  * last; only the mode-independent tokens fall through from :root. Literal hex on purpose, so the block is self-contained and greppable;
  * the values that are brand tokens say which. Every pair is contrast-checked
- * in BRAND.md, "The Gnosia theme inside the app".
+ * in BRAND.md, "The Hermes theme inside the app".
  */
-.gnosia {
-  /* Grounds: cream paper, a whiter card, a deeper cream, a pale teal wash. */
-  --page: #faf6ec; /* --brand-cream */
+.hermes {
+  /* Terracotta and cream: every palette token is explicit in both appearances. */
+  --page: #faf6ec;
   --surface: #fffdf8;
   --surface2: #f3eee1;
   --skeleton: #eee8da;
   --skeleton-sheen: #faf7ef;
-  --tint: #e2efec;
+  --tint: #f5e4da;
   --border: #e6dfd0;
   --hair: #ede7da;
-  --track: #e6dfd0; /* the border's value, as in :root */
-
-  /* Ink: the brand's navy-black, then two warm muted inks. */
-  --text: #15283a; /* --brand-ink */
-  --text2: #605b54;
-  --text3: #878276;
-
-  /* Accent: a mid teal for fills, at the one luminance where both a white
-     label (chips, the accent button) and the black stat-tile strip clear
-     4.5:1; the deep brand teal is the text colour and the lip. */
-  --accent: #148285;
-  --accent-text: #0f5f61; /* --brand-teal */
-  --accent-lip: #0f5f61; /* --brand-teal */
-
-  /* The primary pill is the landing page's brand button: teal face, navy lip,
-     cream label, so the app and the sign-in page press the same button. */
-  --btn-face: #0f5f61; /* --brand-teal */
-  --btn-lip: #0d1c2b; /* --brand-navy */
-  --btn-text: #faf6ec; /* --brand-cream */
-
-  /* Mastery: deep teal, soft teal, warm grey, stepped by lightness (L* 36,
-     58, 86) so the three stay apart without hue. */
-  --m-hi: #0f5f61; /* --brand-teal */
-  --m-mid: #529798;
+  --track: #e6dfd0;
+  --text: #38251f;
+  --text2: #66554d;
+  --text3: #736359;
+  --accent: #b95b3c;
+  --accent-text: #9e4a2e;
+  --accent-lip: #813a25;
+  --btn-face: #9e4a2e;
+  --btn-lip: #592f23;
+  --btn-text: #faf6ec;
+  --m-hi: #9e4a2e;
+  --m-mid: #ab6d54;
   --m-lo: #ddd5c4;
   --lip-shade: #cbc1ad;
-  --diagram-matte: #f7f6f3; /* stays light, see :root */
-
-  /* The streak is the brand's gold: 3.1:1 on cream, the non-text minimum. */
-  --streak: #b3842c; /* --brand-gold */
-
-  /* Signal colours keep their :root hues. Only two labels move, each
-     because it was under 4.5:1: the green text darkened just far enough to
-     pass on its tint and on cream, and the label on a green face turned
-     dark, as it already is in `.dark`. The amber text needs no override:
-     :root's is the one this palette chose, and it passes on cream (4.75). */
+  --diagram-matte: #f7f6f3;
+  --streak: #c2603f;
   --ok-text: #008024;
   --ok-on: #0b2e14;
-
-  /* As :root has them, declared so this block names every palette token
-     (AGENTS.md: a token gets a value in every block); change them here
-     too when :root's change. */
   --ok: #29cc57;
   --ok-lip: #15b441;
   --ok-tint: #e6f8ec;
@@ -328,62 +304,41 @@
 }
 
 /*
- * Gnosia dark: both classes on <html>. The brand's deep navy as the ground,
- * cream ink, the lifted teal the public pages use on navy, and the bright
- * gold. It sits after `.dark` and `.gnosia` and outranks both (two classes),
+ * Hermes dark: both classes on <html>. The brand's deep earth as the ground,
+ * cream ink, the lifted terracotta the public pages use on earth, and the bright
+ * clay. It sits after `.dark` and `.hermes` and outranks both (two classes),
  * and it declares every token either of them sets, so nothing here depends on
  * which of the two happens to come later in the file. Every pair is measured
- * in BRAND.md, "Gnosia dark".
+ * in BRAND.md, "Hermes dark".
  */
-.gnosia.dark {
-  /* Grounds: the site's dark navy for the page, then two steps lighter at
-     the same hue (OKLCH L 0.24 and 0.285, the lightness of `.dark`'s steps),
-     a teal wash for the tint, and navy-greys for the lines. */
-  --page: #0a1621; /* --brand-navy in dark */
-  --surface: #102131;
-  --surface2: #1b2c3c;
-  --skeleton: #1c2e3f;
-  --skeleton-sheen: #2a3d50;
-  --tint: #112c32;
-  --border: #3d4c5b;
-  --hair: #263645;
-  /* Recessed, as `.dark` has it: every fill clears 3:1 (learning's #187b78
-     is the lowest, 4.14), and black is 1.28:1 from the card, the most any
-     darker track can be. A navy tint at this lightness is not visible. */
+.hermes.dark {
+  /* Terracotta and cream: every palette token is explicit in both appearances. */
+  --page: #211815;
+  --surface: #2c201c;
+  --surface2: #392a24;
+  --skeleton: #3b2b25;
+  --skeleton-sheen: #4a352c;
+  --tint: #392a24;
+  --border: #73574a;
+  --hair: #4a382f;
   --track: #000000;
   --surface-raised: var(--surface2);
-
-  /* Ink: the brand's cream-white and its grey-blue mist, then a quieter
-     grey-blue for hints. */
-  --text: #eee8dc; /* --brand-ink in dark */
-  --text2: #a3b2bf; /* --brand-mist in dark */
-  --text3: #74828f;
-
-  /* Accent: the Gnosia mid teal stays the fill, because it is the one teal
-     that carries both a white label and the black stat-tile strip; the
-     lifted brand teal is the text colour on navy. */
-  --accent: #148285;
-  --accent-text: #5cbab3; /* --brand-teal in dark */
-  --accent-lip: #0f5f61;
-
-  /* The brand button in dark: lifted teal face, navy label, and the teal
-     sunk halfway into navy for the lip, as the public pages draw it. */
-  --btn-face: #5cbab3;
-  --btn-lip: #33686a;
-  --btn-text: #0a1621;
-
-  /* Mastery, stepped by lightness: bright teal, deep teal, navy-grey. */
-  --m-hi: #5cbab3;
-  --m-hi-on: #0a1621;
-  --m-mid: #187b78;
-  --m-lo: #3d4c5b;
-  --lip-shade: #05101c;
-  --diagram-matte: #f7f6f3; /* stays light, see :root */
-
-  /* The brand's bright gold. */
-  --streak: #e2b95e; /* --brand-gold in dark */
-
-  /* Signal colours as `.dark` has them; every pair passes on navy. */
+  --text: #f4ecdc;
+  --text2: #c7b2a5;
+  --text3: #b09a8c;
+  --accent: #b95b3c;
+  --accent-text: #edaa8e;
+  --accent-lip: #813a25;
+  --btn-face: #edaa8e;
+  --btn-lip: #87533f;
+  --btn-text: #211815;
+  --m-hi: #edaa8e;
+  --m-hi-on: #211815;
+  --m-mid: #a46850;
+  --m-lo: #73574a;
+  --lip-shade: #160e0b;
+  --diagram-matte: #f7f6f3;
+  --streak: #edaa8e;
   --ok: #29cc57;
   --ok-lip: #15b441;
   --ok-text: #5ed981;
@@ -507,13 +462,13 @@
   --color-on-tone: var(--on-tone);
   --color-diagram-matte: var(--diagram-matte);
 
-  /* Gnosia brand colours (the block at the end of this file, and
-     docs/design/BRAND.md): `bg-brand-cream`, `text-brand-teal` and so on. */
-  --color-brand-teal: var(--brand-teal);
-  --color-brand-navy: var(--brand-navy);
+  /* Hermes brand colours (the block at the end of this file, and
+     docs/design/BRAND.md): `bg-brand-cream`, `text-brand-terracotta` and so on. */
+  --color-brand-terracotta: var(--brand-terracotta);
+  --color-brand-earth: var(--brand-earth);
   --color-brand-cream: var(--brand-cream);
-  --color-brand-gold: var(--brand-gold);
-  --color-brand-gold-soft: var(--brand-gold-soft);
+  --color-brand-clay: var(--brand-clay);
+  --color-brand-clay-soft: var(--brand-clay-soft);
   --color-brand-ink: var(--brand-ink);
   --color-brand-mist: var(--brand-mist);
 
@@ -591,7 +546,7 @@ body {
  *
  * Every colour is a token mixed with transparency, so the veil is the page's
  * own surface in each of the six modes: a white veil in Classic light, a
- * charcoal one in dark, cream and navy in Gnosia. A hard-coded veil would be a
+ * charcoal one in dark, cream and earth in Hermes. A hard-coded veil would be a
  * grey smear on one of them.
  */
 .studio-veil {
@@ -683,9 +638,9 @@ body {
   animation: studio-breathe 2s ease-in-out infinite;
 }
 
-/* The studio home's glow: three soft fields of the brand's teal, gold and
+/* The studio home's glow: three soft fields of the brand's terracotta, clay and
    mist drifting behind "What shall we make?", Lovable's moving wash in
-   Gnosia's colours. Each field is a radial gradient that fades to nothing at
+   Hermes's colours. Each field is a radial gradient that fades to nothing at
    its own edge, so no blur filter is needed and only `transform` animates,
    which the compositor does alone. The brand tokens flip with `.dark`, so
    both appearances get their own strength from one set of rules. */
@@ -702,18 +657,18 @@ body {
   border-radius: 9999px;
 }
 
-.studio-glow-teal {
+.studio-glow-terracotta {
   left: -12%;
   bottom: -24%;
   width: min(70%, 62rem);
-  background: radial-gradient(closest-side, color-mix(in srgb, var(--brand-teal) 38%, transparent), transparent);
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--brand-terracotta) 38%, transparent), transparent);
 }
 
-.studio-glow-gold {
+.studio-glow-clay {
   right: -14%;
   bottom: -28%;
   width: min(64%, 56rem);
-  background: radial-gradient(closest-side, color-mix(in srgb, var(--brand-gold-soft) 62%, transparent), transparent);
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--brand-clay-soft) 62%, transparent), transparent);
 }
 
 .studio-glow-mist {
@@ -723,12 +678,12 @@ body {
   background: radial-gradient(closest-side, color-mix(in srgb, var(--brand-mist) 22%, transparent), transparent);
 }
 
-.dark .studio-glow-teal {
-  background: radial-gradient(closest-side, color-mix(in srgb, var(--brand-teal) 55%, transparent), transparent);
+.dark .studio-glow-terracotta {
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--brand-terracotta) 55%, transparent), transparent);
 }
 
-.dark .studio-glow-gold {
-  background: radial-gradient(closest-side, color-mix(in srgb, var(--brand-gold) 34%, transparent), transparent);
+.dark .studio-glow-clay {
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--brand-clay) 34%, transparent), transparent);
 }
 
 .dark .studio-glow-mist {
@@ -777,10 +732,10 @@ body {
   .studio-glow > span {
     will-change: transform;
   }
-  .studio-glow-teal {
+  .studio-glow-terracotta {
     animation: studio-glow-a 26s ease-in-out infinite;
   }
-  .studio-glow-gold {
+  .studio-glow-clay {
     animation: studio-glow-b 32s ease-in-out infinite;
   }
   .studio-glow-mist {
@@ -800,7 +755,7 @@ body {
 }
 
 /* ==========================================================================
- * Gnosia brand
+ * Hermes brand
  *
  * The brand palette and the motion for the public pages (app/(site)/) and the
  * brand components (components/brand/). Values, contrast ratios and the reason
@@ -809,101 +764,101 @@ body {
  * (`bg-brand-cream`, `text-brand-ink`), declared in the @theme block.
  *
  * Roles, not just hues: `ink` and `mist` are the text colours and flip between
- * themes; `teal` lightens in dark so it still reads as text on navy; `cream`
- * and `navy` are the two grounds (the site layout picks one per theme).
+ * themes; `terracotta` lightens in dark so it still reads as text on earth; `cream`
+ * and `earth` are the two grounds (the site layout picks one per theme).
  * ========================================================================== */
 :root {
-  --brand-teal: #0f5f61;
-  --brand-navy: #0d1c2b;
+  --brand-terracotta: #9e4a2e;
+  --brand-earth: #211815;
   --brand-cream: #faf6ec;
-  --brand-gold: #b3842c;
-  --brand-gold-soft: #efd9a1;
-  --brand-ink: #15283a;
-  --brand-mist: #4f6173;
+  --brand-clay: #c2603f;
+  --brand-clay-soft: #eac5b2;
+  --brand-ink: #38251f;
+  --brand-mist: #66554d;
 }
 
 .dark {
-  --brand-teal: #5cbab3;
-  --brand-navy: #0a1621;
+  --brand-terracotta: #edaa8e;
+  --brand-earth: #211815;
   --brand-cream: #f4ecdc;
-  --brand-gold: #e2b95e;
-  --brand-gold-soft: #e8c877;
-  --brand-ink: #eee8dc;
-  --brand-mist: #a3b2bf;
+  --brand-clay: #edaa8e;
+  --brand-clay-soft: #dca084;
+  --brand-ink: #f4ecdc;
+  --brand-mist: #c7b2a5;
 }
 
-/* The public pages' ground: cream (navy in dark) under two soft glows, a cool
+/* The public pages' ground: cream (earth in dark) under two soft glows, a cool
    one from the top right and a warm one behind the hero. */
-.gnosia-ground {
+.hermes-ground {
   background:
-    radial-gradient(56rem 34rem at 88% -6%, color-mix(in srgb, var(--brand-teal) 11%, transparent), transparent 70%),
-    radial-gradient(40rem 30rem at 6% 14%, color-mix(in srgb, var(--brand-gold-soft) 32%, transparent), transparent 70%),
+    radial-gradient(56rem 34rem at 88% -6%, color-mix(in srgb, var(--brand-terracotta) 6%, transparent), transparent 70%),
+    radial-gradient(40rem 30rem at 6% 14%, color-mix(in srgb, var(--brand-clay-soft) 20%, transparent), transparent 70%),
     var(--brand-cream);
   color: var(--brand-ink);
 }
 
-.dark .gnosia-ground {
+.dark .hermes-ground {
   background:
-    radial-gradient(56rem 34rem at 88% -6%, color-mix(in srgb, var(--brand-teal) 16%, transparent), transparent 70%),
-    radial-gradient(40rem 30rem at 6% 14%, color-mix(in srgb, var(--brand-gold-soft) 6%, transparent), transparent 70%),
-    var(--brand-navy);
+    radial-gradient(56rem 34rem at 88% -6%, color-mix(in srgb, var(--brand-terracotta) 16%, transparent), transparent 70%),
+    radial-gradient(40rem 30rem at 6% 14%, color-mix(in srgb, var(--brand-clay-soft) 6%, transparent), transparent 70%),
+    var(--brand-earth);
 }
 
-/* A translucent card: frosted white on cream, a teal-tinted pane on navy.
+/* A translucent card: frosted white on cream, a terracotta-tinted pane on earth.
    The public pages are the one place with shadows; the app kit has none. */
-.gnosia-glass {
+.hermes-glass {
   background: color-mix(in srgb, white 62%, transparent);
   border: 1px solid color-mix(in srgb, var(--brand-ink) 8%, transparent);
   box-shadow:
-    0 1px 2px color-mix(in srgb, var(--brand-navy) 4%, transparent),
-    0 18px 40px -20px color-mix(in srgb, var(--brand-navy) 18%, transparent);
+    0 1px 2px color-mix(in srgb, var(--brand-earth) 4%, transparent),
+    0 18px 40px -20px color-mix(in srgb, var(--brand-earth) 18%, transparent);
   -webkit-backdrop-filter: blur(14px);
   backdrop-filter: blur(14px);
 }
 
-.dark .gnosia-glass {
-  background: color-mix(in srgb, var(--brand-teal) 7%, transparent);
+.dark .hermes-glass {
+  background: color-mix(in srgb, var(--brand-terracotta) 7%, transparent);
   border-color: color-mix(in srgb, var(--brand-cream) 10%, transparent);
   box-shadow: 0 18px 40px -20px color-mix(in srgb, black 60%, transparent);
 }
 
 /* A sheet of paper: the product glimpses on the landing page sit on it. */
-.gnosia-paper {
+.hermes-paper {
   background: #fffdf8;
   border: 1px solid color-mix(in srgb, var(--brand-ink) 9%, transparent);
   box-shadow:
-    0 1px 2px color-mix(in srgb, var(--brand-navy) 5%, transparent),
-    0 24px 48px -28px color-mix(in srgb, var(--brand-navy) 28%, transparent);
+    0 1px 2px color-mix(in srgb, var(--brand-earth) 5%, transparent),
+    0 24px 48px -28px color-mix(in srgb, var(--brand-earth) 28%, transparent);
 }
 
-.dark .gnosia-paper {
-  background: color-mix(in srgb, var(--brand-cream) 6%, var(--brand-navy));
+.dark .hermes-paper {
+  background: color-mix(in srgb, var(--brand-cream) 6%, var(--brand-earth));
   border-color: color-mix(in srgb, var(--brand-cream) 11%, transparent);
   box-shadow: 0 24px 48px -28px color-mix(in srgb, black 70%, transparent);
 }
 
 /* The chapter panels: three flat washes of the brand colours, so each row has
    its own ground without a gradient or a border (Brilliant's tinted panels). */
-.gnosia-panel-teal {
-  background: color-mix(in srgb, var(--brand-teal) 12%, var(--brand-cream));
+.hermes-panel-terracotta {
+  background: color-mix(in srgb, var(--brand-terracotta) 12%, var(--brand-cream));
 }
-.gnosia-panel-gold {
-  background: color-mix(in srgb, var(--brand-gold-soft) 42%, var(--brand-cream));
+.hermes-panel-clay {
+  background: color-mix(in srgb, var(--brand-clay-soft) 42%, var(--brand-cream));
 }
-.gnosia-panel-mist {
+.hermes-panel-mist {
   background: color-mix(in srgb, var(--brand-mist) 11%, var(--brand-cream));
 }
-.dark .gnosia-panel-teal {
-  background: color-mix(in srgb, var(--brand-teal) 13%, var(--brand-navy));
+.dark .hermes-panel-terracotta {
+  background: color-mix(in srgb, var(--brand-terracotta) 13%, var(--brand-earth));
 }
-.dark .gnosia-panel-gold {
-  background: color-mix(in srgb, var(--brand-gold) 11%, var(--brand-navy));
+.dark .hermes-panel-clay {
+  background: color-mix(in srgb, var(--brand-clay) 11%, var(--brand-earth));
 }
-.dark .gnosia-panel-mist {
-  background: color-mix(in srgb, var(--brand-mist) 12%, var(--brand-navy));
+.dark .hermes-panel-mist {
+  background: color-mix(in srgb, var(--brand-mist) 12%, var(--brand-earth));
 }
 
-@keyframes gnosia-float {
+@keyframes hermes-float {
   0%,
   100% {
     transform: translateY(0) rotate(0deg);
@@ -913,7 +868,7 @@ body {
   }
 }
 
-@keyframes gnosia-rise {
+@keyframes hermes-rise {
   from {
     opacity: 0;
     transform: translateY(12px);
@@ -928,19 +883,19 @@ body {
    and the hero's one rise. Nothing here carries meaning, so the reduced
    version is simply still. */
 @media (prefers-reduced-motion: no-preference) {
-  .gnosia-float {
-    animation: gnosia-float 9s ease-in-out infinite;
+  .hermes-float {
+    animation: hermes-float 9s ease-in-out infinite;
   }
 
-  .gnosia-rise {
-    animation: gnosia-rise 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  .hermes-rise {
+    animation: hermes-rise 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both;
   }
 
-  .gnosia-rise-2 {
+  .hermes-rise-2 {
     animation-delay: 0.12s;
   }
 
-  .gnosia-rise-3 {
+  .hermes-rise-3 {
     animation-delay: 0.24s;
   }
 }
@@ -982,8 +937,8 @@ body {
   scroll-behavior: auto !important;
 }
 
-:root[data-motion="reduce"] .gnosia-float,
-:root[data-motion="reduce"] .gnosia-rise,
+:root[data-motion="reduce"] .hermes-float,
+:root[data-motion="reduce"] .hermes-rise,
 :root[data-motion="reduce"] .studio-shimmer::after,
 :root[data-motion="reduce"] .studio-fade-in,
 :root[data-motion="reduce"] .studio-breathe,

@@ -3,8 +3,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { key as blobKey, type BlobStore } from "@gnosia/blob";
-import { asset, assetDerivation, blobObject, LOCAL_LEARNER_ID, readableOwners, type Asset } from "@gnosia/schema";
+import { key as blobKey, type BlobStore } from "@hermes/blob";
+import { asset, assetDerivation, blobObject, LOCAL_LEARNER_ID, readableOwners, type Asset } from "@hermes/schema";
 import { and, eq, inArray, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
@@ -783,7 +783,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
       return detach(after);
     }
     const sha256 = createHash("sha256").update(frame.body).digest("hex");
-    const dir = await mkdtemp(path.join(os.tmpdir(), "gnosia-poster-"));
+    const dir = await mkdtemp(path.join(os.tmpdir(), "hermes-poster-"));
     try {
       const file = path.join(dir, `poster${POSTER_EXTENSION}`);
       await writeFile(file, frame.body);
@@ -830,7 +830,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
             bytes: done.bytes,
             title: `${video.row.title ?? video.row.id} (poster)`,
             // Made by this repository's upload command, not rendered by the tool.
-            sourceRepo: "gnosia",
+            sourceRepo: "hermes",
             blobKey: done.key,
             resourceType: null,
             ownerId: video.row.ownerId,
@@ -1006,7 +1006,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
       return detach(after);
     }
     const sha256 = createHash("sha256").update(made.body).digest("hex");
-    const dir = await mkdtemp(path.join(os.tmpdir(), "gnosia-pdf-"));
+    const dir = await mkdtemp(path.join(os.tmpdir(), "hermes-pdf-"));
     try {
       const file = path.join(dir, `video${PDF_EXTENSION}`);
       await writeFile(file, made.body);
@@ -1052,7 +1052,7 @@ export async function uploadAssets(db: CatalogDatabase, options: AssetUploadOpti
             // compares its inputs against without reading the document.
             inputsHash: made.inputs,
             // Made by this repository's upload command, not rendered by the tool.
-            sourceRepo: "gnosia",
+            sourceRepo: "hermes",
             blobKey: done.key,
             resourceType: null,
             ownerId: video.row.ownerId,

@@ -1,6 +1,7 @@
+import { NextResponse } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ConceptWorkspace } from "@gnosia/tutor/concept-workspace-core";
+import type { ConceptWorkspace } from "@hermes/tutor/concept-workspace-core";
 
 /**
  * `POST /api/agent/session`: one structured question from the tutor model.
@@ -14,9 +15,9 @@ const readTutorStyle = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/concept-workspace", () => ({ readConceptWorkspace }));
 vi.mock("@/lib/settings", () => ({ readTutorStyle }));
-vi.mock("@gnosia/tutor/providers", async (importOriginal) => ({
+vi.mock("@hermes/tutor/providers", async (importOriginal) => ({
   // The pure helpers (the missing-key message, the skipped entries) are real.
-  ...(await importOriginal<typeof import("@gnosia/tutor/providers")>()),
+  ...(await importOriginal<typeof import("@hermes/tutor/providers")>()),
   completeWithFallback,
   availableProviderSummary: () => "none",
 }));
@@ -26,7 +27,7 @@ const tutorCredentials = vi.hoisted(() => vi.fn());
 const signedIn = vi.hoisted(() => ({ value: true }));
 vi.mock("@/lib/agent/credentials", () => ({ tutorCredentials }));
 // tutorDeps opens the catalog for every request. Unmocked, that is the
-// owner's real ~/.gnosia/catalog.db on a laptop, and a rejected promise on CI,
+// owner's real ~/.hermes/catalog.db on a laptop, and a rejected promise on CI,
 // whose DATABASE_URL is a postgres:// tripwire the catalog refuses. Nothing
 // this route reads here goes through the handle, so a stand-in will do.
 vi.mock("@/lib/learner-store", () => ({ catalogDatabase: async () => ({}) }));
@@ -123,6 +124,16 @@ describe("POST /api/agent/session", () => {
     expect(readConceptWorkspace).not.toHaveBeenCalled();
   });
 
+  it("answers a 429 once the owner's window is spent, before any read or provider call", async () => {
+    enforceRateLimit.mockReturnValueOnce(NextResponse.json({ code: "RATE_LIMITED" }, { status: 429 }));
+    const { status, json } = await call({ conceptSlug: "dot-product", step: "probe" });
+    expect(status).toBe(429);
+    expect(json.code).toBe("RATE_LIMITED");
+    expect(enforceRateLimit).toHaveBeenCalledWith("local", "session", expect.anything());
+    expect(readConceptWorkspace).not.toHaveBeenCalled();
+    expect(completeWithFallback).not.toHaveBeenCalled();
+  });
+
   it("refuses another origin before reading anything", async () => {
     expect((await call({ conceptSlug: "dot-product", step: "probe" }, "https://evil.example")).status).toBe(403);
     expect(readConceptWorkspace).not.toHaveBeenCalled();
@@ -156,6 +167,7 @@ describe("POST /api/agent/session", () => {
     );
     const { status, json } = await call({ conceptSlug: "dot-product", step: "check", avoid: ["Earlier?"] });
     expect(status).toBe(200);
+    expect(readConceptWorkspace).toHaveBeenCalledWith("dot-product", "local");
     const question = json.question as { choices: string[]; correct: number; origin: string };
     expect(question.choices[question.correct]).toBe("Right");
     expect(question.origin).toBe("model");

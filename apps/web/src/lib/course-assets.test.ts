@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { AssetRef } from "@gnosia/catalog/state";
-import type { Course, Module, Topic } from "@gnosia/content";
+import type { AssetRef } from "@hermes/catalog/state";
+import type { Course, Module, Topic } from "@hermes/content";
 
 /**
  * What a course page reads from the catalog per module (`loadCourseAssets`),
@@ -19,8 +19,8 @@ const catalog = vi.hoisted(() => ({
 vi.mock("next/server", () => ({ connection: async () => undefined }));
 vi.mock("@/lib/owner", () => ({ currentScope: async () => ({ owner: "local", readable: ["local", "commons"] }) }));
 vi.mock("@/lib/learner-store", () => ({ catalogDatabase: async () => ({}) }));
-vi.mock("@gnosia/catalog/state", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@gnosia/catalog/state")>()),
+vi.mock("@hermes/catalog/state", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@hermes/catalog/state")>()),
   assetsForTopic: catalog.forTopic,
   assetsForConcepts: catalog.forConcepts,
   assetsByIds: catalog.byIds,

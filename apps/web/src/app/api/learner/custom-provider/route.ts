@@ -1,4 +1,4 @@
-import { customProviderAddTurn, customProviderChangeTurn } from "@gnosia/tutor/server/turns";
+import { customProviderAddTurn, customProviderChangeTurn } from "@hermes/tutor/server/turns";
 
 import { settingsRoute } from "@/lib/provider-keys/requests";
 import { CHAIN_WRITE_RATE_LIMIT } from "@/lib/tutor-models/requests";
@@ -22,7 +22,7 @@ export const runtime = "nodejs";
  * refused (`KEY_REQUIRED`) unless the key comes with it, so a saved key never
  * goes to a host it was not saved for. Its models stay. Its Delete is
  * the provider route's, which removes it whole. Both are turns in
- * `@gnosia/tutor/server/turns` (`customProviderAddTurn`,
+ * `@hermes/tutor/server/turns` (`customProviderAddTurn`,
  * `customProviderChangeTurn`).
  */
 

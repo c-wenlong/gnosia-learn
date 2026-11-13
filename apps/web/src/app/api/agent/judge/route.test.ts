@@ -1,6 +1,7 @@
+import { NextResponse } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ConceptWorkspace } from "@gnosia/tutor/concept-workspace-core";
+import type { ConceptWorkspace } from "@hermes/tutor/concept-workspace-core";
 
 /**
  * `POST /api/agent/judge`: the verdict on one answer to a chat check.
@@ -13,9 +14,9 @@ const readConceptWorkspace = vi.hoisted(() => vi.fn());
 const completeWithFallback = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/concept-workspace", () => ({ readConceptWorkspace }));
-vi.mock("@gnosia/tutor/providers", async (importOriginal) => ({
+vi.mock("@hermes/tutor/providers", async (importOriginal) => ({
   // The pure helpers (the missing-key message, the skipped entries) are real.
-  ...(await importOriginal<typeof import("@gnosia/tutor/providers")>()),
+  ...(await importOriginal<typeof import("@hermes/tutor/providers")>()),
   completeWithFallback,
   availableProviderSummary: () => "none",
 }));
@@ -25,7 +26,7 @@ const tutorCredentials = vi.hoisted(() => vi.fn());
 const signedIn = vi.hoisted(() => ({ value: true }));
 vi.mock("@/lib/agent/credentials", () => ({ tutorCredentials }));
 // tutorDeps opens the catalog for every request. Unmocked, that is the
-// owner's real ~/.gnosia/catalog.db on a laptop, and a rejected promise on CI,
+// owner's real ~/.hermes/catalog.db on a laptop, and a rejected promise on CI,
 // whose DATABASE_URL is a postgres:// tripwire the catalog refuses. Nothing
 // this route reads here goes through the handle, so a stand-in will do.
 vi.mock("@/lib/learner-store", () => ({ catalogDatabase: async () => ({}) }));
@@ -33,6 +34,14 @@ vi.mock("@/lib/auth/session", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth/session")>()),
   isSignedIn: async () => signedIn.value,
 }));
+// The limiter, watched and real by default: a body the turn refuses must not
+// spend a token, and a spent window must stop the turn before any read.
+const enforceRateLimit = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/agent/guard", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/agent/guard")>();
+  enforceRateLimit.mockImplementation(real.enforceRateLimit);
+  return { ...real, enforceRateLimit };
+});
 
 /** A stand-in for `tutorCredentials`' answer; the route only passes it on. */
 const CREDENTIALS = [{ config: { id: "gemini" }, apiKey: "own-gemini-key", source: "saved" }];
@@ -113,6 +122,18 @@ describe("POST /api/agent/judge", () => {
     tutorCredentials.mockResolvedValue(CREDENTIALS);
     signedIn.value = true;
     readConceptWorkspace.mockResolvedValue({ state: "ok", workspace });
+    // Clears the calls and keeps the real limiter behind it.
+    enforceRateLimit.mockClear();
+  });
+
+  it("answers a 429 once the owner's window is spent, before any read or provider call", async () => {
+    enforceRateLimit.mockReturnValueOnce(NextResponse.json({ code: "RATE_LIMITED" }, { status: 429 }));
+    const { status, json } = await call(OK);
+    expect(status).toBe(429);
+    expect(json.code).toBe("RATE_LIMITED");
+    expect(enforceRateLimit).toHaveBeenCalledWith("local", "judge", expect.anything());
+    expect(readConceptWorkspace).not.toHaveBeenCalled();
+    expect(completeWithFallback).not.toHaveBeenCalled();
   });
 
   it("refuses a body past its byte limit with a 413 before any read", async () => {
@@ -144,6 +165,8 @@ describe("POST /api/agent/judge", () => {
     expect(json.code).toBe("BAD_REQUEST");
     expect(readConceptWorkspace).not.toHaveBeenCalled();
     expect(completeWithFallback).not.toHaveBeenCalled();
+    // A malformed body spends no token.
+    expect(enforceRateLimit).not.toHaveBeenCalled();
   });
 
   it("judges against the note's matching check and returns the verdict", async () => {
@@ -151,6 +174,7 @@ describe("POST /api/agent/judge", () => {
     const { status, json } = await call(OK);
     expect(status).toBe(200);
     expect(json.verdict).toEqual({ correct: true, feedback: "Yes, orthogonal." });
+    expect(readConceptWorkspace).toHaveBeenCalledWith("dot-product", "local");
     const [messages, credentials] = completeWithFallback.mock.calls[0] as [{ role: string; content: string }[], unknown];
     expect(credentials).toBe(CREDENTIALS);
     expect(messages[0]?.content).toContain("- Answer: They are orthogonal");
@@ -168,6 +192,18 @@ describe("POST /api/agent/judge", () => {
     expect(system).toContain(`## The answer the tutor committed to`);
     expect(system).toContain(commitment);
     expect(system.indexOf(commitment)).toBeLessThan(system.indexOf("- Answer: They are orthogonal"));
+  });
+
+  it("hands the request's signal to the model call, so a closed tab stops it", async () => {
+    completeWithFallback.mockResolvedValue(reply('{"correct": true, "feedback": "Yes."}'));
+    const browser = new AbortController();
+    const { POST } = await import("./route");
+    await POST(new Request(post(OK), { signal: browser.signal }));
+    const signal = completeWithFallback.mock.calls[0]?.[3] as AbortSignal | undefined;
+    expect(signal).toBeInstanceOf(AbortSignal);
+    expect(signal?.aborted).toBe(false);
+    browser.abort();
+    expect(signal?.aborted).toBe(true);
   });
 
   it("answers UNSTRUCTURED_REPLY for a verdict that is not true or false", async () => {

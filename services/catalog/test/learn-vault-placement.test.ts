@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { session, sessionLogEntry } from "@gnosia/schema";
+import { session, sessionLogEntry } from "@hermes/schema";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 
@@ -41,14 +41,14 @@ describe.skipIf(!reachable.ok)("learn vault", () => {
     const recorded = await manifest(vault);
     await writeFile(
       path.join(vault, ".vault.json"),
-      JSON.stringify({ ...recorded, database: "gnosia:1" }, null, 2),
+      JSON.stringify({ ...recorded, database: "hermes:1" }, null, 2),
     );
     const rel = "concepts/fixtures/alpha.md";
     await writeFile(path.join(vault, rel), `${await read(vault, rel)}\nfrom elsewhere\n`);
     const before = await revisions();
     const result = await learn("vault", "push", "--out", vault);
     expect(result.code).toBe(1);
-    expect(result.stderr).toMatch(/was pulled from the database gnosia:1/);
+    expect(result.stderr).toMatch(/was pulled from the database hermes:1/);
     expect(await revisions()).toBe(before);
     // A pull adopts this database, keeps the edit, and puts this database's version beside it.
     const pulled = await pull(vault);
@@ -60,7 +60,7 @@ describe.skipIf(!reachable.ok)("learn vault", () => {
 
   it("refuses a vault inside another checkout of this repository", async () => {
     const other = await newVault();
-    await writeFile(path.join(other, "package.json"), JSON.stringify({ name: "gnosia", private: true }));
+    await writeFile(path.join(other, "package.json"), JSON.stringify({ name: "hermes", private: true }));
     const result = await learn("vault", "pull", "--out", path.join(other, "learn", "vault"));
     expect(result.code).toBe(1);
     expect(result.stderr).toMatch(/is inside .*, a checkout of this repository/);
@@ -87,8 +87,8 @@ describe.skipIf(!reachable.ok)("learn vault", () => {
     const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><title>theirs</title></svg>';
     const sha = createHash("sha256").update(svg).digest("hex");
     const key = `${other}/${sha}.svg`;
-    await mkdir(path.join(process.env["GNOSIA_HOME"] as string, "blobs", other), { recursive: true });
-    await writeFile(path.join(process.env["GNOSIA_HOME"] as string, "blobs", key), svg);
+    await mkdir(path.join(process.env["HERMES_HOME"] as string, "blobs", other), { recursive: true });
+    await writeFile(path.join(process.env["HERMES_HOME"] as string, "blobs", key), svg);
     // Another owner's rows, written around the seam as the review's seed was:
     // the write guards of the flipped types let a named repair through.
     const guarded = (write: (tx: typeof v.scratch.db) => Promise<void>) =>
@@ -126,7 +126,7 @@ describe.skipIf(!reachable.ok)("learn vault before the flip", () => {
   it("refuses while the database does not own the notes and logs", async () => {
     const scratch = await migratedScratchDatabase();
     const fixture = await makeFixture();
-    const vault = await mkdtemp(path.join(tmpdir(), "gnosia-vault-"));
+    const vault = await mkdtemp(path.join(tmpdir(), "hermes-vault-"));
     try {
       const result = await execFileAsync(process.execPath, ["--import", "tsx", ENTRY, "vault", "pull", "--out", vault], {
         env: { ...process.env, LEARN_ROOT: fixture.root, DATABASE_URL: scratch.url },

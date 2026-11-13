@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { realpath } from "node:fs/promises";
 import path from "node:path";
 
-import { indexRun } from "@gnosia/schema";
+import { indexRun } from "@hermes/schema";
 import { eq, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";

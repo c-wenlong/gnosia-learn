@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { ProviderName } from "@gnosia/schema/shared";
+import type { ProviderName } from "@hermes/schema/shared";
 
 import { TUTOR_TO_BYOK } from "@/lib/byok-providers";
 import { studioApi, studioEnabled } from "@/lib/studio";

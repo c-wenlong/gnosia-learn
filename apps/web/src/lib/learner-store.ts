@@ -8,9 +8,9 @@ import {
   StateError,
   type CatalogDatabase,
   type KnowledgeBase,
-} from "@gnosia/catalog/state";
-import { emptyLearnerState, type LearnerState } from "@gnosia/schema/shared";
-import { failureCode } from "@gnosia/tutor/server/provider-keys";
+} from "@hermes/catalog/state";
+import { emptyLearnerState, type LearnerState } from "@hermes/schema/shared";
+import { failureCode } from "@hermes/tutor/server/provider-keys";
 
 import { currentOwner } from "@/lib/owner";
 
@@ -83,7 +83,7 @@ function database(): Promise<CatalogDatabase> {
 }
 
 async function open(): Promise<CatalogDatabase> {
-  const { connect } = await import("@gnosia/catalog/state");
+  const { connect } = await import("@hermes/catalog/state");
   return connect({ connectionTimeoutMillis: 3_000 }).db;
 }
 

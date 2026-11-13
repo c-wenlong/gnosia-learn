@@ -1,12 +1,12 @@
 import "server-only";
 
-import { readConceptNote as readConceptNoteCore, type ConceptNoteRead } from "@gnosia/tutor/server/concept-note";
+import { readConceptNote as readConceptNoteCore, type ConceptNoteRead } from "@hermes/tutor/server/concept-note";
 
 import { contentSource } from "@/data/source";
 
 /**
  * One concept's note through the reader seam. The read lives in
- * `@gnosia/tutor/server/concept-note`; this file hands it this app's
+ * `@hermes/tutor/server/concept-note`; this file hands it this app's
  * selected seam.
  */
 

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { SESSION_TEXT_LIMIT } from "@gnosia/tutor/session-core";
+import { SESSION_TEXT_LIMIT } from "@hermes/tutor/session-core";
 
 import {
   chatRequestId,

@@ -9,7 +9,7 @@ import { TypingDots } from "./TypingDots";
 /**
  * Small kit pieces the UI audit's leftovers added (issue #359): `TypingDots`,
  * a `Placeholder` a class can size, and `Glyph`'s stroke. The lint rules in
- * eslint-rules/gnosia.mjs fail when a hand-built copy of a kit piece comes back.
+ * eslint-rules/hermes.mjs fail when a hand-built copy of a kit piece comes back.
  */
 
 describe("TypingDots", () => {

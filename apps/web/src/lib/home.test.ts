@@ -21,7 +21,7 @@ vi.mock("@/lib/auth/session", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/auth/session")>()),
   isSignedIn: async () => true,
 }));
-vi.mock("@gnosia/catalog/state", () => ({
+vi.mock("@hermes/catalog/state", () => ({
   asLastVisited: vi.fn(() => undefined),
   asRecentModules: vi.fn(() => undefined),
   assetsByIds: vi.fn(async () => []),
@@ -117,7 +117,7 @@ describe("readHome", () => {
   });
 
   it("lists a course opened with no topic done on the courses card, as the sidebar lists it", async () => {
-    const state = await import("@gnosia/catalog/state");
+    const state = await import("@hermes/catalog/state");
     vi.mocked(state.recentActivity).mockResolvedValueOnce([
       { type: "visit", course: "cs3230", module: "m1", at: new Date().toISOString() },
     ] as never);
@@ -143,7 +143,7 @@ describe("readHome", () => {
 
   it("reads the event log folded per module and concept, bounded by the threads it lists", async () => {
     getCourses.mockResolvedValueOnce([]);
-    const state = await import("@gnosia/catalog/state");
+    const state = await import("@hermes/catalog/state");
     const { readHome } = await import("./home");
     await readHome();
     expect(state.recentActivity).toHaveBeenCalledWith(expect.anything(), "local", { limit: 5 });
@@ -159,7 +159,7 @@ describe("readHome", () => {
   });
 
   it("loses only the session rows when the tutor sessions cannot be read", async () => {
-    const state = await import("@gnosia/catalog/state");
+    const state = await import("@hermes/catalog/state");
     getCourses.mockResolvedValueOnce([]);
     vi.mocked(state.recentTutorSessions).mockRejectedValueOnce(new Error('relation "tutor_session" does not exist'));
     const { readHome } = await import("./home");
@@ -170,7 +170,7 @@ describe("readHome", () => {
   });
 
   it("reads the frontier's first concept as Next up, with where it sits on the path", async () => {
-    const state = await import("@gnosia/catalog/state");
+    const state = await import("@hermes/catalog/state");
     // CS3230 is set aside: nothing opens "Next from here", but `placeOf` still
     // reads the full course list, so the pick's eyebrow names its module.
     getCourses.mockResolvedValueOnce([
@@ -208,7 +208,7 @@ describe("readHome", () => {
   });
 
   it("names the note's domain when the next concept sits on no curriculum item", async () => {
-    const state = await import("@gnosia/catalog/state");
+    const state = await import("@hermes/catalog/state");
     getCourses.mockResolvedValueOnce([]);
     vi.mocked(state.readKnowledgeBase).mockResolvedValueOnce({
       concepts: [concept("c-free", { title: "Free note", domain: "probability" })],
@@ -220,7 +220,7 @@ describe("readHome", () => {
   });
 
   it("walks a visited module's next topic by the topic vocabulary's authored order", async () => {
-    const state = await import("@gnosia/catalog/state");
+    const state = await import("@hermes/catalog/state");
     vi.mocked(state.recentActivity).mockResolvedValueOnce([
       { type: "visit", course: "cs3230", module: "m1", at: new Date().toISOString() },
     ] as never);
@@ -273,7 +273,7 @@ describe("readHome", () => {
   });
 
   it("opens the frontier concepts a concept thread unlocks, so Next up stands down", async () => {
-    const state = await import("@gnosia/catalog/state");
+    const state = await import("@hermes/catalog/state");
     vi.mocked(state.recentActivity).mockResolvedValueOnce([
       { type: "observation", concept: "c-seen", at: new Date().toISOString() },
     ] as never);

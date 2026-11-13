@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
-import { GnosiaLockup } from "@/components/brand/GnosiaWordmark";
-import { GnosiaMascot } from "@/components/brand/GnosiaMascot";
+import { HermesLockup } from "@/components/brand/HermesWordmark";
+import { HermesMascot } from "@/components/brand/HermesMascot";
 import { Button } from "@/components/ui/Button";
 import { AUTH_SECRET_VAR, OWNER_PASSWORD_VAR, safeNextPath } from "@/lib/auth/core";
 import { authConfig } from "@/lib/auth/session";
@@ -53,18 +53,18 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
       <div className="relative flex justify-center md:order-1">
         <span
           aria-hidden
-          className="pointer-events-none absolute top-1/2 left-1/2 size-[260px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(closest-side,color-mix(in_srgb,var(--brand-gold-soft)_55%,transparent),transparent)] md:size-[420px] dark:bg-[radial-gradient(closest-side,color-mix(in_srgb,var(--brand-teal)_22%,transparent),transparent)]"
+          className="pointer-events-none absolute top-1/2 left-1/2 size-[260px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(closest-side,color-mix(in_srgb,var(--brand-clay-soft)_55%,transparent),transparent)] md:size-[420px] dark:bg-[radial-gradient(closest-side,color-mix(in_srgb,var(--brand-terracotta)_22%,transparent),transparent)]"
         />
-        <GnosiaMascot pose="happy" float preload className="relative h-[120px] md:h-[300px]" />
+        <HermesMascot pose="happy" float preload className="relative h-[120px] md:h-[300px]" />
       </div>
 
-      <div className="gnosia-glass flex flex-col rounded-[28px] px-6 py-8 md:order-2 md:px-8 md:py-10">
-        <GnosiaLockup size={44} className="self-center text-brand-ink" />
+      <div className="hermes-glass flex flex-col rounded-[28px] px-6 py-8 md:order-2 md:px-8 md:py-10">
+        <HermesLockup size={44} className="self-center text-brand-ink" />
         <h1 className="mt-7 text-center font-book text-[30px] leading-tight font-medium tracking-[-0.02em] text-brand-ink">
           Open your book
         </h1>
         <p className="mt-2 text-center text-[15px] leading-relaxed text-brand-mist">
-          Gnosia has one reader for now. Enter the owner password to continue.
+          Hermes has one reader for now. Enter the owner password to continue.
         </p>
 
         <form method="post" action={next === safeNextPath(null) ? "/api/auth/sign-in" : `/api/auth/sign-in?${new URLSearchParams({ next })}`} className="mt-8 flex w-full flex-col gap-4">
@@ -80,7 +80,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
               disabled={unconfigured}
               aria-invalid={error === "password" || undefined}
               aria-describedby={error ? "sign-in-error" : undefined}
-              className="h-12 rounded-2xl border border-brand-ink/15 bg-white/70 px-4 text-[16px] text-brand-ink outline-none transition-colors duration-150 focus-visible:border-brand-teal focus-visible:ring-2 focus-visible:ring-brand-teal/25 disabled:opacity-50 aria-invalid:border-danger dark:bg-brand-navy/50"
+              className="h-12 rounded-2xl border border-brand-ink/15 bg-white/70 px-4 text-[16px] text-brand-ink outline-none transition-colors duration-150 focus-visible:border-brand-terracotta focus-visible:ring-2 focus-visible:ring-brand-terracotta/25 disabled:opacity-50 aria-invalid:border-danger dark:bg-brand-earth/50"
             />
           </label>
           {error === "password" && (
@@ -97,7 +97,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
             <div
               id="sign-in-error"
               role="alert"
-              className="rounded-2xl border border-brand-gold/40 bg-brand-gold-soft/25 px-4 py-3 dark:border-brand-gold/30 dark:bg-brand-gold/10 text-[14px] leading-relaxed text-brand-ink"
+              className="rounded-2xl border border-brand-clay/40 bg-brand-clay-soft/25 px-4 py-3 dark:border-brand-clay/30 dark:bg-brand-clay/10 text-[14px] leading-relaxed text-brand-ink"
             >
               <p className="font-semibold">Sign-in is not configured on this deployment.</p>
               <p className="mt-1">

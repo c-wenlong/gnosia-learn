@@ -2,8 +2,8 @@ import { readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { fileSource } from "@gnosia/content";
-import { contentRevision, topic } from "@gnosia/schema";
+import { fileSource } from "@hermes/content";
+import { contentRevision, topic } from "@hermes/schema";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -416,7 +416,7 @@ describe.skipIf(!reachable.ok)("topic and tag writers", () => {
           contentHash: "seeded",
           bytes: 1,
           title: "A picture",
-          sourceRepo: "gnosia",
+          sourceRepo: "hermes",
           blobKey: null,
           resourceType: null,
           ownerId: "local",

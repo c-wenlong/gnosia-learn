@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { resetRateLimits } from "@gnosia/tutor/guards";
+import { resetRateLimits } from "@hermes/tutor/guards";
 
-import { isCallable } from "@gnosia/tutor/providers";
+import { isCallable } from "@hermes/tutor/providers";
 
 import {
   migratedScratchDatabase,
@@ -62,7 +62,7 @@ type ProviderRoute = typeof import("./provider/route");
 type KeyRoutes = typeof import("../provider-key/route");
 type Store = typeof import("@/lib/tutor-models/store");
 type Credentials = typeof import("@/lib/agent/credentials");
-type Cache = typeof import("@gnosia/tutor/server/model-list");
+type Cache = typeof import("@hermes/tutor/server/model-list");
 
 describe.skipIf(!reachable.ok)("tutor model routes", () => {
   let scratch: Scratch;
@@ -101,7 +101,7 @@ describe.skipIf(!reachable.ok)("tutor model routes", () => {
       import("../provider-key/route"),
       import("@/lib/tutor-models/store"),
       import("@/lib/agent/credentials"),
-      import("@gnosia/tutor/server/model-list"),
+      import("@hermes/tutor/server/model-list"),
       import("./provider/route"),
     ]);
   }, 60_000);
