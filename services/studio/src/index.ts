@@ -4,6 +4,7 @@ import path from "node:path";
 import { migrateLegacyByok } from "./agent/byok";
 import { closeKeys, fromWebEnv, hasKeySecret, setCatalogFile, setKeySecret, takeKeySecret } from "./agent/byok-keys";
 import { agentSettingsView, createApi } from "./api";
+import { reclaimCgroupFileCache } from "./cgroup";
 import type { SpendEntry } from "./cost";
 import { Drafts } from "./drafts/drafts";
 import { agentAuthReport, CONCURRENCY, HOST, PORT } from "./config";
@@ -260,7 +261,8 @@ async function main(): Promise<void> {
       if (asked !== null) return;
       warmed = true;
       manual.start();
-      void manual.tick();
+      await manual.tick();
+      await reclaimCgroupFileCache();
     })();
   }
 

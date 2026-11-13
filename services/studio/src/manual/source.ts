@@ -3,6 +3,7 @@ import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promise
 import path from "node:path";
 
 import { canvas, CANVAS_CLI_ARGS, doctor } from "../canvas/canvas";
+import { reclaimCgroupFileCache } from "../cgroup";
 import { manualCheckDir, manualDir, manualPath, REPO_ROOT } from "../paths";
 import { run, sweepByMarker, type RunResult } from "../proc";
 
@@ -448,6 +449,7 @@ export class ManualSource {
       if (await this.doctorOk()) this.wanted = null;
     } finally {
       this.abort = null;
+      void reclaimCgroupFileCache();
     }
   }
 
