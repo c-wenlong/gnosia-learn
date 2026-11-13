@@ -3,6 +3,7 @@ import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promise
 import path from "node:path";
 
 import { canvas, CANVAS_CLI_ARGS, doctor } from "../canvas/canvas";
+import { reclaimCgroupFileCache } from "../cgroup";
 import { manualCheckDir, manualDir, manualPath, REPO_ROOT } from "../paths";
 import { run, sweepByMarker, type RunResult } from "../proc";
 
@@ -439,6 +440,7 @@ export class ManualSource {
       for (const check of failed) {
         this.log(`manual stale: the worked snippet "${check.name}" no longer runs clean: ${check.detail}`);
       }
+      void reclaimCgroupFileCache({ isIdle: () => !this.stopped && this.isIdle() });
     } catch (error) {
       if (this.stopped) return;
       this.snippetError = (error as Error).message;
