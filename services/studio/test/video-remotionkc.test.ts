@@ -84,7 +84,7 @@ function fixedTools(): RemotionkcToolchain {
       root: REMOTIONKC,
       nodeModules: `${REMOTIONKC}/node_modules`,
       venv: `${REMOTIONKC}/.venv`,
-      gnosiaPython: { link: `${REMOTIONKC}/.venv/bin/python`, real: "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3.12", home: "/Library/Frameworks/Python.framework" },
+      narrationPython: { link: `${REMOTIONKC}/.venv/bin/python`, real: "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3.12", home: "/Library/Frameworks/Python.framework" },
       scriptShells: [],
       headlessShell: { binary: `${SHELL}/chrome-headless-shell`, dir: SHELL },
       compositor: `${REMOTIONKC}/node_modules/@remotion/compositor-darwin-arm64`,
@@ -441,7 +441,7 @@ describe("the backend's own parts", () => {
     await writeFile(path.join(checkout, "tools", "cli", "remotionkc.mjs"), "");
     const broken: RemotionkcToolchain = {
       ...tools,
-      remotionkc: { ...tools.remotionkc, root: checkout, sandboxReady: false, headlessShell: null, tsc: null, parser: null, gnosiaPython: null, nodeVersion: "22.10.0" },
+      remotionkc: { ...tools.remotionkc, root: checkout, sandboxReady: false, headlessShell: null, tsc: null, parser: null, narrationPython: null, nodeVersion: "22.10.0" },
     };
     expect(remotionkcProblems(broken).join("\n")).toMatch(/no build --no-narrate[\s\S]*22\.18[\s\S]*npx remotion browser ensure[\s\S]*native compiler[\s\S]*typescript package[\s\S]*narration-deps/);
   });

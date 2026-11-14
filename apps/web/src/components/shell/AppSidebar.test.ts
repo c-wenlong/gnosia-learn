@@ -67,6 +67,7 @@ const EMPTY: RecentModel = { reachable: true, items: [], more: false, pinned: []
 
 const mounted: Array<() => void> = [];
 afterEach(() => {
+  vi.useRealTimers();
   while (mounted.length) mounted.pop()?.();
 });
 
@@ -798,13 +799,15 @@ describe("the sections", () => {
     mocks.listDrafts.mockImplementation(async (query: { q?: string }) => ({ ok: true, data: { drafts: query.q === undefined ? [renamed] : query.q === "transport" ? [renamed] : [], note: "" } }));
     const container = await mount(true);
     const field = container.querySelector<HTMLInputElement>('input[type="search"]')!;
+    vi.useFakeTimers();
     act(() => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(field, "transport");
       field.dispatchEvent(new Event("input", { bubbles: true }));
     });
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      await vi.advanceTimersByTimeAsync(200);
     });
+    vi.useRealTimers();
     const hits = [...nav(container).querySelectorAll("[data-peek-hold] li a")];
     expect(hits.map((a) => a.getAttribute("href"))).toEqual(["/studio?draft=d1"]);
     expect(hits[0]?.textContent).toContain("Transport layer");
@@ -834,13 +837,15 @@ describe("the sections", () => {
     mocks.listDrafts.mockImplementation(async (query: { q?: string }) => ({ ok: true, data: { drafts: query.q === "transport" || query.q === undefined ? [renamed] : [], note: "" } }));
     const container = await mount(true);
     const field = container.querySelector<HTMLInputElement>('input[type="search"]')!;
+    vi.useFakeTimers();
     act(() => {
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(field, "transport");
       field.dispatchEvent(new Event("input", { bubbles: true }));
     });
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      await vi.advanceTimersByTimeAsync(200);
     });
+    vi.useRealTimers();
     const results = () => nav(container).querySelector<HTMLElement>("[data-peek-hold].pt-1")!.parentElement!;
     expect(results().className).not.toContain("opacity-0");
     act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Collapse the sidebar"]')!.click());
@@ -975,12 +980,14 @@ describe("the shortcuts", () => {
     more().focus();
     key({ key: "?", shiftKey: true }, more());
     expect(document.querySelector("dialog[open]")?.textContent).toContain("Keyboard shortcuts");
+    vi.useFakeTimers();
     act(() => {
       document.querySelector("dialog[open]")!.dispatchEvent(new Event("cancel", { cancelable: true }));
     });
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 250));
+      await vi.advanceTimersByTimeAsync(200);
     });
+    vi.useRealTimers();
 
     act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Open the sidebar"]')!.click());
     expect(nav(container).parentElement!.getAttribute("role")).toBe("dialog");
@@ -1031,12 +1038,14 @@ describe("the shortcuts", () => {
     // The kit's rise and fade, and none of it under reduced motion.
     expect(sheet.className).toContain("starting:open:opacity-0");
     expect(sheet.className).toContain("motion-reduce:transition-none");
+    vi.useFakeTimers();
     act(() => {
       sheet.dispatchEvent(new Event("cancel", { cancelable: true }));
     });
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 250));
+      await vi.advanceTimersByTimeAsync(200);
     });
+    vi.useRealTimers();
     expect(document.querySelector("dialog")).toBeNull();
   });
 

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * Remove stops Studio using a provider: its tier models and the active pick
@@ -42,6 +42,21 @@ beforeAll(() => {
 });
 
 const mounted: Array<() => void> = [];
+beforeEach(() => {
+  // Every answer queue starts empty: a resolved value or pending promise a
+  // test leaves behind must not answer the next test's calls.
+  for (const mock of [
+    mocks.getByokSettings,
+    mocks.removeByokProvider,
+    mocks.listByokModels,
+    mocks.saveByokModels,
+    mocks.sendJson,
+  ]) {
+    mock.mockReset();
+  }
+  mocks.selects.length = 0;
+  mocks.sendJson.mockResolvedValue({ status: 200, data: { ok: true, synced: false } });
+});
 afterEach(() => {
   while (mounted.length) mounted.pop()?.();
 });

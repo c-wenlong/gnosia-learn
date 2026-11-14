@@ -23,7 +23,11 @@ beforeAll(() => {
 });
 
 afterEach(() => {
+  // Restores before useRealTimers: the clock swap put its own Intl in place,
+  // so a spy made under it would hand the stale copy back after the real one.
+  vi.restoreAllMocks();
   vi.useRealTimers();
+  vi.unstubAllEnvs();
   document.body.innerHTML = "";
 });
 
@@ -53,6 +57,34 @@ describe("StudioTime", () => {
   it("words an age by calendar day in that zone", () => {
     // 01:00 on 4 Oct in Singapore, 37 hours before NOW.
     expect(render("Asia/Singapore", new Date(NOW - 37 * 3_600_000).toISOString(), "ago")).toBe("Yesterday");
+  });
+
+  it("counts days in the runtime's zone with no provider, or one that names no zone", () => {
+    // The runtime's zone, picked the way a browser's is: New York, so the
+    // Created day sits a day behind what the app zone says. The spy goes in
+    // after useFakeTimers, which swaps Intl for its own copy.
+    vi.useFakeTimers({ now: NOW });
+    const real = Intl.DateTimeFormat;
+    vi.spyOn(Intl, "DateTimeFormat").mockImplementation(function (
+      this: unknown,
+      locales?: Intl.LocalesArgument,
+      options?: Intl.DateTimeFormatOptions,
+    ) {
+      return new real(locales, { ...options, timeZone: options?.timeZone ?? "America/New_York" });
+    });
+    const text = (element: React.ReactElement) => {
+      const host = document.createElement("div");
+      document.body.append(host);
+      const root = createRoot(host);
+      act(() => root.render(element));
+      const out = host.textContent ?? "";
+      act(() => root.unmount());
+      return out;
+    };
+    expect(text(createElement(StudioTime, { at: CREATED, as: "day" }))).toBe("29 Sept");
+    expect(
+      text(createElement(StudioZone, { timeZone: undefined }, createElement(StudioTime, { at: CREATED, as: "dayTime" }))),
+    ).toBe("29 Sept, 16:25");
   });
 });
 

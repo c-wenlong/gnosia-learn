@@ -6,6 +6,10 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { parseCgroupV2Path, parseFileBytes, reclaimCgroupFileCache, setCgroupIdlePredicate } from "../src/cgroup";
 
+// The homeserver unit is still `gnosia-learn-studio.service` until setup is
+// re-run. These paths are what a running host reports, so the parser tests
+// keep that name.
+
 describe("reclaimCgroupFileCache", () => {
   let root = "";
 

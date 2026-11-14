@@ -42,7 +42,7 @@ export interface RemotionkcTools {
   /** `<root>/.venv`, resolved, or null: where gnosia-audio is installed (`npm run narration-deps`). */
   venv: string | null;
   /** `<root>/.venv/bin/python`: the interpreter gnosia-audio runs on, for `narrate`, `sidecars` and the clip keys. */
-  gnosiaPython: Program | null;
+  narrationPython: Program | null;
   /**
    * The shells gnosia-audio's console script needs, resolved: none when its
    * first line names the venv's python, `/bin/sh` and the shell macOS runs
@@ -138,7 +138,7 @@ function packageVersion(nodeModules: string | null, name: string): string | null
 }
 
 /** Whether gnosia-audio is installed in the venv: its package directory in some site-packages. */
-function gnosiaInstalled(venv: string | null): boolean {
+function narrationInstalled(venv: string | null): boolean {
   if (venv === null) return false;
   try {
     return readdirSync(path.join(venv, "lib")).some((python) => existsSync(path.join(venv, "lib", python, "site-packages", "gnosia_audio", "cli.py")));
@@ -196,7 +196,7 @@ export function discoverRemotionkc(): Omit<RemotionkcTools, "libs"> {
     root,
     nodeModules,
     venv,
-    gnosiaPython: venv !== null && gnosiaInstalled(venv) ? programAt(path.join(root, ".venv", "bin", "python")) : null,
+    narrationPython: venv !== null && narrationInstalled(venv) ? programAt(path.join(root, ".venv", "bin", "python")) : null,
     scriptShells: venv === null ? [] : scriptShells(path.join(venv, "bin", "gnosia-audio")),
     headlessShell: findHeadlessShell(nodeModules),
     compositor,
@@ -232,7 +232,7 @@ export async function discoverRemotionkcToolchain(): Promise<RemotionkcToolchain
   const own = discoverRemotionkc();
   const libs =
     process.platform === "linux"
-      ? await foreignLibs([own.gnosiaPython?.real ?? null, own.headlessShell?.binary ?? null, own.esbuild, own.tsc, ...executablesIn(own.compositor)])
+      ? await foreignLibs([own.narrationPython?.real ?? null, own.headlessShell?.binary ?? null, own.esbuild, own.tsc, ...executablesIn(own.compositor)])
       : [];
   return { ...(await discoverToolchain()), remotionkc: { ...own, libs } };
 }
@@ -278,6 +278,6 @@ export function remotionkcProblems(tools: Toolchain): string[] {
     if (own.tsc === null) problems.push("TypeScript's native compiler for this platform is missing from node_modules, so a composition cannot be checked");
   }
   if (own.parser === null) problems.push("the studio's own typescript package is missing, so the gate cannot parse a composition: run npm ci in this repository");
-  if (own.gnosiaPython === null) problems.push(`gnosia-audio is not installed in ${own.root}/.venv: run npm run narration-deps there`);
+  if (own.narrationPython === null) problems.push(`gnosia-audio is not installed in ${own.root}/.venv: run npm run narration-deps there`);
   return problems;
 }

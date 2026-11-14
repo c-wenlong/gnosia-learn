@@ -29,7 +29,8 @@ vi.mock("@/data/source", async (importOriginal) => {
 
 const loadWeekCheck = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/week-check-page", () => ({ loadWeekCheck }));
-vi.mock("@/components/session/SessionFocus", () => ({ SessionFocus: () => "the check" }));
+const SessionFocus = vi.hoisted(() => vi.fn<(props: unknown) => string>(() => "the check"));
+vi.mock("@/components/session/SessionFocus", () => ({ SessionFocus }));
 
 type Params = { slug: string; module: string };
 
@@ -49,6 +50,7 @@ describe("the week check page", () => {
   beforeEach(() => {
     outage.on = false;
     loadWeekCheck.mockReset();
+    SessionFocus.mockClear();
   });
 
   it("says it cannot start when the catalog does not answer, linking back to the module", async () => {
@@ -72,5 +74,40 @@ describe("the week check page", () => {
     loadWeekCheck.mockResolvedValue({ state: "unreachable" });
     const html = await render({ slug: "cp4284", module: "m1-llm-foundations-recap" });
     expect(html).toContain("The module check cannot start");
+  });
+
+  it("renders the check with the module's props when the read is ready", async () => {
+    loadWeekCheck.mockResolvedValue({ state: "ok", plan: { modelAvailable: true }, reason: null });
+    const html = await render({ slug: "cp4284", module: "m1-llm-foundations-recap" });
+    expect(html).toContain("the check");
+    expect(SessionFocus).toHaveBeenCalledTimes(1);
+    expect(SessionFocus.mock.calls[0]?.[0]).toMatchObject({
+      slug: "cp4284-m1",
+      mode: "module",
+      modelAvailable: true,
+      nothingToAsk: false,
+      weekCheck: { moduleId: "cp4284-m1", moduleHref: "/courses/cp4284/m1-llm-foundations-recap", reason: null },
+    });
+  });
+
+  it("tells the check there is nothing to ask when the read gives a reason", async () => {
+    loadWeekCheck.mockResolvedValue({ state: "ok", plan: { modelAvailable: false }, reason: "Nothing to ask" });
+    await render({ slug: "cp4284", module: "m1-llm-foundations-recap" });
+    expect(SessionFocus.mock.calls[0]?.[0]).toMatchObject({ nothingToAsk: true, weekCheck: { reason: "Nothing to ask" } });
+  });
+
+  it("is a 404 for a module or a course nobody has", async () => {
+    await expect(render({ slug: "cp4284", module: "nope" })).rejects.toMatchObject({
+      digest: expect.stringMatching(/;404$/),
+    });
+    await expect(render({ slug: "nope", module: "m1-llm-foundations-recap" })).rejects.toMatchObject({
+      digest: expect.stringMatching(/;404$/),
+    });
+  });
+
+  it("names itself after the course and module outside an outage", async () => {
+    await expect(
+      page.generateMetadata({ params: Promise.resolve({ slug: "cp4284", module: "m1-llm-foundations-recap" }) }),
+    ).resolves.toEqual({ title: "CP4284 · Module check · LLM Foundations Recap" });
   });
 });

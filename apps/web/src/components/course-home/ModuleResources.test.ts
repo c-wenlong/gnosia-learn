@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 const learner = {
   state: { userResources: {} as Record<string, { id: string; title: string; url: string }[]> },
@@ -18,16 +18,31 @@ beforeAll(() => {
 
 const mounted: Array<() => void> = [];
 
+beforeEach(() => {
+  // A remove lands in the learner's state, as the provider's does, so the row
+  // it was on leaves the list on the next draw.
+  learner.removeResource.mockImplementation((moduleId: string, id: string) => {
+    learner.state.userResources = {
+      ...learner.state.userResources,
+      [moduleId]: (learner.state.userResources[moduleId] ?? []).filter((r) => r.id !== id),
+    };
+  });
+});
+
 afterEach(() => {
   while (mounted.length) mounted.pop()?.();
   learner.addResource.mockClear();
+  learner.removeResource.mockClear();
+  learner.state.userResources = {};
+  vi.useRealTimers();
 });
 
 function mount() {
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
-  act(() => root.render(createElement(ModuleResources, { moduleId: "m1", curated: [] })));
+  const draw = () => act(() => root.render(createElement(ModuleResources, { moduleId: "m1", curated: [] })));
+  draw();
   mounted.push(() => {
     act(() => root.unmount());
     host.remove();
@@ -37,7 +52,7 @@ function mount() {
   act(() => toggle.click());
   expect(toggle.getAttribute("aria-expanded")).toBe("true");
   expect(host.querySelector("form")?.closest("[inert]")).toBeNull();
-  return host;
+  return { host, draw };
 }
 
 /** Sets a controlled input's value the way typing does, so React sees the change. */
@@ -66,7 +81,7 @@ function description(host: HTMLElement, input: HTMLInputElement) {
 
 describe("ModuleResources add form", () => {
   it("labels each field, and marks only the refused one invalid with its reason read with it", () => {
-    const host = mount();
+    const { host } = mount();
     const title = field(host, "Title");
     const url = field(host, "URL");
     expect(title).not.toBeNull();
@@ -87,7 +102,7 @@ describe("ModuleResources add form", () => {
   });
 
   it("names each empty field, and clears both once the resource is added", () => {
-    const host = mount();
+    const { host } = mount();
     submit(host);
     expect(description(host, field(host, "Title"))).toBe("Enter a title.");
     expect(description(host, field(host, "URL"))).toBe("Enter a URL.");
@@ -99,5 +114,33 @@ describe("ModuleResources add form", () => {
     expect(learner.addResource).toHaveBeenCalledWith("m1", { title: "Docs", url: "https://example.com/docs" });
     expect(host.querySelector('[role="alert"]')).toBeNull();
     expect(field(host, "URL").hasAttribute("aria-invalid")).toBe(false);
+    // The fields start over, ready for the next one.
+    expect(field(host, "Title").value).toBe("");
+    expect(field(host, "URL").value).toBe("");
+  });
+});
+
+describe("ModuleResources remove", () => {
+  it("removes your row through the provider, hands focus to Add a resource, and folds a copy away over 300ms", () => {
+    vi.useFakeTimers();
+    learner.state.userResources = { m1: [{ id: "u1", title: "Mine", url: "https://example.com/mine" }] };
+    const { host, draw } = mount();
+    const row = [...host.querySelectorAll("li")].find((li) => li.textContent?.includes("Mine"))!;
+    const remove = [...row.querySelectorAll("button")].find((b) => b.textContent === "Remove")!;
+    const addButton = [...host.querySelectorAll("button")].find((b) => b.textContent?.includes("Add a resource"))!;
+
+    act(() => remove.click());
+    expect(learner.removeResource).toHaveBeenCalledTimes(1);
+    expect(learner.removeResource).toHaveBeenCalledWith("m1", "u1");
+    expect(document.activeElement).toBe(addButton);
+
+    // The provider's state no longer holds it; a copy stays in place while it
+    // folds away, inert, then goes at 300ms.
+    draw();
+    expect(host.textContent).toContain("Mine");
+    act(() => void vi.advanceTimersByTime(299));
+    expect(host.textContent).toContain("Mine");
+    act(() => void vi.advanceTimersByTime(1));
+    expect(host.textContent).not.toContain("Mine");
   });
 });

@@ -38,13 +38,15 @@ const sha256 = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex
 
 const VIDEO = Buffer.from(Array.from({ length: 2_000 }, (_, i) => (i * 3) % 255));
 const JPEG = Buffer.from([0xff, 0xd8, 1, 2, 3, 0xff, 0xd9]);
+const PDF_BYTES = Buffer.from([0x25, 0x50, 0x44, 0x46, 1, 2, 3, 4]);
 const VIDEO_PATH = "out/secret-domain/demo/demo.mp4";
 const VIDEO_ID = `manimkc:${VIDEO_PATH}`;
 const POSTER_ID = `poster:${VIDEO_ID}`;
+const PDF_ID = `pdf:${VIDEO_ID}`;
 const TTLS: number[] = [];
 
 /** Filled in by `beforeAll`, read by the mocked module on every call. */
-const signing: { store: BlobStore | null; origin: string } = { store: null, origin: "" };
+const signing: { store: BlobStore | null; origin: string; fail: Error | null } = { store: null, origin: "", fail: null };
 
 vi.mock("@/lib/blob-store", () => ({
   SIGNED_URL_TTL_SECONDS: 3600,
@@ -55,6 +57,7 @@ vi.mock("@/lib/blob-store", () => ({
       ...inner,
       provider: inner.provider,
       signedUrl: async (key: string, ttl: number) => {
+        if (signing.fail !== null) throw signing.fail;
         TTLS.push(ttl);
         return `${signing.origin}/signed/${encodeURIComponent(key)}?expires=${ttl}`;
       },
@@ -73,6 +76,8 @@ describe.skipIf(!reachable.ok)("asset routes redirecting to a signed URL", () =>
   let server: Server;
   let FILE: Handler;
   let POSTER: Handler;
+  let PDF: Handler;
+  const saved: Record<string, string | undefined> = {};
 
   const call = (handler: Handler, suffix: string, id: string) =>
     handler(new Request(`http://localhost:3000/api/assets/${encodeURIComponent(id)}/${suffix}`), {
@@ -80,6 +85,7 @@ describe.skipIf(!reachable.ok)("asset routes redirecting to a signed URL", () =>
     });
 
   beforeAll(async () => {
+    for (const key of ["DATABASE_URL", "HERMES_HOME", "GNOSIA_HOME"]) saved[key] = process.env[key];
     scratch = await migratedScratchDatabase();
     home = await mkdtemp(path.join(tmpdir(), "asset-redirect-"));
     const store = fsStore(path.join(home, "blobs"));
@@ -111,6 +117,7 @@ describe.skipIf(!reachable.ok)("asset routes redirecting to a signed URL", () =>
     process.env.HERMES_HOME = home;
     ({ GET: FILE } = (await import("./[id]/file/route")) as { GET: Handler });
     ({ GET: POSTER } = (await import("./[id]/poster/route")) as { GET: Handler });
+    ({ GET: PDF } = (await import("./[id]/pdf/route")) as { GET: Handler });
 
     const put = async (bytes: Buffer, ext: string) => {
       const key = blobKey("local", sha256(bytes), ext);
@@ -130,6 +137,7 @@ describe.skipIf(!reachable.ok)("asset routes redirecting to a signed URL", () =>
     };
     const videoKey = await put(VIDEO, "mp4");
     const posterKey = await put(JPEG, "jpg");
+    const pdfKey = await put(PDF_BYTES, "pdf");
     await scratch.db.insert(asset).values([
       {
         id: VIDEO_ID,
@@ -148,15 +156,29 @@ describe.skipIf(!reachable.ok)("asset routes redirecting to a signed URL", () =>
         sourceRepo: "hermes",
         blobKey: posterKey,
       },
+      {
+        id: PDF_ID,
+        kind: "pdf",
+        contentHash: sha256(PDF_BYTES),
+        bytes: PDF_BYTES.length,
+        sourceRepo: "hermes",
+        blobKey: pdfKey,
+      },
     ]);
-    await scratch.db.insert(assetDerivation).values({ assetId: POSTER_ID, sourceAssetId: VIDEO_ID });
+    await scratch.db.insert(assetDerivation).values([
+      { assetId: POSTER_ID, sourceAssetId: VIDEO_ID },
+      { assetId: PDF_ID, sourceAssetId: VIDEO_ID },
+    ]);
   }, 60_000);
 
   afterAll(async () => {
     await new Promise<void>((resolve) => server?.close(() => resolve()));
     await scratch?.drop();
     if (home !== undefined) await rm(home, { recursive: true, force: true });
-    delete process.env.HERMES_HOME;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
   });
 
   it("redirects to the store's URL for an hour, carrying no path, and never caches the redirect", async () => {
@@ -185,5 +207,34 @@ describe.skipIf(!reachable.ok)("asset routes redirecting to a signed URL", () =>
     expect(response.status).toBe(302);
     const body = await fetch(response.headers.get("location") as string);
     expect(Buffer.from(await body.arrayBuffer()).equals(JPEG)).toBe(true);
+  });
+
+  it("redirects the video's PDF the same way, under the pdf route", async () => {
+    const response = await call(PDF, "pdf", VIDEO_ID);
+    expect(response.status).toBe(302);
+    const location = response.headers.get("location") ?? "";
+    expect(location.startsWith(`${signing.origin}/signed/`)).toBe(true);
+    const body = await fetch(location);
+    expect(Buffer.from(await body.arrayBuffer()).equals(PDF_BYTES)).toBe(true);
+  });
+
+  it("answers 503 blob-store-unavailable, not a hang or a 500, when the signer throws", async () => {
+    // The redirect is part of serving the file: a store that cannot sign is
+    // the store's problem, which the route names, not an exception's.
+    signing.fail = new Error("signing endpoint down");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      for (const [handler, suffix] of [
+        [FILE, "file"],
+        [PDF, "pdf"],
+      ] as const) {
+        const response = await call(handler, suffix, VIDEO_ID);
+        expect(response.status).toBe(503);
+        expect(await response.json()).toMatchObject({ code: "blob-store-unavailable" });
+      }
+    } finally {
+      signing.fail = null;
+      warn.mockRestore();
+    }
   });
 });
