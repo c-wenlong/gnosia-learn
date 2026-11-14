@@ -221,14 +221,15 @@ function voicesIn(model: string): string[] {
  * is switched off.
  */
 async function sharedCache(root: string, python: string | null): Promise<string | null> {
-  if (python === null) return null;
+  const cli = path.join(root, "tools", "cli", "manimkc");
+  if (python === null || !existsSync(cli)) return null;
   const env: NodeJS.ProcessEnv = {
     PATH: "/usr/bin:/bin",
     HOME: process.env.HOME ?? "",
     MANIMKC_TIMING: "0",
     ...(process.env.MANIMKC_HOME === undefined ? {} : { MANIMKC_HOME: process.env.MANIMKC_HOME }),
   };
-  const result = await run(python, [path.join(root, "tools", "cli", "manimkc"), "--root", root, "home", "--json"], {
+  const result = await run(python, [cli, "--root", root, "home", "--json"], {
     cwd: root,
     env,
     timeoutMs: 30_000,

@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { WrapperOutputTracker, type CallStep, type WrapperCall } from "../src/video/calls";
+import { VIDEO_DOCTOR_TTL_MS } from "../src/video/config";
 import { DEAD_CALLS, DEAD_START_MS, deadTools, deadToolsMessage, diedAtStart } from "../src/video/dead-tools";
 import { VideoDoctor, type VideoDoctorReport } from "../src/video/doctor";
 import { toolsHealth } from "../src/video/tools";
@@ -212,5 +213,44 @@ describe("the doctor, told", () => {
     expect(started[1]!.at).toBeGreaterThanOrEqual(stoppedAt);
     started[1]!.end();
     await until(() => doctor.current()?.toolchainStop?.jobId === "j2", "the stop never reached the verdict");
+  });
+
+  it("skips periodic timer refreshes after a missing-checkout failure is recorded, and records one if a working checkout is removed", async () => {
+    vi.useFakeTimers();
+    try {
+      let runs = 0;
+      let present = true;
+      const doctor = new VideoDoctor(
+        async () => {
+          runs += 1;
+          return present
+            ? { ...passing, ok: true, checks: [{ name: "checkout", ok: true, detail: "found" }], checkedAt: new Date(0).toISOString() }
+            : { ...passing, ok: false, checks: [{ name: "checkout", ok: false, detail: "missing" }], checkedAt: new Date(0).toISOString() };
+        },
+        () => present,
+      );
+      await doctor.report(true);
+      expect(runs).toBe(1);
+      expect(doctor.current()?.ok).toBe(true);
+      doctor.start();
+
+      // Checkout is removed while Studio is running: the next tick runs once
+      // to record the missing-checkout failure, then suppresses further ticks.
+      present = false;
+      await vi.advanceTimersByTimeAsync(VIDEO_DOCTOR_TTL_MS);
+      expect(runs).toBe(2);
+      expect(doctor.current()?.ok).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(VIDEO_DOCTOR_TTL_MS * 3);
+      expect(runs).toBe(2);
+
+      present = true;
+      await vi.advanceTimersByTimeAsync(VIDEO_DOCTOR_TTL_MS);
+      expect(runs).toBe(3);
+      expect(doctor.current()?.ok).toBe(true);
+      await doctor.drain();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

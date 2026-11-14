@@ -12,7 +12,7 @@ import { probe } from "./scratch-database";
  * temp directory to get a temp `learn/` for free — a trick that stops working
  * when the state is a database rather than files beside the code. The CLI takes
  * `LEARN_ROOT` for the files and `DATABASE_URL` for the rest, so a run here can
- * touch neither the real `learn/` nor the real `gnosia`.
+ * touch neither the real `learn/` nor the real `hermes`.
  *
  * **The `--json` shapes are a contract.** The `/learn` and `/review` skills
  * live in a plugin outside this repo and parse them, and `learn/README.md`

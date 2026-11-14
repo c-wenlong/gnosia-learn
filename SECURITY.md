@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-gnosia is not versioned or released. It is continuously deployed to Vercel
+hermes is not versioned or released. It is continuously deployed to Vercel
 from `main`, so the only things that get fixes are the `main` branch and the
 current production deploy. There is no older line to back-port to.
 
@@ -10,7 +10,7 @@ current production deploy. There is no older line to back-port to.
 
 If you discover a security issue, please **do not** open a public GitHub issue
 describing it. Use GitHub's
-[private vulnerability reporting](https://github.com/c-wenlong/gnosia-learn/security/advisories/new)
+[private vulnerability reporting](https://github.com/promethevs-labs/hermes-studio/security/advisories/new)
 instead.
 
 Include:
@@ -48,9 +48,9 @@ target to promise. Reports are acknowledged as soon as I see them.
   beside the event log, the mastery model and the schedule, and none of it is
   committed except `seed/`, a small real slice in the export format, which
   anyone who can read the repo can read. The catalog is the learner's own
-  SQLite file (`~/.gnosia/catalog.db` by default), which also means it has no
+  SQLite file (`~/.hermes/catalog.db` by default), which also means it has no
   backup beyond that machine; the nightly export (`npm run export:nightly`)
-  writes its copy under `~/.gnosia/archive/` on the same machine.
+  writes its copy under `~/.hermes/archive/` on the same machine.
 - **Learner progress is written by signed-in routes only.** Checkboxes, notes
   and recaps go through `POST /api/learner/*`. `apps/web/src/proxy.ts` answers
   401 to any `/api/` request without a valid owner session (only `/api/auth/*`

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
-import { GnosiaMascot, type MascotPose } from "@/components/brand/GnosiaMascot";
+import { HermesMascot, type MascotPose } from "@/components/brand/HermesMascot";
 import { Button } from "@/components/ui/Button";
 import { cx } from "@/components/ui/classes";
 
@@ -11,7 +11,7 @@ import { GITHUB_URL, siteLink } from "./site";
 export const metadata: Metadata = {
   // Absolute: the root layout's title template would otherwise append the
   // product name a second time.
-  title: { absolute: "Gnosia" },
+  title: { absolute: "Hermes" },
   description:
     "A book that grows as you do. A living personal knowledge system that learns what you know and teaches what comes next.",
 };
@@ -51,14 +51,14 @@ function Hero() {
       <div className="text-center lg:text-left">
         <h1
           id="hero-title"
-          className="gnosia-rise mx-auto max-w-[12ch] font-book text-[48px] leading-[1.02] font-medium tracking-[-0.025em] text-balance text-brand-ink sm:text-[64px] lg:mx-0 lg:text-[84px]"
+          className="hermes-rise mx-auto max-w-[12ch] font-book text-[48px] leading-[1.02] font-medium tracking-[-0.025em] text-balance text-brand-ink sm:text-[64px] lg:mx-0 lg:text-[84px]"
         >
           A book that <em className="font-normal text-brand-terracotta">grows</em> as you do.
         </h1>
-        <p className="gnosia-rise gnosia-rise-2 mx-auto mt-7 max-w-[30rem] text-[18px] leading-relaxed text-pretty text-brand-mist md:text-[20px] lg:mx-0">
-          Gnosia keeps a living model of what you know, concept by concept, and teaches you what comes next.
+        <p className="hermes-rise hermes-rise-2 mx-auto mt-7 max-w-[30rem] text-[18px] leading-relaxed text-pretty text-brand-mist md:text-[20px] lg:mx-0">
+          Hermes keeps a living model of what you know, concept by concept, and teaches you what comes next.
         </p>
-        <div className="gnosia-rise gnosia-rise-3 mt-10 flex flex-wrap items-center justify-center gap-x-7 gap-y-4 lg:justify-start">
+        <div className="hermes-rise hermes-rise-3 mt-10 flex flex-wrap items-center justify-center gap-x-7 gap-y-4 lg:justify-start">
           <Button variant="brand" href="/sign-in">
             Open your book
           </Button>
@@ -77,7 +77,7 @@ function Hero() {
         {/* The mascot peeks over the top of the page it is asking from: it
             sits behind the card, which hides everything below its eyes. */}
         <div className="pointer-events-none absolute top-0 right-6 lg:right-10">
-          <GnosiaMascot pose="curious" float preload className="h-[130px] lg:h-[165px]" />
+          <HermesMascot pose="curious" float preload className="h-[130px] lg:h-[165px]" />
         </div>
         <div className="relative">
           <ProbeDemo />
@@ -105,7 +105,7 @@ const CHAPTERS: Chapter[] = [
     name: "Probe",
     title: "It starts from what you already know.",
     body: "A few questions before any teaching, so your book begins with you rather than with page one. Every concept gets a probability that you know it, and every answer after that moves it.",
-    panel: "gnosia-panel-terracotta",
+    panel: "hermes-panel-terracotta",
     pose: "reading",
     art: <KnownArt />,
   },
@@ -114,7 +114,7 @@ const CHAPTERS: Chapter[] = [
     name: "Plan",
     title: "Next is whatever you are ready for.",
     body: "Concepts sit in a graph of prerequisites. When the ones underneath are known, the one above lights up. No fixed syllabus, just the next thing in reach.",
-    panel: "gnosia-panel-clay",
+    panel: "hermes-panel-clay",
     pose: "excited",
     art: <FrontierArt />,
   },
@@ -123,7 +123,7 @@ const CHAPTERS: Chapter[] = [
     name: "Review",
     title: "Reviews arrive just before you forget.",
     body: "Spaced review with four ratings. Remembered cards wait longer each time; the ones you keep missing come back sooner and get flagged. Sessions, reviews and the tutor all write back to the same book.",
-    panel: "gnosia-panel-mist",
+    panel: "hermes-panel-mist",
     pose: "happy",
     art: <ReviewArt />,
   },
@@ -163,7 +163,7 @@ function Chapters() {
             {/* Hangs off the panel's outer bottom corner, half in the gap
                 below, so it never lands on the art. */}
             <span className={cx("absolute -bottom-11 md:-bottom-12", i % 2 === 1 ? "left-5" : "right-5")}>
-              <GnosiaMascot pose={c.pose} className="h-[92px] md:h-[104px]" />
+              <HermesMascot pose={c.pose} className="h-[92px] md:h-[104px]" />
             </span>
           </div>
         </section>
@@ -181,7 +181,7 @@ function KnownArt() {
     { name: "Attention weights", p: 0.18 },
   ];
   return (
-    <div aria-hidden className="gnosia-paper w-full max-w-[330px] rounded-[22px] p-5">
+    <div aria-hidden className="hermes-paper w-full max-w-[330px] rounded-[22px] p-5">
       <p className="text-[13px] font-medium text-brand-mist">What you know</p>
       <ul className="mt-4 flex flex-col gap-3.5">
         {rows.map((r) => (
@@ -224,7 +224,7 @@ function FrontierArt() {
         {known.map((k, i) => (
           <li
             key={k}
-            className="gnosia-paper absolute left-0 flex h-[13.8%] w-[40%] items-center gap-[2cqw] rounded-full px-[2.75cqw] text-[3.25cqw] font-medium whitespace-nowrap text-brand-ink"
+            className="hermes-paper absolute left-0 flex h-[13.8%] w-[40%] items-center gap-[2cqw] rounded-full px-[2.75cqw] text-[3.25cqw] font-medium whitespace-nowrap text-brand-ink"
             style={{ top: `${(8.5 + i * 34.6).toFixed(1)}%` }}
           >
             <span className="grid size-[4cqw] shrink-0 place-items-center rounded-full bg-brand-terracotta text-brand-cream dark:text-brand-earth">
@@ -252,7 +252,7 @@ function ReviewArt() {
   const ratings = ["Again", "Hard", "Good", "Easy"];
   return (
     <div aria-hidden className="w-full max-w-[340px]">
-      <div className="gnosia-paper rounded-[22px] p-5">
+      <div className="hermes-paper rounded-[22px] p-5">
         <p className="text-[13px] font-medium text-brand-mist">Review, 3 of 7</p>
         <p className="mt-3 font-book text-[19px] leading-snug font-medium text-brand-ink">
           Why divide the scores by the square root of the key size?
@@ -346,7 +346,7 @@ function Colophon() {
         Colophon
       </h2>
       <p className="mx-auto mt-4 max-w-[34rem] font-book text-[16px] leading-relaxed text-pretty text-brand-ink/85 italic">
-        Gnosia keeps one probability per concept with Bayesian Knowledge Tracing, spaces reviews with SM-2, orders
+        Hermes keeps one probability per concept with Bayesian Knowledge Tracing, spaces reviews with SM-2, orders
         concepts in a prerequisite graph, and derives the notes and the model from an append-only event log. Set in
         Literata and Figtree. The{" "}
         <a

@@ -6,7 +6,7 @@ import { readCookie, writeCookie } from "./client-cookie";
 /** The preference cookies' browser side: one way to write them, one to read them back. */
 
 afterEach(() => {
-  for (const name of ["a", "b", "gnosia-sidebar"]) document.cookie = `${name}=; Path=/; Max-Age=0`;
+  for (const name of ["a", "b", "hermes-sidebar"]) document.cookie = `${name}=; Path=/; Max-Age=0`;
   vi.restoreAllMocks();
 });
 
@@ -35,7 +35,7 @@ describe("writeCookie", () => {
 describe("readCookie", () => {
   it("finds a cookie by its whole name, with or without a space after the separator", () => {
     expect(readCookie("theme", "theme-fade=1; theme=dark")).toBe("dark");
-    expect(readCookie("theme", "x=1;theme=gnosia")).toBe("gnosia");
+    expect(readCookie("theme", "x=1;theme=hermes")).toBe("hermes");
   });
 
   it("is undefined for a cookie that is not there, and empty for one set to nothing", () => {
@@ -45,7 +45,7 @@ describe("readCookie", () => {
   });
 
   it("reads the browser's cookies when given none", () => {
-    document.cookie = "gnosia-sidebar=open; Path=/";
-    expect(readCookie("gnosia-sidebar")).toBe("open");
+    document.cookie = "hermes-sidebar=open; Path=/";
+    expect(readCookie("hermes-sidebar")).toBe("open");
   });
 });

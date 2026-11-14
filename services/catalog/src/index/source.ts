@@ -21,7 +21,7 @@ import type {
   NewTopic,
   NewTopicRelation,
   SourceRepo,
-} from "@gnosia/schema";
+} from "@hermes/schema";
 
 import type { CoverCredit } from "../content/cover-image";
 import type { ImportedLog } from "../content/session-logs";

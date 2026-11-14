@@ -1,6 +1,6 @@
 # The tutor's model chain
 
-Accepted and built, 2026-09-30. The owner picks the models the Gnosia tutor
+Accepted and built, 2026-09-30. The owner picks the models the Hermes tutor
 calls, in order, from Settings, instead of relying on one hard-coded default
 per provider. An owner who never adds one gets the built-in defaults, exactly
 as before, so the Vercel deployment runs unchanged on its environment keys.

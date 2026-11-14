@@ -91,7 +91,7 @@ describe("studioApi failures", () => {
         return new Response("{}", { status: 200 });
       }),
     );
-    await studioApi("/api/x", { headers: { "x-gnosia-owner": "someone-else" } });
-    expect(seen[0]!.get("x-gnosia-owner")).toBe("local");
+    await studioApi("/api/x", { headers: { "x-hermes-owner": "someone-else" } });
+    expect(seen[0]!.get("x-hermes-owner")).toBe("local");
   });
 });

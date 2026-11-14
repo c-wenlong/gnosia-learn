@@ -95,7 +95,7 @@ describe("the app harness", () => {
     expect(env).toMatchObject({
       CATALOG_DB: "/w/catalog.db",
       DATABASE_URL: "/w/catalog.db",
-      GNOSIA_HOME: "/w/home",
+      HERMES_HOME: "/w/home",
       MANIMKC_ROOT: "/w/empty",
       REMOTIONKC_ROOT: "/w/empty",
       REVIDEOKC_ROOT: "/w/empty",

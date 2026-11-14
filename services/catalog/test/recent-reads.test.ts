@@ -1,4 +1,4 @@
-import { concept, learner, LOCAL_LEARNER_ID, mastery, topic } from "@gnosia/schema";
+import { concept, learner, LOCAL_LEARNER_ID, mastery, topic } from "@hermes/schema";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { appendEvent, readEvents, readKnowledgeBase, recentActivity, recentConcepts, type EventRecord } from "../src/state";

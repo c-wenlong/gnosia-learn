@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import type { CatalogDatabase } from "@gnosia/catalog/state";
-import { ownerScope } from "@gnosia/schema/shared";
-import type { TutorDeps } from "@gnosia/tutor/server/deps";
-import { BadRequest, MAX_ID_CHARS } from "@gnosia/tutor/server/learner-writes";
-import { failureCode } from "@gnosia/tutor/server/provider-keys";
-import type { TurnReply } from "@gnosia/tutor/server/turns";
+import type { CatalogDatabase } from "@hermes/catalog/state";
+import { ownerScope } from "@hermes/schema/shared";
+import type { TutorDeps } from "@hermes/tutor/server/deps";
+import { BadRequest, MAX_ID_CHARS } from "@hermes/tutor/server/learner-writes";
+import { failureCode } from "@hermes/tutor/server/provider-keys";
+import type { TurnReply } from "@hermes/tutor/server/turns";
 
 import { contentSource } from "@/data/source";
 import { enforceRateLimit, enforceSameOrigin, type RateLimitRule } from "@/lib/agent/guard";
@@ -233,7 +233,7 @@ export function learnerDeps(owner: string, requestUrl?: string): TutorDeps {
 
 /**
  * A route that is one of the shared learner writes
- * (`@gnosia/tutor/server/learner-writes`), with this app's
+ * (`@hermes/tutor/server/learner-writes`), with this app's
  * guards in front: same origin, the session's owner, a rate limit on
  * `learner:<bucket>`, and the bounded body read. The parse, the write and the
  * answer are the turn's.

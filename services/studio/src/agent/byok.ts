@@ -1,7 +1,7 @@
 import { lstat, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import type { ProviderName } from "@gnosia/schema/shared";
+import type { ProviderName } from "@hermes/schema/shared";
 
 import { agentEnv } from "./agent";
 import { KeysUnavailable, openSavedKey, savedKeys, type KeyAccess } from "./byok-keys";

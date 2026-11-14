@@ -2,9 +2,9 @@ import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
 
-import { connect, databasePath, type CatalogDatabase, type Connection } from "@gnosia/catalog/state";
-import { AUTH_SECRET_VAR, MIN_SECRET_LENGTH, type ProviderName } from "@gnosia/schema/shared";
-import { failureCode, keySecret, openSavedKeys, savedKeyStatuses } from "@gnosia/tutor/server/provider-keys";
+import { connect, databasePath, type CatalogDatabase, type Connection } from "@hermes/catalog/state";
+import { AUTH_SECRET_VAR, MIN_SECRET_LENGTH, type ProviderName } from "@hermes/schema/shared";
+import { failureCode, keySecret, openSavedKeys, savedKeyStatuses } from "@hermes/tutor/server/provider-keys";
 
 import { studioOwner } from "../config";
 import { REPO_ROOT } from "../paths";
@@ -19,7 +19,7 @@ import { REPO_ROOT } from "../paths";
  * of the 2026-10 audit); that file is deleted at start (`migrateLegacyByok`
  * in `byok.ts`) and nothing writes it again.
  *
- * Reads go through `@gnosia/tutor/server/provider-keys`, the module the web
+ * Reads go through `@hermes/tutor/server/provider-keys`, the module the web
  * app reads the same rows through, which reaches the table
  * only through the catalog's one door to it. Nothing here names the table.
  *
@@ -29,7 +29,7 @@ import { REPO_ROOT } from "../paths";
  */
 
 /** What no child of the runner gets: the key-sealing secret and the session's inputs (docs/DEPLOYMENT.md, "Signing in"). */
-export const RUNNER_SECRET_VARS = [AUTH_SECRET_VAR, "OWNER_PASSWORD", "SESSION_EPOCH", "GNOSIA_LOCAL_TOKEN"] as const;
+export const RUNNER_SECRET_VARS = [AUTH_SECRET_VAR, "OWNER_PASSWORD", "SESSION_EPOCH", "HERMES_LOCAL_TOKEN"] as const;
 
 /** Why the saved keys cannot be read right now; `problem` is the sentence health and a refusal print. */
 export type KeyAccess = { ok: true; problem: null } | { ok: false; reason: "no-secret" | "no-catalog" | "catalog-unreadable"; problem: string };
@@ -88,7 +88,7 @@ export function hasKeySecret(): boolean {
  * already uses, which reads the app's files with Next's own loader in dev
  * mode and resolves the catalog the way the app does: so the runner gets the
  * secret and the file the web started beside it got, in the same order
- * (`$GNOSIA_HOME/.env` is not part of it, as it is not for `next dev`). Each
+ * (`$HERMES_HOME/.env` is not part of it, as it is not for `next dev`). Each
  * answer is read for its one value and dropped. Nulls when the helper cannot
  * run or names none; the catalog is null too when its check fails, and the
  * runner's own resolution then answers (and says why in health).

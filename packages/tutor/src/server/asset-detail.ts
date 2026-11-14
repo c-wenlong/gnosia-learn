@@ -11,8 +11,8 @@ import {
   type AssetWithTopics,
   type CatalogDatabase,
   type TopicTitles,
-} from "@gnosia/catalog/state";
-import type { OwnerScope } from "@gnosia/schema/shared";
+} from "@hermes/catalog/state";
+import type { OwnerScope } from "@hermes/schema/shared";
 
 import { compareByKindThenId } from "../kind-order";
 import { openBlob, resolveAsset } from "./asset-files";

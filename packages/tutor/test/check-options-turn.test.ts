@@ -1,5 +1,5 @@
-import { checkDistractor, learner, LOCAL_LEARNER_ID } from "@gnosia/schema";
-import { readCheckDistractors } from "@gnosia/catalog/state";
+import { checkDistractor, learner, LOCAL_LEARNER_ID } from "@hermes/schema";
+import { readCheckDistractors } from "@hermes/catalog/state";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ConceptCheck } from "../src/concept-note-core";

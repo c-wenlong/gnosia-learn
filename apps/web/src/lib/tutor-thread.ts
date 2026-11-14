@@ -6,8 +6,8 @@ import {
   restoreRecallPick,
   type ChoiceAnswer,
   type RecallPick,
-} from "@gnosia/tutor/check-block";
-import { restoreCheck, restoreVerdict, type TurnCheck, type Verdict } from "@gnosia/tutor/tutor-check";
+} from "@hermes/tutor/check-block";
+import { restoreCheck, restoreVerdict, type TurnCheck, type Verdict } from "@hermes/tutor/tutor-check";
 
 /**
  * The concept tutor's thread as the browser keeps it, and the pure rules the
@@ -175,7 +175,7 @@ function withCheckBlocks(turns: readonly Pick<TutorTurn, "role" | "content" | "c
 }
 
 /**
- * The route's payload bounds, `PAYLOAD_LIMITS` in `@gnosia/tutor/guards`
+ * The route's payload bounds, `PAYLOAD_LIMITS` in `@hermes/tutor/guards`
  * (kept as numbers here, so this browser module imports nothing from the
  * server's guards; `tutor-thread.test.ts` holds the two equal).
  */
@@ -228,6 +228,11 @@ export function recapTurns(turns: readonly Pick<TutorTurn, "role" | "content">[]
 
 /** Where a thread's session id lives in `sessionStorage` (R6): beside the thread, gone with the tab. */
 export function sessionKey(slug: string): string {
+  return `hermes:tutor-session:${slug}`;
+}
+
+/** The session id a tab stored before the rename. */
+export function legacySessionKey(slug: string): string {
   return `gnosia:tutor-session:${slug}`;
 }
 
@@ -239,6 +244,11 @@ export function sessionKey(slug: string): string {
  * the words stay here.
  */
 export function threadKey(slug: string): string {
+  return `hermes:tutor:${slug}`;
+}
+
+/** The thread a tab stored before the rename. */
+export function legacyThreadKey(slug: string): string {
   return `gnosia:tutor:${slug}`;
 }
 

@@ -841,6 +841,77 @@ describe("a tutor turn", () => {
   });
 });
 
+describe("a live turn that fails", () => {
+  const stored = (slug: string) => JSON.parse(sessionStorage.getItem(threadKey(slug)) ?? "[]") as Array<{ role: string; content: string }>;
+
+  /** Answers the chat route with `failure` until `answered` is set, then with a reply. */
+  function chatAnswering(failure: () => Response) {
+    const state = { answered: false };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        fetched.push({ url, body: init?.body === undefined ? undefined : JSON.parse(String(init.body)) });
+        if (url !== "/api/agent/chat") return new Response("{}", { status: 200 });
+        if (!state.answered) return failure();
+        return new Response(JSON.stringify({ message: { content: "SYN opens it." }, sources: [] }), { status: 200 });
+      }),
+    );
+    return state;
+  }
+
+  it.each([
+    {
+      name: "a 503",
+      failure: () => new Response(JSON.stringify({ error: "No provider answered in time." }), { status: 503 }),
+      text: "No provider answered in time.",
+    },
+    {
+      name: "a 200 with an empty reply",
+      failure: () => new Response(JSON.stringify({ message: { content: "  " } }), { status: 200 }),
+      text: "The tutor sent an empty reply. Try asking again.",
+    },
+  ])("on $name says why, keeps the question last, and Try again asks it once", async ({ failure, text }) => {
+    const chat = chatAnswering(failure);
+    const host = await mount({ slug: "tcp-fail" });
+    await typePlain(host, "What is a SYN?");
+    await act(async () => textarea(host)!.form!.requestSubmit());
+    await settle();
+
+    expect(chatCalls()).toHaveLength(1);
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain(text);
+    expect(stored("tcp-fail")).toEqual([{ role: "user", content: "What is a SYN?" }]);
+    expect(host.querySelector("[aria-busy]")?.getAttribute("aria-busy")).toBe("false");
+    const retry = [...host.querySelectorAll("button")].find((b) => b.textContent === "Try again");
+    expect(retry).toBeDefined();
+
+    chat.answered = true;
+    await act(async () => retry!.click());
+    await settle();
+    expect(chatCalls()).toHaveLength(2);
+    const messages = (chatCalls()[1]!.body as { messages: Array<{ role: string; content: string }> }).messages;
+    expect(messages).toEqual([{ role: "user", content: "What is a SYN?" }]);
+    expect(stored("tcp-fail").map((t) => t.content)).toEqual(["What is a SYN?", "SYN opens it."]);
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+  });
+});
+
+describe("a store that refuses writes", () => {
+  it("keeps the thread in memory, so the reply still shows", async () => {
+    const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("Quota exceeded", "QuotaExceededError");
+    });
+    const host = await mount({ slug: "tcp-full" });
+    await typePlain(host, "What is a SYN?");
+    await act(async () => textarea(host)!.form!.requestSubmit());
+    await settle();
+    expect(setItem).toHaveBeenCalled();
+    expect(sessionStorage.getItem(threadKey("tcp-full"))).toBeNull();
+    expect(host.textContent).toContain("What is a SYN?");
+    expect(host.textContent).toContain("An answer [1].");
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+  });
+});
+
 describe("a due review (R3)", () => {
   const stored = (slug: string) => JSON.parse(sessionStorage.getItem(threadKey(slug)) ?? "[]") as Array<{ role: string; content: string }>;
   const button = (host: HTMLElement, text: string) => [...host.querySelectorAll("button")].find((b) => b.textContent?.trim() === text);

@@ -14,8 +14,8 @@ import {
 } from "@/lib/course-path";
 import { loadKnowledgeBase } from "@/lib/learner-store";
 import { moduleConcepts, type PathKbConcept } from "@/lib/module-path";
-import { ownValue } from "@gnosia/tutor/own-key";
-import type { Course } from "@gnosia/content";
+import { ownValue } from "@hermes/tutor/own-key";
+import type { Course } from "@hermes/content";
 
 /**
  * Everything a course page needs from the server, for `/courses/[slug]` and

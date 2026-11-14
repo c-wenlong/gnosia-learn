@@ -1,4 +1,4 @@
-import { ASSET_NAME_MAX, cleanAssetName } from "@gnosia/schema/shared";
+import { ASSET_NAME_MAX, cleanAssetName } from "@hermes/schema/shared";
 
 import { sendJson } from "@/lib/send-json";
 

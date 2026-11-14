@@ -1,6 +1,6 @@
 import { Readable } from "node:stream";
 
-import { BlobNotFoundError, BlobRangeError } from "@gnosia/blob";
+import { BlobNotFoundError, BlobRangeError } from "@hermes/blob";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { lookupFailed, logLookupFailure, serveBlobRange } from "./asset-response";

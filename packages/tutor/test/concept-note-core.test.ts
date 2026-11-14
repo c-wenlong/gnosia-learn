@@ -62,6 +62,27 @@ describe("concept note parsing", () => {
     expect(checks[1]).toMatchObject({ id: "c2", question: "One inside a list still counts" });
   });
 
+  it("reads a check fenced inside a blockquote, as the CLI's blockquote recursion does", () => {
+    const quoted = ["## Checks", "", "> ```check", "> q: Quoted question?", "> a: Yes.", "> ```"].join("\n");
+    expect(parseChecks(quoted)).toEqual([{ id: "c1", question: "Quoted question?", answer: "Yes.", why: "", source: "" }]);
+  });
+
+  it("reads the field names however they are capitalised", () => {
+    const loud = ["```check", "Q: Shouted?", "A: Still an answer.", "WHY: Because.", "SOURCE: pg 4", "```"].join("\n");
+    expect(parseChecks(loud)).toEqual([{ id: "c1", question: "Shouted?", answer: "Still an answer.", why: "Because.", source: "pg 4" }]);
+  });
+
+  it("returns nothing for a note with no checks, as the CLI does", () => {
+    expect(parseChecks("# Just prose\n\nNo fences here.\n")).toEqual([]);
+  });
+
+  it("reads the topics frontmatter, inline and block lists alike", () => {
+    const { frontmatter } = parseConceptNote(NOTE.replace("tags: []", "topics: [cs3230-m1-t1]\ntags: []"));
+    expect(frontmatter.topics).toEqual(["cs3230-m1-t1"]);
+    const block = parseFrontmatterFields(["topics:", "  - cs3230-m1-t1", "  - cs3230-m1-t2"].join("\n"));
+    expect(block.topics).toEqual(["cs3230-m1-t1", "cs3230-m1-t2"]);
+  });
+
   it("treats a note with no frontmatter as all empty lists", () => {
     const fields = parseFrontmatterFields(null);
     expect(fields).toEqual({ title: null, summary: null, requires: [], assumes: [], tags: [], topics: [], sources: [] });

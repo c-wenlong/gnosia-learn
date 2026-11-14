@@ -1,6 +1,6 @@
 // SQLite helpers the scripts share: opening the catalog's database file,
 // copying it (the operation `createdb -T` was on Postgres), and dropping it.
-// scripts/e2e.mjs and scripts/flip-rehearsal.mjs both copy `gnosia`'s
+// scripts/e2e.mjs and scripts/flip-rehearsal.mjs both copy `hermes`'s
 // file, and a copy that has to be right under open connections is easy to
 // get subtly wrong (a `cp` of the main file can miss pages still in the
 // -wal), so it lives here once.

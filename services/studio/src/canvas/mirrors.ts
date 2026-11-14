@@ -3,7 +3,8 @@ import { stat } from "node:fs/promises";
 
 import { MIRROR_HEALTH_MS, MIRROR_IDLE_MS, MIRROR_START_MS } from "../config";
 import { absolute, REPO_ROOT, slugOf, workPath } from "../paths";
-import { NPM, stopChild } from "../proc";
+import { stopChild } from "../proc";
+import { CANVAS_CLI_ARGS } from "./canvas";
 
 /**
  * One `canvas serve` per document, held open for as long as someone is looking.
@@ -221,7 +222,7 @@ export class Mirrors {
       );
     }
 
-    const child = spawn(NPM, ["run", "--silent", "canvas", "--", "serve", target, "--no-open", "--json"], {
+    const child = spawn(process.execPath, [...CANVAS_CLI_ARGS, "serve", target, "--no-open", "--json"], {
       cwd: REPO_ROOT,
       env: process.env,
       detached: true,

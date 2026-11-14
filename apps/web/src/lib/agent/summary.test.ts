@@ -6,9 +6,9 @@ import {
   formatPriorKnowledgeBlock,
   formatTranscript,
   parseKnowledgeResponse,
-} from "@gnosia/tutor/summary";
-import { buildAgentSessionContext } from "@gnosia/tutor/prompt";
-import type { TopicKnowledge } from "@gnosia/schema/shared";
+} from "@hermes/tutor/summary";
+import { buildAgentSessionContext } from "@hermes/tutor/prompt";
+import type { TopicKnowledge } from "@hermes/schema/shared";
 
 // The app reads courses from the database only; this suite tests logic over
 // real course data, so it reads the export tree instead (`@/test/content-files`).
@@ -85,6 +85,31 @@ describe("parseKnowledgeResponse", () => {
       '{"summary":"S","keyPoints":"- first\\n- second"}',
     );
     expect(parsed?.keyPoints).toEqual(["first", "second"]);
+  });
+
+  it("keeps only the strings of a list that mixes in other types", () => {
+    const parsed = parseKnowledgeResponse(
+      '{"summary":"S","keyPoints":["a",3,null,"b"]}',
+    );
+    expect(parsed?.keyPoints).toEqual(["a", "b"]);
+  });
+
+  it("splits a semicolon-joined string where a list was expected", () => {
+    const parsed = parseKnowledgeResponse(
+      '{"summary":"S","keyPoints":"first; second;third"}',
+    );
+    expect(parsed?.keyPoints).toEqual(["first", "second", "third"]);
+  });
+
+  it("strips a list marker but keeps a number the item starts with", () => {
+    const parsed = parseKnowledgeResponse(
+      '{"summary":"S","keyPoints":"- 3 heads attend\\n1. the rest\\n2) vote"}',
+    );
+    expect(parsed?.keyPoints).toEqual([
+      "3 heads attend",
+      "the rest",
+      "vote",
+    ]);
   });
 
   it("returns null for unusable responses", () => {

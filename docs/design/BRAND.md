@@ -1,6 +1,6 @@
-# Gnosia: the brand
+# Hermes: the brand
 
-The product was called gnosia; it is now **Gnosia**. This document is the
+The product was called Gnosia; it is now **Hermes**. This document is the
 brand: what it should feel like, the palette and why each value was chosen,
 how the mark is built, the rules for the mascot, and where each piece appears.
 The app's own token and component contract is still
@@ -11,7 +11,7 @@ The app's own token and component contract is still
 
 One sentence carries the whole brand: **"A book that grows as you do."**
 
-Gnosia is a personal tome that changes as its owner learns. Underneath, it is
+Hermes is a personal tome that changes as its owner learns. Underneath, it is
 a knowledge system: it keeps a model of what you know, one concept at a time,
 picks what you are ready for next, and folds notes, tutor conversations,
 resources and study sessions back into that model. The feeling to aim for is
@@ -111,7 +111,7 @@ reduction of it, and where the two disagree the art wins.
 
 | File | What it is | Used for |
 | --- | --- | --- |
-| [docs/design/brand/logo-sheet.png](brand/logo-sheet.png) | The primary lockup, the symbol alone, the wordmark alone, both on light and dark, and the app icon | The original lockup reference; superseded for the interface by the logo files below. Historical reference only; `GnosiaMark.ts` and the preview kit now reproduce the supplied 8-5 rings |
+| [docs/design/brand/logo-sheet.png](brand/logo-sheet.png) | The primary lockup, the symbol alone, the wordmark alone, both on light and dark, and the app icon | The original lockup reference; superseded for the interface by the logo files below. Historical reference only; `HermesMark.ts` and the preview kit now reproduce the supplied 8-5 rings |
 | [docs/design/brand/app-icon.png](brand/app-icon.png) | The first app icon: the old mark on a navy-to-teal rounded square, 1254px | Historical reference only. Every shipped icon now uses the supplied 8-5 art |
 | [docs/design/brand/mascot-sheet.png](brand/mascot-sheet.png) | The mascot in six poses: neutral, happy, reading, curious, excited, sleepy | Reference only; the shipped poses come from the renders below |
 | [docs/design/brand/mascot/](brand/mascot/) `{neutral,happy,reading,curious,excited,sleepy}.png` | The six poses as separate renders, one file per pose, 1254px square on a transparent ground | Source of the shipped poses below |
@@ -120,12 +120,12 @@ reduction of it, and where the two disagree the art wins.
 | [docs/design/brand/world-staircase.png](brand/world-staircase.png) | The world: a staircase of books into a sky city, the mascot beside it | Historical banner source; withheld until repainted |
 | [docs/design/brand/pixel-art-sheet.png](brand/pixel-art-sheet.png) | A pixel-art take on the book, the wordmark and the world | **Campaign art only, never product UI.** It uses its own palette (royal blue, red ribbon) and its own letterforms, so it must not leak into the app or the landing page. The [avatar sprites](#avatar-sprites) are pixel art too, but their own, in the brand palette |
 | [docs/design/brand/logo/](brand/logo/) `mark.png`, `wordmark-ink.png`, `wordmark-cream.png` | The owner's logo art, 2026-09-27: the mark alone (1254px), and the GNOSIA letters in deep teal (for light grounds) and in cream (for dark grounds), 2172 by 724, all on transparent grounds | Source of the four files below |
-| [apps/web/public/brand/](../../apps/web/public/brand/) `mark.png` (256), `mark.svg` | The mark, concept 8-5 "Bold medium thin": a terracotta-on-cream tree cross-section with one bold, one medium and one thin ring, supplied as final art. `wordmark-ink.png` is retained as the alpha-mask source for CSS-coloured lettering; the old cream raster is reference only | `GnosiaWordmark` and `GnosiaLockup` |
-| [apps/web/src/app/icon.png](../../apps/web/src/app/icon.png) (512), `icon.svg`, `favicon.ico` | The new mark, supplied as final art: PNG, a hand-pixelled SVG and a multi-size ICO | Favicon and PWA icon |
-| [apps/web/src/app/apple-icon.png](../../apps/web/src/app/apple-icon.png) (180) | The new mark on an opaque square, supplied as final art; opaque, because iOS fills a transparent home-screen icon with black, and square, because iOS rounds the corners itself | Home-screen icon |
-| [apps/desktop/Resources/AppIcon.png](../../apps/desktop/Resources/AppIcon.png) (1024) | The new mark, supplied as final art; `scripts/bundle-app.sh` renders the `.icns` from it | macOS app icon |
-| [apps/web/public/brand/mascot/](../../apps/web/public/brand/mascot/) `{neutral,happy,reading,curious,excited,sleepy}.png` | Cut from the renders in `docs/design/brand/mascot/`: trimmed to the art plus 8px and scaled to 900px on the longest side (620 to 880px wide) | `GnosiaMascot` |
-| [apps/web/public/opengraph-image.png](../../apps/web/public/opengraph-image.png) (1200 by 630) | Interim 8-5 mark and terracotta wordmark on cream, from `kit/social-card.svg` | The social card; the owner's hand-cut art replaces it later |
+| [apps/web/public/brand/](../../apps/web/public/brand/) `mark.png` (1024), `mark.svg` | The hat mark from [brand/](../../brand/brand.md). `mark.png` is `brand/mono/mono-charcoal.png` and `mark.svg` is `brand/svg/mark-mono-charcoal.svg`, so the hat reads on cream and white. The cream mark stays in the kit for dark grounds. The ring paths in `HermesMark.ts` are the older in-app drawing. `wordmark-ink.png` is retained as the alpha-mask source for CSS-coloured lettering | `HermesWordmark` and `HermesLockup` |
+| [apps/web/src/app/icon.png](../../apps/web/src/app/icon.png) (512), `icon.svg`, `favicon.ico` | Copies of `brand/png/icon-512.png`, `brand/svg/mark-color-on-bg.svg` and `brand/png/favicon.ico` | Favicon and PWA icon |
+| [apps/web/src/app/apple-icon.png](../../apps/web/src/app/apple-icon.png) (180) | Copy of `brand/png/apple-touch-icon-180.png`; opaque, because iOS fills a transparent home-screen icon with black, and square, because iOS rounds the corners itself | Home-screen icon |
+| [apps/desktop/Resources/AppIcon.png](../../apps/desktop/Resources/AppIcon.png) (1024) | Copy of `brand/png/avatar-1024.png`; `scripts/bundle-app.sh` renders the `.icns` from it | macOS app icon |
+| [apps/web/public/brand/mascot/](../../apps/web/public/brand/mascot/) `{neutral,happy,reading,curious,excited,sleepy}.png` | Cut from the renders in `docs/design/brand/mascot/`: trimmed to the art plus 8px and scaled to 900px on the longest side (620 to 880px wide) | `HermesMascot` |
+| [apps/web/public/opengraph-image.png](../../apps/web/public/opengraph-image.png) (1280 by 640) | Copy of `brand/banners/social-preview-name-1280x640.png` | The social card |
 | Historical banner (`brand/world-staircase.png`) | The old teal world art is retained as a reference; `public/banner.png` is removed | Repaint before restoring it to the repository, campaigns or landing page |
 
 The icon files and historical banner are supplied or cut by hand from
@@ -135,7 +135,7 @@ letter alpha mask. It will give way to the owner's hand-cut art.
 [kit/render.mjs](kit/render.mjs)
 (SVG or HTML to PNG, fonts loaded, optional transparent ground) and
 [kit/gen-icons.mjs](kit/gen-icons.mjs) (the flat mark on a tile, read from
-`GnosiaMark.ts`) exist for previews and for any size the art does not cover.
+`HermesMark.ts`) exist for previews and for any size the art does not cover.
 
 ## The mark
 
@@ -144,11 +144,11 @@ one medium and one thin irregular ring, with a crack. Growth accumulates
 around a centre, as knowledge does. The owner's supplied art wins wherever
 a reproduction disagrees with it.
 
-`public/brand/mark.svg` is the supplied transparent vector on a 1024-unit
-grid. `GnosiaMark.ts` exports its exact `MARK_RINGS` and `MARK_CREAM` paths
-and `MARK_VIEWBOX`; the preview kit reads those constants. The cream path
-uses the even-odd fill rule. There is no ribbon G, book-page contour or
-`MARK_STAR` in the current mark. The landing page's next-step cue is a ring.
+`public/brand/mark.svg` is the charcoal hat, copied from
+`brand/svg/mark-mono-charcoal.svg`, so it reads on cream and white. The cream
+hat stays in the kit for dark grounds. `HermesMark.ts` still exports the
+older ring paths; the preview kit reads those constants. The landing page's
+next-step cue is a ring.
 
 The shipped PNG and favicon variants remain the supplied files from #661.
 Do not redraw, rotate, stretch, outline or add a drop shadow to the mark.
@@ -157,13 +157,13 @@ Leave clear space of at least a quarter of its width on every side.
 ### The wordmark and the lockup
 
 The owner's GNOSIA letterforms remain unchanged: a light geometric sans with
-an open G and an A without a crossbar. `GnosiaWordmark` uses the alpha channel
+an open G and an A without a crossbar. `HermesWordmark` uses the alpha channel
 of the existing letter art as a CSS mask, deep terracotta on light grounds
 and cream on dark ones. No font approximation or recoloured raster is needed.
 The static import keeps the mask URL content-hashed.
 
-The mark is decorative and the letters have one accessible name, Gnosia.
-`GnosiaWordmark` places the mark beside the letters; `GnosiaLockup` stacks
+The mark is decorative and the letters have one accessible name, Hermes.
+`HermesWordmark` places the mark beside the letters; `HermesLockup` stacks
 them for sign-in. The mark stays at 1.9em and the lettering at 0.8em in bars.
 
 ## The mascot
@@ -187,7 +187,7 @@ ground, kept in [docs/design/brand/mascot/](brand/mascot/). The renders have
 no background, no fringe and no baked shadow, so the same file works on
 cream and on navy. The copies the app ships are trimmed to the art plus 8px
 and scaled to 900px on the longest side, which covers the 400px hero at 2x.
-[GnosiaMascot](../../apps/web/src/components/brand/GnosiaMascot.tsx) renders
+[HermesMascot](../../apps/web/src/components/brand/HermesMascot.tsx) renders
 a pose from `public/brand/mascot/` with `next/image`, `alt=""`, sized by
 height with a class. The poses are static imports, so each ships under a
 content-hashed URL and `next/image` reads its pixel size from the file: a
@@ -247,10 +247,10 @@ Rules:
 ## Motion and surfaces
 
 The public pages allow what the app kit does not: soft shadows, translucent
-cards (`.gnosia-glass`, frosted white on cream, a terracotta-tinted pane on earth,
-now only on the sign-in card), sheets of paper (`.gnosia-paper`, the warm
+cards (`.hermes-glass`, frosted white on cream, a terracotta-tinted pane on earth,
+now only on the sign-in card), sheets of paper (`.hermes-paper`, the warm
 white card every product glimpse on the landing page sits on) and three flat
-chapter washes (`.gnosia-panel-terracotta`, `-clay`, `-mist`: 11 to 42% of a brand
+chapter washes (`.hermes-panel-terracotta`, `-clay`, `-mist`: 11 to 42% of a brand
 colour mixed into the ground). The app keeps its flat, border-only kit. Motion is limited to the
 mascot's float and a single 0.9 second rise on the hero text, all of it
 behind `prefers-reduced-motion: no-preference`. Nothing moves on scroll.
@@ -262,24 +262,24 @@ landing page's frontier illustration. The old star glyph is retired.
 
 | Piece | Where |
 | --- | --- |
-| `GnosiaWordmark` | The app's top bar (links to `/home`), the public header (links to `/`) and footer |
-| `GnosiaLockup` | The sign-in card |
-| `GnosiaMascot` | Landing hero (`curious`), chapters one to three (`reading`, `excited`, `happy`), sign-in (`happy`) |
+| `HermesWordmark` | The app's top bar (links to `/home`), the public header (links to `/`) and footer |
+| `HermesLockup` | The sign-in card |
+| `HermesMascot` | Landing hero (`curious`), chapters one to three (`reading`, `excited`, `happy`), sign-in (`happy`) |
 | `PixelAvatar` | The sidebar's account row (32px), and the picker on Settings' Profile tab (48px) |
 | The brand button (`variant="brand"` in [classes.ts](../../apps/web/src/components/ui/classes.ts)) | The landing page's calls to action and the sign-in button. Deep terracotta face, earth lip and cream label in light; pale terracotta face and earth label in dark |
-| `.gnosia-ground` | The `(site)` layout |
-| `.gnosia-paper`, `.gnosia-panel-*` | The landing page's probe, chapter glimpses and chapter panels |
-| `.gnosia-glass` | The sign-in card |
+| `.hermes-ground` | The `(site)` layout |
+| `.hermes-paper`, `.hermes-panel-*` | The landing page's probe, chapter glimpses and chapter panels |
+| `.hermes-glass` | The sign-in card |
 | Literata (`font-book`) | Every title on the public pages, the chapter and contents numerals, the colophon |
 | The closing band | Text and a brand button on earth while the banner awaits repainting |
-| `ThemeToggle` (moon in light, sun in dark) | The public header, beside Sign in and on the sign-in page. Light is the default for a visitor with no cookie; a click flips the appearance and keeps the palette (Gnosia light and Gnosia dark, or Light and Dark), and writes the app's theme cookie; the saved row wins over that cookie in the app whenever the database answers, so signing in brings the saved theme back, and the row and other devices are untouched, since only the app's theme control (Settings and the avatar menu) saves it |
+| `ThemeToggle` (moon in light, sun in dark) | The public header, beside Sign in and on the sign-in page. Light is the default for a visitor with no cookie; a click flips the appearance and keeps the palette (Hermes light and Hermes dark, or Light and Dark), and writes the app's theme cookie; the saved row wins over that cookie in the app whenever the database answers, so signing in brings the saved theme back, and the row and other devices are untouched, since only the app's theme control (Settings and the avatar menu) saves it |
 | Icons and social card | See [The source art](#the-source-art) |
 
-## The Gnosia theme inside the app
+## The Hermes theme inside the app
 
-Palette (Classic or Gnosia) and appearance (Light, Dark or System) remain
-separate choices. Classic keeps its existing blue palette. Gnosia light
-(`.gnosia`) and Gnosia dark (`.gnosia.dark`) now carry terracotta, cream and
+Palette (Classic or Hermes) and appearance (Light, Dark or System) remain
+separate choices. Classic keeps its existing blue palette. Hermes light
+(`.hermes`) and Hermes dark (`.hermes.dark`) now carry terracotta, cream and
 earth across every app page. Each block explicitly declares every app token,
 so light values cannot leak into dark mode.
 
@@ -294,7 +294,7 @@ labels and icons. The brand's terracotta never replaces a verdict colour.
 Avatar sprites keep their shapes and species colours; their fixed brand
 inks now follow terracotta, cream and earth.
 
-### Gnosia light
+### Hermes light
 
 | Token | Value |
 | --- | --- |
@@ -337,7 +337,7 @@ inks now follow terracotta, cream and earth.
 | `--violet` | `#8b5cf6` |
 | `--on-tone` | `#000000` |
 
-### Gnosia dark
+### Hermes dark
 
 | Token | Value |
 | --- | --- |
@@ -380,7 +380,7 @@ inks now follow terracotta, cream and earth.
 | `--violet` | `#8b5cf6` |
 | `--on-tone` | `#000000` |
 
-### Gnosia app: contrast
+### Hermes app: contrast
 
 | Pair | Light | Dark | Needs |
 | --- | --- | --- | --- |
@@ -460,7 +460,7 @@ both labels; nothing outside it does. The smallest darkening is `#4269fb`,
 0.36 L* lighter than `#4168fa`, which no one can see. `#4168fa` sits in the
 middle of the window, so neither label is left at the edge of 4.5:1, and it
 is the value `.dark` chose for the same reason. So Classic has one accent in
-both appearances, as Gnosia does.
+both appearances, as Hermes does.
 
 **Every pair that reads the moved blue**, re-measured:
 
@@ -498,8 +498,8 @@ the links do not change.
 **The warning text (2026-10-05).** `--warn-text` was `#b78900`, the lip's
 amber, and failed 4.5:1 on every light ground it sits on, its own tint
 included: a "not quite" verdict, a stale-export chip and the studio's warning
-lines were all under the minimum. It now takes `#8c6800`, the amber Gnosia
-light already chose, so both light palettes share one value and `.gnosia`
+lines were all under the minimum. It now takes `#8c6800`, the amber Hermes
+light already chose, so both light palettes share one value and `.hermes`
 drops its override. `--warn-lip`, the button lip, stays `#b78900`: it is a
 graphic, not text.
 
@@ -538,7 +538,7 @@ blue beside the mastered `#7491ff`.
 **The mastery ramp.** Mastered stays `#7491ff`, the kit's value and the
 link colour, at L* 62.7; learning is now L* 44.7 and untouched L* 32.3.
 The gaps are 18.0 and 12.4 L*, luminance ratios of 1.87 and 1.58. The top
-gap is narrower than Gnosia's 2.2 because it has a ceiling: mastered is
+gap is narrower than Hermes's 2.2 because it has a ceiling: mastered is
 5.75:1 on the card, and learning has to clear 3:1 there, so the two can be
 at most 5.75 / 3 = 1.92 apart. Widening it to 2.2 would mean lifting
 mastered to about `#83a2ff`, away from the link colour; this change keeps
@@ -581,7 +581,7 @@ redesign on 2026-09-27 kept the brand, the copy rules and the claims, and
 changed the shape, after reading the landing pages of four learning
 products (captured at 1440px on 2026-09-27):
 
-| Product | What it does | What Gnosia took |
+| Product | What it does | What Hermes took |
 | --- | --- | --- |
 | Brilliant | A serif display face (CoFo Robert, 76px, weight 500) over a plain sans; a warm off-white ground; large flat pastel panels, each holding a working piece of the product | Literata for titles over Figtree; the three flat chapter washes; a probe question you can answer in the hero instead of a picture of one |
 | Duolingo | One character in every section, doing something different; alternating illustration and text rows; the lipped 3D button | A mascot pose per chapter; the alternating rows; the brand button kept |

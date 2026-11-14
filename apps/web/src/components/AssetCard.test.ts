@@ -9,7 +9,7 @@ import {
   assetMetaLine,
   formatBytes,
   type AssetCardRef,
-} from "@gnosia/tutor/asset-meta";
+} from "@hermes/tutor/asset-meta";
 
 beforeAll(() => {
   (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
@@ -125,7 +125,7 @@ describe("assetMetaLine", () => {
       assetMetaLine(asset({ kind: "diagram_svg", sourceRepo: "tldrawkc", bytes: 12_000 })),
     ).toBe("SVG · tldraw · 12 kB");
     // The chip beside it already says "Note", so the line does not.
-    expect(assetMetaLine(asset({ kind: "note", sourceRepo: "gnosia", bytes: 3_100 }))).toBe("3.1 kB");
+    expect(assetMetaLine(asset({ kind: "note", sourceRepo: "hermes", bytes: 3_100 }))).toBe("3.1 kB");
   });
 
   it("gives a link its host, or says external when the URL does not parse", () => {
@@ -136,7 +136,7 @@ describe("assetMetaLine", () => {
   });
 
   it("says nothing it does not know", () => {
-    expect(assetMetaLine(asset({ kind: "session", sourceRepo: "gnosia", bytes: null }))).toBe("");
+    expect(assetMetaLine(asset({ kind: "session", sourceRepo: "hermes", bytes: null }))).toBe("");
   });
 });
 

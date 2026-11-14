@@ -4,7 +4,7 @@ import path from "node:path";
 
 import fsPromises from "node:fs/promises";
 
-import { concept } from "@gnosia/schema";
+import { concept } from "@hermes/schema";
 import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 

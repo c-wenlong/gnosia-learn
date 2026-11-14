@@ -1,4 +1,4 @@
-import { asset, assetDerivation, blobObject, collection, type OwnerScope } from "@gnosia/schema";
+import { asset, assetDerivation, blobObject, collection, type OwnerScope } from "@hermes/schema";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 

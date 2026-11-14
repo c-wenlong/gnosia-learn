@@ -167,7 +167,7 @@ export const conceptCurriculumItem = pgTable(
 );
 ```
 
-`npm run generate -w @gnosia/catalog` writes
+`npm run generate -w @hermes/catalog` writes
 `services/catalog/drizzle/0009_concept_curriculum_item_position.sql`:
 
 ```sql

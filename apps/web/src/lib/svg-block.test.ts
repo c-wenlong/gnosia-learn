@@ -118,9 +118,13 @@ describe("the allowlist (D105)", () => {
   });
 
   it("caps a runaway reply: markup past the limit is not read", () => {
-    const huge = `<svg viewBox="0 0 1 1"><rect width="4"/>` + "x".repeat(200_000);
+    const head = `<svg viewBox="0 0 1 1"><rect width="4"/>`;
+    // The second rect starts one character past the 100,000 the compiler reads.
+    const huge = head + "x".repeat(100_001 - head.length) + `<rect width="9"/></svg>`;
     const root = figure(huge);
     expect(root.tag).toBe("svg");
+    const elements = root.children.filter((child): child is SvgNode => typeof child !== "string");
+    expect(elements.map((node) => node.attrs)).toEqual([{ width: "4" }]);
   });
 });
 
@@ -249,6 +253,22 @@ describe("compileSvg never throws, and nothing it keeps makes React throw (S2-03
   it("stops at the depth cap rather than recursing without end", () => {
     const deep = "<g>".repeat(5_000);
     expect(() => compileSvg(`<svg>${deep}<rect/>`)).not.toThrow();
+    expect(compileSvg(`<svg>${deep}<rect/>`).kind).toBe("figure");
+  });
+
+  it("keeps an element at depth 40 and drops one at depth 41", () => {
+    // The root is depth 0, so a rect inside `wraps` groups sits at depth wraps + 1.
+    const nested = (wraps: number) => `<svg>${"<g>".repeat(wraps)}<rect width="1"/>${"</g>".repeat(wraps)}</svg>`;
+    const innermost = (root: SvgNode): SvgNode => {
+      let node = root;
+      while (node.children.length > 0 && (node.children[0] as SvgNode).tag === "g") node = node.children[0] as SvgNode;
+      return node;
+    };
+    expect(innermost(figure(nested(38))).children).toEqual([{ tag: "rect", attrs: { width: "1" }, children: [] }]);
+    expect(innermost(figure(nested(39))).children).toEqual([{ tag: "rect", attrs: { width: "1" }, children: [] }]);
+    const cut = innermost(figure(nested(40)));
+    expect(cut.tag).toBe("g");
+    expect(cut.children).toEqual([]);
   });
 });
 

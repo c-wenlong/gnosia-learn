@@ -141,7 +141,7 @@ describe.skipIf(!reachable.ok)("scripts/flip-rehearsal.mjs on a copy", () => {
 
       // The throwaway copy is gone, and the template is as it was: no content.
       // The report names the copy, and the step says it imported into that one.
-      expect(report.preflight).toMatch(/^gnosia_preflight_\d+_[0-9a-z]+$/);
+      expect(report.preflight).toMatch(/^hermes_preflight_\d+_[0-9a-z]+$/);
       expect(report.steps.find((s) => s.name === "import into a throwaway copy")?.gist).toMatch(
         new RegExp(`on ${report.preflight}; dropped$`),
       );

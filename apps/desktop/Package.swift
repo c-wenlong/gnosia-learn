@@ -2,11 +2,11 @@
 import PackageDescription
 
 let package = Package(
-    name: "GnosiaWeb",
+    name: "HermesWeb",
     platforms: [.macOS(.v14)],
     targets: [
-        .executableTarget(name: "GnosiaWeb", path: "Sources/GnosiaWeb"),
+        .executableTarget(name: "HermesWeb", path: "Sources/HermesWeb"),
         // `swift test`: the pure rules the shell's launchers share.
-        .testTarget(name: "GnosiaWebTests", dependencies: ["GnosiaWeb"], path: "Tests/GnosiaWebTests"),
+        .testTarget(name: "HermesWebTests", dependencies: ["HermesWeb"], path: "Tests/HermesWebTests"),
     ]
 )

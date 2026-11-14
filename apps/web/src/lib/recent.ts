@@ -1,6 +1,6 @@
 import "server-only";
 
-import { PREFERENCE_KEYS } from "@gnosia/schema/shared";
+import { PREFERENCE_KEYS } from "@hermes/schema/shared";
 import {
   asLastVisited,
   asRecentModules,
@@ -16,15 +16,15 @@ import {
   type RecentConcept,
   type RecentDraft,
   type RecentSession,
-} from "@gnosia/catalog/state";
+} from "@hermes/catalog/state";
 
 import { getCourses } from "@/data/courses";
 import { ContentUnavailableError } from "@/data/source";
 import { conceptHref } from "@/lib/course-path";
 import { catalogDatabase } from "@/lib/learner-store";
-import { bucketOf } from "@gnosia/tutor/mastery-bucket";
+import { bucketOf } from "@hermes/tutor/mastery-bucket";
 import { currentOwner, ownerScope, type OwnerScope } from "@/lib/owner";
-import { parsePlayback } from "@gnosia/tutor/playback";
+import { parsePlayback } from "@hermes/tutor/playback";
 import {
   asPinned,
   conceptTouches,
@@ -42,8 +42,8 @@ import {
   type VideoProgress,
 } from "@/lib/recent-core";
 import { studioEnabled } from "@/lib/studio";
-import type { Course } from "@gnosia/content";
-import { moduleNumber } from "@gnosia/content/module-number";
+import type { Course } from "@hermes/content";
+import { moduleNumber } from "@hermes/content/module-number";
 
 /**
  * Recent, read from the catalog (L7 of
@@ -141,7 +141,7 @@ async function videoProgress(
  * point at one: `session:learn/sessions/<id>.md`, the id `catalog`'s
  * `logAssetId` (services/catalog/src/content/session-logs.ts) gives every
  * log it writes. Repeated here because the web app reaches the catalog
- * through `@gnosia/catalog/state` alone.
+ * through `@hermes/catalog/state` alone.
  */
 function sessionLogId(sessionId: string): string {
   return `session:learn/sessions/${sessionId}.md`;

@@ -9,7 +9,7 @@
 // they do under `next dev`; a value already in the environment wins, as there.
 // `db` loads the same files, then resolves the catalog's SQLite file with the
 // catalog's own `databasePath()` (services/catalog/src/env.ts: CATALOG_DB,
-// then DATABASE_URL, then $GNOSIA_HOME/catalog.db, with services/catalog/.env
+// then DATABASE_URL, then $HERMES_HOME/catalog.db, with services/catalog/.env
 // read under them), so it names the file the app will open, and opens it
 // read-only. It prints `FILE=<path>` and exits 0, or one line saying what is
 // wrong and exits 3. A value with a newline in it is not supported: the lines

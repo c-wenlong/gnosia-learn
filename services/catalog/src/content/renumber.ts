@@ -7,7 +7,7 @@ import {
   type RevisionEntityType,
   tag,
   topic,
-} from "@gnosia/schema";
+} from "@hermes/schema";
 import { and, asc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";

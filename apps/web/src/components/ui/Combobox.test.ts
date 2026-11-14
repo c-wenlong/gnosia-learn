@@ -181,16 +181,46 @@ describe("the list's placement", () => {
         disconnected += 1;
       }
     } as unknown as typeof ResizeObserver;
+    // A 1024 by 768 window, and a list as tall as `listHeight`, as a browser would lay them out.
+    let listHeight = 60;
+    const isList = (el: HTMLElement) => el.getAttribute("role") === "listbox";
+    const root = document.documentElement;
+    const sizes: Array<[object, string, number | (() => number)]> = [
+      [root, "clientWidth", 1024],
+      [root, "clientHeight", 768],
+      [HTMLElement.prototype, "offsetWidth", function (this: HTMLElement) { return isList(this) ? 200 : 0; } as unknown as () => number],
+      [HTMLElement.prototype, "offsetHeight", function (this: HTMLElement) { return isList(this) ? listHeight : 0; } as unknown as () => number],
+      [HTMLElement.prototype, "clientHeight", function (this: HTMLElement) { return isList(this) ? listHeight : 0; } as unknown as () => number],
+      [HTMLElement.prototype, "scrollHeight", function (this: HTMLElement) { return isList(this) ? listHeight : 0; } as unknown as () => number],
+    ];
+    const saved = sizes.map(([target, key]) => [target, key, Object.getOwnPropertyDescriptor(target, key)] as const);
+    for (const [target, key, value] of sizes) {
+      Object.defineProperty(target, key, { configurable: true, get: typeof value === "function" ? value : () => value });
+    }
     try {
-      const { list, press, type } = mount();
+      const { field, list, press, type } = mount();
+      const rect = { top: 600, bottom: 632, left: 40, right: 240, width: 200, height: 32 };
+      field.parentElement!.getBoundingClientRect = () => rect as DOMRect;
       type("sonnet");
-      // A list filtered to the same number of taller rows changes size, not count.
-      expect(watched).toContain(list());
-      expect(callback).not.toBeNull();
+      const box = list()!;
+      expect(watched).toContain(box);
+      expect(watched).toContain(field.parentElement);
+      // Room under the field for a 60px list: 632 + 8.
+      expect(box.style.top).toBe("640px");
+
+      // The same rows grow taller (the count is unchanged): with no room left
+      // under the field the list goes over it, flush: 600 - 8 - 200.
+      listHeight = 200;
       act(() => callback!());
+      expect(box.style.top).toBe("392px");
+
       press("Escape");
       expect(disconnected).toBe(1);
     } finally {
+      for (const [target, key, descriptor] of saved) {
+        if (descriptor === undefined) delete (target as Record<string, unknown>)[key];
+        else Object.defineProperty(target, key, descriptor);
+      }
       globalThis.ResizeObserver = original;
     }
   });

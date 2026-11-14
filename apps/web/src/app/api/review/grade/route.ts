@@ -1,4 +1,4 @@
-import { reviewGradeTurn } from "@gnosia/tutor/server/learner-writes";
+import { reviewGradeTurn } from "@hermes/tutor/server/learner-writes";
 
 import { turnRoute } from "@/lib/learner-api";
 
@@ -27,6 +27,6 @@ import { turnRoute } from "@/lib/learner-api";
  * minute, and a concept the catalog does not know is a 400, not a 503.
  *
  * The parse and the write are `reviewGradeTurn` in
- * `@gnosia/tutor/server/learner-writes`.
+ * `@hermes/tutor/server/learner-writes`.
  */
 export const POST = turnRoute("review-grade", reviewGradeTurn);

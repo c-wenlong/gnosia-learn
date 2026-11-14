@@ -1,4 +1,4 @@
-import type { MasteryLabel } from "@gnosia/catalog/state";
+import type { MasteryLabel } from "@hermes/catalog/state";
 
 /**
  * The three colours the redesign draws mastery in.

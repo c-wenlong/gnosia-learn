@@ -9,13 +9,13 @@ import { COLUMN_TITLE, cx } from "@/components/ui/classes";
 import { continueHref, defaultModuleIndex, pathStatus, type TopicMastery } from "@/lib/course-path";
 import { libraryHref } from "@/lib/library";
 import { useLearner } from "@/lib/learner-context";
-import type { Course } from "@gnosia/content";
+import type { Course } from "@hermes/content";
 
 import { CourseRail } from "./CourseRail";
 import { CourseSidebar } from "./CourseSidebar";
 import { ModuleMain } from "./ModuleMain";
 import type { ModuleData, RelatedCourse } from "./types";
-import { ownValue } from "@gnosia/tutor/own-key";
+import { ownValue } from "@hermes/tutor/own-key";
 
 /**
  * A course page in the layout of Coursera's course home: the course sidebar

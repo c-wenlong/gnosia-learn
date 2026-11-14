@@ -20,7 +20,7 @@ export async function remotionkcClipKeys(job: BackendJob, allLines: readonly str
   const lines = allLines.filter((line) => line.trim() !== "");
   if (lines.length === 0) return [];
   const own = remotionkcTools(job.tools);
-  if (own.gnosiaPython === null) throw new Error("gnosia-audio is not installed in remotionkc's .venv");
+  if (own.narrationPython === null) throw new Error("gnosia-audio is not installed in remotionkc's .venv");
   const tools = job.tools as RemotionkcToolchain;
   const result = await runSandboxed({
     ...job,

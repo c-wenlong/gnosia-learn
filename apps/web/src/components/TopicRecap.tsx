@@ -13,11 +13,11 @@ import type {
   Course,
   Module,
   Topic,
-} from "@gnosia/content";
-import type { KnowledgeInput, TopicKnowledge } from "@gnosia/schema/shared";
+} from "@hermes/content";
+import type { KnowledgeInput, TopicKnowledge } from "@hermes/schema/shared";
 import { useLearner } from "@/lib/learner-context";
-import { formatKnowledgeMarkdown } from "@gnosia/tutor/summary";
-import { ownValue } from "@gnosia/tutor/own-key";
+import { formatKnowledgeMarkdown } from "@hermes/tutor/summary";
+import { ownValue } from "@hermes/tutor/own-key";
 import { FADE_IN } from "@/components/ui/motion";
 
 function formatDate(iso: string): string {

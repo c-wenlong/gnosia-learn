@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CourseAssets } from "@/lib/course-assets";
-import { ownValue } from "@gnosia/tutor/own-key";
-import type { Course, Module } from "@gnosia/content";
+import { ownValue } from "@hermes/tutor/own-key";
+import type { Course, Module } from "@hermes/content";
 
 /**
  * What a course page reads from the server, with every read beneath it

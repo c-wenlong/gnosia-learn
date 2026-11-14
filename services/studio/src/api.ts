@@ -8,7 +8,7 @@ import { byokStatus, checkByokProvider, listByokModels, removeByokProvider, save
 import { keyAccessNow } from "./agent/byok-keys";
 import { canvas, doctor, doctorChecks, type DoctorCheck } from "./canvas/canvas";
 import { preferenceSet, videoList } from "./data/catalog";
-import { STUDIO_OWNER_HEADER, studioAgentPreference } from "@gnosia/schema/shared";
+import { STUDIO_OWNER_HEADER, studioAgentPreference } from "@hermes/schema/shared";
 
 import { agentAuthReport, CONCURRENCY, HOST, PORT, studioOwner, VERB_TIMEOUT_MS } from "./config";
 import { recompare } from "./diagram/compare";
@@ -365,7 +365,14 @@ async function handle(
 
   /* /api/health */
   if (segments[1] === "health" && segments.length === 2) {
-    return send(response, 200, await health(store, runner, probes, drafts, video));
+    const refreshParam = url.searchParams.get("refresh");
+    const refresh =
+      refreshParam === "0" || refreshParam === "false"
+        ? false
+        : refreshParam === "1" || refreshParam === "true"
+          ? true
+          : undefined;
+    return send(response, 200, await health(store, runner, probes, drafts, video, refresh));
   }
 
   /* /api/drafts — the planner conversations (docs/STUDIO-CHAT-FIRST.md). */
@@ -1994,21 +2001,29 @@ async function health(
   probes: HealthProbes,
   drafts?: Drafts,
   video?: VideoDeps & { doctor: VideoDoctor },
+  refresh?: boolean,
 ): Promise<Record<string, unknown>> {
+  if (refresh === true) {
+    probes.forget();
+  } else {
+    await probes.waitWarm();
+  }
+  const readOptions = refresh === undefined ? {} : { refresh };
   // Every answer is the last one each probe has, returned at once; an old one
   // starts a refresh for the next call (health-probes.ts has the measurements
-  // that made this necessary). Only a probe that has never answered is waited
-  // for, which `npm run studio` avoids by warming them all at start.
+  // that made this necessary) unless `?refresh=0` asked for a passive read.
+  // Only a probe that has never answered is waited for, which `npm run studio`
+  // avoids by warming them all at start.
   const [doctorRead, claudeRead, qwenRead, codexRead, catalogRead, agentRead, vocabulary] = await Promise.all([
-    probes.doctor.read(),
-    probes.claude.read(),
-    probes.qwen.read(),
-    probes.codex.read(),
-    probes.catalog.read(),
-    probes.agent.read(),
+    probes.doctor.read(readOptions),
+    probes.claude.read(readOptions),
+    probes.qwen.read(readOptions),
+    probes.codex.read(readOptions),
+    probes.catalog.read(readOptions),
+    probes.agent.read(readOptions),
     // The last read any route made, however old, rather than a `catalog topic
     // ls` on this call; an old one is refreshed behind it.
-    vocabularyStatusNow(),
+    vocabularyStatusNow(undefined, readOptions),
   ]);
   const checked = doctorRead.value.result;
   const claudeVersion = claudeRead.value;

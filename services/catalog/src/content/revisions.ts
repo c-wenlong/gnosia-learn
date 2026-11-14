@@ -4,7 +4,7 @@ import {
   type NewContentRevision,
   type RevisionEntityType,
   type RevisionOp,
-} from "@gnosia/schema";
+} from "@hermes/schema";
 import { sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
@@ -17,7 +17,7 @@ import type { Snapshot, SnapshotRead } from "./snapshot";
  */
 
 /** The session setting the per-table write guard checks (migration 0010, D4). */
-export const REVISION_SETTING = "gnosia.revision_id";
+export const REVISION_SETTING = "hermes.revision_id";
 
 export interface LatestRevision {
   id: number;
@@ -143,7 +143,7 @@ export async function latestRevisions(
 
 /**
  * Take revision ids from the table's own identity sequence before the rows
- * exist, so the seam can name the revision in `gnosia.revision_id` before
+ * exist, so the seam can name the revision in `hermes.revision_id` before
  * the entity write that the guard checks.
  */
 export async function reserveRevisionIds(db: CatalogDatabase, count: number): Promise<number[]> {

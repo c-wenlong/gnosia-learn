@@ -1,4 +1,4 @@
-import type { ProviderName } from "@gnosia/schema/shared";
+import type { ProviderName } from "@hermes/schema/shared";
 
 /**
  * The BYOK provider presets the studio runner can spawn on (the runner's own

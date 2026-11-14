@@ -1,4 +1,4 @@
-import { POSTER_CONTENT_TYPE } from "@gnosia/catalog/state";
+import { POSTER_CONTENT_TYPE } from "@hermes/catalog/state";
 
 import { posterSource } from "@/lib/asset-files";
 import { lookupFailed, problemResponse, serveStoredWhole } from "@/lib/asset-response";

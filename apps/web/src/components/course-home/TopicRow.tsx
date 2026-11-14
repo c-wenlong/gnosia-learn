@@ -12,8 +12,8 @@ import { Textarea } from "@/components/ui/Textarea";
 import { TextLink } from "@/components/ui/TextLink";
 import { topicMark, topicMeta, topicSessionHref, type TopicMastery } from "@/lib/course-path";
 import { useLearner } from "@/lib/learner-context";
-import type { Course, Module, Topic } from "@gnosia/content";
-import { ownValue } from "@gnosia/tutor/own-key";
+import type { Course, Module, Topic } from "@hermes/content";
+import { ownValue } from "@hermes/tutor/own-key";
 
 import { TopicMarkIcon } from "./icons";
 import { ROW_BOX, ROW_HOVER, ROW_META, ROW_TITLE, STRETCHED } from "./rows";

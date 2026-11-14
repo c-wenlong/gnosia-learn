@@ -1,4 +1,4 @@
-import { concept, conceptPrerequisite } from "@gnosia/schema";
+import { concept, conceptPrerequisite } from "@hermes/schema";
 import { asc } from "drizzle-orm";
 
 import { withDatabase } from "../db";

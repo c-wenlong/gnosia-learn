@@ -9,8 +9,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  */
 
 const connect = vi.hoisted(() => vi.fn());
-vi.mock("@gnosia/catalog/state", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@gnosia/catalog/state")>()),
+vi.mock("@hermes/catalog/state", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@hermes/catalog/state")>()),
   connect,
 }));
 

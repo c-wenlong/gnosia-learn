@@ -1,5 +1,5 @@
-import type { JobState } from "@gnosia/schema/shared";
-import type { VideoChapter } from "@gnosia/tutor/media";
+import type { JobState } from "@hermes/schema/shared";
+import type { VideoChapter } from "@hermes/tutor/media";
 
 import { assetFileHref, assetStatusHref } from "@/lib/library";
 import { capitalised } from "@/lib/sentence";

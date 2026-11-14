@@ -2,10 +2,10 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ReviewQueueItem, StoredCheckDistractor } from "@gnosia/catalog/state";
-import { CHECK_OPTIONS_VERSION } from "@gnosia/tutor/check-options";
-import { parseChecks, type ConceptCheck } from "@gnosia/tutor/concept-note-core";
-import { checkHash, readWrittenOptions } from "@gnosia/tutor/server/check-options";
+import type { ReviewQueueItem, StoredCheckDistractor } from "@hermes/catalog/state";
+import { CHECK_OPTIONS_VERSION } from "@hermes/tutor/check-options";
+import { parseChecks, type ConceptCheck } from "@hermes/tutor/concept-note-core";
+import { checkHash, readWrittenOptions } from "@hermes/tutor/server/check-options";
 
 import { toReviewItem } from "./review-queue";
 
@@ -18,8 +18,8 @@ import { toReviewItem } from "./review-queue";
 
 const stored = vi.hoisted(() => ({ rows: [] as StoredCheckDistractor[] }));
 
-vi.mock("@gnosia/catalog/state", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@gnosia/catalog/state")>()),
+vi.mock("@hermes/catalog/state", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@hermes/catalog/state")>()),
   readCheckDistractors: vi.fn(async () => stored.rows),
 }));
 

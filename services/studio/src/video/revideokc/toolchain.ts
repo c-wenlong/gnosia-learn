@@ -29,7 +29,7 @@ export interface RevideokcTools {
   /** `<root>/.venv`, resolved, or null: where gnosia-audio is installed (`npm run narration-deps`). */
   venv: string | null;
   /** `<root>/.venv/bin/python`: the interpreter gnosia-audio runs on, for `narrate`, `sidecars` and the clip keys. */
-  gnosiaPython: Program | null;
+  narrationPython: Program | null;
   /** The shells gnosia-audio's console script needs, resolved: none unless uv wrote it in its `#!/bin/sh` form (`../script-shells.ts`). */
   scriptShells: string[];
   /** The Chrome binary puppeteer drives, resolved, and the app bundle (or install directory) it runs its helpers from. */
@@ -41,7 +41,7 @@ export interface RevideokcTools {
   typescript: string | null;
   /** `@revideo/core`'s version, for health and the doctor. */
   revideo: string | null;
-  /** Whether the CLI has `build --no-narrate` and `sidecars` (c-wenlong/revideokc#8), which a sandboxed build needs. */
+  /** Whether the CLI has `build --no-narrate` and `sidecars` (promethevs-labs/revideokc#8), which a sandboxed build needs. */
   splitBuild: boolean;
   /** The version of the node every job runs, which must strip types (22.18 or later). */
   nodeVersion: string;
@@ -149,7 +149,7 @@ function packageVersion(nodeModules: string | null, name: string): string | null
 }
 
 /** Whether gnosia-audio is installed in the venv: its package directory in some site-packages. */
-function gnosiaInstalled(venv: string | null): boolean {
+function narrationInstalled(venv: string | null): boolean {
   if (venv === null) return false;
   try {
     return readdirSync(path.join(venv, "lib")).some((python) => existsSync(path.join(venv, "lib", python, "site-packages", "gnosia_audio", "cli.py")));
@@ -189,7 +189,7 @@ export function discoverRevideokc(): Omit<RevideokcTools, "libs"> {
     root,
     nodeModules,
     venv,
-    gnosiaPython: venv !== null && gnosiaInstalled(venv) ? programAt(path.join(root, ".venv", "bin", "python")) : null,
+    narrationPython: venv !== null && narrationInstalled(venv) ? programAt(path.join(root, ".venv", "bin", "python")) : null,
     scriptShells: venv === null ? [] : scriptShells(path.join(venv, "bin", "gnosia-audio")),
     chrome: findChrome(),
     ffmpegInstaller: pkg("@ffmpeg-installer"),
@@ -224,7 +224,7 @@ export async function discoverRevideokcToolchain(): Promise<RevideokcToolchain> 
   const own = discoverRevideokc();
   const libs =
     process.platform === "linux"
-      ? await foreignLibs([own.gnosiaPython?.real ?? null, own.chrome?.binary ?? null, ...executablesIn(own.ffmpegInstaller), ...executablesIn(own.ffprobeInstaller)])
+      ? await foreignLibs([own.narrationPython?.real ?? null, own.chrome?.binary ?? null, ...executablesIn(own.ffmpegInstaller), ...executablesIn(own.ffprobeInstaller)])
       : [];
   return { ...(await discoverToolchain()), revideokc: { ...own, libs } };
 }
@@ -260,7 +260,7 @@ export function revideokcProblems(tools: Toolchain): string[] {
     return problems;
   }
   if (!own.splitBuild) {
-    problems.push(`the revideokc checkout at ${own.root} has no build --no-narrate or sidecars verb (c-wenlong/revideokc#8), which a sandboxed build needs: move the submodule forward`);
+    problems.push(`the revideokc checkout at ${own.root} has no build --no-narrate or sidecars verb (promethevs-labs/revideokc#8), which a sandboxed build needs: move the submodule forward`);
   }
   if (!atLeast(own.nodeVersion, 22, 18)) problems.push(`node ${own.nodeVersion} cannot run revideokc, which needs 22.18 or later to strip types`);
   if (own.nodeModules === null || own.revideo === null) problems.push(`${own.root}/node_modules is missing: run PUPPETEER_SKIP_DOWNLOAD=1 npm ci there`);
@@ -269,7 +269,7 @@ export function revideokcProblems(tools: Toolchain): string[] {
     if (own.typescript === null) problems.push("typescript is missing from node_modules, so a scene cannot be checked");
   }
   if (own.chrome === null) problems.push("no Chrome or Chromium was found (REVIDEOKC_CHROME names one), and Revideo renders in one");
-  if (own.gnosiaPython === null) problems.push(`gnosia-audio is not installed in ${own.root}/.venv: run npm run narration-deps there`);
+  if (own.narrationPython === null) problems.push(`gnosia-audio is not installed in ${own.root}/.venv: run npm run narration-deps there`);
   if (own.chrome !== null && /["\\\n\r]/.test(own.chrome.binary)) problems.push("the Chrome binary's path holds a character a sandbox profile cannot carry");
   return problems;
 }

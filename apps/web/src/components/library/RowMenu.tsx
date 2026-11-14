@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { ASSET_NAME_MAX } from "@gnosia/schema/shared";
+import { ASSET_NAME_MAX } from "@hermes/schema/shared";
 
 import { Button } from "@/components/ui/Button";
 import { Dialog, DIALOG_CLOSE_MS, type DialogSize } from "@/components/ui/Dialog";

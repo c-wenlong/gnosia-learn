@@ -88,7 +88,7 @@ describe("cx", () => {
   it("keeps a class it does not know, so a word that only looks like a colour is never dropped", () => {
     keepsAll("text-foo", "text-text2");
     keepsAll("bg-unknown", "bg-surface");
-    keepsAll("gnosia-glass studio-veil katex prose prose-sm", "rounded-none");
+    keepsAll("hermes-glass studio-veil katex prose prose-sm", "rounded-none");
   });
 
   it("keeps the field size and its desktop size, which differ by variant", () => {
@@ -125,7 +125,7 @@ describe("cx", () => {
     keepsAll("ring-0", "has-[input:focus]:ring-2", "has-[:checked]:bg-tint");
     keepsAll("opacity-100", "starting:opacity-0");
     keepsAll("rotate-0", "open:rotate-180", "group-open:rotate-90");
-    keepsAll("bg-surface", "dark:bg-surface2", "[.gnosia_&]:bg-page", "[.gnosia.dark_&]:bg-track");
+    keepsAll("bg-surface", "dark:bg-surface2", "[.hermes_&]:bg-page", "[.hermes.dark_&]:bg-track");
     keepsAll("pointer-coarse:after:-inset-2", "after:absolute");
     // the same variant on both is a conflict like any other
     expect(cx("motion-reduce:transition-none", "motion-reduce:transition-opacity")).toBe("motion-reduce:transition-opacity");

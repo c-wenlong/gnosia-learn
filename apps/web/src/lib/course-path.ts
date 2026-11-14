@@ -1,8 +1,8 @@
-import type { MasteryLabel } from "@gnosia/catalog/state";
+import type { MasteryLabel } from "@hermes/catalog/state";
 
-import { bucketOf, MASTERY_BUCKET_LABEL, type MasteryBucket } from "@gnosia/tutor/mastery-bucket";
-import { ownValue } from "@gnosia/tutor/own-key";
-import type { Course } from "@gnosia/content";
+import { bucketOf, MASTERY_BUCKET_LABEL, type MasteryBucket } from "@hermes/tutor/mastery-bucket";
+import { ownValue } from "@hermes/tutor/own-key";
+import type { Course } from "@hermes/content";
 
 /**
  * The course page's arithmetic: which mark each topic and module carries,

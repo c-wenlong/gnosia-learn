@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
-import { act, createElement, type ReactNode } from "react";
+import { act, createElement, type ComponentProps, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ReviewItem } from "@gnosia/tutor/review-core";
-import { OPTIONS_WAIT_MS } from "@gnosia/tutor/session-core";
+import type { ReviewItem } from "@hermes/tutor/review-core";
+import { OPTIONS_WAIT_MS } from "@hermes/tutor/session-core";
 
 /**
  * How the review moves from card to card (docs/design/IMPLEMENTATION.md,
@@ -101,7 +101,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-async function mount(items: ReviewItem[]) {
+async function mount(items: ReviewItem[], props: Partial<ComponentProps<typeof ReviewSession>> = {}) {
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
@@ -111,6 +111,7 @@ async function mount(items: ReviewItem[]) {
         initial: { reachable: true, items, nextDue: null },
         focus: null,
         asOf: "2026-10-04T00:00:00.000Z",
+        ...props,
       }),
     );
   });
@@ -245,6 +246,63 @@ describe("ReviewSession and a key held down", () => {
     await settle(() => key("2", true));
     expect(graded).toEqual([]);
     expect(host.querySelector('[role="group"][aria-label="Rate your recall"]')).not.toBeNull();
+  });
+});
+
+describe("ReviewSession when a grade does not save", () => {
+  it("keeps the card on screen with the error, and never refreshes", async () => {
+    vi.mocked(fetch).mockImplementation(async (url) =>
+      url === "/api/review/grade"
+        ? new Response(JSON.stringify({ error: "grade write failed" }), { status: 500 })
+        : new Response(JSON.stringify({ ok: true, nextDue: null, items: [] }), { status: 200 }),
+    );
+    router.refresh.mockClear();
+    const host = await mount([RECALL, CHECK]);
+    await settle(() => button(host, "Show answer").click());
+    await settle(() => rating(host, "Good").click());
+
+    // A grade that did not save stays on screen: a review silently lost is
+    // worse than one retried.
+    expect(host.querySelector('[data-step="0"]')).not.toBeNull();
+    expect(host.querySelector('[data-step="1"]')).toBeNull();
+    expect(host.querySelector('[role="alert"]')!.textContent).toBe("grade write failed");
+    expect(router.refresh).not.toHaveBeenCalled();
+  });
+
+  it("says the server could not be reached when the grade request fails", async () => {
+    vi.mocked(fetch).mockImplementation(async (url) => {
+      if (url === "/api/review/grade") throw new Error("offline");
+      return new Response(JSON.stringify({ ok: true, nextDue: null, items: [] }), { status: 200 });
+    });
+    router.refresh.mockClear();
+    const host = await mount([RECALL]);
+    await settle(() => button(host, "Show answer").click());
+    await settle(() => rating(host, "Good").click());
+
+    expect(host.querySelector('[data-step="0"]')).not.toBeNull();
+    expect(host.querySelector('[role="alert"]')!.textContent).toBe("Not saved: the server could not be reached.");
+    expect(router.refresh).not.toHaveBeenCalled();
+  });
+});
+
+describe("ReviewSession with nothing to grade", () => {
+  it("draws the unavailable panel and no rating row when the catalog could not be read", async () => {
+    const host = await mount([RECALL], { initial: { reachable: false, items: [RECALL], nextDue: null } });
+    expect(host.textContent).toContain("Reviews are unavailable");
+    expect(host.textContent).toContain("The catalog could not be read, so there is no queue to show");
+    expect(host.querySelector('[role="group"][aria-label="Rate your recall"]')).toBeNull();
+    expect(host.querySelector('[data-step="0"]')).toBeNull();
+  });
+
+  it("says nothing is due on an empty queue, and that picked cards are done on a chosen set", async () => {
+    const empty = await mount([]);
+    expect(empty.textContent).toContain("Nothing due");
+    expect(empty.textContent).toContain("No review is scheduled yet");
+    expect(empty.querySelector('[role="group"][aria-label="Rate your recall"]')).toBeNull();
+
+    const chosen = await mount([], { selected: true });
+    expect(chosen.textContent).toContain("Already reviewed");
+    expect(chosen.textContent).toContain("not due any more");
   });
 });
 

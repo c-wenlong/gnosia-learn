@@ -24,9 +24,9 @@ import {
   type LibraryFilters,
   type LibraryLayout,
 } from "@/lib/library";
-import { isRenderSource, RENDER_SOURCES, uploadCommand } from "@gnosia/tutor/asset-problems";
+import { isRenderSource, RENDER_SOURCES, uploadCommand } from "@hermes/tutor/asset-problems";
 import { parseOpen } from "@/lib/library-preview";
-import { ownValue } from "@gnosia/tutor/own-key";
+import { ownValue } from "@hermes/tutor/own-key";
 
 export const metadata: Metadata = {
   title: "Library",

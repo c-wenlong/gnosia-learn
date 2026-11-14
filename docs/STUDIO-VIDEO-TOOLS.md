@@ -379,7 +379,7 @@ both); the wrapper's verbs (`VERBS` in `calls.ts`, `steps.ts`,
 the runner watches Reads for; and `routes.ts` and `review.ts`, which still
 call `resolvedPaths` and `sheetPath` directly.
 
-### Phase 2b. revideokc, ready to be sandboxed (in c-wenlong/revideokc)
+### Phase 2b. revideokc, ready to be sandboxed (in promethevs-labs/revideokc)
 
 - puppeteer `pipe: true` always; `DISABLE_TELEMETRY=true` always.
 - Vite's `cacheDir` under the data root's `cache/vite`, so a render never

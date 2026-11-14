@@ -265,9 +265,14 @@ export class VideoDoctor {
   private timer: NodeJS.Timeout | null = null;
   private drained = false;
   private readonly check: () => Promise<VideoDoctorReport>;
+  private readonly hasCheckout: () => boolean;
 
-  constructor(check: () => Promise<VideoDoctorReport> = runVideoDoctor) {
+  constructor(
+    check: () => Promise<VideoDoctorReport> = runVideoDoctor,
+    hasCheckout: () => boolean = () => true,
+  ) {
     this.check = check;
+    this.hasCheckout = hasCheckout;
   }
 
   private stopped: ToolchainStop | null = null;
@@ -328,7 +333,16 @@ export class VideoDoctor {
   }
 
   start(): void {
-    this.timer = setInterval(() => void this.report(true), VIDEO_DOCTOR_TTL_MS);
+    this.timer = setInterval(() => {
+      if (
+        !this.hasCheckout() &&
+        this.last !== null &&
+        this.last.checks.some((check) => check.name === "checkout" && !check.ok)
+      ) {
+        return;
+      }
+      void this.report(true);
+    }, VIDEO_DOCTOR_TTL_MS);
     this.timer.unref();
   }
 

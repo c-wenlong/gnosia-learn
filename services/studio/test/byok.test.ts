@@ -5,7 +5,7 @@ import path from "node:path";
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { saveProviderKey, removeProviderKey } from "@gnosia/tutor/server/provider-keys";
+import { saveProviderKey, removeProviderKey } from "@hermes/tutor/server/provider-keys";
 
 import { migratedScratchDatabase, type Scratch } from "../../catalog/test/scratch-database";
 import { fakeQwen, type FakeQwen } from "./fake-qwen";
@@ -36,7 +36,7 @@ const SECRET = "test-auth-secret-0123456789abcdef-test";
 process.env.AUTH_SECRET = SECRET;
 process.env.OWNER_PASSWORD = "owner-password-for-this-test";
 process.env.SESSION_EPOCH = "3";
-process.env.GNOSIA_LOCAL_TOKEN = "local-token-for-this-test";
+process.env.HERMES_LOCAL_TOKEN = "local-token-for-this-test";
 const OWNER = "local";
 const OPENROUTER_KEY = "sk-or-v1-test-key-0001";
 const OPENAI_KEY = "sk-oai-test-key-0002";
@@ -324,7 +324,7 @@ describe("the settings file and the saved keys (D12)", () => {
 
 describe("the runner's secrets", () => {
   it("are taken out of the environment, found or not", () => {
-    const env: NodeJS.ProcessEnv = { AUTH_SECRET: ` ${SECRET} `, OWNER_PASSWORD: "pw", SESSION_EPOCH: "2", GNOSIA_LOCAL_TOKEN: "t", PATH: "/bin" };
+    const env: NodeJS.ProcessEnv = { AUTH_SECRET: ` ${SECRET} `, OWNER_PASSWORD: "pw", SESSION_EPOCH: "2", HERMES_LOCAL_TOKEN: "t", PATH: "/bin" };
     expect(keys.takeKeySecret(env)).toBe(SECRET);
     expect(env).toEqual({ PATH: "/bin" });
     const none: NodeJS.ProcessEnv = { OWNER_PASSWORD: "pw" };

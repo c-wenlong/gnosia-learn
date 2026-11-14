@@ -1,4 +1,4 @@
-import { THEME_MODES } from "@gnosia/schema/shared";
+import { THEME_MODES } from "@hermes/schema/shared";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -29,17 +29,17 @@ describe("themeClass", () => {
   it("resolves the four fixed modes regardless of the device", () => {
     for (const prefersDark of [false, true]) {
       expect(themeClass("light", prefersDark)).toEqual([]);
-      expect(themeClass("gnosia", prefersDark)).toEqual(["gnosia"]);
+      expect(themeClass("hermes", prefersDark)).toEqual(["hermes"]);
       expect(themeClass("dark", prefersDark)).toEqual(["dark"]);
-      expect(themeClass("gnosia-dark", prefersDark)).toEqual(["gnosia", "dark"]);
+      expect(themeClass("hermes-dark", prefersDark)).toEqual(["hermes", "dark"]);
     }
   });
 
   it("lets the device decide the appearance under both system modes, and keeps the palette", () => {
     expect(themeClass("system", false)).toEqual([]);
     expect(themeClass("system", true)).toEqual(["dark"]);
-    expect(themeClass("gnosia-system", false)).toEqual(["gnosia"]);
-    expect(themeClass("gnosia-system", true)).toEqual(["gnosia", "dark"]);
+    expect(themeClass("hermes-system", false)).toEqual(["hermes"]);
+    expect(themeClass("hermes-system", true)).toEqual(["hermes", "dark"]);
   });
 });
 
@@ -55,10 +55,10 @@ describe("SYSTEM_THEME_SCRIPT", () => {
   it("adds dark only for a system mode on a dark device", () => {
     expect(run("system", true)).toEqual(["dark"]);
     expect(run("system", false)).toEqual([]);
-    expect(run("gnosia-system", true)).toEqual(["dark"]);
-    expect(run("gnosia-system", false)).toEqual([]);
+    expect(run("hermes-system", true)).toEqual(["dark"]);
+    expect(run("hermes-system", false)).toEqual([]);
     // The fixed modes were resolved on the server; the script leaves them be.
-    for (const theme of ["light", "gnosia", "dark", "gnosia-dark"]) expect(run(theme, true)).toEqual([]);
+    for (const theme of ["light", "hermes", "dark", "hermes-dark"]) expect(run(theme, true)).toEqual([]);
   });
 
   it("swallows a browser without matchMedia", () => {
@@ -130,16 +130,16 @@ describe("followTheme", () => {
     });
   });
 
-  it("follows the device under gnosia-system, and keeps gnosia on throughout", async () => {
+  it("follows the device under hermes-system, and keeps hermes on throughout", async () => {
     const b = fakeBrowser(false);
     await withBrowser(b, () => {
-      const stop = followTheme("gnosia-system", b.win);
-      expect([...b.classes]).toEqual(["gnosia"]);
-      expect(b.doc.documentElement.dataset.theme).toBe("gnosia-system");
+      const stop = followTheme("hermes-system", b.win);
+      expect([...b.classes]).toEqual(["hermes"]);
+      expect(b.doc.documentElement.dataset.theme).toBe("hermes-system");
       b.setDark(true);
-      expect([...b.classes].sort()).toEqual(["dark", "gnosia"]);
+      expect([...b.classes].sort()).toEqual(["dark", "hermes"]);
       b.setDark(false);
-      expect([...b.classes]).toEqual(["gnosia"]);
+      expect([...b.classes]).toEqual(["hermes"]);
       stop();
       expect(b.listeners.size).toBe(0);
     });
@@ -150,9 +150,9 @@ describe("followTheme", () => {
     await withBrowser(b, () => {
       for (const [mode, expected] of [
         ["light", []],
-        ["gnosia", ["gnosia"]],
+        ["hermes", ["hermes"]],
         ["dark", ["dark"]],
-        ["gnosia-dark", ["dark", "gnosia"]],
+        ["hermes-dark", ["dark", "hermes"]],
       ] as const) {
         const stop = followTheme(mode, b.win);
         expect([...b.classes].sort()).toEqual([...expected]);
@@ -168,9 +168,9 @@ describe("followTheme", () => {
       const stop = followTheme("system", b.win);
       expect([...b.classes]).toEqual(["dark"]);
       stop();
-      followTheme("gnosia", b.win)();
+      followTheme("hermes", b.win)();
       b.setDark(false);
-      expect([...b.classes]).toEqual(["gnosia"]);
+      expect([...b.classes]).toEqual(["hermes"]);
     });
   });
 });

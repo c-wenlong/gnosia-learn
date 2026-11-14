@@ -2,7 +2,7 @@ import {
   contentOwnership,
   dbSource,
   type CatalogDatabase,
-} from "@gnosia/catalog/state";
+} from "@hermes/catalog/state";
 import {
   CONTENT_SOURCE_VAR,
   selectSource,
@@ -10,8 +10,8 @@ import {
   type ContentType,
   type Resolutions,
   type SelectedSource,
-} from "@gnosia/content";
-import type { OwnerScope } from "@gnosia/schema/shared";
+} from "@hermes/content";
+import type { OwnerScope } from "@hermes/schema/shared";
 
 /**
  * The content seam's composition root, moved out of

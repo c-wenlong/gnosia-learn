@@ -14,7 +14,7 @@ import { cx } from "./classes";
  * under 4.5:1, too low for 11px text. Black is at least 4.5:1 on all four
  * tones in every palette. The `ok` frame is the green face, not the green
  * text colour: the text green is tuned for 4.5:1 *as* text on cream, which
- * makes it too dark to carry black at 11px (4.1:1 under `.gnosia`).
+ * makes it too dark to carry black at 11px (4.1:1 under `.hermes`).
  */
 export type StatTone = "ok" | "accent" | "violet" | "streak";
 

@@ -1,4 +1,4 @@
-import { diagram } from "@gnosia/schema";
+import { diagram } from "@hermes/schema";
 import { and, eq, isNull } from "drizzle-orm";
 
 import { diagramPaths } from "../diagram-document";

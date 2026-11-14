@@ -2,7 +2,7 @@
 
 Status: proposed 2026-10-09, and decided the same day: the owner chose a
 full fourth video tool over plates (D96, amended below). blenderkc is built
-as its own repository (github.com/c-wenlong/blenderkc, private): it narrates
+as its own repository (github.com/promethevs-labs/blenderkc-public, private): it narrates
 through gnosia-audio, writes its own sidecars and answers `topics --json`
 with manimkc's report shape, and the catalog imports its renders as
 `blenderkc:` rows (`tools/blenderkc` here, its section in
@@ -309,7 +309,7 @@ There is no skill yet. The studio part below stands unchanged.
 
 The repository and CLI follow remotionkc and revideokc so that nothing about
 it is new to learn: `tools/blenderkc/` as a submodule
-(github.com/c-wenlong/blenderkc), `BLENDERKC_ROOT` the checkout and
+(github.com/promethevs-labs/blenderkc-public), `BLENDERKC_ROOT` the checkout and
 `BLENDERKC_HOME` the data root (renders, frames, the kernel cache, state),
 plates under `plates/<domain>/[<sub>/]<slug>/<name>.py` mirroring topics, a
 `blenderkc-plate` skill symlinked into `.claude/skills/`, and verbs `doctor`,
@@ -328,7 +328,7 @@ worth making by hand.
 
 | Area | Change | Phase |
 | --- | --- | --- |
-| `c-wenlong/blenderkc` (new) | The library, the kit, the CLI, the `blenderkc-plate` skill, the HBM plate | 1 |
+| `promethevs-labs/blenderkc-public` (new) | The library, the kit, the CLI, the `blenderkc-plate` skill, the HBM plate | 1 |
 | `tools/blenderkc` here | The submodule, `.gitmodules`, the `eslint.config.mjs` ignore, the skill symlink, an AGENTS.md section | 1 |
 | `tools/revideokc` | A `Plate` component (a `Video` layer plus anchor-following labels), a `plates` step that writes requests and stages encodes into `public/<topic>/plates/`, the beats syntax in a scene | 2 |
 | [VIDEO-TOOLS.md](../VIDEO-TOOLS.md) | A routing row ("a physical object, photoreal: revideokc with blenderkc plates"), a matrix row, and a "Not built yet" entry until phase 2 lands | 2 |
@@ -340,7 +340,7 @@ worth making by hand.
 
 ### Phase 1. The library and one plate
 
-In `c-wenlong/blenderkc`: the venv and `make deps`, the timeline, the kit
+In `promethevs-labs/blenderkc-public`: the venv and `make deps`, the timeline, the kit
 the HBM shot needs, the CLI verbs of D104, anchors, the resumable build, and
 the HBM shot rebuilt as `plates/computer-architecture/hbm/stack.py` on the
 library.

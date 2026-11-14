@@ -1,3 +1,4 @@
+import { dataHome, HOME_ENV } from "./home";
 import { createHash, randomUUID } from "node:crypto";
 import { constants, createWriteStream, existsSync, readFileSync, realpathSync } from "node:fs";
 import { lstat, mkdir, open, readdir, rename, rm, stat, type FileHandle } from "node:fs/promises";
@@ -44,8 +45,8 @@ const TEMP_DIR = ".tmp";
 const READ_NO_FOLLOW = constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (constants.O_NONBLOCK ?? 0);
 
 /**
- * Where the laptop's blobs live: `$GNOSIA_HOME/blobs`, or
- * `~/.gnosia/blobs` when the variable is unset.
+ * Where the laptop's blobs live: `$HERMES_HOME/blobs` (`$GNOSIA_HOME` still
+ * works), or `~/.hermes/blobs` when neither is set and no old home exists.
  *
  * Outside the repository for the reason `$MANIMKC_HOME` exists: moving the
  * manimkc submodule on 2026-09-13 deleted 25 rendered videos, because git does
@@ -58,13 +59,13 @@ const READ_NO_FOLLOW = constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0) | (const
  * would name a different directory each time, and one of them is the repo.
  */
 export function defaultBlobRoot(env: NodeJS.ProcessEnv = process.env): string {
-  const raw = env.GNOSIA_HOME?.trim();
-  if (!raw) return path.join(homedir(), ".gnosia", "blobs");
+  const raw = env[HOME_ENV]?.trim() || env.GNOSIA_HOME?.trim();
+  if (!raw) return path.join(dataHome(env), "blobs");
   const expanded = raw === "~" || raw.startsWith("~/") ? path.join(homedir(), raw.slice(1)) : raw;
   if (!path.isAbsolute(expanded)) {
     throw new BlobError(
       "BLOB_ROOT",
-      `GNOSIA_HOME must be absolute or start with ~/, not ${JSON.stringify(raw)}`,
+      `${HOME_ENV} must be absolute or start with ~/, not ${JSON.stringify(raw)}`,
     );
   }
   return path.join(expanded, "blobs");
@@ -108,7 +109,7 @@ export function fsStore(root: string = defaultBlobRoot()): BlobStore {
   if (checkout !== null) {
     throw new BlobError(
       "BLOB_ROOT",
-      `refusing blob root ${base}: it is inside the gnosia checkout at ${checkout}, where a git operation can delete it. Point GNOSIA_HOME outside the repository`,
+      `refusing blob root ${base}: it is inside the hermes checkout at ${checkout}, where a git operation can delete it. Point HERMES_HOME outside the repository`,
     );
   }
 
@@ -271,16 +272,20 @@ export function fsStore(root: string = defaultBlobRoot()): BlobStore {
 }
 
 /**
- * The nearest directory at or above `dir` that is a gnosia checkout.
+ * The nearest directory at or above `dir` that is a hermes checkout.
  * Symlinks are resolved first, so a root that is a link into the tree is
  * caught too.
  *
- * A checkout is a directory whose `package.json` is named `gnosia`, which
+ * A checkout is a directory whose `package.json` is named `hermes` (or the
+ * old name `gnosia`, kept so an older checkout still counts), which
  * holds for a clone, a worktree, an older checkout from before this package
  * existed, and a copy with no `.git` at all, any of which a `git clean` or a
  * move can empty. A directory with a `.git` and this package in it counts too.
  * Neither test is "any `.git`", so a home directory that happens to be a
  * dotfiles repository does not refuse the default root.
+ *
+ * `gnosiaCheckoutAbove` and `isGnosiaPackage` keep the old names. They exist
+ * only to find a checkout, including one made before the product was Hermes.
  */
 function gnosiaCheckoutAbove(dir: string): string | null {
   let current = resolveExisting(dir);
@@ -297,10 +302,11 @@ function gnosiaCheckoutAbove(dir: string): string | null {
   }
 }
 
-/** Whether `file` is a `package.json` naming the gnosia repository. */
+/** Whether `file` is a `package.json` naming this Hermes repository, old name `gnosia` included. */
 function isGnosiaPackage(file: string): boolean {
   try {
-    return (JSON.parse(readFileSync(file, "utf8")) as { name?: unknown }).name === "gnosia";
+    const name = (JSON.parse(readFileSync(file, "utf8")) as { name?: unknown }).name;
+    return name === "hermes" || name === "gnosia";
   } catch {
     // Absent, unreadable or not JSON: not this repository's root manifest.
     return false;

@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { SESSION_TEXT_LIMIT } from "@hermes/tutor/session-core";
+
 import {
   chatRequestId,
   closeChatSession,
+  closeSessionNow,
   judgeAnswer,
   keptScopes,
   recordAnswer,
@@ -214,5 +217,124 @@ describe("a chat that names its session", () => {
     fetchMock.mockResolvedValue(json(200, { ok: true, result: RESULT }));
     await recordAnswer(input({ sessionTitle: "CP4284 · Attention", sessionGoal: "cp4284-m1-t1" }));
     expect(bodyOf(fetchMock.mock.calls[0])).toMatchObject({ sessionTitle: "CP4284 · Attention", sessionGoal: "cp4284-m1-t1" });
+  });
+});
+
+describe("closeSessionNow", () => {
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  /** A scope whose session an answer opened; resolves with that session id. */
+  async function opened(at: RecordInput): Promise<string> {
+    fetchMock.mockResolvedValueOnce(json(200, { ok: true, result: RESULT }));
+    await recordAnswer(at);
+    const id = bodyOf(fetchMock.mock.calls[0]).sessionId as string;
+    fetchMock.mockReset();
+    return id;
+  }
+
+  it("is true with no session to close, and sends nothing", async () => {
+    expect(await closeSessionNow(input().scope, 0)).toBe(true);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("tries once more after a failed close, and is true once the second is answered", async () => {
+    const at = input();
+    const id = await opened(at);
+    fetchMock.mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce(json(200, { ok: true }));
+    expect(await closeSessionNow(at.scope, 0)).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    for (const call of fetchMock.mock.calls) {
+      expect(call[0]).toBe("/api/learner/session/close");
+      expect(bodyOf(call)).toEqual({ sessionId: id });
+    }
+    // Closed and forgotten: nothing left to close.
+    closeChatSession(at.scope);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("is false after two refused closes, and keeps the session id to close later", async () => {
+    const at = input();
+    const id = await opened(at);
+    fetchMock.mockResolvedValue(json(500, { ok: false }));
+    expect(await closeSessionNow(at.scope, 0)).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValue(json(200, { ok: true }));
+    closeChatSession(at.scope);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(bodyOf(fetchMock.mock.calls[0])).toEqual({ sessionId: id });
+  });
+
+  it("forgets the closed session, so the next answer opens a fresh one", async () => {
+    const at = input();
+    await opened(at);
+    fetchMock.mockResolvedValue(json(200, { ok: true, result: RESULT }));
+    expect(await closeSessionNow(at.scope, 0)).toBe(true);
+    // A new save after the close opens a fresh session.
+    await recordAnswer({ ...at, requestId: "chat-r2" });
+    expect(bodyOf(fetchMock.mock.calls[1]).sessionId).not.toBe(bodyOf(fetchMock.mock.calls[0]).sessionId);
+  });
+
+  it("keeps a released scope until a pending close has settled", async () => {
+    const at = input();
+    await opened(at);
+    const before = keptScopes();
+    let answer: (r: Response) => void = () => {};
+    fetchMock.mockReturnValueOnce(new Promise<Response>((resolve) => (answer = resolve)));
+    const closed = closeSessionNow(at.scope, 0);
+    releaseScope(at.scope);
+    await Promise.resolve();
+    expect(keptScopes()).toBe(before);
+    answer(json(200, { ok: true }));
+    expect(await closed).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(keptScopes()).toBe(before - 1);
+  });
+});
+
+describe("recordAnswer from a check card", () => {
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("sends the committed answer as answer, the option picked as chosen, and the confidence and reasoning", async () => {
+    fetchMock.mockResolvedValue(json(200, { ok: true, result: RESULT }));
+    const long = "x".repeat(SESSION_TEXT_LIMIT + 5);
+    await recordAnswer(input({ answer: "ignored", card: { key: `B${long}`, chosen: `C${long}`, confidence: 30, thinking: `T${long}` } }));
+    const body = bodyOf(fetchMock.mock.calls[0]);
+    expect(body).toEqual({
+      conceptSlug: "dot-product",
+      correct: true,
+      source: "probe",
+      question: "Q?",
+      answer: `B${long}`.slice(0, SESSION_TEXT_LIMIT),
+      chosen: `C${long}`.slice(0, SESSION_TEXT_LIMIT),
+      confidence: 30,
+      thinking: `T${long}`.slice(0, SESSION_TEXT_LIMIT),
+      requestId: "chat-r1",
+      sessionId: expect.stringMatching(/^chat-/),
+    });
+  });
+
+  it("sends chosen null for \"I don't know\", and leaves out a confidence and reasoning it does not have", async () => {
+    fetchMock.mockResolvedValue(json(200, { ok: true, result: RESULT }));
+    await recordAnswer(input({ card: { key: "B", chosen: null, confidence: null, thinking: null } }));
+    const body = bodyOf(fetchMock.mock.calls[0]);
+    expect(body).toEqual({
+      conceptSlug: "dot-product",
+      correct: true,
+      source: "probe",
+      question: "Q?",
+      answer: "B",
+      chosen: null,
+      requestId: "chat-r1",
+      sessionId: expect.stringMatching(/^chat-/),
+    });
   });
 });

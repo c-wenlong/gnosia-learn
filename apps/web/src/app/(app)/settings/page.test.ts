@@ -11,14 +11,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * in for, so a test reads only what the page handed the Model selection card.
  */
 const studioApi = vi.hoisted(() => vi.fn());
+const studio = vi.hoisted(() => ({ on: true }));
 const modelSelection = vi.hoisted(() => vi.fn());
+const loadProviderKeys = vi.hoisted(() => vi.fn());
+const loadTutorModels = vi.hoisted(() => vi.fn());
 
-vi.mock("@/lib/studio", () => ({ studioEnabled: () => true, studioApi }));
+vi.mock("@/lib/studio", () => ({ studioEnabled: () => studio.on, studioApi }));
 vi.mock("@/lib/owner", () => ({ currentOwner: async () => "local" }));
 vi.mock("@/lib/settings", () => ({ loadSettings: async () => ({ tutorStyle: "socratic" }) }));
 vi.mock("@/data/courses", () => ({ getCourses: async () => [], getAllTopicIds: () => [] }));
-vi.mock("@/lib/provider-keys/settings", () => ({ loadProviderKeys: async () => ({ rows: [] }) }));
-vi.mock("@/lib/tutor-models/settings", () => ({ loadTutorModels: async () => ({ chain: [], reachable: true }) }));
+vi.mock("@/lib/provider-keys/settings", () => ({ loadProviderKeys }));
+vi.mock("@/lib/tutor-models/settings", () => ({ loadTutorModels }));
 vi.mock("@/lib/providers/view", () => ({ providersView: () => ({}) }));
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 vi.mock("@/components/settings/SettingsTabs", () => ({
@@ -43,15 +46,21 @@ const { default: SettingsPage } = await import("./page");
 
 beforeEach(() => {
   vi.useFakeTimers();
+  studio.on = true;
   studioApi.mockReset();
+  studioApi.mockResolvedValue({ ok: true, data: {} });
   modelSelection.mockReset();
+  loadProviderKeys.mockReset();
+  loadProviderKeys.mockResolvedValue({ rows: [] });
+  loadTutorModels.mockReset();
+  loadTutorModels.mockResolvedValue({ chain: [], reachable: true });
 });
 afterEach(() => vi.useRealTimers());
 
 /** The page, awaited and drawn, with what the Model selection card was handed. */
 async function draw(page: Promise<ReactNode>) {
   renderToStaticMarkup(createElement("div", null, await page));
-  return modelSelection.mock.calls.at(-1)?.[0] as { byok?: unknown };
+  return modelSelection.mock.calls.at(-1)?.[0] as { byok?: unknown; savedForTutor?: unknown; studio?: boolean };
 }
 
 describe("Settings and the studio runner", () => {
@@ -95,5 +104,46 @@ describe("Settings and the studio runner", () => {
     const page = SettingsPage();
     await vi.advanceTimersByTimeAsync(0);
     expect((await draw(page)).byok).toEqual({ state: "down" });
+  });
+
+  it("leaves a refusal that is not down for the card to read itself, rather than calling it down", async () => {
+    // The distinction the docstring makes: `down` means nothing listens, and
+    // anything else the card asks about again rather than showing as down.
+    studioApi.mockResolvedValue({ ok: false, reason: "refused", status: 500, undelivered: false, headline: "", detail: "" });
+    const page = SettingsPage();
+    await vi.advanceTimersByTimeAsync(0);
+    expect((await draw(page)).byok).toBeUndefined();
+    expect(studioApi).toHaveBeenCalledTimes(1);
+  });
+
+  it("never asks the runner when the studio is off, and the card hears that", async () => {
+    studio.on = false;
+    const page = SettingsPage();
+    await vi.advanceTimersByTimeAsync(2_000);
+    const props = await draw(page);
+    expect(studioApi).not.toHaveBeenCalled();
+    expect(props.byok).toBeUndefined();
+    expect(props.studio).toBe(false);
+  });
+
+  it("reads the owner's keys and model chain, and hands the card only the readable keys the runner knows", async () => {
+    loadProviderKeys.mockResolvedValue({
+      rows: [
+        // gemini in the tutor's table is google in the runner's; deepseek has
+        // no BYOK preset, an unreadable saved key does not count, and no saved
+        // row at all counts least of all.
+        { id: "anthropic", saved: { readable: true } },
+        { id: "gemini", saved: { readable: true } },
+        { id: "deepseek", saved: { readable: true } },
+        { id: "openai", saved: { readable: false } },
+        { id: "nvidia", saved: null },
+      ],
+    });
+    const page = SettingsPage();
+    await vi.advanceTimersByTimeAsync(0);
+    const props = await draw(page);
+    expect(loadProviderKeys).toHaveBeenCalledWith("local");
+    expect(loadTutorModels).toHaveBeenCalledWith("local");
+    expect(props.savedForTutor).toEqual(["anthropic", "google"]);
   });
 });

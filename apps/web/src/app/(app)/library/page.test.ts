@@ -78,7 +78,7 @@ const ROWS = [
     url: null,
     bytes: 2_900,
     title: "The TLB",
-    sourceRepo: "gnosia",
+    sourceRepo: "hermes",
     topics: ["operating-systems"],
     createdAt: "2026-09-29T12:00:00Z",
     // Revised by a person five days later: the row says so.
@@ -92,7 +92,7 @@ const ROWS = [
     url: null,
     bytes: 1_200,
     title: "Session log",
-    sourceRepo: "gnosia",
+    sourceRepo: "hermes",
     topics: [],
     createdAt: "2026-09-29T15:30:00Z",
     updatedAt: "2026-09-29T15:30:00Z",
@@ -105,7 +105,7 @@ const ROWS = [
     url: "https://pages.cs.wisc.edu/~remzi/OSTEP/",
     bytes: null,
     title: "OSTEP",
-    sourceRepo: "gnosia",
+    sourceRepo: "hermes",
     topics: ["operating-systems"],
     createdAt: "2026-09-01T00:00:00Z",
     // Rewritten by an import a month later: no person changed it, so no label.
@@ -373,6 +373,29 @@ describe("/library", () => {
   it("reads the stars once with the filter off too, for the rows' menus", async () => {
     await render();
     expect(loadFavorites).toHaveBeenCalledTimes(1);
+  });
+
+  it("says the catalog is unreachable when the read cannot be answered, and nothing about an empty one", async () => {
+    loadLibrary.mockResolvedValueOnce({ rows: [], counts: [], reachable: false, truncated: false, titles: {}, concepts: {}, parents: {} });
+    const html = await render();
+    expect(html).toContain("The catalog is unreachable");
+    expect(html).toContain("npm run catalog -- status");
+    expect(html).not.toContain("holds no assets");
+  });
+
+  it("says how rows get here when the catalog answers with none", async () => {
+    loadLibrary.mockResolvedValueOnce({ rows: [], counts: [], reachable: true, truncated: false, titles: {}, concepts: {}, parents: {} });
+    const html = await render();
+    expect(html).toContain("Nothing indexed yet");
+    expect(html).toContain("holds no assets");
+    expect(html).not.toContain("unreachable");
+  });
+
+  it("warns that the read stopped short when the catalog truncates the rows", async () => {
+    const snapshot = await loadLibrary();
+    loadLibrary.mockResolvedValueOnce({ ...snapshot, truncated: true });
+    const html = await render();
+    expect(html).toContain(`Read stopped at ${ROWS.length} rows; there may be more.`);
   });
 
   it("says how to star something when nothing is starred, and says so when the stars cannot be read", async () => {
