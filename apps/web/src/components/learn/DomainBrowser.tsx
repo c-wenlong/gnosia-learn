@@ -3,6 +3,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import { DomainGraph, type DomainGraphNode, type MapMark } from "@/components/learn/DomainGraph";
+import { DomainSpine } from "@/components/learn/DomainSpine";
 import { LegendChips, useLegendPreview } from "@/components/learn/LegendChips";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
@@ -13,6 +14,7 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SegmentedControl, type SegmentItem } from "@/components/ui/SegmentedControl";
 import type { GraphEdge, GraphNode } from "@hermes/tutor/concept-graph";
 import type { DomainLayout, DomainSummary } from "@/lib/domain-map";
+import { spineOf } from "@/lib/domain-spine";
 import { domainTitle, movedKey, readMoved } from "@/lib/domain-view";
 import {
   legendMembers,
@@ -36,10 +38,11 @@ import { LEECH_LABEL } from "@hermes/tutor/review-core";
 
 export type Place = { domain: string | null; topic: string | null };
 
-/** The two ways to draw a domain (D11): a group per topic, or on axes. */
+/** The ways to draw a domain: a group per topic, on axes (D11), or as a path down one spine (D12). */
 const LAYOUT_ITEMS: SegmentItem<MapLayout>[] = [
   { id: "groups", label: "Groups" },
   { id: "axes", label: "Axes" },
+  { id: "path", label: "Path" },
 ];
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
@@ -192,7 +195,7 @@ export function DomainView({
   /** Bumped when a pick moved here from another place: the new panel's heading takes the focus. */
   panelFocus?: number;
   onPanelFocused?: () => void;
-  /** Groups or axes (D11); a topic is always groups, and offers no switch. */
+  /** Groups, axes (D11) or path (D12); a topic is always groups, and offers no switch. */
   arrangement?: MapLayout;
   onArrange?: (next: MapLayout) => void;
 }) {
@@ -233,10 +236,26 @@ export function DomainView({
   );
   const onLegendPress = useCallback((group: LegendGroup) => onFilter(legendPress(filter, group)), [filter, onFilter]);
   const { moved, gliding, move, save, reset } = useMoved(domain.slug, layout);
+  // Counts every choice of a concept, so the path can open the topic of one chosen again (it is already selected).
+  const [chosen, setChosen] = useState(0);
+  const choose = useCallback(
+    (id: string) => {
+      setChosen((n) => n + 1);
+      onSelect(id);
+    },
+    [onSelect],
+  );
   const onAxes = topic === null && arrangement === "axes";
-  // The pill goes as Reset starts, not when the glide home ends. On the axes nothing has moved:
+  const onPath = topic === null && arrangement === "path";
+  // The path's spine: the topics in the order they are learnt, each with the concepts that branch off it (D12).
+  // Worked out here from the layout's groups and the graph, only when the path is drawn.
+  const spine = useMemo(
+    () => (onPath ? spineOf(layout.groups, edges, rows, domain.slug, domainOf, domainTitle) : null),
+    [onPath, layout.groups, edges, rows, domain.slug, domainOf],
+  );
+  // The pill goes as Reset starts, not when the glide home ends. On the axes and the path nothing has moved:
   // the groups' dragged places wait there for Groups to come back.
-  const anyMoved = Object.keys(moved).length > 0 && !gliding && !onAxes;
+  const anyMoved = Object.keys(moved).length > 0 && !gliding && !onAxes && !onPath;
   return (
     <div className="flex flex-col gap-3">
       <div className="flex min-h-8 flex-wrap items-center justify-between gap-2">
@@ -267,6 +286,30 @@ export function DomainView({
       <DockedAside aside="narrow">
           <Card>
             <LegendChips counts={counts} filter={filter} preview={legend} onPress={onLegendPress} />
+            {spine !== null ? (
+              <DomainSpine
+                key={domain.slug}
+                domain={domain}
+                spine={spine}
+                nodes={graphNodes}
+                edges={edges}
+                marks={marks}
+                selected={selected}
+                reveal={chosen}
+                dimmed={dimmed}
+                hover={hover}
+                hoverTopic={hoverTopic}
+                preview={preview}
+                onSelect={choose}
+                onPick={onPick}
+                onTopic={(t) => {
+                  setHoverTopic(null);
+                  onGo({ domain: domain.slug, topic: t });
+                }}
+                onHover={setPointerHover}
+                onHoverTopic={setHoverTopic}
+              />
+            ) : (
             <DomainGraph
               layout={layout}
               title={domain.title}
@@ -291,6 +334,7 @@ export function DomainView({
               locked={gliding}
               arrangement={onAxes ? "axes" : "groups"}
             />
+            )}
             {domain.links.length > 0 && (
               <p data-outside className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-text2">
                 <span>Links to other domains:</span>
@@ -307,11 +351,14 @@ export function DomainView({
               </p>
             )}
             <p className="text-[12px] leading-4 text-text3">
-              {onAxes
-                ? "Left to right: when a concept is learnt. Higher up: more concepts need it. Hover a topic in the list to find its concepts."
-                : "Prerequisites sit above."}{" "}
-              Solid: required. Dashed: background. The arc round a dot is its p(L); a dashed ring is ready to learn; a red dot is a
-              review overdue, a red ring keeps slipping.
+              {onPath
+                ? "Top to bottom: the order to learn the topics in. Each topic's concepts are in the order to learn them. A topic whose concepts are all mastered is folded; press it to open it."
+                : onAxes
+                  ? "Left to right: when a concept is learnt. Higher up: more concepts need it. Hover a topic in the list to find its concepts."
+                  : "Prerequisites sit above."}{" "}
+              {onPath
+                ? "A dashed outline is ready to learn; a red dot is a review overdue."
+                : "Solid: required. Dashed: background. The arc round a dot is its p(L); a dashed ring is ready to learn; a red dot is a review overdue, a red ring keeps slipping."}
             </p>
           </Card>
           <div className="flex min-w-0 flex-col gap-3">
@@ -334,7 +381,7 @@ export function DomainView({
               dimmed={dimmed}
               hover={hover}
               onGo={onGo}
-              onSelect={onSelect}
+              onSelect={choose}
               onHover={setPointerHover}
               onFocusHover={setFocusHover}
               onHoverTopic={setHoverTopic}

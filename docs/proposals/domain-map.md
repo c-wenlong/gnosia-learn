@@ -5,7 +5,8 @@ Status: built, 2026-10-04, all four phases: 1 the tree and the layout
 the island map removed ([#358](https://github.com/promethevs-labs/hermes-studio/pull/358)),
 3 hover and drag ([#365](https://github.com/promethevs-labs/hermes-studio/pull/365)),
 4 these docs ([#366](https://github.com/promethevs-labs/hermes-studio/pull/366)); the
-axes layout (D11) followed on 2026-10-05. It replaces the island map
+axes layout (D11) followed on 2026-10-05, and the path layout (D12 to D16, issue
+[#668](https://github.com/promethevs-labs/hermes-studio/issues/668)) on 2026-11-14. It replaces the island map
 of [knowledge-map.md](knowledge-map.md), decisions G2 to G8; G1 (the graph
 is what `/learn` opens on, the table at `?view=table`) stands.
 
@@ -199,6 +200,85 @@ the top left of the zone. At 1440 wide 23 of its 56 labels are drawn and
 22 of computer architecture's 43; at 390 wide, 6 of each, none overlapping
 and none under 11px. The glide each way and a hover across 30 concepts held
 every frame at 16.7 ms.
+
+**D12. A domain can be drawn as a path (2026-11-14).** The layout switch
+gains a third segment, "Path", after Groups and Axes. It draws the domain as
+roadmap.sh draws a roadmap: one vertical spine with a node per topic, and
+each topic's concepts branching off its node. It is a layout beside the other
+two, not a replacement: Groups stays the default, and the choice is in the URL
+as `layout=path`, kept in memory while the learner moves between domains,
+left out in a topic (always groups), on the cards and in the table. The path
+is plain HTML (an ordered list, buttons, the kit's `Collapse`), not the SVG
+picture, so it reads at a phone's width with nothing to scale: the spine is a
+rail down the left, a node's title and its concepts sit to its right, and a
+topic's concepts wrap under its title. There is no pan and no zoom. Two
+collapses were considered (issue #668): by group, which puts the topics on the
+spine (13 nodes for algorithms, not 56), and by chain, which would pick a
+longest prerequisite chain of concepts. Group it is: the grouping is already
+curated, and a longest chain flips when one edge is added. A per-target chain
+("path to X") is a different question and a later one.
+
+**D13. The spine's order is the groups' order, and a topic's concepts follow
+the topic's own edges.** Topics are ordered by `topicOrder` (D3, now in
+`topic-order.ts` so the browser can use it): by level, the longest chain of
+topics a topic needs, where topics that need each other (a loop) count as one
+level; then the more topics need one the earlier it goes; then the vocabulary's
+order. So the same graph gives the same spine whatever order the rows come in,
+and a loop between topics never throws and never pushes its members to the
+end. Inside a topic the concepts are in steps: a concept's step is the longest
+chain of the topic's own concepts it needs, again a loop as one step (the same
+`levels` pass), and a step lists its concepts by id. The order is worked out
+in the browser from the layout's groups and the graph (`spineOf`,
+`domain-spine.ts`), pure and free of dagre; nothing is added to the server's
+layout or the page's payload.
+
+**D14. An edge that cannot sit on the line is a label, and the path draws no
+edges.** The line already says "needs the topic above". A topic that needs
+another topic further up has a label under its title ("Also needs Graphs"), and
+one that needs a topic the spine puts further down (a loop) says "(further
+down)". A concept of another domain that a topic's concepts need or lead to is
+a button naming the concept and its domain, which moves to it, as D4 lists
+those edges in the panel; three are shown and "N more" shows the rest. Edges
+between concepts are not drawn as lines: the picture of a node's branch is its
+steps, top to bottom, and the edges of one concept are what hovering it lights
+(D16) and what the panel lists.
+
+**D15. The path is the learner's: mastered topics fold and the view opens at
+the frontier.** A topic whose concepts are all mastered starts folded, to its
+title with an "All mastered" badge, and one press opens it, and one more folds
+it. Every other topic starts open. A concept chosen anywhere (the list, the
+panel, a link with `concept=`) opens the topic that holds it, so a selection
+is never hidden. The view opens scrolled to the first topic, in spine order,
+holding a concept that is ready to learn (the same flag the legend's chip
+counts, not mastered), unless the first topic is that one or a concept was
+asked for; that node's marker has the dashed ring the picture uses for ready,
+and the topic says how many it has. A node's marker is a mastery dot: mastered
+when the topic is done, learning once any concept has evidence, not started
+otherwise, and the rail below a done topic is drawn in the mastered colour. The
+fold glides open and shut over 300 ms (the kit's `Collapse`, with the
+reduced-motion rules it has), and the content stays mounted but inert while
+shut.
+
+**D16. The path keeps the map's other interactions.** Hovering a concept, or
+its row in the list, keeps it and its neighbours lit and fades the rest, as D5
+does, and hovering a topic's title lights that topic's concepts. A legend chip
+previews and filters as D9 describes, and a search or a filter dims what it
+would hide. A concept's text is 12px, the size the chips use, never below 11
+(D10), and a concept's name for a screen reader carries its mastery, ready and
+the marks as it does on the picture. Nothing drags, so the "Positions moved"
+pill is hidden as on the axes, and the dragged places wait for Groups. The
+list beside the path is the same list, in the same order as the spine.
+
+Measured on a scratch copy of the owner's catalog, in the built app (2026-11-14):
+algorithms is 13 nodes down one spine for its 56 concepts, with two topics
+(asymptotic analysis and growth rates, mastered in the copy to try the fold)
+folded, and the view opened at the third node, the first with a concept ready
+to learn (scrolled 372px at 1440 by 900, 656px at 390 wide). Neither width
+scrolls sideways, and the browser console stayed empty through every state:
+default, a hovered concept, a legend chip previewing and filtering, a folded
+topic and the same one opened, in light and dark. A long concept title wraps
+to a second line at 390 rather than being cut. The groups layout is
+unchanged, and Path leaves it with one press.
 
 ## Phases
 
