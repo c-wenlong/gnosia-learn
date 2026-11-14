@@ -222,6 +222,30 @@ describe("the path layout", () => {
     expect(toggle(host, "foundations").getAttribute("aria-expanded")).toBe("true");
   });
 
+  it("opens the topic again when the already selected concept is chosen from the list after its topic is folded", () => {
+    const host = mount("?domain=algorithms&layout=path&concept=merge");
+    expect(toggle(host, "sorting").getAttribute("aria-expanded")).toBe("true");
+    act(() => toggle(host, "sorting").click());
+    expect(toggle(host, "sorting").getAttribute("aria-expanded")).toBe("false");
+    const row = host.querySelector('button[data-list-concept="merge"]') as HTMLButtonElement;
+    act(() => row.click());
+    expect(toggle(host, "sorting").getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("leaves the concepts out of the tab order, since the list beside the path is the keyboard's way in (D7), and keeps the controls in it", () => {
+    const host = mount();
+    expect(chip(host, "heap").tabIndex).toBe(-1);
+    expect(toggle(host, "sorting").tabIndex).toBe(0);
+    const outside = host.querySelector('button[data-spine-outside="linalg"]') as HTMLButtonElement;
+    expect(outside.tabIndex).toBe(0);
+  });
+
+  it("keeps each node clear of the phone header when the view scrolls to it, and of nothing on a wider screen", () => {
+    const host = mount();
+    expect(stop(host, "sorting").className).toContain("scroll-mt-28");
+    expect(stop(host, "sorting").className).toContain("md:scroll-mt-4");
+  });
+
   it("keeps a hovered concept and its neighbours lit and fades the rest, and the list lights them too (D5)", () => {
     const host = mount();
     enter(chip(host, "merge"));

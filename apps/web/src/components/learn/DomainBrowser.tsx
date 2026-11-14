@@ -236,6 +236,15 @@ export function DomainView({
   );
   const onLegendPress = useCallback((group: LegendGroup) => onFilter(legendPress(filter, group)), [filter, onFilter]);
   const { moved, gliding, move, save, reset } = useMoved(domain.slug, layout);
+  // Counts every choice of a concept, so the path can open the topic of one chosen again (it is already selected).
+  const [chosen, setChosen] = useState(0);
+  const choose = useCallback(
+    (id: string) => {
+      setChosen((n) => n + 1);
+      onSelect(id);
+    },
+    [onSelect],
+  );
   const onAxes = topic === null && arrangement === "axes";
   const onPath = topic === null && arrangement === "path";
   // The path's spine: the topics in the order they are learnt, each with the concepts that branch off it (D12).
@@ -286,11 +295,12 @@ export function DomainView({
                 edges={edges}
                 marks={marks}
                 selected={selected}
+                reveal={chosen}
                 dimmed={dimmed}
                 hover={hover}
                 hoverTopic={hoverTopic}
                 preview={preview}
-                onSelect={onSelect}
+                onSelect={choose}
                 onPick={onPick}
                 onTopic={(t) => {
                   setHoverTopic(null);
@@ -371,7 +381,7 @@ export function DomainView({
               dimmed={dimmed}
               hover={hover}
               onGo={onGo}
-              onSelect={onSelect}
+              onSelect={choose}
               onHover={setPointerHover}
               onFocusHover={setFocusHover}
               onHoverTopic={setHoverTopic}

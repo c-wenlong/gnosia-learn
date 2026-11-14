@@ -39,6 +39,7 @@ export function DomainSpine({
   edges,
   marks,
   selected,
+  reveal,
   dimmed,
   hover,
   hoverTopic,
@@ -57,6 +58,8 @@ export function DomainSpine({
   edges: readonly SpineEdge[];
   marks: Readonly<Record<string, MapMark>>;
   selected: string | null;
+  /** Bumped by every choice of a concept, the selected one again included: the topic holding it opens. */
+  reveal: number;
   dimmed: ReadonlySet<string>;
   hover: string | null;
   hoverTopic: string | null;
@@ -72,9 +75,11 @@ export function DomainSpine({
   // A concept chosen elsewhere (the list, the panel) is never left inside a folded node: the one open at the
   // start, and each one chosen after. Adjusted while rendering, as React asks, so no frame shows it hidden.
   const [open, setOpen] = useState<ReadonlySet<string>>(() => revealConcept(openByDefault(spine), spine, selected));
-  const [seen, setSeen] = useState(selected);
-  if (seen !== selected) {
-    setSeen(selected);
+  // Asked again on every choice (`reveal` counts them), not only when the concept changes: choosing the
+  // one already selected, from the list, after folding its topic, must open it again.
+  const [seen, setSeen] = useState({ selected, reveal });
+  if (seen.selected !== selected || seen.reveal !== reveal) {
+    setSeen({ selected, reveal });
     setOpen((o) => revealConcept(o, spine, selected));
   }
   /** The nodes whose list of other domains' concepts is shown whole, not cut at `OUTSIDE_SHOWN`. */
@@ -113,6 +118,8 @@ export function DomainSpine({
       <button
         key={id}
         type="button"
+        // The list beside the path is the keyboard's way in (D7): a second tab stop per concept would double it.
+        tabIndex={-1}
         data-spine-concept={id}
         data-hover={id === hover}
         data-related={related}
@@ -169,7 +176,8 @@ export function DomainSpine({
             data-done={node.done}
             data-frontier={spine.frontier === node.topic}
             data-open={!folded}
-            className="grid scroll-mt-4 grid-cols-[1.25rem_minmax(0,1fr)] gap-x-3"
+            // Clear of the phone header, 56px and the notch, which sticks over the page; the sidebar has none.
+            className="grid scroll-mt-28 grid-cols-[1.25rem_minmax(0,1fr)] gap-x-3 md:scroll-mt-4"
           >
             <div className="flex flex-col items-center" aria-hidden="true">
               <span className="relative mt-1 inline-flex size-5 shrink-0 items-center justify-center">
