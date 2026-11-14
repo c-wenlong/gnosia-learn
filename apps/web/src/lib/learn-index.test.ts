@@ -129,6 +129,7 @@ describe("filters and search", () => {
   // D11 of docs/proposals/domain-map.md: a domain is drawn in groups or on axes.
   it("reads the map's layout, groups unless the axes are asked for", () => {
     expect(parseLayout("axes")).toBe("axes");
+    expect(parseLayout("path")).toBe("path");
     expect(parseLayout("groups")).toBe("groups");
     expect(parseLayout(null)).toBe("groups");
     expect(parseLayout(undefined)).toBe("groups");
@@ -151,6 +152,19 @@ describe("filters and search", () => {
     expect(indexSearch({ ...base, view: "table", domain: "algorithms", topic: null }, "domain=algorithms&layout=axes")).toBe("view=table");
     // A state that does not name a layout leaves the groups' URL as it was.
     expect(indexSearch({ selected: null, filter: "all", scope: "neighbourhood", view: "graph", domain: "algorithms", topic: null }, "layout=axes")).toBe("domain=algorithms");
+  });
+
+  // D12: the path is a layout of its own, written and dropped as the axes are.
+  it("writes layout=path on a domain only, and drops it in a topic, on the cards and in the table", () => {
+    const base = { selected: null, filter: "all" as const, scope: "neighbourhood" as const, layout: "path" as const };
+    expect(indexSearch({ ...base, view: "graph", domain: "algorithms", topic: null })).toBe("domain=algorithms&layout=path");
+    expect(indexSearch({ ...base, view: "graph", domain: "algorithms", topic: "sorting" }, "domain=algorithms&layout=path")).toBe(
+      "domain=algorithms&topic=sorting",
+    );
+    expect(indexSearch({ ...base, view: "graph", domain: null, topic: null }, "layout=path")).toBe("");
+    expect(indexSearch({ ...base, layout: "axes", view: "graph", domain: "algorithms", topic: null }, "domain=algorithms&layout=path")).toBe(
+      "domain=algorithms&layout=axes",
+    );
   });
 
   it("links a concept to its place on the map, which the page opens in its domain", () => {
