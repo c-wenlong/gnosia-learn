@@ -1,11 +1,11 @@
 "use server";
 
-import { readPreference, readPreferences, writePreference } from "@gnosia/catalog/state";
-import type { StudioAgentPreference } from "@gnosia/schema/shared";
+import { readPreference, readPreferences, writePreference } from "@hermes/catalog/state";
+import type { StudioAgentPreference } from "@hermes/schema/shared";
 import { redirect } from "next/navigation";
 
 import type { AgentRow } from "@/components/studio/StudioSettings";
-import { noteBody } from "@gnosia/tutor/concept-workspace-core";
+import { noteBody } from "@hermes/tutor/concept-workspace-core";
 import { readConceptWorkspace } from "@/lib/concept-workspace";
 import { catalogDatabase, withLearnerStore } from "@/lib/learner-store";
 import { currentOwner } from "@/lib/owner";
@@ -46,7 +46,7 @@ import { checkHandoffInput, type ConceptConversation } from "@/lib/tutor-handoff
  * endpoint with a stable id, so an ungated one is a way into the runner on a
  * deployment that has no studio — and a gate reached only through a helper is a
  * gate the next action added to this file can silently miss. Spelled out per
- * endpoint, it is something the `gnosia/studio-gate` lint rule can check per
+ * endpoint, it is something the `hermes/studio-gate` lint rule can check per
  * endpoint (and app/(app)/studio/gate.test.ts calls each one with the studio off).
  */
 

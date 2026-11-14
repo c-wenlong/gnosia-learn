@@ -42,7 +42,7 @@ export function ProbeDemo() {
   };
 
   return (
-    <div className="gnosia-paper relative rounded-[28px] p-6 text-left md:p-7">
+    <div className="hermes-paper relative rounded-[28px] p-6 text-left md:p-7">
       <p className="flex items-center justify-between gap-3 text-[13px] font-medium text-brand-mist">
         <span>A probe on softmax</span>
         <span className="font-book text-[14px] font-normal italic">try it</span>

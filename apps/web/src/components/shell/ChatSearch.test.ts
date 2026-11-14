@@ -19,9 +19,9 @@ vi.mock("@/lib/learner-context", () => ({ useLearner: () => ({ state: { displayN
 vi.mock("next/navigation", () => ({ usePathname: () => mocks.pathname }));
 vi.mock("@/lib/studio-drafts", () => ({ listDrafts: mocks.listDrafts }));
 // The catalog's half of Recent: empty unless a test gives it rows.
-vi.mock("@/lib/recent-client", () => ({ fetchRecent: mocks.fetchRecent, changeRecent: vi.fn(async () => true), VISIT_STORED_EVENT: "gnosia:visit-stored" }));
+vi.mock("@/lib/recent-client", () => ({ fetchRecent: mocks.fetchRecent, changeRecent: vi.fn(async () => true), VISIT_STORED_EVENT: "hermes:visit-stored" }));
 vi.mock("next/image", () => ({ default: () => null }));
-vi.mock("@/components/brand/GnosiaWordmark", () => ({ GnosiaWordmark: () => createElement("span", null, "Gnosia") }));
+vi.mock("@/components/brand/HermesWordmark", () => ({ HermesWordmark: () => createElement("span", null, "Hermes") }));
 vi.mock("@/components/ThemeSwitch", () => ({ ThemeSwitch: () => null }));
 
 const { ShellFrame } = await import("./ShellFrame");
@@ -49,7 +49,7 @@ const mounted: Array<() => void> = [];
 afterEach(() => {
   while (mounted.length) mounted.pop()?.();
   vi.useRealTimers();
-  document.cookie = "gnosia-sidebar=; Max-Age=0; Path=/";
+  document.cookie = "hermes-sidebar=; Max-Age=0; Path=/";
 });
 
 /**

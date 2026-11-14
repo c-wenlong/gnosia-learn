@@ -1,4 +1,4 @@
-import { checkRateLimit, type RateLimitRule, type RateLimitStore } from "@gnosia/tutor/guards";
+import { checkRateLimit, type RateLimitRule, type RateLimitStore } from "@hermes/tutor/guards";
 
 /**
  * How many passwords anyone gets to try (S7-02 of the 2026-10 audit).

@@ -21,7 +21,7 @@ let conformanceRoot: string | undefined;
 conformance(
   "fs",
   () => {
-    conformanceRoot = mkdtempSync(path.join(tmpdir(), "gnosia-blob-conformance-"));
+    conformanceRoot = mkdtempSync(path.join(tmpdir(), "hermes-blob-conformance-"));
     return fsStore(conformanceRoot);
   },
   {
@@ -37,7 +37,7 @@ afterEach(() => {
 });
 
 function tempDir(): string {
-  const dir = mkdtempSync(path.join(tmpdir(), "gnosia-blob-fs-"));
+  const dir = mkdtempSync(path.join(tmpdir(), "hermes-blob-fs-"));
   temps.push(dir);
   return dir;
 }
@@ -229,30 +229,32 @@ describe("fsStore on disk", () => {
 });
 
 describe("the fs root", () => {
-  it("defaults to ~/.gnosia/blobs", () => {
-    expect(defaultBlobRoot({})).toBe(path.join(homedir(), ".gnosia", "blobs"));
-    expect(defaultBlobRoot({ GNOSIA_HOME: "   " })).toBe(path.join(homedir(), ".gnosia", "blobs"));
+  it("follows $HERMES_HOME, and still reads $GNOSIA_HOME", () => {
+    expect(defaultBlobRoot({ HERMES_HOME: "/data/hermes" })).toBe(path.join("/data/hermes", "blobs"));
+    expect(defaultBlobRoot({ GNOSIA_HOME: "/data/old" })).toBe(path.join("/data/old", "blobs"));
+    expect(defaultBlobRoot({ HERMES_HOME: "/data/hermes", GNOSIA_HOME: "/data/old" })).toBe(
+      path.join("/data/hermes", "blobs"),
+    );
   });
 
-  it("puts blobs under $GNOSIA_HOME, expanding a leading ~", () => {
-    expect(defaultBlobRoot({ GNOSIA_HOME: "/data/gnosia" })).toBe(path.join("/data/gnosia", "blobs"));
-    expect(defaultBlobRoot({ GNOSIA_HOME: "~/elsewhere" })).toBe(path.join(homedir(), "elsewhere", "blobs"));
-    expect(defaultBlobRoot({ GNOSIA_HOME: "~" })).toBe(path.join(homedir(), "blobs"));
+  it("puts blobs under $HERMES_HOME, expanding a leading ~", () => {
+    expect(defaultBlobRoot({ HERMES_HOME: "~/elsewhere" })).toBe(path.join(homedir(), "elsewhere", "blobs"));
+    expect(defaultBlobRoot({ HERMES_HOME: "~" })).toBe(path.join(homedir(), "blobs"));
   });
 
-  it("refuses a relative $GNOSIA_HOME rather than resolving it against the working directory", () => {
-    expect(() => defaultBlobRoot({ GNOSIA_HOME: "data/blobs" })).toThrow(BlobError);
-    expect(() => defaultBlobRoot({ GNOSIA_HOME: "data/blobs" })).toThrow(/absolute/);
+  it("refuses a relative $HERMES_HOME rather than resolving it against the working directory", () => {
+    expect(() => defaultBlobRoot({ HERMES_HOME: "data/blobs" })).toThrow(BlobError);
+    expect(() => defaultBlobRoot({ HERMES_HOME: "data/blobs" })).toThrow(/absolute/);
   });
 
   it("refuses a root inside this checkout, and creates nothing there", () => {
     const inside = path.join(REPO_ROOT, "blob-root-that-must-not-exist");
 
-    expect(() => fsStore(inside)).toThrow(/inside the gnosia checkout/);
+    expect(() => fsStore(inside)).toThrow(/inside the hermes checkout/);
     expect(existsSync(inside)).toBe(false);
   });
 
-  it("refuses a root inside any gnosia checkout, including through a symlink", () => {
+  it("refuses a root inside any hermes checkout, including through a symlink", () => {
     const outer = tempDir();
     const checkout = path.join(outer, "checkout");
     mkdirSync(path.join(checkout, ".git"), { recursive: true });
@@ -260,20 +262,20 @@ describe("the fs root", () => {
     writeFileSync(path.join(checkout, "packages", "blob", "package.json"), "{}");
     symlinkSync(checkout, path.join(outer, "link"));
 
-    expect(() => fsStore(path.join(checkout, "data", "blobs"))).toThrow(/inside the gnosia checkout/);
-    expect(() => fsStore(path.join(outer, "link", "blobs"))).toThrow(/inside the gnosia checkout/);
+    expect(() => fsStore(path.join(checkout, "data", "blobs"))).toThrow(/inside the hermes checkout/);
+    expect(() => fsStore(path.join(outer, "link", "blobs"))).toThrow(/inside the hermes checkout/);
   });
 
-  it("refuses a root inside a directory whose package.json names gnosia, with or without .git", () => {
+  it("refuses a root inside a directory whose package.json names hermes, with or without .git", () => {
     const copy = tempDir();
-    writeFileSync(path.join(copy, "package.json"), JSON.stringify({ name: "gnosia", private: true }));
+    writeFileSync(path.join(copy, "package.json"), JSON.stringify({ name: "hermes", private: true }));
 
-    expect(() => fsStore(path.join(copy, "blobs"))).toThrow(/inside the gnosia checkout/);
+    expect(() => fsStore(path.join(copy, "blobs"))).toThrow(/inside the hermes checkout/);
   });
 
   it("accepts a root under a package.json that names something else, or is not JSON", () => {
     const other = tempDir();
-    writeFileSync(path.join(other, "package.json"), JSON.stringify({ name: "gnosia-fork-of-nothing" }));
+    writeFileSync(path.join(other, "package.json"), JSON.stringify({ name: "hermes-fork-of-nothing" }));
     const broken = tempDir();
     writeFileSync(path.join(broken, "package.json"), "{ not json");
 
@@ -285,6 +287,6 @@ describe("the fs root", () => {
     const home = tempDir();
     mkdirSync(path.join(home, ".git"));
 
-    expect(() => fsStore(path.join(home, ".gnosia", "blobs"))).not.toThrow();
+    expect(() => fsStore(path.join(home, ".hermes", "blobs"))).not.toThrow();
   });
 });

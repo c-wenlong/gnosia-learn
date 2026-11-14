@@ -3,7 +3,7 @@
 import { DialogHeader } from "@/components/studio/StudioDialog";
 import { VideoChangeButton } from "@/components/studio/video/VideoGridJob";
 import { Button } from "@/components/ui/Button";
-import { STUDIO_SOURCE } from "@gnosia/tutor/asset-problems";
+import { STUDIO_SOURCE } from "@hermes/tutor/asset-problems";
 import { buttonClasses } from "@/components/ui/classes";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { libraryHref, posterHref, videoFileHref, videoStatusHref } from "@/lib/studio-video-job";

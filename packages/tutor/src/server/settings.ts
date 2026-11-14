@@ -1,6 +1,6 @@
-import type { CatalogDatabase } from "@gnosia/catalog/state";
-import { readParams, readPreferences, type BktParams } from "@gnosia/catalog/state";
-import { PREFERENCE_KEYS } from "@gnosia/schema/shared";
+import type { CatalogDatabase } from "@hermes/catalog/state";
+import { readParams, readPreferences, type BktParams } from "@hermes/catalog/state";
+import { PREFERENCE_KEYS } from "@hermes/schema/shared";
 
 import { parseMotionMode, parseTutorStyle, type MotionMode, type TutorStyle } from "../preferences";
 import { failureCode } from "./provider-keys";

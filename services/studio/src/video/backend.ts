@@ -123,6 +123,8 @@ export interface VideoBackend extends VideoGateChecks {
   isSheet(paths: VideoPaths, file: string): boolean;
   /** The directories beside the topic folder the agent may Read, as the session's `--add-dir`s. */
   addDirs(paths: VideoPaths): string[];
+  /** Whether the tool's checkout CLI exists on disk, so the periodic doctor timer can skip polling an uninitialized submodule. */
+  hasCheckout?: () => boolean;
   /** The fixture render and the checks that prove this backend works on this machine (D75). */
   doctor(): Promise<VideoDoctorReport>;
 }

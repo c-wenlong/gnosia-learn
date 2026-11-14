@@ -10,8 +10,11 @@ import {
   stopWaiting,
   getDraft,
   listDrafts,
+  renameDraft,
   saveBrief,
   sendMessage,
+  setDraftHarness,
+  setDraftModel,
 } from "./studio-drafts";
 import { videoAvailability, diagramAvailability, readStudioHealth } from "@/lib/studio-health";
 import {
@@ -40,7 +43,13 @@ function answer(status: number, body: unknown) {
   return fetchMock;
 }
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  // Fake timers and spies set inside a test otherwise survive a failed
+  // assertion into every test after it.
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 
 describe("the calls", () => {
   it("creates a draft with its idempotency key", async () => {
@@ -51,6 +60,23 @@ describe("the calls", () => {
       "/studio/api/drafts",
       expect.objectContaining({ method: "POST", body: '{"idempotencyKey":"k"}', headers: { "content-type": "application/json" } }),
     );
+  });
+
+  it("writes the name, model and harness picks on their own routes, with `default` for no model (D90)", async () => {
+    const fetchMock = answer(200, {});
+    await renameDraft("d 1", "Sockets");
+    await renameDraft("d1", null);
+    await setDraftModel("d1", "opus");
+    await setDraftModel("d1", null);
+    await setDraftHarness("d1", "codex");
+    const calls = fetchMock.mock.calls as unknown as [string, RequestInit][];
+    expect(calls.map(([path, init]) => `${init.method} ${path} ${init.body ?? ""}`.trim())).toEqual([
+      'PUT /studio/api/drafts/d%201/name {"name":"Sockets"}',
+      'PUT /studio/api/drafts/d1/name {"name":null}',
+      'PUT /studio/api/drafts/d1/model {"model":"opus"}',
+      'PUT /studio/api/drafts/d1/model {"model":"default"}',
+      'PUT /studio/api/drafts/d1/harness {"harness":"codex"}',
+    ]);
   });
 
   it("reads, lists, messages, draws and abandons on the documented paths", async () => {
@@ -179,7 +205,6 @@ describe("the calls", () => {
     timeout.mockClear();
     await createDraft({ idempotencyKey: "k2" });
     expect(timeout).not.toHaveBeenCalledWith(240_000);
-    timeout.mockRestore();
   });
 
   it("sends a message's idempotency key when it has one", async () => {
@@ -288,7 +313,6 @@ describe("openDraftEvents", () => {
     vi.advanceTimersByTime(60_000);
     expect(FakeSource.made).toHaveLength(1);
     stop();
-    vi.useRealTimers();
   });
 
   it("reopens a stream the browser closed for good, from the record's newest seq, with backoff", () => {
@@ -327,7 +351,6 @@ describe("openDraftEvents", () => {
     stop();
     vi.advanceTimersByTime(60_000);
     expect(FakeSource.made).toHaveLength(3);
-    vi.useRealTimers();
   });
 
   it("backs off to thirty seconds at most", () => {

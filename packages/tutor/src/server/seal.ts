@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from "node:crypto";
-import { MIN_SECRET_LENGTH, PROVIDER_KEY_LIMITS, type ProviderName } from "@gnosia/schema/shared";
+import { MIN_SECRET_LENGTH, PROVIDER_KEY_LIMITS, type ProviderName } from "@hermes/schema/shared";
 
 /**
  * Sealing and opening an owner's provider key (docs/BYOK.md, decision 2).
@@ -21,6 +21,9 @@ import { MIN_SECRET_LENGTH, PROVIDER_KEY_LIMITS, type ProviderName } from "@gnos
 /** The version `sealKey` writes. */
 export const CURRENT_KEY_VERSION = 1;
 
+// Version 1 rows were sealed under the pre-rename strings. A rename of the
+// salt or the additional data makes every saved key unreadable while
+// CURRENT_KEY_VERSION stays 1, so both stay on the strings those rows used.
 const SALT = "gnosia/provider-key";
 const IV_BYTES = 12;
 const KEY_BYTES = 32;

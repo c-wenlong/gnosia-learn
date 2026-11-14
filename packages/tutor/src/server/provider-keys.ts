@@ -4,13 +4,13 @@ import {
   saveCustomProviderKey,
   writeProviderKey,
   type CatalogDatabase,
-} from "@gnosia/catalog/state";
+} from "@hermes/catalog/state";
 import {
   AUTH_SECRET_VAR,
   isCustomProviderId,
   MIN_SECRET_LENGTH,
   type ProviderName,
-} from "@gnosia/schema/shared";
+} from "@hermes/schema/shared";
 
 import { openKey, sealKey } from "./seal";
 

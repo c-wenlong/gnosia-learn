@@ -1,6 +1,6 @@
-# Contributing to gnosia
+# Contributing to hermes
 
-Thanks for your interest in contributing! gnosia is a Next.js study hub
+Thanks for your interest in contributing! hermes is a Next.js study hub
 with a tutoring pipeline beside it, both over one SQLite database file. Both
 halves are meant to stay readable: every write is a revision with a reason,
 and `catalog export` turns the content back into plain files at any time.
@@ -8,8 +8,8 @@ and `catalog export` turns the content back into plain files at any time.
 ## Getting started
 
 ```bash
-git clone https://github.com/c-wenlong/gnosia-learn.git
-cd gnosia-learn
+git clone https://github.com/promethevs-labs/hermes-studio.git
+cd hermes-studio
 npm ci
 cp .env.example apps/web/.env.local   # then set OWNER_PASSWORD and AUTH_SECRET in it (see below)
 npm run dev
@@ -28,7 +28,7 @@ The web app reads everything from the catalog, and a fresh clone's catalog is
 built from [`seed/`](seed/README.md), the only content the repository holds:
 
 ```bash
-npm run catalog -- migrate   # creates the catalog file, ~/.gnosia/catalog.db by default
+npm run catalog -- migrate   # creates the catalog file, ~/.hermes/catalog.db by default
 MANIMKC_ROOT=/nonexistent REMOTIONKC_ROOT=/nonexistent REVIDEOKC_ROOT=/nonexistent BLENDERKC_ROOT=/nonexistent npm run catalog -- import seed
 for t in topics tags concepts sessions courses diagrams; do npm run catalog -- flip $t; done
 npm run catalog -- status
@@ -58,8 +58,8 @@ a copy at the repository root is never read. Set `OWNER_PASSWORD` and
 `AUTH_SECRET` first (`openssl rand -base64 32` for the secret), or `/sign-in`
 refuses every password and says why: the landing page at `/` is the only
 page that opens without them. The catalog needs no line at all: the app and
-the catalog CLI both open `~/.gnosia/catalog.db` with no variable set
-(`$GNOSIA_HOME/catalog.db` when that is set), and a `postgres://` value is
+the catalog CLI both open `~/.hermes/catalog.db` with no variable set
+(`$HERMES_HOME/catalog.db` when that is set), and a `postgres://` value is
 refused (`databasePath()` in `services/catalog/src/env.ts`). The app reads
 every course, note and diagram from that file, so it has to be migrated,
 imported and flipped first (README.md, "Install"); `npm run dev:up` stops
@@ -115,8 +115,8 @@ there.
 | `seed/` | A small slice of the content in the export format: a fresh clone's database and the tests' fixture. The format is in its [README](seed/README.md), the course file in [COURSES.md](seed/COURSES.md) |
 | `packages/content/` | The parsers the catalog imports an export's `content/` with, and the reader seam (`ContentSource`, `fileSource`, `selectSource`) the app and the studio read through; the app composes it with no file reader |
 | `packages/schema/` | The Drizzle table definitions: the single source of the catalog's row shapes |
-| `packages/blob/` | The blob store: one interface for where binaries live, and the `fs` adapter under `~/.gnosia/blobs` ([README](packages/blob/README.md)) |
-| `eslint-rules/` | The web app's house rules as ESLint rules (`gnosia/*`: one kit piece per control, class lists through `cx`, sentence case, theme tokens, the studio's gate), each with the files it allows in `eslint.config.mjs` and its cases in `gnosia.test.mjs`. A rule about source text goes here, not into a test that walks the tree |
+| `packages/blob/` | The blob store: one interface for where binaries live, and the `fs` adapter under `~/.hermes/blobs` ([README](packages/blob/README.md)) |
+| `eslint-rules/` | The web app's house rules as ESLint rules (`hermes/*`: one kit piece per control, class lists through `cx`, sentence case, theme tokens, the studio's gate), each with the files it allows in `eslint.config.mjs` and its cases in `hermes.test.mjs`. A rule about source text goes here, not into a test that walks the tree |
 | `services/catalog/` | Migrations, the database connection and the `catalog` CLI ([SCHEMA.md](services/catalog/SCHEMA.md)) |
 | `scripts/learn/` | The `learn` pipeline's entry point and its pure maths modules; the command itself is `services/catalog/src/learn/` |
 | `tools/manimkc/` | Submodule for narrated animation videos, with its own repo and `AGENTS.md` |
@@ -210,7 +210,7 @@ Prerequisites:
 **It never writes to your catalog.** A review rating, a session answer and
 Mark watched all write real evidence, and the event log is append-only, so
 the run works on a database file of its own,
-`<OS temp dir>/gnosia_e2e_<pid>_<time>.db`, and removes it afterwards, on a
+`<OS temp dir>/hermes_e2e_<pid>_<time>.db`, and removes it afterwards, on a
 failure and on Ctrl-C too (`scripts/e2e.mjs`). `--keep-db` leaves it behind
 to inspect, and prints the `rm` line; `--headed` shows the browser.
 
@@ -220,7 +220,7 @@ import seed/`, all six types flipped, and one `learn observe` so a review card
 is due, with the diagram's SVG in a temp blob store. The seed has no videos, so
 the video step (play, pause, see the place saved) prints `SKIP` with the reason
 and counts as neither a pass nor a failure. `--copy` (or `E2E_TEMPLATE_DB=<file>`) copies
-`$GNOSIA_HOME/catalog.db` (else `~/.gnosia/catalog.db`), or the file named,
+`$HERMES_HOME/catalog.db` (else `~/.hermes/catalog.db`), or the file named,
 instead, through SQLite's backup API so a file
 another process holds open still copies whole (`copyDatabase` in
 `scripts/lib/sqlite.mjs`); every content type must be flipped there. `--copy` reads neither
@@ -275,7 +275,7 @@ the reviewer.
 
 ## Reporting bugs
 
-Use the [bug report template](https://github.com/c-wenlong/gnosia-learn/issues/new?template=bug_report.yml)
+Use the [bug report template](https://github.com/promethevs-labs/hermes-studio/issues/new?template=bug_report.yml)
 and include your OS, Node version, browser and whether it was the live site or
 `npm run dev`; the exact command or route that failed with its full output; and
 steps to reproduce.
@@ -285,4 +285,4 @@ steps to reproduce.
 Read [README.md](README.md) for the tour, [ARCHITECTURE.md](ARCHITECTURE.md)
 for how the layers fit together, and [docs/LEARN.md](docs/LEARN.md) for the
 tutoring loop. Discussions are not enabled on this repo, so an
-[issue](https://github.com/c-wenlong/gnosia-learn/issues) is the only channel.
+[issue](https://github.com/promethevs-labs/hermes-studio/issues) is the only channel.

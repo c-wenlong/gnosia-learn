@@ -1,23 +1,23 @@
 import "server-only";
 
-import { readConceptObservations } from "@gnosia/catalog/state";
+import { readConceptObservations } from "@hermes/catalog/state";
 import { connection } from "next/server";
 
 import { readConceptNote } from "@/lib/concept-note";
-import { observationsOf } from "@gnosia/tutor/concept-workspace-core";
+import { observationsOf } from "@hermes/tutor/concept-workspace-core";
 import { moduleConcepts } from "@/lib/module-path";
 import { catalogDatabase, readKb } from "@/lib/learner-store";
 import { currentOwner } from "@/lib/owner";
-import { readWrittenOptions } from "@gnosia/tutor/server/check-options";
+import { readWrittenOptions } from "@hermes/tutor/server/check-options";
 import {
   checkQuestion,
   distractorPool,
   NO_CONCEPTS_TO_CHECK,
   NOTHING_TO_ASK_MODULE,
   type SessionQuestion,
-} from "@gnosia/tutor/session-core";
+} from "@hermes/tutor/session-core";
 import { readSummaries, tutorModelConfigured } from "@/lib/session-page";
-import type { Module } from "@gnosia/content";
+import type { Module } from "@hermes/content";
 import { checksByLastAsked, weekCheckOrder, type WeekCheckConcept, type WeekCheckPlan } from "@/lib/week-check";
 
 /**

@@ -17,7 +17,7 @@ against the owner's database stay open until they have run. Approved
 2026-09-27, when the owner answered the open questions (see
 [Decided by the owner](#decided-by-the-owner)): everything stays local for
 now, so the cloud database and the cloud blob adapter are deferred to a
-go-live step and phase 0 started at 0.2. The owner's `gnosia` database
+go-live step and phase 0 started at 0.2. The owner's `hermes` database
 was still at `0009` and unflipped when the cut-over merged: flip day, run from
 a worktree at `content-files-final` ("After the merge", under
 [Phase 3: cut-over](#phase-3-cut-over)), backs it up, migrates it, flips every
@@ -26,12 +26,12 @@ pointed at that worktree, arms or waives every rule and saves the parity
 report.
 Numbers
 marked *measured* were taken on the owner's laptop on 2026-09-27 against the
-working tree, `~/.gnosia/manimkc/out` and the local `gnosia` database;
+working tree, `~/.hermes/manimkc/out` and the local `hermes` database;
 every other number is marked *guessed* and says what would settle it. File
 and line references are against `origin/main` at `5a78e61`.
 
 Everything below was built and run on Postgres. The catalog has since moved
-to one SQLite file, `$GNOSIA_HOME/catalog.db` by default
+to one SQLite file, `$HERMES_HOME/catalog.db` by default
 ([SQLITE-MIGRATION.md](SQLITE-MIGRATION.md)), so the `createdb -T` copies,
 `pg_dump` backups, `pg_trgm` and roles below are history. Where a step is
 still something to run, a note says what it is today.
@@ -119,7 +119,7 @@ content being in git.
 | Session logs | `learn/sessions/<id>.md`, 3 files, 17,781 bytes (*measured*) | the existing `session` row (it already has `title` and `goal`) plus `session_log_entry(session_id, seq, markdown)` | `learn session start\|log\|close`, `learn observe --session` | the seam; the export concatenates entries | `session.learner_id`, already there |
 | Diagram sources | `learn/assets/<name>.tldr`, 2 tracked plus 1 untracked, 24 to 26 KB each (*measured*) | `diagram.document` jsonb | studio Accept; `learn diagram commit` | `catalog diagram list\|show`; a materialised temp file for tldrawkc | `diagram.owner_id` |
 | Diagram SVGs | `learn/assets/<name>.svg`, 214 to 313 KB each (*measured*) | a blob, referenced by `diagram.svg_blob_key` and `asset.blob_key` | the same Accept or commit | `/api/assets/{id}/file`, via the blob store | `blob_object.owner_id` and the key prefix |
-| Videos and sidecars | `~/.gnosia/manimkc/out`, outside the repo; 36 indexed videos, 432,692,181 bytes, plus 87 sidecars (*measured*) | blobs; `asset` rows keep their ids and gain `blob_key` | `catalog asset upload --source manimkc` | `/api/assets/{id}/file` redirects to a signed URL | `asset.owner_id`, `blob_object.owner_id`, the key prefix |
+| Videos and sidecars | `~/.hermes/manimkc/out`, outside the repo; 36 indexed videos, 432,692,181 bytes, plus 87 sidecars (*measured*) | blobs; `asset` rows keep their ids and gain `blob_key` | `catalog asset upload --source manimkc` | `/api/assets/{id}/file` redirects to a signed URL | `asset.owner_id`, `blob_object.owner_id`, the key prefix |
 | Posters | ffmpeg at request time into a temp cache (`apps/web/src/lib/asset-posters.ts:306-315`) | a blob per video, made at upload, as an `asset` of new kind `poster` derived from the video | the upload command | `/api/assets/{id}/poster` redirects | as videos |
 | `learn/map.md` | a generated file (`services/catalog/src/learn/cli.ts:1241`) | nothing stored; `learn map` renders from rows to stdout or `--out` | none | on demand | none |
 
@@ -310,7 +310,7 @@ the app goes live, any time after phase 0.
 ### 0.1 The cloud database, deferred to go-live
 
 **Deferred.** The owner decided everything stays local for now. The local
-`gnosia` database is the primary, `catalog_instance` records it as such
+`hermes` database is the primary, `catalog_instance` records it as such
 from 0.2, and Vercel keeps running with no database as today. The checklist
 below is the procedure for the day that changes; it is kept here so the order
 is not rediscovered. Vercel has no database today, and every read degrades
@@ -337,7 +337,7 @@ string to set. A go-live needs a new plan.
 - [ ] Confirm the local database is at the expand migration of 0.2 or later,
       so `catalog_instance`, `owner_id` and the rest exist before any data
       moves.
-- [ ] Move the data: `pg_dump gnosia`, restore into the cloud database,
+- [ ] Move the data: `pg_dump hermes`, restore into the cloud database,
       `npm run catalog -- migrate` against it (a no-op, since migrations are
       keyed by file hash), compare every table's row count with the local
       database, and write the `catalog_instance` row as `primary` there.
@@ -346,7 +346,7 @@ string to set. A go-live needs a new plan.
       one, and only then rewrites `blob_object.provider`; a key that fails
       stays `fs` and is listed. Rows and bytes move in the same window, before
       any reader switches adapters, because Vercel cannot reach
-      `~/.gnosia/blobs` and the uploader skips keys already `present`.
+      `~/.hermes/blobs` and the uploader skips keys already `present`.
 - [ ] Mark the local database `copy`, and point the laptop's `DATABASE_URL` at
       the cloud database as `catalog_writer` (D2).
 - [ ] Set `DATABASE_URL` on Vercel production as `app_web`, and on preview
@@ -377,7 +377,7 @@ string to set. A go-live needs a new plan.
       `services/catalog/src/index/writer.ts:396`).
 - [x] The append-only triggers on `content_revision` and
       `session_log_entry`. The guard trigger that refuses a content write
-      unless the transaction has set `gnosia.revision_id` (D4) is
+      unless the transaction has set `hermes.revision_id` (D4) is
       defined here but enabled per table by `catalog flip <type>`, not in
       phase 0: until track D flips, the studio's Accept still writes `asset`
       rows through `assert-output` outside the seam, and a guard armed early
@@ -388,7 +388,7 @@ string to set. A go-live needs a new plan.
       predicates as queries (D21).
 - [x] `CREATE EXTENSION pg_trgm` and a trigram index on `topic.title` and the
       aliases (D14).
-- [x] Generated with `npm run generate -w @gnosia/catalog`, never written
+- [x] Generated with `npm run generate -w @hermes/catalog`, never written
       by hand, and never an edit to an applied file.
 
 Its number is the next free one on `origin/main` at merge: `0010`, or `0011`
@@ -417,7 +417,7 @@ above, and why:
   trigger on every table but `catalog_instance` refuses a write on a copy and
   names `primary_host`. It binds the web app and psql as well as the CLI. The
   flag is `CATALOG_COPY_OK=1`, which makes the connection set
-  `gnosia.copy_ok = on`; `catalog migrate` sets it itself.
+  `hermes.copy_ok = on`; `catalog migrate` sets it itself.
 - **`content_source` carries `export_hash`, `exported_at` and `waivers`** for
   edge case 12 and phase 3's `--waive`, and a type with no row reads from
   files. **`catalog_instance.primary_host`** is required on a copy, so the
@@ -434,7 +434,7 @@ The trigger inventory, with every name, is in
 
 - [x] `services/catalog/src/content/write.ts`: `writeContent(tx, { type, id,
       next, base, author, reason })` opens the transaction, sets
-      `gnosia.revision_id`, writes the entity, and appends the revision.
+      `hermes.revision_id`, writes the entity, and appends the revision.
       Every writer in phase 1 calls it and nothing else writes content tables.
 - [x] `writeSource` (`writer.ts:218`) calls the same revision writer for each
       upserted entity whose `snapshot_hash` changed, with
@@ -453,7 +453,7 @@ op vocabulary gained `delete`: an import that prunes an entity records its last
 state, so the history ends with a word and a return is always a new revision.
 The seam and the importer take the same advisory locks before reading the
 latest revision, so they cannot pick the same `seq`. The seam takes the revision id from the identity's sequence before the
-entity write, so `gnosia.revision_id` names the revision the guard lets
+entity write, so `hermes.revision_id` names the revision the guard lets
 through; an import sets it to `import:<source>`. The grep test
 (`test/content-writes.test.ts`) also catches `delete`, and allows one writer
 outside the seam by name: `assert-output`, the studio's Accept, until Track D
@@ -492,7 +492,7 @@ route can write `Content-Range` without hashing the file through `head`, and a
 `stat(key)` returns the size alone; the `fs` adapter opens objects
 non-blocking and refuses anything under a key that is not a regular file (a
 FIFO hung `head`), and its checkout guard also recognises a root
-`package.json` named `gnosia`. `blobRoot()` in
+`package.json` named `hermes`. `blobRoot()` in
 `services/catalog/src/env.ts` resolves the root for the CLI and the web app
 alike. Two members were added when it
 was built: `list`, by plain string prefix, because phase 4 counts, caps and
@@ -502,9 +502,9 @@ object's upload time; and `provider`, so the upload command fills
 setting that could disagree. The contract per method, the key rules and the
 refusal codes are in [packages/blob/README.md](../packages/blob/README.md).
 
-- [x] An `fs` adapter rooted at `$GNOSIA_HOME/blobs` (default
-      `~/.gnosia/blobs`), outside the repo for the reason `$MANIMKC_HOME`
-      exists, and refusing a root inside a gnosia checkout. Writes go to a
+- [x] An `fs` adapter rooted at `$HERMES_HOME/blobs` (default
+      `~/.hermes/blobs`), outside the repo for the reason `$MANIMKC_HOME`
+      exists, and refusing a root inside a hermes checkout. Writes go to a
       temp file under the root and are renamed into place after the hash and
       length check; `head` hashes the file on every call rather than trusting
       the key or a sidecar, since its callers are asking whether the bytes are
@@ -647,7 +647,7 @@ The web app reads content synchronously at module load
       method throwing "`<type>` is not migrated yet" until its track fills it
       in. The database implementation lives in the catalog because the
       catalog owns the connection; the interface and the switch live in
-      `packages/content`. It is exported through `@gnosia/catalog/state`
+      `packages/content`. It is exported through `@hermes/catalog/state`
       rather than a new `./content` subpath: `state` is the web app's one
       door into the catalog (ARCHITECTURE.md layering rules 1 and 4).
 - [x] `selectSource()` in `packages/content` resolves per type:
@@ -660,7 +660,7 @@ The web app reads content synchronously at module load
 - [x] The `ownership()` callback wired to the `content_source` table in the
       catalog, and passed by the web app's `contentSource()` (0.5). It is
       `contentOwnership` in `services/catalog/src/content/ownership.ts`,
-      exported through `@gnosia/catalog/state`. When the rows cannot be
+      exported through `@hermes/catalog/state`. When the rows cannot be
       read (the database is down, or not yet at 0010) every type reads files
       and the reason is logged once per outage, not once per request. The
       studio's `selectSource` is not wired: it has no database source to
@@ -692,10 +692,10 @@ behind the journal with exit 4 and `Run: npm run catalog -- migrate`.
 - [ ] `DEPLOYMENT.md` gains the roles, the region and the blob token. Not yet,
       and on purpose: all three belong to the cloud move of 0.1, which the
       owner deferred to go-live, and none exists to document. What does exist
-      is written there now: the local blob store and `GNOSIA_HOME`
+      is written there now: the local blob store and `HERMES_HOME`
       ("The blob store"). This box is ticked in 0.1's PR.
 
-**Done when:** the expand migration is applied to a `createdb -T gnosia`
+**Done when:** the expand migration is applied to a `createdb -T hermes`
 copy and then to the local primary; `catalog import` of the current tree into a
 scratch database followed by `catalog export` yields a tree for which
 `catalog parity` reports zero mismatches against the working tree; the `fs`
@@ -851,7 +851,7 @@ list above, and why:
   own queries, so they return what `fileSource` returns for the database's own
   export. `test/topic-readers.test.ts` holds them equal to the file reader on
   the real tree, value for value, then flips both and reads them back through
-  `selectSource`. On a `createdb -T gnosia` copy migrated, imported and
+  `selectSource`. On a `createdb -T hermes` copy migrated, imported and
   flipped (parity clean: 86 topics, 23 domains, 294 aliases, 35 manimkc paths,
   61 module and 32 concept mappings, 8 tags), two `next start` servers on
   identical copies, one with the rows in charge and one with
@@ -964,7 +964,7 @@ commands, the courses indexer's import mode.
 returning the `Course[]` `fileSource` returns key for key, since the pages hand
 courses to client components and React serialises props in key order.
 `test/courses-reader.test.ts` holds it to `JSON.stringify` equality with
-`fileSource` on the real tree. On a `createdb -T gnosia` copy, migrated
+`fileSource` on the real tree. On a `createdb -T hermes` copy, migrated
 and imported, `catalog flip courses` passes parity and arms the six guards,
 `--strict` is refused with 134 violators, and 76 routes (Today, the Courses
 grid, Learn, Library, Settings, the ten course pages, and the 61 module
@@ -1051,7 +1051,7 @@ Opus. **Size:** 4 PRs (*guessed*): writers, readers, plugin, flip.
 
 **Built, rows (PR 1 of the track).** In `services/catalog/src/content/`
 (`notes.ts`, `note-rows.ts`, `session-logs.ts`) and the two indexers. On a
-`createdb -T gnosia` copy: 32 notes, 70 prerequisite rows, 3 logs; parity
+`createdb -T hermes` copy: 32 notes, 70 prerequisite rows, 3 logs; parity
 zero mismatches; all 3 logs and 27 of the 32 notes render byte for byte. Where
 it goes past or around the list above, and why:
 
@@ -1142,7 +1142,7 @@ queue and `/api/concepts/<slug>` follow; Today counts check blocks through the
 seam for both sides and no longer opens files itself; the library's text
 reader takes a `note:` or `session:` asset's text from the seam when its type
 resolves to `db`, since the file is then the export as of the flip. On a
-flipped `createdb -T gnosia` copy, served by `next start` twice (the rows,
+flipped `createdb -T hermes` copy, served by `next start` twice (the rows,
 then `CONTENT_SOURCE=concepts=files,sessions=files`), the server HTML of
 `/learn/<slug>` for `master-theorem`, `tool-calling` and `accounting-method`,
 two tutor session pages, `/review`, `/today`, `/learn`, `/learn/dot-product`
@@ -1162,7 +1162,7 @@ phase 1 review (Track E's review fixes): the raw file route
 drizzle's output counts the concepts with no topic, archived ones included,
 and raises with every slug. `catalog doctor` lists the same rows and says
 whether the constraint is in force, and now reports in full on a database
-behind only on a migration after the expand. The owner's `gnosia` has no
+behind only on a migration after the expand. The owner's `hermes` has no
 such row (0 of 32, counted read-only on 2026-09-28), so it will apply. A
 topic dropped in the same edit that moves its concepts or removes their notes
 is held untouched by the topics source, emptied by the concepts source, and
@@ -1201,8 +1201,8 @@ list and SVG route (`services/studio/src/diagram/review.ts`, `diagrams.ts`,
       `learn diagram commit`, a wrapper over `catalog diagram put`; its
       fallback SVG-only path uploads through the same verb. Version bump.
 - [x] Import the untracked `tailscale-vpn-communication` diagram first. Done
-      on a scratch copy of `gnosia` with the file copied in: 3 diagrams,
-      3 blobs, parity clean. The owner's own `gnosia` is untouched, so
+      on a scratch copy of `hermes` with the file copied in: 3 diagrams,
+      3 blobs, parity clean. The owner's own `hermes` is untouched, so
       the real import is still the owner's, and the file is still untracked
       in the working tree, where only an import or a `git add` keeps it.
 
@@ -1338,7 +1338,7 @@ plan did not say, found while building it:
   re-render drops it and nothing else does.
 - **A poster's id is `poster:<video id>`, outside `manimkc:`**, because the
   manimkc prune deletes every row in its namespace it did not produce. It has
-  no `path` and `source_repo = 'gnosia'`, and it is a companion kind in the
+  no `path` and `source_repo = 'hermes'`, and it is a companion kind in the
   library. The recipe moved to `services/catalog/src/poster/recipe.ts`, shared
   with the route's ffmpeg fallback, so the two cannot cut different pictures.
   A poster cut from a video's old bytes is unhooked from the video when the
@@ -1383,8 +1383,8 @@ unset.
 
 **Parity:** 36 videos and 87 sidecars indexed today (*measured*); each asset's
 `content_hash` equals its blob's `sha256`. Measured on 2026-09-28 on a
-`createdb -T gnosia` copy migrated to 0011 with a temporary
-`GNOSIA_HOME`: 36 videos, 87 sidecars and 36 posters uploaded, 433.6 MB,
+`createdb -T hermes` copy migrated to 0011 with a temporary
+`HERMES_HOME`: 36 videos, 87 sidecars and 36 posters uploaded, 433.6 MB,
 159 of 159 rows with `blob_object.sha256 = asset.content_hash` and equal
 bytes; a second run uploaded nothing and wrote no revision; `catalog index
 --only manimkc` afterwards kept all 159 keys; `catalog blob audit` found
@@ -1470,7 +1470,7 @@ read and its write, and fails without the fix:
   refused by name: rows written through it pointed at bytes the web app never
   reads, and a copy made with `createdb -T` is `primary` too, so "refuse on a
   primary" could not tell a scratch run from the real one.
-  `GNOSIA_HOME` is the one knob, and both sides read it.
+  `HERMES_HOME` is the one knob, and both sides read it.
 - **S6.** `<root>/.owner` names the database (its name and
   `pg_database` oid, as the write-through names an importing database, and
   its server's port, since two servers can hand out the same oid) that
@@ -1480,7 +1480,7 @@ read and its write, and fails without the fix:
   day old, and `--fix` sweeps day-old `.tmp/*.part`.
 - **Consolidated:** one blob-store factory in the catalog (`openBlobStore`),
   one canonical JSON (`canonical`, `canonicalJson` in
-  `@gnosia/schema/shared`, used by the catalog and the studio), one file
+  `@hermes/schema/shared`, used by the catalog and the studio), one file
   hash (`fileFacts`). `LEARN_ROOT` at or inside the repository is refused for
   checkouts, which would land in the tree.
 - **Left, and why:** the three delete-revision paths build different
@@ -1520,10 +1520,10 @@ Parallel by area once every type has flipped. Four PRs (*guessed*).
       mock the seam with `apps/web/src/test/content-files.ts`, which reads
       `seed/`; with `content/` and `learn/` moved out of the worktree, every
       `apps/web` and `services/studio` suite still passes (93 files). Proof on a
-      `createdb -T gnosia` copy, migrated, imported from a throwaway copy
+      `createdb -T hermes` copy, migrated, imported from a throwaway copy
       of the tree (the untracked tailscale diagram included), all six types
       flipped and exported, and `asset upload` into a temporary
-      `GNOSIA_HOME` (159 objects, 433.6 MB): 71 routes served by this
+      `HERMES_HOME` (159 objects, 433.6 MB): 71 routes served by this
       branch from rows gave the same server HTML, scripts and hashed asset
       names set aside, as `origin/main` with `CONTENT_SOURCE=files` and
       `ASSET_FILES_ENABLED=1` on an identical copy; 34 full-page screenshots
@@ -1588,7 +1588,7 @@ Parallel by area once every type has flipped. Four PRs (*guessed*).
       course export older than the last write; for notes, logs and diagrams
       it reads the export as of the last `catalog export`.
 - [x] **Vault:** `learn vault pull [--out <dir>]` (default
-      `~/.gnosia/vault/`) writes every note and session log as markdown
+      `~/.hermes/vault/`) writes every note and session log as markdown
       with a `.vault.json` recording each file's base revision and hash;
       `learn vault push` reads changed notes back through the write seam, one
       revision per file with `--reason`, refusing a file whose row moved
@@ -1603,7 +1603,7 @@ Parallel by area once every type has flipped. Four PRs (*guessed*).
       `services/catalog/test/learn-vault.test.ts` (the done-when's four vault
       cases, plus a copy merged into and never replaced, a file there before
       any pull, a new note refused, a vault from another database) and on a
-      flipped `createdb -T gnosia` copy: 32 notes and 3 logs pulled,
+      flipped `createdb -T hermes` copy: 32 notes and 3 logs pulled,
       byte-identical to `catalog export --only concepts,sessions`, a push with
       no edits wrote zero revisions, one edited note wrote one concept
       revision (and its `note:` asset's). Where it departs from the words
@@ -1612,7 +1612,7 @@ Parallel by area once every type has flipped. Four PRs (*guessed*).
       from; deleting an `.incoming` or `.conflict` copy is how it is settled,
       and the note is then based on that copy's version; a pull from another
       database forgets every base rather than refusing, and a push to one is
-      refused. The folder defaults to `$GNOSIA_HOME/vault`, and one
+      refused. The folder defaults to `$HERMES_HOME/vault`, and one
       inside the repository is refused.
       **Review fixes** (branch `p2/vault-fixes`): every diagram's SVG is
       pulled from the blob store into `assets/<slug>.svg`, read-only, so the
@@ -1678,9 +1678,9 @@ Parallel by area once every type has flipped. Four PRs (*guessed*).
   `services/catalog` and `packages/` passes; the ones that still fail are in
   `apps/web` and `services/studio`, the web slice's (`p2/readers-db-only`).
 - **`npm run e2e -- --seed`** builds its database instead of copying
-  `gnosia`: migrate, `catalog import seed/`, one `learn observe` for a due
+  `hermes`: migrate, `catalog import seed/`, one `learn observe` for a due
   card, the SVG in a temp blob store. The Mark watched step prints `SKIP`,
-  since the seed has no videos. The default stays `-T gnosia` until
+  since the seed has no videos. The default stays `-T hermes` until
   phase 3.
 - **Flip day is `scripts/flip-rehearsal.mjs`** (below).
 
@@ -1726,7 +1726,7 @@ departs from the plan:
   before the contract; fixtures elsewhere that wrote a stored-kind row with a
   path alone now name a `present` blob (`test/stored-blob.ts`).
 
-Measured on a copy of `gnosia` (0009): the rehearsal's first `migrate`
+Measured on a copy of `hermes` (0009): the rehearsal's first `migrate`
 applied 0010 to 0012 and held 0013 with 123 manimkc assets and 3 diagram SVGs
 without a blob; after the import and the uploads `doctor` listed none, and the
 last `migrate` applied 0013.
@@ -1780,14 +1780,14 @@ built on Postgres.
 
 Each flip must record its export hash and each export must record its hash at
 the tree, or the next import would refuse the files as edited; the script
-fails the step otherwise. A rehearsal copies `--from` (default `gnosia`)
+fails the step otherwise. A rehearsal copies `--from` (default `hermes`)
 with `createdb -T`, or `pg_dump` into an empty database when the template has
-sessions open, sets `CATALOG_COPY_OK=1` and a temp `GNOSIA_HOME`, and drops
+sessions open, sets `CATALOG_COPY_OK=1` and a temp `HERMES_HOME`, and drops
 the copy and its temp directories unless `--keep`. `--real` refuses without
 `--database`, and without a `--checkout` that is the checkout the script sits
 in (so a copy of the script elsewhere cannot import a tree missing the owner's
 files); it refuses a rehearsal's options, drops `CATALOG_COPY_OK`, uses the
-blob store the environment names (asked of `@gnosia/blob`, not guessed),
+blob store the environment names (asked of `@hermes/blob`, not guessed),
 shows `git status` of `content/` and `learn/` and refuses while a tracked file
 there has an edit (the exports rewrite those files, and undoing a failed run
 restores them from `HEAD`), and asks for the database name to be typed on a
@@ -1796,7 +1796,7 @@ it. Every child runs in its own process group, and a signal to the script is
 forwarded to the catalog command in flight, which a `kill` of the script used
 to leave running.
 
-Measured 2026-09-28, a rehearsal of `gnosia` (at 0009) with the main
+Measured 2026-09-28, a rehearsal of `hermes` (at 0009) with the main
 checkout's tree, the untracked `tailscale-vpn-communication` diagram included:
 19 of 19 steps in 21 seconds. Migrate applied 0010 to 0012; the import wrote
 1,461 rows; parity was clean before and after; the concepts flip listed 5
@@ -1915,40 +1915,40 @@ the main checkout's script, pointed at that commit's worktree:
    `git tag -a content-files-final a0afd93 -m "last commit with content/ and learn/" && git push origin content-files-final`.
 2. A worktree at the tag, holding the untracked files the owner's checkout
    still has there (the tailscale diagram), since the import must remove
-   nothing: `git worktree add ~/gnosia-files content-files-final`, copy
+   nothing: `git worktree add ~/hermes-files content-files-final`, copy
    every untracked file under the main checkout's `content/` and `learn/`
    into the same place in it, then `npm ci` there.
 3. Flip day from that worktree, with its own script, whose code still holds
    0013 until the upload: `MANIMKC_ROOT=<main checkout>/tools/manimkc
    TLDRAWKC_ROOT=<main checkout>/tools/tldrawkc node
-   scripts/flip-rehearsal.mjs --real --database gnosia --checkout
-   ~/gnosia-files`. It backs up, migrates to 0012, imports (on a
+   scripts/flip-rehearsal.mjs --real --database hermes --checkout
+   ~/hermes-files`. It backs up, migrates to 0012, imports (on a
    throwaway copy first), flips the six types, uploads, and applies 0013.
    Its exports leave edits in the worktree: five notes' frontmatter and two
    `.tldr` files' key order (tracked), and the tailscale pair written again
    (untracked). Leave them as they are; step 4 checks them.
 4. The cut-over, from the main checkout, on `main`: `git pull --ff-only &&
    npm ci`, then `node scripts/flip-rehearsal.mjs --real --cutover --database
-   gnosia --checkout ~/gnosia-files`. The script at the tag cannot do
+   hermes --checkout ~/hermes-files`. The script at the tag cannot do
    this step (it refuses a tag that exists and a tree the exports edited), so
    the main checkout's runs it, and accepts a `--checkout` other than its own
    checkout only when it is a worktree of the same repository at the tag. It
-   backs up to `~/gnosia-precutover-<UTC>.dump`, imports (removing
+   backs up to `~/hermes-precutover-<UTC>.dump`, imports (removing
    nothing, skipping all six types), checks every tracked edit is flip day's
    export byte for byte and HEAD's own files have parity too, saves
-   `~/gnosia-cutover-<UTC>.parity.json`, waives `item-has-concept` with a
+   `~/hermes-cutover-<UTC>.parity.json`, waives `item-has-concept` with a
    reason typed on the terminal, runs `flip <type> --strict` for all six, and
    finds the tag already on `a0afd93` and leaves it. It ends by printing the
    `git switch -c`, `git add` and `git commit` that would keep flip day's
    export on a branch of the worktree; running them is optional and the
    owner's. To see it pass first, the same line without `--real` and
    `--database` and with a `--waive-reason` rehearses it on a copy of
-   `gnosia` and of the blob store `GNOSIA_HOME` names, reading the
+   `hermes` and of the blob store `HERMES_HOME` names, reading the
    worktree in place and writing nothing there.
 5. In the main checkout: `npm run catalog -- migrate` (nothing left to
    apply), and check the app. Then remove the untracked leftovers under
    `content/` and `learn/` and the worktree
-   (`git worktree remove --force ~/gnosia-files`, which drops flip day's
+   (`git worktree remove --force ~/hermes-files`, which drops flip day's
    uncommitted export with it); the rows, the backups, the parity report and
    the tag hold everything they held.
 
@@ -1956,14 +1956,14 @@ The owner has run all five. A Postgres database that never went through flip
 day runs steps 1 to 3 as written, since the tag's code is Postgres's; it is
 then ported to a SQLite file with `services/catalog/scripts/pg-to-sqlite.mjs`
 ([SQLITE-MIGRATION.md](SQLITE-MIGRATION.md)), and step 4 names that file
-(`--database ~/.gnosia/catalog.db`), backing up to
+(`--database ~/.hermes/catalog.db`), backing up to
 `~/catalog-precutover-<UTC>.db` and saving
 `~/catalog-cutover-<UTC>.parity.json`. The port leaves the blob store's
 `.owner` marker naming the Postgres database, and the SQLite catalog is
 known by its file's path (`ownerIdentity` in
 `services/catalog/src/content/blob-owner.ts`), so it refuses to upload
 there until the marker is replaced: with nothing writing to either
-database, move `$GNOSIA_HOME/blobs/.owner` aside, run
+database, move `$HERMES_HOME/blobs/.owner` aside, run
 `npm run catalog -- blob audit` until it is clean, then
 `npm run catalog -- blob audit --fix`, which writes the new marker (the
 same claim as step 9 of [HOMESERVER.md](HOMESERVER.md)).
@@ -2015,11 +2015,11 @@ call; the operator half is #157):
   into the job's scratch directory, where the agent reads it
   (`services/studio/src/diagram/source-note.ts`). The form's placeholder is a slug.
 - **`npm run e2e` builds its database from `seed/` by default.** `--copy`, or
-  setting `E2E_TEMPLATE_DB`, copies `gnosia` or that database instead;
+  setting `E2E_TEMPLATE_DB`, copies `hermes` or that database instead;
   `--seed` is still accepted.
 - **The nightly export.** `node scripts/nightly-export.mjs [--keep N]
   [--json]` runs `catalog export --out` into
-  `$GNOSIA_HOME/archive/<UTC time>/`, writing a `.partial` first and
+  `$HERMES_HOME/archive/<UTC time>/`, writing a `.partial` first and
   renaming it on success, replaces the `latest` link with a rename so it is
   never missing, prunes to the newest 30, removes partials more than a day
   old, refuses an archive inside the checkout, and records nothing on the
@@ -2144,7 +2144,7 @@ template that is flipped already, since flip day's steps store blobs into the
 rehearsal's temp store and a flipped template's are elsewhere: after flip day,
 restore the pre-flip dump into a new database and rehearse from that.
 
-Measured 2026-09-28, a rehearsal of `gnosia` (at 0009) with the main
+Measured 2026-09-28, a rehearsal of `hermes` (at 0009) with the main
 checkout's tree, the untracked tailscale diagram included: 40 of 40 steps.
 Flip day's 23 as before; then the cut-over's backup (347 KB, data for 34
 tables), a migrate with nothing to do, the imports skipping all six types and
@@ -2190,16 +2190,16 @@ main checkout's, which runs against the worktree.
       on that commit, made by this run or before it. Nothing is committed or
       pushed.
 - [x] `--cutover --checkout <worktree>` without `--real` rehearses the owner's
-      cut-over: it copies `--from` (default `gnosia`), which must be
+      cut-over: it copies `--from` (default `hermes`), which must be
       flipped already, clones the blob store `--blob-store` names (default:
-      the one `GNOSIA_HOME` names) into its temp one without the
+      the one `HERMES_HOME` names) into its temp one without the
       store's `.owner` marker, so the copy claims its own and the original
       is never written, and reads the worktree in place.
 - [x] `catalog asset upload --dry-run` says its bytes-cap answers are an
       estimate when it plans posters (`bytesCapEstimate`), since a poster's
       size is known only once ffmpeg cuts it.
 
-Measured 2026-09-28, the whole owner sequence on copies of `gnosia` (at
+Measured 2026-09-28, the whole owner sequence on copies of `hermes` (at
 0009), never on it: a clone of the repository, `content-files-final` made
 there on `a0afd93` (never pushed), a worktree at it with the main checkout's
 untracked tailscale pair copied in, and `npm ci` in both. Flip day, with the
@@ -2227,7 +2227,7 @@ the same order on the seed in a stand-in repository, and
 
 The waiver came off the same evening. Three agents wrote the 161 concept
 notes the 133 items were waiting on, through `learn concept add --item`,
-`concept checkout` and `commit`, and `check add`, all against `gnosia`,
+`concept checkout` and `commit`, and `check add`, all against `hermes`,
 and `catalog doctor` reached zero violators on `item-has-concept`. The first
 `catalog flip courses --strict` refused: the database had moved past the
 files it was last imported from (ten course files, `concepts` now on every
@@ -2259,10 +2259,10 @@ before, so it merged before flip day and does not depend on #152.
       used to omit `learnerId` passes the owner explicitly, and
       `apps/web/src/lib/owner-calls.test.ts` fails the build of one that
       does not: it finds every owner-bearing function in the catalog's own
-      declarations, so a function added to `@gnosia/catalog/state` later
+      declarations, so a function added to `@hermes/catalog/state` later
       is covered the day it lands. `readableOwners(owner)` is `[owner,
       commons]`, and `COMMONS_OWNER`, `readableOwners`, `ownerScope` and the
-      `OwnerScope` type live in `@gnosia/schema/shared`, so the web app
+      `OwnerScope` type live in `@hermes/schema/shared`, so the web app
       and the catalog share one definition. The `commons` learner row is
       created on its first write by the seam, the way `local`'s is created on
       first use (`ensureLearner`), rather than by a migration or at app start:
@@ -2277,7 +2277,7 @@ before, so it merged before flip day and does not depend on #152.
       entity at its far end is readable too (a relation to another owner's
       topic, a course's tag, an item's concept), and a session log belongs to
       its session's learner. The queries the web app reaches through
-      `@gnosia/catalog/state` (`assetsForTopic`, `assetsForConcept`,
+      `@hermes/catalog/state` (`assetsForTopic`, `assetsForConcept`,
       `assetsByIds`, `listAssets`, `assetCounts`, `assetDerivations`,
       `conceptsForAsset(s)`, `derivationSources`, `assetsForCollection`,
       `assetBlobs`, `posterBlob`, `videosWithStoredPoster`, `topicTitles`,
@@ -2306,7 +2306,7 @@ before, so it merged before flip day and does not depend on #152.
 - [x] Blob keys already carry the owner; per-owner caps on bytes stored and
       on uploads per day, checked in `upload()`.
       **Built:** `uploadBlob` in `services/catalog/src/content/blob.ts` reads
-      `GNOSIA_OWNER_BYTES_CAP` and `GNOSIA_OWNER_UPLOADS_PER_DAY`
+      `HERMES_OWNER_BYTES_CAP` and `HERMES_OWNER_UPLOADS_PER_DAY`
       (unset, the default, is no cap, and then nothing is measured). With a cap
       set it measures the owner from `blob_object` by the key's `<owner_id>/`
       prefix, under an advisory lock per owner in the transaction that writes
@@ -2350,7 +2350,7 @@ before 0010 each read still answers unscoped.
       slug with no diagram (no file, no revision number); `catalog diagram`
       takes `--owner`. The runner serves one owner, `STUDIO_OWNER` (default
       `local`), passes it on every diagram verb, and refuses a request the web
-      app names as another owner's (`x-gnosia-owner`, set by the app's
+      app names as another owner's (`x-hermes-owner`, set by the app's
       server from the session, a page's value dropped first).
       **Departed from the brief**, which asked the runner to pass each
       request's owner through: nothing the runner holds is per owner (one
@@ -2558,7 +2558,7 @@ The shared files, and how tracks stay off them:
 | 1 | Postgres is unreachable while the studio is open | The studio reads topics, relations and the diagram list from its cache, written at the last successful read under `$STUDIO_HOME/cache/`, and the banner says the vocabulary is stale and when it was read. Drawing still runs, as D16 of TLDRAWKC-INTEGRATION.md requires. Accept cannot land a diagram, since the diagram lives in the database: the candidate stays in the job workspace with `awaiting_review`, and Accept is offered again when the database answers |
 | 2 | A topic is renamed | A title change is an ordinary `topic edit`. A slug change is `topic rename --from --to` in one transaction: the row's slug is updated and every foreign key follows (`ON UPDATE CASCADE` on all of them, `packages/schema/src/content.ts` and `studio.ts:168`); the slug inside each diagram's `meta.tldrawkc.topic` and each open job's brief is rewritten by the same command; the old slug is appended to the aliases so search still finds it; one `rename` revision is written per affected row. Revisions keep the old slug in their snapshots, which is correct history |
 | 3 | A concept with evidence is deleted | It cannot be: `event.concept_slug` is `ON DELETE RESTRICT` (migration `0004`). `learn concept archive` sets `archived_at`, readers hide it, `mastery` and `review` stay, and `restore` brings it back |
-| 4 | The owner edits a note in Obsidian after cut-over | There is no `learn/` to edit. With the vault sync of open question 1, `learn vault pull` writes notes and logs to `~/.gnosia/vault/` with each file's base revision recorded, and `learn vault push` commits changed files; a note whose row moved since the pull is refused and left beside a `.conflict` copy. `pull` is just as careful in the other direction: it records each written file's hash, and a file whose hash has changed since is never overwritten; the database version is written beside it as `.incoming` and the file is listed, so an unpushed edit survives a pull. Without the sync, an edit to an old export is simply not read, and `catalog doctor` says so when it finds that directory |
+| 4 | The owner edits a note in Obsidian after cut-over | There is no `learn/` to edit. With the vault sync of open question 1, `learn vault pull` writes notes and logs to `~/.hermes/vault/` with each file's base revision recorded, and `learn vault push` commits changed files; a note whose row moved since the pull is refused and left beside a `.conflict` copy. `pull` is just as careful in the other direction: it records each written file's hash, and a file whose hash has changed since is never overwritten; the database version is written beside it as `.incoming` and the file is listed, so an unpushed edit survives a pull. Without the sync, an edit to an old export is simply not read, and `catalog doctor` says so when it finds that directory |
 | 5 | A video upload is interrupted | The `blob_object` row is `pending` and `asset.blob_key` is unchanged, so the page keeps serving the legacy file or answers `not-uploaded`. Rerunning the command resumes: a key already `present` is skipped, a `pending` one is re-uploaded (the key is the hash, so the bytes are identical). A sweep deletes `pending` rows older than a day with no object behind them |
 | 6 | Two tracks both add a column | They should not: phase 0 lands all expand schema (D10). If one must, it merges in the fixed order, rebases on the other, and regenerates its migration from the schema source; the later track's number moves, and neither applied file is edited |
 | 7 | The plugin runs against a half-migrated checkout | Its verbs and shapes are unchanged, so everything it parses still parses. What can break is a direct file edit: an old plugin version editing `learn/concepts/<id>.md` after track C flipped writes to a file the database no longer reads. `learn doctor` compares the file's hash with the last export and prints the plugin version it expects; the next `catalog import` refuses that file by name (edge case 12) |
@@ -2582,7 +2582,7 @@ The shared files, and how tracks stay off them:
 
 **Verdict:** content is authored in Postgres, every piece of it, and files are
 its export format: `catalog export` writes the old shapes (when a person asks,
-and nightly into `$GNOSIA_HOME/archive/`), and `catalog import` reads them
+and nightly into `$HERMES_HOME/archive/`), and `catalog import` reads them
 back. Since the phase 3 cut-over the repository holds no content of its own
 beyond `seed/`, which is one such export. **Why:** content made
 through the app has nowhere to go under the files rule, and a tenant cannot
@@ -2596,7 +2596,7 @@ keys, the failure SCHEMA.md's typed links exist to prevent).
 
 **Verdict:** there is exactly one primary at any time, recorded in
 `catalog_instance`, and every writer refuses on a copy. It is the local
-`gnosia` database now, by the owner's decision of 2026-09-27, and it moves
+`hermes` database now, by the owner's decision of 2026-09-27, and it moves
 to the cloud in the deferred step 0.1 when the app goes live; from then the
 laptop's CLI and studio connect to the cloud and the local database is a copy
 for tests and e2e. **Why:** two databases that both take writes are two truths,
@@ -2946,7 +2946,7 @@ Answered on 2026-09-27, the day the plan merged.
 | Question | Answer | Where it landed |
 | --- | --- | --- |
 | Obsidian | Build the vault pair: `learn vault pull` writes notes and session logs from the database into a folder Obsidian opens as a vault, `learn vault push` reads edits back through the write seam with base-revision conflict refusal. Not a live sync; two commands | Phase 2, edge case 4 |
-| Blob provider | Everything local for now: the `fs` adapter under `~/.gnosia/blobs`. A cloud adapter comes with go-live (R2 on Hobby, Vercel Blob on Pro) | 0.4, D5 |
+| Blob provider | Everything local for now: the `fs` adapter under `~/.hermes/blobs`. A cloud adapter comes with go-live (R2 on Hobby, Vercel Blob on Pro) | 0.4, D5 |
 | Cloud Postgres | Local for now: the local database stays primary, Vercel keeps running without a database, and the cloud move is the deferred step 0.1 | 0.1, D2, D19 |
 | The nine courses | Fill them as content work inside track B, so strict mode arms before cut-over instead of being waived | Track B, D21 |
 | Phase 0 | Approved once these answers were in the doc | this PR |

@@ -89,7 +89,7 @@ function farm(from: string, into: string, rebuilt: readonly string[] = []): void
 }
 
 function studioRepoRoot(): string {
-  const root = mkdtempSync(path.join(realpathSync(tmpdir()), "gnosia-studio-"));
+  const root = mkdtempSync(path.join(realpathSync(tmpdir()), "hermes-studio-"));
   // `.studio` is rebuilt as nothing at all: it is the runner's real state
   // (job workspaces, the content cache), and a suite that does not set
   // STUDIO_HOME would otherwise write through the link into it. `learn` and
@@ -130,16 +130,16 @@ process.env.STUDIO_REPO_ROOT = root;
 // catalog-isolation.ts imports nothing from it). Every setting
 // that could name the owner's real catalog is replaced, whatever the shell or
 // services/catalog/.env says: `CATALOG_DB` blank, the dotenv pointed at
-// nothing, `DATABASE_URL` a value the catalog refuses, and `GNOSIA_HOME` a
+// nothing, `DATABASE_URL` a value the catalog refuses, and `HERMES_HOME` a
 // temp directory of this file's own, which is also the blob store's root
 // (importing the repository stores its diagram SVGs, which would otherwise
-// land in the owner's `~/.gnosia/blobs`). Its own temp directory, not one
+// land in the owner's `~/.hermes/blobs`). Its own temp directory, not one
 // inside the farm above: the fs store refuses a root under anything that
-// looks like a gnosia checkout, and the farm links the checkout's
+// looks like a hermes checkout, and the farm links the checkout's
 // package.json. A suite that wants a database or a root of its own still
 // sets one (services/catalog/test/catalog-isolation.ts says why each).
 const shellEnv = { ...process.env };
-const blobHome = mkdtempSync(path.join(temp, "gnosia-home-"));
+const blobHome = mkdtempSync(path.join(temp, "hermes-home-"));
 isolateCatalog(process.env, blobHome);
 // Only now: the guard imports env.ts, which reads CATALOG_ENV_FILE at import.
 const guard = await import("./services/catalog/test/catalog-guard");
@@ -149,7 +149,7 @@ const forbiddenCatalogs = guard.forbiddenCatalogs(shellEnv, REPO_ROOT);
 // The check sits at the open, inside the driver, so it runs before any
 // write: a suite that sets `DATABASE_URL` and loses to a `CATALOG_DB`, passes
 // the owner's file as an explicit url, or deletes the variables it saved and
-// falls back to `~/.gnosia` is stopped there, whatever it restores
+// falls back to `~/.hermes` is stopped there, whatever it restores
 // afterwards. A subclass keeps `instanceof`, the prototype and the statics.
 // The factory reads the check from globalThis because a mock factory is
 // hoisted above everything in this file.
@@ -194,12 +194,12 @@ process.env.CATALOG_DB_TIMEOUT_MS ??= "30000";
 // once for remotionkc, unconditionally, since a value from the developer's
 // shell is exactly the real checkout. A suite that wants a stand-in sets its
 // own, and a child it spawns inherits whichever is set.
-process.env.REMOTIONKC_ROOT = path.join(temp, "gnosia-test-no-remotionkc");
+process.env.REMOTIONKC_ROOT = path.join(temp, "hermes-test-no-remotionkc");
 // revideokc, the third video tool, for the same reason and the same way.
-process.env.REVIDEOKC_ROOT = path.join(temp, "gnosia-test-no-revideokc");
+process.env.REVIDEOKC_ROOT = path.join(temp, "hermes-test-no-revideokc");
 // blenderkc, the fourth, for the same reason and the same way: its topic.yml
 // files name gpu-architecture, which the seed does not hold.
-process.env.BLENDERKC_ROOT = path.join(temp, "gnosia-test-no-blenderkc");
+process.env.BLENDERKC_ROOT = path.join(temp, "hermes-test-no-blenderkc");
 
 // ffmpeg, as a stand-in. `catalog import` cuts a poster and makes a PDF for
 // every rendered video it stores (2026-10-05 and 2026-10-20) and fails when
@@ -213,7 +213,7 @@ process.env.BLENDERKC_ROOT = path.join(temp, "gnosia-test-no-blenderkc");
 // suite that wants the real binary passes its path explicitly
 // (test/poster-import.test.ts does, with a real mp4), and one that wants
 // none sets FFMPEG_PATH itself.
-const ffmpegHome = mkdtempSync(path.join(temp, "gnosia-ffmpeg-"));
+const ffmpegHome = mkdtempSync(path.join(temp, "hermes-ffmpeg-"));
 const ffmpegStandIn = path.join(ffmpegHome, "ffmpeg");
 writeFileSync(
   ffmpegStandIn,

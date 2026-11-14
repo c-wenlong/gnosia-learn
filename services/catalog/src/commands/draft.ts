@@ -9,7 +9,7 @@ import {
   job as jobTable,
   type Draft,
   type NewDraft,
-} from "@gnosia/schema";
+} from "@hermes/schema";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
 import { CLI_OWNER } from "../content/scope";

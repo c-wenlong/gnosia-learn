@@ -14,7 +14,7 @@ import {
   STUDIO_TABLES,
   type TableName,
   tables,
-} from "@gnosia/schema";
+} from "@hermes/schema";
 import { and, asc, count, eq, getTableName, isNull, max, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 

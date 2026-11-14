@@ -14,7 +14,7 @@ import { databasePath } from "./src/env";
  * Postgres history in `drizzle/`, which the port script still reads.
  *
  * Regenerate after changing packages/schema:
- *   npm run generate -w @gnosia/catalog
+ *   npm run generate -w @hermes/catalog
  */
 export default defineConfig({
   dialect: "sqlite",

@@ -71,11 +71,11 @@ describe("DiagramView", () => {
     expect(host.querySelector("img")).not.toBeNull();
   });
 
-  it("says the diagram did not load rather than leaving a broken box", () => {
+  it("says the diagram did not load rather than leaving a broken box", async () => {
     const host = mount(createElement(DiagramView, props));
     const img = host.querySelector("img") as HTMLImageElement;
 
-    act(() => img.dispatchEvent(new Event("error")));
+    await act(async () => img.dispatchEvent(new Event("error")));
     expect(host.querySelector("img")).toBeNull();
     expect(host.textContent).toContain("This diagram did not load.");
     // The URL is not repeated in the panel: it names an asset id, and the
@@ -84,9 +84,43 @@ describe("DiagramView", () => {
     expect(host.querySelector("[role=status]")?.textContent).not.toContain(props.src);
   });
 
-  it("tries again when it is handed a different diagram", () => {
+  it("puts the picture back on Try again, under the placeholder while it loads", async () => {
     const host = mount(createElement(DiagramView, props));
-    act(() => (host.querySelector("img") as HTMLImageElement).dispatchEvent(new Event("error")));
+    await act(async () => (host.querySelector("img") as HTMLImageElement).dispatchEvent(new Event("error")));
+    expect(host.querySelector("img")).toBeNull();
+    expect(host.textContent).toContain("This diagram did not load.");
+
+    const retry = [...host.querySelectorAll("button")].find((b) => b.textContent === "Try again")!;
+    await act(async () => retry.click());
+    const next = host.querySelector("img");
+    expect(next).not.toBeNull();
+    expect(next?.getAttribute("src")).toBe(props.src);
+    expect(host.querySelector("[data-skeleton]")?.getAttribute("data-skeleton")).toBe("loading");
+    expect(host.textContent).not.toContain("This diagram did not load.");
+  });
+
+  it("reads a picture that was already cached as loaded, with no load event", () => {
+    const complete = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, "complete");
+    const naturalWidth = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, "naturalWidth");
+    // What a second visit sees: the browser has the file already, so the load
+    // event fired before React's onLoad could be attached.
+    Object.defineProperty(HTMLImageElement.prototype, "complete", { configurable: true, get: () => true });
+    Object.defineProperty(HTMLImageElement.prototype, "naturalWidth", { configurable: true, get: () => 10 });
+    try {
+      const host = mount(createElement(DiagramView, props));
+      expect(host.querySelector("img")).not.toBeNull();
+      expect(host.querySelector("[data-skeleton]")?.getAttribute("data-skeleton")).toBe("ready");
+    } finally {
+      if (complete === undefined) delete (HTMLImageElement.prototype as { complete?: boolean }).complete;
+      else Object.defineProperty(HTMLImageElement.prototype, "complete", complete);
+      if (naturalWidth === undefined) delete (HTMLImageElement.prototype as { naturalWidth?: number }).naturalWidth;
+      else Object.defineProperty(HTMLImageElement.prototype, "naturalWidth", naturalWidth);
+    }
+  });
+
+  it("tries again when it is handed a different diagram", async () => {
+    const host = mount(createElement(DiagramView, props));
+    await act(async () => (host.querySelector("img") as HTMLImageElement).dispatchEvent(new Event("error")));
     expect(host.textContent).toContain("This diagram did not load.");
 
     rerender(host, createElement(DiagramView, { ...props, src: "/assets/bkt-decay.svg" }));
@@ -107,10 +141,10 @@ describe("DiagramView", () => {
     expect(host.querySelector("[data-skeleton]")?.getAttribute("data-skeleton")).toBe("loading");
   });
 
-  it("has no title bar, since the page names it, and keeps Full size even when it fails", () => {
+  it("has no title bar, since the page names it, and keeps Full size even when it fails", async () => {
     const host = mount(createElement(DiagramView, props));
     expect(host.querySelector("h3")).toBeNull();
-    act(() => (host.querySelector("img") as HTMLImageElement).dispatchEvent(new Event("error")));
+    await act(async () => (host.querySelector("img") as HTMLImageElement).dispatchEvent(new Event("error")));
     expect(host.textContent).toContain("This diagram did not load.");
     const link = [...host.querySelectorAll("a")].find((a) => a.textContent === "Full size");
     expect(link?.getAttribute("href")).toBe(props.src);

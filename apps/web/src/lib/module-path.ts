@@ -1,4 +1,4 @@
-import type { Family } from "@gnosia/tutor/asset-meta";
+import type { Family } from "@hermes/tutor/asset-meta";
 import {
   conceptHref,
   conceptSessionHref,
@@ -6,9 +6,9 @@ import {
   type KbConceptLike,
   type TopicMastery,
 } from "@/lib/course-path";
-import { bucketOf, masteryCaption, type MasteryBucket } from "@gnosia/tutor/mastery-bucket";
-import { ownValue } from "@gnosia/tutor/own-key";
-import type { Module, Resource, Topic } from "@gnosia/content";
+import { bucketOf, masteryCaption, type MasteryBucket } from "@hermes/tutor/mastery-bucket";
+import { ownValue } from "@hermes/tutor/own-key";
+import type { Module, Resource, Topic } from "@hermes/content";
 import { weekCheckBound } from "@/lib/week-check";
 
 /**

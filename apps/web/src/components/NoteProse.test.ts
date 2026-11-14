@@ -83,6 +83,30 @@ describe("structure", () => {
     expect(host.textContent).toContain("check");
   });
 
+  it("draws an svg fence as a picture, with its script left out", () => {
+    const host = render(
+      '```svg\n<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><script>alert(1)</script><rect width="4" height="4"/></svg>\n```',
+    );
+    const svg = host.querySelector("svg");
+    expect(svg).not.toBeNull();
+    expect(svg?.querySelector("rect")).not.toBeNull();
+    expect(host.querySelector("script")).toBeNull();
+    expect(host.textContent).not.toContain("alert(1)");
+    expect(host.querySelector("pre")).toBeNull();
+  });
+
+  it("shows an svg fence that never opens an <svg> as the code it is", () => {
+    const host = render("```svg\nnot svg\n```");
+    expect(host.querySelector("svg")).toBeNull();
+    expect(host.querySelector("pre code")?.textContent).toBe("not svg");
+  });
+
+  it("renders a --- line as a rule and *words* as emphasis", () => {
+    const host = render("Above.\n\n---\n\nBelow, *stressed*.");
+    expect(host.querySelector("hr")).not.toBeNull();
+    expect(host.querySelector("em")?.textContent).toBe("stressed");
+  });
+
   it("renders a callout as an aside carrying its title", () => {
     const host = render("> [!success] Correct\n> **You answered:** 3");
     const aside = host.querySelector("aside");
@@ -150,6 +174,14 @@ describe("what it will not render", () => {
     const host = render("[[evil]]", { resolveNote: () => "javascript:alert(1)" });
     expect(host.querySelector("a")).toBeNull();
     expect(host.textContent).toContain("evil");
+  });
+
+  it("checks the embed resolver's src too, and names the gap instead", () => {
+    const host = render("![[evil.svg]]", { resolveEmbed: () => "javascript:alert(1)" });
+    expect(host.querySelector("img")).toBeNull();
+    expect(host.querySelector("figure")).toBeNull();
+    expect(host.textContent).toContain("evil.svg");
+    expect(host.textContent).toContain("not available");
   });
 
   it("refuses a data: image and still names the file", () => {

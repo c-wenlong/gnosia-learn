@@ -20,16 +20,16 @@ describe.runIf(process.env.CATALOG_GUARD_FIXTURE === "1" && sentinel !== undefin
   });
 
   it("is refused at the open when the variables are gone and the default applies", () => {
-    const saved = { url: process.env.DATABASE_URL, home: process.env.GNOSIA_HOME };
+    const saved = { url: process.env.DATABASE_URL, home: process.env.HERMES_HOME };
     delete process.env.DATABASE_URL;
-    delete process.env.GNOSIA_HOME;
+    delete process.env.HERMES_HOME;
     try {
-      // `HOME` is the sentinel home, so this is `<sentinel home>/.gnosia/catalog.db`.
-      expect(path.join(homedir(), ".gnosia", "catalog.db").startsWith(process.env.HOME ?? "\0")).toBe(true);
+      // `HOME` is the sentinel home, so this is `<sentinel home>/.hermes/catalog.db`.
+      expect(path.join(homedir(), ".hermes", "catalog.db").startsWith(process.env.HOME ?? "\0")).toBe(true);
       expect(() => connect()).toThrow(/a catalog it did not make/);
     } finally {
       if (saved.url !== undefined) process.env.DATABASE_URL = saved.url;
-      if (saved.home !== undefined) process.env.GNOSIA_HOME = saved.home;
+      if (saved.home !== undefined) process.env.HERMES_HOME = saved.home;
     }
   });
 });

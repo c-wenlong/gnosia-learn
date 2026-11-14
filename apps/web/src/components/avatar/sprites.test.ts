@@ -1,4 +1,4 @@
-import { AVATARS } from "@gnosia/schema/shared";
+import { AVATARS } from "@hermes/schema/shared";
 import { describe, expect, it } from "vitest";
 
 import { PALETTE, SPRITES, spriteRuns } from "./sprites";

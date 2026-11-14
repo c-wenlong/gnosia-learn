@@ -1,4 +1,4 @@
-import { importLegacyState, type LegacyPayload } from "@gnosia/catalog/state";
+import { importLegacyState, type LegacyPayload } from "@hermes/catalog/state";
 
 import { BadRequest, handler } from "@/lib/learner-api";
 

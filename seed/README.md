@@ -49,7 +49,7 @@ this database on its own, in a throwaway file. There is no `createdb`: the
 catalog is one SQLite file, which `connect` creates, with its directory, the
 first time a command opens it, here `migrate`
 ([docs/SQLITE-MIGRATION.md](../docs/SQLITE-MIGRATION.md)). For a second
-database beside your own, put `CATALOG_DB=~/.gnosia/seed.db` (any path) in
+database beside your own, put `CATALOG_DB=~/.hermes/seed.db` (any path) in
 front of each command (`databaseUrl()` in
 [services/catalog/src/env.ts](../services/catalog/src/env.ts)).
 
@@ -59,8 +59,8 @@ the same for remotionkc, revideokc and blenderkc, whose topic.yml files name
 topics the seed does not hold. On a machine with the submodule checked out, the manimkc source
 would otherwise read every rendered video and refuse each topic folder, since
 no seed topic maps one. The diagram's SVG and the course's cover photo go
-into the blob store `GNOSIA_HOME` names; set it to a scratch directory
-unless you want them in `~/.gnosia/blobs`.
+into the blob store `HERMES_HOME` names; set it to a scratch directory
+unless you want them in `~/.hermes/blobs`.
 
 ## Regenerating it
 
@@ -100,7 +100,7 @@ export format is how those rows leave the database as files and come back:
 `catalog export --out <dir>` writes the layout below from the rows, and
 `catalog import <dir>` reads it into a database. The repository holds no copy
 of it; `seed/` is one small instance, the nightly export
-(`npm run export:nightly`, into `$GNOSIA_HOME/archive/`) is the full one,
+(`npm run export:nightly`, into `$HERMES_HOME/archive/`) is the full one,
 and the last tree the repository itself held is at the tag
 `content-files-final` (`git show content-files-final:content/topics.yaml`).
 

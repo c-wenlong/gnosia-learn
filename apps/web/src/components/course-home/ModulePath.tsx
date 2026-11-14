@@ -8,7 +8,7 @@ import { cx, FOCUS } from "@/components/ui/classes";
 import { Collapse, CollapseChevron } from "@/components/ui/Collapse";
 import { continueHref, type TopicMastery } from "@/lib/course-path";
 import { useLearner } from "@/lib/learner-context";
-import { MASTERY_BUCKET_LABEL } from "@gnosia/tutor/mastery-bucket";
+import { MASTERY_BUCKET_LABEL } from "@hermes/tutor/mastery-bucket";
 import {
   conceptMeta,
   modulePath,
@@ -18,7 +18,7 @@ import {
   type PathAsset,
   type PathPrerequisite,
 } from "@/lib/module-path";
-import type { Course, Module } from "@gnosia/content";
+import type { Course, Module } from "@hermes/content";
 
 import { Glyph, type GlyphName } from "@/components/ui/Glyph";
 
@@ -27,7 +27,7 @@ import { ModuleResources, ResourceRow } from "./ModuleResources";
 import { ROW, ROW_BOX, ROW_HOVER, ROW_LIST, ROW_META, ROW_TITLE, STRETCHED } from "./rows";
 import { TopicRow } from "./TopicRow";
 import type { ModuleData } from "./types";
-import { ownValue } from "@gnosia/tutor/own-key";
+import { ownValue } from "@hermes/tutor/own-key";
 
 /**
  * A module's material as one ordered path (`@/lib/module-path`), drawn as

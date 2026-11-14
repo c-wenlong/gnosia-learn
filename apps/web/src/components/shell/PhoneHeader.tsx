@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 
-import { GnosiaWordmark } from "@/components/brand/GnosiaWordmark";
+import { HermesWordmark } from "@/components/brand/HermesWordmark";
 import { iconButtonClasses } from "@/components/ui/classes";
 import { Glyph } from "@/components/ui/Glyph";
 import { IconButton } from "@/components/ui/IconButton";
@@ -28,10 +28,10 @@ export function PhoneHeader() {
         </IconButton>
         <Link
           href={studio ? "/studio" : "/home"}
-          aria-label={studio ? "Gnosia, Studio" : "Gnosia, Home"}
+          aria-label={studio ? "Hermes, Studio" : "Hermes, Home"}
           className="rounded-sm text-[14px] text-text focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
         >
-          <GnosiaWordmark />
+          <HermesWordmark />
         </Link>
         {studio && (
           <NewChatLink onPick={() => undefined} className={iconButtonClasses({ size: "xl", className: "ml-auto" })} label="New chat">

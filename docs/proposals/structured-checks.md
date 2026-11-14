@@ -304,7 +304,7 @@ Retiring the line is a later decision, once the block has run for a while.
 
 **K8. Ideas from LearnHarness, not its code or prompts.** It is AGPL-3.0,
 and this repository is MIT. The mechanics above are reimplemented on
-gnosia's own pieces (the session page's options and shuffle, `firstObject`,
+hermes's own pieces (the session page's options and shuffle, `firstObject`,
 the judge, the verdict row, `recordObservation`), and the prompt rules are
 written here in this repository's words.
 

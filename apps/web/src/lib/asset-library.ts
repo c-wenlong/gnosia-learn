@@ -16,16 +16,16 @@ import {
   type TopicTitles,
   type AssetWithTopics,
   type CatalogDatabase,
-} from "@gnosia/catalog/state";
+} from "@hermes/catalog/state";
 
 import { resolveAsset, seams, servedAssets, storedPosters } from "@/lib/asset-files";
-import type { RouteProblemCode } from "@gnosia/tutor/asset-problems";
+import type { RouteProblemCode } from "@hermes/tutor/asset-problems";
 import { catalogDatabase } from "@/lib/learner-store";
 import { compareByKindThenId, isCompanionKind, searchableText } from "@/lib/library";
 import type { AssetAccess } from "@/lib/library-thumbnails";
 import { currentOwner, currentScope, NoOwnerError, type OwnerScope } from "@/lib/owner";
-import { FAVORITE_PREFIX, favoriteKey, parseFavorite, type Favorite } from "@gnosia/tutor/favorite";
-import { parsePlayback, playbackKey, type Playback } from "@gnosia/tutor/playback";
+import { FAVORITE_PREFIX, favoriteKey, parseFavorite, type Favorite } from "@hermes/tutor/favorite";
+import { parsePlayback, playbackKey, type Playback } from "@hermes/tutor/playback";
 import {
   optionalParents,
   optionalTitles,
@@ -34,7 +34,7 @@ import {
   readAssetTextFor as readAssetTextForCore,
   TEXT_PREVIEW_BYTES,
   type AssetDetail,
-} from "@gnosia/tutor/server/asset-detail";
+} from "@hermes/tutor/server/asset-detail";
 
 
 /**
@@ -202,7 +202,7 @@ async function detailSeams(): Promise<{ db: Promise<CatalogDatabase>; owner: str
   return { db: catalogDatabase(), owner, scope: await currentScope() };
 }
 
-/** One asset's detail page, through the shared read in `@gnosia/tutor/server/asset-detail`. */
+/** One asset's detail page, through the shared read in `@hermes/tutor/server/asset-detail`. */
 export async function readAssetDetail(id: string): Promise<AssetDetail> {
   return readAssetDetailCore(await detailSeams(), id);
 }

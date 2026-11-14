@@ -8,7 +8,7 @@ import {
   type OwnerScope,
   readableOwners,
   topic,
-} from "@gnosia/schema";
+} from "@hermes/schema";
 import { asc, eq } from "drizzle-orm";
 
 import { ownedBy, scopedRead } from "../content/scope";

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
-import type { RevisionEntityType } from "@gnosia/schema";
-import { canonical, canonicalJson, type JsonValue } from "@gnosia/schema/shared";
+import type { RevisionEntityType } from "@hermes/schema";
+import { canonical, canonicalJson, type JsonValue } from "@hermes/schema/shared";
 import { getTableName, inArray } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";

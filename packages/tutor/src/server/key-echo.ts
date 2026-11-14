@@ -1,4 +1,4 @@
-import { PROVIDER_IDS, PROVIDER_KEY_LIMITS } from "@gnosia/schema/shared";
+import { PROVIDER_IDS, PROVIDER_KEY_LIMITS } from "@hermes/schema/shared";
 
 import { keyFor, type SavedKeys } from "../providers";
 import type { Env } from "./deps";

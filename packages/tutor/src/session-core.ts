@@ -1,5 +1,5 @@
-import type { ConceptSummary } from "@gnosia/catalog/state";
-import { CHECK_DISTRACTOR_LIMITS } from "@gnosia/schema/shared";
+import type { ConceptSummary } from "@hermes/catalog/state";
+import { CHECK_DISTRACTOR_LIMITS } from "@hermes/schema/shared";
 
 import type { ConceptCheck } from "./concept-note-core";
 import type { ConceptWorkspace } from "./concept-workspace-core";

@@ -18,8 +18,8 @@ import {
   type ModuleStatus,
   type TopicMastery,
 } from "@/lib/course-path";
-import type { Course, Module } from "@gnosia/content";
-import { moduleNumber, modulePlace, numberedTitle } from "@gnosia/content/module-number";
+import type { Course, Module } from "@hermes/content";
+import { moduleNumber, modulePlace, numberedTitle } from "@hermes/content/module-number";
 
 import { Glyph } from "@/components/ui/Glyph";
 
@@ -27,7 +27,7 @@ import { META_GLYPH } from "./icons";
 import { ModulePath } from "./ModulePath";
 import { ROW_HOVER, ROW_META } from "./rows";
 import type { ModuleData } from "./types";
-import { ownValue } from "@gnosia/tutor/own-key";
+import { ownValue } from "@hermes/tutor/own-key";
 
 /**
  * The main column: one module, laid out as Coursera lays out a module on its

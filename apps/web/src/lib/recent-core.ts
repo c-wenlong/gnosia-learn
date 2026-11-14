@@ -23,9 +23,9 @@
 import { conversationTitle } from "@/lib/conversation-title";
 import { conceptHref } from "@/lib/course-path";
 import { dayDiff } from "@/lib/day-groups";
-import { dayKey, type LogEvent } from "@gnosia/tutor/days";
-import type { MasteryBucket } from "@gnosia/tutor/mastery-bucket";
-import { resumeAt } from "@gnosia/tutor/playback";
+import { dayKey, type LogEvent } from "@hermes/tutor/days";
+import type { MasteryBucket } from "@hermes/tutor/mastery-bucket";
+import { resumeAt } from "@hermes/tutor/playback";
 
 export type RecentKind = "module" | "video" | "draft" | "concept" | "session";
 

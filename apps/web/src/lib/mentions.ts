@@ -231,9 +231,14 @@ export function isEmptyValue(value: MentionValue): boolean {
 
 /** Whether the field holds chips and nothing else: "@video" alone (T15, T16). */
 export function isBareTag(value: MentionValue): boolean {
-  if (value.mentions.length === 0) return false;
+  // The runner's checks, as everywhere above: a range that does not read
+  // `@<kind>` where it sits is words, not a chip, and an out-of-bounds range
+  // cannot be allowed to cut the words away ("hello" with `end` past the
+  // text's length is not a bare tag).
+  const valid = validMentions(value.text, value.mentions);
+  if (valid.length === 0) return false;
   let rest = value.text;
-  for (const mention of [...value.mentions].sort((a, b) => b.start - a.start)) {
+  for (const mention of [...valid].sort((a, b) => b.start - a.start)) {
     rest = rest.slice(0, mention.start) + rest.slice(mention.end);
   }
   return rest.trim() === "";

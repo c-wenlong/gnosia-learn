@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { EMPTY_KNOWLEDGE_BASE } from "@gnosia/catalog/state";
+import { EMPTY_KNOWLEDGE_BASE } from "@hermes/catalog/state";
 
 // The app reads courses from the database only; this suite tests logic over
 // real course data, so it reads the export tree instead (`@/test/content-files`).

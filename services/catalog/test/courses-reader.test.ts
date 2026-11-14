@@ -1,8 +1,8 @@
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { fileSource } from "@gnosia/content";
-import { collection, curriculumItem } from "@gnosia/schema";
+import { fileSource } from "@hermes/content";
+import { collection, curriculumItem } from "@hermes/schema";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -12,7 +12,7 @@ import { dbSource } from "../src/content/source";
 import { runIndex } from "../src/index/run";
 import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 import { SEED } from "./seed";
-import { LOCAL_LEARNER_ID, ownerScope, type OwnerScope } from "@gnosia/schema";
+import { LOCAL_LEARNER_ID, ownerScope, type OwnerScope } from "@hermes/schema";
 import { writeAssetName } from "../src/state";
 
 import { inTransaction } from "../src/db";

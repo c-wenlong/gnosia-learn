@@ -240,7 +240,7 @@ describe("courses", () => {
         contentHash: null,
         bytes: null,
         title: "A book",
-        sourceRepo: "gnosia",
+        sourceRepo: "hermes",
         resourceType: "book",
       },
     ]);
@@ -391,7 +391,7 @@ describe("concepts", () => {
     // Each note is a file: kind, path, and a real hash of real bytes.
     expect(rows.asset).toHaveLength(2);
     const base = rows.asset?.find((a) => a.id === "note:learn/concepts/testing/base.md");
-    expect(base).toMatchObject({ kind: "note", sourceRepo: "gnosia", url: null });
+    expect(base).toMatchObject({ kind: "note", sourceRepo: "hermes", url: null });
     expect(base?.contentHash).toMatch(/^[0-9a-f]{64}$/);
     expect(base?.bytes).toBeGreaterThan(0);
     expect(rows.assetTopic).toContainEqual({
@@ -669,7 +669,7 @@ const LEDGER: MirrorsReport = {
   // the file comparison already happened in manimkc — but the run records which
   // data root it describes, because the mirror rows are about files that need
   // not live under the checkout.
-  outRoot: "/Users/x/.gnosia",
+  outRoot: "/Users/x/.hermes",
   destinations: {
     drive: {
       root: "/Users/x/Google Drive/My Drive",
@@ -782,7 +782,7 @@ describe("mirrors", () => {
 
   it("records which data root the audit describes", () => {
     const { metadata } = buildMirrorRows(LEDGER, MANIMKC_ASSETS);
-    expect(metadata?.["outRoot"]).toBe("/Users/x/.gnosia");
+    expect(metadata?.["outRoot"]).toBe("/Users/x/.hermes");
     // A ledger from a CLI predating the field records null rather than a guess.
     const older = buildMirrorRows({ destinations: LEDGER.destinations }, MANIMKC_ASSETS);
     expect(older.metadata?.["outRoot"]).toBeNull();

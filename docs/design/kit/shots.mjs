@@ -5,21 +5,21 @@
 //   node docs/design/kit/shots.mjs http://localhost:3121 /tmp/shots / /courses /review
 //
 // Writes <out-dir>/<slug>-<desktop|phone>-<theme>.png (a system mode adds the
-// scheme it resolved under: `-system-light`, `-gnosia-system-dark`), where slug is the
+// scheme it resolved under: `-system-light`, `-hermes-system-dark`), where slug is the
 // route with slashes turned into dashes ("courses", "courses-cp4281", "root").
 // Desktop is 1440x900 and phone 390x844, the hi-fi frame sizes. Each shot is
 // the full page, so content below the fold is in the picture too.
 //
-// A theme is the `gnosia-theme` cookie the root layout reads, set before
+// A theme is the `hermes-theme` cookie the root layout reads, set before
 // the page loads, so there is no light flash in the capture. Light sets the
 // cookie to `light`, so a dark preference row in the database cannot leak in.
-// The browser's colour scheme is dark for `dark` and `gnosia-dark`, so the
+// The browser's colour scheme is dark for `dark` and `hermes-dark`, so the
 // two system modes resolve light unless SHOTS_COLOR_SCHEME says otherwise.
 //
 // Options (environment):
 //   SHOTS_VIEWPORTS=desktop,phone   which sizes (default both)
 //   SHOTS_THEMES=light,dark,...     any of the six modes: light, dark, system,
-//                                   gnosia, gnosia-dark, gnosia-system
+//                                   hermes, hermes-dark, hermes-system
 //                                   (default light,dark)
 //   SHOTS_COLOR_SCHEME=dark         force the emulated prefers-color-scheme,
 //                                   to see a system mode resolve dark
@@ -65,11 +65,11 @@ const VIEWPORTS = {
 const pick = (value, all) => (value ? value.split(',').map((s) => s.trim()).filter((s) => all.includes(s)) : all);
 const sizes = pick(process.env.SHOTS_VIEWPORTS, Object.keys(VIEWPORTS));
 // The six cookie values, THEME_MODES in packages/schema/src/shared.ts.
-const MODES = ['light', 'dark', 'system', 'gnosia', 'gnosia-dark', 'gnosia-system'];
+const MODES = ['light', 'dark', 'system', 'hermes', 'hermes-dark', 'hermes-system'];
 const themes = process.env.SHOTS_THEMES ? pick(process.env.SHOTS_THEMES, MODES) : ['light', 'dark'];
 const schemeFor = (theme) => process.env.SHOTS_COLOR_SCHEME ?? (theme === 'dark' || theme.endsWith('-dark') ? 'dark' : 'light');
 // A system mode's picture depends on the emulated scheme, so its file name
-// carries it (`gnosia-system-dark`) and a light and a dark run of the same
+// carries it (`hermes-system-dark`) and a light and a dark run of the same
 // mode can share an output directory.
 const label = (theme) => (theme.endsWith('system') ? `${theme}-${schemeFor(theme)}` : theme);
 const fullPage = !process.env.SHOTS_VIEWPORT_ONLY;
@@ -89,7 +89,7 @@ try {
         hasTouch: isMobile,
         colorScheme: schemeFor(theme),
       });
-      await context.addCookies([{ name: 'gnosia-theme', value: theme, domain: origin.hostname, path: '/' }]);
+      await context.addCookies([{ name: 'hermes-theme', value: theme, domain: origin.hostname, path: '/' }]);
       const page = await context.newPage();
       for (const route of routes) {
         const slug = route.replace(/^\/+|\/+$/g, '').replace(/[/?&=#]+/g, '-') || 'root';

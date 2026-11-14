@@ -5,8 +5,8 @@
 //
 // usage: node scripts/nightly-export.mjs [--keep N] [--json]
 //
-// It runs `catalog export --out` into $GNOSIA_HOME/archive/<UTC time>/
-// (~/.gnosia/archive/ when GNOSIA_HOME is unset), points
+// It runs `catalog export --out` into $HERMES_HOME/archive/<UTC time>/
+// (~/.hermes/archive/ when HERMES_HOME is unset), points
 // archive/latest at it, and deletes all but the newest N exports (default 30).
 //
 // The export is written into a hidden `.<time>.partial-<random>` directory of
@@ -23,7 +23,7 @@
 // example). Pushing the archive to a private git repository is a later
 // decision of the owner's; nothing here creates one.
 //
-// Environment: DATABASE_URL (the catalog's), GNOSIA_HOME (absolute or
+// Environment: DATABASE_URL (the catalog's), HERMES_HOME (absolute or
 // starting with ~/, as the blob store reads it; a diagram's SVG is read from
 // that store too).
 //
@@ -62,13 +62,24 @@ function fileStamp(date = new Date()) {
   return date.toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
 }
 
-/** $GNOSIA_HOME as the blob store reads it: `~` expanded, relative refused. */
-function gnosiaHome(env = process.env) {
-  const raw = env.GNOSIA_HOME?.trim();
-  if (!raw) return join(homedir(), '.gnosia');
-  const expanded = raw === '~' || raw.startsWith('~/') ? join(homedir(), raw.slice(1)) : raw;
-  if (!isAbsolute(expanded)) throw new Refusal(`GNOSIA_HOME must be absolute or start with ~/, not ${JSON.stringify(raw)}`);
-  return expanded;
+/**
+ * The data home, resolved before any directory is created.
+ *
+ * `$HERMES_HOME`, else `$GNOSIA_HOME`, else `~/.hermes` when it exists, else
+ * `~/.gnosia` (`dataHome` in packages/blob/src/home.ts). Creating
+ * `~/.hermes/archive` first would make a later launch treat that empty
+ * directory as the home and stop finding the old catalog. Inlined because
+ * this script runs under plain node, which cannot import that TypeScript module.
+ */
+function hermesHome(env = process.env) {
+  const raw = env.HERMES_HOME?.trim() || env.GNOSIA_HOME?.trim();
+  const home = raw
+    ? (raw === '~' || raw.startsWith('~/') ? join(homedir(), raw.slice(1)) : raw)
+    : (existsSync(join(homedir(), '.hermes')) || !existsSync(join(homedir(), '.gnosia'))
+      ? join(homedir(), '.hermes')
+      : join(homedir(), '.gnosia'));
+  if (!isAbsolute(home)) throw new Refusal(`${raw === env.GNOSIA_HOME?.trim() && !env.HERMES_HOME?.trim() ? 'GNOSIA_HOME' : 'HERMES_HOME'} must be absolute or start with ~/, not ${JSON.stringify(raw)}`);
+  return home;
 }
 
 function inside(child, parent) {
@@ -114,11 +125,11 @@ async function main(argv) {
     process.stdout.write(`${USAGE}\n`);
     return 0;
   }
-  const archive = join(gnosiaHome(), 'archive');
+  const archive = join(hermesHome(), 'archive');
   // Inside the checkout a `git clean` or a relayout deletes it, the reason
   // the blob store and manimkc's renders live outside it too.
   if (inside(real(archive), realpathSync(ROOT))) {
-    throw new Refusal(`refusing ${archive}: it is inside the gnosia checkout, where a git operation can delete it. Point GNOSIA_HOME outside it.`);
+    throw new Refusal(`refusing ${archive}: it is inside the hermes checkout, where a git operation can delete it. Point HERMES_HOME outside it.`);
   }
   mkdirSync(archive, { recursive: true });
 

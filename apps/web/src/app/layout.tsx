@@ -3,9 +3,9 @@ import { cookies, headers } from "next/headers";
 import { Figtree, Geist_Mono } from "next/font/google";
 import { cx } from "@/components/ui/classes";
 import { NONCE_HEADER } from "@/lib/auth/csp";
-import { asMotionMode, LEGACY_MOTION_COOKIE, MOTION_COOKIE, motionAttribute } from "@/lib/motion";
-import { resolveSiteUrl } from "@gnosia/tutor/site-url";
-import { asThemeMode, LEGACY_THEME_COOKIE, SYSTEM_THEME_SCRIPT, THEME_COOKIE, themeClass } from "@/lib/theme-cookie";
+import { asMotionMode, GNOSIA_MOTION_COOKIE, LEGACY_MOTION_COOKIE, MOTION_COOKIE, motionAttribute } from "@/lib/motion";
+import { resolveSiteUrl } from "@hermes/tutor/site-url";
+import { asThemeMode, GNOSIA_THEME_COOKIE, LEGACY_THEME_COOKIE, SYSTEM_THEME_SCRIPT, THEME_COOKIE, themeClass } from "@/lib/theme-cookie";
 import "./globals.css";
 
 // The interface face. Brilliant's own is CoFo Brilliant, and Figtree is the
@@ -25,8 +25,8 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   metadataBase: resolveSiteUrl(),
   title: {
-    default: "Gnosia",
-    template: "%s · Gnosia",
+    default: "Hermes",
+    template: "%s · Hermes",
   },
   description:
     "A book that grows as you do. A living personal knowledge system that learns what you know and teaches what comes next.",
@@ -37,9 +37,9 @@ export const metadata: Metadata = {
     images: [
       {
         url: "/opengraph-image.png",
-        width: 1200,
-        height: 630,
-        alt: "Gnosia: a terracotta tree-ring mark above the wordmark on cream",
+        width: 1280,
+        height: 640,
+        alt: "Hermes Studio: the hat mark and the name on charcoal",
       },
     ],
   },
@@ -62,8 +62,8 @@ export const metadata: Metadata = {
  * the class to match on hydration, so a new browser gets the right theme one
  * frame late rather than a query on every public page.
  *
- * A system appearance (`system`, `gnosia-system`) is what the server cannot
- * resolve. It is rendered light, with `gnosia` already on for the brand
+ * A system appearance (`system`, `hermes-system`) is what the server cannot
+ * resolve. It is rendered light, with `hermes` already on for the brand
  * palette and `data-theme` naming the mode, and the first thing in `<body>`
  * is a two-line script that adds `dark` when the device prefers it, before
  * anything paints (see `SYSTEM_THEME_SCRIPT` in `@/lib/theme-cookie`).
@@ -83,10 +83,10 @@ export default async function RootLayout({
 }>) {
   const [cookieStore, requestHeaders] = await Promise.all([cookies(), headers()]);
   const nonce = requestHeaders.get(NONCE_HEADER) ?? undefined;
-  const theme = asThemeMode(cookieStore.get(THEME_COOKIE)?.value ?? cookieStore.get(LEGACY_THEME_COOKIE)?.value) ?? "light";
+  const theme = asThemeMode(cookieStore.get(THEME_COOKIE)?.value ?? cookieStore.get(GNOSIA_THEME_COOKIE)?.value ?? cookieStore.get(LEGACY_THEME_COOKIE)?.value) ?? "light";
   const classes = themeClass(theme, false);
   const motion = motionAttribute(
-    asMotionMode(cookieStore.get(MOTION_COOKIE)?.value ?? cookieStore.get(LEGACY_MOTION_COOKIE)?.value),
+    asMotionMode(cookieStore.get(MOTION_COOKIE)?.value ?? cookieStore.get(GNOSIA_MOTION_COOKIE)?.value ?? cookieStore.get(LEGACY_MOTION_COOKIE)?.value),
   );
 
   return (

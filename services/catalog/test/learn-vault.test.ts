@@ -4,7 +4,7 @@ import path from "node:path";
 
 import fsPromises from "node:fs/promises";
 
-import { contentRevision } from "@gnosia/schema";
+import { contentRevision } from "@hermes/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 

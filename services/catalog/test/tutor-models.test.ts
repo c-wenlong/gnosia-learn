@@ -1,4 +1,4 @@
-import { learner, LOCAL_LEARNER_ID, TUTOR_MODEL_LIMITS, tutorModel } from "@gnosia/schema";
+import { learner, LOCAL_LEARNER_ID, TUTOR_MODEL_LIMITS, tutorModel } from "@hermes/schema";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 

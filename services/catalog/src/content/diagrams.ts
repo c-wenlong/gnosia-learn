@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { key as blobKey, type BlobStore } from "@gnosia/blob";
+import { key as blobKey, type BlobStore } from "@hermes/blob";
 import {
   assetJob,
   blobObject,
@@ -14,7 +14,7 @@ import {
   readableOwners,
   topic,
   type AuthorKind,
-} from "@gnosia/schema";
+} from "@hermes/schema";
 import { and, eq, isNull, sql } from "drizzle-orm";
 
 import type { CatalogDatabase } from "../db";
@@ -376,7 +376,7 @@ export async function putDiagram(
           contentHash: docHash,
           bytes: bytes.length,
           title,
-          sourceRepo: "gnosia",
+          sourceRepo: "hermes",
           blobKey: null,
           resourceType: null,
           ownerId,
@@ -401,7 +401,7 @@ export async function putDiagram(
           contentHash: svg.sha256,
           bytes: svg.bytes,
           title,
-          sourceRepo: "gnosia",
+          sourceRepo: "hermes",
           blobKey: svg.key,
           resourceType: null,
           ownerId,
@@ -562,7 +562,7 @@ export async function putSvgOnly(db: CatalogDatabase, store: BlobStore, input: P
             contentHash: uploaded.sha256,
             bytes: uploaded.bytes,
             title: slug,
-            sourceRepo: "gnosia",
+            sourceRepo: "hermes",
             blobKey: uploaded.key,
             resourceType: null,
             ownerId,

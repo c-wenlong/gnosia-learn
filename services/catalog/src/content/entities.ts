@@ -19,7 +19,7 @@ import {
   topic,
   topicRelation,
   video,
-} from "@gnosia/schema";
+} from "@hermes/schema";
 import { getTableColumns, getTableName } from "drizzle-orm";
 import type { SQLiteColumn, SQLiteTable } from "drizzle-orm/sqlite-core";
 

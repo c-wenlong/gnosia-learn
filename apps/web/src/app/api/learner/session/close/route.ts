@@ -1,4 +1,4 @@
-import { sessionCloseTurn } from "@gnosia/tutor/server/learner-writes";
+import { sessionCloseTurn } from "@hermes/tutor/server/learner-writes";
 
 import { turnRoute } from "@/lib/learner-api";
 
@@ -17,6 +17,6 @@ import { turnRoute } from "@/lib/learner-api";
  * send it on every arrival at the close screen without a second event.
  *
  * The parse and the write are `sessionCloseTurn` in
- * `@gnosia/tutor/server/learner-writes`.
+ * `@hermes/tutor/server/learner-writes`.
  */
 export const POST = turnRoute("session-close", sessionCloseTurn);

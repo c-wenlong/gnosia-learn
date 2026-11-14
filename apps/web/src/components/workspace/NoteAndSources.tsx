@@ -6,8 +6,8 @@ import { NoteProse, type EmbedResolution } from "@/components/NoteProse";
 import { cx, FOCUS } from "@/components/ui/classes";
 import { MasteryDot } from "@/components/ui/MasteryDot";
 import { TextLink } from "@/components/ui/TextLink";
-import type { CitationSource } from "@gnosia/tutor/prompt";
-import type { ConceptWorkspace, NeighbourRef } from "@gnosia/tutor/concept-workspace-core";
+import type { CitationSource } from "@hermes/tutor/prompt";
+import type { ConceptWorkspace, NeighbourRef } from "@hermes/tutor/concept-workspace-core";
 
 import { NoteDisclosure } from "./NoteDisclosure";
 import { WorkspaceHeading } from "./WorkspaceHeading";

@@ -46,7 +46,7 @@ const notes = ["graphs", "constructor", "__proto__"].map((slug) => ({
   url: null,
   bytes: 10,
   title: slug,
-  sourceRepo: "gnosia",
+  sourceRepo: "hermes",
   topics: [],
 }));
 
@@ -66,7 +66,7 @@ const listAssets = vi.hoisted(() =>
   ),
 );
 
-vi.mock("@gnosia/catalog/state", () => ({
+vi.mock("@hermes/catalog/state", () => ({
   assetParents,
   listAssets,
   readEvents,

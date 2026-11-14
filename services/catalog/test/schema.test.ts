@@ -11,8 +11,8 @@ import {
   session,
   tables,
   topic,
-} from "@gnosia/schema";
-import { AVATARS } from "@gnosia/schema/shared";
+} from "@hermes/schema";
+import { AVATARS } from "@hermes/schema/shared";
 import { eq, inArray, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 

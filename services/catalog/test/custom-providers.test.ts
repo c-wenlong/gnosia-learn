@@ -1,4 +1,4 @@
-import { customProvider, learner, LOCAL_LEARNER_ID, providerKey, tutorModel } from "@gnosia/schema";
+import { customProvider, learner, LOCAL_LEARNER_ID, providerKey, tutorModel } from "@hermes/schema";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import {

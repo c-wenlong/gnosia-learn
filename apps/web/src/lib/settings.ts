@@ -5,15 +5,15 @@ import {
   readSettings as readSettingsCore,
   readTutorStyle as readTutorStyleCore,
   type SettingsSnapshot,
-} from "@gnosia/tutor/server/settings";
-import type { TutorStyle } from "@gnosia/tutor/preferences";
+} from "@hermes/tutor/server/settings";
+import type { TutorStyle } from "@hermes/tutor/preferences";
 
 import { catalogDatabase } from "@/lib/learner-store";
 import { currentOwner } from "@/lib/owner";
 
 /**
  * The owner's settings rows. The reads live in
- * `@gnosia/tutor/server/settings`; this file hands them this app's pool and
+ * `@hermes/tutor/server/settings`; this file hands them this app's pool and
  * owner.
  */
 

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * Remove stops Studio using a provider: its tier models and the active pick
@@ -42,6 +42,21 @@ beforeAll(() => {
 });
 
 const mounted: Array<() => void> = [];
+beforeEach(() => {
+  // Every answer queue starts empty: a resolved value or pending promise a
+  // test leaves behind must not answer the next test's calls.
+  for (const mock of [
+    mocks.getByokSettings,
+    mocks.removeByokProvider,
+    mocks.listByokModels,
+    mocks.saveByokModels,
+    mocks.sendJson,
+  ]) {
+    mock.mockReset();
+  }
+  mocks.selects.length = 0;
+  mocks.sendJson.mockResolvedValue({ status: 200, data: { ok: true, synced: false } });
+});
 afterEach(() => {
   while (mounted.length) mounted.pop()?.();
 });
@@ -121,7 +136,7 @@ describe("ByokConfig's Remove", () => {
     const host = await mountConnected();
     // The real `removeByokProvider` announces its own write.
     mocks.removeByokProvider.mockImplementation(async () => {
-      window.dispatchEvent(new Event("gnosia:byok-settings"));
+      window.dispatchEvent(new Event("hermes:byok-settings"));
       return { ok: true, status: 200, data: {} };
     });
     const before = mocks.getByokSettings.mock.calls.length;
@@ -156,7 +171,7 @@ describe("ByokConfig with the runner down", () => {
     expect(host.textContent).toContain("The studio runner is not answering");
     // A key saved on the Providers card announces a write; a runner known to be down is not asked.
     await act(async () => {
-      window.dispatchEvent(new Event("gnosia:byok-settings"));
+      window.dispatchEvent(new Event("hermes:byok-settings"));
     });
     expect(mocks.getByokSettings).not.toHaveBeenCalled();
 
@@ -283,7 +298,7 @@ describe("ByokConfig's errors (R2-1-10)", () => {
     const connected = mocks.getByokSettings.getMockImplementation();
     // A read the runner refuses puts its words up...
     mocks.getByokSettings.mockResolvedValue({ ok: false, status: 403, refusal: { error: "this runner serves another owner", detail: null } });
-    await act(async () => window.dispatchEvent(new Event("gnosia:byok-settings")));
+    await act(async () => window.dispatchEvent(new Event("hermes:byok-settings")));
     await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
     // ...then a Remove fails with the same words.
     mocks.removeByokProvider.mockResolvedValue({ ok: false, status: 403, refusal: { error: "this runner serves another owner", detail: null } });
@@ -292,7 +307,7 @@ describe("ByokConfig's errors (R2-1-10)", () => {
     await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
     // A good read now answers the read, not the Remove, which was never retried.
     if (connected !== undefined) mocks.getByokSettings.mockImplementation(connected);
-    await act(async () => window.dispatchEvent(new Event("gnosia:byok-settings")));
+    await act(async () => window.dispatchEvent(new Event("hermes:byok-settings")));
     await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
     expect(host.textContent).toContain("this runner serves another owner");
   });
@@ -302,7 +317,7 @@ describe("ByokConfig's errors (R2-1-10)", () => {
     const host = await mount({});
     expect(host.textContent).toContain("this runner serves another owner");
     mocks.getByokSettings.mockResolvedValue(up());
-    await act(async () => window.dispatchEvent(new Event("gnosia:byok-settings")));
+    await act(async () => window.dispatchEvent(new Event("hermes:byok-settings")));
     await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
     expect(host.textContent).not.toContain("this runner serves another owner");
   });

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { AssetRef } from "@gnosia/catalog/state";
+import type { AssetRef } from "@hermes/catalog/state";
 
 import { loadAssetBody } from "./asset-body-data";
 

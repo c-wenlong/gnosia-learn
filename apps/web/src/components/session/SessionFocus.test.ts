@@ -3,7 +3,7 @@ import { act, createElement, StrictMode, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 
-import { OPTIONS_WAIT_MS, type SessionQuestion, type SessionStep } from "@gnosia/tutor/session-core";
+import { OPTIONS_WAIT_MS, type SessionQuestion, type SessionStep } from "@hermes/tutor/session-core";
 import type { WeekCheckPlan } from "@/lib/week-check";
 
 /**
@@ -496,9 +496,13 @@ describe("SessionFocus writing through chat-recall (S4-08)", () => {
     await press(choice(host, "SYN"));
     await press(button(host, "Check"));
 
+    expect(observed()).toHaveLength(2);
     const [refused, resent] = observed();
-    expect(resent?.requestId).toBe(refused?.requestId);
-    expect(resent?.sessionId).not.toBe(refused?.sessionId);
+    expect(refused.requestId).toEqual(expect.any(String));
+    expect(refused.sessionId).toEqual(expect.any(String));
+    expect(resent.sessionId).toEqual(expect.any(String));
+    expect(resent.requestId).toBe(refused.requestId);
+    expect(resent.sessionId).not.toBe(refused.sessionId);
     expect(host.querySelector('[role="alert"]')).toBeNull();
   });
 });
@@ -515,7 +519,9 @@ describe("SessionFocus closing its session", () => {
     await press(button(host, "Continue"));
     const [close] = closes();
     expect(close).toBeDefined();
-    expect(JSON.parse(close?.[1].body as string)).toEqual({ sessionId: observed()[0]?.sessionId });
+    expect(observed()).toHaveLength(1);
+    expect(observed()[0].sessionId).toEqual(expect.any(String));
+    expect(JSON.parse(close?.[1].body as string)).toEqual({ sessionId: observed()[0].sessionId });
   });
 
   it("still closes when the page goes away while the close screen's close waits to try again", async () => {

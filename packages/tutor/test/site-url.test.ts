@@ -28,8 +28,8 @@ describe("resolveSiteUrl", () => {
 
   it("falls back to the Vercel production domain", () => {
     expect(
-      resolveSiteUrl({ VERCEL_PROJECT_PRODUCTION_URL: "gnosia.vercel.app" }).origin,
-    ).toBe("https://gnosia.vercel.app");
+      resolveSiteUrl({ VERCEL_PROJECT_PRODUCTION_URL: "hermes.vercel.app" }).origin,
+    ).toBe("https://hermes.vercel.app");
   });
 
   it("treats an empty string as unset, which once crashed a build", () => {

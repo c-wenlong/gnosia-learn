@@ -35,4 +35,32 @@ describe("ThreadsCard", () => {
     expect(html).toContain('<span class="sr-only">Course module: </span>Divide and conquer');
     expect(html).not.toContain("Studio draft");
   });
+
+  it("says the list could not be read, and offers no way onward", () => {
+    const html = renderToStaticMarkup(createElement(ThreadsCard, { reachable: false, threads: [] }));
+    expect(html).toContain("What you were doing could not be read.");
+    expect(html).not.toContain("Nothing to go back to yet");
+    expect(html).not.toContain('href="/courses"');
+  });
+
+  it("says there is nothing yet when the list is simply empty, and points at the courses", () => {
+    const html = renderToStaticMarkup(createElement(ThreadsCard, { reachable: true, threads: [] }));
+    expect(html).toContain("Nothing to go back to yet");
+    expect(html).toContain('href="/courses"');
+  });
+
+  it("shows a concept's mastery in place of a detail, and a video's progress beside it", () => {
+    const html = renderToStaticMarkup(
+      createElement(ThreadsCard, {
+        reachable: true,
+        threads: [
+          thread({ key: "concept:c1", kind: "concept", title: "Bayes", bucket: "learning", pL: 0.42 }),
+          thread({ key: "video:v1", kind: "video", title: "The video", detail: "2:17 of 11:36", percent: 40 }),
+        ],
+      }),
+    );
+    expect(html).toContain("Learning · p(L) 0.42");
+    expect(html).toContain("2:17 of 11:36");
+    expect(html).toContain('aria-label="40% watched"');
+  });
 });

@@ -2,9 +2,9 @@ import type {
   Course,
   Module,
   Topic,
-} from "@gnosia/content";
-import { moduleNumber } from "@gnosia/content/module-number";
-import type { KnowledgeInput, TopicKnowledge } from "@gnosia/schema/shared";
+} from "@hermes/content";
+import { moduleNumber } from "@hermes/content/module-number";
+import type { KnowledgeInput, TopicKnowledge } from "@hermes/schema/shared";
 import { buildLearningObjectives } from "./objectives";
 
 export interface TranscriptTurn {
@@ -78,11 +78,14 @@ function toStringList(value: unknown): string[] {
       .map((v) => (typeof v === "string" ? v.trim() : ""))
       .filter(Boolean);
   }
-  // Some free models return a newline- or semicolon-joined string.
+  // Some free models return a newline- or semicolon-joined string. The marker
+  // strip is deliberately narrow: a bullet or a "1." / "2)" numbering, followed
+  // by a space. Anything else the item starts with, digits included, is content
+  // ("- 3 heads attend" is "3 heads attend", not "heads attend").
   if (typeof value === "string") {
     return value
       .split(/\n+|;\s*/)
-      .map((v) => v.replace(/^[-*\d.)\s]+/, "").trim())
+      .map((v) => v.replace(/^\s*(?:[-*•+]|\d+[.)])(?:\s+|$)/, "").trim())
       .filter(Boolean);
   }
   return [];

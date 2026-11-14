@@ -15,13 +15,13 @@ import {
   isAgentModel,
   studioAgentPreference,
   video,
-} from "@gnosia/schema";
+} from "@hermes/schema";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { runImportCommand } from "../src/commands/index-command";
 import { JobError, runClaim, runEnqueue, runFinish, runShow, type BriefDocument } from "../src/commands/job";
-import { BlobIntegrityError } from "@gnosia/blob";
+import { BlobIntegrityError } from "@hermes/blob";
 import { runPreferenceGet, runPreferenceSet } from "../src/commands/preference";
 import { openBlobStore } from "../src/content/blob";
 import { auditBlobs } from "../src/content/blob-audit";
@@ -40,7 +40,7 @@ import {
   videoAssetIds,
   type PutVideoInput,
 } from "../src/content/videos";
-import { LOCAL_LEARNER_ID, ownerScope } from "@gnosia/schema";
+import { LOCAL_LEARNER_ID, ownerScope } from "@hermes/schema";
 import { manimkcStandIn, seedWithManimkc } from "./manimkc-standin";
 import { migratedScratchDatabase, probe, type Scratch } from "./scratch-database";
 
@@ -158,7 +158,7 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
   const saved = {
     url: process.env["DATABASE_URL"],
     manimkc: process.env["MANIMKC_ROOT"],
-    home: process.env["GNOSIA_HOME"],
+    home: process.env["HERMES_HOME"],
   };
   let serial = 0;
 
@@ -171,7 +171,7 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
     await manimkcStandIn(manimkc, Buffer.from("a manimkc render"));
     process.env["DATABASE_URL"] = scratch.url;
     process.env["MANIMKC_ROOT"] = manimkc;
-    process.env["GNOSIA_HOME"] = path.join(work, "home");
+    process.env["HERMES_HOME"] = path.join(work, "home");
     await runImportCommand({ dir: tree });
     await scratch.db.insert(learner).values({ id: "other" }).onConflictDoNothing();
   }, 120_000);
@@ -180,7 +180,7 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
     for (const [key, value] of [
       ["DATABASE_URL", saved.url],
       ["MANIMKC_ROOT", saved.manimkc],
-      ["GNOSIA_HOME", saved.home],
+      ["HERMES_HOME", saved.home],
     ] as const) {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
@@ -371,12 +371,12 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
     const rows = await scratch.db.select().from(asset).where(sql`${asset.id} in (${sql.join(Object.values(ids).map((i) => sql`${i}`), sql`, `)})`);
     expect(rows.map((r) => [r.id, r.kind, r.sourceRepo]).sort()).toEqual(
       [
-        [ids.poster, "poster", "gnosia"],
-        [ids.pdf, "pdf", "gnosia"],
-        [ids.video, "video", "gnosia"],
-        [ids.captions, "captions", "gnosia"],
-        [ids.chapters, "chapters", "gnosia"],
-        [ids.transcript, "transcript", "gnosia"],
+        [ids.poster, "poster", "hermes"],
+        [ids.pdf, "pdf", "hermes"],
+        [ids.video, "video", "hermes"],
+        [ids.captions, "captions", "hermes"],
+        [ids.chapters, "chapters", "hermes"],
+        [ids.transcript, "transcript", "hermes"],
       ].sort(),
     );
     expect(rows.find((r) => r.id === ids.video)?.path).toBe(`videos/${slug}.mp4`);
@@ -489,8 +489,8 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
     // Every required blob is the same content-addressed bytes — already
     // stored, so the cap never sees them — and the PDF is the only new
     // object this put would store.
-    const saved = process.env["GNOSIA_OWNER_UPLOADS_PER_DAY"];
-    process.env["GNOSIA_OWNER_UPLOADS_PER_DAY"] = "0";
+    const saved = process.env["HERMES_OWNER_UPLOADS_PER_DAY"];
+    process.env["HERMES_OWNER_UPLOADS_PER_DAY"] = "0";
     try {
       const result = await put({ slug, dir, jobId: second.id, base: landed.revision });
       expect(result).toMatchObject({ jobState: "accepted" });
@@ -500,8 +500,8 @@ describe.skipIf(!reachable.ok)("studio videos in the catalog", () => {
       // No half-written outputs either: the job records the five it landed.
       expect((await scratch.db.select().from(assetJob).where(eq(assetJob.jobId, second.id)))).toHaveLength(5);
     } finally {
-      if (saved === undefined) delete process.env["GNOSIA_OWNER_UPLOADS_PER_DAY"];
-      else process.env["GNOSIA_OWNER_UPLOADS_PER_DAY"] = saved;
+      if (saved === undefined) delete process.env["HERMES_OWNER_UPLOADS_PER_DAY"];
+      else process.env["HERMES_OWNER_UPLOADS_PER_DAY"] = saved;
     }
   });
 

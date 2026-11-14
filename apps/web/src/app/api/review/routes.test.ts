@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { concept, learner } from "@gnosia/schema";
+import { concept, learner } from "@hermes/schema";
 
 import {
   clearTables,
@@ -54,7 +54,7 @@ describe.skipIf(!reachable.ok)("review API routes", () => {
   let scratch: Scratch;
   let grade: (req: Request) => Promise<Response>;
   let due: (req: Request) => Promise<Response>;
-  let state: typeof import("@gnosia/catalog/state");
+  let state: typeof import("@hermes/catalog/state");
 
   let previousDatabaseUrl: string | undefined;
 
@@ -79,7 +79,7 @@ describe.skipIf(!reachable.ok)("review API routes", () => {
     const [gradeRoute, dueRoute, store] = await Promise.all([
       import("./grade/route"),
       import("./due/route"),
-      import("@gnosia/catalog/state"),
+      import("@hermes/catalog/state"),
     ]);
     grade = gradeRoute.POST;
     due = dueRoute.GET;

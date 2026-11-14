@@ -1,4 +1,4 @@
-import { checkDistractor, concept, learner, LOCAL_LEARNER_ID } from "@gnosia/schema";
+import { checkDistractor, concept, learner, LOCAL_LEARNER_ID } from "@hermes/schema";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 

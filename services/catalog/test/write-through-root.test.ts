@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 
-import { fsStore } from "@gnosia/blob";
+import { fsStore } from "@hermes/blob";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -43,11 +43,11 @@ const by: By = { author: "local", authorKind: "person", reason: "a test" };
 const NO_MANIMKC = path.join(tmpdir(), "catalog-test-no-manimkc");
 
 function pointAt(name: string, env: { manimkc?: string; blobHome?: string } = {}): () => void {
-  const keys = ["DATABASE_URL", "MANIMKC_ROOT", "GNOSIA_HOME"] as const;
+  const keys = ["DATABASE_URL", "MANIMKC_ROOT", "HERMES_HOME"] as const;
   const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
   process.env["DATABASE_URL"] = name;
   process.env["MANIMKC_ROOT"] = env.manimkc ?? NO_MANIMKC;
-  if (env.blobHome !== undefined) process.env["GNOSIA_HOME"] = env.blobHome;
+  if (env.blobHome !== undefined) process.env["HERMES_HOME"] = env.blobHome;
   return () => {
     for (const key of keys) {
       const value = saved[key];
@@ -175,7 +175,7 @@ describe.skipIf(!reachable.ok)("a copy of a database never writes into the tree 
     expect(rows[0]?.root).toBe(template.root);
     await expect(
       addTopic(copy.db, { slug: "gamma", title: "Gamma", domain: "testing" }, by),
-    ).rejects.toThrow(/topics was last imported from .* by another database \(.+gnosia_test_\w+.+\), not by this one/s);
+    ).rejects.toThrow(/topics was last imported from .* by another database \(.+hermes_test_\w+.+\), not by this one/s);
     await expect(editTopic(copy.db, { slug: "alpha", summary: "changed on the copy" }, by)).rejects.toThrow(
       /another database/,
     );
